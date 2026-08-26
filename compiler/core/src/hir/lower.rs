@@ -1205,15 +1205,20 @@ impl<'a> FuncBuilder<'a> {
             if self.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION) {
                 continue;
             }
-            let children = self.children(declaration);
-            let [name, initializer] = children.as_slice() else {
+            // name, `!`, type, initializer — the annotation is a child too, so
+            // `const scale: number = 3` has three where `const scale = 3` has
+            // two. Destructuring positionally refused every annotated local.
+            let Some([Some(name), _, _, initializer]) = self.child_slots::<4>(declaration) else {
+                return Err(self.unsupported(declaration, "a declaration of unexpected shape"));
+            };
+            let Some(initializer) = initializer else {
                 return Err(self.unsupported(declaration, "a declaration without an initializer"));
             };
-            let value = self.lower_expression(*initializer)?;
+            let value = self.lower_expression(initializer)?;
             let symbol = self
-                .node(*name)
+                .node(name)
                 .symbol
-                .ok_or_else(|| self.unsupported(*name, "an unresolved declaration"))?;
+                .ok_or_else(|| self.unsupported(name, "an unresolved declaration"))?;
             self.bindings.insert(symbol.0, value);
         }
         Ok(())

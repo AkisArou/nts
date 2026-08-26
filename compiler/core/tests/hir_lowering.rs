@@ -297,6 +297,29 @@ fn an_unimplemented_math_member_is_refused_rather_than_guessed() {
 }
 
 #[test]
+fn a_declaration_with_a_type_annotation_lowers() {
+    let Some(program) = lowered("nested") else {
+        return;
+    };
+    // `const scale: number = 3` — the annotation is a child of the declaration,
+    // so reading its children positionally found the *type* where the
+    // initializer should be and refused it as having none.
+    let annotated = program
+        .program
+        .funcs
+        .iter()
+        .find(|f| f.name == "annotated")
+        .expect("an annotated local should not refuse the whole function");
+    assert!(
+        annotated
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::ConstFloat(v) if (v - 3.0).abs() < f64::EPSILON)),
+        "the initializer should have been lowered",
+    );
+}
+
+#[test]
 fn an_if_lowers_to_a_branch_with_two_targets() {
     let Some(lowered) = lowered("control") else {
         return;
