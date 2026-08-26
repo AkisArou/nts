@@ -11,7 +11,7 @@
 //!   trying to reach, and the gap to it is a codegen defect.
 //! - **C (int64)** is the C a C programmer would write. The gap between it and
 //!   C (double) is not a defect: it is the prize for proving a `number` is
-//!   integral, and it prices the ScriptC number-facts analysis that
+//!   integral, and it prices the `ScriptC` number-facts analysis that
 //!   [`nts_core::hir::HirType::NUMBER`] defers.
 //! - **Node** is the thing being replaced. The gap to it is the argument for
 //!   the project existing.
