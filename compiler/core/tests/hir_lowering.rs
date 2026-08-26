@@ -400,3 +400,82 @@ fn code_after_a_return_is_not_lowered() {
     }
     assert!(lowered.is_complete());
 }
+
+#[test]
+fn the_lowered_program_is_valid_ssa() {
+    for fixture in ["arith", "control", "loops", "calls2"] {
+        let Some(lowered) = lowered(fixture) else {
+            return;
+        };
+        if let Err(problems) = hir::verify::verify(&lowered.program) {
+            panic!("{fixture} lowered to invalid HIR: {problems:#?}");
+        }
+    }
+}
+
+#[test]
+fn a_loop_carried_value_becomes_a_block_parameter() {
+    let Some(lowered) = lowered("loops") else {
+        return;
+    };
+    // `let total = 0; let i = 0; while (i < n) { total = total + i; i = i + 1; }`
+    // Both names differ per iteration, so the header takes both as parameters:
+    // the entry passes the initial values, the back edge the updated ones.
+    let sum = func(&lowered, "sumTo");
+    let header = sum
+        .blocks
+        .iter()
+        .find(|b| !b.params.is_empty())
+        .expect("the loop header takes parameters");
+    assert_eq!(header.params.len(), 2, "total and i are both carried");
+
+    for param in &header.params {
+        assert!(matches!(sum.value(*param).kind, OpKind::BlockParam(_)));
+    }
+}
+
+#[test]
+fn the_value_after_a_loop_is_the_header_parameter() {
+    let Some(lowered) = lowered("loops") else {
+        return;
+    };
+    // The bug this pins: the exit is reached from the *header*, not the body, so
+    // returning the value the body defined uses something the exit does not
+    // dominate. It reads whatever the last iteration left, and nothing crashes.
+    let sum = func(&lowered, "sumTo");
+    let Terminator::Return(Some(returned)) = sum
+        .blocks
+        .iter()
+        .find_map(|b| match &b.terminator {
+            Terminator::Return(_) => Some(b.terminator.clone()),
+            _ => None,
+        })
+        .expect("sumTo returns")
+    else {
+        unreachable!()
+    };
+
+    assert!(
+        matches!(sum.value(returned).kind, OpKind::BlockParam(_)),
+        "returned {:?}, which is not the header parameter",
+        sum.value(returned).kind,
+    );
+}
+
+#[test]
+fn an_assignment_emits_no_store() {
+    let Some(lowered) = lowered("loops") else {
+        return;
+    };
+    // `total = total + i` rebinds a name; with the name bound directly to a value
+    // there is no slot to store into. What the loop costs is the add, not the add
+    // plus a store plus a reload.
+    let sum = func(&lowered, "sumTo");
+    let body = sum
+        .blocks
+        .iter()
+        .find(|b| matches!(&b.terminator, Terminator::Jump { args, .. } if args.len() == 2))
+        .expect("the loop body jumps back with both carried values");
+    // two adds and one constant — nothing else
+    assert_eq!(body.ops.len(), 3, "{:?}", body.ops);
+}

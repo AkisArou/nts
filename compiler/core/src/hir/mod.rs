@@ -25,6 +25,7 @@
 //!   symbol resolution had to land before this.
 
 pub mod lower;
+pub mod verify;
 
 use nts_semantic_schema::{Origin, TypeId};
 

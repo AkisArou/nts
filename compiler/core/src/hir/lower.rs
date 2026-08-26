@@ -144,6 +144,23 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// Add a parameter to a block and return the value it defines.
+    ///
+    /// A block parameter is a value like any other, but it belongs to the block
+    /// rather than to the operation list — nothing computes it, a predecessor
+    /// supplies it.
+    fn push_block_param(&mut self, block: BlockId, ty: HirType, origin: Origin) -> ValueId {
+        let index = u32::try_from(self.blocks[block.0 as usize].params.len()).unwrap_or(0);
+        let id = ValueId(u32::try_from(self.values.len()).unwrap_or(u32::MAX));
+        self.values.push(Op {
+            kind: OpKind::BlockParam(index),
+            ty,
+            origin,
+        });
+        self.blocks[block.0 as usize].params.push(id);
+        id
+    }
+
     /// Start a new block and return its id. Does not switch to it.
     fn new_block(&mut self) -> BlockId {
         self.blocks.push(PartialBlock {
@@ -341,6 +358,110 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// Symbols assigned anywhere inside a subtree.
+    ///
+    /// Collected before a loop body is lowered, because the header needs a
+    /// parameter for each of them *before* the body can refer to it — the body
+    /// reads the value the previous iteration produced, which does not exist yet.
+    fn assigned_symbols(&self, root: NodeId, into: &mut Vec<u32>) {
+        let node = self.node(root);
+        if self.kind_of(root) == Some(syntax::BINARY_EXPRESSION) {
+            let children = self.children(root);
+            if let [target, operator, _] = children.as_slice()
+                && self.kind_of(*operator) == Some(syntax::EQUALS_TOKEN)
+                && let Some(symbol) = self.node(*target).symbol
+                && !into.contains(&symbol.0)
+            {
+                into.push(symbol.0);
+            }
+        }
+        for child in &node.children {
+            self.assigned_symbols(*child, into);
+        }
+    }
+
+    /// `while (c) { .. }`.
+    ///
+    /// # Where block parameters earn their keep
+    ///
+    /// A variable the body assigns has a different value on each iteration, and
+    /// the header has to see whichever one the previous iteration produced. That
+    /// is exactly a block parameter: the entry passes the initial value, the back
+    /// edge passes the updated one, and the body reads the parameter.
+    ///
+    /// The parameters are created before the body is lowered, because the body
+    /// refers to them. Which variables need one is a syntactic question —
+    /// [`Self::assigned_symbols`] — answered by scanning the body first.
+    fn lower_while(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let children = self.children(id);
+        let [condition, body] = children.as_slice() else {
+            return Err(self.unsupported(id, "a `while` of unexpected shape"));
+        };
+
+        let mut carried = Vec::new();
+        self.assigned_symbols(*body, &mut carried);
+
+        let header = self.new_block();
+        let origin = self.origin(id);
+
+        // The values entering the loop, in the order the parameters take them.
+        let mut incoming = Vec::new();
+        for symbol in &carried {
+            let value = *self.bindings.get(symbol).ok_or_else(|| {
+                self.unsupported(id, "a loop assigning a name declared outside it")
+            })?;
+            incoming.push(value);
+        }
+        self.terminate(Terminator::Jump {
+            target: header,
+            args: incoming.clone(),
+        });
+
+        // Inside the loop, each carried name *is* its parameter.
+        self.switch_to(header);
+        let mut params = Vec::new();
+        for (symbol, entering) in carried.iter().zip(&incoming) {
+            let ty = self.values[entering.0 as usize].ty.clone();
+            let param = self.push_block_param(header, ty, origin.clone());
+            self.bindings.insert(*symbol, param);
+            params.push(param);
+        }
+
+        let cond = self.lower_expression(*condition)?;
+        let body_block = self.new_block();
+        let exit = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond,
+            then_target: body_block,
+            then_args: Vec::new(),
+            else_target: exit,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(body_block);
+        self.lower_statement(*body)?;
+        if !self.is_terminated() {
+            // The back edge carries whatever the body left in each name.
+            let updated: Vec<ValueId> =
+                carried.iter().map(|symbol| self.bindings[symbol]).collect();
+            self.terminate(Terminator::Jump {
+                target: header,
+                args: updated,
+            });
+        }
+
+        // After the loop the live value of a carried name is the header parameter,
+        // and the bindings must be put back to it. The body overwrote them with
+        // values defined in the body block — which the exit does not dominate, so
+        // using one after the loop is invalid SSA that reads whatever the last
+        // iteration happened to leave.
+        for (symbol, param) in carried.iter().zip(&params) {
+            self.bindings.insert(*symbol, *param);
+        }
+        self.switch_to(exit);
+        Ok(())
+    }
+
     /// `if (c) { .. } else { .. }`.
     ///
     /// The merge block is created only if control can actually reach it. When
@@ -427,6 +548,14 @@ impl<'a> FuncBuilder<'a> {
             }
             Some(syntax::BLOCK) => self.lower_block(id),
             Some(syntax::IF_STATEMENT) => self.lower_if(id),
+            Some(syntax::WHILE_STATEMENT) => self.lower_while(id),
+            Some(syntax::EXPRESSION_STATEMENT) => {
+                let Some(expression) = self.children(id).first().copied() else {
+                    return Ok(());
+                };
+                self.lower_expression(expression)?;
+                Ok(())
+            }
             Some(syntax::VARIABLE_STATEMENT) => self.lower_variable_statement(id),
             _ => Err(self.unsupported(id, "this statement")),
         }
@@ -586,6 +715,19 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a binary expression of unexpected shape"));
         };
 
+        // Assignment is not arithmetic on a location: it rebinds a name to a
+        // value. With the name bound directly there is no slot to store into and
+        // nothing to emit — the rebinding *is* the assignment.
+        if self.kind_of(*operator) == Some(syntax::EQUALS_TOKEN) {
+            let value = self.lower_expression(*rhs_node)?;
+            let symbol = self
+                .node(*lhs_node)
+                .symbol
+                .ok_or_else(|| self.unsupported(*lhs_node, "assignment to a computed target"))?;
+            self.bindings.insert(symbol.0, value);
+            return Ok(value);
+        }
+
         let lhs = self.lower_expression(*lhs_node)?;
         let rhs = self.lower_expression(*rhs_node)?;
         let ty = self
@@ -600,6 +742,7 @@ impl<'a> FuncBuilder<'a> {
         // concatenation, and the two lower to nothing alike. Resolving it here
         // against the result type means no backend has to ask again.
         let op = match token {
+            syntax::EQUALS_TOKEN => unreachable!("assignment is handled before this"),
             syntax::PLUS_TOKEN if ty.is_managed() => BinOp::Concat,
             syntax::PLUS_TOKEN => BinOp::Add,
             syntax::MINUS_TOKEN => BinOp::Sub,
