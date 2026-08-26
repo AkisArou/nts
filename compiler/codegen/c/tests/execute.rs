@@ -759,3 +759,35 @@ int main(void) {{
     assert!(output.contains("teamAge() = 140"), "{output}");
     assert!(output.contains("totalAges() = 81"), "{output}");
 }
+
+#[test]
+fn methods_are_static_calls_with_an_explicit_receiver() {
+    // A method lowers to a function whose first parameter is the receiver, and a
+    // call site to a direct call. There is no dispatch to arrange: the checker
+    // resolved every call site, so `c.advance()` names exactly one target. A
+    // vtable only becomes necessary where a site has more than one, and
+    // TypeScript says when that is.
+    //
+    // `twoCounters` keeps two instances alive at once, so the receiver is
+    // genuinely an argument rather than something that could have been folded.
+    //
+    // Expected values came from running this `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+double run(double step, double times);
+double scaled(double step, double times, double factor);
+double twoCounters(double a, double b);
+int main(void) {{
+    check("run(3,4)", run(3, 4), 12);
+    check("scaled(2,5,10)", scaled(2, 5, 10), 100);
+    // 7*100 + 3*2
+    check("twoCounters(7,3)", twoCounters(7, 3), 706);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("instances", &harness) else {
+        return;
+    };
+    assert!(output.contains("twoCounters(7,3) = 706"), "{output}");
+}

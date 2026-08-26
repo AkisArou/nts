@@ -32,6 +32,20 @@ pub const RUNTIME_HEADER: &str = include_str!("../../../../runtime/c/nts_runtime
 pub const RUNTIME_SOURCE_NAME: &str = "nts_runtime.c";
 pub const RUNTIME_SOURCE: &str = include_str!("../../../../runtime/c/nts_runtime.c");
 
+/// Every value some operation or terminator in a function reads.
+fn values_read(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
+    let mut read = rustc_hash::FxHashSet::default();
+    for block in &func.blocks {
+        read.extend(nts_core::hir::operands_of_terminator(&block.terminator));
+        for value in &block.ops {
+            read.extend(nts_core::hir::operands_of(
+                &func.values[value.0 as usize].kind,
+            ));
+        }
+    }
+    read
+}
+
 /// What an emitter needs beyond the function it is emitting.
 ///
 /// Layouts come from the program because a field's name and position are a
@@ -41,6 +55,14 @@ pub const RUNTIME_SOURCE: &str = include_str!("../../../../runtime/c/nts_runtime
 struct Context<'a> {
     program: &'a Program,
     literals: &'a [String],
+    /// Values something in this function reads.
+    ///
+    /// A call whose result nobody wants still has to happen, so dead-code
+    /// elimination keeps it — but assigning it to a local nobody reads is
+    /// `-Wunused-but-set-variable`, which is an error under the flags the
+    /// generated file is compiled with. `c.advance();` as a statement is
+    /// exactly that.
+    read: rustc_hash::FxHashSet<ValueId>,
 }
 
 /// C for one program, and what could not be emitted.
@@ -109,14 +131,12 @@ pub fn emit(program: &Program) -> Emitted {
     let mut bodies = Vec::new();
     for func in &program.funcs {
         let mut body = CodeWriter::new();
-        match emit_func(
-            &mut body,
-            func,
-            &Context {
-                program,
-                literals: &literals,
-            },
-        ) {
+        let context = Context {
+            program,
+            literals: &literals,
+            read: values_read(func),
+        };
+        match emit_func(&mut body, func, &context) {
             Ok(signature) => bodies.push((signature, body, func)),
             Err(diagnostic) => diagnostics.push(diagnostic),
         }
@@ -255,6 +275,12 @@ const RESERVED: &[&str] = &[
 /// against. Names this backend generates itself (`v0`, `t0`, `b0`) are mangled
 /// the same way, so a function called `v0` cannot shadow a parameter.
 fn c_identifier(name: &str) -> String {
+    // A method's qualified name is `Class#method`. `#` cannot appear in a
+    // TypeScript identifier, which is why it was chosen -- and it cannot appear
+    // in a C one either, so it is spelled with an underscore pair here.
+    if name.contains('#') {
+        return name.replace('#', "__");
+    }
     let generated = matches!(name.as_bytes().first(), Some(b'v' | b't' | b'b'))
         && name.len() > 1
         && name[1..].bytes().all(|b| b.is_ascii_digit());
@@ -690,6 +716,13 @@ fn emit_body(
             ));
         }
     }
+
+    // A call whose result nobody reads is emitted as a bare statement, so it has
+    // nothing to declare. `c.advance();` written for its effect is exactly that,
+    // and a local assigned by nobody is `-Wunused-variable`.
+    declared.retain(|value| {
+        read.contains(value) || !matches!(func.values[value.0 as usize].kind, OpKind::Call { .. })
+    });
 
     // A parameter nothing reads is an error under -Werror, and constant folding
     // produces them for real: `fixed(scale: 8) { return scale * scale }` folds
@@ -1145,11 +1178,13 @@ fn emit_op(
         OpKind::Call { callee, args } => {
             let (Callee::Direct(target) | Callee::External(target)) = callee;
             let arguments: Vec<String> = args.iter().map(|a| value_name(*a)).collect();
-            format!(
-                "{name} = {}({});",
-                c_identifier(target),
-                arguments.join(", ")
-            )
+            let call = format!("{}({})", c_identifier(target), arguments.join(", "));
+            if context.read.contains(&value) {
+                format!("{name} = {call};")
+            } else {
+                // The call still happens; only its result is unwanted.
+                format!("{call};")
+            }
         }
         OpKind::Unary { op: un, operand } => unary_text(func, &name, *un, *operand, &op.ty),
         OpKind::ObjectNew

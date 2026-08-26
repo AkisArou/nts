@@ -48,43 +48,77 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+
+        // A class contributes one function per method and constructor, each
+        // taking the instance as its first parameter. There is no dispatch to
+        // arrange: the checker resolved every call site, so a method call is a
+        // static call and `this` is an ordinary argument.
+        if node.kind == NodeKind::Syntax(syntax::CLASS_DECLARATION) {
+            let members: Vec<NodeId> = {
+                let probe = FuncBuilder::new(snapshot);
+                probe
+                    .children(id)
+                    .into_iter()
+                    .filter(|child| {
+                        matches!(
+                            probe.kind_of(*child),
+                            Some(syntax::METHOD_DECLARATION | syntax::CONSTRUCTOR)
+                        )
+                    })
+                    .collect()
+            };
+            for member in members {
+                let mut builder = FuncBuilder::new(snapshot);
+                match builder.lower_method(id, member) {
+                    Ok(func) => lowered.program.funcs.push(func),
+                    Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+                }
+                collect_layouts(&mut lowered.program, builder.layouts);
+            }
+            continue;
+        }
+
         if node.kind != NodeKind::Syntax(syntax::FUNCTION_DECLARATION) {
             continue;
         }
-        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
         let mut builder = FuncBuilder::new(snapshot);
         match builder.lower_function(id) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => lowered.diagnostics.push(diagnostic),
         }
-        // A layout is a property of the type, not of the function that happened
-        // to mention it first, so it is collected once for the whole program.
-        for layout in builder.layouts {
-            if let Some(existing) = lowered
-                .program
-                .layouts
-                .iter_mut()
-                .find(|known| known.same_shape(&layout.fields))
-            {
-                for ty in layout.types {
-                    if !existing.types.contains(&ty) {
-                        existing.types.push(ty);
-                    }
-                }
-                // As in `layout_of`: a declared name beats a generated one,
-                // and the two functions that mention a type may be discovered
-                // in either order.
-                if existing.name.starts_with("Type") && !layout.name.starts_with("Type") {
-                    existing.name = layout.name;
-                }
-            } else {
-                lowered.program.layouts.push(layout);
-            }
-        }
+        collect_layouts(&mut lowered.program, builder.layouts);
     }
 
     canonicalize_objects(&mut lowered.program);
     lowered
+}
+
+/// Merge a function's discovered layouts into the program's.
+///
+/// A layout is a property of the type, not of the function that happened to
+/// mention it first.
+fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
+    for layout in layouts {
+        if let Some(existing) = program
+            .layouts
+            .iter_mut()
+            .find(|known| known.same_shape(&layout.fields))
+        {
+            for ty in layout.types {
+                if !existing.types.contains(&ty) {
+                    existing.types.push(ty);
+                }
+            }
+            // A declared name beats a generated one, and the two functions that
+            // mention a type may be discovered in either order.
+            if existing.name.starts_with("Type") && !layout.name.starts_with("Type") {
+                existing.name = layout.name;
+            }
+        } else {
+            program.layouts.push(layout);
+        }
+    }
 }
 
 /// Give structurally identical object types one identity.
@@ -214,6 +248,8 @@ struct FuncBuilder<'a> {
     bindings: rustc_hash::FxHashMap<u32, ValueId>,
     /// Layouts discovered while lowering this function.
     layouts: Vec<Layout>,
+    /// The receiver, in a method.
+    this: Option<ValueId>,
 }
 
 impl<'a> FuncBuilder<'a> {
@@ -229,6 +265,7 @@ impl<'a> FuncBuilder<'a> {
             current: BlockId(0),
             bindings: rustc_hash::FxHashMap::default(),
             layouts: Vec::new(),
+            this: None,
         }
     }
 
@@ -337,6 +374,108 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// One method or constructor of a class, as a function taking the instance.
+    ///
+    /// There is no dispatch to arrange. The checker resolved every call site, so
+    /// `c.advance()` names one target and lowers to a static call with `c` as
+    /// the first argument — which is what a method *is* once the receiver is
+    /// explicit. A vtable only becomes necessary where a call site has more than
+    /// one possible target, and TypeScript tells us when that is.
+    fn lower_method(&mut self, class: NodeId, member: NodeId) -> Result<Func, Diagnostic> {
+        let class_name = self
+            .children(class)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .and_then(|child| self.node(child).text.clone())
+            .ok_or_else(|| self.unsupported(class, "an anonymous class"))?;
+
+        // A static method has no receiver: it is a namespaced function, and its
+        // call sites name the class rather than an instance. Lowering one as if
+        // it took `this` would give it a parameter no caller passes.
+        let modifiers = self.node(member).modifiers;
+        if modifiers.contains(nts_semantic_schema::DeclarationModifiers::STATIC) {
+            return Err(self.unsupported(member, "a static method"));
+        }
+        if modifiers.contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT) {
+            return Err(self.unsupported(member, "an abstract method"));
+        }
+
+        let is_constructor = self.kind_of(member) == Some(syntax::CONSTRUCTOR);
+        let member_name = if is_constructor {
+            "constructor".to_owned()
+        } else {
+            self.children(member)
+                .into_iter()
+                .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+                .and_then(|child| self.node(child).text.clone())
+                .ok_or_else(|| self.unsupported(member, "a method with a computed name"))?
+        };
+
+        // `#` cannot appear in a TypeScript identifier, so a qualified name
+        // cannot collide with a plain function's.
+        let name = format!("{class_name}#{member_name}");
+
+        // `this` is parameter zero. Its type is the class's instance type, which
+        // is what the checker gives the class declaration's name.
+        let instance = self
+            .type_of(class)
+            .ok_or_else(|| self.unsupported(class, "a class of unrepresentable type"))?;
+        let origin = self.origin(member);
+        let receiver = self.push(OpKind::Param(0), instance.clone(), origin.clone());
+        self.this = Some(receiver);
+        let mut params = vec![Param {
+            name: "this".to_owned(),
+            ty: instance.clone(),
+            origin: origin.clone(),
+            known: Facts::TOP,
+        }];
+
+        for child in self.children(member) {
+            if self.kind_of(child) != Some(syntax::PARAMETER) {
+                continue;
+            }
+            let index = u32::try_from(params.len()).unwrap_or(0);
+            params.push(self.lower_param(child, index)?);
+        }
+
+        let body = self
+            .children(member)
+            .into_iter()
+            .rev()
+            .find(|child| self.kind_of(*child) == Some(syntax::BLOCK))
+            .ok_or_else(|| self.unsupported(member, "a method without a body"))?;
+
+        // A constructor returns the instance, so that `new C(...)` is one call.
+        let return_type = if is_constructor {
+            instance
+        } else {
+            self.children(member)
+                .into_iter()
+                .filter(|child| {
+                    !matches!(
+                        self.kind_of(*child),
+                        Some(syntax::PARAMETER | syntax::IDENTIFIER)
+                    ) && *child != body
+                })
+                .find_map(|child| self.type_of(child))
+                .unwrap_or(HirType::Void)
+        };
+
+        self.lower_block(body)?;
+        if is_constructor && !self.is_terminated() {
+            self.terminate(Terminator::Return(Some(receiver)));
+        }
+        self.terminate(Terminator::Return(None));
+
+        // A method is reachable from outside exactly when its class is, so the
+        // class's `export` is what makes it a root.
+        let exported = self
+            .node(class)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
+        Ok(self.finish(name, params, return_type, origin, exported))
+    }
+
     fn lower_function(&mut self, id: NodeId) -> Result<Func, Diagnostic> {
         let children = self.children(id);
 
@@ -380,6 +519,23 @@ impl<'a> FuncBuilder<'a> {
         // rejects that for a non-void function, so reaching it means void.
         self.terminate(Terminator::Return(None));
 
+        let origin = self.origin(id);
+        let exported = self
+            .node(id)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
+        Ok(self.finish(name, params, return_type, origin, exported))
+    }
+
+    /// Assemble what has been built into a function.
+    fn finish(
+        &mut self,
+        name: String,
+        params: Vec<Param>,
+        return_type: HirType,
+        origin: Origin,
+        exported: bool,
+    ) -> Func {
         let blocks = std::mem::take(&mut self.blocks)
             .into_iter()
             .map(|block| Block {
@@ -392,18 +548,15 @@ impl<'a> FuncBuilder<'a> {
             })
             .collect();
 
-        Ok(Func {
+        Func {
             name,
             params,
             return_type,
             values: std::mem::take(&mut self.values),
             blocks,
-            origin: self.origin(id),
-            exported: self
-                .node(id)
-                .modifiers
-                .contains(nts_semantic_schema::DeclarationModifiers::EXPORT),
-        })
+            origin,
+            exported,
+        }
     }
 
     fn lower_param(&mut self, id: NodeId, index: u32) -> Result<Param, Diagnostic> {
@@ -1098,6 +1251,12 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::CONDITIONAL_EXPRESSION) => self.lower_conditional(id),
             Some(syntax::ARRAY_LITERAL_EXPRESSION) => self.lower_array_literal(id),
             Some(syntax::OBJECT_LITERAL_EXPRESSION) => self.lower_object_literal(id),
+            Some(syntax::NEW_EXPRESSION) => self.lower_new(id),
+            // `this` is parameter zero of a method. Outside one there is no
+            // receiver to name.
+            Some(syntax::THIS_KEYWORD) => self
+                .this
+                .ok_or_else(|| self.unsupported(id, "`this` outside a method")),
             Some(syntax::ELEMENT_ACCESS_EXPRESSION) => self.lower_element_access(id),
             Some(syntax::PROPERTY_ACCESS_EXPRESSION) => self.lower_property_access(id),
             // `x!`, `x as T` and `x satisfies T` are claims about types. The
@@ -1311,6 +1470,19 @@ impl<'a> FuncBuilder<'a> {
             if property.accessor.is_some() {
                 return Err(self.unsupported(id, "an object with an accessor"));
             }
+            // A method is a member of the type but not a field of the object.
+            // It has no storage: the checker resolved every call site, so it is
+            // a function the call names directly rather than a slot to load
+            // from. This is where a vtable would go if dispatch needed one.
+            if matches!(
+                self.snapshot
+                    .types
+                    .get(property.ty.0 as usize)
+                    .map(|record| &record.kind),
+                Some(TypeKind::Function(_))
+            ) {
+                continue;
+            }
             if property.optional {
                 // An optional field needs a presence bit, which changes the
                 // layout rather than adding to it.
@@ -1370,6 +1542,48 @@ impl<'a> FuncBuilder<'a> {
         }
         self.layouts.push(layout.clone());
         Ok(layout)
+    }
+
+    /// `new C(a, b)` — allocate, then run the constructor over it.
+    ///
+    /// The constructor returns the instance, so this is one call rather than an
+    /// allocation followed by a statement whose result must be threaded through.
+    fn lower_new(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let children = self.children(id);
+        let callee = *children
+            .first()
+            .ok_or_else(|| self.unsupported(id, "a `new` with no callee"))?;
+        let class = self
+            .node(callee)
+            .text
+            .clone()
+            .ok_or_else(|| self.unsupported(callee, "a computed constructor"))?;
+
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "a `new` of unrepresentable type"))?;
+        let HirType::Managed(ManagedType::Object(type_id)) = ty else {
+            return Err(self.unsupported(id, "a `new` that does not produce an object"));
+        };
+        // Laying the class out here is what makes its fields addressable; the
+        // constructor is about to write every one of them.
+        self.layout_of(id, type_id)?;
+
+        let origin = self.origin(id);
+        let object = self.push(OpKind::ObjectNew, ty.clone(), origin.clone());
+
+        let mut args = vec![object];
+        for argument in children.iter().skip(1) {
+            args.push(self.lower_expression(*argument)?);
+        }
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::Direct(format!("{class}#constructor")),
+                args,
+            },
+            ty,
+            origin,
+        ))
     }
 
     /// `xs[i]`, as a read. Writes are handled by the assignment lowering.
@@ -1776,6 +1990,44 @@ impl<'a> FuncBuilder<'a> {
         // rather than a division.
         if let Some(intrinsic) = self.math_intrinsic(callee_node) {
             return self.lower_math(id, intrinsic, &children[1..]);
+        }
+
+        // `c.advance()` — a method call. The receiver becomes the first
+        // argument, which is what a method is once it is explicit.
+        if self.kind_of(callee_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            let parts = self.children(callee_node);
+            let [receiver_node, member] = parts.as_slice() else {
+                return Err(self.unsupported(callee_node, "a method call of unexpected shape"));
+            };
+            let receiver = self.lower_expression(*receiver_node)?;
+            let HirType::Managed(ManagedType::Object(type_id)) =
+                self.values[receiver.0 as usize].ty.clone()
+            else {
+                return Err(self.unsupported(id, "a method call on something without methods"));
+            };
+            let layout = self.layout_of(id, type_id)?;
+            let member_name = self
+                .node(*member)
+                .text
+                .clone()
+                .ok_or_else(|| self.unsupported(*member, "a computed method name"))?;
+
+            let mut args = vec![receiver];
+            for argument in children.iter().skip(1) {
+                args.push(self.lower_expression(*argument)?);
+            }
+            let ty = self
+                .type_of(id)
+                .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
+            let origin = self.origin(id);
+            return Ok(self.push(
+                OpKind::Call {
+                    callee: Callee::Direct(format!("{}#{member_name}", layout.name)),
+                    args,
+                },
+                ty,
+                origin,
+            ));
         }
 
         let name = self
