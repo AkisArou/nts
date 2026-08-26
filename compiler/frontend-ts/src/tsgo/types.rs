@@ -164,6 +164,7 @@ pub mod syntax {
     pub const READONLY_KEYWORD: u16 = 148;
     pub const NUMBER_KEYWORD: u16 = 150;
     pub const PARAMETER: u16 = 170;
+    pub const PROPERTY_SIGNATURE: u16 = 172;
     pub const PROPERTY_DECLARATION: u16 = 173;
     pub const METHOD_SIGNATURE: u16 = 174;
     pub const METHOD_DECLARATION: u16 = 175;

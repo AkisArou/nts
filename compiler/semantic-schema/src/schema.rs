@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -71,6 +71,14 @@ pub struct SemanticSnapshot {
     pub signatures: Vec<SignatureRecord>,
     /// Indexed by [`NodeId`]. Flattened from tsgo's encoded AST.
     pub nodes: Vec<NodeRecord>,
+    /// Base types of a class or interface type, in declaration order.
+    ///
+    /// `extends` first, then `implements`. Needed because the property list of a
+    /// derived type is *flattened* — it already contains inherited members, with
+    /// nothing to say where they came from. On the JVM only own fields belong in
+    /// `field_info`; in C, base fields must come first at fixed offsets so an
+    /// upcast is a no-op pointer cast.
+    pub base_types: FxHashMap<TypeId, Vec<TypeId>>,
     /// Compile-time constant value of a node, where the checker folded one.
     ///
     /// Covers enum members and the sites that read them. `Color.Red` becomes an
@@ -312,7 +320,7 @@ pub enum TypeKind {
     Literal(LiteralValue),
     /// A named object type, class instance, or interface.
     Object {
-        properties: Vec<(String, TypeId)>,
+        properties: Vec<PropertyRecord>,
     },
     Array(TypeId),
     Tuple(Vec<TypeId>),
@@ -343,6 +351,19 @@ pub enum TypeKind {
     Unsupported {
         rendered: String,
     },
+}
+
+/// One member of an object type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PropertyRecord {
+    pub name: String,
+    pub ty: TypeId,
+    /// Declared on this type rather than inherited.
+    ///
+    /// The checker returns a flattened member list, so without this a backend
+    /// cannot tell `Circle.radius` from `Circle.id` — and emitting an inherited
+    /// field as an own one duplicates the superclass's storage.
+    pub own: bool,
 }
 
 /// The value of a literal type.

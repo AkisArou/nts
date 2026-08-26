@@ -27,8 +27,8 @@
 //! that hits it says so instead of quietly returning a partial type graph.
 
 use nts_semantic_schema::{
-    CallTarget, ConstantValue, NodeId, NodeKind, ParameterRecord, SemanticSnapshot, SignatureId,
-    SignatureRecord, SymbolId, TypeId, TypeKind,
+    CallTarget, ConstantValue, NodeId, NodeKind, ParameterRecord, PropertyRecord, SemanticSnapshot,
+    SignatureId, SignatureRecord, SymbolId, TypeId, TypeKind,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -223,6 +223,18 @@ impl<'a> Decomposer<'a> {
         let properties = self
             .client
             .properties_of_type(self.handle, &self.project, ty)?;
+        // Bases before members. The member list the checker returns is flattened,
+        // so `own` can only be decided against the declaration's own members —
+        // and the bases are what a backend needs for `super_class`, the
+        // `interfaces` table, and base-first field offsets.
+        let bases = self.client.base_types(self.handle, &self.project, ty)?;
+        if !bases.is_empty() {
+            let base_ids = self.intern_all(snapshot, &bases, worklist, stats, seeded);
+            if let Some(&slot) = self.interned.get(&ty) {
+                snapshot.base_types.insert(slot, base_ids);
+            }
+        }
+
         if properties.is_empty() {
             // `{}` really has no properties, and recording that is different from
             // failing to look.
@@ -240,8 +252,19 @@ impl<'a> Decomposer<'a> {
             .types_of_symbols(self.handle, &self.project, symbol_ids)?;
         let ids = self.intern_all(snapshot, &types, worklist, stats, seeded);
 
+        // Own members come from the declaration, not from the checker: the member
+        // list is flattened and says nothing about origin.
+        let own = Self::own_member_names(snapshot, ty, &self.interned);
         Ok(TypeKind::Object {
-            properties: names.into_iter().zip(ids).collect(),
+            properties: names
+                .into_iter()
+                .zip(ids)
+                .map(|(name, ty)| PropertyRecord {
+                    own: own.contains(&name),
+                    name,
+                    ty,
+                })
+                .collect(),
         })
     }
 
@@ -313,6 +336,72 @@ impl<'a> Decomposer<'a> {
 
         stats.round_trips = self.client.round_trips() - before;
         Ok(stats)
+    }
+
+    /// Names of the members a type declares itself.
+    ///
+    /// Walks the declaring node's own member children. Anything in the checker's
+    /// flattened list but absent here was inherited.
+    ///
+    /// An empty set means "nothing known", which makes every member read as
+    /// inherited — conservative in the right direction, since a backend that
+    /// treats an own field as inherited emits a lookup where it could have used
+    /// an offset, while the reverse duplicates storage.
+    fn own_member_names(
+        snapshot: &SemanticSnapshot,
+        ty: u32,
+        interned: &FxHashMap<u32, TypeId>,
+    ) -> FxHashSet<String> {
+        let mut names = FxHashSet::default();
+        let Some(slot) = interned.get(&ty) else {
+            return names;
+        };
+        let Some(symbol) = snapshot
+            .types
+            .get(slot.0 as usize)
+            .and_then(|record| record.symbol)
+        else {
+            return names;
+        };
+        let Some(declared) = snapshot.symbols.get(symbol.0 as usize) else {
+            return names;
+        };
+
+        for declaration in &declared.declarations {
+            let Some(node) = snapshot.nodes.get(declaration.0 as usize) else {
+                continue;
+            };
+            for member in node.children.iter().flat_map(|child| {
+                let child_node = &snapshot.nodes[child.0 as usize];
+                if child_node.kind == NodeKind::List {
+                    child_node.children.clone()
+                } else {
+                    vec![*child]
+                }
+            }) {
+                let member_node = &snapshot.nodes[member.0 as usize];
+                let is_member = matches!(
+                    member_node.kind,
+                    NodeKind::Syntax(
+                        syntax::PROPERTY_DECLARATION
+                            | syntax::METHOD_DECLARATION
+                            | syntax::METHOD_SIGNATURE
+                            | syntax::PROPERTY_SIGNATURE
+                    )
+                );
+                if !is_member {
+                    continue;
+                }
+                if let Some(name) = member_node
+                    .children
+                    .iter()
+                    .find_map(|c| snapshot.nodes[c.0 as usize].text.clone())
+                {
+                    names.insert(name);
+                }
+            }
+        }
+        names
     }
 
     /// Whether a type was declared in the files being compiled.

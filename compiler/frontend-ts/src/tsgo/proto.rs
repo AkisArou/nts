@@ -27,6 +27,7 @@ pub mod method {
     pub const GET_RESOLVED_SIGNATURE: &str = "getResolvedSignature";
     pub const GET_SEMANTIC_DIAGNOSTICS: &str = "getSemanticDiagnostics";
 
+    pub const GET_BASE_TYPES: &str = "getBaseTypes";
     pub const GET_CONSTANT_VALUE: &str = "getConstantValue";
     pub const GET_PARAMETERS_OF_SIGNATURE: &str = "getParametersOfSignature";
     pub const GET_EXPORTS_OF_MODULE: &str = "getExportsOfModule";

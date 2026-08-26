@@ -468,6 +468,26 @@ impl Client {
         )
     }
 
+    /// Base types of a class or interface type.
+    ///
+    /// Answers an empty list for a type with no heritage, which is the common
+    /// case rather than an error.
+    pub fn base_types(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<Vec<TypeResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_BASE_TYPES,
+            &CheckerTypeParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+            },
+        )
+    }
+
     /// Whether a type is an array. One call, and it is worth it: decomposing an
     /// array as an ordinary object yields `length`, `push`, `map` and the rest of
     /// the prototype instead of an element type.
