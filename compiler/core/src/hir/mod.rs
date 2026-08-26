@@ -27,6 +27,7 @@
 pub mod dce;
 pub mod facts;
 pub mod flow;
+pub mod fold;
 
 pub mod lower;
 pub mod specialize;
@@ -378,6 +379,22 @@ pub struct Program {
     pub funcs: Vec<Func>,
 }
 
+/// The values an operation reads.
+///
+/// Exposed because a backend needs the same answer the verifier does, and two
+/// implementations of "what does this operation read" would eventually disagree
+/// about a newly added operation — in whichever direction was not tested.
+#[must_use]
+pub fn operands_of(kind: &OpKind) -> Vec<ValueId> {
+    verify::operands(kind)
+}
+
+/// The values a terminator reads.
+#[must_use]
+pub fn operands_of_terminator(terminator: &Terminator) -> Vec<ValueId> {
+    verify::terminator_operands(terminator)
+}
+
 /// Everything a backend needs, in the one order that is correct.
 ///
 /// Lower, specialize, verify. Kept here rather than in each caller because a
@@ -403,16 +420,41 @@ pub struct Prepared {
 /// inserts operations — so it has to earn that trust again rather than inherit
 /// it from the lowering.
 pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Vec<verify::Invalid>> {
+    prepare_with(snapshot, true)
+}
+
+/// As [`prepare`], with specialization optional.
+///
+/// Turning it off is not a supported way to build anything — it is how the
+/// benchmarks measure what specialization is worth, by compiling one program
+/// both ways and running both.
+///
+/// # Errors
+///
+/// As [`prepare`].
+pub fn prepare_with(
+    snapshot: &SemanticSnapshot,
+    specialize_numbers: bool,
+) -> Result<Prepared, Vec<verify::Invalid>> {
     let lowered = lower::lower(snapshot);
     let mut program = lowered.program;
     let mut specialized = 0;
     let mut conversions = 0;
 
-    for func in &mut program.funcs {
-        let analysis = flow::analyze(func);
-        let report = specialize::specialize(func, &analysis);
-        specialized += report.specialized;
-        conversions += report.conversions;
+    if specialize_numbers {
+        for func in &mut program.funcs {
+            // Folding first, because a folded constant is a smaller thing to
+            // specialize and because a coercion of a known value should never
+            // reach the backend as a call.
+            let analysis = flow::analyze(func);
+            fold::fold(func, &analysis);
+
+            // Re-analyzed, since folding changed what the operations are.
+            let analysis = flow::analyze(func);
+            let report = specialize::specialize(func, &analysis);
+            specialized += report.specialized;
+            conversions += report.conversions;
+        }
     }
 
     // Specialization orphans values by design — a folded constant leaves its

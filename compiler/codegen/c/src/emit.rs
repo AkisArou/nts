@@ -105,8 +105,10 @@ pub fn emit(program: &Program) -> Emitted {
                 op: coercion @ (UnOp::ToInt32 | UnOp::ToUint32),
                 operand,
             } = &op.kind
-                && coercion_is_free(func, *coercion, *operand)
+                && (coercion_is_free(func, *coercion, *operand)
+                    || matches!(func.values[operand.0 as usize].ty, HirType::Int { .. }))
             {
+                // Emitted as a cast, not a call.
                 continue;
             }
             if !helpers.contains(&needed) {
@@ -399,10 +401,33 @@ fn emit_body(writer: &mut CodeWriter, func: &Func) -> Result<(), Diagnostic> {
     // behind. The arena keeps dead entries on purpose: a `ValueId` is an index
     // into it, and compacting would invalidate every reference in the function.
     let mut declared = rustc_hash::FxHashSet::default();
+    let mut read = rustc_hash::FxHashSet::default();
     for block in &func.blocks {
         declared.extend(block.params.iter().copied());
         declared.extend(block.ops.iter().copied());
+        read.extend(nts_core::hir::operands_of_terminator(&block.terminator));
+        for value in &block.ops {
+            read.extend(nts_core::hir::operands_of(
+                &func.values[value.0 as usize].kind,
+            ));
+        }
     }
+
+    // A parameter nothing reads is an error under -Werror, and constant folding
+    // produces them for real: `fixed(scale: 8) { return scale * scale }` folds
+    // to `64` and stops looking at its argument. The signature still has to
+    // match, so the parameter stays and is discarded explicitly.
+    writer.indent();
+    for index in 0..func.params.len() {
+        let id = ValueId(u32::try_from(index).unwrap_or(0));
+        if !read.contains(&id) {
+            writer.line(
+                &func.params[index].origin,
+                format!("(void){};", value_name(id)),
+            );
+        }
+    }
+    writer.dedent();
 
     writer.indent();
     for (index, op) in func.values.iter().enumerate() {
@@ -472,12 +497,36 @@ fn emit_block(
 
 /// The C spelling of a binary operation.
 fn binary_text(
+    func: &Func,
     op: &nts_core::hir::Op,
     name: &str,
     bin: BinOp,
     lhs: ValueId,
     rhs: ValueId,
 ) -> Result<String, Diagnostic> {
+    // A bitwise operator's operands are always coercion results — the lowering
+    // guarantees it — so they hold int32 values whatever their representation
+    // says. When specialization did not give them an integer type, the
+    // arithmetic still has to happen in integers, so it is spelled with casts
+    // around it. Those casts are exactly the cost the analysis removes.
+    let integral = matches!(op.ty, HirType::Int { .. });
+    // Cast decided per *operand*, from its own type. Deciding it from the
+    // result's would emit `v14 | v15` with `v15` a double, which is not C.
+    let cast = |value: ValueId| {
+        if matches!(func.values[value.0 as usize].ty, HirType::Int { .. }) {
+            value_name(value)
+        } else {
+            format!("(int32_t){}", value_name(value))
+        }
+    };
+    let wrap = |text: String| {
+        if integral {
+            format!("{name} = {text};")
+        } else {
+            format!("{name} = (double)({text});")
+        }
+    };
+
     // Shifts are not C operators here. JavaScript masks the count to five bits,
     // where C leaves a shift by 32 or more undefined; `<<` on a negative signed
     // operand is undefined in C and defined in JavaScript. Each goes through a
@@ -489,11 +538,7 @@ fn binary_text(
         _ => None,
     };
     if let Some(helper) = helper {
-        return Ok(format!(
-            "{name} = {helper}({}, {});",
-            value_name(lhs),
-            value_name(rhs)
-        ));
+        return Ok(wrap(format!("{helper}({}, {})", cast(lhs), cast(rhs))));
     }
 
     let operator = match bin {
@@ -521,19 +566,8 @@ fn binary_text(
         }
     };
 
-    // A bitwise operator on a double is not valid C at all. Reaching here means
-    // specialization declined the value, and emitting `a | b` anyway would fail
-    // to compile — loudly, but a long way from the cause.
-    if matches!(
-        bin,
-        BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr | BinOp::UShr
-    ) && !matches!(op.ty, HirType::Int { .. })
-    {
-        return Err(Diagnostic::error(
-            "NTS2004",
-            "a bitwise operator whose result was not specialized to an integer",
-            op.origin.location,
-        ));
+    if matches!(bin, BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor) {
+        return Ok(wrap(format!("{} {operator} {}", cast(lhs), cast(rhs))));
     }
 
     // `%` is integer-only in C. On doubles it is `fmod`, and emitting `%` would
@@ -567,6 +601,23 @@ fn unary_text(func: &Func, name: &str, un: UnOp, operand: ValueId) -> String {
             if coercion_is_free(func, un, operand) {
                 return format!("{name} = {};", value_name(operand));
             }
+
+            // An *integer* of some other width is a truncation, which C spells
+            // as a cast through the unsigned type of the target — exactly
+            // ToInt32's "reduce modulo 2^32, reinterpret signed", and one
+            // instruction. Only a genuine double needs the total, wrapping,
+            // fmod-based helper, and reaching for it on an `int64_t` operand
+            // costs a conversion to double and a library call in the loop body
+            // that the whole analysis existed to speed up.
+            if matches!(func.values[operand.0 as usize].ty, HirType::Int { .. }) {
+                return match un {
+                    UnOp::ToInt32 => {
+                        format!("{name} = (int32_t)(uint32_t){};", value_name(operand))
+                    }
+                    _ => format!("{name} = (uint32_t){};", value_name(operand)),
+                };
+            }
+
             let helper = if matches!(un, UnOp::ToInt32) {
                 "nts_to_int32"
             } else {
@@ -597,7 +648,7 @@ fn emit_op(writer: &mut CodeWriter, func: &Func, value: ValueId) -> Result<(), D
                 op.origin.location,
             ));
         }
-        OpKind::Binary { op: bin, lhs, rhs } => binary_text(op, &name, *bin, *lhs, *rhs)?,
+        OpKind::Binary { op: bin, lhs, rhs } => binary_text(func, op, &name, *bin, *lhs, *rhs)?,
         OpKind::Call { callee, args } => {
             let (Callee::Direct(target) | Callee::External(target)) = callee;
             let arguments: Vec<String> = args.iter().map(|a| value_name(*a)).collect();

@@ -36,30 +36,47 @@ struct Measured {
     checksum: String,
 }
 
+/// Which translation unit, if any, the compiler contributes to a variant.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Generated {
+    /// Hand-written C only.
+    None,
+    /// Compiled by nts, number specialization on.
+    Specialized,
+    /// Compiled by nts with specialization disabled — the same program, every
+    /// number an f64. The gap between this and `Specialized` is what the
+    /// analysis is worth, measured rather than argued.
+    Unspecialized,
+}
+
 /// What a variant is called and how it is built.
 struct Variant {
     label: &'static str,
     /// The C file supplying `bench_run`, relative to the case directory.
     source: &'static str,
-    /// Whether the nts-generated translation unit is linked in too.
-    generated: bool,
+    generated: Generated,
 }
 
 const VARIANTS: &[Variant] = &[
     Variant {
         label: "nts",
         source: "nts.c",
-        generated: true,
+        generated: Generated::Specialized,
+    },
+    Variant {
+        label: "nts f64",
+        source: "nts.c",
+        generated: Generated::Unspecialized,
     },
     Variant {
         label: "C (double)",
         source: "ref-double.c",
-        generated: false,
+        generated: Generated::None,
     },
     Variant {
-        label: "C (int64)",
+        label: "C (int)",
         source: "ref-int.c",
-        generated: false,
+        generated: Generated::None,
     },
 ];
 
@@ -88,10 +105,10 @@ fn main() -> Result<()> {
     std::fs::create_dir_all(&out).context("creating the build directory")?;
 
     println!(
-        "{:<14} {:>12} {:>12} {:>12} {:>12}   {:>8} {:>9}",
-        "case", "nts", "C (double)", "C (int64)", "node", "nts/C", "node/nts"
+        "{:<12} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>10} {:>9}",
+        "case", "nts", "nts f64", "C (double)", "C (int)", "node", "specialize", "node/nts"
     );
-    println!("{}", "-".repeat(92));
+    println!("{}", "-".repeat(104));
 
     for case in &cases {
         match run_case(&root, case, &out) {
@@ -104,9 +121,12 @@ fn main() -> Result<()> {
 
 fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
     let name = case.file_name().context("a case needs a name")?;
-    let generated = out.join(format!("{name}.generated.c"));
-    std::fs::write(&generated, emit(&case.join("tsconfig.json"))?)
-        .with_context(|| format!("writing {generated}"))?;
+    let tsconfig = case.join("tsconfig.json");
+    let specialized = out.join(format!("{name}.specialized.c"));
+    let plain = out.join(format!("{name}.plain.c"));
+    std::fs::write(&specialized, emit(&tsconfig, true)?)
+        .with_context(|| format!("writing {specialized}"))?;
+    std::fs::write(&plain, emit(&tsconfig, false)?).with_context(|| format!("writing {plain}"))?;
 
     let mut results = Vec::new();
     for variant in VARIANTS {
@@ -118,8 +138,10 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
             case.join(variant.source),
             root.join("benches/common/main.c"),
         ];
-        if variant.generated {
-            sources.push(generated.clone());
+        match variant.generated {
+            Generated::Specialized => sources.push(specialized.clone()),
+            Generated::Unspecialized => sources.push(plain.clone()),
+            Generated::None => {}
         }
         compile(root, &sources, &binary)?;
         results.push(measure(&mut std::process::Command::new(&binary))?);
@@ -142,14 +164,20 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
     }
 
     let nts = &results[0];
-    let reference = &results[1];
+    let unspecialized = &results[1];
+    // No combined "distance from C" ratio, deliberately. Which hand-written C
+    // is the legitimate ceiling differs by case -- `C (int)` is a target only
+    // where the three obligations can actually be discharged, and for `fib`
+    // they cannot (see docs/records/0004). A single column would need a
+    // footnote per row to mean anything, so the columns are left to be read.
     println!(
-        "{name:<14} {:>12} {:>12} {:>12} {:>12}   {:>7.2}x {:>8.1}x",
+        "{name:<12} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9.2}x {:>8.1}x",
         human(nts.ns_per_op),
-        human(reference.ns_per_op),
+        human(unspecialized.ns_per_op),
         human(results[2].ns_per_op),
+        human(results[3].ns_per_op),
         human(node.ns_per_op),
-        nts.ns_per_op / reference.ns_per_op,
+        unspecialized.ns_per_op / nts.ns_per_op,
         node.ns_per_op / nts.ns_per_op,
     );
     Ok(())
@@ -157,14 +185,14 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
 
 /// The compiler's own pipeline, not a shell out to the CLI — a benchmark that
 /// measured a stale generated file would be worse than no benchmark.
-fn emit(tsconfig: &Utf8Path) -> Result<String> {
+fn emit(tsconfig: &Utf8Path, specialize: bool) -> Result<String> {
     let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(tsconfig)?;
     if snapshot.has_errors() {
         bail!("{tsconfig} does not typecheck");
     }
 
-    let prepared = match hir::prepare(&snapshot) {
+    let prepared = match hir::prepare_with(&snapshot, specialize) {
         Ok(prepared) => prepared,
         Err(problems) => bail!("invalid HIR: {problems:?}"),
     };
