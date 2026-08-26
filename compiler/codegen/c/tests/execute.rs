@@ -727,3 +727,35 @@ int main(void) {{
     assert!(output.contains("shifted(1,2,10) = 11012"), "{output}");
     assert!(output.contains("scaledBy(6) = 42"), "{output}");
 }
+
+#[test]
+fn objects_hold_references_and_arrays_hold_objects() {
+    // A reference field is a pointer. Under NoGC nothing is ever freed, so it
+    // costs neither a write barrier nor a trace -- but *which* fields are
+    // references is recorded on the layout as a pointer bitmap (RFC 8.3),
+    // because that is a fact about the layout and a collector cannot be told it
+    // after the fact.
+    //
+    // Expected values came from running this `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+double describe(void);
+double teamAge(void);
+double totalAges(void);
+int main(void) {{
+    // "ada".length * 100 + 36
+    check("describe()", describe(), 336);
+    // An object holding an object: 45 * 3 + "grace".length
+    check("teamAge()", teamAge(), 140);
+    // An array whose elements are references, walked with `length`.
+    check("totalAges()", totalAges(), 81);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("objects", &harness) else {
+        return;
+    };
+    assert!(output.contains("teamAge() = 140"), "{output}");
+    assert!(output.contains("totalAges() = 81"), "{output}");
+}

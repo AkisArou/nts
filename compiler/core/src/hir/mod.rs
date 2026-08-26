@@ -502,6 +502,31 @@ impl Layout {
                 .all(|(mine, theirs)| mine.name == theirs.name && mine.ty == theirs.ty)
     }
 
+    /// Which fields hold references, as a bitmap over layout order.
+    ///
+    /// RFC §8.3 sanctions a pointer bitmap for a fixed layout. Nothing reads it
+    /// under `NoGC` — nothing is ever freed, so a reference field is a pointer and
+    /// costs neither a barrier nor a trace. It is recorded now because a
+    /// collector cannot be given it later: it is a fact about the *layout*, and
+    /// the layout is decided here.
+    ///
+    /// Thirty-two fields is the bitmap's limit. Beyond that a layout needs the
+    /// generated trace routine §8.3 describes for variable objects, and saying
+    /// so is better than silently tracing the first thirty-two.
+    #[must_use]
+    pub fn reference_map(&self) -> Option<u32> {
+        if self.fields.len() > 32 {
+            return None;
+        }
+        let mut map = 0_u32;
+        for (index, field) in self.fields.iter().enumerate() {
+            if field.ty.is_managed() {
+                map |= 1_u32 << index;
+            }
+        }
+        Some(map)
+    }
+
     /// The index of a field by name.
     #[must_use]
     pub fn index_of(&self, name: &str) -> Option<u32> {

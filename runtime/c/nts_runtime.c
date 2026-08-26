@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY, sizeof(void *), 1, "reference"};
 const NtsDescriptor nts_desc_string1 = {NTS_KIND_STRING, 1, 0, "string"};
 const NtsDescriptor nts_desc_string2 = {NTS_KIND_STRING, 2, 0, "string"};
 

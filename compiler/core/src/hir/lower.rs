@@ -1316,12 +1316,13 @@ impl<'a> FuncBuilder<'a> {
                 // layout rather than adding to it.
                 return Err(self.unsupported(id, "an object with an optional property"));
             }
+            // A reference field is a pointer. Under NoGC nothing is ever freed,
+            // so it costs neither a write barrier nor a trace; which fields are
+            // references is recorded on the layout for the collector that comes
+            // later, because that is a fact about the layout and the layout is
+            // decided here.
             let field_ty = representation(self.snapshot, property.ty)
                 .ok_or_else(|| self.unsupported(id, "a property of unrepresentable type"))?;
-            if field_ty.is_managed() {
-                // A reference field has to be traced, and nothing traces yet.
-                return Err(self.unsupported(id, "an object with a reference field"));
-            }
             fields.push(Field {
                 name: property.name.clone(),
                 ty: field_ty,
@@ -1361,6 +1362,12 @@ impl<'a> FuncBuilder<'a> {
             name,
             fields,
         };
+        if layout.reference_map().is_none() {
+            // Past the bitmap's width. RFC §8.3 has generated trace routines for
+            // this case; silently tracing the first thirty-two fields would be
+            // a collector that misses references.
+            return Err(self.unsupported(id, "an object with more than 32 fields"));
+        }
         self.layouts.push(layout.clone());
         Ok(layout)
     }

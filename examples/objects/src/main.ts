@@ -43,3 +43,43 @@ export function scaledBy(v: number): number {
   const f: Frozen = { scale: 7 };
   return v * f.scale;
 }
+
+// A reference field is a pointer. Under NoGC nothing is ever freed, so it costs
+// neither a write barrier nor a trace -- but *which* fields are references is
+// recorded on the layout as a pointer bitmap (RFC 8.3), because that is a fact
+// about the layout and the collector that comes later cannot be told it after
+// the fact.
+interface Person {
+  name: string;
+  age: number;
+}
+
+export function describe(): number {
+  const p: Person = { name: "ada", age: 36 };
+  return p.name.length * 100 + p.age;
+}
+
+// An object holding an object. The forward declarations exist so a field can
+// point at a type declared later, or at its own.
+interface Team {
+  lead: Person;
+  size: number;
+}
+
+export function teamAge(): number {
+  const t: Team = { lead: { name: "grace", age: 45 }, size: 3 };
+  return t.lead.age * t.size + t.lead.name.length;
+}
+
+// An array whose elements are references.
+export function totalAges(): number {
+  const people: Person[] = [
+    { name: "ada", age: 36 },
+    { name: "grace", age: 45 },
+  ];
+  let total = 0;
+  for (let i = 0; i < people.length; i++) {
+    total += people[i]!.age;
+  }
+  return total;
+}

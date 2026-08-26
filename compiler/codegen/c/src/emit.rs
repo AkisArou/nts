@@ -317,14 +317,24 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) 
 /// and alignment and the emitted field access is `p->x` — which is both faster
 /// to read and impossible to get wrong by an offset.
 fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+    // Every object type is forward-declared first, so a field may point at a
+    // type declared later -- or at its own, which a linked structure does.
     for layout in &program.layouts {
         let name = object_type_name(layout);
-        writer.line(origin, format!("typedef struct {name} {{"));
+        writer.line(origin, format!("typedef struct {name} {name};"));
+    }
+    if !program.layouts.is_empty() {
+        writer.blank(origin);
+    }
+
+    for layout in &program.layouts {
+        let name = object_type_name(layout);
+        writer.line(origin, format!("struct {name} {{"));
         // The header first, so every managed object starts the same way and a
         // provider can read the descriptor without knowing the type (RFC 8.2).
         writer.line(origin, "    NtsHeader header;");
         for field in &layout.fields {
-            let Ok(ty) = c_type(&field.ty, origin) else {
+            let Ok(ty) = c_type_of(program, &field.ty, origin) else {
                 continue;
             };
             // `readonly` is semantic, not syntactic — `Readonly<T>` counts — and
@@ -335,12 +345,17 @@ fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program
                 format!("    {qualifier}{ty} {};", c_identifier(&field.name)),
             );
         }
-        writer.line(origin, format!("}} {name};"));
+        writer.line(origin, "};");
+        // RFC 8.3: a pointer bitmap over the fields, in layout order. Nothing
+        // reads it under NoGC -- a reference field is a pointer and costs
+        // nothing -- but it is a fact about the layout, and the layout is
+        // decided here rather than by whatever collects later.
         writer.line(
             origin,
             format!(
                 "static const NtsDescriptor nts_desc_{name} = \
-                 {{ NTS_KIND_OBJECT, sizeof({name}), 0, \"{}\" }};",
+                 {{ NTS_KIND_OBJECT, sizeof({name}), {}u, \"{}\" }};",
+                layout.reference_map().unwrap_or(0),
                 layout.name
             ),
         );
@@ -380,10 +395,18 @@ fn descriptors_reached(bodies: &[(String, CodeWriter, &Func)]) -> Vec<&'static s
             if !matches!(op.kind, OpKind::ArrayNew { .. }) {
                 continue;
             }
-            if let Ok(element) = element_type(&op.ty, &op.origin)
-                && !found.contains(&element)
+            let HirType::Managed(ManagedType::Array(element)) = &op.ty else {
+                continue;
+            };
+            // Arrays of references share the runtime's own descriptor: every
+            // reference is a pointer, so they are all the same shape.
+            if element.is_managed() {
+                continue;
+            }
+            if let Ok(spelling) = c_type(element, &op.origin)
+                && !found.contains(&spelling)
             {
-                found.push(element);
+                found.push(spelling);
             }
         }
     }
@@ -451,7 +474,24 @@ fn field_of(
 }
 
 /// The C spelling of an array's element type.
-fn element_type(array: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
+fn element_type(program: &Program, array: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
+    let HirType::Managed(ManagedType::Array(element)) = array else {
+        return Err(Diagnostic::error(
+            "NTS2005",
+            "an array operation on something that is not an array",
+            origin.location,
+        ));
+    };
+    c_type_of(program, element, origin)
+}
+
+/// The descriptor an array's elements use.
+///
+/// Every reference is the same shape -- a pointer -- so arrays of references
+/// share one descriptor. A descriptor describes the element's *shape*, not what
+/// it points at, and emitting one per pointed-to type would be as many copies
+/// of the same three numbers.
+fn element_descriptor(array: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
     let HirType::Managed(ManagedType::Array(element)) = array else {
         return Err(Diagnostic::error(
             "NTS2005",
@@ -460,14 +500,9 @@ fn element_type(array: &HirType, origin: &Origin) -> Result<&'static str, Diagno
         ));
     };
     if element.is_managed() {
-        return Err(Diagnostic::error(
-            "NTS2001",
-            "an array of managed references needs a collector to trace it, \
-             which this backend does not have yet",
-            origin.location,
-        ));
+        return Ok("nts_desc_ref".to_owned());
     }
-    c_type(element, origin)
+    Ok(descriptor_name(c_type(element, origin)?))
 }
 
 /// The descriptor a given element type uses. One per element type, not per
@@ -1029,10 +1064,9 @@ fn managed_op(
             )
         }
         OpKind::ArrayNew { length } => {
-            let element = element_type(&op.ty, &op.origin)?;
             format!(
                 "{name} = nts_array_new(&{}, {});",
-                descriptor_name(element),
+                element_descriptor(&op.ty, &op.origin)?,
                 value_name(*length)
             )
         }
@@ -1045,7 +1079,11 @@ fn managed_op(
             index,
             checked,
         } => {
-            let element = element_type(&func.values[array.0 as usize].ty, &op.origin)?;
+            let element = element_type(
+                context.program,
+                &func.values[array.0 as usize].ty,
+                &op.origin,
+            )?;
             let slot = index_expression(func, *array, *index, *checked);
             format!(
                 "{name} = NTS_ELEMENTS({}, {element})[{slot}];",
@@ -1058,7 +1096,11 @@ fn managed_op(
             value: stored,
             checked,
         } => {
-            let element = element_type(&func.values[array.0 as usize].ty, &op.origin)?;
+            let element = element_type(
+                context.program,
+                &func.values[array.0 as usize].ty,
+                &op.origin,
+            )?;
             let slot = index_expression(func, *array, *index, *checked);
             format!(
                 "NTS_ELEMENTS({}, {element})[{slot}] = {};",

@@ -73,6 +73,10 @@ typedef NtsHeader NtsString;
  * because talking to C is the point. */
 #define NTS_TWO_BYTE 1u
 
+/* Elements of an array of references. Every reference is a pointer, so one
+ * descriptor serves them all -- it describes the element's shape, not what the
+ * element points at. `traced` is set, which is what a collector will read. */
+extern const NtsDescriptor nts_desc_ref;
 extern const NtsDescriptor nts_desc_string1;
 extern const NtsDescriptor nts_desc_string2;
 
