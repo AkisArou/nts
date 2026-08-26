@@ -76,3 +76,13 @@ Each cost a wrong first attempt and is now pinned by a test.
   and answered by no endpoint, so they must be captured at classification.
 - **A tuple is array-like and object-like.** Whichever test runs first claims it,
   and the array path loses the arity that makes a flat layout possible.
+- **A prefix unary operator is a dense index, not a `SyntaxKind`.** The encoder
+  documents the six small bits as holding "the operator's SyntaxKind value (e.g.
+  `PlusPlusToken=45`, `TildeToken=54`)" and asserts at startup that
+  `KindLastUnaryOperator` fits in them. `encoder_generated.go` then writes
+  `0..=5`, and `decoder_generated.go` reads it back with `commonData & 7`. A `-`
+  arrives as `1`. Believing the prose rejects every unary expression; believing
+  it and being lenient reads `!` as `~`, which still compiles.
+- **A `PrefixUnaryExpression`'s operator is not a child node.** A
+  `BinaryExpression` holds a real `OperatorToken` node, so a child walk finds it.
+  The unary operator is a struct field, so a child walk finds only the operand.

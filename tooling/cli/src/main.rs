@@ -244,6 +244,13 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
                 rhs.0
             )
         }
+        OpKind::Unary { op: un, operand } => {
+            let operator = match un {
+                nts_core::hir::UnOp::Neg => "neg",
+                nts_core::hir::UnOp::Not => "not",
+            };
+            format!("%{index} = {operator} %{} : {ty}", operand.0)
+        }
         OpKind::Call { callee, args } => {
             let rendered: Vec<String> = args.iter().map(|a| format!("%{}", a.0)).collect();
             let (kind, name) = match callee {

@@ -310,6 +310,7 @@ fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_) => Vec::new(),
         OpKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
+        OpKind::Unary { operand, .. } => vec![*operand],
         OpKind::Call { args, .. } => args.clone(),
         OpKind::Return(value) => value.iter().copied().collect(),
     }

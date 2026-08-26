@@ -260,6 +260,10 @@ pub enum OpKind {
         lhs: ValueId,
         rhs: ValueId,
     },
+    Unary {
+        op: UnOp,
+        operand: ValueId,
+    },
     /// A call whose callee the checker resolved.
     Call {
         callee: Callee,
@@ -306,6 +310,18 @@ pub enum BinOp {
     Ge,
     Eq,
     Ne,
+}
+
+/// A unary operator.
+///
+/// Negation is its own operation rather than `0 - x`, which is a different
+/// function: IEEE says `0.0 - 0.0` is `+0.0`, while `-(0.0)` is `-0.0`. The two
+/// zeroes are distinguishable — `1/x` tells them apart — so lowering negation to
+/// a subtraction silently changes results.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnOp {
+    Neg,
+    Not,
 }
 
 /// A lowered program.

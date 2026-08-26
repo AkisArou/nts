@@ -14,7 +14,9 @@
 //! to be visible.
 
 use nts_codegen_common::{CodeWriter, Copy, block_order, destruct};
-use nts_core::hir::{BinOp, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, ValueId};
+use nts_core::hir::{
+    BinOp, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId,
+};
 use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::Origin;
 
@@ -392,6 +394,13 @@ fn emit_op(writer: &mut CodeWriter, func: &Func, value: ValueId) -> Result<(), D
                 value_name(*lhs),
                 value_name(*rhs)
             )
+        }
+        OpKind::Unary { op: un, operand } => {
+            let operator = match un {
+                UnOp::Neg => "-",
+                UnOp::Not => "!",
+            };
+            format!("{name} = {operator}{};", value_name(*operand))
         }
         OpKind::Call { callee, args } => {
             let (Callee::Direct(target) | Callee::External(target)) = callee;

@@ -20,8 +20,11 @@ pub const MINUS_TOKEN: u16 = 40;
 pub const ASTERISK_TOKEN: u16 = 41;
 pub const SLASH_TOKEN: u16 = 43;
 pub const PERCENT_TOKEN: u16 = 44;
+pub const EXCLAMATION_TOKEN: u16 = 53;
 pub const QUESTION_TOKEN: u16 = 57;
 pub const IDENTIFIER: u16 = 79;
+pub const FALSE_KEYWORD: u16 = 96;
+pub const TRUE_KEYWORD: u16 = 111;
 pub const CONST_KEYWORD: u16 = 86;
 pub const DEFAULT_KEYWORD: u16 = 89;
 pub const EXPORT_KEYWORD: u16 = 94;
@@ -38,6 +41,8 @@ pub const OVERRIDE_KEYWORD: u16 = 164;
 pub const READONLY_KEYWORD: u16 = 148;
 pub const NUMBER_KEYWORD: u16 = 150;
 pub const PARAMETER: u16 = 170;
+pub const PARENTHESIZED_EXPRESSION: u16 = 218;
+pub const PREFIX_UNARY_EXPRESSION: u16 = 225;
 pub const PROPERTY_SIGNATURE: u16 = 172;
 pub const PROPERTY_DECLARATION: u16 = 173;
 pub const METHOD_SIGNATURE: u16 = 174;
@@ -62,3 +67,28 @@ pub const EXPRESSION_WITH_TYPE_ARGUMENTS: u16 = 234;
 pub const HERITAGE_CLAUSE: u16 = 299;
 pub const ENUM_MEMBER: u16 = 306;
 pub const SOURCE_FILE: u16 = 307;
+
+/// The operator of a prefix unary expression, as the encoder actually writes it.
+///
+/// # Not a `SyntaxKind`
+///
+/// The encoder's own documentation says these six bits "encode the operator's
+/// `SyntaxKind` value (e.g. `PlusPlusToken=45`, `TildeToken=54`)". They do not.
+/// `encoder_generated.go` writes a dense index, and `decoder_generated.go` reads
+/// it back with `commonData & 7` — three bits, not six. A `-` is `1`, not `40`.
+///
+/// Believing the prose gives a lowering that rejects every unary expression, or
+/// worse, one that reads `~` as `!`. Read off real output; see
+/// `docs/records/0003-typescript-feature-coverage.md`.
+pub mod prefix_operator {
+    /// The decoder's own mask. The upper three bits of `small` are not part of
+    /// the operator.
+    pub const MASK: u8 = 7;
+
+    pub const PLUS: u8 = 0;
+    pub const MINUS: u8 = 1;
+    pub const TILDE: u8 = 2;
+    pub const EXCLAMATION: u8 = 3;
+    pub const PLUS_PLUS: u8 = 4;
+    pub const MINUS_MINUS: u8 = 5;
+}

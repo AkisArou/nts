@@ -14,12 +14,12 @@
 
 use nts_diagnostics::{Diagnostic, Location};
 use nts_semantic_schema::{
-    LiteralValue, NodeId, NodeKind, Origin, SemanticSnapshot, TypeId, TypeKind, syntax,
+    LiteralValue, NodeData, NodeId, NodeKind, Origin, SemanticSnapshot, TypeId, TypeKind, syntax,
 };
 
 use super::{
     BinOp, Block, BlockId, Callee, Func, HirType, ManagedType, Op, OpKind, Param, Program,
-    Terminator, ValueId,
+    Terminator, UnOp, ValueId,
 };
 
 /// What a lowering produced, and what it could not.
@@ -380,6 +380,25 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// Symbols *declared* anywhere inside a subtree.
+    ///
+    /// A name declared inside a loop body is fresh on every iteration, so it is
+    /// not carried across the back edge however often the body assigns it.
+    /// Treating it as carried asks the header for a value that does not exist
+    /// before the loop — which is the shape of `let x = 0` inside an outer loop,
+    /// and therefore of every nested loop written the obvious way.
+    fn declared_symbols(&self, root: NodeId, into: &mut Vec<u32>) {
+        if self.kind_of(root) == Some(syntax::VARIABLE_DECLARATION)
+            && let Some(name) = self.children(root).first()
+            && let Some(symbol) = self.node(*name).symbol
+        {
+            into.push(symbol.0);
+        }
+        for child in &self.node(root).children {
+            self.declared_symbols(*child, into);
+        }
+    }
+
     /// `while (c) { .. }`.
     ///
     /// # Where block parameters earn their keep
@@ -400,6 +419,9 @@ impl<'a> FuncBuilder<'a> {
 
         let mut carried = Vec::new();
         self.assigned_symbols(*body, &mut carried);
+        let mut declared = Vec::new();
+        self.declared_symbols(*body, &mut declared);
+        carried.retain(|symbol| !declared.contains(symbol));
 
         let header = self.new_block();
         let origin = self.origin(id);
@@ -464,10 +486,21 @@ impl<'a> FuncBuilder<'a> {
 
     /// `if (c) { .. } else { .. }`.
     ///
-    /// The merge block is created only if control can actually reach it. When
-    /// both arms return, there is nothing after the `if`, and emitting an empty
-    /// merge would leave an unreachable block for every early return in the
-    /// program.
+    /// # The merge is where the arms have to agree
+    ///
+    /// Each arm may leave a different value in the same name. After the `if`,
+    /// which one is live depends on the edge taken — which is precisely what a
+    /// block parameter is for, and the same mechanism a loop header uses.
+    ///
+    /// Without it, the name keeps whatever value the last-lowered arm produced,
+    /// defined in a block the merge does not dominate. That is invalid SSA. It
+    /// also *compiles*, to code that reads a variable the other path never wrote,
+    /// which is why the verifier exists rather than a code review.
+    ///
+    /// Only names the arms disagree about become parameters. One they agree on is
+    /// already defined before the branch — two arms cannot produce the same
+    /// [`ValueId`] otherwise — so it dominates the merge, and a parameter for it
+    /// would be a copy carrying no information.
     fn lower_if(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         let children = self.children(id);
         let (condition, then_branch, else_branch) = match children.as_slice() {
@@ -476,19 +509,23 @@ impl<'a> FuncBuilder<'a> {
             _ => return Err(self.unsupported(id, "an `if` of unexpected shape")),
         };
 
+        let origin = self.origin(id);
         let cond = self.lower_expression(condition)?;
         let then_block = self.new_block();
 
         // With no `else`, the false edge goes straight to the merge. Allocating an
         // else block for it would leave a block whose only content is a jump —
         // once per `if` without an else, which is most of them.
-        let (else_block, merge) = if else_branch.is_some() {
+        let (else_block, preallocated) = if else_branch.is_some() {
             (self.new_block(), None)
         } else {
             let merge = self.new_block();
             (merge, Some(merge))
         };
 
+        // Remembered because the false edge's arguments are not known until the
+        // merge has parameters, which is after both arms are lowered.
+        let branch_block = self.current;
         self.terminate(Terminator::Branch {
             cond,
             then_target: then_block,
@@ -497,18 +534,31 @@ impl<'a> FuncBuilder<'a> {
             else_args: Vec::new(),
         });
 
+        // What each name held on entry: the baseline the arms are compared
+        // against, and what the false edge carries when there is no `else`.
+        let entry = self.bindings.clone();
+
         self.switch_to(then_block);
         self.lower_statement(then_branch)?;
+        // The block the arm *ended* in, which nested control flow moves away from
+        // the block it started in. Terminating `then_block` instead would leave
+        // the real tail without a terminator.
+        let then_tail = self.current;
         let then_open = !self.is_terminated();
+        let then_bindings = std::mem::replace(&mut self.bindings, entry.clone());
 
-        let else_open = match else_branch {
+        let (else_tail, else_open, else_bindings) = match else_branch {
             Some(else_branch) => {
                 self.switch_to(else_block);
                 self.lower_statement(else_branch)?;
-                !self.is_terminated()
+                let tail = self.current;
+                let open = !self.is_terminated();
+                let bindings = std::mem::replace(&mut self.bindings, entry.clone());
+                (tail, open, bindings)
             }
-            // The false edge is the merge, which is open by construction.
-            None => true,
+            // The false edge is the merge, which is open by construction and
+            // changes nothing.
+            None => (else_block, true, entry.clone()),
         };
 
         if !then_open && !else_open {
@@ -517,22 +567,68 @@ impl<'a> FuncBuilder<'a> {
             return Ok(());
         }
 
-        let merge = merge.unwrap_or_else(|| self.new_block());
+        let merge = preallocated.unwrap_or_else(|| self.new_block());
+
+        let mut merged: Vec<(u32, ValueId, ValueId)> = Vec::new();
+        if then_open && else_open {
+            for (symbol, entering) in &entry {
+                let from_then = then_bindings.get(symbol).copied().unwrap_or(*entering);
+                let from_else = else_bindings.get(symbol).copied().unwrap_or(*entering);
+                if from_then != from_else {
+                    merged.push((*symbol, from_then, from_else));
+                }
+            }
+            // Sorted because the source is a hash map: without this the parameter
+            // list would vary between runs of one compiler on one input, and the
+            // snapshot digest would stop being a cache key.
+            merged.sort_unstable();
+        }
+
+        let mut params = Vec::new();
+        for (symbol, from_then, _) in &merged {
+            let ty = self.values[from_then.0 as usize].ty.clone();
+            params.push((*symbol, self.push_block_param(merge, ty, origin.clone())));
+        }
+
         if then_open {
-            self.switch_to(then_block);
+            self.switch_to(then_tail);
+            let args = merged.iter().map(|(_, from_then, _)| *from_then).collect();
             self.terminate(Terminator::Jump {
                 target: merge,
-                args: Vec::new(),
+                args,
             });
         }
-        if else_branch.is_some() && else_open {
-            self.switch_to(else_block);
-            self.terminate(Terminator::Jump {
-                target: merge,
-                args: Vec::new(),
-            });
+        if else_branch.is_some() {
+            if else_open {
+                self.switch_to(else_tail);
+                let args = merged.iter().map(|(_, _, from_else)| *from_else).collect();
+                self.terminate(Terminator::Jump {
+                    target: merge,
+                    args,
+                });
+            }
+        } else if let Some(Terminator::Branch { else_args, .. }) =
+            &mut self.blocks[branch_block.0 as usize].terminator
+        {
+            // The false edge points at the merge directly, so its arguments live
+            // on the branch rather than on a jump of its own.
+            *else_args = merged.iter().map(|(_, _, from_else)| *from_else).collect();
         }
+
         self.switch_to(merge);
+        self.bindings = match (then_open, else_open) {
+            // Only one arm reaches the merge, so its bindings are the live ones
+            // outright — no parameter is needed to choose between them.
+            (true, false) => then_bindings,
+            (false, true) => else_bindings,
+            _ => {
+                let mut live = entry;
+                for (symbol, param) in params {
+                    live.insert(symbol, param);
+                }
+                live
+            }
+        };
         Ok(())
     }
 
@@ -568,6 +664,27 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::STRING_LITERAL) => self.lower_string(id),
             Some(syntax::BINARY_EXPRESSION) => self.lower_binary(id),
             Some(syntax::CALL_EXPRESSION) => self.lower_call(id),
+            // Parentheses group; they compute nothing. Lowering the inner
+            // expression is the whole of it — the grouping already happened when
+            // the parser built the tree this shape.
+            Some(syntax::PARENTHESIZED_EXPRESSION) => {
+                let children = self.children(id);
+                let [inner] = children.as_slice() else {
+                    return Err(
+                        self.unsupported(id, "a parenthesized expression of unexpected shape")
+                    );
+                };
+                self.lower_expression(*inner)
+            }
+            Some(syntax::PREFIX_UNARY_EXPRESSION) => self.lower_prefix_unary(id),
+            Some(syntax::TRUE_KEYWORD) => {
+                let origin = self.origin(id);
+                Ok(self.push(OpKind::ConstBool(true), HirType::Bool, origin))
+            }
+            Some(syntax::FALSE_KEYWORD) => {
+                let origin = self.origin(id);
+                Ok(self.push(OpKind::ConstBool(false), HirType::Bool, origin))
+            }
             _ => Err(self.unsupported(id, "this expression")),
         }
     }
@@ -578,6 +695,48 @@ impl<'a> FuncBuilder<'a> {
     /// value — no slot and no store, because nothing here can reassign it yet.
     /// When assignment arrives, a `let` will need one and a `const` still will
     /// not, which is what the snapshot's variable kind is for.
+    /// `-x`, `+x`, `!x`.
+    ///
+    /// # The operator is not a child
+    ///
+    /// A `BinaryExpression` holds its operator as a real token node, so
+    /// [`Self::children`] returns it. A `PrefixUnaryExpression` does not: tsgo
+    /// stores the operator as a `Kind` *field*, which the encoder packs into the
+    /// node's small data as a dense index — see
+    /// [`syntax::prefix_operator`] for why that index is not a `SyntaxKind`
+    /// however firmly the encoder's documentation says it is. The only child is
+    /// the operand.
+    ///
+    /// Unary `+` is `ToNumber`, which on something already typed `number` is the
+    /// identity — including on `-0`, so it is dropped rather than lowered to an
+    /// operation that would then have to preserve the sign of zero.
+    fn lower_prefix_unary(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let NodeData::Children { small, .. } = self.node(id).data else {
+            return Err(self.unsupported(id, "a unary expression without operator data"));
+        };
+        let children = self.children(id);
+        let [operand] = children.as_slice() else {
+            return Err(self.unsupported(id, "a unary expression of unexpected shape"));
+        };
+
+        let op = match small & syntax::prefix_operator::MASK {
+            syntax::prefix_operator::PLUS => None,
+            syntax::prefix_operator::MINUS => Some(UnOp::Neg),
+            syntax::prefix_operator::EXCLAMATION => Some(UnOp::Not),
+            // `~` is `ToInt32` then a bitwise complement, and `++`/`--` assign.
+            // Both are lowerable; neither is a spelling of what is here.
+            _ => return Err(self.unsupported(id, "this unary operator")),
+        };
+
+        let value = self.lower_expression(*operand)?;
+        let Some(op) = op else { return Ok(value) };
+        let origin = self.origin(id);
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "a unary expression of unrepresentable type"))?;
+        Ok(self.push(OpKind::Unary { op, operand: value }, ty, origin))
+    }
+
     fn lower_variable_statement(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         // A `VariableDeclarationList` is an ordinary syntax node, not a NodeList,
         // so `children` does not flatten it away — the declarations sit one level

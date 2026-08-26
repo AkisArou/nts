@@ -55,7 +55,12 @@ fn run(example: &str, harness: &str) -> Option<String> {
     hir::verify::verify(&lowered.program).expect("lowered HIR should verify");
     let emitted = nts_codegen_c::emit(&lowered.program);
 
-    let dir = std::env::temp_dir().join(format!("nts-e2e-{example}"));
+    // Keyed by the harness as well as the example: two tests exercising one
+    // example otherwise share a directory, and cargo runs them concurrently.
+    let mut hasher = std::hash::DefaultHasher::new();
+    std::hash::Hash::hash(harness, &mut hasher);
+    let key = std::hash::Hasher::finish(&hasher);
+    let dir = std::env::temp_dir().join(format!("nts-e2e-{example}-{key:016x}"));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let generated = dir.join("generated.c");
     let main = dir.join("main.c");
@@ -197,4 +202,70 @@ int main(void) {{
         return;
     };
     assert!(output.contains("compute(5,1) = 11"), "{output}");
+}
+
+#[test]
+fn an_if_inside_a_loop_merges_both_arms() {
+    // The case that motivated merge-block parameters. Each arm leaves a
+    // different value in `result`; without a parameter the merge reads whichever
+    // one the else arm happened to define, from a block it does not dominate.
+    // `classify(n)` counts 1 per iteration below 6 and 2 per iteration after.
+    let harness = format!(
+        r#"{CHECK}
+double classify(double n);
+double atLeastTen(double n);
+double nested(double n);
+int main(void) {{
+    check("classify(0)", classify(0), 0);
+    check("classify(3)", classify(3), 3);
+    // i = 0..9: six iterations at +1 (i <= 5), four at +2.
+    check("classify(10)", classify(10), 14);
+    // An `if` with no `else`: the false edge carries the merge argument on the
+    // branch itself, so the untaken path has to leave `v` alone.
+    check("atLeastTen(3)", atLeastTen(3), 10);
+    check("atLeastTen(42)", atLeastTen(42), 42);
+    // A name declared in the outer body is fresh per iteration, not carried.
+    check("nested(5)", nested(5), 25);
+    check("nested(0)", nested(0), 0);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("nested", &harness) else {
+        return;
+    };
+    assert!(output.contains("classify(10) = 14"), "{output}");
+    assert!(output.contains("nested(5) = 25"), "{output}");
+}
+
+#[test]
+fn unary_operators_mean_what_they_say() {
+    // The encoder writes a dense operator index, not a SyntaxKind, and its own
+    // documentation says otherwise. Reading it the documented way yields `~`
+    // where `!` was written — which still compiles.
+    let harness = format!(
+        r#"{CHECK}
+double negate(double x);
+bool flip(bool b);
+double grouped(double a, double b);
+bool always(void);
+int main(void) {{
+    check("negate(3)", negate(3), -3);
+    check("negate(-3)", negate(-3), 3);
+    check("flip(true)", flip(true), 0);
+    check("flip(false)", flip(false), 1);
+    // Negating zero must give negative zero: `0 - x` would give +0, and the two
+    // are distinguishable by 1/x.
+    check("1/negate(0)", 1.0 / negate(0), -1.0 / 0.0);
+    // Parentheses group: (a+b)*(a-b) is 9-4, not a + b*a - b.
+    check("grouped(3,2)", grouped(3, 2), 5);
+    check("always()", always(), 1);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("nested", &harness) else {
+        return;
+    };
+    assert!(output.contains("negate(3) = -3"), "{output}");
 }
