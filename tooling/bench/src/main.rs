@@ -39,7 +39,7 @@ struct Measured {
 /// Which translation unit, if any, the compiler contributes to a variant.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Generated {
-    /// Hand-written C only.
+    /// Hand-written C++ only.
     None,
     /// Compiled by nts, number specialization on.
     Specialized,
@@ -52,30 +52,34 @@ enum Generated {
 /// What a variant is called and how it is built.
 struct Variant {
     label: &'static str,
-    /// The C file supplying `bench_run`, relative to the case directory.
+    /// The C++ file supplying `bench_run`, relative to the case directory.
     source: &'static str,
     generated: Generated,
 }
 
+/// One hand-written reference per case, and it is C++.
+///
+/// There used to be two, `C (double)` and `C (int)`, because it was not obvious
+/// which was a fair ceiling -- and the README carried a footnote apologising for
+/// that. The double one was really answering "what does the conservative
+/// lowering cost", and `nts f64` answers that better: it measures the compiler's
+/// actual output rather than a hand-written simulation of it. So the reference is
+/// now singular and means one thing -- what a C++ programmer writes -- and each
+/// `ref.cpp` says in a comment why that is what it is for that program.
 const VARIANTS: &[Variant] = &[
     Variant {
         label: "nts",
-        source: "nts.c",
+        source: "nts.cpp",
         generated: Generated::Specialized,
     },
     Variant {
         label: "nts f64",
-        source: "nts.c",
+        source: "nts.cpp",
         generated: Generated::Unspecialized,
     },
     Variant {
-        label: "C (double)",
-        source: "ref-double.c",
-        generated: Generated::None,
-    },
-    Variant {
-        label: "C (int)",
-        source: "ref-int.c",
+        label: "C++",
+        source: "ref.cpp",
         generated: Generated::None,
     },
 ];
@@ -116,21 +120,96 @@ fn main() -> Result<()> {
     .context("writing the runtime")?;
 
     println!(
-        "{:<12} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>10} {:>9}",
-        "case", "nts", "nts f64", "C (double)", "C (int)", "node", "specialize", "node/nts"
+        "{:<14} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9}",
+        "case", "C++", "nts", "nts f64", "node", "nts/C++", "nts/node"
     );
-    println!("{}", "-".repeat(104));
+    println!("{}", "-".repeat(88));
 
+    let mut rows = Vec::new();
     for case in &cases {
         match run_case(&root, case, &out) {
-            Ok(()) => {}
+            Ok(row) => rows.push(row),
             Err(error) => println!("{:<14} failed: {error:#}", case.file_name().unwrap_or("?")),
         }
+    }
+
+    // Only a full run may rewrite the README. A filtered one would leave the
+    // table describing a mixture of two machines and two revisions, which is
+    // worse than a stale table because it does not look stale.
+    if requested.is_empty() && rows.len() == cases.len() {
+        write_readme(&root, &rows)?;
+        println!("\nREADME updated.");
+    } else if !requested.is_empty() {
+        println!("\nREADME not updated: a filtered run measures only part of the table.");
     }
     Ok(())
 }
 
-fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
+/// Rewrite the README's generated benchmark table.
+///
+/// Between markers rather than appended, so the surrounding prose is written by
+/// hand and the numbers never are. A table typed out by a person is a table that
+/// drifts from the machine that produced it.
+fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
+    let mut table = String::new();
+    table.push_str(
+        "| case | C++ | nts | nts f64 | V8 | nts/C++ | nts/V8 |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n",
+    );
+    for row in rows {
+        table.push_str(&format!(
+            "| {} | {} | **{}** | {} | {} | {:.2}x | {:.2}x |\n",
+            row.case,
+            human(row.cpp),
+            human(row.nts),
+            human(row.unspecialized),
+            human(row.node),
+            row.nts / row.cpp,
+            row.nts / row.node,
+        ));
+    }
+
+    let legend = "\n\
+        Both ratios are nts divided by the other, so **lower is better and 1.00 is \
+        parity**: `nts/C++` under 1.00 beats hand-written C++, `nts/V8` under 1.00 \
+        beats V8.\n\n\
+        `nts f64` is the same TypeScript with number specialization switched off. \
+        It is the column that makes a speedup a measurement rather than a claim — \
+        one program, compiled two ways, run against each other.\n\n\
+        `C++` is one hand-written reference per case, being what a C++ programmer \
+        would actually write for that program; each `ref.cpp` says why in a \
+        comment. Every variant returns a checksum and the runner refuses to report \
+        a case whose variants disagree, so a backend cannot win by computing the \
+        wrong answer quickly. Node is timed inside its own process after 20,000 \
+        warmup iterations, so neither startup nor a cold JIT is in its column.\n";
+
+    let path = root.join("README.md");
+    let text = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
+    const START: &str = "<!-- benchmarks:start -->";
+    const END: &str = "<!-- benchmarks:end -->";
+    let (Some(from), Some(to)) = (text.find(START), text.find(END)) else {
+        bail!("README.md has no benchmark markers");
+    };
+    let updated = format!(
+        "{}{START}\n{table}{legend}{}",
+        &text[..from],
+        &text[to..]
+    );
+    std::fs::write(&path, updated).with_context(|| format!("writing {path}"))?;
+    Ok(())
+}
+
+/// One case's timings, kept so the README can be written from the same numbers
+/// the terminal showed.
+struct Row {
+    case: String,
+    cpp: f64,
+    nts: f64,
+    unspecialized: f64,
+    node: f64,
+}
+
+fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     let name = case.file_name().context("a case needs a name")?;
     let tsconfig = case.join("tsconfig.json");
 
@@ -164,17 +243,14 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
             "{name}.{}",
             variant.label.replace([' ', '(', ')'], "")
         ));
-        let mut sources = vec![
-            case.join(variant.source),
-            root.join("benches/common/main.c"),
-            out.join(nts_codegen_c::RUNTIME_SOURCE_NAME),
-        ];
+        let cpp = vec![case.join(variant.source), root.join("benches/common/main.cpp")];
+        let mut c = vec![out.join(nts_codegen_c::RUNTIME_SOURCE_NAME)];
         match variant.generated {
-            Generated::Specialized => sources.push(specialized.clone()),
-            Generated::Unspecialized => sources.push(plain.clone()),
+            Generated::Specialized => c.push(specialized.clone()),
+            Generated::Unspecialized => c.push(plain.clone()),
             Generated::None => {}
         }
-        compile(root, &sources, &binary, defines)?;
+        compile(root, &cpp, &c, &binary, defines)?;
         results.push(measure(&mut std::process::Command::new(&binary))?);
     }
 
@@ -194,24 +270,24 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
         }
     }
 
-    let nts = &results[0];
-    let unspecialized = &results[1];
-    // No combined "distance from C" ratio, deliberately. Which hand-written C
-    // is the legitimate ceiling differs by case -- `C (int)` is a target only
-    // where the three obligations can actually be discharged, and for `fib`
-    // they cannot (see docs/records/0004). A single column would need a
-    // footnote per row to mean anything, so the columns are left to be read.
+    let row = Row {
+        case: shown,
+        cpp: results[2].ns_per_op,
+        nts: results[0].ns_per_op,
+        unspecialized: results[1].ns_per_op,
+        node: node.ns_per_op,
+    };
     println!(
-        "{shown:<12} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9.2}x {:>8.1}x",
-        human(nts.ns_per_op),
-        human(unspecialized.ns_per_op),
-        human(results[2].ns_per_op),
-        human(results[3].ns_per_op),
-        human(node.ns_per_op),
-        unspecialized.ns_per_op / nts.ns_per_op,
-        node.ns_per_op / nts.ns_per_op,
+        "{:<14} {:>11} {:>11} {:>11} {:>11}   {:>8.2}x {:>8.2}x",
+        row.case,
+        human(row.cpp),
+        human(row.nts),
+        human(row.unspecialized),
+        human(row.node),
+        row.nts / row.cpp,
+        row.nts / row.node,
     );
-    Ok(())
+    Ok(row)
 }
 
 /// The compiler's own pipeline, not a shell out to the CLI — a benchmark that
@@ -245,32 +321,72 @@ fn emit(tsconfig: &Utf8Path, specialize: bool, provider: hir::Provider) -> Resul
     Ok(emitted.writer.text().to_owned())
 }
 
+/// Build one variant.
+///
+/// Two languages in one binary: the harness and the hand-written reference are
+/// C++, the generated program and the runtime are C. They are compiled
+/// separately rather than by letting one driver guess from file extensions,
+/// because a `-std=` that applies to the wrong language is the kind of thing
+/// that works until it silently does not.
+///
+/// Everything is built with `-flto`, for fairness rather than for speed. A
+/// reference defines its workload and `bench_run` in one translation unit, so
+/// without LTO clang inlines one into the other; the nts workload is necessarily
+/// in a separate unit and could not be. That gap would show up as a codegen
+/// defect that does not exist.
 fn compile(
     root: &Utf8Path,
-    sources: &[Utf8PathBuf],
+    cpp: &[Utf8PathBuf],
+    c: &[Utf8PathBuf],
     binary: &Utf8Path,
     defines: &[&str],
 ) -> Result<()> {
-    let output = std::process::Command::new("clang")
-        // Link-time optimization, for fairness rather than for speed. A
-        // reference variant defines its workload and `bench_run` in one
-        // translation unit, so without LTO clang inlines one into the other;
-        // the nts workload is necessarily in a separate unit and could not be.
-        // That gap would show up as a codegen defect that does not exist.
-        .args(["-std=c11", "-O2", "-flto", "-Wall", "-Wextra", "-Werror"])
-        .args(defines)
-        .arg("-I")
-        .arg(root.join("benches/common"))
-        .arg("-I")
-        .arg(root.join("target/bench"))
-        .args(sources)
+    const SHARED: &[&str] = &["-O2", "-flto", "-Wall", "-Wextra", "-Werror"];
+    let includes = [
+        "-I".to_owned(),
+        root.join("benches/common").to_string(),
+        "-I".to_owned(),
+        root.join("target/bench").to_string(),
+    ];
+
+    let mut objects = Vec::new();
+    for (driver, standard, sources) in [
+        ("clang++", "-std=c++17", cpp),
+        ("clang", "-std=c11", c),
+    ] {
+        for source in sources {
+            let object = binary.with_extension(format!(
+                "{}.o",
+                source.file_name().unwrap_or("unit").replace('.', "_")
+            ));
+            let output = std::process::Command::new(driver)
+                .args(SHARED)
+                .arg(standard)
+                .args(defines)
+                .args(&includes)
+                .arg("-c")
+                .arg(source)
+                .arg("-o")
+                .arg(&object)
+                .output()
+                .with_context(|| format!("running {driver}"))?;
+            if !output.status.success() {
+                bail!("{driver}: {}", String::from_utf8_lossy(&output.stderr));
+            }
+            objects.push(object);
+        }
+    }
+
+    let link = std::process::Command::new("clang++")
+        .args(SHARED)
+        .args(&objects)
         .arg("-o")
         .arg(binary)
         .arg("-lm")
         .output()
-        .context("running clang")?;
-    if !output.status.success() {
-        bail!("clang: {}", String::from_utf8_lossy(&output.stderr));
+        .context("linking")?;
+    if !link.status.success() {
+        bail!("link: {}", String::from_utf8_lossy(&link.stderr));
     }
     Ok(())
 }

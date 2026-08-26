@@ -15,20 +15,32 @@ are the gaps between them, not any single column.
 
 | Variant | What it is | What the gap means |
 | --- | --- | --- |
+| `C++` | hand-written C++, what a C++ programmer would write | the ceiling |
 | `nts` | `src/main.ts`, compiled by this compiler | — |
 | `nts f64` | the same, with number specialization **off** | the gap is what the analysis is worth |
-| `C (double)` | hand-written C, every `number` an IEEE double | what the semantics cost without any proof |
-| `C (int)` | hand-written C with native integers | the ceiling, *where the proof succeeds* |
 | `node` | the same `.ts`, run on V8 | the thing being replaced |
 
 `nts f64` is the column that makes a speedup a measurement rather than a claim:
 one program, compiled two ways, run against each other.
 
-There is deliberately **no combined "distance from C" ratio**. Which
-hand-written C is a legitimate ceiling differs per case — `C (int)` is a target
-only where the three obligations can actually be discharged, and for `fib` they
-cannot, because `fib(93)` overflows `int64` while the double version does not
-(see `docs/records/0004`). A single column would need a footnote per row.
+**One reference per case, and it is C++.** There used to be two, `C (double)`
+and `C (int)`, because it was not obvious which was a fair ceiling — and this
+file carried a footnote apologising for that. The double one was really
+answering "what does the conservative lowering cost", and `nts f64` answers that
+better: it measures the compiler's actual output rather than a hand-written
+simulation of it. So the reference is singular now and means one thing — what a
+C++ programmer writes — and each `ref.cpp` says in a comment why that is what it
+is for that program.
+
+That makes `nts/C++` a ratio worth printing. It is not always reachable: `fib`'s
+C++ uses `int64_t`, which nts cannot choose from the type `number` because
+`fib(93)` overflows it. The row shows the gap rather than hiding it behind a
+choice of reference.
+
+Two languages go into each binary. The harness and the reference are C++; the
+generated program and the runtime are C. They are compiled separately rather
+than by letting one driver guess from file extensions, and the `nts.cpp` shim
+declares the generated entry point `extern "C"`.
 
 Node 24 strips TypeScript types natively, so `bench.mjs` imports the same
 `src/main.ts` the compiler consumes. There is no second copy of the program to
