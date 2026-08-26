@@ -64,6 +64,34 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool) -> Result<()> {
     println!("elapsed          {} ms", stats.elapsed_ms);
     println!("snapshot digest  {}", hex(&snapshot.digest()?));
 
+    if !snapshot.diagnostics.is_empty() {
+        println!();
+        for diagnostic in &snapshot.diagnostics {
+            let source = snapshot
+                .sources
+                .get(diagnostic.primary.file.0 as usize)
+                .map_or("<unknown>", |s| s.uri.as_str());
+            println!(
+                "  {:?} {} {}:{} {}",
+                diagnostic.severity,
+                diagnostic.code,
+                source,
+                diagnostic.primary.span.start,
+                diagnostic.message,
+            );
+            for label in &diagnostic.labels {
+                println!("      {}", label.message);
+            }
+        }
+    }
+
+    // RFC §4.1: a program that does not typecheck is not a program to compile.
+    // Reporting the snapshot and exiting zero would let a backend emit code for
+    // it, which is the one outcome nothing downstream can detect.
+    if snapshot.has_errors() {
+        bail!("{} type error(s); refusing to proceed", stats.errors);
+    }
+
     Ok(())
 }
 

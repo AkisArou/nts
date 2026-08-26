@@ -55,6 +55,12 @@ pub struct FrontendStats {
     /// round trip per *distinct* type. Interning is what keeps that proportional
     /// to a program's types rather than its nodes.
     pub distinct_types: u32,
+    /// Checker diagnostics of error severity.
+    ///
+    /// Non-zero means no backend may emit code for this program.
+    pub errors: u32,
+    /// Checker diagnostics of warning severity.
+    pub warnings: u32,
     /// Distinct symbols interned.
     pub symbols: u32,
     /// Modules recorded.

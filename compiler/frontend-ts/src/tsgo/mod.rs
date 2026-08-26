@@ -47,11 +47,12 @@ use serde::de::DeserializeOwned;
 
 use crate::source::{FrontendStats, SemanticSource};
 use proto::{
-    CheckerSignatureParams, CheckerSymbolParams, CheckerTypeParams, DocumentIdentifier,
-    GetSignaturesOfTypeParams, GetSourceFileParams, GetSymbolsAtLocationsParams,
-    GetTypeAtLocationsParams, GetTypePropertyParams, GetTypesOfSymbolsParams, InitializeResponse,
-    NodeHandle, ProjectHandle, SignatureKind, SignatureResponse, SnapshotHandle, SymbolResponse,
-    TypeResponse, UpdateSnapshotParams, UpdateSnapshotResponse,
+    CheckerSignatureParams, CheckerSymbolParams, CheckerTypeParams, DiagnosticResponse,
+    DocumentIdentifier, GetDiagnosticsParams, GetSignaturesOfTypeParams, GetSourceFileParams,
+    GetSymbolsAtLocationsParams, GetTypeAtLocationsParams, GetTypePropertyParams,
+    GetTypesOfSymbolsParams, InitializeResponse, NodeHandle, ProjectHandle, SignatureKind,
+    SignatureResponse, SnapshotHandle, SymbolResponse, TypeResponse, UpdateSnapshotParams,
+    UpdateSnapshotResponse,
 };
 use wire::{Frame, MessageType, WireError, read_frame, write_frame};
 
@@ -343,6 +344,31 @@ impl Client {
         )
     }
 
+    /// Every diagnostic the checker produced for a whole project.
+    ///
+    /// Two exchanges for the program regardless of size, so the correctness gate
+    /// costs a constant. Syntactic diagnostics matter as much as semantic ones: a
+    /// parse error means the decoded AST is not the program anybody wrote.
+    pub fn diagnostics(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+    ) -> Result<Vec<DiagnosticResponse>, TsgoError> {
+        let params = GetDiagnosticsParams {
+            snapshot,
+            project: project.clone(),
+            // Omitted on purpose — tsgo reads absence as "every file".
+            file: None,
+        };
+        let mut all: Vec<DiagnosticResponse> =
+            self.request(proto::method::GET_SYNTACTIC_DIAGNOSTICS, &params)?;
+        all.extend(self.request::<Vec<DiagnosticResponse>>(
+            proto::method::GET_SEMANTIC_DIAGNOSTICS,
+            &params,
+        )?);
+        Ok(all)
+    }
+
     /// Return type of one signature.
     pub fn return_type_of_signature(
         &mut self,
@@ -578,6 +604,8 @@ impl SemanticSource for TsgoApi {
             }
         }
 
+        collect_diagnostics(&mut client, &mut snapshot, &opened)?;
+
         // Seeded with every interned type, because reachability does not exist yet
         // to say which of them the build will actually reach. The seam is the seed
         // set: when it does, only this argument changes.
@@ -606,6 +634,8 @@ impl SemanticSource for TsgoApi {
             nodes_decoded: u32::try_from(snapshot.nodes.len()).unwrap_or(u32::MAX),
             types_resolved: u32::try_from(snapshot.node_types.len()).unwrap_or(u32::MAX),
             distinct_types: u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX),
+            errors: count_severity(&snapshot, nts_diagnostics::Severity::Error),
+            warnings: count_severity(&snapshot, nts_diagnostics::Severity::Warning),
             symbols: u32::try_from(snapshot.symbols.len()).unwrap_or(u32::MAX),
             modules: symbols::module_count(&snapshot),
             decomposed: decomposed.map_or(0, |d| d.decomposed),
@@ -674,4 +704,89 @@ fn resolve_types(
 fn workspace_uri(root: &Utf8Path, path: &Utf8Path) -> String {
     let relative = path.strip_prefix(root).unwrap_or(path);
     format!("nts-workspace:///{relative}")
+}
+
+/// Record every diagnostic the checker produced.
+///
+/// Runs after all files are decoded so that each file already has a `SourceId`
+/// and a diagnostic can name the source it belongs to.
+fn collect_diagnostics(
+    client: &mut Client,
+    snapshot: &mut SemanticSnapshot,
+    opened: &UpdateSnapshotResponse,
+) -> Result<(), TsgoError> {
+    let by_path: FxHashMap<&str, SourceId> = snapshot
+        .sources
+        .iter()
+        .enumerate()
+        .map(|(index, source)| {
+            (
+                source.display_path.as_str(),
+                SourceId(u32::try_from(index).unwrap_or(u32::MAX)),
+            )
+        })
+        .collect();
+
+    let mut converted = Vec::new();
+    for project in &opened.projects {
+        let reported = client.diagnostics(opened.snapshot, &project.id)?;
+        converted.extend(
+            reported
+                .iter()
+                .filter_map(|d| convert_diagnostic(d, &by_path)),
+        );
+    }
+    snapshot.diagnostics.extend(converted);
+    Ok(())
+}
+
+/// Convert a checker diagnostic into the compiler's own vocabulary.
+///
+/// Diagnostics naming a file outside the decoded set are dropped rather than
+/// anchored to an arbitrary source: a location pointing at the wrong file is
+/// worse than no diagnostic, because it sends a reader somewhere real.
+fn convert_diagnostic(
+    reported: &DiagnosticResponse,
+    by_path: &FxHashMap<&str, SourceId>,
+) -> Option<nts_diagnostics::Diagnostic> {
+    let file = *by_path.get(reported.file_name.as_str())?;
+    let span = nts_diagnostics::Span::new(
+        u32::try_from(reported.pos.max(0)).unwrap_or(u32::MAX),
+        u32::try_from(reported.end.max(0)).unwrap_or(u32::MAX),
+    );
+    let location = nts_diagnostics::Location { file, span };
+
+    let severity = match reported.category {
+        proto::category::ERROR => nts_diagnostics::Severity::Error,
+        proto::category::WARNING => nts_diagnostics::Severity::Warning,
+        // Suggestions and messages are not build-affecting; recording them as
+        // notes keeps `has_errors` honest.
+        _ => nts_diagnostics::Severity::Note,
+    };
+
+    let mut diagnostic = nts_diagnostics::Diagnostic {
+        severity,
+        // TypeScript's own code, so `TS2322` stays greppable against its docs.
+        code: format!("TS{}", reported.code),
+        message: reported.text.clone(),
+        primary: location,
+        labels: Vec::new(),
+    };
+    // A message chain is the *reason* for the headline message. Dropping it loses
+    // the half of the diagnostic that says what to fix.
+    for link in &reported.message_chain {
+        diagnostic = diagnostic.with_label(location, link.text.clone());
+    }
+    Some(diagnostic)
+}
+
+fn count_severity(snapshot: &SemanticSnapshot, severity: nts_diagnostics::Severity) -> u32 {
+    u32::try_from(
+        snapshot
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == severity)
+            .count(),
+    )
+    .unwrap_or(u32::MAX)
 }

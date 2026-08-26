@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -71,6 +71,12 @@ pub struct SemanticSnapshot {
     pub signatures: Vec<SignatureRecord>,
     /// Indexed by [`NodeId`]. Flattened from tsgo's encoded AST.
     pub nodes: Vec<NodeRecord>,
+    /// What the checker said about this program.
+    ///
+    /// A snapshot is produced even when the program does not typecheck, because
+    /// an editor or a diagnostic run wants it either way. Deciding whether to
+    /// *build* is a separate question — see [`SemanticSnapshot::has_errors`].
+    pub diagnostics: Vec<nts_diagnostics::Diagnostic>,
     /// Type assigned to a node, for the nodes that have one.
     ///
     /// Sparse on purpose: only nodes the lowering actually needs a type for are
@@ -350,6 +356,19 @@ impl SemanticSnapshot {
 
     fn check_node(&self, id: u32) -> Result<(), SnapshotError> {
         check(id, "node", self.nodes.len())
+    }
+
+    /// Whether the program failed to typecheck.
+    ///
+    /// No backend may emit code for a program where this is true. A C backend
+    /// handed `function f(a: number): string { return a; }` would emit a function
+    /// declared to return a string and returning a double — the generated code
+    /// would be wrong in a way nothing downstream could detect.
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        self.diagnostics
+            .iter()
+            .any(|d| d.severity == nts_diagnostics::Severity::Error)
     }
 
     /// Content digest over the snapshot, for cache keys.

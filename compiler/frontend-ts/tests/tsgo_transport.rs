@@ -233,7 +233,7 @@ fn round_trips_stay_proportional_to_files() {
     // getExportsOfModule). Every one of those either transfers in bulk or
     // batches; if this ever tracks node count, the transport choice needs redoing.
     assert_eq!(stats.files, 1);
-    assert_eq!(stats.round_trips, 2 + 4 * u64::from(stats.files));
+    assert_eq!(stats.round_trips, 2 + 4 * u64::from(stats.files) + 2);
     assert!(stats.nodes_decoded > 20, "a real AST was decoded");
     assert!(stats.types_resolved > 20, "types were resolved");
 }

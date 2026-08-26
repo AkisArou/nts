@@ -28,6 +28,7 @@ pub mod method {
     pub const GET_SEMANTIC_DIAGNOSTICS: &str = "getSemanticDiagnostics";
 
     pub const GET_EXPORTS_OF_MODULE: &str = "getExportsOfModule";
+    pub const GET_SYNTACTIC_DIAGNOSTICS: &str = "getSyntacticDiagnostics";
     pub const GET_RETURN_TYPE_OF_SIGNATURE: &str = "getReturnTypeOfSignature";
     pub const GET_SIGNATURES_OF_TYPE: &str = "getSignaturesOfType";
     pub const GET_TYPES_OF_TYPE: &str = "getTypesOfType";
@@ -367,4 +368,53 @@ pub mod signature_flags {
     pub const HAS_REST_PARAMETER: u32 = 1 << 0;
     /// A `new` signature rather than a call signature.
     pub const CONSTRUCT: u32 = 1 << 2;
+}
+
+/// Parameters for the diagnostic endpoints.
+///
+/// `file` is optional, and omitting it is the whole point: tsgo reads that as
+/// "every file", so one exchange covers the program. `getProgramDiagnostics`
+/// looks like the project-wide call but reports *configuration* diagnostics —
+/// it returns nothing for a file with a type error.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDiagnosticsParams {
+    pub snapshot: SnapshotHandle,
+    pub project: ProjectHandle,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<DocumentIdentifier>,
+}
+
+/// `diagnostics.Category`, an `int32` on the wire.
+///
+/// The ordering is a trap worth naming: **`Warning` is 0 and `Error` is 1**, not
+/// the other way round. Treating 0 as the error case would let every failing
+/// program through and reject every clean one.
+pub mod category {
+    pub const WARNING: i32 = 0;
+    pub const ERROR: i32 = 1;
+    pub const SUGGESTION: i32 = 2;
+    pub const MESSAGE: i32 = 3;
+}
+
+/// One diagnostic from the checker.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticResponse {
+    #[serde(default)]
+    pub file_name: String,
+    #[serde(default)]
+    pub pos: i64,
+    #[serde(default)]
+    pub end: i64,
+    #[serde(default)]
+    pub code: i32,
+    #[serde(default)]
+    pub category: i32,
+    #[serde(default)]
+    pub text: String,
+    /// Nested explanation, as in "Type 'X' is not assignable to type 'Y'" followed
+    /// by the reason. Flattened into labels rather than dropped.
+    #[serde(default)]
+    pub message_chain: Vec<DiagnosticResponse>,
 }
