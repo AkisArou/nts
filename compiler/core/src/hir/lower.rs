@@ -82,6 +82,23 @@ pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType
             HirType::Managed(ManagedType::Array(Box::new(element)))
         }
         TypeKind::Object { .. } => HirType::Managed(ManagedType::Object(ty)),
+
+        // `any` and `unknown` fall here and are refused, which is right for one
+        // of them and wrong for the other.
+        //
+        // `docs/any-unknown.md` settles it: `any` is not a runtime type at all
+        // and none may reach MIR — application `any` is rejected, while
+        // declaration-originated `any` (from `lib.*.d.ts` or `@types`) is tracked
+        // as *unchecked* rather than rejected, so the ecosystem stays usable.
+        // `unknown`, by contrast, is a fully supported top type that "must not be
+        // rejected merely because it requires an erased representation", and its
+        // representation is chosen by whole-program analysis — a primitive, a
+        // managed reference, a closed union, a handle, or a general erased value,
+        // whichever is cheapest across all reachable uses.
+        //
+        // Refusing `unknown` therefore rejects valid programs today. Implementing
+        // it needs the provenance tracking and representation analysis that
+        // document describes, not another arm in this match.
         _ => return None,
     })
 }

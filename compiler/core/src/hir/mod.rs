@@ -80,6 +80,27 @@ impl HirType {
     ///
     /// Named rather than written inline so the places that have *not* yet been
     /// specialized are greppable.
+    ///
+    /// # What replaces this
+    ///
+    /// Narrowing a `number` to an integer is a *proof*, not a heuristic, and the
+    /// proof already exists: `third_party/scriptc/packages/compiler/src/ir/number-facts.ts`
+    /// in the proof-of-concept is a flow-sensitive forward abstract
+    /// interpretation over the IR — an interval over the extended reals joined
+    /// with wholeness, may-be-NaN and may-be-negative-zero flags, plus the
+    /// literal's source spelling.
+    ///
+    /// It discharges three obligations before a value may cross into an integer
+    /// slot: representability (the written literal round-trips through `f64`),
+    /// wholeness (integral on every path), and range (within ±(2^53 − 1), beyond
+    /// which integrality is unprovable because adjacent integers stop being
+    /// distinguishable). Its transfer functions implement JavaScript semantics
+    /// rather than idealized arithmetic — `x | 0` is a proof by way of `ToInt32`,
+    /// and remainder takes the dividend's sign.
+    ///
+    /// Its JVM consumer asks exactly the question this constant defers: whether a
+    /// local can use a Java `int` without changing number semantics. Investigate
+    /// it before writing a specialization pass here; do not re-derive it.
     pub const NUMBER: Self = Self::Float { bits: 64 };
 
     /// Whether values of this type are traced by the collector.
