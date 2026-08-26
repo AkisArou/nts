@@ -262,22 +262,38 @@ fn string_locals_and_concatenation_lower_together() {
 }
 
 #[test]
-fn a_call_through_a_member_access_is_refused_for_now() {
-    let Some(lowered) = lowered("calls2") else {
+fn a_known_math_member_becomes_an_operation() {
+    let Some(program) = lowered("calls2") else {
         return;
     };
-    // `Math.max(n, 0)`. The callee is a property access rather than a name, and
-    // member access is not lowered yet — so it is refused rather than guessed at
-    // from the callee's spelling.
-    assert!(!lowered.is_complete());
+    // `Math.max(n, 0)` is an operation, not a call. Lowering it as one is what
+    // lets the analysis know the result is bounded by its arguments; a call
+    // would return TOP and poison everything downstream of it.
+    let via_library = program
+        .program
+        .funcs
+        .iter()
+        .find(|f| f.name == "viaLibrary")
+        .expect("`Math.max` should lower");
     assert!(
-        lowered
-            .diagnostics
+        via_library
+            .values
             .iter()
-            .any(|d| d.message.contains("computed callee")),
-        "{:?}",
-        lowered.diagnostics,
+            .any(|op| matches!(op.kind, OpKind::Binary { op: BinOp::Max, .. })),
+        "the call should have become a Max operation",
     );
+}
+
+#[test]
+fn an_unimplemented_math_member_is_refused_rather_than_guessed() {
+    let Some(program) = lowered("mathops-unsupported") else {
+        return;
+    };
+    // Emitting a call to a C function that happens to share a name would be
+    // assuming libm agrees about the semantics — and for `round` and `min` it
+    // demonstrably does not. RFC 4.1: refuse rather than approximate.
+    assert!(!program.is_complete());
+    assert!(program.diagnostics[0].code.starts_with("NTS"));
 }
 
 #[test]

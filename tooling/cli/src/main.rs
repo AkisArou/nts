@@ -336,6 +336,11 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
                 nts_core::hir::UnOp::Not => "not",
                 nts_core::hir::UnOp::ToInt32 => "toint32",
                 nts_core::hir::UnOp::ToUint32 => "touint32",
+                nts_core::hir::UnOp::Floor => "floor",
+                nts_core::hir::UnOp::Ceil => "ceil",
+                nts_core::hir::UnOp::Trunc => "trunc",
+                nts_core::hir::UnOp::Round => "round",
+                nts_core::hir::UnOp::Abs => "abs",
             };
             format!("%{index} = {operator} %{} : {ty}", operand.0)
         }
@@ -410,6 +415,8 @@ const fn render_bin(op: BinOp) -> &'static str {
         BinOp::Shl => "shl",
         BinOp::Shr => "shr",
         BinOp::UShr => "ushr",
+        BinOp::Min => "min",
+        BinOp::Max => "max",
     }
 }
 

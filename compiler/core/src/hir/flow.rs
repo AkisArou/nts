@@ -288,6 +288,14 @@ fn transfer_block(
                 op: UnOp::ToUint32,
                 operand,
             } => facts::to_uint32(lookup(&refinements, values, *operand)),
+            OpKind::Unary {
+                op: rounding @ (UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round),
+                operand,
+            } => facts::round_to_integer(*rounding, lookup(&refinements, values, *operand)),
+            OpKind::Unary {
+                op: UnOp::Abs,
+                operand,
+            } => facts::abs(lookup(&refinements, values, *operand)),
             // A parameter keeps what its declared type said. It is an operation
             // in the entry block like any other, so without this arm the
             // transfer recomputes it as TOP and joins that over the seed —

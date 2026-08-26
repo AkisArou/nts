@@ -417,3 +417,58 @@ int main(void) {{
     assert!(output.contains("pipeline(64) = 382"), "{output}");
     assert!(output.contains("exposed(1e21) = 0"), "{output}");
 }
+
+#[test]
+fn math_intrinsics_follow_javascript_and_not_c() {
+    // `Math.floor` is a proof of wholeness -- a stronger one than `| 0`, since
+    // it keeps the magnitude rather than wrapping it. The rounding rules are
+    // also where C and JavaScript quietly disagree: C's `round` takes a half
+    // away from zero and JavaScript takes it toward positive infinity, and C's
+    // `fmin` returns the non-NaN operand where JavaScript returns NaN.
+    //
+    // Every expected value came from running this same `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+#include <math.h>
+double shard(double hash);
+double clampIndex(double i, double limit);
+double rounded(double x);
+double distance(double a, double b);
+int main(void) {{
+    check("shard(0)", shard(0), 0);
+    check("shard(65535)", shard(65535), 0);
+    check("shard(70000)", shard(70000), 1);
+    // abs first, so a negative hash lands in the same shard as its magnitude.
+    check("shard(-70000)", shard(-70000), 1);
+    check("shard(2^31-1)", shard(2147483647.0), 32767);
+    check("shard(1e21)", shard(1e21), 8544);
+
+    check("clampIndex(-5)", clampIndex(-5, 1000), 0);
+    // Math.trunc, so 3.9 becomes 3 rather than 4.
+    check("clampIndex(3.9)", clampIndex(3.9, 1000), 3);
+    check("clampIndex(5000)", clampIndex(5000, 1000), 1000);
+
+    // Half toward positive infinity: C's round would say -2 here.
+    check("rounded(-1.5)", rounded(-1.5), -1);
+    check("rounded(2.5)", rounded(2.5), 3);
+    check("distance(-3,8)", distance(-3, 8), 11);
+
+    // NaN is contagious through Math.min/max, unlike fmin/fmax. Checked apart
+    // because NaN compares equal to nothing, including itself.
+    if (!isnan(clampIndex(0.0 / 0.0, 1000))) {{
+        printf("FAIL clampIndex(NaN) should be NaN\n");
+        failures++;
+    }} else {{
+        printf("ok clampIndex(NaN) = nan\n");
+    }}
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("mathops", &harness) else {
+        return;
+    };
+    assert!(output.contains("rounded(-1.5) = -1"), "{output}");
+    assert!(output.contains("shard(1e21) = 8544"), "{output}");
+    assert!(output.contains("clampIndex(NaN) = nan"), "{output}");
+}

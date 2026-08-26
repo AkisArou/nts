@@ -277,7 +277,14 @@ fn width_of(func: &Func, analysis: &Analysis, index: usize) -> Option<u8> {
         // the language's definition rather than by inference, its operands
         // having been coerced on the way in.
         OpKind::Unary {
-            op: UnOp::ToInt32 | UnOp::ToUint32,
+            op:
+                UnOp::ToInt32
+                | UnOp::ToUint32
+                | UnOp::Floor
+                | UnOp::Ceil
+                | UnOp::Trunc
+                | UnOp::Round
+                | UnOp::Abs,
             ..
         }
         | OpKind::Binary {
@@ -345,13 +352,21 @@ fn insert_conversions(func: &mut Func, analysis: &Analysis) -> usize {
                     let rhs = coerce(func, rhs, &ty);
                     Some(OpKind::Binary { op: bin, lhs, rhs })
                 }
-                // A coercion's operand must be left exactly as it is. Coercing
-                // it to the result type would replace `ToInt32` with a C cast —
-                // which is undefined behaviour for an out-of-range double, and
-                // is precisely what `ToInt32` exists to avoid. The operation is
-                // the conversion; it does not need one of its own.
+                // A rounding operation's operand must be left exactly as it is.
+                // These *are* the conversion, and coercing the input first would
+                // change the answer: `floor(-3.7)` is `-4`, while truncating
+                // `-3.7` to an integer first gives `-3` and then floors to `-3`.
+                // For `ToInt32` the same coercion would be undefined behaviour
+                // outright, on the values it exists to handle.
                 OpKind::Unary {
-                    op: op @ (UnOp::ToInt32 | UnOp::ToUint32),
+                    op:
+                        op @ (UnOp::ToInt32
+                        | UnOp::ToUint32
+                        | UnOp::Floor
+                        | UnOp::Ceil
+                        | UnOp::Trunc
+                        | UnOp::Round
+                        | UnOp::Abs),
                     operand,
                 } => Some(OpKind::Unary { op, operand }),
                 OpKind::Unary { op, operand } => {

@@ -463,6 +463,19 @@ pub fn div(a: Facts, b: Facts) -> Facts {
         return Facts::TOP;
     }
     let (lo, hi) = corners(a, b, |x, y| x / y);
+
+    // A quotient is `-0` only when it is a zero *and* the two signs differ —
+    // the same exclusive-or rule as multiplication. Claiming it whenever the
+    // result straddles zero is sound but costly: it refuses every non-negative
+    // division, and a `-0` is enough to refuse an integer representation, so
+    // `Math.floor(bounded / 65536)` stopped being provable for no reason.
+    let a_negative = a.lo < 0.0 || a.maybe_negative_zero;
+    let b_negative = b.lo < 0.0 || b.maybe_negative_zero;
+    let a_positive = a.hi > 0.0 || (a.lo <= 0.0 && a.hi >= 0.0);
+    let b_positive = b.hi > 0.0 || (b.lo <= 0.0 && b.hi >= 0.0);
+    let may_be_zero = lo <= 0.0 && hi >= 0.0;
+    let negative_zero = may_be_zero && ((a_negative && b_positive) || (a_positive && b_negative));
+
     Facts::new(
         lo,
         hi,
@@ -470,7 +483,7 @@ pub fn div(a: Facts, b: Facts) -> Facts {
         // provable without folding is a singleton that lands on an integer.
         lo == hi && lo.fract() == 0.0 && lo.is_finite(),
         maybe_nan,
-        lo <= 0.0 && hi >= 0.0,
+        negative_zero,
     )
 }
 
@@ -638,6 +651,82 @@ pub fn bitwise(op: super::BinOp, a: Facts, b: Facts) -> Facts {
     Facts::new(I32_MIN, I32_MAX, true, false, false)
 }
 
+/// `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`.
+///
+/// The point of these is the wholeness they establish: whatever came in, what
+/// comes out is an integer. That is the same kind of fact `ToInt32` gives, and
+/// a more useful one, because it keeps the magnitude rather than wrapping it —
+/// which is how an author states integer intent about a value larger than
+/// int32.
+///
+/// The bounds move by at most one, so the interval is just the operation
+/// applied to each end. NaN survives: `Math.floor(NaN)` is NaN.
+#[must_use]
+pub fn round_to_integer(op: super::UnOp, a: Facts) -> Facts {
+    use super::UnOp;
+    if !a.has_numeric() {
+        return empty_but_nan(a.maybe_nan);
+    }
+    let apply = |x: f64| match op {
+        UnOp::Floor => x.floor(),
+        UnOp::Ceil => x.ceil(),
+        UnOp::Trunc => x.trunc(),
+        // JavaScript rounds a half toward positive infinity, which `floor(x +
+        // 0.5)` says exactly and `f64::round` does not: the latter rounds away
+        // from zero, making `Math.round(-1.5)` come out `-2` instead of `-1`.
+        _ => (x + 0.5).floor(),
+    };
+
+    // Any of these can produce `-0`: from `-0` itself, and for everything but
+    // `floor` from anything in `(-1, 0)`. `Facts::new` drops the claim again if
+    // the result cannot be a zero at all.
+    let negative_zero = a.maybe_negative_zero || (!matches!(op, UnOp::Floor) && a.lo < 0.0);
+    Facts::new(apply(a.lo), apply(a.hi), true, a.maybe_nan, negative_zero)
+}
+
+/// `Math.abs`.
+#[must_use]
+pub fn abs(a: Facts) -> Facts {
+    if !a.has_numeric() {
+        return empty_but_nan(a.maybe_nan);
+    }
+    let (lo, hi) = if a.lo <= 0.0 && a.hi >= 0.0 {
+        // Straddles zero, so zero is reachable and is the lower bound.
+        (0.0, a.lo.abs().max(a.hi.abs()))
+    } else {
+        (a.lo.abs().min(a.hi.abs()), a.lo.abs().max(a.hi.abs()))
+    };
+    // `Math.abs(-0)` is `+0`: the one operation here that cannot produce a
+    // negative zero however it is fed.
+    Facts::new(lo, hi, a.whole, a.maybe_nan, false)
+}
+
+/// `Math.min` and `Math.max`.
+///
+/// NaN is contagious, unlike C's `fmin`/`fmax`, which pick the other operand.
+#[must_use]
+pub fn min_max(op: super::BinOp, a: Facts, b: Facts) -> Facts {
+    use super::BinOp;
+    let maybe_nan = a.maybe_nan || b.maybe_nan;
+    if !a.has_numeric() || !b.has_numeric() {
+        return empty_but_nan(maybe_nan);
+    }
+    let (lo, hi) = if matches!(op, BinOp::Min) {
+        (a.lo.min(b.lo), a.hi.min(b.hi))
+    } else {
+        (a.lo.max(b.lo), a.hi.max(b.hi))
+    };
+    Facts::new(
+        lo,
+        hi,
+        a.whole && b.whole,
+        maybe_nan,
+        // Either operand's negative zero can be selected: JavaScript orders
+        // `-0` below `0` for exactly this purpose.
+        a.maybe_negative_zero || b.maybe_negative_zero,
+    )
+}
+
 /// Apply a binary operator's transfer function.
 #[must_use]
 pub fn transfer_binary(op: super::BinOp, a: Facts, b: Facts) -> Option<Facts> {
@@ -651,6 +740,7 @@ pub fn transfer_binary(op: super::BinOp, a: Facts, b: Facts) -> Option<Facts> {
         BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr | BinOp::UShr => {
             bitwise(op, a, b)
         }
+        BinOp::Min | BinOp::Max => min_max(op, a, b),
         // Comparisons and concatenation do not produce numbers.
         BinOp::Concat | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne => {
             return None;
@@ -757,6 +847,93 @@ mod tests {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// The same containment property for the operations that establish
+    /// wholeness. These are the ones a specialization decision rests on, so an
+    /// unsound bound here is an unsound integer somewhere downstream.
+    #[test]
+    fn rounding_and_abs_contain_the_real_answer() {
+        use super::super::UnOp;
+        /// An abstract rounding operation paired with the arithmetic it
+        /// abstracts.
+        type Rounding = (UnOp, fn(f64) -> f64);
+        let cases: &[Rounding] = &[
+            (UnOp::Floor, f64::floor),
+            (UnOp::Ceil, f64::ceil),
+            (UnOp::Trunc, f64::trunc),
+            // JavaScript's rounding, not Rust's: half goes toward positive
+            // infinity, so `Math.round(-1.5)` is `-1`.
+            (UnOp::Round, |x| (x + 0.5).floor()),
+        ];
+        for &x in POOL {
+            for (op, concrete) in cases {
+                let result = round_to_integer(*op, Facts::constant(x));
+                let actual = concrete(x);
+                assert!(
+                    result.contains(actual),
+                    "{op:?}({x}) = {actual}, outside {result:?}"
+                );
+            }
+            let result = abs(Facts::constant(x));
+            assert!(
+                result.contains(x.abs()),
+                "abs({x}) = {}, outside {result:?}",
+                x.abs()
+            );
+        }
+
+        // And over intervals, where a rule can be right at both ends and wrong
+        // between them.
+        for &x in POOL {
+            for &y in POOL {
+                let set = Facts::constant(x).join(Facts::constant(y));
+                for (op, concrete) in cases {
+                    let result = round_to_integer(*op, set);
+                    for member in [x, y] {
+                        assert!(
+                            result.contains(concrete(member)),
+                            "{op:?}: {member} in {set:?} gives {}, outside {result:?}",
+                            concrete(member)
+                        );
+                    }
+                }
+                let result = abs(set);
+                for member in [x, y] {
+                    assert!(result.contains(member.abs()), "abs over {set:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn min_and_max_are_not_fmin_and_fmax() {
+        use super::super::BinOp;
+        // C's `fmin(1, NaN)` is `1`. JavaScript's `Math.min(1, NaN)` is NaN,
+        // and a domain that borrowed C's rule would prove a number where the
+        // program has none.
+        let result = min_max(BinOp::Min, Facts::constant(1.0), Facts::constant(f64::NAN));
+        assert!(result.maybe_nan, "{result:?}");
+        // `whole` describes the interval's members, and NaN is not one of them
+        // — it has no ordering, which is exactly why it needs its own flag. What
+        // protects a specialization decision is that `is_integral_within`
+        // refuses anything that may be NaN at all.
+        assert!(result.contains(f64::NAN));
+
+        for &x in POOL {
+            for &y in POOL {
+                let (a, b) = (Facts::constant(x), Facts::constant(y));
+                let smallest = min_max(BinOp::Min, a, b);
+                let largest = min_max(BinOp::Max, a, b);
+                let (real_min, real_max) = if x.is_nan() || y.is_nan() {
+                    (f64::NAN, f64::NAN)
+                } else {
+                    (x.min(y), x.max(y))
+                };
+                assert!(smallest.contains(real_min), "min({x},{y}) {smallest:?}");
+                assert!(largest.contains(real_max), "max({x},{y}) {largest:?}");
             }
         }
     }

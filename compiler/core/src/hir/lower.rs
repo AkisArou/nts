@@ -1095,6 +1095,15 @@ impl<'a> FuncBuilder<'a> {
         let callee_node = *children
             .first()
             .ok_or_else(|| self.unsupported(id, "a call with no callee"))?;
+
+        // `Math.floor(x)` and friends are operations, not calls. Lowering them
+        // as operations is what lets the analysis see that the result is a whole
+        // number — which is the entire reason an author writes `Math.floor`
+        // rather than a division.
+        if let Some(intrinsic) = self.math_intrinsic(callee_node) {
+            return self.lower_math(id, intrinsic, &children[1..]);
+        }
+
         let name = self
             .node(callee_node)
             .text
@@ -1119,6 +1128,72 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
         let origin = self.origin(id);
         Ok(self.push(OpKind::Call { callee, args }, ty, origin))
+    }
+
+    /// The `Math` member a callee names, if it names one.
+    ///
+    /// Recognized by shape rather than by symbol identity, which is a
+    /// simplification: a program that shadowed the global `Math` with its own
+    /// object would be mis-read. It cannot be shadowed by a *function* in the
+    /// compiled program — that call would resolve to a direct target and never
+    /// reach here — so the remaining case is an import named `Math` with
+    /// matching method names.
+    ///
+    /// `docs/any-unknown.md` describes the principled version: profiles that
+    /// associate trusted *declaration identities* with a closed set of
+    /// compiler-owned semantics, so the core never matches on a name at all.
+    /// This is the shape that becomes.
+    fn math_intrinsic(&self, callee: NodeId) -> Option<MathIntrinsic> {
+        if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return None;
+        }
+        let children = self.children(callee);
+        let object = *children.first()?;
+        let member = *children.last()?;
+        if self.kind_of(object) != Some(syntax::IDENTIFIER)
+            || self.node(object).text.as_deref() != Some("Math")
+        {
+            return None;
+        }
+        match self.node(member).text.as_deref()? {
+            "floor" => Some(MathIntrinsic::Unary(UnOp::Floor)),
+            "ceil" => Some(MathIntrinsic::Unary(UnOp::Ceil)),
+            "trunc" => Some(MathIntrinsic::Unary(UnOp::Trunc)),
+            "round" => Some(MathIntrinsic::Unary(UnOp::Round)),
+            "abs" => Some(MathIntrinsic::Unary(UnOp::Abs)),
+            "min" => Some(MathIntrinsic::Binary(BinOp::Min)),
+            "max" => Some(MathIntrinsic::Binary(BinOp::Max)),
+            _ => None,
+        }
+    }
+
+    fn lower_math(
+        &mut self,
+        id: NodeId,
+        intrinsic: MathIntrinsic,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "a `Math` call of unrepresentable type"))?;
+        let origin = self.origin(id);
+
+        match (intrinsic, arguments) {
+            (MathIntrinsic::Unary(op), [argument]) => {
+                let operand = self.lower_expression(*argument)?;
+                Ok(self.push(OpKind::Unary { op, operand }, ty, origin))
+            }
+            (MathIntrinsic::Binary(op), [left, right]) => {
+                let lhs = self.lower_expression(*left)?;
+                let rhs = self.lower_expression(*right)?;
+                Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))
+            }
+            // `Math.min()` is `Infinity` and `Math.min(a, b, c)` folds, but both
+            // are shapes this lowering does not accept yet, and quietly
+            // producing the two-argument answer for a three-argument call would
+            // be wrong in a way nothing downstream could detect.
+            _ => Err(self.unsupported(id, "a `Math` call with this many arguments")),
+        }
     }
 
     fn lower_identifier(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
@@ -1310,4 +1385,11 @@ fn known_values(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> Facts {
         }),
         _ => Facts::TOP,
     }
+}
+
+/// A `Math` member the compiler implements directly.
+#[derive(Debug, Clone, Copy)]
+enum MathIntrinsic {
+    Unary(UnOp),
+    Binary(BinOp),
 }

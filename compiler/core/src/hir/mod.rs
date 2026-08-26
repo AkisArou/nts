@@ -352,6 +352,13 @@ pub enum BinOp {
     /// Logical right shift, JavaScript's `>>>`. The one bitwise operator whose
     /// result is *uint32*, and so the one that can exceed int32.
     UShr,
+
+    /// `Math.min` and `Math.max`.
+    ///
+    /// Not C's `fmin`/`fmax`, which return the non-NaN operand where JavaScript
+    /// returns NaN, and which have their own opinion about the two zeroes.
+    Min,
+    Max,
 }
 
 /// A unary operator.
@@ -372,6 +379,21 @@ pub enum UnOp {
     ToInt32,
     /// JavaScript's `ToUint32`. As above, reinterpreted unsigned.
     ToUint32,
+
+    /// `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.abs`.
+    ///
+    /// The rounding four are *proofs of wholeness*, in the way `x | 0` is a
+    /// proof of int32-ness — and a stronger one, because they keep the
+    /// magnitude instead of wrapping it. They are how an author says "this is
+    /// an integer" about a value too large for int32.
+    ///
+    /// `Round` is not C's `round`: JavaScript rounds a half toward positive
+    /// infinity, so `Math.round(-1.5)` is `-1` where C says `-2`.
+    Floor,
+    Ceil,
+    Trunc,
+    Round,
+    Abs,
 }
 
 /// A lowered program.
