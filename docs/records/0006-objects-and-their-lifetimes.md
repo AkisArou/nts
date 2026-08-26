@@ -14,7 +14,7 @@ drops it. It is the only case in `benches/` that allocates at all.
 | --- | --- | --- |
 | nts, NoGC (bump allocator) | 66.0 us | 31x slower |
 | nts, reference counting | 21.8 us | 10x slower |
-| nts, escape analysis | **2.3 us** | **parity** |
+| nts, escape analysis | **2.1 us** | **parity** |
 | C (double), by hand | 2.1 us | — |
 | node 24 | 2.2 us | — |
 
@@ -41,7 +41,7 @@ nineteen releases. The correct-by-construction convention — every value is own
 by the function that names it, every consumption takes its own reference — gives
 local rules and a great many redundant pairs.
 
-Four removals took it to zero retains and nine releases, one per allocation:
+Five removals took it to no retains at all and one release per allocation:
 
 - **Parameters are borrowed.** The caller holds a reference across a synchronous
   call and cannot release it until after the call returns, so the callee needs
@@ -54,6 +54,10 @@ Four removals took it to zero retains and nine releases, one per allocation:
   this, every loop-carried object touches the count on every back edge.
 - **Initializing stores.** A store into a slot that is still zero owes no load
   and no release. Almost every store in a program is one.
+- **Borrowed loads.** A reference read out of a slot belongs to that slot, and
+  across a stretch with no call, no store and no release, the slot cannot change
+  and the container cannot go away. `Box#read` went from a retain, two loads and
+  a release to two loads.
 
 ## What is still owed
 
