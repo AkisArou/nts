@@ -1021,3 +1021,78 @@ int main(void) {{
         "{printed}",
     );
 }
+
+#[test]
+fn cycles_are_collected_and_acyclic_objects_are_never_considered() {
+    // A cycle is what reference counting on its own cannot reclaim: every
+    // object in one is held by another object in the same one, so no count
+    // reaches zero. RFC 9.2 names this as the price of 9.2, and this is the
+    // part that pays it.
+    //
+    // `acyclic` is here for the other half. A type whose references cannot lead
+    // back to it can never be in a cycle, and the compiler knows which types
+    // those are, so the collector never sees one. If it did, every program that
+    // allocates would pay for a hazard it does not have.
+    let harness = format!(
+        r#"{CHECK}
+#include "nts_runtime.h"
+double selfCycle(double times);
+double pairCycle(double times);
+double acyclic(double times);
+int main(void) {{
+    check("selfCycle(100)", selfCycle(100), 4950);
+    check("pairCycle(100)", pairCycle(100), 4950);
+    check("acyclic(100)", acyclic(100), 4950);
+
+    nts_collect_cycles();
+    if (nts_live_count() != 0 || nts_live_bytes() != 0) {{
+        printf("FAIL cycles leak: %zu objects, %zu bytes\n",
+               nts_live_count(), nts_live_bytes());
+        failures++;
+    }} else {{
+        printf("ok cycles are reclaimed\n");
+    }}
+
+    // Nothing calls the collector by hand in a real program, so the threshold
+    // has to be what keeps a cycling loop bounded. This allocates well past it
+    // without asking for anything.
+    check("selfCycle(40000)", selfCycle(40000), 799980000);
+    if (nts_live_bytes() > 1u << 20) {{
+        printf("FAIL cycles are not collected on their own: %zu bytes\n",
+               nts_live_bytes());
+        failures++;
+    }} else {{
+        printf("ok cycles are collected without being asked\n");
+    }}
+
+    // Acyclic objects must never reach the collector's candidate buffer, or
+    // every allocating program pays for a hazard it does not have.
+    size_t before = nts_cycle_candidates();
+    acyclic(1000);
+    if (nts_cycle_candidates() != before) {{
+        printf("FAIL acyclic objects were considered: %zu -> %zu\n",
+               before, nts_cycle_candidates());
+        failures++;
+    }} else {{
+        printf("ok acyclic objects are never considered\n");
+    }}
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = build_and_run_with("cycles", &harness, hir::Provider::ReferenceCounting)
+    else {
+        return;
+    };
+    let printed = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "{printed}");
+    assert!(printed.contains("ok cycles are reclaimed"), "{printed}");
+    assert!(
+        printed.contains("ok cycles are collected without being asked"),
+        "{printed}",
+    );
+    assert!(
+        printed.contains("ok acyclic objects are never considered"),
+        "{printed}",
+    );
+}

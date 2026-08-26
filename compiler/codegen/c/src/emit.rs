@@ -353,7 +353,8 @@ fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program
         writer.blank(origin);
     }
 
-    for layout in &program.layouts {
+    let cyclic_layouts = program.cyclic_layouts();
+    for (index, layout) in program.layouts.iter().enumerate() {
         let name = object_type_name(layout);
         writer.line(origin, format!("struct {name} {{"));
         // The header first, so every managed object starts the same way and a
@@ -409,11 +410,15 @@ fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program
             );
             format!("nts_refs_{name}")
         };
+        // Whether an object of this type could be in a reference cycle. The
+        // collector reads it to stay away from the programs that have none,
+        // which is nearly all of them.
+        let cyclic = u32::from(cyclic_layouts.get(index).copied().unwrap_or(true));
         writer.line(
             origin,
             format!(
                 "static const NtsDescriptor nts_desc_{name} = \
-                 {{ NTS_KIND_OBJECT, sizeof({name}), {}u, {offsets}, \"{}\" }};",
+                 {{ NTS_KIND_OBJECT, sizeof({name}), {}u, {cyclic}u, {offsets}, \"{}\" }};",
                 references.len(),
                 layout.name
             ),
@@ -433,7 +438,7 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, \"{element}[]\" }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, \"{element}[]\" }};",
                 descriptor_name(element)
             ),
         );

@@ -52,6 +52,20 @@ typedef struct NtsDescriptor {
      * otherwise, and `offsets` is null -- element addresses are `i * size` and
      * there is no table worth writing down. A string has neither. */
     uint32_t references;
+    /* Whether an object of this type could be part of a reference cycle -- that
+     * is, whether the type can lead back to itself through reference fields.
+     *
+     * The compiler decides it, once per type, and it is what keeps the cycle
+     * collector away from programs that have no cycles to collect. Without it a
+     * candidate would be buffered on every release that does not reach zero,
+     * which is most of them, and every allocating program would pay for a
+     * hazard it does not have.
+     *
+     * Conservative in the safe direction: an array of references is cyclic
+     * because one descriptor serves them all and says nothing about what the
+     * elements point at, and a field whose type the compiler cannot see is
+     * cyclic because unknown has to mean yes. */
+    uint32_t cyclic;
     const uint32_t *offsets;
     const char *name;
 } NtsDescriptor;
@@ -92,6 +106,28 @@ typedef NtsHeader NtsString;
 extern const NtsDescriptor nts_desc_ref;
 extern const NtsDescriptor nts_desc_string1;
 extern const NtsDescriptor nts_desc_string2;
+
+/* Colors for the cycle collector (RFC 9.2), in `flags`. A release that does not
+ * reach zero *might* have removed the last reference from outside a cycle, so
+ * the object becomes a candidate; the collector later works out which candidates
+ * really are garbage by removing internal references and seeing what is left. */
+#define NTS_COLOR_MASK 3u
+#define NTS_BLACK 0u  /* In use. */
+#define NTS_GRAY 1u   /* Internal references are being removed. */
+#define NTS_WHITE 2u  /* Reachable only from within a cycle: garbage. */
+#define NTS_PURPLE 3u /* A candidate root. */
+#define NTS_BUFFERED 4u
+
+/* Consider the candidates and reclaim whatever turns out to be garbage.
+ *
+ * Called automatically when candidates accumulate, and directly by a program
+ * that would rather choose the moment. Reference counting reclaims everything
+ * else the instant it becomes garbage; this is only for what it cannot. */
+void nts_collect_cycles(void);
+
+/* How many candidates have ever been buffered. For tests: an acyclic program
+ * must never buffer one, and the only way to state that is to count. */
+size_t nts_cycle_candidates(void);
 
 /* An object the program did not allocate -- a string literal in static data --
  * carries this count and is never freed. A sentinel rather than a flag bit so

@@ -577,6 +577,85 @@ pub struct Program {
 }
 
 impl Program {
+    /// Which layouts can be part of a reference cycle.
+    ///
+    /// A cycle is what reference counting cannot reclaim on its own, so a
+    /// collector has to consider every object that might be in one. Most cannot
+    /// be, and that is decidable from the types alone: an object of type `T` can
+    /// be in a cycle only if `T` is reachable from `T` by following reference
+    /// fields. `class Wrapper { inner: Leaf }` never can be, however many
+    /// `Wrapper`s exist; `class Node { next: Node }` always can be, and takes
+    /// one line to write.
+    ///
+    /// Answering it here is what keeps the collector off every program that has
+    /// no cycles to collect. The alternative is a runtime that buffers a
+    /// candidate on every release that does not reach zero, which is most of
+    /// them.
+    ///
+    /// An array of references is conservatively cyclic: every one of them shares
+    /// a single descriptor, which describes the element's shape and not what the
+    /// element points at, so there is nothing per-element-type to be precise
+    /// with. A field whose type has no layout here is cyclic for the same
+    /// reason — the answer is unknown, and unknown has to mean yes.
+    #[must_use]
+    pub fn cyclic_layouts(&self) -> Vec<bool> {
+        // Edges: which layouts a layout's reference fields can lead to.
+        let edges: Vec<Vec<usize>> = self
+            .layouts
+            .iter()
+            .map(|layout| {
+                let mut targets = Vec::new();
+                for field in &layout.fields {
+                    self.reaches(&field.ty, &mut targets);
+                }
+                targets
+            })
+            .collect();
+
+        // Reachability from each layout to itself. The layout count is small --
+        // one per distinct object shape in the program -- so a search per
+        // layout is the right shape of answer rather than a strongly-connected
+        // components pass that would need explaining.
+        (0..self.layouts.len())
+            .map(|start| {
+                let mut seen = vec![false; self.layouts.len()];
+                let mut stack = edges[start].clone();
+                while let Some(next) = stack.pop() {
+                    if next == start {
+                        return true;
+                    }
+                    if std::mem::replace(&mut seen[next], true) {
+                        continue;
+                    }
+                    stack.extend(edges[next].iter().copied());
+                }
+                false
+            })
+            .collect()
+    }
+
+    /// The layouts a type's references can lead to.
+    ///
+    /// An unknown target is recorded as an edge to every layout, so the
+    /// conservative answer falls out of the same search rather than needing a
+    /// rule of its own: whoever holds it can reach itself, and is cyclic.
+    fn reaches(&self, ty: &HirType, into: &mut Vec<usize>) {
+        match ty {
+            HirType::Managed(ManagedType::Object(id)) => {
+                match self.layouts.iter().position(|l| l.types.contains(id)) {
+                    Some(at) => into.push(at),
+                    // A type with no layout here could be anything, including
+                    // something that leads back. Every layout is a possible
+                    // target, which makes whoever holds it cyclic.
+                    None => into.extend(0..self.layouts.len()),
+                }
+            }
+            // Through an array, which is a reference like any other.
+            HirType::Managed(ManagedType::Array(element)) => self.reaches(element, into),
+            _ => {}
+        }
+    }
+
     /// The layout of an object type.
     #[must_use]
     pub fn layout(&self, ty: TypeId) -> Option<&Layout> {
@@ -834,6 +913,73 @@ fn place_allocations(program: &mut Program) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn layout(name: &str, id: u32, fields: Vec<Field>) -> Layout {
+        Layout {
+            types: vec![TypeId(id)],
+            name: name.to_owned(),
+            fields,
+        }
+    }
+
+    fn field(name: &str, ty: HirType) -> Field {
+        Field {
+            name: name.to_owned(),
+            ty,
+            readonly: false,
+        }
+    }
+
+    fn object(id: u32) -> HirType {
+        HirType::Managed(ManagedType::Object(TypeId(id)))
+    }
+
+    #[test]
+    fn only_types_that_can_lead_back_to_themselves_can_be_in_a_cycle() {
+        // The question a cycle collector has to ask about every object, answered
+        // once per type instead. `Wrapper` holds a reference and still cannot be
+        // in a cycle, which is the case that matters: it is the common one.
+        let program = Program {
+            funcs: Vec::new(),
+            layouts: vec![
+                // 0: Node { next: Node } -- a cycle in one line.
+                layout("Node", 1, vec![field("next", object(1))]),
+                // 1: Leaf { value: number }
+                layout("Leaf", 2, vec![field("value", HirType::NUMBER)]),
+                // 2: Wrapper { inner: Leaf }
+                layout("Wrapper", 3, vec![field("inner", object(2))]),
+                // 3: Left { right: Right } and 4: Right { left: Left }
+                layout("Left", 4, vec![field("right", object(5))]),
+                layout("Right", 5, vec![field("left", object(4))]),
+                // 5: Tree { children: Tree[] } -- through an array.
+                layout(
+                    "Tree",
+                    6,
+                    vec![field(
+                        "children",
+                        HirType::Managed(ManagedType::Array(Box::new(object(6)))),
+                    )],
+                ),
+            ],
+        };
+
+        assert_eq!(
+            program.cyclic_layouts(),
+            vec![true, false, false, true, true, true],
+        );
+    }
+
+    #[test]
+    fn a_field_of_unknown_layout_is_assumed_to_lead_anywhere() {
+        // Unknown has to mean yes. A type this program has no layout for could
+        // lead back, and a collector that skipped the object on that basis would
+        // skip a cycle.
+        let program = Program {
+            funcs: Vec::new(),
+            layouts: vec![layout("Holder", 1, vec![field("other", object(99))])],
+        };
+        assert_eq!(program.cyclic_layouts(), vec![true]);
+    }
 
     #[test]
     fn a_number_lowers_to_a_double_until_specialized() {
