@@ -168,8 +168,10 @@ dependencies = [
 name = "nts-core"
 version = "0.0.0"
 dependencies = [
+ "camino",
  "indexmap",
  "nts-diagnostics",
+ "nts-frontend-ts",
  "nts-semantic-schema",
  "rustc-hash",
  "serde",

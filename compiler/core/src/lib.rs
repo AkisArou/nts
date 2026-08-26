@@ -29,6 +29,8 @@
 //! here, because MIR is what gets cached, diffed for incremental builds, and
 //! serialized into HMR generations.
 
+pub mod hir;
 pub mod reachability;
 
+pub use hir::{Func, HirType, OpKind, Program};
 pub use reachability::Reachability;

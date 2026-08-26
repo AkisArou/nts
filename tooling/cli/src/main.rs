@@ -7,6 +7,7 @@
 
 use anyhow::{Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
+use nts_core::hir::{self, BinOp, HirType, ManagedType, OpKind};
 use nts_core::reachability;
 use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo, tsgo::decompose::Budget};
 use nts_semantic_schema::SCHEMA_VERSION;
@@ -24,6 +25,14 @@ fn main() -> Result<()> {
                 .find(|a| !a.starts_with("--"))
                 .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
             frontend(&tsconfig, decompose, calls, constants)
+        }
+        Some("hir") => {
+            let rest: Vec<String> = args.collect();
+            let tsconfig = rest
+                .iter()
+                .find(|a| !a.starts_with("--"))
+                .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
+            dump_hir(&tsconfig)
         }
         Some("version") | None => {
             println!("nts {}", env!("CARGO_PKG_VERSION"));
@@ -126,4 +135,108 @@ fn hex(bytes: &[u8]) -> String {
         let _ = write!(out, "{b:02x}");
         out
     })
+}
+
+/// Lower a project to HIR and print it.
+///
+/// A readable dump rather than a debug format: RFC §4.1 asks that every stage be
+/// inspectable, and the point of this layer is that its decisions are visible.
+fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
+    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let mut source = TsgoApi::new(tsgo_binary);
+    let snapshot = source.snapshot(tsconfig)?;
+
+    if snapshot.has_errors() {
+        for diagnostic in &snapshot.diagnostics {
+            println!("{} {}", diagnostic.code, diagnostic.message);
+        }
+        bail!("the program does not typecheck");
+    }
+
+    let lowered = hir::lower::lower(&snapshot);
+    for func in &lowered.program.funcs {
+        let params: Vec<String> = func
+            .params
+            .iter()
+            .map(|p| format!("{}: {}", p.name, render(&p.ty)))
+            .collect();
+        println!(
+            "{}func {}({}) -> {} {{",
+            if func.exported { "export " } else { "" },
+            func.name,
+            params.join(", "),
+            render(&func.return_type),
+        );
+        for (index, op) in func.ops.iter().enumerate() {
+            println!("  {}", render_op(index, op));
+        }
+        println!("}}");
+    }
+
+    for diagnostic in &lowered.diagnostics {
+        println!("  -- {} {}", diagnostic.code, diagnostic.message);
+    }
+    println!(
+        "\n{} function(s), {}",
+        lowered.program.funcs.len(),
+        if lowered.is_complete() {
+            "nothing refused".to_owned()
+        } else {
+            format!("{} construct(s) refused", lowered.diagnostics.len())
+        },
+    );
+    Ok(())
+}
+
+fn render(ty: &HirType) -> String {
+    match ty {
+        HirType::Void => "void".to_owned(),
+        HirType::Never => "never".to_owned(),
+        HirType::Bool => "bool".to_owned(),
+        HirType::Int { bits, signed } => format!("{}{bits}", if *signed { 'i' } else { 'u' }),
+        HirType::Float { bits } => format!("f{bits}"),
+        HirType::Managed(ManagedType::String) => "managed<str>".to_owned(),
+        HirType::Managed(ManagedType::Object(id)) => format!("managed<obj#{}>", id.0),
+        HirType::Managed(ManagedType::Array(element)) => {
+            format!("managed<[{}]>", render(element))
+        }
+    }
+}
+
+fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
+    let ty = render(&op.ty);
+    match &op.kind {
+        OpKind::Param(n) => format!("%{index} = param {n} : {ty}"),
+        OpKind::ConstInt(v) => format!("%{index} = const {v} : {ty}"),
+        OpKind::ConstFloat(v) => format!("%{index} = const {v} : {ty}"),
+        OpKind::ConstBool(v) => format!("%{index} = const {v} : {ty}"),
+        OpKind::ConstString(v) => format!("%{index} = const {v:?} : {ty}"),
+        OpKind::Binary { op: bin, lhs, rhs } => {
+            format!(
+                "%{index} = {} %{}, %{} : {ty}",
+                render_bin(*bin),
+                lhs.0,
+                rhs.0
+            )
+        }
+        OpKind::Return(Some(v)) => format!("ret %{}", v.0),
+        OpKind::Return(None) => "ret".to_owned(),
+    }
+}
+
+const fn render_bin(op: BinOp) -> &'static str {
+    match op {
+        BinOp::Add => "add",
+        BinOp::Sub => "sub",
+        BinOp::Mul => "mul",
+        BinOp::Div => "div",
+        BinOp::Rem => "rem",
+        BinOp::Concat => "concat",
+        BinOp::Lt => "lt",
+        BinOp::Le => "le",
+        BinOp::Gt => "gt",
+        BinOp::Ge => "ge",
+        BinOp::Eq => "eq",
+        BinOp::Ne => "ne",
+    }
 }

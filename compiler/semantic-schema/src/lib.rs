@@ -23,6 +23,7 @@
 
 pub mod origin;
 pub mod schema;
+pub mod syntax;
 
 pub use origin::{GeneratedReason, Origin, ScopeId};
 pub use schema::{
