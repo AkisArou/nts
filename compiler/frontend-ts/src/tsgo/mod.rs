@@ -51,9 +51,10 @@ use proto::{
     DiagnosticResponse, DocumentIdentifier, GetDiagnosticsParams, GetResolvedSignatureParams,
     GetSignaturePropertyParams, GetSignaturesOfTypeParams, GetSourceFileParams,
     GetSymbolsAtLocationsParams, GetTypeAtLocationsParams, GetTypePropertyParams,
-    GetTypesOfSymbolsParams, IndexInfoResponse, InitializeResponse, NodeHandle, ProjectHandle,
-    SignatureKind, SignatureResponse, SnapshotHandle, SourceFileMetadata, SymbolResponse,
-    TypePredicateResponse, TypeResponse, UpdateSnapshotParams, UpdateSnapshotResponse,
+    GetTypesOfSymbolsParams, IndexInfoResponse, InitializeResponse, IsTypeAssignableToParams,
+    NodeHandle, ProjectHandle, SignatureKind, SignatureResponse, SnapshotHandle,
+    SourceFileMetadata, SymbolResponse, TypePredicateResponse, TypeResponse, UpdateSnapshotParams,
+    UpdateSnapshotResponse,
 };
 use wire::{Frame, MessageType, WireError, read_frame, write_frame};
 
@@ -608,6 +609,33 @@ impl Client {
                 project: project.clone(),
                 ty,
                 kind: SignatureKind::Construct,
+            },
+        )
+    }
+
+    /// Whether a value of `source` may be used where `target` is expected.
+    ///
+    /// A question, not an extraction: the answer depends on a pair, so there is
+    /// nothing to store up front. Lowering asks it where a coercion might be
+    /// needed — an assignment, an argument, a return — and the answer decides
+    /// between emitting a conversion and emitting nothing.
+    ///
+    /// Takes checker type ids rather than arena indices, so a caller holding a
+    /// `TypeId` needs the mapping that produced it.
+    pub fn is_type_assignable_to(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        source: u32,
+        target: u32,
+    ) -> Result<bool, TsgoError> {
+        self.request(
+            proto::method::IS_TYPE_ASSIGNABLE_TO,
+            &IsTypeAssignableToParams {
+                snapshot,
+                project: project.clone(),
+                source,
+                target,
             },
         )
     }

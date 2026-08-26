@@ -17,6 +17,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+nts-diagnostics.workspace = true
 nts-semantic-schema.workspace = true
 rustc-hash.workspace = true
 serde_json.workspace = true

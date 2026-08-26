@@ -28,6 +28,7 @@ pub mod method {
     pub const GET_SEMANTIC_DIAGNOSTICS: &str = "getSemanticDiagnostics";
 
     pub const GET_BASE_TYPES: &str = "getBaseTypes";
+    pub const IS_TYPE_ASSIGNABLE_TO: &str = "isTypeAssignableTo";
     pub const GET_TYPE_PREDICATE_OF_SIGNATURE: &str = "getTypePredicateOfSignature";
     pub const GET_TYPE_PARAMETERS_OF_SIGNATURE: &str = "getTypeParametersOfSignature";
     pub const GET_CHECK_TYPE_OF_TYPE: &str = "getCheckTypeOfType";
@@ -542,4 +543,17 @@ pub struct IndexInfoResponse {
     pub value_type: TypeResponse,
     #[serde(default)]
     pub is_readonly: bool,
+}
+
+/// Parameters for `isTypeAssignableTo`.
+///
+/// Both handles must be checker type ids, not arena indices — this asks the
+/// checker a question rather than reading the snapshot.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IsTypeAssignableToParams {
+    pub snapshot: SnapshotHandle,
+    pub project: ProjectHandle,
+    pub source: u32,
+    pub target: u32,
 }
