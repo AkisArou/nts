@@ -125,18 +125,103 @@ impl HirType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ValueId(pub u32);
 
+/// A basic block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BlockId(pub u32);
+
 /// One function.
 #[derive(Debug, Clone)]
 pub struct Func {
     pub name: String,
     pub params: Vec<Param>,
     pub return_type: HirType,
-    /// Operations in evaluation order. `ops[i]` defines `ValueId(i)`.
-    pub ops: Vec<Op>,
+    /// Every value the function defines. [`ValueId`] indexes this.
+    ///
+    /// Separate from the blocks so that a value's identity survives blocks being
+    /// reordered, split, or merged — which every optimization does.
+    pub values: Vec<Op>,
+    /// Blocks. `blocks[0]` is the entry.
+    pub blocks: Vec<Block>,
     pub origin: Origin,
     /// Exported from its module, and therefore a root: reachability starts here
     /// and the symbol survives into the artifact.
     pub exported: bool,
+}
+
+impl Func {
+    /// The op defining a value.
+    #[must_use]
+    pub fn value(&self, id: ValueId) -> &Op {
+        &self.values[id.0 as usize]
+    }
+
+    /// The entry block.
+    #[must_use]
+    pub fn entry(&self) -> &Block {
+        &self.blocks[0]
+    }
+}
+
+/// A straight-line run of operations ending in exactly one terminator.
+///
+/// # Why blocks, and why parameters instead of phi nodes
+///
+/// A flat operation list cannot express a branch, and without a control-flow
+/// graph there is no dominance — so no constant propagation, no dead-code
+/// elimination, and nowhere for `number` specialization to run. The structure is
+/// the optimization work, not a preliminary to it.
+///
+/// Values that differ by which edge was taken arrive as **block parameters**,
+/// passed as arguments on the jump. A phi node states the same thing but keeps it
+/// inside the successor, where it has to be held in order with a predecessor list
+/// that every edit can invalidate. On the edge, splitting a critical edge is
+/// local and cannot desynchronize anything. Cranelift, MLIR and Swift SIL all
+/// made this choice.
+#[derive(Debug, Clone)]
+pub struct Block {
+    /// Values this block receives from its predecessors.
+    pub params: Vec<ValueId>,
+    /// Operations in order, as indices into the function's value arena.
+    pub ops: Vec<ValueId>,
+    pub terminator: Terminator,
+}
+
+/// How a block ends. Exactly one per block, and never in the middle.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Terminator {
+    Return(Option<ValueId>),
+    Jump {
+        target: BlockId,
+        args: Vec<ValueId>,
+    },
+    Branch {
+        cond: ValueId,
+        then_target: BlockId,
+        then_args: Vec<ValueId>,
+        else_target: BlockId,
+        else_args: Vec<ValueId>,
+    },
+    /// Control cannot reach here.
+    ///
+    /// Distinct from a missing terminator, which is a malformed function. This is
+    /// a claim the compiler is making, and a backend may rely on it.
+    Unreachable,
+}
+
+impl Terminator {
+    /// Blocks this one can transfer control to.
+    #[must_use]
+    pub fn successors(&self) -> Vec<BlockId> {
+        match self {
+            Self::Return(_) | Self::Unreachable => Vec::new(),
+            Self::Jump { target, .. } => vec![*target],
+            Self::Branch {
+                then_target,
+                else_target,
+                ..
+            } => vec![*then_target, *else_target],
+        }
+    }
 }
 
 /// One parameter.
@@ -161,8 +246,10 @@ pub struct Op {
 /// What an operation does.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpKind {
-    /// The nth parameter, materialized as a value.
+    /// The nth parameter of the function, materialized as a value.
     Param(u32),
+    /// The nth parameter of the block that defines it.
+    BlockParam(u32),
     ConstInt(i64),
     ConstFloat(f64),
     ConstBool(bool),

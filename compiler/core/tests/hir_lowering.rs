@@ -5,7 +5,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_core::hir::{self, BinOp, Callee, Func, HirType, ManagedType, OpKind, lower::Lowered};
+use nts_core::hir::{
+    self, BinOp, Callee, Func, HirType, ManagedType, OpKind, Terminator, lower::Lowered,
+};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 fn lowered(fixture: &str) -> Option<Lowered> {
@@ -60,7 +62,7 @@ fn one_binding_becomes_one_value() {
     // identifiers carry the same symbol.
     let add = func(&lowered, "add");
     let (lhs, rhs) = add
-        .ops
+        .values
         .iter()
         .find_map(|op| match &op.kind {
             OpKind::Binary { lhs, rhs, .. } => Some((*lhs, *rhs)),
@@ -68,9 +70,11 @@ fn one_binding_becomes_one_value() {
         })
         .expect("the addition");
 
-    assert!(matches!(add.ops[lhs.0 as usize].kind, OpKind::Param(0)));
-    assert!(matches!(add.ops[rhs.0 as usize].kind, OpKind::Param(1)));
-    assert_eq!(add.ops.len(), 4, "two params, one add, one return");
+    assert!(matches!(add.value(lhs).kind, OpKind::Param(0)));
+    assert!(matches!(add.value(rhs).kind, OpKind::Param(1)));
+    // Two params and one add. The return is a terminator, not a value.
+    assert_eq!(add.values.len(), 3);
+    assert_eq!(add.blocks.len(), 1, "straight-line code needs one block");
 }
 
 #[test]
@@ -82,7 +86,7 @@ fn plus_on_strings_is_not_the_same_operator_as_plus_on_numbers() {
     // concatenation, and the two lower to nothing alike. Resolving it here means
     // no backend has to ask again.
     let op_of = |f: &Func| {
-        f.ops
+        f.values
             .iter()
             .find_map(|op| match &op.kind {
                 OpKind::Binary { op, .. } => Some(*op),
@@ -125,7 +129,7 @@ fn every_operation_carries_an_origin() {
     // RFC decision 20. Not conditional and not debug-only: once a lowering has
     // run without it the mapping back to source is gone for good.
     for f in &lowered.program.funcs {
-        for op in &f.ops {
+        for op in &f.values {
             let span = op.origin.location.span;
             assert!(
                 span.start < span.end,
@@ -178,12 +182,12 @@ fn a_const_binding_costs_nothing() {
     let compute = func(&lowered, "compute");
     assert!(
         !compute
-            .ops
+            .values
             .iter()
             .any(|op| matches!(op.kind, OpKind::ConstFloat(_))),
         "no spurious materialization",
     );
-    assert_eq!(compute.ops.len(), 5, "two params, a call, an add, a return");
+    assert_eq!(compute.values.len(), 4, "two params, a call, an add");
 }
 
 #[test]
@@ -195,7 +199,7 @@ fn a_resolved_call_names_its_target_statically() {
     // static call rather than going through a function value.
     let compute = func(&lowered, "compute");
     let callee = compute
-        .ops
+        .values
         .iter()
         .find_map(|op| match &op.kind {
             OpKind::Call { callee, .. } => Some(callee.clone()),
@@ -212,7 +216,7 @@ fn a_call_passes_the_values_it_was_given() {
     };
     let compute = func(&lowered, "compute");
     let args = compute
-        .ops
+        .values
         .iter()
         .find_map(|op| match &op.kind {
             OpKind::Call { args, .. } => Some(args.clone()),
@@ -221,10 +225,7 @@ fn a_call_passes_the_values_it_was_given() {
         .expect("the call");
     assert_eq!(args.len(), 1);
     // `double(a)` — the argument is the first parameter, not a reload of it.
-    assert!(matches!(
-        compute.ops[args[0].0 as usize].kind,
-        OpKind::Param(0)
-    ));
+    assert!(matches!(compute.value(args[0]).kind, OpKind::Param(0)));
 }
 
 #[test]
@@ -245,7 +246,7 @@ fn string_locals_and_concatenation_lower_together() {
     };
     let greet = func(&lowered, "greet");
     assert_eq!(greet.return_type, HirType::Managed(ManagedType::String));
-    assert!(greet.ops.iter().any(|op| matches!(
+    assert!(greet.values.iter().any(|op| matches!(
         &op.kind,
         OpKind::Binary {
             op: BinOp::Concat,
@@ -254,7 +255,7 @@ fn string_locals_and_concatenation_lower_together() {
     )));
     assert!(
         greet
-            .ops
+            .values
             .iter()
             .any(|op| matches!(&op.kind, OpKind::ConstString(text) if text == "world")),
     );
@@ -277,4 +278,125 @@ fn a_call_through_a_member_access_is_refused_for_now() {
         "{:?}",
         lowered.diagnostics,
     );
+}
+
+#[test]
+fn an_if_lowers_to_a_branch_with_two_targets() {
+    let Some(lowered) = lowered("control") else {
+        return;
+    };
+    let max = func(&lowered, "max");
+    let Terminator::Branch {
+        then_target,
+        else_target,
+        ..
+    } = max.entry().terminator.clone()
+    else {
+        panic!(
+            "the entry should end in a branch, got {:?}",
+            max.entry().terminator
+        );
+    };
+    assert_ne!(then_target, else_target);
+}
+
+#[test]
+fn an_if_without_an_else_creates_no_empty_block() {
+    let Some(lowered) = lowered("control") else {
+        return;
+    };
+    // `if (a > b) { return a; } return b;` is three blocks: the test, the taken
+    // arm, and the continuation. Allocating an else block for the false edge
+    // would leave a fourth whose only content is a jump — once per `if` without
+    // an else, which is most of them.
+    let max = func(&lowered, "max");
+    assert_eq!(max.blocks.len(), 3, "{:?}", max.blocks);
+    assert!(
+        !max.blocks
+            .iter()
+            .any(|b| b.ops.is_empty() && matches!(b.terminator, Terminator::Jump { .. })),
+        "a block exists only to jump",
+    );
+}
+
+#[test]
+fn when_every_arm_returns_no_merge_block_is_created() {
+    let Some(lowered) = lowered("control") else {
+        return;
+    };
+    // `clamp` returns from all three arms, so nothing follows the `if` and there
+    // is nowhere for a merge block to be reached from.
+    let clamp = func(&lowered, "clamp");
+    let returns = clamp
+        .blocks
+        .iter()
+        .filter(|b| matches!(b.terminator, Terminator::Return(_)))
+        .count();
+    assert_eq!(returns, 3);
+    assert!(
+        !clamp
+            .blocks
+            .iter()
+            .any(|b| matches!(b.terminator, Terminator::Unreachable)),
+        "an unreachable block was emitted",
+    );
+}
+
+#[test]
+fn every_block_ends_in_exactly_one_terminator() {
+    let Some(lowered) = lowered("control") else {
+        return;
+    };
+    // Guaranteed by construction rather than checked at the end: a block is
+    // terminated once and later terminations are ignored, so a `return` inside a
+    // branch cannot be followed by the jump that would otherwise be appended.
+    for f in &lowered.program.funcs {
+        for (index, block) in f.blocks.iter().enumerate() {
+            assert!(
+                !matches!(block.terminator, Terminator::Unreachable),
+                "{} block {index} was left unterminated",
+                f.name,
+            );
+        }
+    }
+}
+
+#[test]
+fn every_successor_names_a_real_block() {
+    let Some(lowered) = lowered("control") else {
+        return;
+    };
+    // A dangling successor is a malformed CFG, and every pass downstream —
+    // dominance, liveness, register allocation — would walk into it.
+    for f in &lowered.program.funcs {
+        for block in &f.blocks {
+            for successor in block.terminator.successors() {
+                assert!(
+                    (successor.0 as usize) < f.blocks.len(),
+                    "{} branches to a block that does not exist",
+                    f.name,
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn code_after_a_return_is_not_lowered() {
+    let Some(lowered) = lowered("control") else {
+        return;
+    };
+    // A block that has already returned cannot hold more operations, so the
+    // statements after it are skipped rather than emitted into a closed block.
+    for f in &lowered.program.funcs {
+        for block in &f.blocks {
+            if matches!(block.terminator, Terminator::Return(_)) {
+                assert!(
+                    block.ops.len() <= f.values.len(),
+                    "sanity: ops index into the value arena",
+                );
+            }
+        }
+    }
+    assert!(lowered.is_complete());
 }

@@ -169,8 +169,22 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
             params.join(", "),
             render(&func.return_type),
         );
-        for (index, op) in func.ops.iter().enumerate() {
-            println!("  {}", render_op(index, op));
+        for (index, block) in func.blocks.iter().enumerate() {
+            let params: Vec<String> = block
+                .params
+                .iter()
+                .map(|p| format!("%{}: {}", p.0, render(&func.value(*p).ty)))
+                .collect();
+            let label = if params.is_empty() {
+                format!("b{index}:")
+            } else {
+                format!("b{index}({}):", params.join(", "))
+            };
+            println!("{label}");
+            for value in &block.ops {
+                println!("  {}", render_op(value.0 as usize, func.value(*value)));
+            }
+            println!("  {}", render_terminator(&block.terminator));
         }
         println!("}}");
     }
@@ -209,6 +223,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
     match &op.kind {
         OpKind::Param(n) => format!("%{index} = param {n} : {ty}"),
+        OpKind::BlockParam(n) => format!("%{index} = blockparam {n} : {ty}"),
         OpKind::ConstInt(v) => format!("%{index} = const {v} : {ty}"),
         OpKind::ConstFloat(v) => format!("%{index} = const {v} : {ty}"),
         OpKind::ConstBool(v) => format!("%{index} = const {v} : {ty}"),
@@ -231,6 +246,44 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         }
         OpKind::Return(Some(v)) => format!("ret %{}", v.0),
         OpKind::Return(None) => "ret".to_owned(),
+    }
+}
+
+fn render_terminator(terminator: &nts_core::hir::Terminator) -> String {
+    use nts_core::hir::Terminator;
+    let args = |values: &[nts_core::hir::ValueId]| {
+        if values.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "({})",
+                values
+                    .iter()
+                    .map(|v| format!("%{}", v.0))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        }
+    };
+    match terminator {
+        Terminator::Return(Some(v)) => format!("ret %{}", v.0),
+        Terminator::Return(None) => "ret".to_owned(),
+        Terminator::Jump { target, args: a } => format!("jump b{}{}", target.0, args(a)),
+        Terminator::Branch {
+            cond,
+            then_target,
+            then_args,
+            else_target,
+            else_args,
+        } => format!(
+            "br %{}, b{}{}, b{}{}",
+            cond.0,
+            then_target.0,
+            args(then_args),
+            else_target.0,
+            args(else_args),
+        ),
+        Terminator::Unreachable => "unreachable".to_owned(),
     }
 }
 

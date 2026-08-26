@@ -47,6 +47,7 @@ pub const CALL_EXPRESSION: u16 = 214;
 pub const NEW_EXPRESSION: u16 = 215;
 pub const BLOCK: u16 = 242;
 pub const VARIABLE_STATEMENT: u16 = 244;
+pub const IF_STATEMENT: u16 = 246;
 pub const RETURN_STATEMENT: u16 = 254;
 pub const VARIABLE_DECLARATION: u16 = 261;
 pub const VARIABLE_DECLARATION_LIST: u16 = 262;

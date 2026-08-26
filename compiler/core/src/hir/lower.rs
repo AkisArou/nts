@@ -17,7 +17,10 @@ use nts_semantic_schema::{
     LiteralValue, NodeId, NodeKind, Origin, SemanticSnapshot, TypeId, TypeKind, syntax,
 };
 
-use super::{BinOp, Callee, Func, HirType, ManagedType, Op, OpKind, Param, Program, ValueId};
+use super::{
+    BinOp, Block, BlockId, Callee, Func, HirType, ManagedType, Op, OpKind, Param, Program,
+    Terminator, ValueId,
+};
 
 /// What a lowering produced, and what it could not.
 #[derive(Debug, Default)]
@@ -103,10 +106,22 @@ pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType
     })
 }
 
+/// A block under construction.
+struct PartialBlock {
+    params: Vec<ValueId>,
+    ops: Vec<ValueId>,
+    /// `None` until the block is terminated. A block that reaches its end without
+    /// one is still open and will be given a jump or a return.
+    terminator: Option<Terminator>,
+}
+
 /// Builds one function.
 struct FuncBuilder<'a> {
     snapshot: &'a SemanticSnapshot,
-    ops: Vec<Op>,
+    /// Every value the function defines.
+    values: Vec<Op>,
+    blocks: Vec<PartialBlock>,
+    current: BlockId,
     /// Symbol index → the value holding it.
     ///
     /// This is what makes two identifiers with one symbol become one value
@@ -118,8 +133,44 @@ impl<'a> FuncBuilder<'a> {
     fn new(snapshot: &'a SemanticSnapshot) -> Self {
         Self {
             snapshot,
-            ops: Vec::new(),
+            values: Vec::new(),
+            blocks: vec![PartialBlock {
+                params: Vec::new(),
+                ops: Vec::new(),
+                terminator: None,
+            }],
+            current: BlockId(0),
             bindings: rustc_hash::FxHashMap::default(),
+        }
+    }
+
+    /// Start a new block and return its id. Does not switch to it.
+    fn new_block(&mut self) -> BlockId {
+        self.blocks.push(PartialBlock {
+            params: Vec::new(),
+            ops: Vec::new(),
+            terminator: None,
+        });
+        BlockId(u32::try_from(self.blocks.len() - 1).unwrap_or(u32::MAX))
+    }
+
+    fn switch_to(&mut self, block: BlockId) {
+        self.current = block;
+    }
+
+    /// Whether the current block has already ended.
+    ///
+    /// A `return` inside a branch terminates its block, and appending a jump
+    /// after it would put two terminators in one block.
+    fn is_terminated(&self) -> bool {
+        self.blocks[self.current.0 as usize].terminator.is_some()
+    }
+
+    /// End the current block, unless something already did.
+    fn terminate(&mut self, terminator: Terminator) {
+        let block = &mut self.blocks[self.current.0 as usize];
+        if block.terminator.is_none() {
+            block.terminator = Some(terminator);
         }
     }
 
@@ -167,8 +218,9 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn push(&mut self, kind: OpKind, ty: HirType, origin: Origin) -> ValueId {
-        let id = ValueId(u32::try_from(self.ops.len()).unwrap_or(u32::MAX));
-        self.ops.push(Op { kind, ty, origin });
+        let id = ValueId(u32::try_from(self.values.len()).unwrap_or(u32::MAX));
+        self.values.push(Op { kind, ty, origin });
+        self.blocks[self.current.0 as usize].ops.push(id);
         id
     }
 
@@ -219,11 +271,28 @@ impl<'a> FuncBuilder<'a> {
 
         self.lower_block(body)?;
 
+        // A body that falls off its end returns nothing. TypeScript already
+        // rejects that for a non-void function, so reaching it means void.
+        self.terminate(Terminator::Return(None));
+
+        let blocks = std::mem::take(&mut self.blocks)
+            .into_iter()
+            .map(|block| Block {
+                params: block.params,
+                ops: block.ops,
+                // Every block is terminated by construction: an open one is only
+                // possible if a lowering forgot, and Unreachable states that
+                // rather than leaving a malformed function.
+                terminator: block.terminator.unwrap_or(Terminator::Unreachable),
+            })
+            .collect();
+
         Ok(Func {
             name,
             params,
             return_type,
-            ops: std::mem::take(&mut self.ops),
+            values: std::mem::take(&mut self.values),
+            blocks,
             origin: self.origin(id),
             exported: self
                 .node(id)
@@ -262,8 +331,87 @@ impl<'a> FuncBuilder<'a> {
 
     fn lower_block(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         for statement in self.children(id) {
+            // Everything after a `return` in the same block is dead. Lowering it
+            // would put operations in a block that has already ended.
+            if self.is_terminated() {
+                break;
+            }
             self.lower_statement(statement)?;
         }
+        Ok(())
+    }
+
+    /// `if (c) { .. } else { .. }`.
+    ///
+    /// The merge block is created only if control can actually reach it. When
+    /// both arms return, there is nothing after the `if`, and emitting an empty
+    /// merge would leave an unreachable block for every early return in the
+    /// program.
+    fn lower_if(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let children = self.children(id);
+        let (condition, then_branch, else_branch) = match children.as_slice() {
+            [condition, then_branch] => (*condition, *then_branch, None),
+            [condition, then_branch, else_branch] => (*condition, *then_branch, Some(*else_branch)),
+            _ => return Err(self.unsupported(id, "an `if` of unexpected shape")),
+        };
+
+        let cond = self.lower_expression(condition)?;
+        let then_block = self.new_block();
+
+        // With no `else`, the false edge goes straight to the merge. Allocating an
+        // else block for it would leave a block whose only content is a jump —
+        // once per `if` without an else, which is most of them.
+        let (else_block, merge) = if else_branch.is_some() {
+            (self.new_block(), None)
+        } else {
+            let merge = self.new_block();
+            (merge, Some(merge))
+        };
+
+        self.terminate(Terminator::Branch {
+            cond,
+            then_target: then_block,
+            then_args: Vec::new(),
+            else_target: else_block,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(then_block);
+        self.lower_statement(then_branch)?;
+        let then_open = !self.is_terminated();
+
+        let else_open = match else_branch {
+            Some(else_branch) => {
+                self.switch_to(else_block);
+                self.lower_statement(else_branch)?;
+                !self.is_terminated()
+            }
+            // The false edge is the merge, which is open by construction.
+            None => true,
+        };
+
+        if !then_open && !else_open {
+            // Both arms ended. Anything after the `if` is unreachable, and the
+            // enclosing block is already closed.
+            return Ok(());
+        }
+
+        let merge = merge.unwrap_or_else(|| self.new_block());
+        if then_open {
+            self.switch_to(then_block);
+            self.terminate(Terminator::Jump {
+                target: merge,
+                args: Vec::new(),
+            });
+        }
+        if else_branch.is_some() && else_open {
+            self.switch_to(else_block);
+            self.terminate(Terminator::Jump {
+                target: merge,
+                args: Vec::new(),
+            });
+        }
+        self.switch_to(merge);
         Ok(())
     }
 
@@ -274,11 +422,11 @@ impl<'a> FuncBuilder<'a> {
                     Some(expression) => Some(self.lower_expression(expression)?),
                     None => None,
                 };
-                let origin = self.origin(id);
-                self.push(OpKind::Return(value), HirType::Void, origin);
+                self.terminate(Terminator::Return(value));
                 Ok(())
             }
             Some(syntax::BLOCK) => self.lower_block(id),
+            Some(syntax::IF_STATEMENT) => self.lower_if(id),
             Some(syntax::VARIABLE_STATEMENT) => self.lower_variable_statement(id),
             _ => Err(self.unsupported(id, "this statement")),
         }
