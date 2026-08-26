@@ -459,7 +459,7 @@ fn transfer_block(
             // here with a known size, it is that size exactly — which is what
             // lets an index into an array literal be proven in bounds by the
             // interval domain alone, with no reasoning about the array at all.
-            OpKind::ArrayLen(array) => {
+            OpKind::Length(array) => {
                 let bound = Facts::new(0.0, facts::U32_MAX, true, false, false);
                 match func.values[array.0 as usize].kind {
                     OpKind::ArrayNew { length } => {

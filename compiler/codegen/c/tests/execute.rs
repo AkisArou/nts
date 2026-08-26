@@ -620,3 +620,48 @@ int main(void) {{
         "{printed}"
     );
 }
+
+#[test]
+fn strings_are_utf16_code_units_and_compare_by_value() {
+    // `length` counts UTF-16 code units, which is what JavaScript means by one.
+    // Stored one byte per unit when every unit fits and two otherwise, so
+    // `length` stays O(1) for all of JavaScript while ordinary text costs one
+    // byte per character rather than two.
+    //
+    // Equality is by value: a concatenation and a literal holding the same code
+    // units are different allocations and must still compare equal.
+    //
+    // Expected values came from running this `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+double greetingLength(void);
+double emptyLength(void);
+bool concatEqualsLiteral(void);
+bool differs(void);
+bool sameLength(void);
+double wideLength(void);
+double mixedLength(void);
+bool mixedEquals(void);
+int main(void) {{
+    check("greetingLength", greetingLength(), 11);
+    check("emptyLength", emptyLength(), 0);
+    check("concatEqualsLiteral", concatEqualsLiteral(), 1);
+    check("differs", differs(), 0);
+    check("sameLength", sameLength(), 1);
+    // Five code units, all beyond Latin-1, so this string is stored two bytes
+    // per unit -- and `length` is still five.
+    check("wideLength", wideLength(), 5);
+    // One narrow operand and one wide: the result has to be wide.
+    check("mixedLength", mixedLength(), 8);
+    // ...and comparing them must not depend on how either was stored.
+    check("mixedEquals", mixedEquals(), 1);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("strings", &harness) else {
+        return;
+    };
+    assert!(output.contains("wideLength = 5"), "{output}");
+    assert!(output.contains("mixedEquals = 1"), "{output}");
+}

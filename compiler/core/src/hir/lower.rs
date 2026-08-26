@@ -1099,12 +1099,12 @@ impl<'a> FuncBuilder<'a> {
         let value = self.lower_expression(*object)?;
         if !matches!(
             self.values[value.0 as usize].ty,
-            HirType::Managed(ManagedType::Array(_))
+            HirType::Managed(ManagedType::Array(_) | ManagedType::String)
         ) {
-            return Err(self.unsupported(id, "`length` of something that is not an array"));
+            return Err(self.unsupported(id, "`length` of something without one"));
         }
         let origin = self.origin(id);
-        Ok(self.push(OpKind::ArrayLen(value), HirType::NUMBER, origin))
+        Ok(self.push(OpKind::Length(value), HirType::NUMBER, origin))
     }
 
     /// `c ? a : b`, and the short-circuiting `a && b` / `a || b`.

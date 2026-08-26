@@ -766,9 +766,33 @@ cross-thread gateway messages
 
 MMTk defines roots as references held in locals, globals, thread-local variables, and similar runtime-visible slots. Its guidance also notes that compilers insert yieldpoints and generate stack maps at GC-safe points.
 
-## 10.2 Initial C and LLVM strategy: shadow root frames
+## 10.2 Root frames belong to the provider, not to the backend
 
-Both native backends should initially use explicit root frames:
+> **Amended.** This section originally required both native backends to use
+> explicit root frames "initially". That contradicts §9.2, which makes reference
+> counting the first shipping provider and states that it needs no precise
+> native stack maps for liveness.
+>
+> Root frames exist so a *tracing* collector can find references on the stack.
+> Under RC, liveness is the reference count; under NoGC (§9.1) nothing collects
+> at all. For both providers that ship first, root frames are pure overhead — a
+> push and a pop per managed local per call, on exactly the code this project
+> claims is fast.
+>
+> Rooting is therefore a property of the **memory provider**:
+>
+> | Provider | Roots |
+> | --- | --- |
+> | NoGC | none — nothing is collected |
+> | RC + cycle collection | none — the count is liveness |
+> | MMTk, or any tracing provider | required |
+>
+> This also keeps MIR provider-neutral, which §7.2 already demands. The design
+> below stands as written for the tracing case, and must not be built before
+> a tracing provider needs it.
+
+When a tracing provider is in use, both native backends should use explicit
+root frames:
 
 ```c
 struct NtsRootFrame {

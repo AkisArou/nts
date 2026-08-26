@@ -302,8 +302,12 @@ pub enum OpKind {
     ArrayNew {
         length: ValueId,
     },
-    /// An array's element count.
-    ArrayLen(ValueId),
+    /// The element count of a variable-length managed object.
+    ///
+    /// One operation for arrays and strings, because they share a header
+    /// (RFC 8.2) and it is the same field. For a string it counts UTF-16 code
+    /// units, which is what `String.prototype.length` means.
+    Length(ValueId),
     /// `array[index]`.
     ArrayGet {
         array: ValueId,

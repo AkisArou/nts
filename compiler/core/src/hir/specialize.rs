@@ -376,11 +376,21 @@ fn insert_conversions(func: &mut Func, analysis: &Analysis) -> usize {
                     Some(OpKind::Unary { op, operand })
                 }
                 OpKind::Call { callee, args } => {
-                    // Signatures were not specialized, so every argument crosses
-                    // as a double.
+                    // Signatures are not specialized, so a *number* crosses as a
+                    // double however it is held here. Anything else crosses as
+                    // itself: a managed reference has one representation and
+                    // this pass never changed it — coercing it to a double
+                    // would be a cast from a pointer, which is not a conversion
+                    // but a different value.
                     let args = args
                         .into_iter()
-                        .map(|arg| coerce(func, arg, &HirType::NUMBER))
+                        .map(|arg| {
+                            if matches!(func.values[arg.0 as usize].ty, HirType::Int { .. }) {
+                                coerce(func, arg, &HirType::NUMBER)
+                            } else {
+                                arg
+                            }
+                        })
                         .collect();
                     Some(OpKind::Call { callee, args })
                 }

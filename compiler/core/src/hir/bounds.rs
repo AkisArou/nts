@@ -100,7 +100,7 @@ fn provably_in_bounds(
     // interval domain cannot see that -- both are unknown numbers -- but the
     // comparison that guards the block relates them.
     analysis.guarded_by(at, index, |candidate| {
-        matches!(func.values[candidate.0 as usize].kind, OpKind::ArrayLen(of) if of == array)
+        matches!(func.values[candidate.0 as usize].kind, OpKind::Length(of) if of == array)
     })
 }
 
