@@ -72,3 +72,16 @@ export function nested(count: number): number {
   }
   return total;
 }
+
+// The box never leaves this function, so it does not need to be on the heap --
+// but it holds a cell that does, and that cell has to be given up where the box
+// ends. A frame slot has no count to reach zero and no destructor to run, so
+// the release is the compiler's to emit.
+export function localBox(times: number): number {
+  let total = 0;
+  for (let i = 0; i < times; i++) {
+    const box = new Box(new Cell(i));
+    total = total + box.read();
+  }
+  return total;
+}

@@ -886,22 +886,14 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
 /// `objects` benchmark it is the entire gap to hand-written C.
 fn place_allocations(program: &mut Program) -> usize {
     let escapes = escape::analyze_program(program);
-    let layouts = program.layouts.clone();
     let mut framed = 0;
 
     for (func, escapes) in program.funcs.iter_mut().zip(&escapes) {
         for index in 0..func.values.len() {
             let value = ValueId(u32::try_from(index).unwrap_or(0));
-            if !matches!(func.values[index].kind, OpKind::ObjectNew { frame: false }) {
-                continue;
-            }
-            let Some(layout) = layouts.iter().find(|layout| {
-                matches!(&func.values[index].ty, HirType::Managed(ManagedType::Object(id))
-                    if layout.types.contains(id))
-            }) else {
-                continue;
-            };
-            if escapes.is_frame_local(value, layout) {
+            if matches!(func.values[index].kind, OpKind::ObjectNew { frame: false })
+                && escapes.is_frame_local(value)
+            {
                 func.values[index].kind = OpKind::ObjectNew { frame: true };
                 framed += 1;
             }

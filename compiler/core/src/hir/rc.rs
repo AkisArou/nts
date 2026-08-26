@@ -80,7 +80,7 @@
 //! the work it exists to do.
 
 use super::liveness;
-use super::{BlockId, Func, HirType, Op, OpKind, Program, ValueId};
+use super::{BlockId, Func, HirType, Layout, ManagedType, Op, OpKind, Program, ValueId};
 
 /// What one pass inserted.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -97,8 +97,9 @@ pub struct Report {
 /// Insert retains and releases across a program.
 pub fn insert(program: &mut Program) -> Report {
     let mut report = Report::default();
+    let layouts = program.layouts.clone();
     for func in &mut program.funcs {
-        let one = insert_into(func);
+        let one = insert_into(func, &layouts);
         report.retains += one.retains;
         report.releases += one.releases;
         report.moves += one.moves;
@@ -108,11 +109,15 @@ pub fn insert(program: &mut Program) -> Report {
 }
 
 /// A deterministic ordering, so one compiler on one input emits one program.
-fn ordered(func: &Func, values: &rustc_hash::FxHashSet<ValueId>) -> Vec<ValueId> {
+fn ordered(
+    func: &Func,
+    layouts: &[Layout],
+    values: &rustc_hash::FxHashSet<ValueId>,
+) -> Vec<ValueId> {
     let mut counted_values: Vec<ValueId> = values
         .iter()
         .copied()
-        .filter(|value| owned(func, *value))
+        .filter(|value| owned(func, layouts, *value))
         .collect();
     counted_values.sort_unstable();
     counted_values
@@ -120,19 +125,40 @@ fn ordered(func: &Func, values: &rustc_hash::FxHashSet<ValueId>) -> Vec<ValueId>
 
 /// Whether a value needs counting at all.
 ///
-fn counted(func: &Func, value: ValueId) -> bool {
+fn counted(func: &Func, layouts: &[Layout], value: ValueId) -> bool {
     let op = &func.values[value.0 as usize];
-    op.ty.is_managed()
-        && !matches!(
-            op.kind,
-            // Static data with no count to change, and the runtime treats it as
-            // immortal anyway.
-            OpKind::ConstString(_)
-                // In the frame, so it goes away when the frame does. Counting it
-                // would at best be wasted work and at worst call `free` on a
-                // stack address.
-                | OpKind::ObjectNew { frame: true }
-        )
+    if !op.ty.is_managed() {
+        return false;
+    }
+    match op.kind {
+        // Static data with no count to change, and the runtime treats it as
+        // immortal anyway.
+        OpKind::ConstString(_) => false,
+        // A frame object has no count of its own -- it goes away when the frame
+        // does, and counting it would at best be wasted work and at worst call
+        // `free` on a stack address. But it still *ends*, and if it holds
+        // references they have to be given up then. So it is tracked exactly
+        // like anything else, and only the release differs.
+        OpKind::ObjectNew { frame: true } => !reference_fields(func, layouts, value).is_empty(),
+        _ => true,
+    }
+}
+
+/// The indices of a value's reference fields, in layout order.
+fn reference_fields(func: &Func, layouts: &[Layout], value: ValueId) -> Vec<u32> {
+    let HirType::Managed(ManagedType::Object(id)) = &func.values[value.0 as usize].ty else {
+        return Vec::new();
+    };
+    let Some(layout) = layouts.iter().find(|layout| layout.types.contains(id)) else {
+        return Vec::new();
+    };
+    layout
+        .fields
+        .iter()
+        .enumerate()
+        .filter(|(_, field)| field.ty.is_managed())
+        .filter_map(|(index, _)| u32::try_from(index).ok())
+        .collect()
 }
 
 /// Whether this function holds a reference of its own to a value.
@@ -140,8 +166,8 @@ fn counted(func: &Func, value: ValueId) -> bool {
 /// Everything counted is owned except a parameter, which the caller holds for
 /// the length of the call. An owned value is retained where it is produced and
 /// released where it dies; a borrowed one is neither.
-fn owned(func: &Func, value: ValueId) -> bool {
-    counted(func, value) && !matches!(func.values[value.0 as usize].kind, OpKind::Param(_))
+fn owned(func: &Func, layouts: &[Layout], value: ValueId) -> bool {
+    counted(func, layouts, value) && !matches!(func.values[value.0 as usize].kind, OpKind::Param(_))
 }
 
 /// Whether a producer already yields a reference the function owns.
@@ -161,7 +187,7 @@ fn produces_owned(kind: &OpKind) -> bool {
     )
 }
 
-fn insert_into(func: &mut Func) -> Report {
+fn insert_into(func: &mut Func, layouts: &[Layout]) -> Report {
     let live = liveness::analyze(func);
     let mut report = Report::default();
     let blocks = std::mem::take(&mut func.blocks);
@@ -177,7 +203,15 @@ fn insert_into(func: &mut Func) -> Report {
             mut ops,
             moved,
             borrowed,
-        } = count_ops(func, at, &block.ops, &block.terminator, &live, &mut report);
+        } = count_ops(
+            func,
+            layouts,
+            at,
+            &block.ops,
+            &block.terminator,
+            &live,
+            &mut report,
+        );
 
         let edges = edges_of(&block.terminator);
         let mut terminator = block.terminator.clone();
@@ -185,24 +219,24 @@ fn insert_into(func: &mut Func) -> Report {
         if edges.is_empty() {
             // Leaving the function. What is returned is handed to the caller and
             // everything else is dropped -- and a value that is both is moved.
-            let mut dying = ordered(func, live.available(at));
+            let mut dying = ordered(func, layouts, live.available(at));
             dying.retain(|value| !moved.contains(value) && !borrowed.contains(value));
             let transfers: Vec<ValueId> = super::operands_of_terminator(&block.terminator)
                 .into_iter()
-                .filter(|value| counted(func, *value))
+                .filter(|value| counted(func, layouts, *value))
                 .collect();
             for value in settle(&transfers, &mut dying) {
                 retain(func, &mut ops, value, &mut report);
             }
             for value in dying {
-                release(func, &mut ops, value, &mut report);
+                release_value(func, layouts, &mut ops, value, &mut report);
             }
         } else {
             // With one edge it cannot be critical, so its work can go at the end
             // of this block; with more, each edge needs a block of its own.
             let single = edges.len() == 1;
             for (slot, (successor, args)) in edges.into_iter().enumerate() {
-                let mut dying: Vec<ValueId> = ordered(func, live.available(at))
+                let mut dying: Vec<ValueId> = ordered(func, layouts, live.available(at))
                     .into_iter()
                     .filter(|value| {
                         !live.live_in(successor).contains(value)
@@ -212,7 +246,7 @@ fn insert_into(func: &mut Func) -> Report {
                     .collect();
                 let transfers: Vec<ValueId> = args
                     .into_iter()
-                    .filter(|value| counted(func, *value))
+                    .filter(|value| counted(func, layouts, *value))
                     .collect();
                 let retains = settle(&transfers, &mut dying);
                 if retains.is_empty() && dying.is_empty() {
@@ -224,14 +258,14 @@ fn insert_into(func: &mut Func) -> Report {
                         retain(func, &mut ops, value, &mut report);
                     }
                     for value in dying {
-                        release(func, &mut ops, value, &mut report);
+                        release_value(func, layouts, &mut ops, value, &mut report);
                     }
                 } else {
                     for value in retains {
                         retain(func, &mut edge_ops, value, &mut report);
                     }
                     for value in dying {
-                        release(func, &mut edge_ops, value, &mut report);
+                        release_value(func, layouts, &mut edge_ops, value, &mut report);
                     }
                     let landing = BlockId(
                         u32::try_from(original_count + split_blocks.len()).unwrap_or(u32::MAX),
@@ -289,6 +323,7 @@ fn edges_of(terminator: &super::Terminator) -> Vec<(BlockId, Vec<ValueId>)> {
 /// One block's operations, with counting inserted around them.
 fn count_ops(
     func: &mut Func,
+    layouts: &[Layout],
     at: BlockId,
     original: &[ValueId],
     terminator: &super::Terminator,
@@ -316,7 +351,7 @@ fn count_ops(
         // constructor makes is one of those.
         if let OpKind::FieldSet { value: stored, .. } | OpKind::ArraySet { value: stored, .. } =
             &kind
-            && counted(func, *stored)
+            && counted(func, layouts, *stored)
         {
             let previous = if fresh.initializing(func, &kind) {
                 None
@@ -336,7 +371,7 @@ fn count_ops(
             // so it is never in a release set at all -- there is no release to
             // cancel against, and skipping the retain would hand the slot a
             // reference the caller is still counting as its own.
-            if owned(func, *stored) && live.dies_in(at, *stored) && moved.insert(*stored) {
+            if owned(func, layouts, *stored) && live.dies_in(at, *stored) && moved.insert(*stored) {
                 report.moves += 1;
             } else {
                 retain(func, &mut ops, *stored, report);
@@ -356,7 +391,7 @@ fn count_ops(
         // this function owns is owned the same way -- unless the borrow is
         // demonstrably good for as long as it is used, in which case the
         // function can just read the slot.
-        if owned(func, *value) && !produces_owned(&kind) {
+        if owned(func, layouts, *value) && !produces_owned(&kind) {
             if is_load(&kind) && borrows_safely(func, original, index, *value, at, terminator, live)
             {
                 borrowed.insert(*value);
@@ -689,6 +724,55 @@ fn retain(func: &mut Func, ops: &mut Vec<ValueId>, value: ValueId, report: &mut 
     });
     ops.push(id);
     report.retains += 1;
+}
+
+/// Give up what a value holds, at the point its live range ends.
+///
+/// For a heap object that is one call, and the runtime walks the fields. A frame
+/// object has no count to reach zero and no destruction to trigger, so the walk
+/// is emitted here instead: load each reference field and release it. Same work,
+/// decided at compile time rather than read off a descriptor at run time.
+fn release_value(
+    func: &mut Func,
+    layouts: &[Layout],
+    ops: &mut Vec<ValueId>,
+    value: ValueId,
+    report: &mut Report,
+) {
+    if !matches!(
+        func.values[value.0 as usize].kind,
+        OpKind::ObjectNew { frame: true }
+    ) {
+        release(func, ops, value, report);
+        return;
+    }
+    let origin = func.values[value.0 as usize].origin.clone();
+    for field in reference_fields(func, layouts, value) {
+        let ty = field_type(func, layouts, value, field);
+        let loaded = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
+        func.values.push(Op {
+            kind: OpKind::FieldGet {
+                object: value,
+                field,
+            },
+            ty,
+            origin: origin.clone(),
+        });
+        ops.push(loaded);
+        release(func, ops, loaded, report);
+    }
+}
+
+/// The declared type of one field, so the load that reads it is typed.
+fn field_type(func: &Func, layouts: &[Layout], value: ValueId, field: u32) -> HirType {
+    let HirType::Managed(ManagedType::Object(id)) = &func.values[value.0 as usize].ty else {
+        return HirType::Void;
+    };
+    layouts
+        .iter()
+        .find(|layout| layout.types.contains(id))
+        .and_then(|layout| layout.fields.get(field as usize))
+        .map_or(HirType::Void, |field| field.ty.clone())
 }
 
 fn release(func: &mut Func, ops: &mut Vec<ValueId>, value: ValueId, report: &mut Report) {

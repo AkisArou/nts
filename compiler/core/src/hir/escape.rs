@@ -73,19 +73,13 @@ impl Escapes {
 
     /// Whether an allocation can live in the frame.
     ///
-    /// Not escaping is necessary and not sufficient: an object holding
-    /// references would need those released when the frame ends, and a frame
-    /// slot has nowhere to hang that. So a frame-local object is one with no
-    /// reference fields, which is what the `layout` argument checks.
-    ///
-    /// Lifting that means emitting the release of each reference field where the
-    /// object's live range ends -- the same thing the runtime does when it
-    /// destroys a heap object, done by the compiler instead. It is a real
-    /// extension rather than a hard one, and it is not here because objects of
-    /// scalars are where the allocation traffic in hot code actually is.
+    /// An object holding references can, and it costs something: what those
+    /// slots hold has to be given up where the object's live range ends, which
+    /// is what the runtime does when it destroys a heap object and what the
+    /// compiler emits instead when there is no heap object to destroy.
     #[must_use]
-    pub fn is_frame_local(&self, value: ValueId, layout: &super::Layout) -> bool {
-        !self.values.contains(&value) && layout.reference_fields().is_empty()
+    pub fn is_frame_local(&self, value: ValueId) -> bool {
+        !self.values.contains(&value)
     }
 }
 
@@ -388,18 +382,17 @@ mod tests {
 
         let escapes = analyze_program(&program);
         let caller = &escapes[2];
-        let layout = &program.layouts[0];
         // `a` is only ever read through, including inside `keeper`.
-        assert!(caller.is_frame_local(ValueId(0), layout));
+        assert!(caller.is_frame_local(ValueId(0)));
         // `b` is put inside `a`, and outlives the call that put it there.
         assert!(caller.escapes(ValueId(2)));
-        assert!(!caller.is_frame_local(ValueId(2), layout));
+        assert!(!caller.is_frame_local(ValueId(2)));
     }
 
-    /// An object holding a reference is not a frame candidate however local it
-    /// is: the frame has nowhere to hang the release of what the field holds.
+    /// An allocation nothing does anything with stays in the frame, which is
+    /// the base case the rest of the module narrows from.
     #[test]
-    fn an_object_with_reference_fields_stays_on_the_heap() {
+    fn an_allocation_that_goes_nowhere_stays_in_the_frame() {
         let program = Program {
             funcs: vec![func(
                 "make",
@@ -414,27 +407,6 @@ mod tests {
             layouts: Vec::new(),
         };
         let escapes = analyze_program(&program);
-        assert!(!escapes[0].escapes(ValueId(0)));
-
-        let scalars = Layout {
-            types: vec![TypeId(1)],
-            name: "Point".to_owned(),
-            fields: vec![Field {
-                name: "x".to_owned(),
-                ty: HirType::NUMBER,
-                readonly: false,
-            }],
-        };
-        let references = Layout {
-            types: vec![TypeId(1)],
-            name: "Box".to_owned(),
-            fields: vec![Field {
-                name: "cell".to_owned(),
-                ty: object(),
-                readonly: false,
-            }],
-        };
-        assert!(escapes[0].is_frame_local(ValueId(0), &scalars));
-        assert!(!escapes[0].is_frame_local(ValueId(0), &references));
+        assert!(escapes[0].is_frame_local(ValueId(0)));
     }
 }

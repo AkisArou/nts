@@ -1096,6 +1096,44 @@ fn unary_text(func: &Func, name: &str, un: UnOp, operand: ValueId, result: &HirT
 
 /// Allocation and field or element access: the operations that go through a
 /// managed object's header.
+/// Prepare an object that lives in the frame rather than on the heap.
+///
+/// The storage is a local declared with the others; this fills in what the
+/// allocator would have. The descriptor because anything that reads an object
+/// reads it there, and the count as `NTS_IMMORTAL` so that a retain or release
+/// which somehow reaches a frame object is a no-op rather than `free` on a stack
+/// address.
+///
+/// The reference slots start empty, and that one is load-bearing. A frame slot
+/// is reused by every execution of the site that declares it, so on the second
+/// pass through a loop it holds the pointers the first pass released -- and the
+/// compiler emits a release of each reference field where the object ends.
+/// Zeroing is what makes that release read a null rather than a pointer to
+/// memory that is gone, on any path where a field was not written.
+///
+/// None of these stores survive a program that writes every field before reading
+/// it, which is every constructor and every object literal; clang removes them
+/// along with the object.
+fn start_frame_object(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    name: &str,
+    type_name: &str,
+    layout: &nts_core::hir::Layout,
+) {
+    writer.line(
+        origin,
+        format!("{name}_frame.header.descriptor = &nts_desc_{type_name};"),
+    );
+    writer.line(
+        origin,
+        format!("{name}_frame.header.reserved = NTS_IMMORTAL;"),
+    );
+    for field in layout.reference_fields() {
+        writer.line(origin, format!("{name}_frame.{} = 0;", c_identifier(field)));
+    }
+}
+
 fn managed_op(
     writer: &mut CodeWriter,
     func: &Func,
@@ -1109,23 +1147,7 @@ fn managed_op(
             let layout = layout_of(context.program, &op.ty, &op.origin)?;
             let type_name = object_type_name(layout);
             if *frame {
-                // The storage is a local declared with the others; this only
-                // fills in the header and takes its address. The descriptor is
-                // written because anything that reads an object reads it there,
-                // and the count is `NTS_IMMORTAL` so that a retain or release
-                // that reaches a frame object is a no-op rather than a call to
-                // `free` on a stack address.
-                //
-                // Both stores are dead in every program that does not read
-                // them, and clang removes them along with the object itself.
-                writer.line(
-                    &op.origin,
-                    format!("{name}_frame.header.descriptor = &nts_desc_{type_name};"),
-                );
-                writer.line(
-                    &op.origin,
-                    format!("{name}_frame.header.reserved = NTS_IMMORTAL;"),
-                );
+                start_frame_object(writer, &op.origin, &name, &type_name, layout);
                 format!("{name} = &{name}_frame;")
             } else {
                 format!("{name} = ({type_name} *)nts_object_new(&nts_desc_{type_name});")

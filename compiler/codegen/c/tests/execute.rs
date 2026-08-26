@@ -1002,6 +1002,7 @@ double replace(double first, double second);
 double churn(double times);
 double selfAssign(double value);
 double nested(double count);
+double localBox(double times);
 int main(void) {{
     check("replace(3,7)", replace(3, 7), 3007);
     check("selfAssign(9)", selfAssign(9), 9);
@@ -1010,6 +1011,18 @@ int main(void) {{
     // Three boxes, each holding a cell, read once per round. Dropping the array
     // has to reach two levels down.
     check("nested(100)", nested(100), 600);
+
+    // The box stays in the frame and the cell it holds does not, so the release
+    // of that cell is the compiler's to emit -- there is no count reaching zero
+    // and no destructor running to do it.
+    check("localBox(1000)", localBox(1000), 499500);
+    if (nts_live_count() != 0 || nts_live_bytes() != 0) {{
+        printf("FAIL a frame object kept what it held: %zu objects, %zu bytes\n",
+               nts_live_count(), nts_live_bytes());
+        failures++;
+    }} else {{
+        printf("ok a frame object gives up what it holds\n");
+    }}
 
     for (int i = 0; i < 200; i++) {{
         replace(3, 7);
@@ -1036,6 +1049,10 @@ int main(void) {{
     assert!(output.status.success(), "{printed}");
     assert!(
         printed.contains("ok overwritten references are released"),
+        "{printed}",
+    );
+    assert!(
+        printed.contains("ok a frame object gives up what it holds"),
         "{printed}",
     );
 }
