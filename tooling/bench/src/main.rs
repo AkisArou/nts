@@ -151,6 +151,9 @@ fn main() -> Result<()> {
 /// hand and the numbers never are. A table typed out by a person is a table that
 /// drifts from the machine that produced it.
 fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
+    const START: &str = "<!-- benchmarks:start -->";
+    const END: &str = "<!-- benchmarks:end -->";
+
     let mut table = String::new();
     table.push_str(
         "| case | C++ | nts | nts f64 | V8 | nts/C++ | nts/V8 |\n\
@@ -185,16 +188,10 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
 
     let path = root.join("README.md");
     let text = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
-    const START: &str = "<!-- benchmarks:start -->";
-    const END: &str = "<!-- benchmarks:end -->";
     let (Some(from), Some(to)) = (text.find(START), text.find(END)) else {
         bail!("README.md has no benchmark markers");
     };
-    let updated = format!(
-        "{}{START}\n{table}{legend}{}",
-        &text[..from],
-        &text[to..]
-    );
+    let updated = format!("{}{START}\n{table}{legend}{}", &text[..from], &text[to..]);
     std::fs::write(&path, updated).with_context(|| format!("writing {path}"))?;
     Ok(())
 }
@@ -243,7 +240,10 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
             "{name}.{}",
             variant.label.replace([' ', '(', ')'], "")
         ));
-        let cpp = vec![case.join(variant.source), root.join("benches/common/main.cpp")];
+        let cpp = vec![
+            case.join(variant.source),
+            root.join("benches/common/main.cpp"),
+        ];
         let mut c = vec![out.join(nts_codegen_c::RUNTIME_SOURCE_NAME)];
         match variant.generated {
             Generated::Specialized => c.push(specialized.clone()),
@@ -350,10 +350,7 @@ fn compile(
     ];
 
     let mut objects = Vec::new();
-    for (driver, standard, sources) in [
-        ("clang++", "-std=c++17", cpp),
-        ("clang", "-std=c11", c),
-    ] {
+    for (driver, standard, sources) in [("clang++", "-std=c++17", cpp), ("clang", "-std=c11", c)] {
         for source in sources {
             let object = binary.with_extension(format!(
                 "{}.o",
