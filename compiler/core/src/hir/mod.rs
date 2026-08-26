@@ -395,6 +395,13 @@ pub enum UnOp {
     Trunc,
     Round,
     Abs,
+
+    /// JavaScript truthiness.
+    ///
+    /// Not a comparison against zero: `NaN` is falsy and is not equal to
+    /// anything, and both zeroes are falsy while only one of them compares
+    /// equal to `0` in an interval. What `&&` and `||` branch on.
+    Truthy,
 }
 
 /// A lowered program.

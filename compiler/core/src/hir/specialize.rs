@@ -352,12 +352,13 @@ fn insert_conversions(func: &mut Func, analysis: &Analysis) -> usize {
                     let rhs = coerce(func, rhs, &ty);
                     Some(OpKind::Binary { op: bin, lhs, rhs })
                 }
-                // A rounding operation's operand must be left exactly as it is.
-                // These *are* the conversion, and coercing the input first would
-                // change the answer: `floor(-3.7)` is `-4`, while truncating
+                // A converting operation's operand must be left exactly as it
+                // is. These *are* the conversion, and coercing the input first
+                // changes the answer: `floor(-3.7)` is `-4`, while truncating
                 // `-3.7` to an integer first gives `-3` and then floors to `-3`.
-                // For `ToInt32` the same coercion would be undefined behaviour
-                // outright, on the values it exists to handle.
+                // For `ToInt32` the same coercion is undefined behaviour
+                // outright, on precisely the values it exists to handle. For
+                // `Truthy` it is `(bool)x`, which calls NaN true.
                 OpKind::Unary {
                     op:
                         op @ (UnOp::ToInt32
@@ -366,7 +367,8 @@ fn insert_conversions(func: &mut Func, analysis: &Analysis) -> usize {
                         | UnOp::Ceil
                         | UnOp::Trunc
                         | UnOp::Round
-                        | UnOp::Abs),
+                        | UnOp::Abs
+                        | UnOp::Truthy),
                     operand,
                 } => Some(OpKind::Unary { op, operand }),
                 OpKind::Unary { op, operand } => {

@@ -482,3 +482,65 @@ int main(void) {{
     assert!(output.contains("shard(1e21) = 8544"), "{output}");
     assert!(output.contains("clampIndex(NaN) = nan"), "{output}");
 }
+
+#[test]
+fn conditionals_short_circuit_and_use_javascript_truthiness() {
+    // `||` and `&&` do not produce booleans and do not evaluate both sides.
+    // Truthiness is not `!= 0`: NaN is falsy, and every comparison against NaN
+    // is false including the inequality, so `x != 0` calls NaN true. `-0` is
+    // falsy as well, and compares equal to `0`.
+    //
+    // Every expected value came from running this `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+#include <math.h>
+double sign(double x);
+double pick(bool flag, double a, double b);
+double orDefault(double x);
+double andThen(double x, double y);
+bool both(bool a, bool b);
+bool isTruthy(double x);
+int main(void) {{
+    check("sign(5)", sign(5), 1);
+    check("sign(-5)", sign(-5), -1);
+    check("sign(0)", sign(0), 0);
+    // NaN is greater than nothing and less than nothing, so both arms fail.
+    check("sign(NaN)", sign(0.0 / 0.0), 0);
+
+    check("pick(true)", pick(true, 1, 2), 1);
+    check("pick(false)", pick(false, 1, 2), 2);
+
+    check("orDefault(0)", orDefault(0), 42);
+    check("orDefault(7)", orDefault(7), 7);
+    check("orDefault(NaN)", orDefault(0.0 / 0.0), 42);
+    check("orDefault(-0)", orDefault(-0.0), 42);
+
+    // `&&` yields the left operand when it is falsy -- including NaN itself.
+    check("andThen(0,9)", andThen(0, 9), 0);
+    check("andThen(3,9)", andThen(3, 9), 9);
+    if (!isnan(andThen(0.0 / 0.0, 9))) {{
+        printf("FAIL andThen(NaN,9) should be NaN\n");
+        failures++;
+    }} else {{
+        printf("ok andThen(NaN,9) = nan\n");
+    }}
+
+    check("both(t,t)", both(true, true), 1);
+    check("both(t,f)", both(true, false), 0);
+    check("both(f,t)", both(false, true), 0);
+
+    check("isTruthy(0)", isTruthy(0), 0);
+    check("isTruthy(NaN)", isTruthy(0.0 / 0.0), 0);
+    check("isTruthy(-0)", isTruthy(-0.0), 0);
+    check("isTruthy(1)", isTruthy(1), 1);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("conditionals", &harness) else {
+        return;
+    };
+    assert!(output.contains("orDefault(NaN) = 42"), "{output}");
+    assert!(output.contains("andThen(NaN,9) = nan"), "{output}");
+    assert!(output.contains("isTruthy(-0) = 0"), "{output}");
+}

@@ -218,6 +218,13 @@ fn helpers_reached(bodies: &[(String, CodeWriter, &Func)]) -> Vec<&'static str> 
                 } if !matches!(func.values[operand.0 as usize].ty, HirType::Int { .. }) => {
                     "nts_round"
                 }
+                OpKind::Unary {
+                    op: UnOp::Truthy,
+                    operand,
+                } if !matches!(func.values[operand.0 as usize].ty, HirType::Int { .. }) => {
+                    // For `isnan`.
+                    "math.h"
+                }
                 // floor/ceil/trunc/fabs come from <math.h> rather than from a
                 // helper, but they are why it has to be included.
                 OpKind::Unary {
@@ -681,6 +688,17 @@ fn unary_text(func: &Func, name: &str, un: UnOp, operand: ValueId, result: &HirT
     match un {
         UnOp::Neg => format!("{name} = -{};", value_name(operand)),
         UnOp::Not => format!("{name} = !{};", value_name(operand)),
+        UnOp::Truthy => {
+            // An integer is truthy exactly when it is non-zero, and `!= 0` says
+            // so. A double additionally has to exclude NaN, which is falsy and
+            // which `!= 0` would call true — every comparison with a NaN is
+            // false, including the inequality.
+            if matches!(func.values[operand.0 as usize].ty, HirType::Int { .. }) {
+                format!("{name} = {} != 0;", value_name(operand))
+            } else {
+                format!("{name} = ({0} != 0.0) && !isnan({0});", value_name(operand))
+            }
+        }
         UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round | UnOp::Abs => {
             // An integer is already rounded, and taking its magnitude is a
             // comparison rather than a library call.

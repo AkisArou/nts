@@ -593,7 +593,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// A missing condition is `for (;;)`: the loop is entered unconditionally.
     fn lower_for(&mut self, id: NodeId) -> Result<(), Diagnostic> {
-        let Some([initializer, condition, update, body]) = self.for_parts(id) else {
+        let Some([initializer, condition, update, body]) = self.child_slots::<4>(id) else {
             return Err(self.unsupported(id, "a `for` of unexpected shape"));
         };
         let Some(body) = body else {
@@ -634,17 +634,22 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
-    /// The four optional children of a `for`, in visitor order.
+    /// A node's children assigned to their declared property slots.
     ///
-    /// [`Self::children`] returns only the ones that are present, so which is
-    /// which comes from the node's presence bitmask. Reading them positionally
-    /// would make `for (;; i++)` an infinite loop with `i++` as its condition.
-    fn for_parts(&self, id: NodeId) -> Option<[Option<NodeId>; 4]> {
+    /// [`Self::children`] returns only the children that are *present*, so
+    /// nothing about a position identifies which property it is. The node's
+    /// presence bitmask does, one bit per property in visitor order.
+    ///
+    /// Reading positionally instead is wrong in two different ways, both of
+    /// which happened: `for (;; i++)` becomes an infinite loop with `i++` as its
+    /// condition, and `c ? a : b` picks up the `:` token as its true branch —
+    /// which at least fails loudly, being a token where an expression belongs.
+    fn child_slots<const N: usize>(&self, id: NodeId) -> Option<[Option<NodeId>; N]> {
         let NodeData::Children { present, .. } = self.node(id).data else {
             return None;
         };
         let mut children = self.children(id).into_iter();
-        let mut slots = [None; 4];
+        let mut slots = [None; N];
         for (bit, slot) in slots.iter_mut().enumerate() {
             if present & (1 << bit) != 0 {
                 *slot = children.next();
@@ -943,6 +948,7 @@ impl<'a> FuncBuilder<'a> {
                 };
                 self.lower_expression(*inner)
             }
+            Some(syntax::CONDITIONAL_EXPRESSION) => self.lower_conditional(id),
             Some(syntax::PREFIX_UNARY_EXPRESSION) => self.lower_prefix_unary(id),
             Some(syntax::POSTFIX_UNARY_EXPRESSION) => self.lower_postfix_unary(id),
             Some(syntax::TRUE_KEYWORD) => {
@@ -963,6 +969,163 @@ impl<'a> FuncBuilder<'a> {
     /// value — no slot and no store, because nothing here can reassign it yet.
     /// When assignment arrives, a `let` will need one and a `const` still will
     /// not, which is what the snapshot's variable kind is for.
+    /// `c ? a : b`, and the short-circuiting `a && b` / `a || b`.
+    ///
+    /// All three are one shape: evaluate a condition, take one of two paths, and
+    /// arrive at a value that depends on which. That is a merge block with a
+    /// parameter — the same mechanism an `if` uses for a name the two arms
+    /// disagree about, applied to a value with no name.
+    ///
+    /// The point of doing it this way rather than evaluating both sides is that
+    /// both sides *must not* be evaluated: `a && expensive()` does not call
+    /// `expensive` when `a` is falsy, and in a language with side effects that
+    /// is a semantic difference rather than an optimization.
+    fn lower_branching_value(
+        &mut self,
+        id: NodeId,
+        condition: ValueId,
+        then_branch: Branch,
+        else_branch: Branch,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "a conditional of unrepresentable type"))?;
+
+        let then_block = self.new_block();
+        let else_block = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: condition,
+            then_target: then_block,
+            then_args: Vec::new(),
+            else_target: else_block,
+            else_args: Vec::new(),
+        });
+
+        let entry = self.bindings.clone();
+        self.switch_to(then_block);
+        let then_value = self.evaluate(then_branch)?;
+        let then_tail = self.current;
+        let then_bindings = std::mem::replace(&mut self.bindings, entry.clone());
+
+        self.switch_to(else_block);
+        let else_value = self.evaluate(else_branch)?;
+        let else_tail = self.current;
+        let else_bindings = std::mem::replace(&mut self.bindings, entry.clone());
+
+        // The two arms must agree about representation, since one parameter
+        // receives both. They do whenever the checker gave the expression a type
+        // at all; a `number | string` would not be lowerable in the first place.
+        let merge = self.new_block();
+        let result = self.push_block_param(merge, ty, origin.clone());
+
+        let mut merged = Vec::new();
+        for (symbol, entering) in &entry {
+            let from_then = then_bindings.get(symbol).copied().unwrap_or(*entering);
+            let from_else = else_bindings.get(symbol).copied().unwrap_or(*entering);
+            if from_then != from_else {
+                merged.push((*symbol, from_then, from_else));
+            }
+        }
+        merged.sort_unstable();
+
+        let mut params = Vec::new();
+        for (symbol, from_then, _) in &merged {
+            let carried = self.values[from_then.0 as usize].ty.clone();
+            params.push((
+                *symbol,
+                self.push_block_param(merge, carried, origin.clone()),
+            ));
+        }
+
+        self.switch_to(then_tail);
+        let mut args = vec![then_value];
+        args.extend(merged.iter().map(|(_, from_then, _)| *from_then));
+        self.terminate(Terminator::Jump {
+            target: merge,
+            args,
+        });
+
+        self.switch_to(else_tail);
+        let mut args = vec![else_value];
+        args.extend(merged.iter().map(|(_, _, from_else)| *from_else));
+        self.terminate(Terminator::Jump {
+            target: merge,
+            args,
+        });
+
+        self.switch_to(merge);
+        self.bindings = entry;
+        for (symbol, param) in params {
+            self.bindings.insert(symbol, param);
+        }
+        Ok(result)
+    }
+
+    /// Produce a branch's value: either an expression to lower here, or one
+    /// already computed before the branch.
+    fn evaluate(&mut self, branch: Branch) -> Result<ValueId, Diagnostic> {
+        match branch {
+            Branch::Expression(node) => self.lower_expression(node),
+            Branch::Value(value) => Ok(value),
+        }
+    }
+
+    /// `c ? a : b`.
+    fn lower_conditional(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        // condition, `?`, whenTrue, `:`, whenFalse — the punctuation is made of
+        // children too, so the slots come from the presence bitmask.
+        let Some([Some(condition), _, Some(when_true), _, Some(when_false)]) =
+            self.child_slots::<5>(id)
+        else {
+            return Err(self.unsupported(id, "a conditional of unexpected shape"));
+        };
+        let condition = self.lower_expression(condition)?;
+        let condition = self.truthy(id, condition)?;
+        self.lower_branching_value(
+            id,
+            condition,
+            Branch::Expression(when_true),
+            Branch::Expression(when_false),
+        )
+    }
+
+    /// `a && b` and `a || b`, which do not evaluate `b` unless they have to.
+    fn lower_logical(
+        &mut self,
+        id: NodeId,
+        and: bool,
+        left: NodeId,
+        right: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let first = self.lower_expression(left)?;
+        let condition = self.truthy(id, first)?;
+        // `a && b` is `b` when `a` is truthy and `a` otherwise; `a || b` is the
+        // other way round. Neither yields a bool in general — `0 || 5` is `5`.
+        let (then_branch, else_branch) = if and {
+            (Branch::Expression(right), Branch::Value(first))
+        } else {
+            (Branch::Value(first), Branch::Expression(right))
+        };
+        self.lower_branching_value(id, condition, then_branch, else_branch)
+    }
+
+    /// A value as a condition, by JavaScript's rules.
+    fn truthy(&mut self, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+        if matches!(self.values[value.0 as usize].ty, HirType::Bool) {
+            return Ok(value);
+        }
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::Unary {
+                op: UnOp::Truthy,
+                operand: value,
+            },
+            HirType::Bool,
+            origin,
+        ))
+    }
+
     /// `-x`, `+x`, `!x`.
     ///
     /// # The operator is not a child
@@ -1246,6 +1409,19 @@ impl<'a> FuncBuilder<'a> {
             return Ok(value);
         }
 
+        // `&&` and `||` must not evaluate their right operand unless the left
+        // one requires it, so they are taken before the ordinary path lowers
+        // both.
+        let token = self.kind_of(*operator).unwrap_or(0);
+        if token == syntax::AMPERSAND_AMPERSAND_TOKEN || token == syntax::BAR_BAR_TOKEN {
+            return self.lower_logical(
+                id,
+                token == syntax::AMPERSAND_AMPERSAND_TOKEN,
+                *lhs_node,
+                *rhs_node,
+            );
+        }
+
         // `x += e` is `x = x + e`: the operator applies, and the name rebinds.
         // Spelling it out here rather than in a desugaring keeps one place that
         // knows a bitwise operator needs its coercions.
@@ -1392,4 +1568,15 @@ fn known_values(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> Facts {
 enum MathIntrinsic {
     Unary(UnOp),
     Binary(BinOp),
+}
+
+/// One side of a branching expression.
+///
+/// A ternary's arms are expressions to lower inside their own blocks; a
+/// short-circuit's "untaken" arm is the left operand, already evaluated before
+/// the branch.
+#[derive(Debug, Clone, Copy)]
+enum Branch {
+    Expression(NodeId),
+    Value(ValueId),
 }
