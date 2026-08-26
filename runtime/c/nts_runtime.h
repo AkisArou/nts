@@ -26,8 +26,7 @@
 
 /* RFC 8.1: every managed object references an immutable descriptor, which
  * describes the shape rather than the contents -- so there is one per element
- * type, not one per object. `traced` is the reference-field map in its simplest
- * form: an array of scalars and a string have no references to trace. */
+ * type, not one per object. */
 /* Which shape the descriptor describes. A variable-length object reads `size`
  * as bytes per element and takes its count from the header; a fixed one reads
  * it as the whole object. Without the tag the same field would mean two things
@@ -39,7 +38,21 @@
 typedef struct NtsDescriptor {
     uint32_t kind;
     uint32_t size;
-    uint32_t traced;
+    /* RFC 8.3, the reference map. For an object, how many fields hold
+     * references and where they are: `offsets` has `references` byte offsets
+     * into the object, generated with `offsetof` so that the compiler that laid
+     * the struct out is the one that says where its fields are.
+     *
+     * Byte offsets rather than a bitmap over field indices, because the runtime
+     * cannot turn an index into an address: it does not know the field types.
+     * A table also has no width limit, so an object with more than thirty-two
+     * fields needs nothing special.
+     *
+     * For an array, `references` is 1 when the elements are references and 0
+     * otherwise, and `offsets` is null -- element addresses are `i * size` and
+     * there is no table worth writing down. A string has neither. */
+    uint32_t references;
+    const uint32_t *offsets;
     const char *name;
 } NtsDescriptor;
 

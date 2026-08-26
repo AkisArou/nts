@@ -961,3 +961,57 @@ int main(void) {{
         "NoGC should hold every object it allocated: {printed}",
     );
 }
+
+#[test]
+fn a_store_gives_up_the_reference_the_slot_was_holding() {
+    // A field is a slot with an owner. Writing it takes a reference to what goes
+    // in and drops the one to what comes out, and the second half is the half
+    // that is easy to omit -- omitting it is invisible except as growth.
+    //
+    // `makeBox` is what makes this a test rather than an accident: the caller
+    // never names the cell inside the box, so the overwritten cell's only
+    // reference is the field. Nothing else is going to release it.
+    let harness = format!(
+        r#"{CHECK}
+#include "nts_runtime.h"
+double replace(double first, double second);
+double churn(double times);
+double selfAssign(double value);
+double nested(double count);
+int main(void) {{
+    check("replace(3,7)", replace(3, 7), 3007);
+    check("selfAssign(9)", selfAssign(9), 9);
+    // 0 + 1 + ... + 999
+    check("churn(1000)", churn(1000), 499500);
+    // Three boxes, each holding a cell, read once per round. Dropping the array
+    // has to reach two levels down.
+    check("nested(100)", nested(100), 600);
+
+    for (int i = 0; i < 200; i++) {{
+        replace(3, 7);
+        selfAssign(9);
+        churn(50);
+        nested(2);
+    }}
+    if (nts_live_count() != 0 || nts_live_bytes() != 0) {{
+        printf("FAIL overwritten references leak: %zu objects, %zu bytes\n",
+               nts_live_count(), nts_live_bytes());
+        failures++;
+    }} else {{
+        printf("ok overwritten references are released\n");
+    }}
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = build_and_run_with("references", &harness, hir::Provider::ReferenceCounting)
+    else {
+        return;
+    };
+    let printed = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "{printed}");
+    assert!(
+        printed.contains("ok overwritten references are released"),
+        "{printed}",
+    );
+}

@@ -372,16 +372,40 @@ fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program
             );
         }
         writer.line(origin, "};");
-        // RFC 8.3: a pointer bitmap over the fields, in layout order. Nothing
-        // reads it under NoGC -- a reference field is a pointer and costs
-        // nothing -- but it is a fact about the layout, and the layout is
-        // decided here rather than by whatever collects later.
+        // RFC 8.3: where this object's references are, as byte offsets. Written
+        // with `offsetof` so the compiler that laid the struct out is the one
+        // that says where its fields are -- padding, alignment and field order
+        // are its business, and duplicating its arithmetic here would be a
+        // second source of truth that agrees until it does not.
+        //
+        // Nothing reads this under NoGC, where a reference field is a pointer
+        // and costs nothing. It is emitted anyway, because it is a fact about
+        // the layout.
+        let references = layout.reference_fields();
+        let offsets = if references.is_empty() {
+            // No table, and no `static const uint32_t x[] = {};` either: a
+            // zero-length array is not C.
+            "0".to_owned()
+        } else {
+            let entries: Vec<String> = references
+                .iter()
+                .map(|field| format!("offsetof({name}, {})", c_identifier(field)))
+                .collect();
+            writer.line(
+                origin,
+                format!(
+                    "static const uint32_t nts_refs_{name}[] = {{ {} }};",
+                    entries.join(", ")
+                ),
+            );
+            format!("nts_refs_{name}")
+        };
         writer.line(
             origin,
             format!(
                 "static const NtsDescriptor nts_desc_{name} = \
-                 {{ NTS_KIND_OBJECT, sizeof({name}), {}u, \"{}\" }};",
-                layout.reference_map().unwrap_or(0),
+                 {{ NTS_KIND_OBJECT, sizeof({name}), {}u, {offsets}, \"{}\" }};",
+                references.len(),
                 layout.name
             ),
         );
@@ -400,7 +424,7 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, \"{element}[]\" }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, \"{element}[]\" }};",
                 descriptor_name(element)
             ),
         );

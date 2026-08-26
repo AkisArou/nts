@@ -657,7 +657,14 @@ impl<'a> FuncBuilder<'a> {
             _ => None,
         };
 
+        // Only a bare name is carried. `box.cell = c` and `xs[i] = c` write
+        // *through* a reference and leave the reference itself alone, so they
+        // need no loop parameter -- and taking the target's symbol anyway would
+        // pick up the class member `cell`, a symbol no local scope declares,
+        // which then looks like an assignment to a name from an enclosing scope
+        // and gets the loop refused.
         if let Some(target) = written
+            && self.kind_of(target) == Some(syntax::IDENTIFIER)
             && let Some(symbol) = self.node(target).symbol
             && !into.contains(&symbol.0)
         {
@@ -1536,12 +1543,6 @@ impl<'a> FuncBuilder<'a> {
             name,
             fields,
         };
-        if layout.reference_map().is_none() {
-            // Past the bitmap's width. RFC §8.3 has generated trace routines for
-            // this case; silently tracing the first thirty-two fields would be
-            // a collector that misses references.
-            return Err(self.unsupported(id, "an object with more than 32 fields"));
-        }
         self.layouts.push(layout.clone());
         Ok(layout)
     }

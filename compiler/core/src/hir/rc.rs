@@ -164,20 +164,31 @@ fn insert_into(func: &mut Func) -> Report {
         for value in &block.ops {
             let kind = func.values[value.0 as usize].kind.clone();
 
-            // A store takes its own reference to what it stores.
+            // A store takes its own reference to what it stores, and gives up
+            // the one the slot was already holding.
             //
-            // It should also release whatever the slot held before, and does
-            // not: reading the old value back needs a load, and for an element
-            // a bounds test the store itself already performed. Every field is
-            // written exactly once today -- an object literal writes each of
-            // them and nothing else does -- so the missing release is
-            // unreachable rather than merely rare. It becomes reachable with
-            // mutation of reference fields, and is the first thing to add then.
+            // The order is load-old, retain-new, store, release-old, and it is
+            // that order for one reason: `o.x = o.x` must not free the object
+            // between reading it and writing it back. Releasing after the store
+            // makes the self-assignment a no-op instead of a use-after-free.
+            //
+            // The load is safe on a slot that has never been written, because
+            // `nts_object_new` zeroes and `nts_release` ignores null. A store
+            // that is provably the first one -- every store a constructor makes
+            // is -- still pays for a load and a null test, which is a real cost
+            // and the obvious thing to remove next. It needs an analysis of
+            // which stores are initializing, and correctness does not.
             if let OpKind::FieldSet { value: stored, .. } | OpKind::ArraySet { value: stored, .. } =
                 &kind
                 && counted(func, *stored)
             {
+                let previous = load_slot(func, &mut ops, &kind);
                 retain(func, &mut ops, *stored, &mut report);
+                ops.push(*value);
+                if let Some(previous) = previous {
+                    release(func, &mut ops, previous, &mut report);
+                }
+                continue;
             }
 
             ops.push(*value);
@@ -289,6 +300,53 @@ fn edges_of(terminator: &super::Terminator) -> Vec<(BlockId, Vec<ValueId>)> {
         ],
         super::Terminator::Return(_) | super::Terminator::Unreachable => Vec::new(),
     }
+}
+
+/// Read what a slot holds, so that the store about to overwrite it can give up
+/// the reference it was keeping.
+///
+/// The load takes over the slot's reference rather than making one of its own --
+/// a move, like every other hand-off here -- so it is not retained, and the
+/// release that follows the store is what consumes it.
+///
+/// An element load carries the same bounds test as the store, on the same array
+/// and the same index. If the index is out of range the load traps where the
+/// store would have, which is the same program. If bounds elimination can prove
+/// the store safe, it proves the load safe by the same facts.
+fn load_slot(func: &mut Func, ops: &mut Vec<ValueId>, store: &OpKind) -> Option<ValueId> {
+    let (kind, ty, origin) = match store {
+        OpKind::FieldSet {
+            object,
+            field,
+            value,
+        } => (
+            OpKind::FieldGet {
+                object: *object,
+                field: *field,
+            },
+            func.values[value.0 as usize].ty.clone(),
+            func.values[value.0 as usize].origin.clone(),
+        ),
+        OpKind::ArraySet {
+            array,
+            index,
+            value,
+            checked,
+        } => (
+            OpKind::ArrayGet {
+                array: *array,
+                index: *index,
+                checked: *checked,
+            },
+            func.values[value.0 as usize].ty.clone(),
+            func.values[value.0 as usize].origin.clone(),
+        ),
+        _ => return None,
+    };
+    let id = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
+    func.values.push(Op { kind, ty, origin });
+    ops.push(id);
+    Some(id)
 }
 
 /// Cancel each transfer against a death of the same value, leaving the transfers

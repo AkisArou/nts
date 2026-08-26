@@ -20,9 +20,9 @@ static size_t nts_reclaimed = 0;
 
 size_t nts_live_count(void) { return nts_allocated - nts_reclaimed; }
 
-const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY, sizeof(void *), 1, "reference"};
-const NtsDescriptor nts_desc_string1 = {NTS_KIND_STRING, 1, 0, "string"};
-const NtsDescriptor nts_desc_string2 = {NTS_KIND_STRING, 2, 0, "string"};
+const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY, sizeof(void *), 1, 0, "reference"};
+const NtsDescriptor nts_desc_string1 = {NTS_KIND_STRING, 1, 0, 0, "string"};
+const NtsDescriptor nts_desc_string2 = {NTS_KIND_STRING, 2, 0, 0, "string"};
 
 /* The NoGC provider (RFC 9.1): a bump allocator that never frees. For compiler
  * bring-up, allocation testing and bounded-lifetime tools. It must never be
@@ -110,6 +110,41 @@ void nts_retain(NtsHeader *object) {
     object->reserved++;
 }
 
+/* Give up what a dying object was holding.
+ *
+ * A field is a slot with an owner, so an object that is about to stop existing
+ * has to release everything its slots hold -- otherwise a tree of objects leaks
+ * everything below its root, which is the shape of leak that looks like it
+ * works right up until it doesn't. */
+static void nts_release_contents(NtsHeader *object) {
+    const NtsDescriptor *descriptor = object->descriptor;
+    if (descriptor->references == 0) {
+        return;
+    }
+    if (descriptor->kind == NTS_KIND_ARRAY) {
+        NtsHeader **slots = NTS_ELEMENTS(object, NtsHeader *);
+        for (uint32_t index = 0; index < object->length; index++) {
+            nts_release(slots[index]);
+        }
+        return;
+    }
+    for (uint32_t index = 0; index < descriptor->references; index++) {
+        unsigned char *slot = (unsigned char *)object + descriptor->offsets[index];
+        nts_release(*(NtsHeader **)slot);
+    }
+}
+
+/* Objects whose count has reached zero and whose contents have not been given
+ * up yet, linked through the count word -- which is free, because the count is
+ * zero and the object is going away.
+ *
+ * Threading the list through the objects is what makes destruction iterative
+ * rather than recursive, and that is not a micro-optimization: releasing the
+ * head of a million-node list recursively is a million C stack frames. It also
+ * means destruction allocates nothing and so cannot fail. */
+static NtsHeader *nts_dying = 0;
+static bool nts_draining = false;
+
 void nts_release(NtsHeader *object) {
     if (!object || object->reserved == NTS_IMMORTAL) {
         return;
@@ -118,13 +153,26 @@ void nts_release(NtsHeader *object) {
         object->reserved--;
         return;
     }
-    /* The last reference. Under the bump allocator there is nothing to give
-     * back, so this is where the RC provider's own allocator will free -- and
-     * where a cycle collector will record a candidate (RFC 9.2), since a cycle
-     * is precisely what never reaches this line. */
-    object->reserved = 0;
-    nts_reclaimed++;
-    nts_free(object);
+
+    /* The last reference. A cycle collector (RFC 9.2) will record candidates
+     * here too, since a cycle is precisely what never reaches this line. */
+    object->reserved = (uintptr_t)nts_dying;
+    nts_dying = object;
+    if (nts_draining) {
+        /* An outer call owns the list and will get to it. */
+        return;
+    }
+
+    nts_draining = true;
+    while (nts_dying) {
+        NtsHeader *dead = nts_dying;
+        nts_dying = (NtsHeader *)dead->reserved;
+        /* This may link more objects into the list, which the loop picks up. */
+        nts_release_contents(dead);
+        nts_reclaimed++;
+        nts_free(dead);
+    }
+    nts_draining = false;
 }
 
 void nts_bounds(double index, uint32_t length) {
