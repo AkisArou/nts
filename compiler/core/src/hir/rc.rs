@@ -90,6 +90,8 @@ pub struct Report {
     /// Hand-offs that needed neither, because the consumer took the reference
     /// the function was already holding.
     pub moves: usize,
+    /// Loads that needed neither, because the slot they read stayed put.
+    pub borrows: usize,
 }
 
 /// Insert retains and releases across a program.
@@ -100,6 +102,7 @@ pub fn insert(program: &mut Program) -> Report {
         report.retains += one.retains;
         report.releases += one.releases;
         report.moves += one.moves;
+        report.borrows += one.borrows;
     }
     report
 }
@@ -170,7 +173,11 @@ fn insert_into(func: &mut Func) -> Report {
 
     for (index, block) in blocks.into_iter().enumerate() {
         let at = BlockId(u32::try_from(index).unwrap_or(0));
-        let (mut ops, moved) = count_ops(func, at, &block.ops, &live, &mut report);
+        let Counted {
+            mut ops,
+            moved,
+            borrowed,
+        } = count_ops(func, at, &block.ops, &block.terminator, &live, &mut report);
 
         let edges = edges_of(&block.terminator);
         let mut terminator = block.terminator.clone();
@@ -179,7 +186,7 @@ fn insert_into(func: &mut Func) -> Report {
             // Leaving the function. What is returned is handed to the caller and
             // everything else is dropped -- and a value that is both is moved.
             let mut dying = ordered(func, live.available(at));
-            dying.retain(|value| !moved.contains(value));
+            dying.retain(|value| !moved.contains(value) && !borrowed.contains(value));
             let transfers: Vec<ValueId> = super::operands_of_terminator(&block.terminator)
                 .into_iter()
                 .filter(|value| counted(func, *value))
@@ -198,7 +205,9 @@ fn insert_into(func: &mut Func) -> Report {
                 let mut dying: Vec<ValueId> = ordered(func, live.available(at))
                     .into_iter()
                     .filter(|value| {
-                        !live.live_in(successor).contains(value) && !moved.contains(value)
+                        !live.live_in(successor).contains(value)
+                            && !moved.contains(value)
+                            && !borrowed.contains(value)
                     })
                     .collect();
                 let transfers: Vec<ValueId> = args
@@ -282,14 +291,16 @@ fn count_ops(
     func: &mut Func,
     at: BlockId,
     original: &[ValueId],
+    terminator: &super::Terminator,
     live: &liveness::Liveness,
     report: &mut Report,
-) -> (Vec<ValueId>, rustc_hash::FxHashSet<ValueId>) {
+) -> Counted {
     let mut ops = Vec::with_capacity(original.len());
     let mut fresh = Fresh::entering(func, at);
     let mut moved = rustc_hash::FxHashSet::default();
+    let mut borrowed = rustc_hash::FxHashSet::default();
 
-    for value in original {
+    for (index, value) in original.iter().enumerate() {
         let kind = func.values[value.0 as usize].kind.clone();
 
         // A store takes its own reference to what it stores, and gives up the
@@ -342,12 +353,97 @@ fn count_ops(
         ops.push(*value);
 
         // A producer that hands back a borrow is retained, so that every value
-        // this function owns is owned the same way.
+        // this function owns is owned the same way -- unless the borrow is
+        // demonstrably good for as long as it is used, in which case the
+        // function can just read the slot.
         if owned(func, *value) && !produces_owned(&kind) {
-            retain(func, &mut ops, *value, report);
+            if is_load(&kind) && borrows_safely(func, original, index, *value, at, terminator, live)
+            {
+                borrowed.insert(*value);
+                report.borrows += 1;
+            } else {
+                retain(func, &mut ops, *value, report);
+            }
         }
     }
-    (ops, moved)
+    Counted {
+        ops,
+        moved,
+        borrowed,
+    }
+}
+
+/// What counting one block produced.
+struct Counted {
+    ops: Vec<ValueId>,
+    /// Values handed to a slot, which claimed their death.
+    moved: rustc_hash::FxHashSet<ValueId>,
+    /// Values read out of a slot that stayed put, so no reference was taken and
+    /// none is given back.
+    borrowed: rustc_hash::FxHashSet<ValueId>,
+}
+
+/// Reading a reference out of a slot.
+fn is_load(kind: &OpKind) -> bool {
+    matches!(kind, OpKind::FieldGet { .. } | OpKind::ArrayGet { .. })
+}
+
+/// Whether a load can read the slot rather than take a reference of its own.
+///
+/// # The argument
+///
+/// The reference this produces belongs to the slot it came out of, and the
+/// container of that slot is alive here -- it is an operand of the load, and
+/// this function owns it or borrows it from someone who does. So the value is
+/// good for as long as the slot still holds it and the container still exists.
+///
+/// Both hold across a stretch of straight-line code with no call, no store and
+/// no release in it: nothing can run that would overwrite the slot, nothing here
+/// overwrites it, and nothing gives up the container. So a load whose last use
+/// falls inside such a stretch needs no retain, and therefore no release.
+///
+/// # What it turns down
+///
+/// A value used *by* a call, which is the common `o.field.method()`. The callee
+/// could reach the container by some path this does not track and overwrite the
+/// slot, and the borrowed reference would be the only thing holding what used to
+/// be there. Ruling that out needs to know what a callee can reach, which is a
+/// larger analysis than this one; passing an owned reference is what it costs
+/// not to have it.
+///
+/// A value that outlives the block, for the same reason as the rest of this
+/// module: what happens on the far side of an edge is not something a local rule
+/// gets to assume.
+fn borrows_safely(
+    func: &Func,
+    original: &[ValueId],
+    at: usize,
+    value: ValueId,
+    block: BlockId,
+    terminator: &super::Terminator,
+    live: &liveness::Liveness,
+) -> bool {
+    if !live.dies_in(block, value) {
+        return false;
+    }
+    // Handed on by the terminator, so its reference goes somewhere.
+    if super::operands_of_terminator(terminator).contains(&value) {
+        return false;
+    }
+
+    let mut last = at;
+    for (index, other) in original.iter().enumerate().skip(at + 1) {
+        if super::verify::operands(&func.values[other.0 as usize].kind).contains(&value) {
+            last = index;
+        }
+    }
+
+    !original[at + 1..=last].iter().any(|other| {
+        matches!(
+            func.values[other.0 as usize].kind,
+            OpKind::Call { .. } | OpKind::FieldSet { .. } | OpKind::ArraySet { .. }
+        )
+    })
 }
 
 /// Which slots are known to hold nothing yet.

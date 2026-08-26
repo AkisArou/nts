@@ -111,8 +111,21 @@ fn build_and_run_with(
     // and the bump allocator cannot do that. Compiling the runtime without this
     // define while the HIR counts references would balance the counts and still
     // grow the heap.
+    // Reference counting is a claim about memory, so the tests that make it are
+    // built with the thing that checks memory. The use-after-free the cycle
+    // collector shipped with -- freeing an object mid-walk while another edge of
+    // the same cycle still named it -- compiled clean, ran clean at -O2, and
+    // produced the right answers. AddressSanitizer found it immediately, which
+    // is an argument for it being on rather than for it being reached for.
+    //
+    // NoGC is left alone: it never frees, so there is nothing for a
+    // use-after-free detector to find, and every one of its tests would pay.
     let provider_define: &[&str] = match provider {
-        hir::Provider::ReferenceCounting => &["-DNTS_PROVIDER_RC"],
+        hir::Provider::ReferenceCounting => &[
+            "-DNTS_PROVIDER_RC",
+            "-fsanitize=address",
+            "-fno-omit-frame-pointer",
+        ],
         hir::Provider::NoGc => &[],
     };
 
@@ -152,6 +165,11 @@ fn build_and_run_with(
 
     Some(
         std::process::Command::new(&binary)
+            // Leak detection off: what leaks is what these tests are *about*,
+            // and they measure it themselves with `nts_live_bytes`, which says
+            // how much rather than merely that. A cycle deliberately left
+            // uncollected at exit is not a defect for LeakSanitizer to find.
+            .env("ASAN_OPTIONS", "detect_leaks=0")
             .output()
             .expect("compiled binary should run"),
     )

@@ -362,13 +362,23 @@ static void nts_scan(NtsHeader *root) {
     }
 }
 
-/* Free what is left white: referenced only from within the subgraph, which is
- * the definition of a garbage cycle. */
+/* Gather what is left white: referenced only from within the subgraph, which is
+ * the definition of a garbage cycle.
+ *
+ * Gather, not free. Freeing during the walk is the obvious thing and it is
+ * wrong: two objects in a cycle point at each other, so after the first is
+ * freed the second still names it, and the walk reads a color out of memory
+ * that is gone. The recursive form the paper gives frees *after* recursing,
+ * which has the same effect; a worklist has to say so. */
+static NtsHeader **nts_dead = 0;
+static size_t nts_dead_len = 0;
+static size_t nts_dead_cap = 0;
+
 static void nts_collect_white_child(NtsHeader *child) {
     nts_work_push(child);
 }
 
-static void nts_collect_white(NtsHeader *root) {
+static void nts_gather_white(NtsHeader *root) {
     nts_work_len = 0;
     nts_work_push(root);
     while (nts_work_len) {
@@ -377,12 +387,8 @@ static void nts_collect_white(NtsHeader *root) {
             continue;
         }
         nts_paint(object, NTS_BLACK);
-        /* Children are read out before the object goes, so freeing it here is
-         * safe -- and freeing here rather than after the walk means the walk
-         * needs no second list. */
         nts_each_reference(object, nts_collect_white_child);
-        nts_reclaimed++;
-        nts_free(object);
+        nts_push(&nts_dead, &nts_dead_len, &nts_dead_cap, object);
     }
 }
 
@@ -422,10 +428,20 @@ void nts_collect_cycles(void) {
     for (size_t index = 0; index < nts_roots_len; index++) {
         nts_roots[index]->flags &= ~NTS_BUFFERED;
     }
+    nts_dead_len = 0;
     for (size_t index = 0; index < nts_roots_len; index++) {
-        nts_collect_white(nts_roots[index]);
+        nts_gather_white(nts_roots[index]);
     }
     nts_roots_len = 0;
+
+    /* Every one of these is garbage and every reference between them has
+     * already been accounted for, so this frees the memory and nothing else --
+     * releasing contents here would decrement counts a second time. */
+    for (size_t index = 0; index < nts_dead_len; index++) {
+        nts_reclaimed++;
+        nts_free(nts_dead[index]);
+    }
+    nts_dead_len = 0;
     nts_collecting = false;
 }
 
