@@ -45,6 +45,10 @@ pub mod flags {
     pub const NEVER: u32 = 1 << 18;
     pub const TYPE_PARAMETER: u32 = 1 << 19;
     pub const OBJECT: u32 = 1 << 20;
+    pub const INDEX: u32 = 1 << 21;
+    pub const TEMPLATE_LITERAL: u32 = 1 << 22;
+    pub const INDEXED_ACCESS: u32 = 1 << 25;
+    pub const CONDITIONAL: u32 = 1 << 26;
     pub const UNION: u32 = 1 << 27;
     pub const INTERSECTION: u32 = 1 << 28;
 }
@@ -102,6 +106,14 @@ pub fn classify(response: &TypeResponse, symbols: &FxHashMap<u32, SymbolId>) -> 
         TypeKind::BigInt
     } else if f & flags::ES_SYMBOL != 0 {
         TypeKind::Symbol
+    } else if f & flags::TEMPLATE_LITERAL != 0 {
+        // Captured here because the literal segments arrive on the response and
+        // no endpoint answers them again. Decomposition fills in the placeholder
+        // types later; the texts must survive until then.
+        TypeKind::TemplateLiteral {
+            texts: response.texts.clone(),
+            types: Vec::new(),
+        }
     } else if f == 0 {
         // No flags at all is not a type the checker produces.
         TypeKind::Unsupported {
@@ -206,6 +218,7 @@ mod tests {
     fn response(flags: u32, value: Option<serde_json::Value>) -> TypeResponse {
         TypeResponse {
             id: 1,
+            texts: Vec::new(),
             flags,
             value,
             symbol: 0,

@@ -35,7 +35,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::proto::{
     NodeHandle, ProjectHandle, SignatureResponse, SnapshotHandle, SymbolResponse, TypeResponse,
-    check_flags, signature_flags, symbol_flags,
+    check_flags, method, predicate_kind, signature_flags, symbol_flags,
 };
 use super::types::{self, flags, syntax};
 use super::{Client, TsgoError};
@@ -51,6 +51,18 @@ impl Budget {
     /// Enough for a small program; a placeholder until reachability sets the
     /// seeds and the bound stops mattering.
     pub const DEFAULT: Self = Self { max_types: 4096 };
+}
+
+/// The mutable state a decomposition walk carries.
+///
+/// Bundled because it is the same three values everywhere, and threading them
+/// individually pushed `resolve` past the point where a transposed argument would
+/// still be obvious.
+#[derive(Debug)]
+struct Walk<'w> {
+    worklist: &'w mut Vec<u32>,
+    stats: &'w mut DecomposeStats,
+    seeded: &'w FxHashSet<u32>,
 }
 
 /// What one decomposition cost and covered.
@@ -82,6 +94,11 @@ pub struct Decomposer<'a> {
     symbols: FxHashMap<u32, SymbolId>,
     /// Where each compiled file's nodes begin, for resolving declaration handles.
     file_bases: Vec<(String, u32)>,
+    /// Literal segments of template literal types, kept from interning time.
+    ///
+    /// They arrive on the response and are gone by the time the walk decides how
+    /// to resolve the type, and there is no endpoint that answers them again.
+    texts: FxHashMap<u32, Vec<String>>,
 }
 
 impl std::fmt::Debug for Decomposer<'_> {
@@ -115,6 +132,7 @@ impl<'a> Decomposer<'a> {
             done: FxHashSet::default(),
             symbols,
             file_bases,
+            texts: FxHashMap::default(),
         }
     }
 
@@ -162,7 +180,15 @@ impl<'a> Decomposer<'a> {
                 continue;
             }
 
-            let kind = self.resolve(snapshot, ty, bits, &mut worklist, &mut stats, &seeded)?;
+            let texts = self.texts.get(&ty).cloned().unwrap_or_default();
+            let kind = {
+                let mut walk = Walk {
+                    worklist: &mut worklist,
+                    stats: &mut stats,
+                    seeded: &seeded,
+                };
+                self.resolve(snapshot, ty, bits, &texts, &mut walk)?
+            };
             snapshot.types[slot.0 as usize].kind = kind;
             stats.decomposed += 1;
         }
@@ -172,50 +198,134 @@ impl<'a> Decomposer<'a> {
     }
 
     /// Resolve one placeholder into structure.
+    ///
+    /// Order matters throughout: several of these shapes overlap. A tuple is also
+    /// array-like, an array is also an object, and a function type is also an
+    /// object — whichever test runs first claims the type.
     fn resolve(
         &mut self,
         snapshot: &mut SemanticSnapshot,
         ty: u32,
         bits: u32,
-        worklist: &mut Vec<u32>,
-        stats: &mut DecomposeStats,
-        seeded: &FxHashSet<u32>,
+        texts: &[String],
+        walk: &mut Walk<'_>,
     ) -> Result<TypeKind, TsgoError> {
         if bits & flags::UNION != 0 {
             let members = self.client.types_of_type(self.handle, &self.project, ty)?;
-            let ids = self.intern_all(snapshot, &members, worklist, stats, seeded);
-            return Ok(TypeKind::Union(ids));
+            return Ok(TypeKind::Union(self.intern_all(snapshot, &members, walk)));
         }
 
         if bits & flags::INTERSECTION != 0 {
             let members = self.client.types_of_type(self.handle, &self.project, ty)?;
-            let ids = self.intern_all(snapshot, &members, worklist, stats, seeded);
-            return Ok(TypeKind::Intersection(ids));
+            return Ok(TypeKind::Intersection(
+                self.intern_all(snapshot, &members, walk),
+            ));
+        }
+
+        if bits & flags::CONDITIONAL != 0 {
+            return self.resolve_conditional(snapshot, ty, bits, walk);
+        }
+
+        if bits & flags::INDEXED_ACCESS != 0 {
+            let object = self.type_property(method::GET_OBJECT_TYPE_OF_TYPE, snapshot, ty, walk)?;
+            let index = self.type_property(method::GET_INDEX_TYPE_OF_TYPE, snapshot, ty, walk)?;
+            return Ok(match (object, index) {
+                (Some(object), Some(index)) => TypeKind::IndexedAccess { object, index },
+                _ => TypeKind::Structured { flags: bits },
+            });
+        }
+
+        if bits & flags::TEMPLATE_LITERAL != 0 {
+            let parts = self.client.types_of_type(self.handle, &self.project, ty)?;
+            return Ok(TypeKind::TemplateLiteral {
+                texts: texts.to_vec(),
+                types: self.intern_all(snapshot, &parts, walk),
+            });
+        }
+
+        if bits & flags::TYPE_PARAMETER != 0 {
+            return self.resolve_type_parameter(snapshot, ty, walk);
         }
 
         if bits & flags::OBJECT == 0 {
-            // Conditionals, indexed accesses, template literals, type parameters:
-            // real shapes this pass does not model yet. Left as placeholders
-            // rather than flattened into something they are not.
+            // `keyof T` and the remaining shapes. Left as placeholders rather than
+            // flattened into something they are not.
             return Ok(TypeKind::Structured { flags: bits });
         }
 
-        // An array is an object type, so this check has to come first. Decomposing
-        // one as an ordinary object yields `length`, `push`, `map` and the rest of
-        // the prototype rather than an element type.
-        // A tuple is also an object type, and also a reference, so it has to be
-        // separated before either the array or the property path. Its element
-        // types are its type arguments; its arity is fixed, which is exactly what
-        // makes a flat layout possible where an array needs a length.
+        self.resolve_object(snapshot, ty, bits, walk)
+    }
+
+    /// `T extends U ? X : Y`.
+    fn resolve_conditional(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        ty: u32,
+        bits: u32,
+        walk: &mut Walk<'_>,
+    ) -> Result<TypeKind, TsgoError> {
+        let check = self.type_property(method::GET_CHECK_TYPE_OF_TYPE, snapshot, ty, walk)?;
+        let extends = self.type_property(method::GET_EXTENDS_TYPE_OF_TYPE, snapshot, ty, walk)?;
+        // The branches can be absent when the checker has not needed them, which
+        // is different from them being `never`.
+        let true_type =
+            self.type_property(method::GET_TRUE_TYPE_OF_CONDITIONAL, snapshot, ty, walk)?;
+        let false_type =
+            self.type_property(method::GET_FALSE_TYPE_OF_CONDITIONAL, snapshot, ty, walk)?;
+
+        Ok(match (check, extends) {
+            (Some(check), Some(extends)) => TypeKind::Conditional {
+                check,
+                extends,
+                true_type,
+                false_type,
+            },
+            _ => TypeKind::Structured { flags: bits },
+        })
+    }
+
+    /// A type parameter, and the bound that lets a backend specialize it.
+    fn resolve_type_parameter(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        ty: u32,
+        walk: &mut Walk<'_>,
+    ) -> Result<TypeKind, TsgoError> {
+        let constraint = self
+            .client
+            .constraint_of_type_parameter(self.handle, &self.project, ty)?
+            .map(|response| self.intern_one(snapshot, &response, walk));
+        let name = self
+            .interned
+            .get(&ty)
+            .and_then(|slot| snapshot.types.get(slot.0 as usize))
+            .and_then(|record| record.symbol)
+            .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
+            .map_or_else(String::new, |symbol| symbol.name.clone());
+        Ok(TypeKind::TypeParameter { name, constraint })
+    }
+
+    /// An object type: a tuple, an array, a callable, or a record of members.
+    fn resolve_object(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        ty: u32,
+        bits: u32,
+        walk: &mut Walk<'_>,
+    ) -> Result<TypeKind, TsgoError> {
+        // A tuple is array-like too, and treating one as an array loses its arity
+        // — the property that lets it be laid out flat rather than as a pointer
+        // and a length.
         if self.client.is_tuple_type(self.handle, &self.project, ty)? {
             let args = self.client.type_arguments(self.handle, &self.project, ty)?;
-            let ids = self.intern_all(snapshot, &args, worklist, stats, seeded);
-            return Ok(TypeKind::Tuple(ids));
+            return Ok(TypeKind::Tuple(self.intern_all(snapshot, &args, walk)));
         }
 
+        // An array is an object type. Decomposing one as an ordinary object yields
+        // `length`, `push`, `map` and the rest of the prototype.
         if self.client.is_array_type(self.handle, &self.project, ty)? {
             let args = self.client.type_arguments(self.handle, &self.project, ty)?;
-            let ids = self.intern_all(snapshot, &args, worklist, stats, seeded);
+            let ids = self.intern_all(snapshot, &args, walk);
             return Ok(ids
                 .first()
                 .map_or(TypeKind::Structured { flags: bits }, |&element| {
@@ -223,52 +333,59 @@ impl<'a> Decomposer<'a> {
                 }));
         }
 
-        // Call signatures before properties. A function type is an object type,
-        // and every backend needs its exact signature rather than its members: a
-        // JVM `method_info` cannot be emitted without a descriptor at all, and C
-        // and LLVM need it to choose `int32_t` against `double` against a boxed
-        // handle, and whether arguments pass in registers.
+        // Call signatures before members: every backend needs a function type's
+        // exact signature rather than its prototype. A JVM `method_info` cannot be
+        // emitted without a descriptor at all.
         let signatures = self
             .client
             .signatures_of_type(self.handle, &self.project, ty)?;
         if let Some(signature) = signatures.first() {
-            let id = self.record_signature(snapshot, signature, worklist, stats, seeded)?;
+            let id = self.record_signature(snapshot, signature, walk)?;
             return Ok(TypeKind::Function(id));
         }
 
-        let properties = self
-            .client
-            .properties_of_type(self.handle, &self.project, ty)?;
-        // Bases before members. The member list the checker returns is flattened,
-        // so `own` can only be decided against the declaration's own members —
-        // and the bases are what a backend needs for `super_class`, the
-        // `interfaces` table, and base-first field offsets.
+        // A `new (...) => T` type has no call signature, only a construct one.
+        let constructors =
+            self.client
+                .construct_signatures_of_type(self.handle, &self.project, ty)?;
+        if let Some(signature) = constructors.first() {
+            let id = self.record_signature(snapshot, signature, walk)?;
+            return Ok(TypeKind::Function(id));
+        }
+
+        self.resolve_members(snapshot, ty, walk)
+    }
+
+    /// The members and index signatures of a record-like object type.
+    fn resolve_members(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        ty: u32,
+        walk: &mut Walk<'_>,
+    ) -> Result<TypeKind, TsgoError> {
+        // Bases before members: the member list is flattened, so `own` can only be
+        // decided against the declaration's own members.
         let bases = self.client.base_types(self.handle, &self.project, ty)?;
         if !bases.is_empty() {
-            let base_ids = self.intern_all(snapshot, &bases, worklist, stats, seeded);
+            let base_ids = self.intern_all(snapshot, &bases, walk);
             if let Some(&slot) = self.interned.get(&ty) {
                 snapshot.base_types.insert(slot, base_ids);
             }
         }
 
         // An index signature decides representation before any property does: a
-        // type with one cannot be a flat struct, because its keys are not known
-        // at compile time.
+        // type with one cannot be a flat struct, because its keys are not known at
+        // compile time.
         let indexes = self
             .client
             .index_infos_of_type(self.handle, &self.project, ty)?;
         if !indexes.is_empty() {
             let signatures = indexes
                 .iter()
-                .map(|info| {
-                    let key = self.intern_one(snapshot, &info.key_type, worklist, stats, seeded);
-                    let value =
-                        self.intern_one(snapshot, &info.value_type, worklist, stats, seeded);
-                    IndexSignature {
-                        key,
-                        value,
-                        readonly: info.is_readonly,
-                    }
+                .map(|info| IndexSignature {
+                    key: self.intern_one(snapshot, &info.key_type, walk),
+                    value: self.intern_one(snapshot, &info.value_type, walk),
+                    readonly: info.is_readonly,
                 })
                 .collect();
             if let Some(&slot) = self.interned.get(&ty) {
@@ -276,6 +393,9 @@ impl<'a> Decomposer<'a> {
             }
         }
 
+        let properties = self
+            .client
+            .properties_of_type(self.handle, &self.project, ty)?;
         if properties.is_empty() {
             // `{}` really has no properties, and recording that is different from
             // failing to look.
@@ -285,32 +405,27 @@ impl<'a> Decomposer<'a> {
         }
 
         let symbol_ids: Vec<u32> = properties.iter().map(|s| s.id).collect();
-        // The one batch endpoint in this pass: every property's type in one
-        // exchange, so a wide object costs the same as a narrow one.
         let types = self
             .client
             .types_of_symbols(self.handle, &self.project, symbol_ids)?;
-        let ids = self.intern_all(snapshot, &types, worklist, stats, seeded);
-
-        // Own members come from the declaration, not from the checker: the member
-        // list is flattened and says nothing about origin.
+        let ids = self.intern_all(snapshot, &types, walk);
         let own = Self::own_member_names(snapshot, ty, &self.interned);
+
         Ok(TypeKind::Object {
             properties: properties
                 .iter()
                 .zip(ids)
                 .map(|(symbol, ty)| PropertyRecord {
-                    own: own.contains(&symbol.name),
                     // Two halves, and neither alone is enough. `CheckFlagsReadonly`
-                    // covers only *computed* symbols — a property made readonly by
-                    // `Readonly<T>` or a mapped type — and says nothing about a
-                    // plain `readonly host: string`. The modifier covers exactly
-                    // the opposite case. Measured: `Config.host` is readonly by
-                    // keyword and carries no check flag; `Frozen.a` is readonly by
-                    // mapped type and has no keyword on any declaration.
+                    // covers only computed symbols — `Readonly<T>` and mapped types,
+                    // where no declaration carries the keyword — and misses a plain
+                    // `readonly host: string`. The modifier covers the opposite case.
                     readonly: symbol.check_flags & check_flags::READONLY != 0
                         || Self::declared_readonly(snapshot, &symbol.name),
                     optional: symbol.flags & symbol_flags::OPTIONAL != 0,
+                    // A getter is a call, not a load.
+                    accessor: accessor_of(symbol.flags),
+                    own: own.contains(&symbol.name),
                     name: symbol.name.clone(),
                     ty,
                 })
@@ -365,8 +480,14 @@ impl<'a> Decomposer<'a> {
             let signature = self
                 .client
                 .resolved_signature(self.handle, &self.project, handle)?;
-            let id =
-                self.record_signature(snapshot, &signature, &mut worklist, &mut stats, &seeded)?;
+            let id = {
+                let mut walk = Walk {
+                    worklist: &mut worklist,
+                    stats: &mut stats,
+                    seeded: &seeded,
+                };
+                self.record_signature(snapshot, &signature, &mut walk)?
+            };
 
             let callee = signature
                 .declaration
@@ -575,9 +696,7 @@ impl<'a> Decomposer<'a> {
         &mut self,
         snapshot: &mut SemanticSnapshot,
         signature: &SignatureResponse,
-        worklist: &mut Vec<u32>,
-        stats: &mut DecomposeStats,
-        seeded: &FxHashSet<u32>,
+        walk: &mut Walk<'_>,
     ) -> Result<SignatureId, TsgoError> {
         // Deliberately not `signature.parameters`: those ids are unregistered and
         // cannot be resolved. See `Client::parameters_of_signature`.
@@ -589,19 +708,13 @@ impl<'a> Decomposer<'a> {
             &self.project,
             parameters.iter().map(|p| p.id).collect(),
         )?;
-        let parameter_ids = self.intern_all(snapshot, &parameter_types, worklist, stats, seeded);
+        let parameter_ids = self.intern_all(snapshot, &parameter_types, walk);
 
         let returned =
             self.client
                 .return_type_of_signature(self.handle, &self.project, signature.id)?;
         let return_type = self
-            .intern_all(
-                snapshot,
-                std::slice::from_ref(&returned),
-                worklist,
-                stats,
-                seeded,
-            )
+            .intern_all(snapshot, std::slice::from_ref(&returned), walk)
             .first()
             .copied()
             .unwrap_or(TypeId(0));
@@ -637,17 +750,66 @@ impl<'a> Decomposer<'a> {
             })
             .collect();
 
+        // A type predicate is what makes a guard function useful to a backend:
+        // inside the true branch the concrete type is known, so a dispatch can
+        // become a direct call.
+        let predicate = self
+            .client
+            .type_predicate_of_signature(self.handle, &self.project, signature.id)?
+            .map(|response| {
+                let narrowed_to = response
+                    .r#type
+                    .as_ref()
+                    .map(|ty| self.intern_one(snapshot, ty, walk));
+                let asserts = matches!(
+                    response.kind,
+                    predicate_kind::ASSERTS_THIS | predicate_kind::ASSERTS_IDENTIFIER
+                );
+                let is_this = matches!(
+                    response.kind,
+                    predicate_kind::THIS | predicate_kind::ASSERTS_THIS
+                );
+                nts_semantic_schema::TypePredicate {
+                    parameter_index: (!is_this)
+                        .then(|| u32::try_from(response.parameter_index).unwrap_or(0)),
+                    parameter_name: response.parameter_name,
+                    narrowed_to,
+                    asserts,
+                }
+            });
+
+        let type_parameter_responses =
+            self.client
+                .type_parameters_of_signature(self.handle, &self.project, signature.id)?;
+        let type_parameters = self.intern_all(snapshot, &type_parameter_responses, walk);
+
         let id = SignatureId(u32::try_from(snapshot.signatures.len()).unwrap_or(u32::MAX));
         snapshot.signatures.push(SignatureRecord {
             parameters,
             return_type,
-            type_parameters: Vec::new(),
+            type_parameters,
             // `async` is a property of the declaration, not of the signature, so
             // the checker does not report it here. Lowering reads it off the
             // declaration's modifiers.
             is_async: false,
+            is_construct: signature.flags & signature_flags::CONSTRUCT != 0,
+            type_predicate: predicate,
         });
         Ok(id)
+    }
+
+    /// Fetch one type-valued property and intern it.
+    fn type_property(
+        &mut self,
+        method: &'static str,
+        snapshot: &mut SemanticSnapshot,
+        ty: u32,
+        walk: &mut Walk<'_>,
+    ) -> Result<Option<TypeId>, TsgoError> {
+        let response = self
+            .client
+            .type_property(method, self.handle, &self.project, ty)?;
+        Ok(response.map(|response| self.intern_one(snapshot, &response, walk)))
     }
 
     /// Intern one response, queueing it if it needs decomposing.
@@ -655,20 +817,12 @@ impl<'a> Decomposer<'a> {
         &mut self,
         snapshot: &mut SemanticSnapshot,
         response: &TypeResponse,
-        worklist: &mut Vec<u32>,
-        stats: &mut DecomposeStats,
-        seeded: &FxHashSet<u32>,
+        walk: &mut Walk<'_>,
     ) -> TypeId {
-        self.intern_all(
-            snapshot,
-            std::slice::from_ref(response),
-            worklist,
-            stats,
-            seeded,
-        )
-        .first()
-        .copied()
-        .unwrap_or(TypeId(0))
+        self.intern_all(snapshot, std::slice::from_ref(response), walk)
+            .first()
+            .copied()
+            .unwrap_or(TypeId(0))
     }
 
     /// Intern responses into the arena and queue any that need decomposing.
@@ -676,13 +830,14 @@ impl<'a> Decomposer<'a> {
         &mut self,
         snapshot: &mut SemanticSnapshot,
         responses: &[TypeResponse],
-        worklist: &mut Vec<u32>,
-        stats: &mut DecomposeStats,
-        seeded: &FxHashSet<u32>,
+        walk: &mut Walk<'_>,
     ) -> Vec<TypeId> {
         responses
             .iter()
             .map(|response| {
+                if !response.texts.is_empty() {
+                    self.texts.insert(response.id, response.texts.clone());
+                }
                 let id = *self.interned.entry(response.id).or_insert_with(|| {
                     let id = TypeId(u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX));
                     snapshot
@@ -690,10 +845,10 @@ impl<'a> Decomposer<'a> {
                         .push(types::classify(response, &self.symbols));
                     id
                 });
-                if !seeded.contains(&response.id) && !self.done.contains(&response.id) {
-                    stats.discovered += 1;
+                if !walk.seeded.contains(&response.id) && !self.done.contains(&response.id) {
+                    walk.stats.discovered += 1;
                 }
-                worklist.push(response.id);
+                walk.worklist.push(response.id);
                 id
             })
             .collect()
@@ -718,6 +873,18 @@ fn to_constant(value: &serde_json::Value) -> Option<ConstantValue> {
     value
         .as_str()
         .map(|text| ConstantValue::String(text.to_owned()))
+}
+
+/// Classify a member symbol as a field or an accessor pair.
+fn accessor_of(flags: u32) -> Option<nts_semantic_schema::Accessor> {
+    let get = flags & symbol_flags::GET_ACCESSOR != 0;
+    let set = flags & symbol_flags::SET_ACCESSOR != 0;
+    match (get, set) {
+        (true, true) => Some(nts_semantic_schema::Accessor::GetSet),
+        (true, false) => Some(nts_semantic_schema::Accessor::Get),
+        (false, true) => Some(nts_semantic_schema::Accessor::Set),
+        (false, false) => None,
+    }
 }
 
 /// Which file an arena index belongs to, and where that file starts.

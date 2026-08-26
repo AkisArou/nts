@@ -28,6 +28,18 @@ pub mod method {
     pub const GET_SEMANTIC_DIAGNOSTICS: &str = "getSemanticDiagnostics";
 
     pub const GET_BASE_TYPES: &str = "getBaseTypes";
+    pub const GET_TYPE_PREDICATE_OF_SIGNATURE: &str = "getTypePredicateOfSignature";
+    pub const GET_TYPE_PARAMETERS_OF_SIGNATURE: &str = "getTypeParametersOfSignature";
+    pub const GET_CHECK_TYPE_OF_TYPE: &str = "getCheckTypeOfType";
+    pub const GET_EXTENDS_TYPE_OF_TYPE: &str = "getExtendsTypeOfType";
+    pub const GET_TRUE_TYPE_OF_CONDITIONAL: &str = "getTrueTypeOfConditionalType";
+    pub const GET_FALSE_TYPE_OF_CONDITIONAL: &str = "getFalseTypeOfConditionalType";
+    pub const GET_OBJECT_TYPE_OF_TYPE: &str = "getObjectTypeOfType";
+    pub const GET_INDEX_TYPE_OF_TYPE: &str = "getIndexTypeOfType";
+    /// A type *parameter*'s constraint. Not `getConstraintOfType`, which is for
+    /// substitution types and crashes the server on a type parameter — its
+    /// handler does an unchecked `AsSubstitutionType` cast.
+    pub const GET_CONSTRAINT_OF_TYPE_PARAMETER: &str = "getConstraintOfTypeParameter";
     pub const GET_INDEX_INFOS_OF_TYPE: &str = "getIndexInfosOfType";
     pub const GET_CONSTANT_VALUE: &str = "getConstantValue";
     pub const GET_PARAMETERS_OF_SIGNATURE: &str = "getParametersOfSignature";
@@ -221,6 +233,12 @@ pub struct GetTypeAtLocationsParams {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TypeResponse {
+    /// Literal segments of a template literal type.
+    ///
+    /// Arrives on the response and is answered by no endpoint, so it has to be
+    /// kept when the type is first seen.
+    #[serde(default)]
+    pub texts: Vec<String>,
     /// The checker's own type id. Stable within a session, so it doubles as the
     /// interning key that stops one `string` type becoming N records.
     pub id: u32,
@@ -488,8 +506,32 @@ pub mod check_flags {
 
 /// `ast.SymbolFlags`, for the bits decomposition reads.
 pub mod symbol_flags {
+    pub const GET_ACCESSOR: u32 = 1 << 15;
+    pub const SET_ACCESSOR: u32 = 1 << 16;
     /// Declared `x?: T`.
     pub const OPTIONAL: u32 = 1 << 24;
+}
+
+/// `checker.TypePredicateKind`.
+pub mod predicate_kind {
+    pub const THIS: i32 = 0;
+    pub const IDENTIFIER: i32 = 1;
+    pub const ASSERTS_THIS: i32 = 2;
+    pub const ASSERTS_IDENTIFIER: i32 = 3;
+}
+
+/// What a type-guard signature narrows.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TypePredicateResponse {
+    #[serde(default)]
+    pub kind: i32,
+    #[serde(default)]
+    pub parameter_index: i32,
+    #[serde(default)]
+    pub parameter_name: String,
+    #[serde(default)]
+    pub r#type: Option<TypeResponse>,
 }
 
 /// One index signature of a type.

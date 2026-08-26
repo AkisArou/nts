@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 10;
+pub const SCHEMA_VERSION: u32 = 11;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -339,6 +339,24 @@ pub enum TypeKind {
         name: String,
         constraint: Option<TypeId>,
     },
+    /// `T extends U ? X : Y`.
+    Conditional {
+        check: TypeId,
+        extends: TypeId,
+        true_type: Option<TypeId>,
+        false_type: Option<TypeId>,
+    },
+    /// `T[K]`.
+    IndexedAccess {
+        object: TypeId,
+        index: TypeId,
+    },
+    /// A template literal type: the literal segments interleaved with the
+    /// placeholder types.
+    TemplateLiteral {
+        texts: Vec<String>,
+        types: Vec<TypeId>,
+    },
     /// A structured type the checker resolved but this snapshot has not
     /// decomposed into members yet.
     ///
@@ -368,6 +386,37 @@ pub struct IndexSignature {
     pub readonly: bool,
 }
 
+/// What a type predicate narrows, and how.
+///
+/// `function isFish(p: Pet): p is Fish` tells the compiler that inside the true
+/// branch of a call to it, `p` has type `Fish`. That is what turns a virtual
+/// dispatch into a direct call: the concrete type is known statically, so the
+/// method can be resolved rather than looked up.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TypePredicate {
+    /// Which parameter is narrowed. `None` for a `this` predicate.
+    pub parameter_index: Option<u32>,
+    pub parameter_name: String,
+    /// The type the parameter is narrowed to. Absent for a bare `asserts x`.
+    pub narrowed_to: Option<TypeId>,
+    /// An `asserts` predicate: it narrows for the rest of the enclosing scope
+    /// rather than only inside a branch, and returns `void`.
+    pub asserts: bool,
+}
+
+/// Whether a member is a field or an accessor pair.
+///
+/// An accessor looks like a property at the source level and is a *call* at the
+/// machine level. Emitting a field load for `obj.value` when `value` is a getter
+/// reads whatever happens to sit at that offset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Accessor {
+    Get,
+    Set,
+    /// Both a getter and a setter are declared.
+    GetSet,
+}
+
 /// One member of an object type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PropertyRecord {
@@ -386,6 +435,8 @@ pub struct PropertyRecord {
     /// Changes layout: an optional property needs a presence bit or an undefined
     /// slot, so it cannot share a representation with a required one.
     pub optional: bool,
+    /// Set when the member is an accessor rather than a field.
+    pub accessor: Option<Accessor>,
     /// Declared on this type rather than inherited.
     ///
     /// The checker returns a flattened member list, so without this a backend
@@ -415,6 +466,10 @@ pub struct SignatureRecord {
     pub type_parameters: Vec<TypeId>,
     /// `async` in source. Lowering allocates a managed `AsyncFrame` (RFC §12).
     pub is_async: bool,
+    /// A `new` signature rather than a call signature.
+    pub is_construct: bool,
+    /// What a call to this narrows, for a type-guard function.
+    pub type_predicate: Option<TypePredicate>,
 }
 
 /// One parameter of a signature.

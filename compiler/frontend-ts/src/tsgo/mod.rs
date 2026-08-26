@@ -53,7 +53,7 @@ use proto::{
     GetSymbolsAtLocationsParams, GetTypeAtLocationsParams, GetTypePropertyParams,
     GetTypesOfSymbolsParams, IndexInfoResponse, InitializeResponse, NodeHandle, ProjectHandle,
     SignatureKind, SignatureResponse, SnapshotHandle, SourceFileMetadata, SymbolResponse,
-    TypeResponse, UpdateSnapshotParams, UpdateSnapshotResponse,
+    TypePredicateResponse, TypeResponse, UpdateSnapshotParams, UpdateSnapshotResponse,
 };
 use wire::{Frame, MessageType, WireError, read_frame, write_frame};
 
@@ -502,6 +502,81 @@ impl Client {
         )
     }
 
+    /// What a type-guard signature narrows, if anything.
+    pub fn type_predicate_of_signature(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        signature: u64,
+    ) -> Result<Option<TypePredicateResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_TYPE_PREDICATE_OF_SIGNATURE,
+            &CheckerSignatureParams {
+                snapshot,
+                project: project.clone(),
+                signature,
+            },
+        )
+    }
+
+    /// Type parameters declared by a signature.
+    pub fn type_parameters_of_signature(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        signature: u64,
+    ) -> Result<Vec<TypeResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_TYPE_PARAMETERS_OF_SIGNATURE,
+            &GetSignaturePropertyParams {
+                snapshot,
+                project: project.clone(),
+                signature,
+            },
+        )
+    }
+
+    /// One type-valued property of a type, by method name.
+    ///
+    /// The conditional and indexed-access getters share a shape, so they share a
+    /// call rather than repeating it six times. They take `objectId` on the wire.
+    pub fn type_property(
+        &mut self,
+        method: &'static str,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<Option<TypeResponse>, TsgoError> {
+        self.request(
+            method,
+            &GetTypePropertyParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+            },
+        )
+    }
+
+    /// The constraint of a type parameter — the `U` in `<T extends U>`.
+    ///
+    /// A different parameter shape from [`Client::type_property`]: this family
+    /// takes `type` rather than `objectId`.
+    pub fn constraint_of_type_parameter(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<Option<TypeResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_CONSTRAINT_OF_TYPE_PARAMETER,
+            &CheckerTypeParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+            },
+        )
+    }
+
     /// Index signatures of a type.
     pub fn index_infos_of_type(
         &mut self,
@@ -515,6 +590,24 @@ impl Client {
                 snapshot,
                 project: project.clone(),
                 ty,
+            },
+        )
+    }
+
+    /// `new` signatures of a type.
+    pub fn construct_signatures_of_type(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<Vec<SignatureResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_SIGNATURES_OF_TYPE,
+            &GetSignaturesOfTypeParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+                kind: SignatureKind::Construct,
             },
         )
     }
