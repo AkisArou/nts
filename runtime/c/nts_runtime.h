@@ -85,7 +85,19 @@ extern const NtsDescriptor nts_desc_string2;
  * that retain and release need no branch beyond the one they already have. */
 #define NTS_IMMORTAL UINT32_MAX
 
+/* The memory provider is chosen at build time, and the runtime and the
+ * generated program must agree about it -- so it is a define rather than
+ * something either side decides for itself.
+ *
+ *   (default)          RFC 9.1 NoGC: a bump allocator, and nothing is freed.
+ *   NTS_PROVIDER_RC    RFC 9.2: each object is its own allocation, and the last
+ *                      release gives it back.
+ *
+ * NoGC is not slower for being simpler: a bump allocator is a pointer add, and
+ * that is the point of it for allocation testing and microbenchmarks. RC pays
+ * for a free list because it has something to give back. */
 void *nts_alloc(size_t bytes);
+size_t nts_live_bytes(void);
 void nts_retain(NtsHeader *object);
 /* How many allocated objects still hold a reference.
  *

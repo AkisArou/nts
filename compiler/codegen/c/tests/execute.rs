@@ -106,6 +106,16 @@ fn build_and_run_with(
     .expect("write runtime header");
     std::fs::write(&runtime, nts_codegen_c::RUNTIME_SOURCE).expect("write runtime");
 
+    // The provider is a property of the runtime as much as of the HIR: RC needs
+    // each object to be its own allocation so the last release can give it back,
+    // and the bump allocator cannot do that. Compiling the runtime without this
+    // define while the HIR counts references would balance the counts and still
+    // grow the heap.
+    let provider_define: &[&str] = match provider {
+        hir::Provider::ReferenceCounting => &["-DNTS_PROVIDER_RC"],
+        hir::Provider::NoGc => &[],
+    };
+
     let compile = std::process::Command::new("clang")
         // `--gc-sections` is reachability's other half: the compiler drops what
         // no export reaches, and the linker drops what survives compilation and
@@ -119,8 +129,9 @@ fn build_and_run_with(
             "-ffunction-sections",
             "-fdata-sections",
             "-Wl,--gc-sections",
-            "-o",
         ])
+        .args(provider_define)
+        .arg("-o")
         .arg(&binary)
         .arg(&generated)
         .arg(&main)
@@ -794,6 +805,7 @@ fn methods_are_static_calls_with_an_explicit_receiver() {
 double run(double step, double times);
 double scaled(double step, double times, double factor);
 double twoCounters(double a, double b);
+double eitherOr(double pick, double step);
 int main(void) {{
     check("run(3,4)", run(3, 4), 12);
     check("scaled(2,5,10)", scaled(2, 5, 10), 100);
@@ -823,6 +835,7 @@ fn reference_counting_balances_and_still_computes_the_right_answers() {
 #include "nts_runtime.h"
 double run(double step, double times);
 double twoCounters(double a, double b);
+double eitherOr(double pick, double step);
 int main(void) {{
     size_t before = nts_live_count();
     check("run(3,4)", run(3, 4), 12);
@@ -844,6 +857,28 @@ int main(void) {{
     }} else {{
         printf("ok live objects %zu -> %zu\n", before, after);
     }}
+
+    // Counts balancing is not the same as memory coming back: a release at zero
+    // that only decremented a counter would pass the check above and still grow
+    // the heap. This is the check that cannot be satisfied by bookkeeping.
+    if (nts_live_bytes() != 0) {{
+        printf("FAIL %zu bytes still held\n", nts_live_bytes());
+        failures++;
+    }} else {{
+        printf("ok no bytes held\n");
+    }}
+
+    // Each arm drops the object the other arm keeps.
+    check("eitherOr(1,5)", eitherOr(1, 5), 5);
+    check("eitherOr(0,5)", eitherOr(0, 5), 6);
+    for (int i = 0; i < 500; i++) {{ eitherOr(i % 2, 5); }}
+    if (nts_live_count() != 0 || nts_live_bytes() != 0) {{
+        printf("FAIL divergent paths leak: %zu objects, %zu bytes\n",
+               nts_live_count(), nts_live_bytes());
+        failures++;
+    }} else {{
+        printf("ok divergent paths release on both arms\n");
+    }}
     return failures ? 1 : 0;
 }}
 "#
@@ -855,6 +890,11 @@ int main(void) {{
     let printed = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "{printed}");
     assert!(printed.contains("live objects 0 -> 0"), "{printed}");
+    assert!(printed.contains("ok no bytes held"), "{printed}");
+    assert!(
+        printed.contains("ok divergent paths release on both arms"),
+        "{printed}",
+    );
     assert!(printed.contains("twoCounters(7,3) = 706"), "{printed}");
 }
 

@@ -27,11 +27,31 @@ const NtsDescriptor nts_desc_string2 = {NTS_KIND_STRING, 2, 0, "string"};
 /* The NoGC provider (RFC 9.1): a bump allocator that never frees. For compiler
  * bring-up, allocation testing and bounded-lifetime tools. It must never be
  * selected silently for a general application. */
+#ifndef NTS_PROVIDER_RC
 static unsigned char *nts_bump = 0;
 static size_t nts_bump_left = 0;
+#endif
+
+static size_t nts_bytes_held = 0;
+
+size_t nts_live_bytes(void) { return nts_bytes_held; }
 
 void *nts_alloc(size_t bytes) {
     bytes = (bytes + 15u) & ~(size_t)15u;
+    nts_bytes_held += bytes;
+
+#ifdef NTS_PROVIDER_RC
+    /* Its own allocation, because it will be given back. The size is kept in
+     * front of the object so that `nts_free` knows what it is returning without
+     * consulting the descriptor -- which a freed object may no longer have. */
+    size_t *block = (size_t *)malloc(bytes + 16u);
+    if (!block) {
+        fprintf(stderr, "nts: out of memory\n");
+        abort();
+    }
+    *block = bytes;
+    return (unsigned char *)block + 16u;
+#else
     if (bytes > nts_bump_left) {
         size_t chunk = bytes > (size_t)1048576 ? bytes : (size_t)1048576;
         nts_bump = (unsigned char *)malloc(chunk);
@@ -45,6 +65,20 @@ void *nts_alloc(size_t bytes) {
     nts_bump += bytes;
     nts_bump_left -= bytes;
     return result;
+#endif
+}
+
+/* Give an object's memory back. Only the reference-counting provider has
+ * anything to give: under NoGC there is no per-object allocation to return, and
+ * the last release is where a tracing collector would do nothing at all. */
+static void nts_free(void *object) {
+#ifdef NTS_PROVIDER_RC
+    size_t *block = (size_t *)((unsigned char *)object - 16u);
+    nts_bytes_held -= *block;
+    free(block);
+#else
+    (void)object;
+#endif
 }
 
 /* A fixed-layout object: the descriptor knows its whole size, and `length` is
@@ -90,6 +124,7 @@ void nts_release(NtsHeader *object) {
      * is precisely what never reaches this line. */
     object->reserved = 0;
     nts_reclaimed++;
+    nts_free(object);
 }
 
 void nts_bounds(double index, uint32_t length) {

@@ -533,5 +533,14 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
         nts_codegen_c::RUNTIME_HEADER_NAME,
         nts_codegen_c::RUNTIME_SOURCE_NAME
     );
+    // The provider is half a runtime decision. Reference counting needs each
+    // object to be its own allocation so that the last release can hand it back;
+    // the bump allocator the default uses cannot free anything. Compiling the
+    // runtime without this define while the program counts references balances
+    // the counts and still grows the heap, which is the quiet failure worth
+    // spending two lines of output to prevent.
+    if provider == hir::Provider::ReferenceCounting {
+        println!("compile the runtime with -DNTS_PROVIDER_RC");
+    }
     Ok(())
 }

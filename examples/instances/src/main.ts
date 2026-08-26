@@ -48,3 +48,16 @@ export function twoCounters(a: number, b: number): number {
   y.advance();
   return x.count * 100 + y.count;
 }
+
+// A branch where each object dies on one arm and lives on the other. Liveness
+// at block granularity says both are live out of the branch -- their union is
+// -- so neither would be released there, and both would leak. The releases go
+// on the edges instead, which is the only placement that is exact here.
+export function eitherOr(pick: number, step: number): number {
+  const a = new Counter(step);
+  const b = new Counter(step + 1);
+  if (pick > 0) {
+    return a.advance();
+  }
+  return b.advance();
+}

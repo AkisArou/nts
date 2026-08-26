@@ -57,6 +57,12 @@ impl Liveness {
         &self.live_out[block.0 as usize]
     }
 
+    /// Values a block can name: those arriving live, and those it defines.
+    #[must_use]
+    pub fn available(&self, block: BlockId) -> &FxHashSet<ValueId> {
+        &self.available[block.0 as usize]
+    }
+
     /// Whether a value's last read is inside this block.
     ///
     /// True when it is available in the block — defined there, or arriving live

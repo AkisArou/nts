@@ -769,11 +769,18 @@ fn emit_body(
     }
     writer.dedent();
 
-    // Only blocks something actually jumps to need a label. The entry never does,
-    // and an unreferenced label is a warning in every C compiler worth using.
+    // Only blocks something actually jumps to need a label, and an unreferenced
+    // label is a warning in every C compiler worth using. "Actually" is the load-
+    // bearing word: a jump to the next block in this order emits no `goto`, so
+    // the successor edge exists in the HIR and no label is needed for it. This
+    // has to mirror the rule in `emit_terminator` exactly or the two disagree.
     let mut targeted = rustc_hash::FxHashSet::default();
-    for block in &func.blocks {
-        targeted.extend(block.terminator.successors());
+    for (position, block) in order.iter().enumerate() {
+        let next = order.get(position + 1).copied();
+        match &func.blocks[block.0 as usize].terminator {
+            Terminator::Jump { target, .. } if next == Some(*target) => {}
+            terminator => targeted.extend(terminator.successors()),
+        }
     }
 
     for (position, block) in order.iter().enumerate() {
