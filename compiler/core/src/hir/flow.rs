@@ -229,6 +229,16 @@ fn transfer_block(
                 op: UnOp::Neg,
                 operand,
             } => facts::neg(lookup(&refinements, values, *operand)),
+            // The coercions are where an unconstrained value becomes a known
+            // integer. Everything about `x | 0` depends on this arm.
+            OpKind::Unary {
+                op: UnOp::ToInt32,
+                operand,
+            } => facts::to_int32(lookup(&refinements, values, *operand)),
+            OpKind::Unary {
+                op: UnOp::ToUint32,
+                operand,
+            } => facts::to_uint32(lookup(&refinements, values, *operand)),
             // A booleans is not a number, and a call's result needs the callee
             // analyzed — neither is a claim this pass can make.
             _ => Facts::TOP,

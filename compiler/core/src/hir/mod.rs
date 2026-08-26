@@ -321,6 +321,25 @@ pub enum BinOp {
     Ge,
     Eq,
     Ne,
+
+    /// Bitwise operators, on operands already coerced by [`UnOp::ToInt32`] or
+    /// [`UnOp::ToUint32`].
+    ///
+    /// JavaScript defines these as `ToInt32`, then the machine operation, then
+    /// back — which makes the *result* whole and inside int32 whatever the
+    /// inputs were. That is not a hint about likely values, it is a guarantee
+    /// from the language, and it is why `x | 0` is the idiom for "this is an
+    /// integer". The coercion is a separate operation so that the guarantee
+    /// lands on a value the analysis can see.
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    /// Arithmetic (sign-propagating) right shift, JavaScript's `>>`.
+    Shr,
+    /// Logical right shift, JavaScript's `>>>`. The one bitwise operator whose
+    /// result is *uint32*, and so the one that can exceed int32.
+    UShr,
 }
 
 /// A unary operator.
@@ -333,6 +352,14 @@ pub enum BinOp {
 pub enum UnOp {
     Neg,
     Not,
+    /// JavaScript's `ToInt32`: truncate toward zero, reduce modulo 2^32, then
+    /// reinterpret as signed. Maps NaN and both infinities to `0`.
+    ///
+    /// Not a C cast. `(int32_t)x` on an out-of-range double is undefined
+    /// behaviour, while `ToInt32` is total and wraps.
+    ToInt32,
+    /// JavaScript's `ToUint32`. As above, reinterpreted unsigned.
+    ToUint32,
 }
 
 /// A lowered program.

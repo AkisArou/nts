@@ -122,6 +122,14 @@ pub fn specialize(func: &mut Func, analysis: &Analysis) -> Report {
         let own = u32::try_from(index).unwrap_or(0);
         match &value.kind {
             OpKind::Binary { op, lhs, .. } if !op.is_comparison() => classes.union(own, lhs.0),
+            // A coercion is deliberately *not* joined to its operand. Joining
+            // them would defeat the point: `ToInt32` exists precisely to turn
+            // something that is not an integer into one, and forcing its input
+            // to be an integer already would make `x | 0` unrepresentable.
+            OpKind::Unary {
+                op: UnOp::ToInt32 | UnOp::ToUint32,
+                ..
+            } => {}
             OpKind::Unary { operand, .. } => classes.union(own, operand.0),
             _ => {}
         }
@@ -229,7 +237,23 @@ fn width_of(func: &Func, analysis: &Analysis, index: usize) -> Option<u8> {
             op: UnOp::Neg,
             operand,
         } => provable(*operand),
-        OpKind::ConstFloat(_) | OpKind::BlockParam(_) => true,
+        // Always integral, and the middle two are the interesting half of this
+        // pass. A coercion's result is an integer by construction whatever
+        // reached it — the one place a value becomes provably integral with
+        // nothing upstream having been provable, which is what makes `x | 0`
+        // and `x & 1023` worth writing. A bitwise result is likewise int32 by
+        // the language's definition rather than by inference, its operands
+        // having been coerced on the way in.
+        OpKind::Unary {
+            op: UnOp::ToInt32 | UnOp::ToUint32,
+            ..
+        }
+        | OpKind::Binary {
+            op: BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr | BinOp::UShr,
+            ..
+        }
+        | OpKind::ConstFloat(_)
+        | OpKind::BlockParam(_) => true,
 
         // Everything else stays a double, for one of three reasons:
         //
@@ -289,6 +313,15 @@ fn insert_conversions(func: &mut Func) -> usize {
                     let rhs = coerce(func, rhs, &ty);
                     Some(OpKind::Binary { op: bin, lhs, rhs })
                 }
+                // A coercion's operand must be left exactly as it is. Coercing
+                // it to the result type would replace `ToInt32` with a C cast —
+                // which is undefined behaviour for an out-of-range double, and
+                // is precisely what `ToInt32` exists to avoid. The operation is
+                // the conversion; it does not need one of its own.
+                OpKind::Unary {
+                    op: op @ (UnOp::ToInt32 | UnOp::ToUint32),
+                    operand,
+                } => Some(OpKind::Unary { op, operand }),
                 OpKind::Unary { op, operand } => {
                     let operand = coerce(func, operand, &ty);
                     Some(OpKind::Unary { op, operand })

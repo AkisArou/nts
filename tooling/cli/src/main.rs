@@ -332,6 +332,8 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             let operator = match un {
                 nts_core::hir::UnOp::Neg => "neg",
                 nts_core::hir::UnOp::Not => "not",
+                nts_core::hir::UnOp::ToInt32 => "toint32",
+                nts_core::hir::UnOp::ToUint32 => "touint32",
             };
             format!("%{index} = {operator} %{} : {ty}", operand.0)
         }
@@ -400,6 +402,12 @@ const fn render_bin(op: BinOp) -> &'static str {
         BinOp::Ge => "ge",
         BinOp::Eq => "eq",
         BinOp::Ne => "ne",
+        BinOp::BitAnd => "and",
+        BinOp::BitOr => "or",
+        BinOp::BitXor => "xor",
+        BinOp::Shl => "shl",
+        BinOp::Shr => "shr",
+        BinOp::UShr => "ushr",
     }
 }
 

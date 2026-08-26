@@ -897,6 +897,65 @@ impl<'a> FuncBuilder<'a> {
             .kind_of(*operator)
             .ok_or_else(|| self.unsupported(id, "a binary expression with no operator"))?;
 
+        // A bitwise operator is `ToInt32`, the machine operation, and back. The
+        // coercion is made explicit rather than folded into the operator so the
+        // analysis can see it: `ToInt32` is where "this value is an integer"
+        // stops being a hope and becomes a fact, and `x | 0` is how a TypeScript
+        // author writes exactly that.
+        if let Some(op) = bitwise_operator(token) {
+            let origin = self.origin(id);
+            let (left, right) = if matches!(op, BinOp::UShr) {
+                // `>>>` coerces its left operand unsigned; the count is masked
+                // either way.
+                (
+                    self.push(
+                        OpKind::Unary {
+                            op: UnOp::ToUint32,
+                            operand: lhs,
+                        },
+                        HirType::NUMBER,
+                        origin.clone(),
+                    ),
+                    self.push(
+                        OpKind::Unary {
+                            op: UnOp::ToInt32,
+                            operand: rhs,
+                        },
+                        HirType::NUMBER,
+                        origin.clone(),
+                    ),
+                )
+            } else {
+                (
+                    self.push(
+                        OpKind::Unary {
+                            op: UnOp::ToInt32,
+                            operand: lhs,
+                        },
+                        HirType::NUMBER,
+                        origin.clone(),
+                    ),
+                    self.push(
+                        OpKind::Unary {
+                            op: UnOp::ToInt32,
+                            operand: rhs,
+                        },
+                        HirType::NUMBER,
+                        origin.clone(),
+                    ),
+                )
+            };
+            return Ok(self.push(
+                OpKind::Binary {
+                    op,
+                    lhs: left,
+                    rhs: right,
+                },
+                ty,
+                origin,
+            ));
+        }
+
         // `+` is not one operator. On numbers it is arithmetic; on strings it is
         // concatenation, and the two lower to nothing alike. Resolving it here
         // against the result type means no backend has to ask again.
@@ -909,11 +968,32 @@ impl<'a> FuncBuilder<'a> {
             syntax::SLASH_TOKEN => BinOp::Div,
             syntax::PERCENT_TOKEN => BinOp::Rem,
             syntax::LESS_THAN_TOKEN => BinOp::Lt,
+            syntax::LESS_THAN_EQUALS_TOKEN => BinOp::Le,
             syntax::GREATER_THAN_TOKEN => BinOp::Gt,
+            syntax::GREATER_THAN_EQUALS_TOKEN => BinOp::Ge,
+            // `==` and `===` differ only by coercion, and both operands are
+            // already known to be numbers here — where the two agree. A `==`
+            // between different types would not reach this lowering, because
+            // the checker rejects it under `strict`.
+            syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN => BinOp::Eq,
+            syntax::EXCLAMATION_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN => BinOp::Ne,
             _ => return Err(self.unsupported(*operator, "this operator")),
         };
 
         let origin = self.origin(id);
         Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))
     }
+}
+
+/// The bitwise operator a token spells, if it spells one.
+const fn bitwise_operator(token: u16) -> Option<BinOp> {
+    Some(match token {
+        syntax::AMPERSAND_TOKEN => BinOp::BitAnd,
+        syntax::BAR_TOKEN => BinOp::BitOr,
+        syntax::CARET_TOKEN => BinOp::BitXor,
+        syntax::LESS_THAN_LESS_THAN_TOKEN => BinOp::Shl,
+        syntax::GREATER_THAN_GREATER_THAN_TOKEN => BinOp::Shr,
+        syntax::GREATER_THAN_GREATER_THAN_GREATER_THAN_TOKEN => BinOp::UShr,
+        _ => return None,
+    })
 }

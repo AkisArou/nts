@@ -13,6 +13,12 @@ pub const STRING_LITERAL: u16 = 10;
 
 // Operator tokens. Note 42 is absent: it is `**`, not `*`.
 pub const LESS_THAN_TOKEN: u16 = 29;
+pub const LESS_THAN_EQUALS_TOKEN: u16 = 32;
+pub const GREATER_THAN_EQUALS_TOKEN: u16 = 33;
+pub const EQUALS_EQUALS_TOKEN: u16 = 34;
+pub const EXCLAMATION_EQUALS_TOKEN: u16 = 35;
+pub const EQUALS_EQUALS_EQUALS_TOKEN: u16 = 36;
+pub const EXCLAMATION_EQUALS_EQUALS_TOKEN: u16 = 37;
 pub const GREATER_THAN_TOKEN: u16 = 31;
 pub const PLUS_TOKEN: u16 = 39;
 pub const EQUALS_TOKEN: u16 = 63;
@@ -20,6 +26,12 @@ pub const MINUS_TOKEN: u16 = 40;
 pub const ASTERISK_TOKEN: u16 = 41;
 pub const SLASH_TOKEN: u16 = 43;
 pub const PERCENT_TOKEN: u16 = 44;
+pub const LESS_THAN_LESS_THAN_TOKEN: u16 = 47;
+pub const GREATER_THAN_GREATER_THAN_TOKEN: u16 = 48;
+pub const GREATER_THAN_GREATER_THAN_GREATER_THAN_TOKEN: u16 = 49;
+pub const AMPERSAND_TOKEN: u16 = 50;
+pub const BAR_TOKEN: u16 = 51;
+pub const CARET_TOKEN: u16 = 52;
 pub const EXCLAMATION_TOKEN: u16 = 53;
 pub const QUESTION_TOKEN: u16 = 57;
 pub const IDENTIFIER: u16 = 79;

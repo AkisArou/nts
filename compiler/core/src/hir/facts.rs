@@ -516,6 +516,108 @@ pub fn neg(a: Facts) -> Facts {
     )
 }
 
+/// The int32 range, which every bitwise operator's result lives in.
+pub const I32_MIN: f64 = -2_147_483_648.0;
+pub const I32_MAX: f64 = 2_147_483_647.0;
+/// The uint32 range, which `>>>` alone can reach.
+pub const U32_MAX: f64 = 4_294_967_295.0;
+
+/// JavaScript's `ToInt32`.
+///
+/// Total, unlike a C cast: NaN and both infinities map to `0`, and everything
+/// else truncates toward zero and wraps modulo 2^32. The result is therefore
+/// *always* a whole number inside int32 — which is the entire reason `x | 0` is
+/// how integer intent is written in JavaScript. It is a proof, not a hint.
+#[must_use]
+pub fn to_int32(a: Facts) -> Facts {
+    // Already an int32: the coercion is the identity, and saying so keeps the
+    // range the caller worked for instead of widening back to the full int32.
+    if a.has_numeric() && !a.maybe_nan && a.whole && a.lo >= I32_MIN && a.hi <= I32_MAX {
+        return Facts::new(a.lo, a.hi, true, false, false);
+    }
+    // Only NaN reaches here, and `ToInt32(NaN)` is `0`.
+    if !a.has_numeric() {
+        return Facts::constant(0.0);
+    }
+    Facts::new(I32_MIN, I32_MAX, true, false, false)
+}
+
+/// JavaScript's `ToUint32`.
+#[must_use]
+pub fn to_uint32(a: Facts) -> Facts {
+    if a.has_numeric() && !a.maybe_nan && a.whole && a.lo >= 0.0 && a.hi <= U32_MAX {
+        return Facts::new(a.lo, a.hi, true, false, false);
+    }
+    if !a.has_numeric() {
+        return Facts::constant(0.0);
+    }
+    Facts::new(0.0, U32_MAX, true, false, false)
+}
+
+/// The exact value of a set that holds exactly one whole number.
+fn exact(v: Facts) -> Option<i32> {
+    if !v.is_singleton() || !v.whole || v.lo < I32_MIN || v.lo > I32_MAX {
+        return None;
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    Some(v.lo as i32)
+}
+
+/// Bitwise operators, on operands already coerced.
+///
+/// The result is whole and int32-ranged whatever the inputs were — `>>>` alone
+/// reaches uint32. That guarantee is the useful part; the folding below is only
+/// precision on top of it.
+#[must_use]
+pub fn bitwise(op: super::BinOp, a: Facts, b: Facts) -> Facts {
+    use super::BinOp;
+
+    if let (Some(x), Some(y)) = (exact(a), exact(b)) {
+        // JavaScript masks a shift count to five bits, so `1 << 32` is `1`, not
+        // zero and not undefined behaviour.
+        #[allow(clippy::cast_sign_loss)]
+        let count = (y as u32) & 31;
+        let folded = match op {
+            BinOp::BitAnd => f64::from(x & y),
+            BinOp::BitOr => f64::from(x | y),
+            BinOp::BitXor => f64::from(x ^ y),
+            BinOp::Shl => f64::from(x.wrapping_shl(count)),
+            BinOp::Shr => f64::from(x.wrapping_shr(count)),
+            #[allow(clippy::cast_sign_loss)]
+            BinOp::UShr => f64::from((x as u32).wrapping_shr(count)),
+            _ => return Facts::TOP,
+        };
+        return Facts::constant(folded);
+    }
+
+    // Masking with a known non-negative int32 cannot set a bit outside the mask,
+    // so the result is in `[0, mask]` regardless of the other operand. This is a
+    // materially tighter range than the generic int32 one, and it is the
+    // ordinary spelling of a bounded index: `hash & 1023`.
+    if matches!(op, BinOp::BitAnd)
+        && let Some(mask) = exact(a).or_else(|| exact(b))
+        && mask >= 0
+    {
+        return Facts::new(0.0, f64::from(mask), true, false, false);
+    }
+
+    // A logical right shift by a known non-zero amount bounds the result from
+    // above: shifting a uint32 right by `n` leaves at most `32 - n` bits.
+    if matches!(op, BinOp::UShr)
+        && let Some(count) = exact(b)
+        && (count & 31) > 0
+    {
+        #[allow(clippy::cast_sign_loss)]
+        let bits = 32 - ((count as u32) & 31);
+        return Facts::new(0.0, f64::from(u32::MAX >> (32 - bits)), true, false, false);
+    }
+
+    if matches!(op, BinOp::UShr) {
+        return Facts::new(0.0, U32_MAX, true, false, false);
+    }
+    Facts::new(I32_MIN, I32_MAX, true, false, false)
+}
+
 /// Apply a binary operator's transfer function.
 #[must_use]
 pub fn transfer_binary(op: super::BinOp, a: Facts, b: Facts) -> Option<Facts> {
@@ -526,6 +628,9 @@ pub fn transfer_binary(op: super::BinOp, a: Facts, b: Facts) -> Option<Facts> {
         BinOp::Mul => mul(a, b),
         BinOp::Div => div(a, b),
         BinOp::Rem => rem(a, b),
+        BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr | BinOp::UShr => {
+            bitwise(op, a, b)
+        }
         // Comparisons and concatenation do not produce numbers.
         BinOp::Concat | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne => {
             return None;

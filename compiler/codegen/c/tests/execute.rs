@@ -75,6 +75,9 @@ fn run(example: &str, harness: &str) -> Option<String> {
         .arg(&binary)
         .arg(&generated)
         .arg(&main)
+        // The generated prelude uses fmod and trunc for JavaScript's integer
+        // coercions.
+        .arg("-lm")
         .output()
         .expect("clang should run");
     assert!(
@@ -270,4 +273,52 @@ int main(void) {{
         return;
     };
     assert!(output.contains("negate(3) = -3"), "{output}");
+}
+
+#[test]
+fn bitwise_operators_follow_javascript_and_not_c() {
+    // Every expected value here came from running the same expressions on node,
+    // not from reasoning about them. C and JavaScript disagree about all of it:
+    // `(int32_t)x` is undefined for an out-of-range double where `x | 0` wraps,
+    // `a << b` is undefined for `b >= 32` where JavaScript masks the count, and
+    // `>>>` has no C operator at all.
+    let harness = format!(
+        r#"{CHECK}
+double toInt(double x);
+double bucket(double hash);
+double mix(double a, double b);
+bool isEven(double n);
+int main(void) {{
+    check("toInt(3.7)", toInt(3.7), 3);
+    check("toInt(-3.7)", toInt(-3.7), -3);
+    // Wraps at the int32 boundary rather than saturating or trapping.
+    check("toInt(2^31)", toInt(2147483648.0), -2147483648.0);
+    check("toInt(2^32)", toInt(4294967296.0), 0);
+    check("toInt(1e21)", toInt(1e21), -559939584.0);
+    // Total on the values a C cast cannot represent at all.
+    check("toInt(NaN)", toInt(0.0 / 0.0), 0);
+    check("toInt(inf)", toInt(1.0 / 0.0), 0);
+    check("toInt(-1)", toInt(-1), -1);
+
+    // A mask bounds the result whatever the input was -- including negatives.
+    check("bucket(-1)", bucket(-1), 1023);
+    check("bucket(5000)", bucket(5000), 904);
+    check("bucket(1024)", bucket(1024), 0);
+
+    check("mix(5,3)", mix(5, 3), 24);
+    // `>>>` is unsigned: a negative intermediate comes back positive.
+    check("mix(-1,0)", mix(-1, 0), 2147483644.0);
+
+    check("isEven(4)", isEven(4), 1);
+    check("isEven(7)", isEven(7), 0);
+    check("isEven(-3)", isEven(-3), 0);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("bitwise", &harness) else {
+        return;
+    };
+    assert!(output.contains("toInt(2^31) = -2.14748e+09"), "{output}");
+    assert!(output.contains("bucket(-1) = 1023"), "{output}");
 }

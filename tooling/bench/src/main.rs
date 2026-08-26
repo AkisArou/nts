@@ -194,6 +194,7 @@ fn compile(root: &Utf8Path, sources: &[Utf8PathBuf], binary: &Utf8Path) -> Resul
         .args(sources)
         .arg("-o")
         .arg(binary)
+        .arg("-lm")
         .output()
         .context("running clang")?;
     if !output.status.success() {
