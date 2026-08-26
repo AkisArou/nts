@@ -1081,7 +1081,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a conditional of unexpected shape"));
         };
         let condition = self.lower_expression(condition)?;
-        let condition = self.truthy(id, condition)?;
+        let condition = self.truthy(id, condition);
         self.lower_branching_value(
             id,
             condition,
@@ -1099,7 +1099,7 @@ impl<'a> FuncBuilder<'a> {
         right: NodeId,
     ) -> Result<ValueId, Diagnostic> {
         let first = self.lower_expression(left)?;
-        let condition = self.truthy(id, first)?;
+        let condition = self.truthy(id, first);
         // `a && b` is `b` when `a` is truthy and `a` otherwise; `a || b` is the
         // other way round. Neither yields a bool in general — `0 || 5` is `5`.
         let (then_branch, else_branch) = if and {
@@ -1111,19 +1111,20 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// A value as a condition, by JavaScript's rules.
-    fn truthy(&mut self, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+    fn truthy(&mut self, id: NodeId, value: ValueId) -> ValueId {
+        // A bool is already its own condition; anything else needs the rule.
         if matches!(self.values[value.0 as usize].ty, HirType::Bool) {
-            return Ok(value);
+            return value;
         }
         let origin = self.origin(id);
-        Ok(self.push(
+        self.push(
             OpKind::Unary {
                 op: UnOp::Truthy,
                 operand: value,
             },
             HirType::Bool,
             origin,
-        ))
+        )
     }
 
     /// `-x`, `+x`, `!x`.
