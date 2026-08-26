@@ -325,7 +325,7 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) 
             origin,
             format!(
                 "static const struct {{ NtsHeader header; {element} data[{}]; }} {name} = \
-                 {{ {{ &{descriptor}, 0, {flags}, {} }}, {{ {} }} }};",
+                 {{ {{ &{descriptor}, NTS_IMMORTAL, {flags}, {} }}, {{ {} }} }};",
                 data.len(),
                 units.len(),
                 data.join(", ")
@@ -1195,6 +1195,12 @@ fn emit_op(
         | OpKind::ArrayGet { .. }
         | OpKind::ArraySet { .. } => {
             return managed_op(writer, func, value, context);
+        }
+        OpKind::Retain(object) => {
+            format!("nts_retain((NtsHeader *){});", value_name(*object))
+        }
+        OpKind::Release(object) => {
+            format!("nts_release((NtsHeader *){});", value_name(*object))
         }
         OpKind::Convert(operand) => {
             // A C cast. Between an integer and a double this is one instruction,

@@ -314,7 +314,9 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         OpKind::Unary { operand, .. } | OpKind::Convert(operand) => vec![*operand],
         OpKind::Call { args, .. } => args.clone(),
         OpKind::ArrayNew { length } => vec![*length],
-        OpKind::Length(array) => vec![*array],
+        OpKind::Length(array) | OpKind::Retain(array) | OpKind::Release(array) => {
+            vec![*array]
+        }
         OpKind::FieldGet { object, .. } => vec![*object],
         OpKind::FieldSet { object, value, .. } => vec![*object, *value],
         OpKind::ArrayGet { array, index, .. } => vec![*array, *index],

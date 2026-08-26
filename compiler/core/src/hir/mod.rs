@@ -30,9 +30,11 @@ pub mod facts;
 pub mod flow;
 pub mod fold;
 pub mod interprocedural;
+pub mod liveness;
 pub mod loops;
 
 pub mod lower;
+pub mod rc;
 pub mod reachable;
 pub mod specialize;
 pub mod verify;
@@ -320,6 +322,14 @@ pub enum OpKind {
         /// [`super::bounds`].
         checked: bool,
     },
+    /// Claim a reference. Produces nothing.
+    ///
+    /// Abstract on purpose (RFC §7.2): HIR must not encode reference counting as
+    /// the *meaning* of a managed reference. Under `NoGC` these are not emitted at
+    /// all; under a tracing collector they would not be either.
+    Retain(ValueId),
+    /// Give up a reference. Produces nothing.
+    Release(ValueId),
     /// Allocate an object. The type is carried by the operation's own type,
     /// which is a [`ManagedType::Object`].
     ObjectNew,
@@ -591,6 +601,8 @@ pub struct Prepared {
     pub checks_kept: usize,
     /// Functions dropped because nothing reachable from an export calls them.
     pub pruned: usize,
+    /// Retains and releases inserted, if the provider counts references.
+    pub counting: rc::Report,
 }
 
 /// Lower a snapshot and make it ready to emit.
@@ -605,9 +617,28 @@ pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Vec<verify::Inva
     prepare_with(snapshot, &Options::default())
 }
 
+/// Which memory discipline the emitted code follows.
+///
+/// RFC §9 and the amendment to §10.2: this is a property of the *provider*, not
+/// of the backend, and it decides what the compiler emits — not only what the
+/// runtime does with it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Provider {
+    /// RFC §9.1. Allocate and never free. No retains, no releases, no barriers.
+    /// For bring-up, allocation testing and bounded-lifetime tools; never a
+    /// silent default for an application.
+    #[default]
+    NoGc,
+    /// RFC §9.2. Reference counting, without the cycle collector yet — so a
+    /// cycle is still a leak, which is the shape of leak this provider has.
+    ReferenceCounting,
+}
+
 /// What to compile, and how.
 #[derive(Debug, Clone, Copy)]
 pub struct Options<'a> {
+    /// The memory discipline. See [`Provider`].
+    pub provider: Provider,
     /// Whether to prove numbers into integers. Off is not a supported way to
     /// build anything — it is how the benchmarks measure what the analysis is
     /// worth, by compiling one program both ways.
@@ -620,6 +651,7 @@ pub struct Options<'a> {
 impl Default for Options<'_> {
     fn default() -> Self {
         Self {
+            provider: Provider::NoGc,
             specialize_numbers: true,
             // The safe choice when the product is unknown: a library may have
             // any export called from outside. An executable keeps more than it
@@ -682,6 +714,15 @@ pub fn prepare_with(
         dce::eliminate(func);
     }
 
+    // Reference counting, after everything that could move or remove an
+    // operation: a retain inserted before dead-code elimination would keep
+    // alive exactly what that pass was about to drop.
+    let counting = if options.provider == Provider::ReferenceCounting {
+        rc::insert(&mut program)
+    } else {
+        rc::Report::default()
+    };
+
     // Bounds checks last, once the facts are as sharp as they are going to get:
     // a check is removed only where the index was proven, and specialization
     // and folding are what sharpen the index.
@@ -713,6 +754,7 @@ pub fn prepare_with(
         checks_removed,
         checks_kept,
         pruned,
+        counting,
     })
 }
 

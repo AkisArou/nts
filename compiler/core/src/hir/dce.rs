@@ -32,7 +32,11 @@ pub fn eliminate(func: &mut Func) -> usize {
             // whatever reads their results.
             if matches!(
                 func.values[value.0 as usize].kind,
-                OpKind::Call { .. } | OpKind::ArraySet { .. } | OpKind::FieldSet { .. }
+                OpKind::Call { .. }
+                    | OpKind::ArraySet { .. }
+                    | OpKind::FieldSet { .. }
+                    | OpKind::Retain(_)
+                    | OpKind::Release(_)
             ) {
                 live.insert(*value);
             }

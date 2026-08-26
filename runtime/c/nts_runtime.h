@@ -80,7 +80,21 @@ extern const NtsDescriptor nts_desc_ref;
 extern const NtsDescriptor nts_desc_string1;
 extern const NtsDescriptor nts_desc_string2;
 
+/* An object the program did not allocate -- a string literal in static data --
+ * carries this count and is never freed. A sentinel rather than a flag bit so
+ * that retain and release need no branch beyond the one they already have. */
+#define NTS_IMMORTAL UINT32_MAX
+
 void *nts_alloc(size_t bytes);
+void nts_retain(NtsHeader *object);
+/* How many allocated objects still hold a reference.
+ *
+ * Not a diagnostic afterthought: it is how reference counting is *tested*. A
+ * program that allocates in a loop keeps this flat under RC and grows it
+ * without bound under NoGC, and the difference is visible from inside the
+ * program rather than inferred from its memory use. */
+size_t nts_live_count(void);
+void nts_release(NtsHeader *object);
 NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length);
 NtsHeader *nts_object_new(const NtsDescriptor *descriptor);
 void nts_bounds(double index, uint32_t length);

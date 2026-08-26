@@ -34,6 +34,15 @@ fn run(example: &str, harness: &str) -> Option<String> {
 
 /// Compile and run, returning the result whether or not it succeeded.
 fn build_and_run(example: &str, harness: &str) -> Option<std::process::Output> {
+    build_and_run_with(example, harness, hir::Provider::NoGc)
+}
+
+/// As above, under a chosen memory provider.
+fn build_and_run_with(
+    example: &str,
+    harness: &str,
+    provider: hir::Provider,
+) -> Option<std::process::Output> {
     let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
         // Announced, because a skip that prints nothing is indistinguishable
         // from a pass — and this is the test whose passing means the most.
@@ -64,13 +73,21 @@ fn build_and_run(example: &str, harness: &str) -> Option<std::process::Output> {
     // The same pipeline the CLI runs, specialization included — otherwise these
     // tests would prove that *unspecialized* code computes the right answers,
     // which is not what ships.
-    let prepared = hir::prepare(&snapshot).expect("prepared HIR should verify");
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider,
+            ..hir::Options::default()
+        },
+    )
+    .expect("prepared HIR should verify");
     let emitted = nts_codegen_c::emit(&prepared.program);
 
     // Keyed by the harness as well as the example: two tests exercising one
     // example otherwise share a directory, and cargo runs them concurrently.
     let mut hasher = std::hash::DefaultHasher::new();
     std::hash::Hash::hash(harness, &mut hasher);
+    std::hash::Hash::hash(&format!("{provider:?}"), &mut hasher);
     let key = std::hash::Hasher::finish(&hasher);
     let dir = std::env::temp_dir().join(format!("nts-e2e-{example}-{key:016x}"));
     std::fs::create_dir_all(&dir).expect("temp dir");
@@ -790,4 +807,80 @@ int main(void) {{
         return;
     };
     assert!(output.contains("twoCounters(7,3) = 706"), "{output}");
+}
+
+#[test]
+fn reference_counting_balances_and_still_computes_the_right_answers() {
+    // The two things reference counting has to get right, and they pull against
+    // each other: release everything, and release nothing twice.
+    //
+    // The live count makes both visible from inside the program. Under NoGC a
+    // loop that allocates grows it without bound; under RC it must come back to
+    // where it started, and the answers must be unchanged -- a premature release
+    // shows up as a wrong answer or a crash rather than as a number.
+    let harness = format!(
+        r#"{CHECK}
+#include "nts_runtime.h"
+double run(double step, double times);
+double twoCounters(double a, double b);
+int main(void) {{
+    size_t before = nts_live_count();
+    check("run(3,4)", run(3, 4), 12);
+    check("twoCounters(7,3)", twoCounters(7, 3), 706);
+
+    // A thousand more allocations. Under NoGC this ends with a thousand live
+    // objects; under RC it must end where it started.
+    for (int i = 0; i < 1000; i++) {{
+        if (run(3, 4) != 12) {{
+            printf("FAIL run(3,4) changed under repetition\n");
+            failures++;
+            break;
+        }}
+    }}
+    size_t after = nts_live_count();
+    if (after != before) {{
+        printf("FAIL live objects went from %zu to %zu\n", before, after);
+        failures++;
+    }} else {{
+        printf("ok live objects %zu -> %zu\n", before, after);
+    }}
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = build_and_run_with("instances", &harness, hir::Provider::ReferenceCounting)
+    else {
+        return;
+    };
+    let printed = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "{printed}");
+    assert!(printed.contains("live objects 0 -> 0"), "{printed}");
+    assert!(printed.contains("twoCounters(7,3) = 706"), "{printed}");
+}
+
+#[test]
+fn without_reference_counting_the_same_program_leaks() {
+    // The control. Not a complaint about NoGC -- RFC 9.1 says it allocates and
+    // never frees, and this is what that means when a program runs for a while.
+    // It is here so the test above is measuring something.
+    let harness = format!(
+        r#"{CHECK}
+#include "nts_runtime.h"
+double run(double step, double times);
+int main(void) {{
+    check("run(3,4)", run(3, 4), 12);
+    for (int i = 0; i < 99; i++) {{ run(3, 4); }}
+    printf("live objects after 100 calls: %zu\n", nts_live_count());
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = build_and_run_with("instances", &harness, hir::Provider::NoGc) else {
+        return;
+    };
+    let printed = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        printed.contains("live objects after 100 calls: 100"),
+        "NoGC should hold every object it allocated: {printed}",
+    );
 }

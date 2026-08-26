@@ -13,6 +13,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Allocated and reclaimed, so that a test can see reference counting balance
+ * from inside the program rather than infer it from memory use. */
+static size_t nts_allocated = 0;
+static size_t nts_reclaimed = 0;
+
+size_t nts_live_count(void) { return nts_allocated - nts_reclaimed; }
+
 const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY, sizeof(void *), 1, "reference"};
 const NtsDescriptor nts_desc_string1 = {NTS_KIND_STRING, 1, 0, "string"};
 const NtsDescriptor nts_desc_string2 = {NTS_KIND_STRING, 2, 0, "string"};
@@ -49,7 +56,40 @@ NtsHeader *nts_object_new(const NtsDescriptor *descriptor) {
     NtsHeader *object = (NtsHeader *)nts_alloc(descriptor->size);
     memset(object, 0, descriptor->size);
     object->descriptor = descriptor;
+    /* One reference: the caller's. */
+    object->reserved = 1;
+    nts_allocated++;
     return object;
+}
+
+/* Reference counting (RFC 9.2). The count lives in the header's
+ * provider-reserved word, which is unused under NoGC and is this under RC.
+ *
+ * Not atomic. A runtime owns its heap (RFC 17.1) and a managed reference does
+ * not cross between runtimes, so the count is only ever touched by one thread.
+ * Making it atomic would cost every retain a locked instruction to defend
+ * against sharing the design does not permit. */
+void nts_retain(NtsHeader *object) {
+    if (!object || object->reserved == NTS_IMMORTAL) {
+        return;
+    }
+    object->reserved++;
+}
+
+void nts_release(NtsHeader *object) {
+    if (!object || object->reserved == NTS_IMMORTAL) {
+        return;
+    }
+    if (object->reserved > 1) {
+        object->reserved--;
+        return;
+    }
+    /* The last reference. Under the bump allocator there is nothing to give
+     * back, so this is where the RC provider's own allocator will free -- and
+     * where a cycle collector will record a candidate (RFC 9.2), since a cycle
+     * is precisely what never reaches this line. */
+    object->reserved = 0;
+    nts_reclaimed++;
 }
 
 void nts_bounds(double index, uint32_t length) {
@@ -67,7 +107,8 @@ NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length) {
     size_t bytes = sizeof(NtsHeader) + (size_t)count * descriptor->size;
     NtsArray *array = (NtsArray *)nts_alloc(bytes);
     array->descriptor = descriptor;
-    array->reserved = 0;
+    array->reserved = 1;
+    nts_allocated++;
     array->flags = 0;
     array->length = count;
     /* Zeroed rather than left as holes: there is no `undefined` in a double, so
@@ -101,7 +142,8 @@ NtsString *nts_concat(const NtsString *a, const NtsString *b) {
     NtsString *out =
         (NtsString *)nts_alloc(sizeof(NtsHeader) + ((size_t)total + 1) * width);
     out->descriptor = wide ? &nts_desc_string2 : &nts_desc_string1;
-    out->reserved = 0;
+    out->reserved = 1;
+    nts_allocated++;
     out->flags = wide ? NTS_TWO_BYTE : 0u;
     out->length = total;
     if (wide) {

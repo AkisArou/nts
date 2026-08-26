@@ -341,6 +341,8 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::ArrayNew { length } => format!("%{index} = array.new %{} : {ty}", length.0),
         OpKind::Length(array) => format!("%{index} = array.len %{} : {ty}", array.0),
         OpKind::ObjectNew => format!("%{index} = object.new : {ty}"),
+        OpKind::Retain(object) => format!("retain %{}", object.0),
+        OpKind::Release(object) => format!("release %{}", object.0),
         OpKind::FieldGet { object, field } => {
             format!("%{index} = field.get %{}.{field} : {ty}", object.0)
         }
@@ -474,7 +476,21 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
         bail!("the program does not typecheck");
     }
 
-    let prepared = match hir::prepare(&snapshot) {
+    // `--rc` selects reference counting (RFC 9.2). NoGC stays the default: it
+    // is what 9.1 says it is, and choosing a provider silently is exactly what
+    // that section forbids.
+    let provider = if std::env::args().any(|arg| arg == "--rc") {
+        hir::Provider::ReferenceCounting
+    } else {
+        hir::Provider::NoGc
+    };
+    let prepared = match hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider,
+            ..hir::Options::default()
+        },
+    ) {
         Ok(prepared) => prepared,
         Err(problems) => {
             for problem in &problems {
