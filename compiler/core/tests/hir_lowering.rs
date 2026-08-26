@@ -158,7 +158,7 @@ fn an_unsupported_construct_is_refused_rather_than_skipped() {
     // and is wrong — with no signal anywhere.
     assert!(
         !lowered.is_complete(),
-        "the `while` loop should have been refused",
+        "the unsupported constructs should have been refused",
     );
     assert_eq!(
         lowered.program.funcs.len(),

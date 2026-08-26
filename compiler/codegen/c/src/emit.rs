@@ -393,9 +393,22 @@ fn emit_body(writer: &mut CodeWriter, func: &Func) -> Result<(), Diagnostic> {
     // Every value except the parameters becomes a local. C scoping would not let
     // a value defined in one block be read in another, so they are all declared
     // at the top — where SSA guarantees each is assigned before any use.
+    //
+    // Declared from the block contents rather than from the value arena, so that
+    // a value dead-code elimination dropped does not leave an unused local
+    // behind. The arena keeps dead entries on purpose: a `ValueId` is an index
+    // into it, and compacting would invalidate every reference in the function.
+    let mut declared = rustc_hash::FxHashSet::default();
+    for block in &func.blocks {
+        declared.extend(block.params.iter().copied());
+        declared.extend(block.ops.iter().copied());
+    }
+
     writer.indent();
     for (index, op) in func.values.iter().enumerate() {
-        if matches!(op.kind, OpKind::Param(_)) {
+        if matches!(op.kind, OpKind::Param(_))
+            || !declared.contains(&ValueId(u32::try_from(index).unwrap_or(0)))
+        {
             continue;
         }
         let ty = c_type(&op.ty, &op.origin)?;
@@ -507,6 +520,21 @@ fn binary_text(
             ));
         }
     };
+
+    // A bitwise operator on a double is not valid C at all. Reaching here means
+    // specialization declined the value, and emitting `a | b` anyway would fail
+    // to compile — loudly, but a long way from the cause.
+    if matches!(
+        bin,
+        BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr | BinOp::UShr
+    ) && !matches!(op.ty, HirType::Int { .. })
+    {
+        return Err(Diagnostic::error(
+            "NTS2004",
+            "a bitwise operator whose result was not specialized to an integer",
+            op.origin.location,
+        ));
+    }
 
     // `%` is integer-only in C. On doubles it is `fmod`, and emitting `%` would
     // not compile — better than emitting something that does and is wrong, but

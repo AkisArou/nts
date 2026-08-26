@@ -322,3 +322,35 @@ int main(void) {{
     assert!(output.contains("toInt(2^31) = -2.14748e+09"), "{output}");
     assert!(output.contains("bucket(-1) = 1023"), "{output}");
 }
+
+#[test]
+fn idiomatic_integer_typescript_computes_the_same_answers() {
+    // `for`, `+=`, `++`, `--`, and a bitwise hash loop -- the forms integer code
+    // is actually written in, and the ones specialization turns into integer
+    // machine arithmetic. Every expected value came from running this same
+    // `src/index.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+double sumTo(double n);
+double triangle(void);
+double hash(double seed, double rounds);
+double countDown(double start);
+int main(void) {{
+    check("sumTo(100)", sumTo(100), 4950);
+    check("sumTo(0)", sumTo(0), 0);
+    check("triangle()", triangle(), 499500);
+    check("hash(12345,50)", hash(12345, 50), 32786);
+    // A fractional seed: `seed | 0` truncates toward zero, so -7.5 becomes -7.
+    check("hash(-7.5,10)", hash(-7.5, 10), 17598);
+    check("countDown(1000)", countDown(1000), 1000);
+    check("countDown(0)", countDown(0), 0);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("idioms", &harness) else {
+        return;
+    };
+    assert!(output.contains("triangle() = 499500"), "{output}");
+    assert!(output.contains("hash(-7.5,10) = 17598"), "{output}");
+}

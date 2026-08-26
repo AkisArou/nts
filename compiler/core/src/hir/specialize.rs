@@ -97,41 +97,26 @@ pub fn specialize(func: &mut Func, analysis: &Analysis) -> Report {
         }
     }
 
-    // Operands: an operation and the values it reads belong together too, and
-    // this is a cost decision rather than a correctness one. Converting both
-    // operands of an addition to integers in order to do the addition in
-    // integers spends two instructions to save one. Keeping them in one class
-    // means the whole computation is specialized or none of it is.
-    //
-    // A comparison joins its two operands to each other but not to its result,
+    // A comparison joins its two operands to each other, but not to its result,
     // which is a bool whatever they are. Without this, `i < 1000` leaves the
-    // literal an integer and `i` a double, and the loop pays a conversion every
-    // iteration to compare them.
+    // literal an integer and `i` a double and the loop pays a conversion every
+    // iteration to compare them — and, worse, a lone constant compared against
+    // an unprovable double gets specialized for no benefit at all.
+    //
+    // Arithmetic operands are deliberately *not* joined. They were, and it cost
+    // more than it saved: in `for (let i = 0; i < 1000; i++) total += i`, the
+    // accumulator is not provably bounded — it grows by an amount the analysis
+    // cannot relate to the iteration count — so joining `total` to `i` sank the
+    // counter with it and the loop specialized nothing. Left apart, the counter
+    // and its comparison become integers and only the accumulation pays a
+    // conversion. Safety does not depend on this: an arithmetic operation is
+    // integer-eligible only if its operands are *provably* integral, so any
+    // conversion it needs is exact.
     for value in &func.values {
-        match &value.kind {
-            OpKind::Binary { op, lhs, rhs } if op.is_comparison() => {
-                classes.union(lhs.0, rhs.0);
-            }
-            OpKind::Binary { lhs, rhs, .. } => {
-                classes.union(lhs.0, rhs.0);
-            }
-            _ => {}
-        }
-    }
-    for (index, value) in func.values.iter().enumerate() {
-        let own = u32::try_from(index).unwrap_or(0);
-        match &value.kind {
-            OpKind::Binary { op, lhs, .. } if !op.is_comparison() => classes.union(own, lhs.0),
-            // A coercion is deliberately *not* joined to its operand. Joining
-            // them would defeat the point: `ToInt32` exists precisely to turn
-            // something that is not an integer into one, and forcing its input
-            // to be an integer already would make `x | 0` unrepresentable.
-            OpKind::Unary {
-                op: UnOp::ToInt32 | UnOp::ToUint32,
-                ..
-            } => {}
-            OpKind::Unary { operand, .. } => classes.union(own, operand.0),
-            _ => {}
+        if let OpKind::Binary { op, lhs, rhs } = &value.kind
+            && op.is_comparison()
+        {
+            classes.union(lhs.0, rhs.0);
         }
     }
 
@@ -387,9 +372,25 @@ fn convert(
         return operand;
     }
     let origin = func.values[operand.0 as usize].origin.clone();
+
+    // Converting a constant is a constant. Without this the emitted code says
+    // `v7 = 1.0; v10 = (int32_t)v7;` where it means `1` — which any C compiler
+    // folds, but which makes the output harder to read than the thing it
+    // describes.
+    let kind = match (&func.values[operand.0 as usize].kind, wanted) {
+        (OpKind::ConstFloat(value), HirType::Int { .. }) =>
+        {
+            #[allow(clippy::cast_possible_truncation)]
+            OpKind::ConstInt(*value as i64)
+        }
+        #[allow(clippy::cast_precision_loss)]
+        (OpKind::ConstInt(value), HirType::Float { .. }) => OpKind::ConstFloat(*value as f64),
+        _ => OpKind::Convert(operand),
+    };
+
     let id = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
     func.values.push(Op {
-        kind: OpKind::Convert(operand),
+        kind,
         ty: wanted.clone(),
         origin,
     });

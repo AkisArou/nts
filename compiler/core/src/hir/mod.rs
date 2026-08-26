@@ -24,6 +24,7 @@
 //!   one [`ValueId`]. Binding identity is what makes that possible, which is why
 //!   symbol resolution had to land before this.
 
+pub mod dce;
 pub mod facts;
 pub mod flow;
 
@@ -403,6 +404,13 @@ pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Vec<verify::Inva
         let report = specialize::specialize(func, &analysis);
         specialized += report.specialized;
         conversions += report.conversions;
+    }
+
+    // Specialization orphans values by design — a folded constant leaves its
+    // unfolded original with no readers — and the C emitter declares a local for
+    // everything it assigns.
+    for func in &mut program.funcs {
+        dce::eliminate(func);
     }
 
     verify::verify(&program)?;

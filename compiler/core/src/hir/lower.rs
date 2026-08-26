@@ -364,18 +364,51 @@ impl<'a> FuncBuilder<'a> {
     /// parameter for each of them *before* the body can refer to it — the body
     /// reads the value the previous iteration produced, which does not exist yet.
     fn assigned_symbols(&self, root: NodeId, into: &mut Vec<u32>) {
-        let node = self.node(root);
-        if self.kind_of(root) == Some(syntax::BINARY_EXPRESSION) {
-            let children = self.children(root);
-            if let [target, operator, _] = children.as_slice()
-                && self.kind_of(*operator) == Some(syntax::EQUALS_TOKEN)
-                && let Some(symbol) = self.node(*target).symbol
-                && !into.contains(&symbol.0)
-            {
-                into.push(symbol.0);
+        // Every form that writes to a name, not just `=`. Missing one does not
+        // fail loudly: the header simply gets no parameter for that name, the
+        // loop reads the value it had on entry, and the back edge never passes
+        // the update. `for (let i = 0; i < n; i++)` then runs forever, and the
+        // only thing that catches it is the SSA verifier noticing that the exit
+        // reads a value the body defined.
+        let written = match self.kind_of(root) {
+            Some(syntax::BINARY_EXPRESSION) => {
+                let children = self.children(root);
+                match children.as_slice() {
+                    [target, operator, _] => {
+                        let token = self.kind_of(*operator).unwrap_or(0);
+                        if token == syntax::EQUALS_TOKEN || compound_operator(token).is_some() {
+                            Some(*target)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                }
             }
+            Some(syntax::PREFIX_UNARY_EXPRESSION) => {
+                let NodeData::Children { small, .. } = self.node(root).data else {
+                    return;
+                };
+                matches!(
+                    small & syntax::prefix_operator::MASK,
+                    syntax::prefix_operator::PLUS_PLUS | syntax::prefix_operator::MINUS_MINUS
+                )
+                .then(|| self.children(root).first().copied())
+                .flatten()
+            }
+            // Every postfix operator is a step, so no operator check is needed.
+            Some(syntax::POSTFIX_UNARY_EXPRESSION) => self.children(root).first().copied(),
+            _ => None,
+        };
+
+        if let Some(target) = written
+            && let Some(symbol) = self.node(target).symbol
+            && !into.contains(&symbol.0)
+        {
+            into.push(symbol.0);
         }
-        for child in &node.children {
+
+        for child in &self.node(root).children {
             self.assigned_symbols(*child, into);
         }
     }
@@ -425,10 +458,28 @@ impl<'a> FuncBuilder<'a> {
 
         let header = self.new_block();
         let origin = self.origin(id);
+        let (params, exit) = self.enter_loop(id, header, &carried, Some(*condition), &origin)?;
 
+        self.lower_statement(*body)?;
+        self.close_loop(header, &carried, &params, exit);
+        Ok(())
+    }
+
+    /// Open a loop: jump to the header, give it a parameter per carried name,
+    /// test the condition, and leave the builder positioned in the body.
+    ///
+    /// Returns the header's parameters and the exit block.
+    fn enter_loop(
+        &mut self,
+        id: NodeId,
+        header: BlockId,
+        carried: &[u32],
+        condition: Option<NodeId>,
+        origin: &Origin,
+    ) -> Result<(Vec<ValueId>, BlockId), Diagnostic> {
         // The values entering the loop, in the order the parameters take them.
         let mut incoming = Vec::new();
-        for symbol in &carried {
+        for symbol in carried {
             let value = *self.bindings.get(symbol).ok_or_else(|| {
                 self.unsupported(id, "a loop assigning a name declared outside it")
             })?;
@@ -449,19 +500,34 @@ impl<'a> FuncBuilder<'a> {
             params.push(param);
         }
 
-        let cond = self.lower_expression(*condition)?;
         let body_block = self.new_block();
         let exit = self.new_block();
-        self.terminate(Terminator::Branch {
-            cond,
-            then_target: body_block,
-            then_args: Vec::new(),
-            else_target: exit,
-            else_args: Vec::new(),
-        });
+        match condition {
+            Some(condition) => {
+                let cond = self.lower_expression(condition)?;
+                self.terminate(Terminator::Branch {
+                    cond,
+                    then_target: body_block,
+                    then_args: Vec::new(),
+                    else_target: exit,
+                    else_args: Vec::new(),
+                });
+            }
+            // `for (;;)`. The exit block stays reachable only through a `return`
+            // inside the body, which is exactly what the source says.
+            None => self.terminate(Terminator::Jump {
+                target: body_block,
+                args: Vec::new(),
+            }),
+        }
 
         self.switch_to(body_block);
-        self.lower_statement(*body)?;
+        Ok((params, exit))
+    }
+
+    /// Close a loop: take the back edge, restore the carried names, and continue
+    /// after the loop.
+    fn close_loop(&mut self, header: BlockId, carried: &[u32], params: &[ValueId], exit: BlockId) {
         if !self.is_terminated() {
             // The back edge carries whatever the body left in each name.
             let updated: Vec<ValueId> =
@@ -472,16 +538,182 @@ impl<'a> FuncBuilder<'a> {
             });
         }
 
-        // After the loop the live value of a carried name is the header parameter,
-        // and the bindings must be put back to it. The body overwrote them with
-        // values defined in the body block — which the exit does not dominate, so
-        // using one after the loop is invalid SSA that reads whatever the last
-        // iteration happened to leave.
-        for (symbol, param) in carried.iter().zip(&params) {
+        // After the loop the live value of a carried name is the header
+        // parameter, and the bindings must be put back to it. The body
+        // overwrote them with values defined in the body block — which the exit
+        // does not dominate, so using one after the loop is invalid SSA that
+        // reads whatever the last iteration happened to leave.
+        for (symbol, param) in carried.iter().zip(params) {
             self.bindings.insert(*symbol, *param);
         }
         self.switch_to(exit);
+    }
+
+    /// `for (init; cond; update) body`.
+    ///
+    /// The same shape as a `while`, with two differences that matter. The
+    /// initializer runs once *before* the header, so a name it declares is in
+    /// scope at the header and is carried across the back edge — unlike a name
+    /// declared in the body, which is fresh each iteration. And the update runs
+    /// at the end of the body, so the back edge carries what it produced.
+    ///
+    /// A missing condition is `for (;;)`: the loop is entered unconditionally.
+    fn lower_for(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let Some([initializer, condition, update, body]) = self.for_parts(id) else {
+            return Err(self.unsupported(id, "a `for` of unexpected shape"));
+        };
+        let Some(body) = body else {
+            return Err(self.unsupported(id, "a `for` without a body"));
+        };
+
+        if let Some(initializer) = initializer {
+            if self.kind_of(initializer) == Some(syntax::VARIABLE_DECLARATION_LIST) {
+                self.lower_variable_statement(initializer)?;
+            } else {
+                self.lower_expression(initializer)?;
+            }
+        }
+
+        // The update assigns the loop variable too, so it counts toward what is
+        // carried. Missing it is how `i` ends up defined in the body and read
+        // from the header.
+        let mut carried = Vec::new();
+        self.assigned_symbols(body, &mut carried);
+        if let Some(update) = update {
+            self.assigned_symbols(update, &mut carried);
+        }
+        let mut declared = Vec::new();
+        self.declared_symbols(body, &mut declared);
+        carried.retain(|symbol| !declared.contains(symbol));
+
+        let header = self.new_block();
+        let origin = self.origin(id);
+        let (params, exit) = self.enter_loop(id, header, &carried, condition, &origin)?;
+
+        self.lower_statement(body)?;
+        if let Some(update) = update
+            && !self.is_terminated()
+        {
+            self.lower_expression(update)?;
+        }
+        self.close_loop(header, &carried, &params, exit);
         Ok(())
+    }
+
+    /// The four optional children of a `for`, in visitor order.
+    ///
+    /// [`Self::children`] returns only the ones that are present, so which is
+    /// which comes from the node's presence bitmask. Reading them positionally
+    /// would make `for (;; i++)` an infinite loop with `i++` as its condition.
+    fn for_parts(&self, id: NodeId) -> Option<[Option<NodeId>; 4]> {
+        let NodeData::Children { present, .. } = self.node(id).data else {
+            return None;
+        };
+        let mut children = self.children(id).into_iter();
+        let mut slots = [None; 4];
+        for (bit, slot) in slots.iter_mut().enumerate() {
+            if present & (1 << bit) != 0 {
+                *slot = children.next();
+            }
+        }
+        Some(slots)
+    }
+
+    /// `i++` / `i--`, whose value is what the name held *before* the step.
+    fn lower_postfix_unary(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let NodeData::Children { small, .. } = self.node(id).data else {
+            return Err(self.unsupported(id, "a step expression without operator data"));
+        };
+        let children = self.children(id);
+        let [operand] = children.as_slice() else {
+            return Err(self.unsupported(id, "a step expression of unexpected shape"));
+        };
+        // One bit, not the prefix table: `++` is 0 and `--` is 1.
+        let op = if small & syntax::postfix_operator::MASK == syntax::postfix_operator::MINUS_MINUS
+        {
+            BinOp::Sub
+        } else {
+            BinOp::Add
+        };
+        let before = self.lower_expression(*operand)?;
+        self.step(id, *operand, op, before)?;
+        Ok(before)
+    }
+
+    /// A bitwise operation, with the coercions the language requires.
+    ///
+    /// `a & b` is `ToInt32(a) & ToInt32(b)` reinterpreted as a number, and the
+    /// coercions are emitted as their own operations so the analysis can see
+    /// that their results are integers. `>>>` coerces its left operand unsigned;
+    /// the shift count is masked either way.
+    fn push_bitwise(
+        &mut self,
+        op: BinOp,
+        lhs: ValueId,
+        rhs: ValueId,
+        ty: HirType,
+        origin: &Origin,
+    ) -> ValueId {
+        let left_coercion = if matches!(op, BinOp::UShr) {
+            UnOp::ToUint32
+        } else {
+            UnOp::ToInt32
+        };
+        let left = self.push(
+            OpKind::Unary {
+                op: left_coercion,
+                operand: lhs,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let right = self.push(
+            OpKind::Unary {
+                op: UnOp::ToInt32,
+                operand: rhs,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        self.push(
+            OpKind::Binary {
+                op,
+                lhs: left,
+                rhs: right,
+            },
+            ty,
+            origin.clone(),
+        )
+    }
+
+    /// The shared half of `++`/`--`: add or subtract one and rebind the name.
+    fn step(
+        &mut self,
+        id: NodeId,
+        target: NodeId,
+        op: BinOp,
+        current: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "a step of unrepresentable type"))?;
+        let one = self.push(OpKind::ConstFloat(1.0), ty.clone(), origin.clone());
+        let stepped = self.push(
+            OpKind::Binary {
+                op,
+                lhs: current,
+                rhs: one,
+            },
+            ty,
+            origin,
+        );
+        let symbol = self
+            .node(target)
+            .symbol
+            .ok_or_else(|| self.unsupported(target, "a step of something that is not a name"))?;
+        self.bindings.insert(symbol.0, stepped);
+        Ok(stepped)
     }
 
     /// `if (c) { .. } else { .. }`.
@@ -645,6 +877,7 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::BLOCK) => self.lower_block(id),
             Some(syntax::IF_STATEMENT) => self.lower_if(id),
             Some(syntax::WHILE_STATEMENT) => self.lower_while(id),
+            Some(syntax::FOR_STATEMENT) => self.lower_for(id),
             Some(syntax::EXPRESSION_STATEMENT) => {
                 let Some(expression) = self.children(id).first().copied() else {
                     return Ok(());
@@ -677,6 +910,7 @@ impl<'a> FuncBuilder<'a> {
                 self.lower_expression(*inner)
             }
             Some(syntax::PREFIX_UNARY_EXPRESSION) => self.lower_prefix_unary(id),
+            Some(syntax::POSTFIX_UNARY_EXPRESSION) => self.lower_postfix_unary(id),
             Some(syntax::TRUE_KEYWORD) => {
                 let origin = self.origin(id);
                 Ok(self.push(OpKind::ConstBool(true), HirType::Bool, origin))
@@ -718,6 +952,22 @@ impl<'a> FuncBuilder<'a> {
         let [operand] = children.as_slice() else {
             return Err(self.unsupported(id, "a unary expression of unexpected shape"));
         };
+
+        // `++i` and `--i` step the name and evaluate to the *new* value, which
+        // is the only way they differ from the postfix forms.
+        if matches!(
+            small & syntax::prefix_operator::MASK,
+            syntax::prefix_operator::PLUS_PLUS | syntax::prefix_operator::MINUS_MINUS
+        ) {
+            let op =
+                if small & syntax::prefix_operator::MASK == syntax::prefix_operator::MINUS_MINUS {
+                    BinOp::Sub
+                } else {
+                    BinOp::Add
+                };
+            let current = self.lower_expression(*operand)?;
+            return self.step(id, *operand, op, current);
+        }
 
         let op = match small & syntax::prefix_operator::MASK {
             syntax::prefix_operator::PLUS => None,
@@ -887,6 +1137,36 @@ impl<'a> FuncBuilder<'a> {
             return Ok(value);
         }
 
+        // `x += e` is `x = x + e`: the operator applies, and the name rebinds.
+        // Spelling it out here rather than in a desugaring keeps one place that
+        // knows a bitwise operator needs its coercions.
+        if let Some(op) = compound_operator(self.kind_of(*operator).unwrap_or(0)) {
+            let current = self.lower_expression(*lhs_node)?;
+            let addend = self.lower_expression(*rhs_node)?;
+            let ty = self.type_of(id).ok_or_else(|| {
+                self.unsupported(id, "a compound assignment of unrepresentable type")
+            })?;
+            let origin = self.origin(id);
+            let updated = if bitwise_operator_of(op) {
+                self.push_bitwise(op, current, addend, ty, &origin)
+            } else {
+                self.push(
+                    OpKind::Binary {
+                        op,
+                        lhs: current,
+                        rhs: addend,
+                    },
+                    ty,
+                    origin,
+                )
+            };
+            let symbol = self.node(*lhs_node).symbol.ok_or_else(|| {
+                self.unsupported(*lhs_node, "compound assignment to a computed target")
+            })?;
+            self.bindings.insert(symbol.0, updated);
+            return Ok(updated);
+        }
+
         let lhs = self.lower_expression(*lhs_node)?;
         let rhs = self.lower_expression(*rhs_node)?;
         let ty = self
@@ -904,56 +1184,7 @@ impl<'a> FuncBuilder<'a> {
         // author writes exactly that.
         if let Some(op) = bitwise_operator(token) {
             let origin = self.origin(id);
-            let (left, right) = if matches!(op, BinOp::UShr) {
-                // `>>>` coerces its left operand unsigned; the count is masked
-                // either way.
-                (
-                    self.push(
-                        OpKind::Unary {
-                            op: UnOp::ToUint32,
-                            operand: lhs,
-                        },
-                        HirType::NUMBER,
-                        origin.clone(),
-                    ),
-                    self.push(
-                        OpKind::Unary {
-                            op: UnOp::ToInt32,
-                            operand: rhs,
-                        },
-                        HirType::NUMBER,
-                        origin.clone(),
-                    ),
-                )
-            } else {
-                (
-                    self.push(
-                        OpKind::Unary {
-                            op: UnOp::ToInt32,
-                            operand: lhs,
-                        },
-                        HirType::NUMBER,
-                        origin.clone(),
-                    ),
-                    self.push(
-                        OpKind::Unary {
-                            op: UnOp::ToInt32,
-                            operand: rhs,
-                        },
-                        HirType::NUMBER,
-                        origin.clone(),
-                    ),
-                )
-            };
-            return Ok(self.push(
-                OpKind::Binary {
-                    op,
-                    lhs: left,
-                    rhs: right,
-                },
-                ty,
-                origin,
-            ));
+            return Ok(self.push_bitwise(op, lhs, rhs, ty, &origin));
         }
 
         // `+` is not one operator. On numbers it is arithmetic; on strings it is
@@ -996,4 +1227,30 @@ const fn bitwise_operator(token: u16) -> Option<BinOp> {
         syntax::GREATER_THAN_GREATER_THAN_GREATER_THAN_TOKEN => BinOp::UShr,
         _ => return None,
     })
+}
+
+/// The operator a compound-assignment token applies.
+const fn compound_operator(token: u16) -> Option<BinOp> {
+    Some(match token {
+        syntax::PLUS_EQUALS_TOKEN => BinOp::Add,
+        syntax::MINUS_EQUALS_TOKEN => BinOp::Sub,
+        syntax::ASTERISK_EQUALS_TOKEN => BinOp::Mul,
+        syntax::SLASH_EQUALS_TOKEN => BinOp::Div,
+        syntax::PERCENT_EQUALS_TOKEN => BinOp::Rem,
+        syntax::AMPERSAND_EQUALS_TOKEN => BinOp::BitAnd,
+        syntax::BAR_EQUALS_TOKEN => BinOp::BitOr,
+        syntax::CARET_EQUALS_TOKEN => BinOp::BitXor,
+        syntax::LESS_THAN_LESS_THAN_EQUALS_TOKEN => BinOp::Shl,
+        syntax::GREATER_THAN_GREATER_THAN_EQUALS_TOKEN => BinOp::Shr,
+        syntax::GREATER_THAN_GREATER_THAN_GREATER_THAN_EQUALS_TOKEN => BinOp::UShr,
+        _ => return None,
+    })
+}
+
+/// Whether an operator needs the `ToInt32` coercions.
+const fn bitwise_operator_of(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr | BinOp::UShr
+    )
 }

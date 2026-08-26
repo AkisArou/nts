@@ -301,7 +301,7 @@ fn check_dominance(func: &Func, reachable: &FxHashSet<BlockId>, problems: &mut V
     }
 }
 
-fn operands(kind: &OpKind) -> Vec<ValueId> {
+pub(super) fn operands(kind: &OpKind) -> Vec<ValueId> {
     match kind {
         OpKind::Param(_)
         | OpKind::BlockParam(_)
@@ -316,7 +316,7 @@ fn operands(kind: &OpKind) -> Vec<ValueId> {
     }
 }
 
-fn terminator_operands(terminator: &Terminator) -> Vec<ValueId> {
+pub(super) fn terminator_operands(terminator: &Terminator) -> Vec<ValueId> {
     match terminator {
         Terminator::Return(value) => value.iter().copied().collect(),
         Terminator::Jump { args, .. } => args.clone(),
