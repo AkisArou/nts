@@ -87,6 +87,9 @@ use super::{BlockId, Func, HirType, Op, OpKind, Program, ValueId};
 pub struct Report {
     pub retains: usize,
     pub releases: usize,
+    /// Hand-offs that needed neither, because the consumer took the reference
+    /// the function was already holding.
+    pub moves: usize,
 }
 
 /// Insert retains and releases across a program.
@@ -96,6 +99,7 @@ pub fn insert(program: &mut Program) -> Report {
         let one = insert_into(func);
         report.retains += one.retains;
         report.releases += one.releases;
+        report.moves += one.moves;
     }
     report
 }
@@ -159,46 +163,7 @@ fn insert_into(func: &mut Func) -> Report {
 
     for (index, block) in blocks.into_iter().enumerate() {
         let at = BlockId(u32::try_from(index).unwrap_or(0));
-        let mut ops = Vec::with_capacity(block.ops.len());
-
-        for value in &block.ops {
-            let kind = func.values[value.0 as usize].kind.clone();
-
-            // A store takes its own reference to what it stores, and gives up
-            // the one the slot was already holding.
-            //
-            // The order is load-old, retain-new, store, release-old, and it is
-            // that order for one reason: `o.x = o.x` must not free the object
-            // between reading it and writing it back. Releasing after the store
-            // makes the self-assignment a no-op instead of a use-after-free.
-            //
-            // The load is safe on a slot that has never been written, because
-            // `nts_object_new` zeroes and `nts_release` ignores null. A store
-            // that is provably the first one -- every store a constructor makes
-            // is -- still pays for a load and a null test, which is a real cost
-            // and the obvious thing to remove next. It needs an analysis of
-            // which stores are initializing, and correctness does not.
-            if let OpKind::FieldSet { value: stored, .. } | OpKind::ArraySet { value: stored, .. } =
-                &kind
-                && counted(func, *stored)
-            {
-                let previous = load_slot(func, &mut ops, &kind);
-                retain(func, &mut ops, *stored, &mut report);
-                ops.push(*value);
-                if let Some(previous) = previous {
-                    release(func, &mut ops, previous, &mut report);
-                }
-                continue;
-            }
-
-            ops.push(*value);
-
-            // A producer that hands back a borrow is retained, so that every
-            // value this function owns is owned the same way.
-            if owned(func, *value) && !produces_owned(&kind) {
-                retain(func, &mut ops, *value, &mut report);
-            }
-        }
+        let (mut ops, moved) = count_ops(func, at, &block.ops, &live, &mut report);
 
         let edges = edges_of(&block.terminator);
         let mut terminator = block.terminator.clone();
@@ -207,6 +172,7 @@ fn insert_into(func: &mut Func) -> Report {
             // Leaving the function. What is returned is handed to the caller and
             // everything else is dropped -- and a value that is both is moved.
             let mut dying = ordered(func, live.available(at));
+            dying.retain(|value| !moved.contains(value));
             let transfers: Vec<ValueId> = super::operands_of_terminator(&block.terminator)
                 .into_iter()
                 .filter(|value| counted(func, *value))
@@ -224,7 +190,9 @@ fn insert_into(func: &mut Func) -> Report {
             for (slot, (successor, args)) in edges.into_iter().enumerate() {
                 let mut dying: Vec<ValueId> = ordered(func, live.available(at))
                     .into_iter()
-                    .filter(|value| !live.live_in(successor).contains(value))
+                    .filter(|value| {
+                        !live.live_in(successor).contains(value) && !moved.contains(value)
+                    })
                     .collect();
                 let transfers: Vec<ValueId> = args
                     .into_iter()
@@ -299,6 +267,216 @@ fn edges_of(terminator: &super::Terminator) -> Vec<(BlockId, Vec<ValueId>)> {
             (*else_target, else_args.clone()),
         ],
         super::Terminator::Return(_) | super::Terminator::Unreachable => Vec::new(),
+    }
+}
+
+/// One block's operations, with counting inserted around them.
+fn count_ops(
+    func: &mut Func,
+    at: BlockId,
+    original: &[ValueId],
+    live: &liveness::Liveness,
+    report: &mut Report,
+) -> (Vec<ValueId>, rustc_hash::FxHashSet<ValueId>) {
+    let mut ops = Vec::with_capacity(original.len());
+    let mut fresh = Fresh::entering(func, at);
+    let mut moved = rustc_hash::FxHashSet::default();
+
+    for value in original {
+        let kind = func.values[value.0 as usize].kind.clone();
+
+        // A store takes its own reference to what it stores, and gives up the
+        // one the slot was already holding.
+        //
+        // The order is load-old, retain-new, store, release-old, and it is that
+        // order for one reason: `o.x = o.x` must not free the object between
+        // reading it and writing it back. Releasing after the store makes the
+        // self-assignment a no-op instead of a use-after-free.
+        //
+        // A store writing over a zero skips the load and the release: there is
+        // nothing in the slot to give up. Every store an object literal or a
+        // constructor makes is one of those.
+        if let OpKind::FieldSet { value: stored, .. } | OpKind::ArraySet { value: stored, .. } =
+            &kind
+            && counted(func, *stored)
+        {
+            let previous = if fresh.initializing(func, &kind) {
+                None
+            } else {
+                load_slot(func, &mut ops, &kind)
+            };
+            // Storing is a hand-off like any other, so it can be a move: if the
+            // value dies in this block it will be released at the end of it, and
+            // the slot may as well take the reference the local was holding.
+            //
+            // At most one store per value claims the death, and it claims it
+            // before the terminator gets a chance to -- which is why `moved` is
+            // subtracted from the dying set before transfers are settled. Two
+            // consumers cancelling against one death would release once and
+            // hand out two references.
+            // `owned` is not redundant with `dies_in`. A parameter is borrowed,
+            // so it is never in a release set at all -- there is no release to
+            // cancel against, and skipping the retain would hand the slot a
+            // reference the caller is still counting as its own.
+            if owned(func, *stored) && live.dies_in(at, *stored) && moved.insert(*stored) {
+                report.moves += 1;
+            } else {
+                retain(func, &mut ops, *stored, report);
+            }
+            fresh.observe(func, *value, &kind);
+            ops.push(*value);
+            if let Some(previous) = previous {
+                release(func, &mut ops, previous, report);
+            }
+            continue;
+        }
+        fresh.observe(func, *value, &kind);
+
+        ops.push(*value);
+
+        // A producer that hands back a borrow is retained, so that every value
+        // this function owns is owned the same way.
+        if owned(func, *value) && !produces_owned(&kind) {
+            retain(func, &mut ops, *value, report);
+        }
+    }
+    (ops, moved)
+}
+
+/// Which slots are known to hold nothing yet.
+///
+/// # Why this is worth an analysis
+///
+/// Every store to a reference field has to give up what the slot was holding,
+/// and finding that out costs a load, a null test and a call. A store that is
+/// *initializing* -- writing over a zero -- owes none of that, and almost every
+/// store in a program is one: an object literal writes each field once, an array
+/// literal writes each element once, and a constructor writes every field of an
+/// object `new` allocated a moment earlier. Paying for the general case
+/// everywhere would make a class with reference fields cost several times what
+/// it should.
+///
+/// # What it knows, and what it does not
+///
+/// One block at a time, in order, which makes it obviously sound and misses
+/// exactly one thing worth naming: a constructor that writes a field from inside
+/// an `if` gets no benefit, because the store is not in the entry block. Fixing
+/// that is a forward dataflow over the CFG with union at joins -- a slot is
+/// known-zero only where it is zero on *every* path -- and the reason it is not
+/// here is that a wrong answer does not fail loudly. Too eager and a reference
+/// leaks; too eager the other way is worse. Block-local is the version that can
+/// be read and believed.
+///
+/// A reference stops being fresh the moment it is handed to anything that could
+/// store through it. Reading a field, reading an element and asking for a length
+/// are not that; a call, a store, an edge and a return are.
+#[derive(Debug, Default)]
+struct Fresh {
+    /// Objects and arrays whose slots this block still knows about.
+    bases: rustc_hash::FxHashSet<ValueId>,
+    /// Slots already written, so the second store to one is not initializing.
+    written: rustc_hash::FxHashSet<(ValueId, u64)>,
+}
+
+impl Fresh {
+    /// What is known on entry to a block.
+    fn entering(func: &Func, block: BlockId) -> Self {
+        let mut fresh = Self::default();
+        // A constructor's receiver arrives freshly allocated. Only in the entry
+        // block: a later block may be reached by a path that already wrote.
+        // Parameter `i` is value `i`, which the whole backend relies on -- but
+        // it is checked here rather than assumed, because being wrong about
+        // which value the receiver is would mean treating some other object's
+        // stores as initializing.
+        if func.initializes_receiver
+            && block == BlockId(0)
+            && matches!(
+                func.values.first().map(|op| &op.kind),
+                Some(OpKind::Param(0))
+            )
+        {
+            fresh.bases.insert(ValueId(0));
+        }
+        fresh
+    }
+
+    /// Whether this store is writing over a zero.
+    fn initializing(&self, func: &Func, store: &OpKind) -> bool {
+        match store {
+            OpKind::FieldSet { object, field, .. } => {
+                self.bases.contains(object) && !self.written.contains(&(*object, u64::from(*field)))
+            }
+            OpKind::ArraySet { array, index, .. } => {
+                self.bases.contains(array)
+                    && slot_of(func, *index)
+                        .is_some_and(|slot| !self.written.contains(&(*array, slot)))
+            }
+            _ => false,
+        }
+    }
+
+    /// Take an operation into account.
+    fn observe(&mut self, func: &Func, value: ValueId, kind: &OpKind) {
+        match kind {
+            OpKind::ObjectNew | OpKind::ArrayNew { .. } => {
+                self.bases.insert(value);
+            }
+            OpKind::FieldSet { object, field, .. } => {
+                self.written.insert((*object, u64::from(*field)));
+            }
+            OpKind::ArraySet { array, index, .. } => match slot_of(func, *index) {
+                Some(slot) => {
+                    self.written.insert((*array, slot));
+                }
+                // An index this pass cannot name could be any of them, so the
+                // whole array stops being something it knows about.
+                None => {
+                    self.bases.remove(array);
+                }
+            },
+            _ => {}
+        }
+        for escaped in escaping_operands(kind) {
+            self.bases.remove(&escaped);
+        }
+    }
+}
+
+/// The operands an operation hands to something that could store through them.
+///
+/// Reading through a reference is not handing it anywhere, which is why the
+/// container of a load is absent and the value of a store is present.
+fn escaping_operands(kind: &OpKind) -> Vec<ValueId> {
+    match kind {
+        OpKind::FieldGet { .. } | OpKind::Length(_) => Vec::new(),
+        OpKind::ArrayGet { index, .. } => vec![*index],
+        OpKind::FieldSet { value, .. } => vec![*value],
+        OpKind::ArraySet { index, value, .. } => vec![*index, *value],
+        other => super::verify::operands(other),
+    }
+}
+
+/// An array index as a slot number, when it is a constant.
+///
+/// A computed index names no particular slot, and the caller treats that as
+/// naming all of them.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the guards make the conversion exact: non-negative, whole, and \
+              within `u32`, which is every index an array can have"
+)]
+fn slot_of(func: &Func, index: ValueId) -> Option<u64> {
+    match func.values[index.0 as usize].kind {
+        OpKind::ConstInt(value) => u64::try_from(value).ok(),
+        // Lowering produces a float constant for a literal index, since a
+        // TypeScript number is a double until something proves otherwise.
+        OpKind::ConstFloat(value)
+            if value >= 0.0 && value.fract() == 0.0 && value <= f64::from(u32::MAX) =>
+        {
+            Some(u64::from(value as u32))
+        }
+        _ => None,
     }
 }
 

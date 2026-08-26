@@ -763,6 +763,7 @@ mod tests {
             blocks,
             origin: origin(),
             exported: true,
+            initializes_receiver: false,
         }
     }
 

@@ -475,7 +475,11 @@ impl<'a> FuncBuilder<'a> {
             .node(class)
             .modifiers
             .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
-        Ok(self.finish(name, params, return_type, origin, exported))
+        let mut func = self.finish(name, params, return_type, origin, exported);
+        // A constructor runs over an object `new` allocated a moment ago, so
+        // every field it writes is writing over a zero.
+        func.initializes_receiver = is_constructor;
+        Ok(func)
     }
 
     fn lower_function(&mut self, id: NodeId) -> Result<Func, Diagnostic> {
@@ -558,6 +562,10 @@ impl<'a> FuncBuilder<'a> {
             blocks,
             origin,
             exported,
+            // Set by the caller: `finish` does not know what it is assembling,
+            // and a seventh positional bool next to `exported` would be a
+            // parameter waiting to be passed in the wrong order.
+            initializes_receiver: false,
         }
     }
 

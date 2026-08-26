@@ -241,6 +241,7 @@ mod tests {
             ],
             origin: origin(),
             exported: true,
+            initializes_receiver: false,
         }
     }
 
@@ -334,6 +335,7 @@ mod tests {
             ],
             origin: origin(),
             exported: true,
+            initializes_receiver: false,
         };
 
         let live = analyze(&func);

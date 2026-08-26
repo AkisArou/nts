@@ -159,6 +159,19 @@ pub struct Func {
     /// Exported from its module, and therefore a root: reachability starts here
     /// and the symbol survives into the artifact.
     pub exported: bool,
+    /// Parameter zero arrives freshly allocated, with every field still zero.
+    ///
+    /// True for a constructor and nothing else. It holds by construction rather
+    /// than by analysis: `new C(...)` is the only thing that emits a call to
+    /// `C#constructor`, and it allocates the object immediately before. There is
+    /// no way in TypeScript to run a constructor over an object that already
+    /// exists.
+    ///
+    /// What it buys is that a constructor's first store to a field is an
+    /// initializing store — it does not have to load and release whatever the
+    /// slot held, because the slot held nothing. Without this a class costs a
+    /// load, a null test and a call per reference field per construction.
+    pub initializes_receiver: bool,
 }
 
 impl Func {

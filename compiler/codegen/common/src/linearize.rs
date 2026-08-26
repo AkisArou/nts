@@ -68,6 +68,7 @@ mod tests {
             blocks,
             origin: origin(),
             exported: false,
+            initializes_receiver: false,
         }
     }
 
