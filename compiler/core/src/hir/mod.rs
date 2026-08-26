@@ -674,6 +674,19 @@ pub fn prepare_with(
     snapshot: &SemanticSnapshot,
     options: &Options<'_>,
 ) -> Result<Prepared, Vec<verify::Invalid>> {
+    let prepared = prepare_unverified(snapshot, options);
+    verify::verify(&prepared.program)?;
+    Ok(prepared)
+}
+
+/// Everything `prepare_with` does, without the final check that it worked.
+///
+/// Exists so that an invalid program can be *read*. A verifier that returns only
+/// a list of complaints is a poor debugging tool, because the thing worth
+/// looking at is the program the complaints are about. Nothing that emits code
+/// should call this.
+#[must_use]
+pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
     let lowered = lower::lower(snapshot);
     let mut program = lowered.program;
@@ -745,8 +758,7 @@ pub fn prepare_with(
         })
         .count();
 
-    verify::verify(&program)?;
-    Ok(Prepared {
+    Prepared {
         program,
         diagnostics: lowered.diagnostics,
         specialized,
@@ -755,7 +767,7 @@ pub fn prepare_with(
         checks_kept,
         pruned,
         counting,
-    })
+    }
 }
 
 #[cfg(test)]

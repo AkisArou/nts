@@ -256,8 +256,33 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         bail!("the program does not typecheck");
     }
 
-    let lowered = hir::lower::lower(&snapshot);
-    for func in &lowered.program.funcs {
+    // `--prepared` shows the program the backend actually receives, which is
+    // where every pass's output can be read at once; `--rc` adds the counting.
+    // Raw lowering stays the default because it is what maps onto the source.
+    let want_passes = std::env::args().any(|arg| arg == "--prepared" || arg == "--rc");
+    let (program, diagnostics) = if want_passes {
+        let options = hir::Options {
+            provider: if std::env::args().any(|arg| arg == "--rc") {
+                hir::Provider::ReferenceCounting
+            } else {
+                hir::Provider::NoGc
+            },
+            ..hir::Options::default()
+        };
+        // An invalid program is exactly the one worth reading, so the
+        // complaints are printed and the program is dumped anyway.
+        if let Err(problems) = hir::prepare_with(&snapshot, &options) {
+            for problem in &problems {
+                eprintln!("invalid HIR: {problem:?}");
+            }
+        }
+        let prepared = hir::prepare_unverified(&snapshot, &options);
+        (prepared.program, prepared.diagnostics)
+    } else {
+        let lowered = hir::lower::lower(&snapshot);
+        (lowered.program, lowered.diagnostics)
+    };
+    for func in &program.funcs {
         let params: Vec<String> = func
             .params
             .iter()
@@ -290,16 +315,16 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         println!("}}");
     }
 
-    for diagnostic in &lowered.diagnostics {
+    for diagnostic in &diagnostics {
         println!("  -- {} {}", diagnostic.code, diagnostic.message);
     }
     println!(
         "\n{} function(s), {}",
-        lowered.program.funcs.len(),
-        if lowered.is_complete() {
+        program.funcs.len(),
+        if diagnostics.is_empty() {
             "nothing refused".to_owned()
         } else {
-            format!("{} construct(s) refused", lowered.diagnostics.len())
+            format!("{} construct(s) refused", diagnostics.len())
         },
     );
     Ok(())

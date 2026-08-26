@@ -445,9 +445,14 @@ impl<'a> FuncBuilder<'a> {
             .find(|child| self.kind_of(*child) == Some(syntax::BLOCK))
             .ok_or_else(|| self.unsupported(member, "a method without a body"))?;
 
-        // A constructor returns the instance, so that `new C(...)` is one call.
+        // A constructor returns nothing. It could return the instance -- it has
+        // one in hand -- but the caller allocated that instance and already
+        // names it, so returning it hands the caller a second reference to an
+        // object it is already holding. Under reference counting that is a
+        // retain and a release per construction for no gain, and under any
+        // provider it is a copy the C compiler has to see through.
         let return_type = if is_constructor {
-            instance
+            HirType::Void
         } else {
             self.children(member)
                 .into_iter()
@@ -462,9 +467,6 @@ impl<'a> FuncBuilder<'a> {
         };
 
         self.lower_block(body)?;
-        if is_constructor && !self.is_terminated() {
-            self.terminate(Terminator::Return(Some(receiver)));
-        }
         self.terminate(Terminator::Return(None));
 
         // A method is reachable from outside exactly when its class is, so the
@@ -1546,8 +1548,10 @@ impl<'a> FuncBuilder<'a> {
 
     /// `new C(a, b)` — allocate, then run the constructor over it.
     ///
-    /// The constructor returns the instance, so this is one call rather than an
-    /// allocation followed by a statement whose result must be threaded through.
+    /// The allocation is the value. The constructor writes through the pointer
+    /// it is handed and returns nothing, so `new` is an allocation and a call
+    /// rather than an allocation, a call, and a pointer round-trip that every
+    /// stage downstream has to prove is the identity.
     fn lower_new(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let children = self.children(id);
         let callee = *children
@@ -1576,14 +1580,15 @@ impl<'a> FuncBuilder<'a> {
         for argument in children.iter().skip(1) {
             args.push(self.lower_expression(*argument)?);
         }
-        Ok(self.push(
+        self.push(
             OpKind::Call {
                 callee: Callee::Direct(format!("{class}#constructor")),
                 args,
             },
-            ty,
+            HirType::Void,
             origin,
-        ))
+        );
+        Ok(object)
     }
 
     /// `xs[i]`, as a read. Writes are handled by the assignment lowering.

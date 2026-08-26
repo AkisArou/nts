@@ -61,3 +61,37 @@ export function eitherOr(pick: number, step: number): number {
   }
   return b.advance();
 }
+
+// Ownership crossing a call boundary, which is where borrowed parameters could
+// go wrong if they were wrong. The callee allocates and returns, so its `return`
+// retains and the caller receives something it owns. The caller then lends that
+// object to `bump`, which holds no reference of its own -- and does not need
+// one, because the caller cannot release it until after `bump` returns.
+export function makeCounter(step: number): Counter {
+  return new Counter(step);
+}
+
+function bump(c: Counter, times: number): number {
+  for (let i = 0; i < times; i++) {
+    c.advance();
+  }
+  return c.count;
+}
+
+export function borrowChain(step: number, times: number): number {
+  const c = makeCounter(step);
+  return bump(c, times);
+}
+
+// A managed value carried around a loop as a block parameter, replaced every
+// iteration. The old one dies on the back edge and the new one is handed on, so
+// this is the case that separates a loop which touches the count every
+// iteration from one that does not.
+export function chain(times: number): number {
+  let c = makeCounter(1);
+  for (let i = 0; i < times; i++) {
+    c = makeCounter(i);
+    c.advance();
+  }
+  return c.count;
+}

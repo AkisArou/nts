@@ -9,9 +9,10 @@
 //!
 //! - A value whose producer already returns a reference — an allocation, a
 //!   concatenation, a call — starts owned.
-//! - A value that is *borrowed* from somewhere that outlives the read — a
-//!   parameter, a field, an element — is retained at its definition, so it is
-//!   owned like any other.
+//! - A value read out of somewhere that outlives the read — a field, an element
+//!   — is retained at its definition, so it is owned like any other.
+//! - A *parameter* is the exception: it is borrowed, never retained on entry and
+//!   never released on exit. See below.
 //! - Every consumption retains: storing into a field, passing on an edge,
 //!   returning. The consumer's reference is its own.
 //! - Every value is released where its live range ends.
@@ -37,6 +38,46 @@
 //! A terminator with no successors is the simple case: the function is leaving,
 //! so everything it still holds is released. The returned value was retained for
 //! the return, so what the caller receives survives it.
+//!
+//! # Parameters are borrowed
+//!
+//! A callee could retain each managed parameter on entry and release it on exit,
+//! which is uniform and costs two atomic operations per argument per call. It is
+//! also unnecessary, because the caller is already holding one.
+//!
+//! The argument is a value the caller owns — that is the invariant this module
+//! maintains for every value — and the caller's release for it is placed either
+//! at the end of the block containing the call or on an edge leaving that block.
+//! Both are strictly after the call returns, and the call is synchronous. So the
+//! object cannot reach zero while the callee is running, and the callee needs no
+//! reference of its own.
+//!
+//! What the callee does with the parameter is unaffected. Storing it into a
+//! field retains, returning it retains, passing it along an edge retains — the
+//! rules above are about consumption, and they do not change. Only the entry
+//! retain and the exit release go away, and with them the whole convention of a
+//! function taking a reference just to give it back.
+//!
+//! This is the one place where correctness rests on an argument about the caller
+//! rather than on a local rule, which is why it is spelled out rather than
+//! assumed.
+//!
+//! # Handing a reference on is a move, not a copy
+//!
+//! A value that is passed on *and* dies where it is passed on does not need a
+//! retain and a release: it needs neither. The consumer takes the reference this
+//! function was already holding. `return new C()` is the everyday case — retain
+//! for the caller, release because the local is dying, both on the same value
+//! with nothing in between.
+//!
+//! Cancelling the pair is safe here for a reason worth stating, because it is
+//! not safe in general. Suppose the same edge also releases an object `o` that
+//! holds the moved value in a field, and that releasing `o` drops what its
+//! fields hold. Without the retain, could the move leave the value at zero
+//! before the consumer sees it? No — the store into `o`'s field took its own
+//! reference, so the value is held twice and the local's reference is genuinely
+//! the local's to give. That is the convention at the top of this module doing
+//! the work it exists to do.
 
 use super::liveness;
 use super::{BlockId, Func, HirType, Op, OpKind, Program, ValueId};
@@ -64,7 +105,7 @@ fn ordered(func: &Func, values: &rustc_hash::FxHashSet<ValueId>) -> Vec<ValueId>
     let mut counted_values: Vec<ValueId> = values
         .iter()
         .copied()
-        .filter(|value| counted(func, *value))
+        .filter(|value| owned(func, *value))
         .collect();
     counted_values.sort_unstable();
     counted_values
@@ -78,6 +119,15 @@ fn ordered(func: &Func, values: &rustc_hash::FxHashSet<ValueId>) -> Vec<ValueId>
 fn counted(func: &Func, value: ValueId) -> bool {
     let op = &func.values[value.0 as usize];
     op.ty.is_managed() && !matches!(op.kind, OpKind::ConstString(_))
+}
+
+/// Whether this function holds a reference of its own to a value.
+///
+/// Everything counted is owned except a parameter, which the caller holds for
+/// the length of the call. An owned value is retained where it is produced and
+/// released where it dies; a borrowed one is neither.
+fn owned(func: &Func, value: ValueId) -> bool {
+    counted(func, value) && !matches!(func.values[value.0 as usize].kind, OpKind::Param(_))
 }
 
 /// Whether a producer already yields a reference the function owns.
@@ -132,55 +182,68 @@ fn insert_into(func: &mut Func) -> Report {
 
             ops.push(*value);
 
-            // A borrowed producer is retained so that every value is owned.
-            if counted(func, *value) && !produces_owned(&kind) {
+            // A producer that hands back a borrow is retained, so that every
+            // value this function owns is owned the same way.
+            if owned(func, *value) && !produces_owned(&kind) {
                 retain(func, &mut ops, *value, &mut report);
             }
         }
 
-        // Transfers first: the successor, or the caller, takes its own
-        // reference before this function gives any of them up.
-        for transferred in super::operands_of_terminator(&block.terminator) {
-            if counted(func, transferred) {
-                retain(func, &mut ops, transferred, &mut report);
-            }
-        }
-
-        let successors = block.terminator.successors();
-        // With one successor the edge cannot be critical, so the releases can go
-        // at the end of this block; with more, each edge needs its own.
-        let single = successors.len() == 1;
+        let edges = edges_of(&block.terminator);
         let mut terminator = block.terminator.clone();
 
-        if successors.is_empty() {
-            // Leaving the function, so everything it still holds goes.
-            for value in ordered(func, live.available(at)) {
+        if edges.is_empty() {
+            // Leaving the function. What is returned is handed to the caller and
+            // everything else is dropped -- and a value that is both is moved.
+            let mut dying = ordered(func, live.available(at));
+            let transfers: Vec<ValueId> = super::operands_of_terminator(&block.terminator)
+                .into_iter()
+                .filter(|value| counted(func, *value))
+                .collect();
+            for value in settle(&transfers, &mut dying) {
+                retain(func, &mut ops, value, &mut report);
+            }
+            for value in dying {
                 release(func, &mut ops, value, &mut report);
             }
         } else {
-            for successor in successors {
-                let dying: Vec<ValueId> = ordered(func, live.available(at))
+            // With one edge it cannot be critical, so its work can go at the end
+            // of this block; with more, each edge needs a block of its own.
+            let single = edges.len() == 1;
+            for (slot, (successor, args)) in edges.into_iter().enumerate() {
+                let mut dying: Vec<ValueId> = ordered(func, live.available(at))
                     .into_iter()
                     .filter(|value| !live.live_in(successor).contains(value))
                     .collect();
-                if dying.is_empty() {
+                let transfers: Vec<ValueId> = args
+                    .into_iter()
+                    .filter(|value| counted(func, *value))
+                    .collect();
+                let retains = settle(&transfers, &mut dying);
+                if retains.is_empty() && dying.is_empty() {
                     continue;
                 }
+                let mut edge_ops = Vec::new();
                 if single {
+                    for value in retains {
+                        retain(func, &mut ops, value, &mut report);
+                    }
                     for value in dying {
                         release(func, &mut ops, value, &mut report);
                     }
                 } else {
-                    let landing = BlockId(
-                        u32::try_from(original_count + split_blocks.len()).unwrap_or(u32::MAX),
-                    );
-                    let mut edge_ops = Vec::new();
+                    for value in retains {
+                        retain(func, &mut edge_ops, value, &mut report);
+                    }
                     for value in dying {
                         release(func, &mut edge_ops, value, &mut report);
                     }
+                    let landing = BlockId(
+                        u32::try_from(original_count + split_blocks.len()).unwrap_or(u32::MAX),
+                    );
                     // The arguments travel with the jump, so the split block
                     // forwards exactly what the edge carried.
-                    let args = retarget(&mut terminator, successor, landing);
+                    let args = retarget(&mut terminator, slot, landing);
                     split_blocks.push(super::Block {
                         params: Vec::new(),
                         ops: edge_ops,
@@ -205,14 +268,56 @@ fn insert_into(func: &mut Func) -> Report {
     report
 }
 
+/// The edges leaving a block, each with the arguments it carries.
+///
+/// Arguments belong to an edge and not to the terminator: a branch's two arms
+/// pass different things, and where a value's reference goes depends on which
+/// arm runs. A `Branch` condition is a `bool` and so is never counted, which is
+/// why it does not appear here.
+fn edges_of(terminator: &super::Terminator) -> Vec<(BlockId, Vec<ValueId>)> {
+    match terminator {
+        super::Terminator::Jump { target, args } => vec![(*target, args.clone())],
+        super::Terminator::Branch {
+            then_target,
+            then_args,
+            else_target,
+            else_args,
+            ..
+        } => vec![
+            (*then_target, then_args.clone()),
+            (*else_target, else_args.clone()),
+        ],
+        super::Terminator::Return(_) | super::Terminator::Unreachable => Vec::new(),
+    }
+}
+
+/// Cancel each transfer against a death of the same value, leaving the transfers
+/// that still need a retain. What is cancelled is a move.
+fn settle(transfers: &[ValueId], dying: &mut Vec<ValueId>) -> Vec<ValueId> {
+    let mut retains = Vec::new();
+    for value in transfers {
+        if let Some(at) = dying.iter().position(|d| d == value) {
+            // Passed on and dying here: the consumer takes the reference this
+            // function already holds, so neither operation is emitted. One
+            // death cancels one transfer, which is what makes `f(v, v)` right.
+            dying.remove(at);
+        } else {
+            retains.push(*value);
+        }
+    }
+    retains
+}
+
 /// Send one edge through a new block, and hand back the arguments it carried.
 ///
 /// The arguments move to the new block's jump: they are read where control
 /// actually leaves, and the values are still available there because the block
-/// they came from dominates it.
-fn retarget(terminator: &mut super::Terminator, from: BlockId, to: BlockId) -> Vec<ValueId> {
+/// they came from dominates it. The edge is named by position rather than by
+/// target, because a branch can name one block on both arms and those two edges
+/// are not interchangeable.
+fn retarget(terminator: &mut super::Terminator, slot: usize, to: BlockId) -> Vec<ValueId> {
     match terminator {
-        super::Terminator::Jump { target, args } if *target == from => {
+        super::Terminator::Jump { target, args } => {
             *target = to;
             std::mem::take(args)
         }
@@ -223,21 +328,15 @@ fn retarget(terminator: &mut super::Terminator, from: BlockId, to: BlockId) -> V
             else_args,
             ..
         } => {
-            // A branch can name one block on both edges. Only the first is
-            // retargeted here; the second keeps its own releases and its own
-            // split, because the two edges die differently or they would not
-            // both be here.
-            if *then_target == from {
+            if slot == 0 {
                 *then_target = to;
                 std::mem::take(then_args)
-            } else if *else_target == from {
+            } else {
                 *else_target = to;
                 std::mem::take(else_args)
-            } else {
-                Vec::new()
             }
         }
-        _ => Vec::new(),
+        super::Terminator::Return(_) | super::Terminator::Unreachable => Vec::new(),
     }
 }
 

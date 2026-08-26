@@ -14,13 +14,23 @@
 //!
 //! ```text
 //! live_out(b) = union of live_in(s) for every successor s
-//! live_in(b)  = used(b) ∪ (live_out(b) \ defined(b))
+//! live_in(b)  = (used(b) ∪ live_out(b)) \ defined(b)
 //! ```
 //!
 //! SSA makes `defined` trivial — a value is defined once, in one block — and
 //! block parameters are defined by the block that declares them, not by the
 //! edges that supply them. An argument on an edge is *used* by the block that
 //! jumps, which is where it is read.
+//!
+//! The subtraction covers `used` and not only `live_out`, which is the whole
+//! content of the textbook's "upward-exposed uses". A value defined in a block
+//! and read by that same block's terminator — every loop-carried value is one,
+//! since the back edge passes it — is not live on entry: it does not exist yet.
+//! Writing `used ∪ (live_out \ defined)` instead makes such a value live at the
+//! top of its own loop, and therefore *available* at the loop header, where it
+//! is not yet defined. Dominance says a block cannot name it there, so the
+//! mistake shows up as a release the verifier rejects rather than as anything
+//! subtle — but only once a program carries an object around a loop.
 
 use rustc_hash::FxHashSet;
 
@@ -95,10 +105,10 @@ pub fn analyze(func: &Func) -> Liveness {
             }
 
             let mut entering = out.clone();
+            entering.extend(used[index].iter().copied());
             for value in &defined[index] {
                 entering.remove(value);
             }
-            entering.extend(used[index].iter().copied());
 
             if out != live_out[index] || entering != live_in[index] {
                 live_out[index] = out;
@@ -335,5 +345,27 @@ mod tests {
         // stays live around the back edge -- which is exactly what one backward
         // pass in block order would miss.
         assert!(live.live_in(BlockId(2)).contains(&ValueId(0)));
+
+        // `%3` is defined in the body and read by the body's own terminator, so
+        // it is not live on entry to the body: it does not exist yet. Getting
+        // this wrong makes it live in the body, therefore live out of the
+        // header, therefore *available* at the header -- a block that cannot
+        // name it, because the definition does not dominate. Under reference
+        // counting that becomes a release the SSA verifier rejects, which is a
+        // long way from the mistake. Every loop that carries an object has this
+        // shape.
+        assert!(!live.live_in(BlockId(2)).contains(&ValueId(3)));
+        assert!(!live.live_in(BlockId(1)).contains(&ValueId(3)));
+        assert!(!live.available(BlockId(1)).contains(&ValueId(3)));
+        // It is available in the body and dies there. Not "live out": the back
+        // edge *reads* it, and a read is where a live range ends, not something
+        // that extends it past the terminator. The header's parameter is a
+        // different value that the edge supplies. This is what lets reference
+        // counting hand the reference on as a move -- the value is transferred
+        // and dying at the same point, so it needs neither a retain nor a
+        // release.
+        assert!(!live.live_out(BlockId(2)).contains(&ValueId(3)));
+        assert!(live.available(BlockId(2)).contains(&ValueId(3)));
+        assert!(live.dies_in(BlockId(2), ValueId(3)));
     }
 }

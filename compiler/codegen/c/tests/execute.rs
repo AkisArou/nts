@@ -806,6 +806,8 @@ double run(double step, double times);
 double scaled(double step, double times, double factor);
 double twoCounters(double a, double b);
 double eitherOr(double pick, double step);
+double borrowChain(double step, double times);
+double chain(double times);
 int main(void) {{
     check("run(3,4)", run(3, 4), 12);
     check("scaled(2,5,10)", scaled(2, 5, 10), 100);
@@ -836,6 +838,8 @@ fn reference_counting_balances_and_still_computes_the_right_answers() {
 double run(double step, double times);
 double twoCounters(double a, double b);
 double eitherOr(double pick, double step);
+double borrowChain(double step, double times);
+double chain(double times);
 int main(void) {{
     size_t before = nts_live_count();
     check("run(3,4)", run(3, 4), 12);
@@ -868,6 +872,31 @@ int main(void) {{
         printf("ok no bytes held\n");
     }}
 
+    // Ownership crossing a call boundary in both directions: `makeCounter`
+    // hands its reference to `borrowChain`, which lends the object to `bump`
+    // and holds it throughout. A callee that retained what it was handed and
+    // forgot to give it back would show up here and nowhere else.
+    check("borrowChain(3,4)", borrowChain(3, 4), 12);
+    for (int i = 0; i < 500; i++) {{ borrowChain(3, 4); }}
+    if (nts_live_count() != 0 || nts_live_bytes() != 0) {{
+        printf("FAIL borrowed across calls leaks: %zu objects, %zu bytes\n",
+               nts_live_count(), nts_live_bytes());
+        failures++;
+    }} else {{
+        printf("ok references move across call boundaries\n");
+    }}
+
+    // A thousand objects allocated and dropped through one loop-carried slot.
+    // If the back edge leaked, this would end holding every one of them.
+    check("chain(1000)", chain(1000), 999);
+    if (nts_live_count() != 0 || nts_live_bytes() != 0) {{
+        printf("FAIL loop-carried slot leaks: %zu objects, %zu bytes\n",
+               nts_live_count(), nts_live_bytes());
+        failures++;
+    }} else {{
+        printf("ok loop-carried references are released\n");
+    }}
+
     // Each arm drops the object the other arm keeps.
     check("eitherOr(1,5)", eitherOr(1, 5), 5);
     check("eitherOr(0,5)", eitherOr(0, 5), 6);
@@ -893,6 +922,14 @@ int main(void) {{
     assert!(printed.contains("ok no bytes held"), "{printed}");
     assert!(
         printed.contains("ok divergent paths release on both arms"),
+        "{printed}",
+    );
+    assert!(
+        printed.contains("ok references move across call boundaries"),
+        "{printed}",
+    );
+    assert!(
+        printed.contains("ok loop-carried references are released"),
         "{printed}",
     );
     assert!(printed.contains("twoCounters(7,3) = 706"), "{printed}");
