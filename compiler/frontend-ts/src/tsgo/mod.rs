@@ -51,9 +51,9 @@ use proto::{
     DiagnosticResponse, DocumentIdentifier, GetDiagnosticsParams, GetResolvedSignatureParams,
     GetSignaturePropertyParams, GetSignaturesOfTypeParams, GetSourceFileParams,
     GetSymbolsAtLocationsParams, GetTypeAtLocationsParams, GetTypePropertyParams,
-    GetTypesOfSymbolsParams, InitializeResponse, NodeHandle, ProjectHandle, SignatureKind,
-    SignatureResponse, SnapshotHandle, SourceFileMetadata, SymbolResponse, TypeResponse,
-    UpdateSnapshotParams, UpdateSnapshotResponse,
+    GetTypesOfSymbolsParams, IndexInfoResponse, InitializeResponse, NodeHandle, ProjectHandle,
+    SignatureKind, SignatureResponse, SnapshotHandle, SourceFileMetadata, SymbolResponse,
+    TypeResponse, UpdateSnapshotParams, UpdateSnapshotResponse,
 };
 use wire::{Frame, MessageType, WireError, read_frame, write_frame};
 
@@ -502,6 +502,23 @@ impl Client {
         )
     }
 
+    /// Index signatures of a type.
+    pub fn index_infos_of_type(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<Vec<IndexInfoResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_INDEX_INFOS_OF_TYPE,
+            &CheckerTypeParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+            },
+        )
+    }
+
     /// Base types of a class or interface type.
     ///
     /// Answers an empty list for a type with no heritage, which is the common
@@ -514,6 +531,27 @@ impl Client {
     ) -> Result<Vec<TypeResponse>, TsgoError> {
         self.request(
             proto::method::GET_BASE_TYPES,
+            &CheckerTypeParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+            },
+        )
+    }
+
+    /// Whether a type is a tuple.
+    ///
+    /// Checked before the array path: a tuple is an array-like reference too, and
+    /// treating one as an array loses its arity — the property that lets it be
+    /// laid out flat rather than as a pointer and a length.
+    pub fn is_tuple_type(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<bool, TsgoError> {
+        self.request(
+            proto::method::IS_TUPLE_TYPE,
             &CheckerTypeParams {
                 snapshot,
                 project: project.clone(),
@@ -779,15 +817,16 @@ impl SemanticSource for TsgoApi {
                 project,
                 interned,
                 symbol_ids,
+                file_bases.clone(),
             );
             if let Some(budget) = self.decompose {
                 decomposed = Some(deep.run(&mut snapshot, seeds, budget)?);
             }
             if let Some(budget) = self.resolve_calls {
-                resolved = Some(deep.resolve_calls(&mut snapshot, &file_bases, budget)?);
+                resolved = Some(deep.resolve_calls(&mut snapshot, budget)?);
             }
             if let Some(budget) = self.fold_constants {
-                folded = Some(deep.fold_constants(&mut snapshot, &file_bases, budget)?);
+                folded = Some(deep.fold_constants(&mut snapshot, budget)?);
             }
         }
 

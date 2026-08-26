@@ -147,6 +147,7 @@ fn literal_or_structured(
 /// renumbers a kind should fail loudly rather than silently mis-identify nodes.
 pub mod syntax {
     pub const NUMERIC_LITERAL: u16 = 8;
+    pub const QUESTION_TOKEN: u16 = 57;
     pub const IDENTIFIER: u16 = 79;
     pub const CONST_KEYWORD: u16 = 86;
     pub const DEFAULT_KEYWORD: u16 = 89;

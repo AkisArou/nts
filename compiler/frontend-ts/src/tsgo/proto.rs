@@ -28,6 +28,7 @@ pub mod method {
     pub const GET_SEMANTIC_DIAGNOSTICS: &str = "getSemanticDiagnostics";
 
     pub const GET_BASE_TYPES: &str = "getBaseTypes";
+    pub const GET_INDEX_INFOS_OF_TYPE: &str = "getIndexInfosOfType";
     pub const GET_CONSTANT_VALUE: &str = "getConstantValue";
     pub const GET_PARAMETERS_OF_SIGNATURE: &str = "getParametersOfSignature";
     pub const GET_EXPORTS_OF_MODULE: &str = "getExportsOfModule";
@@ -282,6 +283,10 @@ pub struct SymbolResponse {
     pub name: String,
     #[serde(default)]
     pub flags: u32,
+    /// `ast.CheckFlags`. Carries facts the checker computed rather than facts the
+    /// source wrote — readonly-by-mapped-type lives here, not in a modifier.
+    #[serde(default)]
+    pub check_flags: u32,
     /// Where the symbol is declared. More than one for a merged declaration.
     #[serde(default)]
     pub declarations: Vec<NodeHandle>,
@@ -471,4 +476,28 @@ pub struct SourceFileMetadata {
     /// Resolved from a package rather than written by the project.
     #[serde(default)]
     pub is_from_external_library: bool,
+}
+
+/// `ast.CheckFlags`. Only the bits read here are named.
+pub mod check_flags {
+    /// Readonly as the checker computed it, including via a mapped type.
+    pub const READONLY: u32 = 1 << 3;
+    pub const OPTIONAL_PARAMETER: u32 = 1 << 14;
+    pub const REST_PARAMETER: u32 = 1 << 15;
+}
+
+/// `ast.SymbolFlags`, for the bits decomposition reads.
+pub mod symbol_flags {
+    /// Declared `x?: T`.
+    pub const OPTIONAL: u32 = 1 << 24;
+}
+
+/// One index signature of a type.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexInfoResponse {
+    pub key_type: TypeResponse,
+    pub value_type: TypeResponse,
+    #[serde(default)]
+    pub is_readonly: bool,
 }

@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 9;
+pub const SCHEMA_VERSION: u32 = 10;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -71,6 +71,13 @@ pub struct SemanticSnapshot {
     pub signatures: Vec<SignatureRecord>,
     /// Indexed by [`NodeId`]. Flattened from tsgo's encoded AST.
     pub nodes: Vec<NodeRecord>,
+    /// Index signatures of a type — `[key: string]: T`.
+    ///
+    /// The single fact that decides representation: a type with an index
+    /// signature cannot be a flat struct with fixed field offsets, because its
+    /// keys are not known at compile time. Missing it means emitting a struct for
+    /// something that needs a map, and every dynamic key silently misses.
+    pub index_signatures: FxHashMap<TypeId, Vec<IndexSignature>>,
     /// Base types of a class or interface type, in declaration order.
     ///
     /// `extends` first, then `implements`. Needed because the property list of a
@@ -353,11 +360,32 @@ pub enum TypeKind {
     },
 }
 
+/// An index signature: `[key: K]: V`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IndexSignature {
+    pub key: TypeId,
+    pub value: TypeId,
+    pub readonly: bool,
+}
+
 /// One member of an object type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PropertyRecord {
     pub name: String,
     pub ty: TypeId,
+    /// Never written after construction.
+    ///
+    /// Semantic, not syntactic. A property made readonly by `Readonly<T>` or a
+    /// mapped type carries no `readonly` keyword on any declaration, so the
+    /// modifier alone misses it. Directly load-bearing: `ACC_FINAL` on the JVM,
+    /// `const` in C, hoistable loads, and no write barrier on a reference field
+    /// that is never stored to.
+    pub readonly: bool,
+    /// Declared `x?: T`.
+    ///
+    /// Changes layout: an optional property needs a presence bit or an undefined
+    /// slot, so it cannot share a representation with a required one.
+    pub optional: bool,
     /// Declared on this type rather than inherited.
     ///
     /// The checker returns a flattened member list, so without this a backend

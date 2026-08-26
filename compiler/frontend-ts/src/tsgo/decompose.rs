@@ -27,13 +27,15 @@
 //! that hits it says so instead of quietly returning a partial type graph.
 
 use nts_semantic_schema::{
-    CallTarget, ConstantValue, NodeId, NodeKind, ParameterRecord, PropertyRecord, SemanticSnapshot,
-    SignatureId, SignatureRecord, SymbolId, TypeId, TypeKind,
+    CallTarget, ConstantValue, DeclarationModifiers, IndexSignature, NodeId, NodeKind,
+    ParameterRecord, PropertyRecord, SemanticSnapshot, SignatureId, SignatureRecord, SymbolId,
+    TypeId, TypeKind,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::proto::{
-    NodeHandle, ProjectHandle, SignatureResponse, SnapshotHandle, TypeResponse, signature_flags,
+    NodeHandle, ProjectHandle, SignatureResponse, SnapshotHandle, SymbolResponse, TypeResponse,
+    check_flags, signature_flags, symbol_flags,
 };
 use super::types::{self, flags, syntax};
 use super::{Client, TsgoError};
@@ -78,6 +80,8 @@ pub struct Decomposer<'a> {
     done: FxHashSet<u32>,
     /// tsgo symbol id → arena index, for mapping a type's declaring symbol.
     symbols: FxHashMap<u32, SymbolId>,
+    /// Where each compiled file's nodes begin, for resolving declaration handles.
+    file_bases: Vec<(String, u32)>,
 }
 
 impl std::fmt::Debug for Decomposer<'_> {
@@ -101,6 +105,7 @@ impl<'a> Decomposer<'a> {
         project: ProjectHandle,
         interned: FxHashMap<u32, TypeId>,
         symbols: FxHashMap<u32, SymbolId>,
+        file_bases: Vec<(String, u32)>,
     ) -> Self {
         Self {
             client,
@@ -109,6 +114,7 @@ impl<'a> Decomposer<'a> {
             interned,
             done: FxHashSet::default(),
             symbols,
+            file_bases,
         }
     }
 
@@ -197,6 +203,16 @@ impl<'a> Decomposer<'a> {
         // An array is an object type, so this check has to come first. Decomposing
         // one as an ordinary object yields `length`, `push`, `map` and the rest of
         // the prototype rather than an element type.
+        // A tuple is also an object type, and also a reference, so it has to be
+        // separated before either the array or the property path. Its element
+        // types are its type arguments; its arity is fixed, which is exactly what
+        // makes a flat layout possible where an array needs a length.
+        if self.client.is_tuple_type(self.handle, &self.project, ty)? {
+            let args = self.client.type_arguments(self.handle, &self.project, ty)?;
+            let ids = self.intern_all(snapshot, &args, worklist, stats, seeded);
+            return Ok(TypeKind::Tuple(ids));
+        }
+
         if self.client.is_array_type(self.handle, &self.project, ty)? {
             let args = self.client.type_arguments(self.handle, &self.project, ty)?;
             let ids = self.intern_all(snapshot, &args, worklist, stats, seeded);
@@ -235,6 +251,31 @@ impl<'a> Decomposer<'a> {
             }
         }
 
+        // An index signature decides representation before any property does: a
+        // type with one cannot be a flat struct, because its keys are not known
+        // at compile time.
+        let indexes = self
+            .client
+            .index_infos_of_type(self.handle, &self.project, ty)?;
+        if !indexes.is_empty() {
+            let signatures = indexes
+                .iter()
+                .map(|info| {
+                    let key = self.intern_one(snapshot, &info.key_type, worklist, stats, seeded);
+                    let value =
+                        self.intern_one(snapshot, &info.value_type, worklist, stats, seeded);
+                    IndexSignature {
+                        key,
+                        value,
+                        readonly: info.is_readonly,
+                    }
+                })
+                .collect();
+            if let Some(&slot) = self.interned.get(&ty) {
+                snapshot.index_signatures.insert(slot, signatures);
+            }
+        }
+
         if properties.is_empty() {
             // `{}` really has no properties, and recording that is different from
             // failing to look.
@@ -243,7 +284,6 @@ impl<'a> Decomposer<'a> {
             });
         }
 
-        let names: Vec<String> = properties.iter().map(|s| s.name.clone()).collect();
         let symbol_ids: Vec<u32> = properties.iter().map(|s| s.id).collect();
         // The one batch endpoint in this pass: every property's type in one
         // exchange, so a wide object costs the same as a narrow one.
@@ -256,12 +296,22 @@ impl<'a> Decomposer<'a> {
         // list is flattened and says nothing about origin.
         let own = Self::own_member_names(snapshot, ty, &self.interned);
         Ok(TypeKind::Object {
-            properties: names
-                .into_iter()
+            properties: properties
+                .iter()
                 .zip(ids)
-                .map(|(name, ty)| PropertyRecord {
-                    own: own.contains(&name),
-                    name,
+                .map(|(symbol, ty)| PropertyRecord {
+                    own: own.contains(&symbol.name),
+                    // Two halves, and neither alone is enough. `CheckFlagsReadonly`
+                    // covers only *computed* symbols — a property made readonly by
+                    // `Readonly<T>` or a mapped type — and says nothing about a
+                    // plain `readonly host: string`. The modifier covers exactly
+                    // the opposite case. Measured: `Config.host` is readonly by
+                    // keyword and carries no check flag; `Frozen.a` is readonly by
+                    // mapped type and has no keyword on any declaration.
+                    readonly: symbol.check_flags & check_flags::READONLY != 0
+                        || Self::declared_readonly(snapshot, &symbol.name),
+                    optional: symbol.flags & symbol_flags::OPTIONAL != 0,
+                    name: symbol.name.clone(),
                     ty,
                 })
                 .collect(),
@@ -279,7 +329,6 @@ impl<'a> Decomposer<'a> {
     pub fn resolve_calls(
         &mut self,
         snapshot: &mut SemanticSnapshot,
-        file_bases: &[(String, u32)],
         budget: Budget,
     ) -> Result<DecomposeStats, TsgoError> {
         let before = self.client.round_trips();
@@ -297,7 +346,7 @@ impl<'a> Decomposer<'a> {
                     return None;
                 }
                 let arena = u32::try_from(index).unwrap_or(u32::MAX);
-                let (path, base) = file_of(file_bases, arena)?;
+                let (path, base) = file_of(&self.file_bases, arena)?;
                 Some((
                     NodeId(arena),
                     NodeHandle(types::node_handle(arena - base + 1, kind, path)),
@@ -322,7 +371,7 @@ impl<'a> Decomposer<'a> {
             let callee = signature
                 .declaration
                 .as_ref()
-                .and_then(|handle| declaration_node(handle, file_bases));
+                .and_then(|handle| declaration_node(handle, &self.file_bases));
 
             snapshot.call_targets.insert(
                 node,
@@ -336,6 +385,38 @@ impl<'a> Decomposer<'a> {
 
         stats.round_trips = self.client.round_trips() - before;
         Ok(stats)
+    }
+
+    /// Whether a parameter's declaration carries a `?`.
+    ///
+    /// The AST half of optionality, needed because the checker does not set an
+    /// optional bit on the symbols `getParametersOfSignature` returns.
+    fn declared_optional(&self, snapshot: &SemanticSnapshot, symbol: &SymbolResponse) -> bool {
+        symbol.declarations.iter().any(|handle| {
+            declaration_node(handle, &self.file_bases).is_some_and(|node| {
+                snapshot.nodes[node.0 as usize]
+                    .children
+                    .iter()
+                    .any(|child| {
+                        snapshot.nodes[child.0 as usize].kind
+                            == NodeKind::Syntax(syntax::QUESTION_TOKEN)
+                    })
+            })
+        })
+    }
+
+    /// Whether a member is declared `readonly` on the type's own declaration.
+    ///
+    /// The syntactic half of readonly. Walks the declaring node's members looking
+    /// for one with this name that carries the modifier.
+    fn declared_readonly(snapshot: &SemanticSnapshot, name: &str) -> bool {
+        snapshot.nodes.iter().any(|node| {
+            node.modifiers.contains(DeclarationModifiers::READONLY)
+                && node
+                    .children
+                    .iter()
+                    .any(|c| snapshot.nodes[c.0 as usize].text.as_deref() == Some(name))
+        })
     }
 
     /// Names of the members a type declares itself.
@@ -434,7 +515,6 @@ impl<'a> Decomposer<'a> {
     pub fn fold_constants(
         &mut self,
         snapshot: &mut SemanticSnapshot,
-        file_bases: &[(String, u32)],
         budget: Budget,
     ) -> Result<DecomposeStats, TsgoError> {
         let before = self.client.round_trips();
@@ -452,7 +532,7 @@ impl<'a> Decomposer<'a> {
                     return None;
                 }
                 let arena = u32::try_from(index).unwrap_or(u32::MAX);
-                let (path, base) = file_of(file_bases, arena)?;
+                let (path, base) = file_of(&self.file_bases, arena)?;
                 Some((
                     NodeId(arena),
                     NodeHandle(types::node_handle(arena - base + 1, kind, path)),
@@ -526,8 +606,10 @@ impl<'a> Decomposer<'a> {
             .copied()
             .unwrap_or(TypeId(0));
 
-        // Only the last parameter can be a rest parameter, and the flag is on the
-        // signature rather than the parameter.
+        // Optionality and rest-ness come from each parameter's own check flags,
+        // not from the signature-level rest bit: that only says *some* parameter
+        // is rest, and says nothing at all about which are optional.
+
         let has_rest = signature.flags & signature_flags::HAS_REST_PARAMETER != 0;
         let last = parameters.len().saturating_sub(1);
 
@@ -544,10 +626,13 @@ impl<'a> Decomposer<'a> {
                     symbol.name.clone()
                 },
                 ty,
-                // Optionality is not on `SignatureResponse`. Recording every
-                // parameter as required would be a claim the checker never made,
-                // so it stays false and is a named gap rather than a guess.
-                optional: false,
+                // Neither `SymbolFlagsOptional` nor `CheckFlagsOptionalParameter`
+                // is set on the symbols this endpoint returns. The `?` is in the
+                // AST: a `QuestionToken` child of the parameter's declaration.
+                optional: symbol.flags & symbol_flags::OPTIONAL != 0
+                    || self.declared_optional(snapshot, symbol),
+                // Rest-ness is only on the signature, and only the last parameter
+                // can be one.
                 rest: has_rest && index == last,
             })
             .collect();
@@ -563,6 +648,27 @@ impl<'a> Decomposer<'a> {
             is_async: false,
         });
         Ok(id)
+    }
+
+    /// Intern one response, queueing it if it needs decomposing.
+    fn intern_one(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        response: &TypeResponse,
+        worklist: &mut Vec<u32>,
+        stats: &mut DecomposeStats,
+        seeded: &FxHashSet<u32>,
+    ) -> TypeId {
+        self.intern_all(
+            snapshot,
+            std::slice::from_ref(response),
+            worklist,
+            stats,
+            seeded,
+        )
+        .first()
+        .copied()
+        .unwrap_or(TypeId(0))
     }
 
     /// Intern responses into the arena and queue any that need decomposing.
