@@ -165,6 +165,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nts-codegen-common"
+version = "0.0.0"
+dependencies = [
+ "nts-core",
+ "nts-diagnostics",
+ "nts-semantic-schema",
+ "rustc-hash",
+]
+
+[[package]]
 name = "nts-core"
 version = "0.0.0"
 dependencies = [
