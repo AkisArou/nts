@@ -949,6 +949,26 @@ impl<'a> FuncBuilder<'a> {
                 self.lower_expression(*inner)
             }
             Some(syntax::CONDITIONAL_EXPRESSION) => self.lower_conditional(id),
+            Some(syntax::ARRAY_LITERAL_EXPRESSION) => self.lower_array_literal(id),
+            Some(syntax::ELEMENT_ACCESS_EXPRESSION) => self.lower_element_access(id),
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION) => self.lower_property_access(id),
+            // `x!`, `x as T` and `x satisfies T` are claims about types. The
+            // first two narrow what the checker believes; the third asserts
+            // without narrowing. None of them computes anything, so each lowers
+            // to its operand — but the *claim* is not free: an `x!` on an
+            // element access is the author asserting the index is in bounds, and
+            // the bounds check is what makes that assertion checked rather than
+            // assumed. `docs/any-unknown.md` calls this out as the general rule
+            // for assertions.
+            Some(
+                syntax::NON_NULL_EXPRESSION | syntax::AS_EXPRESSION | syntax::SATISFIES_EXPRESSION,
+            ) => {
+                let children = self.children(id);
+                let Some(inner) = children.first() else {
+                    return Err(self.unsupported(id, "an assertion with no operand"));
+                };
+                self.lower_expression(*inner)
+            }
             Some(syntax::PREFIX_UNARY_EXPRESSION) => self.lower_prefix_unary(id),
             Some(syntax::POSTFIX_UNARY_EXPRESSION) => self.lower_postfix_unary(id),
             Some(syntax::TRUE_KEYWORD) => {
@@ -969,6 +989,124 @@ impl<'a> FuncBuilder<'a> {
     /// value — no slot and no store, because nothing here can reassign it yet.
     /// When assignment arrives, a `let` will need one and a `const` still will
     /// not, which is what the snapshot's variable kind is for.
+    /// `[a, b, c]`.
+    ///
+    /// An allocation and a store per element. The length is known here, so it
+    /// is a constant, which is what lets the analysis prove that every one of
+    /// these stores is in bounds — the checks below are elided before they cost
+    /// anything.
+    fn lower_array_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "an array literal of unrepresentable type"))?;
+        if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
+            return Err(self.unsupported(id, "an array literal that is not an array"));
+        }
+        let origin = self.origin(id);
+        let elements = self.children(id);
+
+        #[allow(clippy::cast_precision_loss)]
+        let count = elements.len() as f64;
+        let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
+        let array = self.push(OpKind::ArrayNew { length }, ty, origin.clone());
+
+        for (index, element) in elements.iter().enumerate() {
+            let value = self.lower_expression(*element)?;
+            #[allow(clippy::cast_precision_loss)]
+            let position = index as f64;
+            let index = self.push(
+                OpKind::ConstFloat(position),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            self.push(
+                OpKind::ArraySet {
+                    array,
+                    index,
+                    value,
+                    checked: true,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        Ok(array)
+    }
+
+    /// `[]`, with the element type supplied from outside.
+    fn lower_empty_array(&mut self, id: NodeId, ty: HirType) -> Result<ValueId, Diagnostic> {
+        if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
+            return Err(self.unsupported(id, "an empty array literal that is not an array"));
+        }
+        let origin = self.origin(id);
+        let length = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        Ok(self.push(OpKind::ArrayNew { length }, ty, origin))
+    }
+
+    /// `xs[i]`, as a read. Writes are handled by the assignment lowering.
+    fn lower_element_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let (array, index) = self.element_access_parts(id)?;
+        // The element's representation comes from the *array*, not from the
+        // access node's type. Under `noUncheckedIndexedAccess` — which is what
+        // TypeScript actually knows — that type is `number | undefined`, and
+        // there is no `undefined` to put in a double. What is stored in the
+        // slot is a number; the `!` the author wrote is the claim that one is
+        // there, and the bounds test is what checks it.
+        let HirType::Managed(ManagedType::Array(element)) =
+            self.values[array.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(id, "indexing something that is not an array"));
+        };
+        let ty = *element;
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::ArrayGet {
+                array,
+                index,
+                checked: true,
+            },
+            ty,
+            origin,
+        ))
+    }
+
+    /// The array and index of an `xs[i]`, lowered in source order.
+    fn element_access_parts(&mut self, id: NodeId) -> Result<(ValueId, ValueId), Diagnostic> {
+        let children = self.children(id);
+        let [array, index] = children.as_slice() else {
+            return Err(self.unsupported(id, "an element access of unexpected shape"));
+        };
+        let array_value = self.lower_expression(*array)?;
+        if !matches!(
+            self.values[array_value.0 as usize].ty,
+            HirType::Managed(ManagedType::Array(_))
+        ) {
+            return Err(self.unsupported(id, "indexing something that is not an array"));
+        }
+        let index_value = self.lower_expression(*index)?;
+        Ok((array_value, index_value))
+    }
+
+    /// `xs.length`. Other members are not lowered yet.
+    fn lower_property_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let children = self.children(id);
+        let [object, member] = children.as_slice() else {
+            return Err(self.unsupported(id, "a property access of unexpected shape"));
+        };
+        if self.node(*member).text.as_deref() != Some("length") {
+            return Err(self.unsupported(id, "this property"));
+        }
+        let value = self.lower_expression(*object)?;
+        if !matches!(
+            self.values[value.0 as usize].ty,
+            HirType::Managed(ManagedType::Array(_))
+        ) {
+            return Err(self.unsupported(id, "`length` of something that is not an array"));
+        }
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::ArrayLen(value), HirType::NUMBER, origin))
+    }
+
     /// `c ? a : b`, and the short-circuiting `a && b` / `a || b`.
     ///
     /// All three are one shape: evaluate a condition, take one of two paths, and
@@ -1214,7 +1352,20 @@ impl<'a> FuncBuilder<'a> {
             let Some(initializer) = initializer else {
                 return Err(self.unsupported(declaration, "a declaration without an initializer"));
             };
-            let value = self.lower_expression(initializer)?;
+            // An empty array literal has type `never[]`: with no elements the
+            // checker has nothing to infer from. The declaration does know —
+            // `const out: number[] = []` says so — so the annotation supplies
+            // what the literal cannot.
+            let value = if self.kind_of(initializer) == Some(syntax::ARRAY_LITERAL_EXPRESSION)
+                && self.children(initializer).is_empty()
+            {
+                let declared = self.type_of(name).ok_or_else(|| {
+                    self.unsupported(declaration, "an empty array of unrepresentable type")
+                })?;
+                self.lower_empty_array(initializer, declared)?
+            } else {
+                self.lower_expression(initializer)?
+            };
             let symbol = self
                 .node(name)
                 .symbol
@@ -1406,6 +1557,25 @@ impl<'a> FuncBuilder<'a> {
         // value. With the name bound directly there is no slot to store into and
         // nothing to emit — the rebinding *is* the assignment.
         if self.kind_of(*operator) == Some(syntax::EQUALS_TOKEN) {
+            // `xs[i] = v` writes through a reference; there is no name to
+            // rebind, and the store is the whole of the effect.
+            if self.kind_of(*lhs_node) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
+                let (array, index) = self.element_access_parts(*lhs_node)?;
+                let value = self.lower_expression(*rhs_node)?;
+                let origin = self.origin(id);
+                self.push(
+                    OpKind::ArraySet {
+                        array,
+                        index,
+                        value,
+                        checked: true,
+                    },
+                    HirType::Void,
+                    origin,
+                );
+                return Ok(value);
+            }
+
             let value = self.lower_expression(*rhs_node)?;
             let symbol = self
                 .node(*lhs_node)

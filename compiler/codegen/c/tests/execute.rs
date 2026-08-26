@@ -23,6 +23,17 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 /// Returns `None` when the toolchain is unavailable, so a machine without clang
 /// or a tsgo build skips rather than fails.
 fn run(example: &str, harness: &str) -> Option<String> {
+    let output = build_and_run(example, harness)?;
+    assert!(
+        output.status.success(),
+        "binary failed:\n{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    Some(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Compile and run, returning the result whether or not it succeeded.
+fn build_and_run(example: &str, harness: &str) -> Option<std::process::Output> {
     let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
         // Announced, because a skip that prints nothing is indistinguishable
         // from a pass — and this is the test whose passing means the most.
@@ -86,15 +97,11 @@ fn run(example: &str, harness: &str) -> Option<String> {
         emitted.writer.text()
     );
 
-    let output = std::process::Command::new(&binary)
-        .output()
-        .expect("compiled binary should run");
-    assert!(
-        output.status.success(),
-        "binary failed:\n{}",
-        String::from_utf8_lossy(&output.stdout)
-    );
-    Some(String::from_utf8_lossy(&output.stdout).into_owned())
+    Some(
+        std::process::Command::new(&binary)
+            .output()
+            .expect("compiled binary should run"),
+    )
 }
 
 fn which_clang() -> Option<()> {
@@ -543,4 +550,73 @@ int main(void) {{
     assert!(output.contains("orDefault(NaN) = 42"), "{output}");
     assert!(output.contains("andThen(NaN,9) = nan"), "{output}");
     assert!(output.contains("isTruthy(-0) = 0"), "{output}");
+}
+
+#[test]
+fn arrays_allocate_index_and_measure() {
+    // Allocation through the NoGC provider, stores, loads, and `length` as a
+    // loop bound. `total` and `squares` build their own arrays, so they are
+    // self-contained; `sum` and `at` receive one, which is where the length is
+    // genuinely unknown to the compiler.
+    //
+    // Expected values came from running this `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+double total(void);
+double squares(void);
+double empty(void);
+int main(void) {{
+    check("total()", total(), 15);
+    // 0+1+4+9+16+25+36+49
+    check("squares()", squares(), 140);
+    check("empty()", empty(), 0);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("arrays", &harness) else {
+        return;
+    };
+    assert!(output.contains("squares() = 140"), "{output}");
+    assert!(output.contains("empty() = 0"), "{output}");
+}
+
+#[test]
+fn an_out_of_bounds_index_traps_rather_than_reading_past_the_end() {
+    // The safety claim. `xs[i]!` is the author asserting the index is in
+    // bounds, and a native compiler has no `undefined` to return when it is
+    // not -- so the assertion is *checked*, and a false one stops the program
+    // instead of reading whatever follows the array.
+    //
+    // Reading past the end would not fail on its own: the bump allocator hands
+    // out large chunks, so the memory is mapped and the read would quietly
+    // return whatever happened to be next. That is exactly why this needs a
+    // test rather than an argument.
+    let harness = format!(
+        r#"{CHECK}
+double readAt(double i);
+int main(void) {{
+    // In bounds first, so a failure here is not mistaken for the trap firing.
+    check("readAt(2)", readAt(2), 30);
+    printf("about to read out of bounds\n");
+    fflush(stdout);
+    readAt(3);
+    printf("FAIL: kept going past the end\n");
+    return 0;
+}}
+"#
+    );
+    let Some(output) = build_and_run("arrays", &harness) else {
+        return;
+    };
+    assert!(
+        !output.status.success(),
+        "an out-of-bounds read should stop the program, not continue:\n{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let printed = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        printed.contains("about to read out of bounds") && !printed.contains("FAIL"),
+        "{printed}"
+    );
 }

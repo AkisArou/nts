@@ -295,6 +295,32 @@ pub enum OpKind {
     },
     /// Return, with a value unless the function is `void`.
     Return(Option<ValueId>),
+
+    /// Allocate an array. The element type is carried by the operation's own
+    /// type, which is a [`ManagedType::Array`].
+    ArrayNew {
+        length: ValueId,
+    },
+    /// An array's element count.
+    ArrayLen(ValueId),
+    /// `array[index]`.
+    ArrayGet {
+        array: ValueId,
+        index: ValueId,
+        /// Whether the index still has to be tested at run time.
+        ///
+        /// A *decision*, recorded here rather than left to the backend, so that
+        /// eliminating a check is visible in the HIR and can be tested for. See
+        /// [`super::bounds`].
+        checked: bool,
+    },
+    /// `array[index] = value`. Produces nothing.
+    ArraySet {
+        array: ValueId,
+        index: ValueId,
+        value: ValueId,
+        checked: bool,
+    },
 }
 
 /// What a call reaches.

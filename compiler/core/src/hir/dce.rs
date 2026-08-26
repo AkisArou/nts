@@ -28,7 +28,12 @@ pub fn eliminate(func: &mut Func) -> usize {
             live.insert(operand);
         }
         for value in &block.ops {
-            if matches!(func.values[value.0 as usize].kind, OpKind::Call { .. }) {
+            // A call may have effects and a store certainly does, so both stay
+            // whatever reads their results.
+            if matches!(
+                func.values[value.0 as usize].kind,
+                OpKind::Call { .. } | OpKind::ArraySet { .. }
+            ) {
                 live.insert(*value);
             }
         }

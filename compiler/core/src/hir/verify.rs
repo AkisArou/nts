@@ -312,6 +312,15 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         OpKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
         OpKind::Unary { operand, .. } | OpKind::Convert(operand) => vec![*operand],
         OpKind::Call { args, .. } => args.clone(),
+        OpKind::ArrayNew { length } => vec![*length],
+        OpKind::ArrayLen(array) => vec![*array],
+        OpKind::ArrayGet { array, index, .. } => vec![*array, *index],
+        OpKind::ArraySet {
+            array,
+            index,
+            value,
+            ..
+        } => vec![*array, *index, *value],
         OpKind::Return(value) => value.iter().copied().collect(),
     }
 }

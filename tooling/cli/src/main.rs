@@ -330,6 +330,30 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             )
         }
         OpKind::Convert(operand) => format!("%{index} = convert %{} : {ty}", operand.0),
+        OpKind::ArrayNew { length } => format!("%{index} = array.new %{} : {ty}", length.0),
+        OpKind::ArrayLen(array) => format!("%{index} = array.len %{} : {ty}", array.0),
+        OpKind::ArrayGet {
+            array,
+            index: at,
+            checked,
+        } => format!(
+            "%{index} = array.get{} %{}[%{}] : {ty}",
+            if *checked { "" } else { " unchecked" },
+            array.0,
+            at.0
+        ),
+        OpKind::ArraySet {
+            array,
+            index: at,
+            value,
+            checked,
+        } => format!(
+            "array.set{} %{}[%{}] = %{}",
+            if *checked { "" } else { " unchecked" },
+            array.0,
+            at.0,
+            value.0
+        ),
         OpKind::Unary { op: un, operand } => {
             let operator = match un {
                 nts_core::hir::UnOp::Neg => "neg",
