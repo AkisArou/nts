@@ -690,3 +690,40 @@ int main(void) {{
     assert!(output.contains("wideLength = 5"), "{output}");
     assert!(output.contains("mixedEquals = 1"), "{output}");
 }
+
+#[test]
+fn objects_are_flat_structs_with_fields_at_fixed_offsets() {
+    // A declared shape becomes a real C struct, so `p.x` is a load at an offset
+    // the C compiler chose -- not a hash lookup and not a hand-computed offset.
+    //
+    // `distanceSquared` and `shifted` build their object through `make`, whose
+    // literal has an *anonymous* type. TypeScript is structurally typed, so that
+    // type and `Point` share one layout; without that they would be two structs
+    // of identical shape that could not be passed to each other.
+    //
+    // Expected values came from running this `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+double distanceSquared(double x, double y);
+double shifted(double x, double y, double by);
+double explicit(void);
+double scaledBy(double v);
+int main(void) {{
+    check("distanceSquared(3,4)", distanceSquared(3, 4), 25);
+    // (1+10)*1000 + (2+10)
+    check("shifted(1,2,10)", shifted(1, 2, 10), 11012);
+    // Written out rather than shorthand -- both spellings reach the same field.
+    check("explicit()", explicit(), 34);
+    // A `readonly` field is `const` in the struct, written once at construction
+    // through the qualifier and read normally after.
+    check("scaledBy(6)", scaledBy(6), 42);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("objects", &harness) else {
+        return;
+    };
+    assert!(output.contains("shifted(1,2,10) = 11012"), "{output}");
+    assert!(output.contains("scaledBy(6) = 42"), "{output}");
+}

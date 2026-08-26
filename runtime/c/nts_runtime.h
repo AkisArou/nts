@@ -28,8 +28,17 @@
  * describes the shape rather than the contents -- so there is one per element
  * type, not one per object. `traced` is the reference-field map in its simplest
  * form: an array of scalars and a string have no references to trace. */
+/* Which shape the descriptor describes. A variable-length object reads `size`
+ * as bytes per element and takes its count from the header; a fixed one reads
+ * it as the whole object. Without the tag the same field would mean two things
+ * and nothing would say which. */
+#define NTS_KIND_ARRAY 0u
+#define NTS_KIND_STRING 1u
+#define NTS_KIND_OBJECT 2u
+
 typedef struct NtsDescriptor {
-    uint32_t element_size;
+    uint32_t kind;
+    uint32_t size;
     uint32_t traced;
     const char *name;
 } NtsDescriptor;
@@ -69,6 +78,7 @@ extern const NtsDescriptor nts_desc_string2;
 
 void *nts_alloc(size_t bytes);
 NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length);
+NtsHeader *nts_object_new(const NtsDescriptor *descriptor);
 void nts_bounds(double index, uint32_t length);
 NtsString *nts_concat(const NtsString *a, const NtsString *b);
 bool nts_string_eq(const NtsString *a, const NtsString *b);

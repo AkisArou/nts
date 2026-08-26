@@ -340,6 +340,15 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::Convert(operand) => format!("%{index} = convert %{} : {ty}", operand.0),
         OpKind::ArrayNew { length } => format!("%{index} = array.new %{} : {ty}", length.0),
         OpKind::Length(array) => format!("%{index} = array.len %{} : {ty}", array.0),
+        OpKind::ObjectNew => format!("%{index} = object.new : {ty}"),
+        OpKind::FieldGet { object, field } => {
+            format!("%{index} = field.get %{}.{field} : {ty}", object.0)
+        }
+        OpKind::FieldSet {
+            object,
+            field,
+            value,
+        } => format!("field.set %{}.{field} = %{}", object.0, value.0),
         OpKind::ArrayGet {
             array,
             index: at,

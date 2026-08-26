@@ -19,8 +19,8 @@ use nts_semantic_schema::{
 
 use super::facts::Facts;
 use super::{
-    BinOp, Block, BlockId, Callee, Func, HirType, ManagedType, Op, OpKind, Param, Program,
-    Terminator, UnOp, ValueId,
+    BinOp, Block, BlockId, Callee, Field, Func, HirType, Layout, ManagedType, Op, OpKind, Param,
+    Program, Terminator, UnOp, ValueId,
 };
 
 /// What a lowering produced, and what it could not.
@@ -57,9 +57,73 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => lowered.diagnostics.push(diagnostic),
         }
+        // A layout is a property of the type, not of the function that happened
+        // to mention it first, so it is collected once for the whole program.
+        for layout in builder.layouts {
+            if let Some(existing) = lowered
+                .program
+                .layouts
+                .iter_mut()
+                .find(|known| known.same_shape(&layout.fields))
+            {
+                for ty in layout.types {
+                    if !existing.types.contains(&ty) {
+                        existing.types.push(ty);
+                    }
+                }
+                // As in `layout_of`: a declared name beats a generated one,
+                // and the two functions that mention a type may be discovered
+                // in either order.
+                if existing.name.starts_with("Type") && !layout.name.starts_with("Type") {
+                    existing.name = layout.name;
+                }
+            } else {
+                lowered.program.layouts.push(layout);
+            }
+        }
     }
 
+    canonicalize_objects(&mut lowered.program);
     lowered
+}
+
+/// Give structurally identical object types one identity.
+///
+/// TypeScript is structurally typed, so `Point` and the anonymous
+/// `{ x: number; y: number }` of a literal returned as one *are* the same type
+/// — but the checker gives them different ids, and `HirType` compares by id.
+/// Left alone, a `return { x, y }` from a function declared to return `Point`
+/// looks like a representation change and earns a conversion between two
+/// pointers to the same struct.
+///
+/// Rewriting every object type to its layout's representative makes `HirType`
+/// equality mean what it should: *the same representation*.
+fn canonicalize_objects(program: &mut Program) {
+    let representatives: Vec<(Vec<TypeId>, TypeId)> = program
+        .layouts
+        .iter()
+        .filter_map(|layout| Some((layout.types.clone(), *layout.types.first()?)))
+        .collect();
+
+    let canonical = |ty: &mut HirType| {
+        if let HirType::Managed(ManagedType::Object(id)) = ty
+            && let Some((_, representative)) = representatives
+                .iter()
+                .find(|(members, _)| members.contains(id))
+        {
+            *id = *representative;
+        }
+    };
+
+    for func in &mut program.funcs {
+        canonical(&mut func.return_type);
+        for param in &mut func.params {
+            canonical(&mut param.ty);
+        }
+        for value in &mut func.values {
+            canonical(&mut value.ty);
+        }
+    }
 }
 
 /// Choose a representation for a source type.
@@ -148,6 +212,8 @@ struct FuncBuilder<'a> {
     /// This is what makes two identifiers with one symbol become one value
     /// rather than two loads.
     bindings: rustc_hash::FxHashMap<u32, ValueId>,
+    /// Layouts discovered while lowering this function.
+    layouts: Vec<Layout>,
 }
 
 impl<'a> FuncBuilder<'a> {
@@ -162,6 +228,7 @@ impl<'a> FuncBuilder<'a> {
             }],
             current: BlockId(0),
             bindings: rustc_hash::FxHashMap::default(),
+            layouts: Vec::new(),
         }
     }
 
@@ -679,6 +746,86 @@ impl<'a> FuncBuilder<'a> {
         Ok(before)
     }
 
+    /// `target = value`, for each kind of target.
+    ///
+    /// Three different operations wear one spelling. A name rebinds, which
+    /// emits nothing at all -- the binding *is* the assignment. A field or an
+    /// element writes through a reference, where there is no name to rebind and
+    /// the store is the whole of the effect.
+    fn lower_assignment(
+        &mut self,
+        id: NodeId,
+        target: NodeId,
+        source: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let lhs_node = &target;
+        let rhs_node = &source;
+
+        // `xs[i] = v` writes through a reference; there is no name to
+        // rebind, and the store is the whole of the effect.
+        if self.kind_of(*lhs_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            let children = self.children(*lhs_node);
+            let [target, member] = children.as_slice() else {
+                return Err(self.unsupported(*lhs_node, "a property of unexpected shape"));
+            };
+            let object = self.lower_expression(*target)?;
+            let HirType::Managed(ManagedType::Object(type_id)) =
+                self.values[object.0 as usize].ty.clone()
+            else {
+                return Err(self.unsupported(*lhs_node, "assigning to this property"));
+            };
+            let layout = self.layout_of(*lhs_node, type_id)?;
+            let name = self
+                .node(*member)
+                .text
+                .clone()
+                .ok_or_else(|| self.unsupported(*member, "a computed property name"))?;
+            let field = layout.index_of(&name).ok_or_else(|| {
+                self.unsupported(*lhs_node, "a property the type does not declare")
+            })?;
+            if layout.fields[field as usize].readonly {
+                return Err(self.unsupported(*lhs_node, "assigning to a readonly property"));
+            }
+            let value = self.lower_expression(*rhs_node)?;
+            let origin = self.origin(id);
+            self.push(
+                OpKind::FieldSet {
+                    object,
+                    field,
+                    value,
+                },
+                HirType::Void,
+                origin,
+            );
+            return Ok(value);
+        }
+
+        if self.kind_of(*lhs_node) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
+            let (array, index) = self.element_access_parts(*lhs_node)?;
+            let value = self.lower_expression(*rhs_node)?;
+            let origin = self.origin(id);
+            self.push(
+                OpKind::ArraySet {
+                    array,
+                    index,
+                    value,
+                    checked: true,
+                },
+                HirType::Void,
+                origin,
+            );
+            return Ok(value);
+        }
+
+        let value = self.lower_expression(*rhs_node)?;
+        let symbol = self
+            .node(*lhs_node)
+            .symbol
+            .ok_or_else(|| self.unsupported(*lhs_node, "assignment to a computed target"))?;
+        self.bindings.insert(symbol.0, value);
+        Ok(value)
+    }
+
     /// A bitwise operation, with the coercions the language requires.
     ///
     /// `a & b` is `ToInt32(a) & ToInt32(b)` reinterpreted as a number, and the
@@ -950,6 +1097,7 @@ impl<'a> FuncBuilder<'a> {
             }
             Some(syntax::CONDITIONAL_EXPRESSION) => self.lower_conditional(id),
             Some(syntax::ARRAY_LITERAL_EXPRESSION) => self.lower_array_literal(id),
+            Some(syntax::OBJECT_LITERAL_EXPRESSION) => self.lower_object_literal(id),
             Some(syntax::ELEMENT_ACCESS_EXPRESSION) => self.lower_element_access(id),
             Some(syntax::PROPERTY_ACCESS_EXPRESSION) => self.lower_property_access(id),
             // `x!`, `x as T` and `x satisfies T` are claims about types. The
@@ -1043,6 +1191,180 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::ArrayNew { length }, ty, origin))
     }
 
+    /// `{ x: 1, y }`.
+    ///
+    /// An allocation and a store per field. The fields are written in *layout*
+    /// order rather than source order, so two literals of one type produce the
+    /// same stores — which is what lets a later pass recognize them as the same
+    /// shape.
+    fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "an object literal of unrepresentable type"))?;
+        let HirType::Managed(ManagedType::Object(type_id)) = ty else {
+            return Err(self.unsupported(id, "an object literal that is not an object"));
+        };
+        let layout = self.layout_of(id, type_id)?;
+        let origin = self.origin(id);
+        let object = self.push(OpKind::ObjectNew, ty, origin.clone());
+
+        // Source order, since an initializer may have effects and they happen
+        // where the author wrote them. The *field index* is what puts them in
+        // layout order.
+        for property in self.children(id) {
+            let (name, value) = self.property_parts(property)?;
+            let Some(field) = layout.index_of(&name) else {
+                return Err(self.unsupported(property, "a property the type does not declare"));
+            };
+            self.push(
+                OpKind::FieldSet {
+                    object,
+                    field,
+                    value,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        Ok(object)
+    }
+
+    /// The name and value of one property in an object literal.
+    fn property_parts(&mut self, id: NodeId) -> Result<(String, ValueId), Diagnostic> {
+        match self.kind_of(id) {
+            Some(syntax::PROPERTY_ASSIGNMENT) => {
+                let children = self.children(id);
+                let [name, initializer] = children.as_slice() else {
+                    return Err(self.unsupported(id, "a property of unexpected shape"));
+                };
+                let text = self
+                    .node(*name)
+                    .text
+                    .clone()
+                    .ok_or_else(|| self.unsupported(*name, "a computed property name"))?;
+                let value = self.lower_expression(*initializer)?;
+                Ok((text, value))
+            }
+            // `{ x }` — one node serving as both the field name and a reference
+            // to a variable, and the checker gives it the *property's* symbol.
+            // The variable's symbol is what `getShorthandAssignmentValueSymbol`
+            // answers, which the snapshot does not carry yet; until it does, the
+            // reference is resolved by name against what is in scope.
+            //
+            // That is sound only while the name is unambiguous, so a shadowed
+            // one is refused rather than guessed at.
+            Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => {
+                let children = self.children(id);
+                let [name] = children.as_slice() else {
+                    return Err(self.unsupported(id, "a shorthand property of unexpected shape"));
+                };
+                let text = self
+                    .node(*name)
+                    .text
+                    .clone()
+                    .ok_or_else(|| self.unsupported(*name, "a shorthand without a name"))?;
+
+                let mut found = self.bindings.iter().filter(|(symbol, _)| {
+                    self.snapshot
+                        .symbols
+                        .get(**symbol as usize)
+                        .is_some_and(|record| record.name == text)
+                });
+                let value = match (found.next(), found.next()) {
+                    (Some((_, value)), None) => *value,
+                    (Some(_), Some(_)) => {
+                        return Err(
+                            self.unsupported(*name, "a shorthand naming a shadowed binding")
+                        );
+                    }
+                    _ => return Err(self.unsupported(*name, "a shorthand naming nothing in scope")),
+                };
+                Ok((text, value))
+            }
+            _ => Err(self.unsupported(id, "this kind of property")),
+        }
+    }
+
+    /// The layout of an object type, computed once and remembered.
+    ///
+    /// Declaration order, which is the order the checker reports members in.
+    /// When classes arrive this becomes base-first (RFC §8.1), so that a
+    /// subclass's prefix is its base's layout and an upcast is free.
+    fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {
+        if let Some(known) = self
+            .layouts
+            .iter()
+            .find(|layout| layout.types.contains(&ty))
+        {
+            return Ok(known.clone());
+        }
+        let record =
+            self.snapshot.types.get(ty.0 as usize).ok_or_else(|| {
+                self.unsupported(id, "an object type that is not in the snapshot")
+            })?;
+        let TypeKind::Object { properties } = &record.kind else {
+            return Err(self.unsupported(id, "an object type that was not decomposed"));
+        };
+
+        let mut fields = Vec::new();
+        for property in properties {
+            if property.accessor.is_some() {
+                return Err(self.unsupported(id, "an object with an accessor"));
+            }
+            if property.optional {
+                // An optional field needs a presence bit, which changes the
+                // layout rather than adding to it.
+                return Err(self.unsupported(id, "an object with an optional property"));
+            }
+            let field_ty = representation(self.snapshot, property.ty)
+                .ok_or_else(|| self.unsupported(id, "a property of unrepresentable type"))?;
+            if field_ty.is_managed() {
+                // A reference field has to be traced, and nothing traces yet.
+                return Err(self.unsupported(id, "an object with a reference field"));
+            }
+            fields.push(Field {
+                name: property.name.clone(),
+                ty: field_ty,
+                readonly: property.readonly,
+            });
+        }
+
+        // The declared name where there is one. An anonymous object type —
+        // `{ x: number }` written inline — has no symbol, so it is named after
+        // its type id, which is at least stable and unique.
+        let name = record
+            .symbol
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .map_or_else(|| format!("Type{}", ty.0), |symbol| symbol.name.clone());
+        // Structural, so a type whose shape is already laid out joins that
+        // layout rather than getting one of its own. The first name wins, which
+        // is usually the declared one -- an anonymous literal type tends to be
+        // discovered second.
+        if let Some(existing) = self
+            .layouts
+            .iter_mut()
+            .find(|layout| layout.same_shape(&fields))
+        {
+            existing.types.push(ty);
+            // A declared name beats a generated one, whichever was seen first.
+            // The anonymous type of a literal is usually discovered before the
+            // interface it is assigned to, and `NtsObj_Point` reads better than
+            // `NtsObj_Type5`.
+            if existing.name.starts_with("Type") && !name.starts_with("Type") {
+                existing.name = name;
+            }
+            return Ok(existing.clone());
+        }
+
+        let layout = Layout {
+            types: vec![ty],
+            name,
+            fields,
+        };
+        self.layouts.push(layout.clone());
+        Ok(layout)
+    }
+
     /// `xs[i]`, as a read. Writes are handled by the assignment lowering.
     fn lower_element_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let (array, index) = self.element_access_parts(id)?;
@@ -1093,10 +1415,35 @@ impl<'a> FuncBuilder<'a> {
         let [object, member] = children.as_slice() else {
             return Err(self.unsupported(id, "a property access of unexpected shape"));
         };
-        if self.node(*member).text.as_deref() != Some("length") {
+        let member_name = self
+            .node(*member)
+            .text
+            .clone()
+            .ok_or_else(|| self.unsupported(id, "a computed property name"))?;
+        let value = self.lower_expression(*object)?;
+
+        if let HirType::Managed(ManagedType::Object(type_id)) =
+            self.values[value.0 as usize].ty.clone()
+        {
+            let layout = self.layout_of(id, type_id)?;
+            let field = layout
+                .index_of(&member_name)
+                .ok_or_else(|| self.unsupported(id, "a property the type does not declare"))?;
+            let ty = layout.fields[field as usize].ty.clone();
+            let origin = self.origin(id);
+            return Ok(self.push(
+                OpKind::FieldGet {
+                    object: value,
+                    field,
+                },
+                ty,
+                origin,
+            ));
+        }
+
+        if member_name != "length" {
             return Err(self.unsupported(id, "this property"));
         }
-        let value = self.lower_expression(*object)?;
         if !matches!(
             self.values[value.0 as usize].ty,
             HirType::Managed(ManagedType::Array(_) | ManagedType::String)
@@ -1557,32 +1904,7 @@ impl<'a> FuncBuilder<'a> {
         // value. With the name bound directly there is no slot to store into and
         // nothing to emit — the rebinding *is* the assignment.
         if self.kind_of(*operator) == Some(syntax::EQUALS_TOKEN) {
-            // `xs[i] = v` writes through a reference; there is no name to
-            // rebind, and the store is the whole of the effect.
-            if self.kind_of(*lhs_node) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
-                let (array, index) = self.element_access_parts(*lhs_node)?;
-                let value = self.lower_expression(*rhs_node)?;
-                let origin = self.origin(id);
-                self.push(
-                    OpKind::ArraySet {
-                        array,
-                        index,
-                        value,
-                        checked: true,
-                    },
-                    HirType::Void,
-                    origin,
-                );
-                return Ok(value);
-            }
-
-            let value = self.lower_expression(*rhs_node)?;
-            let symbol = self
-                .node(*lhs_node)
-                .symbol
-                .ok_or_else(|| self.unsupported(*lhs_node, "assignment to a computed target"))?;
-            self.bindings.insert(symbol.0, value);
-            return Ok(value);
+            return self.lower_assignment(id, *lhs_node, *rhs_node);
         }
 
         // `&&` and `||` must not evaluate their right operand unless the left

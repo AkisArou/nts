@@ -32,6 +32,17 @@ pub const RUNTIME_HEADER: &str = include_str!("../../../../runtime/c/nts_runtime
 pub const RUNTIME_SOURCE_NAME: &str = "nts_runtime.c";
 pub const RUNTIME_SOURCE: &str = include_str!("../../../../runtime/c/nts_runtime.c");
 
+/// What an emitter needs beyond the function it is emitting.
+///
+/// Layouts come from the program because a field's name and position are a
+/// property of its *type*, not of the function reading it; literals come from
+/// the program because two functions naming the same string must reach the same
+/// static.
+struct Context<'a> {
+    program: &'a Program,
+    literals: &'a [String],
+}
+
 /// C for one program, and what could not be emitted.
 #[derive(Debug)]
 pub struct Emitted {
@@ -98,7 +109,14 @@ pub fn emit(program: &Program) -> Emitted {
     let mut bodies = Vec::new();
     for func in &program.funcs {
         let mut body = CodeWriter::new();
-        match emit_func(&mut body, func, &literals) {
+        match emit_func(
+            &mut body,
+            func,
+            &Context {
+                program,
+                literals: &literals,
+            },
+        ) {
             Ok(signature) => bodies.push((signature, body, func)),
             Err(diagnostic) => diagnostics.push(diagnostic),
         }
@@ -110,6 +128,7 @@ pub fn emit(program: &Program) -> Emitted {
     // The runtime, and nothing else -- notably not <stdlib.h>, which declares
     // `div`, a name a TypeScript program is entitled to use.
     writer.line(&origin, format!("#include \"{RUNTIME_HEADER_NAME}\""));
+    emit_object_types(&mut writer, &origin, program);
     emit_descriptors(&mut writer, &origin, &descriptors);
     emit_literals(&mut writer, &origin, &literals);
 
@@ -292,6 +311,43 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) 
     }
 }
 
+/// A C struct per object type, and its descriptor.
+///
+/// A real struct rather than manual offsets, so the C compiler decides padding
+/// and alignment and the emitted field access is `p->x` — which is both faster
+/// to read and impossible to get wrong by an offset.
+fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+    for layout in &program.layouts {
+        let name = object_type_name(layout);
+        writer.line(origin, format!("typedef struct {name} {{"));
+        // The header first, so every managed object starts the same way and a
+        // provider can read the descriptor without knowing the type (RFC 8.2).
+        writer.line(origin, "    NtsHeader header;");
+        for field in &layout.fields {
+            let Ok(ty) = c_type(&field.ty, origin) else {
+                continue;
+            };
+            // `readonly` is semantic, not syntactic — `Readonly<T>` counts — and
+            // saying so lets the C compiler hoist loads across calls.
+            let qualifier = if field.readonly { "const " } else { "" };
+            writer.line(
+                origin,
+                format!("    {qualifier}{ty} {};", c_identifier(&field.name)),
+            );
+        }
+        writer.line(origin, format!("}} {name};"));
+        writer.line(
+            origin,
+            format!(
+                "static const NtsDescriptor nts_desc_{name} = \
+                 {{ NTS_KIND_OBJECT, sizeof({name}), 0, \"{}\" }};",
+                layout.name
+            ),
+        );
+        writer.blank(origin);
+    }
+}
+
 /// The per-program data: a descriptor per element type this program allocates.
 ///
 /// The runtime itself is [`RUNTIME_HEADER`] and [`RUNTIME_SOURCE`] -- real C,
@@ -302,7 +358,8 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
         writer.line(
             origin,
             format!(
-                "static const NtsDescriptor {} = {{ sizeof({element}), 0, \"{element}[]\" }};",
+                "static const NtsDescriptor {} = \
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, \"{element}[]\" }};",
                 descriptor_name(element)
             ),
         );
@@ -331,6 +388,66 @@ fn descriptors_reached(bodies: &[(String, CodeWriter, &Func)]) -> Vec<&'static s
         }
     }
     found
+}
+
+/// The C spelling of a type, including the object types this program declares.
+fn c_type_of(program: &Program, ty: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
+    if let HirType::Managed(ManagedType::Object(_)) = ty {
+        let layout = layout_of(program, ty, origin)?;
+        return Ok(format!("{} *", object_type_name(layout)));
+    }
+    Ok(c_type(ty, origin)?.to_owned())
+}
+
+/// The layout an object-typed value refers to.
+fn layout_of<'a>(
+    program: &'a Program,
+    ty: &HirType,
+    origin: &Origin,
+) -> Result<&'a nts_core::hir::Layout, Diagnostic> {
+    let HirType::Managed(ManagedType::Object(id)) = ty else {
+        return Err(Diagnostic::error(
+            "NTS2006",
+            "a field operation on something that is not an object",
+            origin.location,
+        ));
+    };
+    program.layout(*id).ok_or_else(|| {
+        Diagnostic::error("NTS2006", "an object type with no layout", origin.location)
+    })
+}
+
+/// The C name of an object type.
+///
+/// Prefixed so it cannot collide with anything the program declares, and named
+/// after the source type so the emitted C is readable.
+fn object_type_name(layout: &nts_core::hir::Layout) -> String {
+    format!(
+        "NtsObj_{}",
+        layout.name.replace(|c: char| !c.is_alphanumeric(), "_")
+    )
+}
+
+/// The C name of a field, by index into its type's layout.
+fn field_of(
+    program: &Program,
+    func: &Func,
+    object: ValueId,
+    field: u32,
+    origin: &Origin,
+) -> Result<String, Diagnostic> {
+    let layout = layout_of(program, &func.values[object.0 as usize].ty, origin)?;
+    layout
+        .fields
+        .get(field as usize)
+        .map(|field| c_identifier(&field.name))
+        .ok_or_else(|| {
+            Diagnostic::error(
+                "NTS2006",
+                "a field index outside its layout",
+                origin.location,
+            )
+        })
 }
 
 /// The C spelling of an array's element type.
@@ -451,24 +568,27 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         // type for no benefit.
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *",
         HirType::Managed(ManagedType::String) => "NtsString *",
-        HirType::Managed(_) => {
+        // An object type is named per program, so it has no `&'static str`
+        // spelling. `c_type_of` answers for those; reaching here means a caller
+        // asked the question that cannot be answered without the program.
+        HirType::Managed(ManagedType::Object(_)) => {
             return Err(Diagnostic::error(
-                "NTS2001",
-                "strings and objects need a runtime, which this backend does not have yet",
+                "NTS2006",
+                "an object type needs the program to be named",
                 origin.location,
             ));
         }
     })
 }
 
-fn signature(func: &Func) -> Result<String, Diagnostic> {
-    let returns = c_type(&func.return_type, &func.origin)?;
+fn signature(program: &Program, func: &Func) -> Result<String, Diagnostic> {
+    let returns = c_type_of(program, &func.return_type, &func.origin)?;
     if func.params.is_empty() {
         return Ok(format!("{returns} {}(void)", c_identifier(&func.name)));
     }
     let mut params = Vec::new();
     for (index, param) in func.params.iter().enumerate() {
-        let ty = c_type(&param.ty, &param.origin)?;
+        let ty = c_type_of(program, &param.ty, &param.origin)?;
         params.push(format!(
             "{ty} {}",
             value_name(ValueId(u32::try_from(index).unwrap_or(0)))
@@ -498,17 +618,21 @@ fn block_label(block: BlockId) -> String {
 fn emit_func(
     writer: &mut CodeWriter,
     func: &Func,
-    literals: &[String],
+    context: &Context<'_>,
 ) -> Result<String, Diagnostic> {
-    let signature = signature(func)?;
+    let signature = signature(context.program, func)?;
     writer.line(&func.origin, format!("{signature} {{"));
-    emit_body(writer, func, literals)?;
+    emit_body(writer, func, context)?;
     writer.line(&func.origin, "}");
     writer.blank(&func.origin);
     Ok(signature)
 }
 
-fn emit_body(writer: &mut CodeWriter, func: &Func, literals: &[String]) -> Result<(), Diagnostic> {
+fn emit_body(
+    writer: &mut CodeWriter,
+    func: &Func,
+    context: &Context<'_>,
+) -> Result<(), Diagnostic> {
     let order = block_order(func);
 
     // Every value except the parameters becomes a local. C scoping would not let
@@ -559,7 +683,7 @@ fn emit_body(writer: &mut CodeWriter, func: &Func, literals: &[String]) -> Resul
         {
             continue;
         }
-        let ty = c_type(&op.ty, &op.origin)?;
+        let ty = c_type_of(context.program, &op.ty, &op.origin)?;
         writer.line(
             &op.origin,
             format!(
@@ -592,7 +716,7 @@ fn emit_body(writer: &mut CodeWriter, func: &Func, literals: &[String]) -> Resul
             *block,
             next,
             targeted.contains(block),
-            literals,
+            context,
         )?;
     }
     Ok(())
@@ -604,7 +728,7 @@ fn emit_block(
     block: BlockId,
     next: Option<BlockId>,
     labelled: bool,
-    literals: &[String],
+    context: &Context<'_>,
 ) -> Result<(), Diagnostic> {
     let record = &func.blocks[block.0 as usize];
     let origin = func
@@ -618,7 +742,7 @@ fn emit_block(
     writer.indent();
 
     for value in &record.ops {
-        emit_op(writer, func, *value, literals)?;
+        emit_op(writer, func, *value, context)?;
     }
     emit_terminator(writer, func, block, next, &origin);
 
@@ -841,44 +965,69 @@ fn unary_text(func: &Func, name: &str, un: UnOp, operand: ValueId, result: &HirT
     }
 }
 
-fn emit_op(
+/// Allocation and field or element access: the operations that go through a
+/// managed object's header.
+fn managed_op(
     writer: &mut CodeWriter,
     func: &Func,
     value: ValueId,
-    literals: &[String],
+    context: &Context<'_>,
 ) -> Result<(), Diagnostic> {
     let op = func.value(value);
     let name = value_name(value);
     let text = match &op.kind {
-        // Nothing to compute at the definition site. A parameter *is* the C
-        // parameter; a block parameter is written by the edges that jump here;
-        // a return is spelled by the terminator.
-        OpKind::Param(_) | OpKind::BlockParam(_) | OpKind::Return(_) => return Ok(()),
-        OpKind::ConstInt(v) => format!("{name} = {v};"),
-        // Enough digits to round-trip an f64 exactly. Fewer would change the
-        // program's arithmetic.
-        OpKind::ConstFloat(v) => format!("{name} = {v:?};"),
-        OpKind::ConstBool(v) => format!("{name} = {v};"),
-        // A literal is immutable and known now, so it is static data rather
-        // than an allocation. This is the difference between a string-heavy
-        // program allocating once at startup and allocating in a loop.
-        OpKind::ConstString(text) => {
+        OpKind::ObjectNew => {
+            let layout = layout_of(context.program, &op.ty, &op.origin)?;
+            let type_name = object_type_name(layout);
+            format!("{name} = ({type_name} *)nts_object_new(&nts_desc_{type_name});")
+        }
+        OpKind::FieldGet { object, field } => {
+            let field = field_of(context.program, func, *object, *field, &op.origin)?;
+            format!("{name} = {}->{field};", value_name(*object))
+        }
+        OpKind::FieldSet {
+            object,
+            field,
+            value: stored,
+        } => {
+            let layout = layout_of(
+                context.program,
+                &func.values[object.0 as usize].ty,
+                &op.origin,
+            )?;
+            let declared = layout.fields.get(*field as usize).ok_or_else(|| {
+                Diagnostic::error(
+                    "NTS2006",
+                    "a field index outside its layout",
+                    op.origin.location,
+                )
+            })?;
+            let field = c_identifier(&declared.name);
+            if declared.readonly {
+                // `readonly` means "never written *after* construction", and
+                // this is the construction. The field is `const` so that loads
+                // can be hoisted across calls; the one store that establishes
+                // it writes through the qualifier. The storage is heap, never
+                // const-qualified itself, so this is defined.
+                let ty = c_type(&declared.ty, &op.origin)?;
+                return {
+                    writer.line(
+                        &op.origin,
+                        format!(
+                            "*({ty} *)&{}->{field} = {};",
+                            value_name(*object),
+                            value_name(*stored)
+                        ),
+                    );
+                    Ok(())
+                };
+            }
             format!(
-                "{name} = (NtsString *)(void *)&{};",
-                literal_name(literals, text)
+                "{}->{field} = {};",
+                value_name(*object),
+                value_name(*stored)
             )
         }
-        OpKind::Binary { op: bin, lhs, rhs } => binary_text(func, op, &name, *bin, *lhs, *rhs)?,
-        OpKind::Call { callee, args } => {
-            let (Callee::Direct(target) | Callee::External(target)) = callee;
-            let arguments: Vec<String> = args.iter().map(|a| value_name(*a)).collect();
-            format!(
-                "{name} = {}({});",
-                c_identifier(target),
-                arguments.join(", ")
-            )
-        }
-        OpKind::Unary { op: un, operand } => unary_text(func, &name, *un, *operand, &op.ty),
         OpKind::ArrayNew { length } => {
             let element = element_type(&op.ty, &op.origin)?;
             format!(
@@ -916,6 +1065,59 @@ fn emit_op(
                 value_name(*array),
                 value_name(*stored)
             )
+        }
+        _ => unreachable!("managed_op is only reached for managed operations"),
+    };
+    writer.line(&op.origin, text);
+    Ok(())
+}
+
+fn emit_op(
+    writer: &mut CodeWriter,
+    func: &Func,
+    value: ValueId,
+    context: &Context<'_>,
+) -> Result<(), Diagnostic> {
+    let op = func.value(value);
+    let name = value_name(value);
+    let text = match &op.kind {
+        // Nothing to compute at the definition site. A parameter *is* the C
+        // parameter; a block parameter is written by the edges that jump here;
+        // a return is spelled by the terminator.
+        OpKind::Param(_) | OpKind::BlockParam(_) | OpKind::Return(_) => return Ok(()),
+        OpKind::ConstInt(v) => format!("{name} = {v};"),
+        // Enough digits to round-trip an f64 exactly. Fewer would change the
+        // program's arithmetic.
+        OpKind::ConstFloat(v) => format!("{name} = {v:?};"),
+        OpKind::ConstBool(v) => format!("{name} = {v};"),
+        // A literal is immutable and known now, so it is static data rather
+        // than an allocation. This is the difference between a string-heavy
+        // program allocating once at startup and allocating in a loop.
+        OpKind::ConstString(text) => {
+            format!(
+                "{name} = (NtsString *)(void *)&{};",
+                literal_name(context.literals, text)
+            )
+        }
+        OpKind::Binary { op: bin, lhs, rhs } => binary_text(func, op, &name, *bin, *lhs, *rhs)?,
+        OpKind::Call { callee, args } => {
+            let (Callee::Direct(target) | Callee::External(target)) = callee;
+            let arguments: Vec<String> = args.iter().map(|a| value_name(*a)).collect();
+            format!(
+                "{name} = {}({});",
+                c_identifier(target),
+                arguments.join(", ")
+            )
+        }
+        OpKind::Unary { op: un, operand } => unary_text(func, &name, *un, *operand, &op.ty),
+        OpKind::ObjectNew
+        | OpKind::FieldGet { .. }
+        | OpKind::FieldSet { .. }
+        | OpKind::ArrayNew { .. }
+        | OpKind::Length(_)
+        | OpKind::ArrayGet { .. }
+        | OpKind::ArraySet { .. } => {
+            return managed_op(writer, func, value, context);
         }
         OpKind::Convert(operand) => {
             // A C cast. Between an integer and a double this is one instruction,

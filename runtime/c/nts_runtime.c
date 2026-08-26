@@ -13,8 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-const NtsDescriptor nts_desc_string1 = {1, 0, "string"};
-const NtsDescriptor nts_desc_string2 = {2, 0, "string"};
+const NtsDescriptor nts_desc_string1 = {NTS_KIND_STRING, 1, 0, "string"};
+const NtsDescriptor nts_desc_string2 = {NTS_KIND_STRING, 2, 0, "string"};
 
 /* The NoGC provider (RFC 9.1): a bump allocator that never frees. For compiler
  * bring-up, allocation testing and bounded-lifetime tools. It must never be
@@ -39,6 +39,18 @@ void *nts_alloc(size_t bytes) {
     return result;
 }
 
+/* A fixed-layout object: the descriptor knows its whole size, and `length` is
+ * not a count of anything. Zeroed, so a field is never read before it is
+ * written -- the compiler emits a store for every field of a literal, but a
+ * partially-built object is observable through a call made in the middle of
+ * one. */
+NtsHeader *nts_object_new(const NtsDescriptor *descriptor) {
+    NtsHeader *object = (NtsHeader *)nts_alloc(descriptor->size);
+    memset(object, 0, descriptor->size);
+    object->descriptor = descriptor;
+    return object;
+}
+
 void nts_bounds(double index, uint32_t length) {
     fprintf(stderr, "nts: index %g is outside [0, %u)\n", index, length);
     abort();
@@ -51,7 +63,7 @@ NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length) {
         abort();
     }
     uint32_t count = (uint32_t)length;
-    size_t bytes = sizeof(NtsHeader) + (size_t)count * descriptor->element_size;
+    size_t bytes = sizeof(NtsHeader) + (size_t)count * descriptor->size;
     NtsArray *array = (NtsArray *)nts_alloc(bytes);
     array->descriptor = descriptor;
     array->reserved = 0;
@@ -60,7 +72,7 @@ NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length) {
     /* Zeroed rather than left as holes: there is no `undefined` in a double, so
      * a hole has no representation to leave behind. */
     memset((unsigned char *)array + sizeof(NtsHeader), 0,
-           (size_t)count * descriptor->element_size);
+           (size_t)count * descriptor->size);
     return array;
 }
 

@@ -320,6 +320,24 @@ pub enum OpKind {
         /// [`super::bounds`].
         checked: bool,
     },
+    /// Allocate an object. The type is carried by the operation's own type,
+    /// which is a [`ManagedType::Object`].
+    ObjectNew,
+    /// `object.field`, by index into the type's [`Layout`].
+    ///
+    /// An index rather than a name: the layout already decided the order, and
+    /// a backend that had to look a name up would be free to disagree with the
+    /// one that emitted the type.
+    FieldGet {
+        object: ValueId,
+        field: u32,
+    },
+    /// `object.field = value`. Produces nothing.
+    FieldSet {
+        object: ValueId,
+        field: u32,
+        value: ValueId,
+    },
     /// `array[index] = value`. Produces nothing.
     ArraySet {
         array: ValueId,
@@ -436,10 +454,80 @@ pub enum UnOp {
     Truthy,
 }
 
+/// One field of an object, in layout order.
+#[derive(Debug, Clone)]
+pub struct Field {
+    pub name: String,
+    pub ty: HirType,
+    /// Never written after construction — semantic, not syntactic, so
+    /// `Readonly<T>` counts. Load-bearing: `const` in C, `ACC_FINAL` on the
+    /// JVM, hoistable loads, and no write barrier on a reference field that is
+    /// never stored to.
+    pub readonly: bool,
+}
+
+/// How one object type is laid out.
+///
+/// The compiler's answer to "where is this field", decided once and consumed by
+/// every backend — so a C struct and a JVM `field_info` table cannot disagree
+/// about the order. RFC §8.1's descriptor is built from this; the descriptor is
+/// what the *provider* reads at run time, and this is what the compiler decided.
+#[derive(Debug, Clone)]
+pub struct Layout {
+    /// Every schema type that has this layout.
+    ///
+    /// More than one, because TypeScript is *structurally* typed: `Point` and
+    /// the anonymous `{ x: number; y: number }` of a literal are the same type,
+    /// and giving them separate layouts would emit two C structs that are the
+    /// same struct and could not be passed to each other.
+    pub types: Vec<TypeId>,
+    /// The source name, for diagnostics and for the emitted type's name.
+    pub name: String,
+    pub fields: Vec<Field>,
+}
+
+impl Layout {
+    /// Whether two layouts are the same shape.
+    ///
+    /// Field names and representations, in order. Not `readonly`: a value is
+    /// laid out the same whether or not anyone may write to it, and refusing to
+    /// share a layout over that would split `Point` from `Readonly<Point>`.
+    #[must_use]
+    pub fn same_shape(&self, fields: &[Field]) -> bool {
+        self.fields.len() == fields.len()
+            && self
+                .fields
+                .iter()
+                .zip(fields)
+                .all(|(mine, theirs)| mine.name == theirs.name && mine.ty == theirs.ty)
+    }
+
+    /// The index of a field by name.
+    #[must_use]
+    pub fn index_of(&self, name: &str) -> Option<u32> {
+        self.fields
+            .iter()
+            .position(|field| field.name == name)
+            .and_then(|at| u32::try_from(at).ok())
+    }
+}
+
 /// A lowered program.
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub funcs: Vec<Func>,
+    /// Layouts for every object type the program uses.
+    pub layouts: Vec<Layout>,
+}
+
+impl Program {
+    /// The layout of an object type.
+    #[must_use]
+    pub fn layout(&self, ty: TypeId) -> Option<&Layout> {
+        self.layouts
+            .iter()
+            .find(|layout| layout.types.contains(&ty))
+    }
 }
 
 /// The values an operation reads.
