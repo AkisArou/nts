@@ -31,7 +31,7 @@
 //! The crate forbids `unsafe`, so there is no unchecked path to reach for.
 
 use nts_diagnostics::{Location, SourceId, Span};
-use nts_semantic_schema::{NodeData, NodeId, NodeKind, NodeRecord, Origin};
+use nts_semantic_schema::{DeclarationModifiers, NodeData, NodeId, NodeKind, NodeRecord, Origin};
 
 /// Protocol version this decoder implements.
 ///
@@ -159,6 +159,7 @@ pub fn decode(payload: &[u8], file: SourceId) -> Result<EncodedSourceFile, AstEr
 
     let mut nodes = decode_nodes(&payload[header.nodes_at..], file, &strings)?;
     rebuild_children(&mut nodes);
+    assign_modifiers(&mut nodes);
 
     Ok(EncodedSourceFile {
         content_hash: header.content_hash,
@@ -308,12 +309,71 @@ fn decode_nodes(
             children: Vec::new(),
             symbol: None,
             flags: raw.flags,
+            // Filled once children are known; a modifier is a child keyword.
+            modifiers: DeclarationModifiers::default(),
             data,
             text,
         });
     }
 
     Ok(nodes)
+}
+
+/// Record each declaration's modifier keywords.
+///
+/// A modifier is an ordinary child node whose kind is a keyword, so this is a
+/// scan rather than a query — no round trips. Storing the result means no backend
+/// has to remember which keyword kinds count as modifiers.
+fn assign_modifiers(nodes: &mut [NodeRecord]) {
+    use crate::tsgo::types::syntax;
+
+    let mut computed: Vec<DeclarationModifiers> =
+        vec![DeclarationModifiers::default(); nodes.len()];
+    for (index, node) in nodes.iter().enumerate() {
+        // A list is not a declaration and may not claim its contents' modifiers.
+        if node.kind == NodeKind::List {
+            continue;
+        }
+        let mut modifiers = DeclarationModifiers::default();
+        // Modifiers are not direct children: they sit in a `NodeList` that is
+        // itself the child. Scanning only one level attributes every modifier to
+        // the list rather than to the declaration that carries it.
+        let candidates = node.children.iter().flat_map(|child| {
+            let child_node = &nodes[child.0 as usize];
+            let nested: &[NodeId] = if child_node.kind == NodeKind::List {
+                &child_node.children
+            } else {
+                &[]
+            };
+            std::iter::once(*child).chain(nested.iter().copied())
+        });
+
+        for child in candidates {
+            let NodeKind::Syntax(kind) = nodes[child.0 as usize].kind else {
+                continue;
+            };
+            let mapped = match kind {
+                syntax::EXPORT_KEYWORD => DeclarationModifiers::EXPORT,
+                syntax::DEFAULT_KEYWORD => DeclarationModifiers::DEFAULT,
+                syntax::DECLARE_KEYWORD => DeclarationModifiers::DECLARE,
+                syntax::ABSTRACT_KEYWORD => DeclarationModifiers::ABSTRACT,
+                syntax::STATIC_KEYWORD => DeclarationModifiers::STATIC,
+                syntax::READONLY_KEYWORD => DeclarationModifiers::READONLY,
+                syntax::ASYNC_KEYWORD => DeclarationModifiers::ASYNC,
+                syntax::OVERRIDE_KEYWORD => DeclarationModifiers::OVERRIDE,
+                syntax::PUBLIC_KEYWORD => DeclarationModifiers::PUBLIC,
+                syntax::PRIVATE_KEYWORD => DeclarationModifiers::PRIVATE,
+                syntax::PROTECTED_KEYWORD => DeclarationModifiers::PROTECTED,
+                syntax::CONST_KEYWORD => DeclarationModifiers::CONST,
+                _ => continue,
+            };
+            modifiers = modifiers.union(mapped);
+        }
+        computed[index] = modifiers;
+    }
+    for (node, modifiers) in nodes.iter_mut().zip(computed) {
+        node.modifiers = modifiers;
+    }
 }
 
 /// Recover each node's children from the parent links.

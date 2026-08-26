@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -89,6 +89,102 @@ pub struct SemanticSnapshot {
     /// queried, which is what keeps the frontend's round-trip count bounded by
     /// file count rather than node count.
     pub node_types: FxHashMap<NodeId, TypeId>,
+}
+
+/// Modifiers written on a declaration.
+///
+/// Derived from the declaration's own modifier keywords, so this costs no round
+/// trips — but it is stored rather than re-walked, because scanning children for
+/// keyword kinds at every use is the kind of thing that gets written slightly
+/// differently in each backend.
+///
+/// These map close to directly onto emission: `static`, `abstract` and `final`
+/// (from `readonly`) are JVM access flags on `method_info` and `field_info`, and
+/// `async` decides whether a function lowers to a state machine at all (RFC §12).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash, Serialize, Deserialize)]
+pub struct DeclarationModifiers(pub u16);
+
+impl DeclarationModifiers {
+    pub const EXPORT: Self = Self(1 << 0);
+    pub const DEFAULT: Self = Self(1 << 1);
+    pub const DECLARE: Self = Self(1 << 2);
+    pub const ABSTRACT: Self = Self(1 << 3);
+    pub const STATIC: Self = Self(1 << 4);
+    pub const READONLY: Self = Self(1 << 5);
+    pub const ASYNC: Self = Self(1 << 6);
+    pub const OVERRIDE: Self = Self(1 << 7);
+    pub const PUBLIC: Self = Self(1 << 8);
+    pub const PRIVATE: Self = Self(1 << 9);
+    pub const PROTECTED: Self = Self(1 << 10);
+    /// `const` as a modifier, as on `const enum`. Not the `const` of a variable
+    /// declaration — that lives in [`NodeRecord::flags`].
+    pub const CONST: Self = Self(1 << 11);
+
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        (self.0 & other.0) == other.0
+    }
+
+    #[must_use]
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+}
+
+/// What a heritage clause declares.
+///
+/// A class carries one clause per keyword, and the clause's *node data* small
+/// bits are the discriminator: `0` for `extends`, `1` for `implements`. Nothing
+/// in the node kind distinguishes them, so reading the wrong field makes an
+/// interface list look like a base class — which on the JVM is the difference
+/// between `super_class` and the `interfaces` table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum HeritageKind {
+    Extends,
+    Implements,
+}
+
+impl HeritageKind {
+    /// Classify a `HeritageClause` from its node data.
+    #[must_use]
+    pub const fn from_data(data: NodeData) -> Self {
+        match data {
+            NodeData::Children { small: 0, .. } => Self::Extends,
+            _ => Self::Implements,
+        }
+    }
+}
+
+/// How a variable was declared.
+///
+/// From `NodeFlags` on the `VariableDeclarationList`, not from the node data bits
+/// the encoder documentation points at. `const` is what lets a backend treat a
+/// binding as immutable without proving it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum VariableKind {
+    Var,
+    Let,
+    Const,
+}
+
+impl VariableKind {
+    /// Classify a `VariableDeclarationList` by its node flags.
+    #[must_use]
+    pub const fn from_flags(flags: u32) -> Self {
+        // NodeFlags: Let = 1, Const = 2. Neither set means `var`.
+        if flags & 2 != 0 {
+            Self::Const
+        } else if flags & 1 != 0 {
+            Self::Let
+        } else {
+            Self::Var
+        }
+    }
 }
 
 /// What a call site reaches.
@@ -307,6 +403,8 @@ pub struct NodeRecord {
     pub symbol: Option<SymbolId>,
     /// tsgo's `NodeFlags`. Carries `let`/`const`, ambient, and similar bits.
     pub flags: u32,
+    /// Modifier keywords written on this declaration.
+    pub modifiers: DeclarationModifiers,
     pub data: NodeData,
     /// Resolved text, for nodes whose data is a string index.
     pub text: Option<String>,
@@ -436,6 +534,7 @@ mod tests {
             children,
             symbol: None,
             flags: 0,
+            modifiers: DeclarationModifiers::default(),
             data: NodeData::Children {
                 present: 0,
                 small: 0,

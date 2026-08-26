@@ -26,7 +26,8 @@ pub mod schema;
 
 pub use origin::{GeneratedReason, Origin, ScopeId};
 pub use schema::{
-    CallTarget, LiteralValue, ModuleId, ModuleRecord, NodeData, NodeId, NodeKind, NodeRecord,
-    ParameterRecord, SCHEMA_VERSION, SemanticSnapshot, SignatureId, SignatureRecord, SnapshotError,
-    SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind, TypeRecord,
+    CallTarget, DeclarationModifiers, HeritageKind, LiteralValue, ModuleId, ModuleRecord, NodeData,
+    NodeId, NodeKind, NodeRecord, ParameterRecord, SCHEMA_VERSION, SemanticSnapshot, SignatureId,
+    SignatureRecord, SnapshotError, SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind,
+    TypeRecord, VariableKind,
 };
