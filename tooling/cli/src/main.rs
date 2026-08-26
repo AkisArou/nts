@@ -16,11 +16,12 @@ fn main() -> Result<()> {
         Some("frontend") => {
             let rest: Vec<String> = args.collect();
             let decompose = rest.iter().any(|a| a == "--decompose");
+            let calls = rest.iter().any(|a| a == "--calls");
             let tsconfig = rest
                 .iter()
                 .find(|a| !a.starts_with("--"))
                 .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
-            frontend(&tsconfig, decompose)
+            frontend(&tsconfig, decompose, calls)
         }
         Some("version") | None => {
             println!("nts {}", env!("CARGO_PKG_VERSION"));
@@ -37,11 +38,14 @@ fn main() -> Result<()> {
 /// This exists before `nts build` on purpose. Gate G1 is the measurement that
 /// validates the `tsgo --api` transport decision, and a gate nobody can run is
 /// not a gate.
-fn frontend(tsconfig: &Utf8Path, decompose: bool) -> Result<()> {
+fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let mut source = TsgoApi::new(tsgo_binary);
     if decompose {
         source = source.with_decomposition(Budget::DEFAULT);
+    }
+    if calls {
+        source = source.with_call_resolution(Budget::DEFAULT);
     }
 
     let snapshot = source.snapshot(tsconfig)?;
@@ -53,6 +57,9 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool) -> Result<()> {
     println!("  distinct       {}", stats.distinct_types);
     println!("symbols          {}", stats.symbols);
     println!("modules          {}", stats.modules);
+    if calls {
+        println!("calls resolved   {}", stats.calls_resolved);
+    }
     if decompose {
         println!("  decomposed     {}", stats.decomposed);
         if stats.decomposition_exhausted {

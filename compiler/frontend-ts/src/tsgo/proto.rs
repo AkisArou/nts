@@ -341,6 +341,9 @@ pub struct GetSignaturesOfTypeParams {
 #[serde(rename_all = "camelCase")]
 pub struct SignatureResponse {
     pub id: u64,
+    /// The declaration this signature came from, when it has one.
+    #[serde(default)]
+    pub declaration: Option<NodeHandle>,
     #[serde(default)]
     pub flags: u32,
     /// Symbols of the declared parameters, in order.
@@ -417,4 +420,16 @@ pub struct DiagnosticResponse {
     /// by the reason. Flattened into labels rather than dropped.
     #[serde(default)]
     pub message_chain: Vec<DiagnosticResponse>,
+}
+
+/// Parameters for `getResolvedSignature`.
+///
+/// `location` is the call expression. Per call site — there is no batch form, so
+/// this costs round trips proportional to calls rather than to files.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetResolvedSignatureParams {
+    pub snapshot: SnapshotHandle,
+    pub project: ProjectHandle,
+    pub location: NodeHandle,
 }

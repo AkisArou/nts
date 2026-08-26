@@ -27,14 +27,15 @@
 //! that hits it says so instead of quietly returning a partial type graph.
 
 use nts_semantic_schema::{
-    ParameterRecord, SemanticSnapshot, SignatureId, SignatureRecord, SymbolId, TypeId, TypeKind,
+    CallTarget, NodeId, NodeKind, ParameterRecord, SemanticSnapshot, SignatureId, SignatureRecord,
+    SymbolId, TypeId, TypeKind,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::proto::{
-    ProjectHandle, SignatureResponse, SnapshotHandle, TypeResponse, signature_flags,
+    NodeHandle, ProjectHandle, SignatureResponse, SnapshotHandle, TypeResponse, signature_flags,
 };
-use super::types::{self, flags};
+use super::types::{self, flags, syntax};
 use super::{Client, TsgoError};
 
 /// How much traffic one decomposition may spend.
@@ -238,6 +239,76 @@ impl<'a> Decomposer<'a> {
         })
     }
 
+    /// Resolve every call site to the signature it reaches.
+    ///
+    /// `file_bases` maps a source path to where its nodes begin in the arena, so a
+    /// callee's declaration handle can be turned back into a `NodeId`.
+    ///
+    /// Costs one exchange per call site plus the signature's own two, and there is
+    /// no batch form — the same per-item shape as type decomposition, and opt-in
+    /// for the same reason.
+    pub fn resolve_calls(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        file_bases: &[(String, u32)],
+        budget: Budget,
+    ) -> Result<DecomposeStats, TsgoError> {
+        let before = self.client.round_trips();
+        let mut stats = DecomposeStats::default();
+
+        let sites: Vec<(NodeId, NodeHandle)> = snapshot
+            .nodes
+            .iter()
+            .enumerate()
+            .filter_map(|(index, node)| {
+                let NodeKind::Syntax(kind) = node.kind else {
+                    return None;
+                };
+                if kind != syntax::CALL_EXPRESSION && kind != syntax::NEW_EXPRESSION {
+                    return None;
+                }
+                let arena = u32::try_from(index).unwrap_or(u32::MAX);
+                let (path, base) = file_of(file_bases, arena)?;
+                Some((
+                    NodeId(arena),
+                    NodeHandle(types::node_handle(arena - base + 1, kind, path)),
+                ))
+            })
+            .collect();
+
+        let mut worklist = Vec::new();
+        let seeded = FxHashSet::default();
+
+        for (node, handle) in sites {
+            if stats.decomposed as usize >= budget.max_types {
+                stats.exhausted = true;
+                break;
+            }
+            let signature = self
+                .client
+                .resolved_signature(self.handle, &self.project, handle)?;
+            let id =
+                self.record_signature(snapshot, &signature, &mut worklist, &mut stats, &seeded)?;
+
+            let callee = signature
+                .declaration
+                .as_ref()
+                .and_then(|handle| declaration_node(handle, file_bases));
+
+            snapshot.call_targets.insert(
+                node,
+                CallTarget {
+                    signature: id,
+                    callee,
+                },
+            );
+            stats.decomposed += 1;
+        }
+
+        stats.round_trips = self.client.round_trips() - before;
+        Ok(stats)
+    }
+
     /// Resolve one call signature into a schema record.
     ///
     /// Costs two exchanges beyond the `getSignaturesOfType` that found it: one
@@ -346,6 +417,33 @@ impl<'a> Decomposer<'a> {
     }
 }
 
+/// Which file an arena index belongs to, and where that file starts.
+fn file_of(file_bases: &[(String, u32)], arena: u32) -> Option<(&str, u32)> {
+    file_bases
+        .iter()
+        .rev()
+        .find(|(_, base)| *base <= arena)
+        .map(|(path, base)| (path.as_str(), *base))
+}
+
+/// Turn a declaration handle back into an arena node.
+///
+/// Returns `None` for a declaration outside the decoded set — an imported or
+/// ambient function. Mapping it onto whatever node sits at that index in another
+/// file would be a wrong answer that looks exactly like a right one.
+fn declaration_node(handle: &NodeHandle, file_bases: &[(String, u32)]) -> Option<NodeId> {
+    let (index, path) = {
+        let rest = handle.0.split_once('.')?;
+        let (index, tail) = rest;
+        let (_kind, path) = tail.split_once('.')?;
+        (index.parse::<u32>().ok()?, path)
+    };
+    let base = file_bases
+        .iter()
+        .find(|(candidate, _)| candidate == path)
+        .map(|(_, base)| *base)?;
+    index.checked_sub(1).map(|i| NodeId(i + base))
+}
 #[cfg(test)]
 mod tests {
     use super::*;

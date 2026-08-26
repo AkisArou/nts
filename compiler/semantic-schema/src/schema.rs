@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -71,6 +71,12 @@ pub struct SemanticSnapshot {
     pub signatures: Vec<SignatureRecord>,
     /// Indexed by [`NodeId`]. Flattened from tsgo's encoded AST.
     pub nodes: Vec<NodeRecord>,
+    /// Which signature each call site resolves to.
+    ///
+    /// The difference between emitting a static call and emitting a dispatch. A
+    /// backend that does not know the callee has to go through a function value;
+    /// one that does can emit `call helper` and inline it.
+    pub call_targets: FxHashMap<NodeId, CallTarget>,
     /// What the checker said about this program.
     ///
     /// A snapshot is produced even when the program does not typecheck, because
@@ -83,6 +89,19 @@ pub struct SemanticSnapshot {
     /// queried, which is what keeps the frontend's round-trip count bounded by
     /// file count rather than node count.
     pub node_types: FxHashMap<NodeId, TypeId>,
+}
+
+/// What a call site reaches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CallTarget {
+    /// The signature the checker selected, after overload resolution.
+    pub signature: SignatureId,
+    /// The callee's declaration, when it is in the decoded program.
+    ///
+    /// `None` for a call into a file outside the decoded set — an imported or
+    /// ambient function. The signature is still known, so the call can be typed
+    /// exactly; only the direct symbol reference is unavailable.
+    pub callee: Option<NodeId>,
 }
 
 /// One module in the source graph.

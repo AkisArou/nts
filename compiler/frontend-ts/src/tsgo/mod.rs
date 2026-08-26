@@ -48,11 +48,11 @@ use serde::de::DeserializeOwned;
 use crate::source::{FrontendStats, SemanticSource};
 use proto::{
     CheckerSignatureParams, CheckerSymbolParams, CheckerTypeParams, DiagnosticResponse,
-    DocumentIdentifier, GetDiagnosticsParams, GetSignaturesOfTypeParams, GetSourceFileParams,
-    GetSymbolsAtLocationsParams, GetTypeAtLocationsParams, GetTypePropertyParams,
-    GetTypesOfSymbolsParams, InitializeResponse, NodeHandle, ProjectHandle, SignatureKind,
-    SignatureResponse, SnapshotHandle, SymbolResponse, TypeResponse, UpdateSnapshotParams,
-    UpdateSnapshotResponse,
+    DocumentIdentifier, GetDiagnosticsParams, GetResolvedSignatureParams,
+    GetSignaturesOfTypeParams, GetSourceFileParams, GetSymbolsAtLocationsParams,
+    GetTypeAtLocationsParams, GetTypePropertyParams, GetTypesOfSymbolsParams, InitializeResponse,
+    NodeHandle, ProjectHandle, SignatureKind, SignatureResponse, SnapshotHandle, SymbolResponse,
+    TypeResponse, UpdateSnapshotParams, UpdateSnapshotResponse,
 };
 use wire::{Frame, MessageType, WireError, read_frame, write_frame};
 
@@ -369,6 +369,25 @@ impl Client {
         Ok(all)
     }
 
+    /// Which signature a call site resolves to, after overload resolution.
+    ///
+    /// Per call site; there is no batch form.
+    pub fn resolved_signature(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        location: NodeHandle,
+    ) -> Result<SignatureResponse, TsgoError> {
+        self.request(
+            proto::method::GET_RESOLVED_SIGNATURE,
+            &GetResolvedSignatureParams {
+                snapshot,
+                project: project.clone(),
+                location,
+            },
+        )
+    }
+
     /// Return type of one signature.
     pub fn return_type_of_signature(
         &mut self,
@@ -495,6 +514,7 @@ impl Drop for Client {
 pub struct TsgoApi {
     executable: Utf8PathBuf,
     decompose: Option<decompose::Budget>,
+    resolve_calls: Option<decompose::Budget>,
     stats: FrontendStats,
 }
 
@@ -507,6 +527,7 @@ impl TsgoApi {
         Self {
             executable: executable.into(),
             decompose: None,
+            resolve_calls: None,
             stats: FrontendStats::default(),
         }
     }
@@ -522,6 +543,18 @@ impl TsgoApi {
     #[must_use]
     pub const fn with_decomposition(mut self, budget: decompose::Budget) -> Self {
         self.decompose = Some(budget);
+        self
+    }
+
+    /// Also resolve every call site to the signature it reaches.
+    ///
+    /// Off by default for the same reason decomposition is: one exchange per call
+    /// site, with no batch form. What it buys is the difference between a static
+    /// call and a dispatch, so any backend that emits calls will want it — but
+    /// only for the calls a build actually reaches.
+    #[must_use]
+    pub const fn with_call_resolution(mut self, budget: decompose::Budget) -> Self {
+        self.resolve_calls = Some(budget);
         self
     }
 
@@ -550,6 +583,9 @@ impl SemanticSource for TsgoApi {
         // one record no matter how many nodes name it.
         let mut interned: FxHashMap<u32, TypeId> = FxHashMap::default();
         let mut symbol_ids: FxHashMap<u32, SymbolId> = FxHashMap::default();
+        // Where each file's nodes begin, so a declaration handle can be mapped
+        // back onto the shared arena.
+        let mut file_bases: Vec<(String, u32)> = Vec::new();
 
         for project in &opened.projects {
             for path in &project.root_files {
@@ -582,6 +618,8 @@ impl SemanticSource for TsgoApi {
                         node
                     }));
 
+                file_bases.push((path.to_string(), base));
+
                 let ctx = symbols::FileContext {
                     handle: opened.snapshot,
                     project: &project.id,
@@ -609,23 +647,28 @@ impl SemanticSource for TsgoApi {
         // Seeded with every interned type, because reachability does not exist yet
         // to say which of them the build will actually reach. The seam is the seed
         // set: when it does, only this argument changes.
-        let decomposed = if let Some(budget) = self.decompose {
+        let mut decomposed = None;
+        let mut resolved = None;
+        if self.decompose.is_some() || self.resolve_calls.is_some() {
             let seeds: Vec<u32> = interned.keys().copied().collect();
             let project = opened
                 .projects
                 .first()
                 .map_or_else(|| ProjectHandle(String::new()), |p| p.id.clone());
-            let mut decomposer = decompose::Decomposer::new(
+            let mut deep = decompose::Decomposer::new(
                 &mut client,
                 opened.snapshot,
                 project,
                 interned,
                 symbol_ids,
             );
-            Some(decomposer.run(&mut snapshot, seeds, budget)?)
-        } else {
-            None
-        };
+            if let Some(budget) = self.decompose {
+                decomposed = Some(deep.run(&mut snapshot, seeds, budget)?);
+            }
+            if let Some(budget) = self.resolve_calls {
+                resolved = Some(deep.resolve_calls(&mut snapshot, &file_bases, budget)?);
+            }
+        }
 
         self.stats = FrontendStats {
             elapsed_ms: started.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
@@ -638,6 +681,7 @@ impl SemanticSource for TsgoApi {
             warnings: count_severity(&snapshot, nts_diagnostics::Severity::Warning),
             symbols: u32::try_from(snapshot.symbols.len()).unwrap_or(u32::MAX),
             modules: symbols::module_count(&snapshot),
+            calls_resolved: resolved.map_or(0, |r| r.decomposed),
             decomposed: decomposed.map_or(0, |d| d.decomposed),
             decomposition_exhausted: decomposed.is_some_and(|d| d.exhausted),
         };

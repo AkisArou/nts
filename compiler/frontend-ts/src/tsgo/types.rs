@@ -126,6 +126,37 @@ fn literal_or_structured(
     )
 }
 
+/// `ast.SyntaxKind` values, for tsgo 7.0.2.
+///
+/// Read off a real encoded program rather than transcribed from the Go `iota`
+/// list, and pinned by a test against a checked-in fixture — a tsgo bump that
+/// renumbers a kind should fail loudly rather than silently mis-identify nodes.
+pub mod syntax {
+    pub const NUMERIC_LITERAL: u16 = 8;
+    pub const IDENTIFIER: u16 = 79;
+    pub const EXPORT_KEYWORD: u16 = 94;
+    pub const VOID_KEYWORD: u16 = 115;
+    pub const STATIC_KEYWORD: u16 = 125;
+    pub const ASYNC_KEYWORD: u16 = 133;
+    pub const READONLY_KEYWORD: u16 = 148;
+    pub const NUMBER_KEYWORD: u16 = 150;
+    pub const PARAMETER: u16 = 170;
+    pub const PROPERTY_DECLARATION: u16 = 173;
+    pub const METHOD_DECLARATION: u16 = 175;
+    pub const CALL_EXPRESSION: u16 = 214;
+    pub const NEW_EXPRESSION: u16 = 215;
+    pub const BLOCK: u16 = 242;
+    pub const VARIABLE_STATEMENT: u16 = 244;
+    pub const RETURN_STATEMENT: u16 = 254;
+    pub const VARIABLE_DECLARATION: u16 = 261;
+    pub const FUNCTION_DECLARATION: u16 = 263;
+    pub const CLASS_DECLARATION: u16 = 264;
+    pub const ENUM_DECLARATION: u16 = 267;
+    pub const HERITAGE_CLAUSE: u16 = 299;
+    pub const ENUM_MEMBER: u16 = 306;
+    pub const SOURCE_FILE: u16 = 307;
+}
+
 /// Format a node handle the way `session.go`'s `nodeHandleFrom` does.
 ///
 /// `encoder_index` is the index in tsgo's node table, which is one greater than
