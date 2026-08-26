@@ -89,6 +89,25 @@ pub struct Analysis {
     /// Indexed by [`ValueId`]. The set of numbers the value may hold, anywhere
     /// it can be read.
     values: Vec<Facts>,
+    /// Per block, pairs `(a, b)` where `a < b` is known to hold throughout.
+    ///
+    /// A deliberately thin slice of relational information on top of an
+    /// interval domain, and it exists for one question intervals cannot answer:
+    /// whether an index is inside an array whose length is unknown.
+    /// `for (i = 0; i < xs.length; i++)` bounds `i` by a number the analysis has
+    /// no value for — so no interval proves it, and the *identity* of the value
+    /// that guards the loop is the whole of the proof.
+    ///
+    /// Only strict `<` is recorded, because that is what a bounds check needs.
+    less_than: Vec<Vec<(ValueId, ValueId)>>,
+    /// Per block, what a guard on the way in narrowed a value to.
+    ///
+    /// A value's own fact is the join over every path that reaches it, which is
+    /// necessarily wider than what holds at any one of them. Inside
+    /// `if (i < 5)`, `i` is `[0, 4]`; its definition only promises `[0, 5]`,
+    /// because the value that leaves the loop is the one that failed the test.
+    /// One is enough to prove an index in bounds and the other is not.
+    refined: Vec<Refinements>,
 }
 
 impl Analysis {
@@ -102,6 +121,39 @@ impl Analysis {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
+    }
+
+    /// Whether a value is known to be less than some value the predicate
+    /// accepts, everywhere in a block.
+    ///
+    /// Taking a predicate rather than a value because the caller is asking
+    /// "less than *this array's* length", and which value that is depends on
+    /// what the guard happened to compare against.
+    #[must_use]
+    pub fn guarded_by(
+        &self,
+        block: BlockId,
+        value: ValueId,
+        accept: impl Fn(ValueId) -> bool,
+    ) -> bool {
+        self.less_than
+            .get(block.0 as usize)
+            .is_some_and(|relations| {
+                relations
+                    .iter()
+                    .any(|(lesser, greater)| *lesser == value && accept(*greater))
+            })
+    }
+
+    /// What is known about a value *at a particular block*.
+    ///
+    /// Narrower than [`Self::get`] wherever a guard on the way in said more.
+    #[must_use]
+    pub fn get_at(&self, block: BlockId, value: ValueId) -> Facts {
+        self.refined
+            .get(block.0 as usize)
+            .and_then(|refinements| refinements.get(&value).copied())
+            .unwrap_or_else(|| self.get(value))
     }
 
     /// What is known about a value.
@@ -142,6 +194,9 @@ impl Analysis {
 
 /// Values whose facts an edge refined, relative to their own definitions.
 type Refinements = FxHashMap<ValueId, Facts>;
+
+/// Pairs `(a, b)` for which `a < b` is known.
+type Relations = Vec<(ValueId, ValueId)>;
 
 /// What the rest of the program contributes to one function's analysis.
 ///
@@ -258,7 +313,79 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
         }
     }
 
-    Analysis { values }
+    Analysis {
+        values,
+        less_than: relations(func, &entry),
+        refined: entry.into_iter().map(Option::unwrap_or_default).collect(),
+    }
+}
+
+/// The `a < b` facts that hold at the top of each block.
+///
+/// Derived once the intervals have settled, by asking each branch what taking
+/// it proves. A block reached from more than one edge keeps only what every
+/// edge agrees on.
+fn relations(func: &Func, entry: &[Option<Refinements>]) -> Vec<Relations> {
+    let mut incoming: Vec<Option<Relations>> = vec![None; func.blocks.len()];
+
+    for (index, block) in func.blocks.iter().enumerate() {
+        if entry[index].is_none() {
+            // Unreached, so it proves nothing to anyone.
+            continue;
+        }
+        let Terminator::Branch {
+            cond,
+            then_target,
+            else_target,
+            ..
+        } = &block.terminator
+        else {
+            for successor in block.terminator.successors() {
+                merge(&mut incoming[successor.0 as usize], Vec::new());
+            }
+            continue;
+        };
+
+        let (taken, not_taken) = match &func.values[cond.0 as usize].kind {
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs,
+                rhs,
+            } => (vec![(*lhs, *rhs)], Vec::new()),
+            // `!(a >= b)` is `a < b`, so the *false* edge of a `>=` proves it.
+            OpKind::Binary {
+                op: BinOp::Ge,
+                lhs,
+                rhs,
+            } => (Vec::new(), vec![(*lhs, *rhs)]),
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs,
+                rhs,
+            } => (vec![(*rhs, *lhs)], Vec::new()),
+            OpKind::Binary {
+                op: BinOp::Le,
+                lhs,
+                rhs,
+            } => (Vec::new(), vec![(*rhs, *lhs)]),
+            _ => (Vec::new(), Vec::new()),
+        };
+        merge(&mut incoming[then_target.0 as usize], taken);
+        merge(&mut incoming[else_target.0 as usize], not_taken);
+    }
+
+    incoming
+        .into_iter()
+        .map(Option::unwrap_or_default)
+        .collect()
+}
+
+/// Intersect what a block already knew with what one more edge proves.
+fn merge(slot: &mut Option<Relations>, arriving: Relations) {
+    match slot {
+        Some(existing) => existing.retain(|pair| arriving.contains(pair)),
+        None => *slot = Some(arriving),
+    }
 }
 
 /// Run one block, then hand its successors what it proved.
@@ -328,6 +455,19 @@ fn transfer_block(
                 op: UnOp::Abs,
                 operand,
             } => facts::abs(lookup(&refinements, values, *operand)),
+            // A length is a `uint32`, always. Where the array was allocated
+            // here with a known size, it is that size exactly — which is what
+            // lets an index into an array literal be proven in bounds by the
+            // interval domain alone, with no reasoning about the array at all.
+            OpKind::ArrayLen(array) => {
+                let bound = Facts::new(0.0, facts::U32_MAX, true, false, false);
+                match func.values[array.0 as usize].kind {
+                    OpKind::ArrayNew { length } => {
+                        lookup(&refinements, values, length).narrow(bound)
+                    }
+                    _ => bound,
+                }
+            }
             // A parameter keeps what its declared type said. It is an operation
             // in the entry block like any other, so without this arm the
             // transfer recomputes it as TOP and joins that over the seed —

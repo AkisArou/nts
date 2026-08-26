@@ -24,6 +24,7 @@
 //!   one [`ValueId`]. Binding identity is what makes that possible, which is why
 //!   symbol resolution had to land before this.
 
+pub mod bounds;
 pub mod dce;
 pub mod facts;
 pub mod flow;
@@ -466,6 +467,10 @@ pub struct Prepared {
     pub diagnostics: Vec<nts_diagnostics::Diagnostic>,
     pub specialized: usize,
     pub conversions: usize,
+    /// Bounds checks the range analysis proved unnecessary.
+    pub checks_removed: usize,
+    /// Bounds checks that remain.
+    pub checks_kept: usize,
 }
 
 /// Lower a snapshot and make it ready to emit.
@@ -527,12 +532,36 @@ pub fn prepare_with(
         dce::eliminate(func);
     }
 
+    // Bounds checks last, once the facts are as sharp as they are going to get:
+    // a check is removed only where the index was proven, and specialization
+    // and folding are what sharpen the index.
+    let mut checks_removed = 0;
+    if specialize_numbers {
+        let analyses = interprocedural::analyze_program(&program);
+        for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
+            checks_removed += bounds::eliminate_checks(func, analysis);
+        }
+    }
+    let checks_kept = program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter(|op| {
+            matches!(
+                op.kind,
+                OpKind::ArrayGet { checked: true, .. } | OpKind::ArraySet { checked: true, .. }
+            )
+        })
+        .count();
+
     verify::verify(&program)?;
     Ok(Prepared {
         program,
         diagnostics: lowered.diagnostics,
         specialized,
         conversions,
+        checks_removed,
+        checks_kept,
     })
 }
 
