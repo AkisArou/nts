@@ -208,13 +208,30 @@ Game is the canonical one and needs nullable fields for leaves, which we do not
 have. Worth revisiting when optionality lands, because it is the workload that
 would stress escape analysis, reference counting and the cycle collector at once.
 
-## Open decisions
+## Decisions
 
-1. **Pull the 19,000-case TypeScript submodule?** It is a large clone. The 296
-   vendored cases are enough to build the harness against; the full corpus is
-   worth it once the harness exists.
-2. **Upstream the AWFY port?** It would be the reference TypeScript
-   implementation for a suite that has ten others. It also means writing to
-   someone else's review standard, which is a cost and a discipline.
-3. **C++ reference column for AWFY only, or convert `benches/cases/` too?** Two
-   reference conventions in one runner is a smell; one of them should win.
+**The port stays here.** Not upstreamed. That removes one of the three defences
+against a port that is too easy — someone else's review — so the other two carry
+the whole load. Running the original `.js` and the ported `.ts` on node and
+comparing checksums stops being a nice-to-have and becomes the thing that decides
+whether a port is admissible at all. It runs per benchmark, in CI, and a
+mismatch is a build failure rather than a note.
+
+**C++ is the reference, everywhere.** Not only for the Are We Fast Yet cases —
+the existing `benches/cases/*/ref-double.c` and `ref-int.c` convert too. Two
+reference conventions in one runner is a smell, and the AWFY C++ has the property
+the hand-written C never will: someone other than the thing being measured wrote
+it. The conversion is mechanical and the checksums prove it did not change
+anything.
+
+**The Java port is for later, and it is worth more than it looks.** RFC §1
+targets the JVM as well as C and LLVM. When that backend exists, Are We Fast Yet
+gives us a hand-written implementation *in the target language* — the same
+fourteen programs, written by a Java programmer, against which nts-generated
+bytecode can be measured directly. No other suite offers that, and it is a reason
+to keep the TypeScript port faithful to the Java one's structure rather than only
+to the JavaScript one's.
+
+**The 19,000-case TypeScript submodule waits.** The 296 vendored cases are enough
+to build the harness against. Pull the full corpus once the harness exists and
+the refusal diagnostic names types.
