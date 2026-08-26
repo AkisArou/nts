@@ -23,13 +23,13 @@ them, so read the ratios rather than the absolute times.
 <!-- benchmarks:start -->
 | case | C++ | nts | nts f64 | V8 | nts/C++ | nts/V8 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| accumulate | 1.36 us | **1.84 us** | 80.11 us | 3.70 us | 1.35x | 0.50x |
-| arrays | 1.75 us | **1.90 us** | 5.15 us | 2.69 us | 1.08x | 0.71x |
-| checksum | 6.38 us | **6.38 us** | 125.31 us | 9.45 us | 1.00x | 0.67x |
-| fib | 333.33 us | **530.38 us** | 612.96 us | 1.08 ms | 1.59x | 0.49x |
-| loop | 997.0 ns | **864.3 ns** | 858.9 ns | 1.05 us | 0.87x | 0.82x |
-| mandelbrot | 75.15 us | **75.47 us** | 75.53 us | 77.10 us | 1.00x | 0.98x |
-| objects (rc) | 2.11 us | **2.09 us** | 2.35 us | 2.21 us | 0.99x | 0.95x |
+| accumulate | 1.40 us | **2.00 us** | 84.81 us | 3.88 us | 1.42x | 0.51x |
+| arrays | 1.85 us | **2.00 us** | 5.54 us | 2.90 us | 1.08x | 0.69x |
+| checksum | 6.77 us | **6.63 us** | 131.51 us | 9.16 us | 0.98x | 0.72x |
+| fib | 366.55 us | **671.02 us** | 641.47 us | 1.03 ms | 1.83x | 0.65x |
+| loop | 1.02 us | **873.3 ns** | 877.8 ns | 1.03 us | 0.86x | 0.85x |
+| mandelbrot | 77.67 us | **78.15 us** | 78.06 us | 79.63 us | 1.01x | 0.98x |
+| objects (rc) | 2.15 us | **2.12 us** | 2.43 us | 2.23 us | 0.99x | 0.95x |
 
 Both ratios are nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, `nts/V8` under 1.00 beats V8.
 

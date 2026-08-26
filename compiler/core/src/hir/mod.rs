@@ -37,6 +37,7 @@ pub mod loops;
 pub mod lower;
 pub mod rc;
 pub mod reachable;
+pub mod simplify;
 pub mod specialize;
 pub mod verify;
 
@@ -705,6 +706,8 @@ pub struct Prepared {
     pub counting: rc::Report,
     /// Allocations that stayed in the frame instead of reaching the allocator.
     pub framed: usize,
+    /// Operations that turned out to return one of their own operands.
+    pub simplified: usize,
 }
 
 /// Lower a snapshot and make it ready to emit.
@@ -822,6 +825,15 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         }
     }
 
+    // Identities become visible only once specialization has decided
+    // representations: `x | 0` is a coercion until `x` is known to be an `i32`,
+    // and then it is nothing. Removing them here keeps every pass below from
+    // tracking values that are copies of other values.
+    let mut simplified = 0;
+    for func in &mut program.funcs {
+        simplified += simplify::simplify(func);
+    }
+
     // Specialization orphans values by design — a folded constant leaves its
     // unfolded original with no readers — and the C emitter declares a local for
     // everything it assigns.
@@ -876,6 +888,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         pruned,
         counting,
         framed,
+        simplified,
     }
 }
 
