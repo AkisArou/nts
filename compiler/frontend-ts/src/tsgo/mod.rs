@@ -1,0 +1,677 @@
+//! The `tsgo --api` transport.
+//!
+//! # Shape of the conversation
+//!
+//! `tsgo --api` is a request/response server over stdio. There are no request
+//! ids: the method name *is* the correlation key, so exactly one request may be
+//! outstanding at a time. [`Client`] enforces that by taking `&mut self`.
+//!
+//! Two properties of the API keep the round-trip count bounded by *file* count
+//! rather than node count:
+//!
+//! - **ASTs arrive in bulk.** `internal/api/encoder` writes a flat binary node
+//!   layout plus a shared string table, and `getSourceFile` returns a whole file
+//!   as one `RawBinary` payload. AST transfer is not a per-node round trip.
+//! - **Type and symbol queries batch.** `getTypeAtLocations` and
+//!   `getSymbolsAtLocations` take lists, so a file's queries collapse into one
+//!   exchange each.
+//!
+//! [`crate::FrontendStats`] measures whether we are actually holding to that.
+//! See `docs/records/0001-frontend-transport-cost.md` for the numbers.
+//!
+//! # Version pinning
+//!
+//! `internal/api` is internal-scoped and explicitly unstable, so the protocol is
+//! pinned to one tsgo release. [`PINNED_TSGO`] names it and the submodule under
+//! `third_party/typescript-go` is the source of truth it was read from.
+
+pub mod ast;
+pub mod decompose;
+pub mod proto;
+pub mod symbols;
+pub mod types;
+pub mod wire;
+
+use std::io::{BufReader, BufWriter, Write};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::time::Instant;
+
+use camino::{Utf8Path, Utf8PathBuf};
+use nts_diagnostics::{Digest, SourceFile, SourceId};
+use nts_semantic_schema::{
+    NodeId, NodeKind, SCHEMA_VERSION, SemanticSnapshot, SnapshotError, SymbolId, TypeId,
+};
+use rustc_hash::FxHashMap;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
+use crate::source::{FrontendStats, SemanticSource};
+use proto::{
+    CheckerSignatureParams, CheckerSymbolParams, CheckerTypeParams, DocumentIdentifier,
+    GetSignaturesOfTypeParams, GetSourceFileParams, GetSymbolsAtLocationsParams,
+    GetTypeAtLocationsParams, GetTypePropertyParams, GetTypesOfSymbolsParams, InitializeResponse,
+    NodeHandle, ProjectHandle, SignatureKind, SignatureResponse, SnapshotHandle, SymbolResponse,
+    TypeResponse, UpdateSnapshotParams, UpdateSnapshotResponse,
+};
+use wire::{Frame, MessageType, WireError, read_frame, write_frame};
+
+/// The tsgo release this adapter targets.
+///
+/// Matches the `typescript/v7.0.2` tag of the `third_party/typescript-go`
+/// submodule, which is npm `typescript@7.0.2`. Bump deliberately, together with a
+/// run of the frontend conformance fixtures.
+pub const PINNED_TSGO: &str = "7.0.2";
+
+/// Why the frontend failed.
+#[derive(Debug, thiserror::Error)]
+pub enum TsgoError {
+    #[error("could not start `{executable}`: {source}")]
+    Spawn {
+        executable: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error(transparent)]
+    Wire(#[from] WireError),
+
+    #[error("tsgo rejected `{method}`: {message}")]
+    Server { method: String, message: String },
+
+    #[error("tsgo answered `{method}` with a `{got}` frame")]
+    UnexpectedFrame { method: String, got: &'static str },
+
+    #[error(
+        "tsgo asked us to service a `{0}` callback, but no filesystem callbacks were enabled; \
+         this build of tsgo does not match the pinned protocol"
+    )]
+    UnexpectedCallback(String),
+
+    #[error("could not decode tsgo's answer to `{method}`: {source}")]
+    Decode {
+        method: String,
+        #[source]
+        source: serde_json::Error,
+    },
+
+    #[error("could not decode the AST for `{file}`: {source}")]
+    Ast {
+        file: String,
+        #[source]
+        source: ast::AstError,
+    },
+}
+
+impl From<TsgoError> for SnapshotError {
+    fn from(error: TsgoError) -> Self {
+        Self::Transport(error.to_string())
+    }
+}
+
+const fn frame_name(message_type: MessageType) -> &'static str {
+    match message_type {
+        MessageType::Request => "request",
+        MessageType::CallResponse => "call-response",
+        MessageType::CallError => "call-error",
+        MessageType::Response => "response",
+        MessageType::Error => "error",
+        MessageType::Call => "call",
+    }
+}
+
+/// A live `tsgo --api` child process.
+///
+/// Dropping the client closes tsgo's stdin, which is how the server is asked to
+/// exit; [`Drop`] then reaps it so a failed build does not leave a 40 MB checker
+/// resident.
+#[derive(Debug)]
+pub struct Client {
+    child: Child,
+    stdin: BufWriter<ChildStdin>,
+    stdout: BufReader<ChildStdout>,
+    round_trips: u64,
+}
+
+impl Client {
+    /// Spawn `executable --api` with `cwd` as its working directory.
+    ///
+    /// Filesystem callbacks are deliberately not enabled: tsgo reads the disk
+    /// itself, so the conversation stays strictly request/response and we never
+    /// have to service a server-initiated [`MessageType::Call`] mid-request.
+    pub fn spawn(executable: &Utf8Path, cwd: &Utf8Path) -> Result<Self, TsgoError> {
+        let mut child = Command::new(executable.as_str())
+            .arg("--api")
+            .arg("--cwd")
+            .arg(cwd.as_str())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .map_err(|source| TsgoError::Spawn {
+                executable: executable.to_string(),
+                source,
+            })?;
+
+        let stdin = child.stdin.take().expect("stdin was piped");
+        let stdout = child.stdout.take().expect("stdout was piped");
+
+        Ok(Self {
+            child,
+            stdin: BufWriter::new(stdin),
+            stdout: BufReader::new(stdout),
+            round_trips: 0,
+        })
+    }
+
+    /// Request/response pairs exchanged so far.
+    #[must_use]
+    pub const fn round_trips(&self) -> u64 {
+        self.round_trips
+    }
+
+    /// Send a request and return the raw response payload.
+    ///
+    /// Used directly for methods whose answer is binary — `getSourceFile` returns
+    /// an encoded AST that must not be routed through JSON.
+    pub fn request_raw(
+        &mut self,
+        method: &str,
+        params: &impl Serialize,
+    ) -> Result<Vec<u8>, TsgoError> {
+        let payload = serde_json::to_vec(params).map_err(|source| TsgoError::Decode {
+            method: method.to_owned(),
+            source,
+        })?;
+
+        write_frame(&mut self.stdin, MessageType::Request, method, &payload)?;
+        self.round_trips += 1;
+
+        let Frame {
+            message_type,
+            payload,
+            ..
+        } = read_frame(&mut self.stdout)?;
+
+        match message_type {
+            MessageType::Response => Ok(payload),
+            MessageType::Error => Err(TsgoError::Server {
+                method: method.to_owned(),
+                message: String::from_utf8_lossy(&payload).into_owned(),
+            }),
+            MessageType::Call => Err(TsgoError::UnexpectedCallback(method.to_owned())),
+            other => Err(TsgoError::UnexpectedFrame {
+                method: method.to_owned(),
+                got: frame_name(other),
+            }),
+        }
+    }
+
+    /// Send a request and decode a JSON response.
+    pub fn request<R: DeserializeOwned>(
+        &mut self,
+        method: &str,
+        params: &impl Serialize,
+    ) -> Result<R, TsgoError> {
+        let payload = self.request_raw(method, params)?;
+        serde_json::from_slice(&payload).map_err(|source| TsgoError::Decode {
+            method: method.to_owned(),
+            source,
+        })
+    }
+
+    /// Perform the `initialize` handshake.
+    pub fn initialize(&mut self) -> Result<InitializeResponse, TsgoError> {
+        self.request(proto::method::INITIALIZE, &serde_json::Value::Null)
+    }
+
+    /// Open a `tsconfig.json` and take a snapshot of the resulting program.
+    pub fn open_project(
+        &mut self,
+        tsconfig: &Utf8Path,
+    ) -> Result<UpdateSnapshotResponse, TsgoError> {
+        self.request(
+            proto::method::UPDATE_SNAPSHOT,
+            &UpdateSnapshotParams {
+                open_projects: vec![DocumentIdentifier::file(tsconfig)],
+            },
+        )
+    }
+
+    /// Fetch one file's encoded AST.
+    ///
+    /// Answers with `RawBinary`, so this must not go through the JSON path — the
+    /// bytes are the encoded format, not a JSON document.
+    pub fn source_file(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        file: &Utf8Path,
+    ) -> Result<Vec<u8>, TsgoError> {
+        self.request_raw(
+            proto::method::GET_SOURCE_FILE,
+            &GetSourceFileParams {
+                snapshot,
+                project: project.clone(),
+                file: DocumentIdentifier::file(file),
+            },
+        )
+    }
+
+    /// Resolve the types at many locations in one exchange.
+    ///
+    /// Every handle must resolve: `handleGetTypeAtLocations` returns on the first
+    /// failure, so a single unresolvable location loses the whole batch. Callers
+    /// filter `NodeList`s out before calling.
+    pub fn types_at(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        locations: Vec<NodeHandle>,
+    ) -> Result<Vec<TypeResponse>, TsgoError> {
+        if locations.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.request(
+            proto::method::GET_TYPE_AT_LOCATIONS,
+            &GetTypeAtLocationsParams {
+                snapshot,
+                project: project.clone(),
+                locations,
+            },
+        )
+    }
+
+    /// Resolve the symbols at many locations in one exchange.
+    ///
+    /// Entries are `None` where a node names no symbol — a keyword, an operator,
+    /// a block. tsgo leaves those slots nil rather than omitting them, so the
+    /// result stays positionally aligned with the request.
+    pub fn symbols_at(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        locations: Vec<NodeHandle>,
+    ) -> Result<Vec<Option<SymbolResponse>>, TsgoError> {
+        if locations.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.request(
+            proto::method::GET_SYMBOLS_AT_LOCATIONS,
+            &GetSymbolsAtLocationsParams {
+                snapshot,
+                project: project.clone(),
+                locations,
+            },
+        )
+    }
+
+    /// Symbols a module exports.
+    ///
+    /// Takes the module's own symbol, which is the one carried by its
+    /// `SourceFile` node — present for a module, absent for a plain script.
+    pub fn exports_of_module(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        symbol: u32,
+    ) -> Result<Vec<SymbolResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_EXPORTS_OF_MODULE,
+            &CheckerSymbolParams {
+                snapshot,
+                project: project.clone(),
+                symbol,
+            },
+        )
+    }
+
+    /// Call signatures of a type.
+    pub fn signatures_of_type(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<Vec<SignatureResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_SIGNATURES_OF_TYPE,
+            &GetSignaturesOfTypeParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+                kind: SignatureKind::Call,
+            },
+        )
+    }
+
+    /// Return type of one signature.
+    pub fn return_type_of_signature(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        signature: u64,
+    ) -> Result<TypeResponse, TsgoError> {
+        self.request(
+            proto::method::GET_RETURN_TYPE_OF_SIGNATURE,
+            &CheckerSignatureParams {
+                snapshot,
+                project: project.clone(),
+                signature,
+            },
+        )
+    }
+
+    /// Constituent types of a union or intersection.
+    pub fn types_of_type(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<Vec<TypeResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_TYPES_OF_TYPE,
+            &GetTypePropertyParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+            },
+        )
+    }
+
+    /// Whether a type is an array. One call, and it is worth it: decomposing an
+    /// array as an ordinary object yields `length`, `push`, `map` and the rest of
+    /// the prototype instead of an element type.
+    pub fn is_array_type(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<bool, TsgoError> {
+        self.request(
+            proto::method::IS_ARRAY_TYPE,
+            &CheckerTypeParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+            },
+        )
+    }
+
+    /// Type arguments of a reference — the element type, for an array.
+    pub fn type_arguments(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<Vec<TypeResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_TYPE_ARGUMENTS,
+            &CheckerTypeParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+            },
+        )
+    }
+
+    /// Property symbols of an object type.
+    pub fn properties_of_type(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<Vec<SymbolResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_PROPERTIES_OF_TYPE,
+            &CheckerTypeParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+            },
+        )
+    }
+
+    /// Types of many symbols in one exchange.
+    pub fn types_of_symbols(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        symbols: Vec<u32>,
+    ) -> Result<Vec<TypeResponse>, TsgoError> {
+        if symbols.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.request(
+            proto::method::GET_TYPES_OF_SYMBOLS,
+            &GetTypesOfSymbolsParams {
+                snapshot,
+                project: project.clone(),
+                symbols,
+            },
+        )
+    }
+}
+
+impl Drop for Client {
+    fn drop(&mut self) {
+        // Close stdin first: tsgo exits on EOF, so this is a request to stop
+        // rather than a signal. Only kill if it declines to notice.
+        let _ = self.stdin.flush();
+        if let Ok(Some(_)) = self.child.try_wait() {
+            return;
+        }
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// A [`SemanticSource`] backed by a `tsgo --api` child process.
+#[derive(Debug)]
+pub struct TsgoApi {
+    executable: Utf8PathBuf,
+    decompose: Option<decompose::Budget>,
+    stats: FrontendStats,
+}
+
+impl TsgoApi {
+    /// Prepare an adapter around the `tsgo` binary at `executable`.
+    ///
+    /// The process is not spawned until [`SemanticSource::snapshot`] runs.
+    #[must_use]
+    pub fn new(executable: impl Into<Utf8PathBuf>) -> Self {
+        Self {
+            executable: executable.into(),
+            decompose: None,
+            stats: FrontendStats::default(),
+        }
+    }
+
+    /// Also decompose structured types into members and properties.
+    ///
+    /// Off by default, and deliberately so. Producing the snapshot costs round
+    /// trips proportional to *files*; decomposition costs them proportional to
+    /// *distinct types*, because tsgo exposes no batch endpoint for a type's
+    /// members. Turning it on for a whole program before reachability exists
+    /// means paying for types the build will never reach. See
+    /// `docs/records/0002-type-decomposition-is-per-type.md`.
+    #[must_use]
+    pub const fn with_decomposition(mut self, budget: decompose::Budget) -> Self {
+        self.decompose = Some(budget);
+        self
+    }
+
+    /// The `tsgo` binary this adapter will invoke.
+    #[must_use]
+    pub fn executable(&self) -> &Utf8Path {
+        &self.executable
+    }
+}
+
+impl SemanticSource for TsgoApi {
+    fn snapshot(&mut self, tsconfig: &Utf8Path) -> Result<SemanticSnapshot, SnapshotError> {
+        let started = Instant::now();
+
+        let cwd = tsconfig.parent().unwrap_or(Utf8Path::new("."));
+        let mut client = Client::spawn(&self.executable, cwd)?;
+
+        client.initialize()?;
+        let opened = client.open_project(tsconfig)?;
+
+        let mut snapshot = SemanticSnapshot {
+            schema_version: SCHEMA_VERSION,
+            ..SemanticSnapshot::default()
+        };
+        // tsgo's ids are stable within a session, so one `string` type interns to
+        // one record no matter how many nodes name it.
+        let mut interned: FxHashMap<u32, TypeId> = FxHashMap::default();
+        let mut symbol_ids: FxHashMap<u32, SymbolId> = FxHashMap::default();
+
+        for project in &opened.projects {
+            for path in &project.root_files {
+                let path = Utf8Path::new(path);
+                let bytes = client.source_file(opened.snapshot, &project.id, path)?;
+
+                // A file the program lists but cannot produce comes back empty
+                // rather than as an error. Skipping it here keeps the source table
+                // and the node arena consistent with each other.
+                if bytes.is_empty() {
+                    continue;
+                }
+
+                let file = SourceId(u32::try_from(snapshot.sources.len()).unwrap_or(u32::MAX));
+                let decoded = ast::decode(&bytes, file).map_err(|source| TsgoError::Ast {
+                    file: path.to_string(),
+                    source,
+                })?;
+
+                // Nodes from later files must not collide with earlier ones, so
+                // every index is rebased onto the shared arena as it is appended.
+                let base = u32::try_from(snapshot.nodes.len()).unwrap_or(u32::MAX);
+                snapshot
+                    .nodes
+                    .extend(decoded.nodes.into_iter().map(|mut node| {
+                        node.parent = node.parent.map(|NodeId(id)| NodeId(id + base));
+                        for child in &mut node.children {
+                            child.0 += base;
+                        }
+                        node
+                    }));
+
+                let ctx = symbols::FileContext {
+                    handle: opened.snapshot,
+                    project: &project.id,
+                    root: cwd,
+                    path,
+                    base,
+                    file,
+                };
+
+                resolve_types(&mut client, &mut snapshot, &mut interned, ctx)?;
+                symbols::resolve(&mut client, &mut snapshot, &mut symbol_ids, ctx)?;
+
+                snapshot.sources.push(SourceFile {
+                    uri: workspace_uri(cwd, path),
+                    // tsgo already hashed the content; rehashing would be a second
+                    // answer to a question that has one.
+                    digest: Digest(decoded.content_hash),
+                    display_path: path.to_owned(),
+                });
+            }
+        }
+
+        // Seeded with every interned type, because reachability does not exist yet
+        // to say which of them the build will actually reach. The seam is the seed
+        // set: when it does, only this argument changes.
+        let decomposed = if let Some(budget) = self.decompose {
+            let seeds: Vec<u32> = interned.keys().copied().collect();
+            let project = opened
+                .projects
+                .first()
+                .map_or_else(|| ProjectHandle(String::new()), |p| p.id.clone());
+            let mut decomposer = decompose::Decomposer::new(
+                &mut client,
+                opened.snapshot,
+                project,
+                interned,
+                symbol_ids,
+            );
+            Some(decomposer.run(&mut snapshot, seeds, budget)?)
+        } else {
+            None
+        };
+
+        self.stats = FrontendStats {
+            elapsed_ms: started.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
+            round_trips: client.round_trips(),
+            files: u32::try_from(snapshot.sources.len()).unwrap_or(u32::MAX),
+            nodes_decoded: u32::try_from(snapshot.nodes.len()).unwrap_or(u32::MAX),
+            types_resolved: u32::try_from(snapshot.node_types.len()).unwrap_or(u32::MAX),
+            distinct_types: u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX),
+            symbols: u32::try_from(snapshot.symbols.len()).unwrap_or(u32::MAX),
+            modules: symbols::module_count(&snapshot),
+            decomposed: decomposed.map_or(0, |d| d.decomposed),
+            decomposition_exhausted: decomposed.is_some_and(|d| d.exhausted),
+        };
+
+        snapshot.validate()?;
+        Ok(snapshot)
+    }
+
+    fn stats(&self) -> FrontendStats {
+        self.stats
+    }
+}
+
+/// Resolve a type for every addressable node of one file, in a single exchange.
+fn resolve_types(
+    client: &mut Client,
+    snapshot: &mut SemanticSnapshot,
+    interned: &mut FxHashMap<u32, TypeId>,
+    ctx: symbols::FileContext<'_>,
+) -> Result<(), TsgoError> {
+    // Lists are skipped, not because their type is uninteresting but because a
+    // list has no `*ast.Node` behind it: its handle fails to resolve, and one
+    // failure loses the whole batch.
+    let addressable: Vec<(NodeId, NodeHandle)> = snapshot
+        .nodes
+        .iter()
+        .enumerate()
+        .skip(ctx.base as usize)
+        .filter_map(|(index, node)| {
+            let NodeKind::Syntax(kind) = node.kind else {
+                return None;
+            };
+            let arena = u32::try_from(index).unwrap_or(u32::MAX);
+            Some((
+                NodeId(arena),
+                NodeHandle(types::node_handle(
+                    arena - ctx.base + 1,
+                    kind,
+                    ctx.path.as_str(),
+                )),
+            ))
+        })
+        .collect();
+
+    let handles = addressable.iter().map(|(_, h)| h.clone()).collect();
+    let responses = client.types_at(ctx.handle, ctx.project, handles)?;
+
+    for ((node, _), response) in addressable.iter().zip(&responses) {
+        let type_id = *interned.entry(response.id).or_insert_with(|| {
+            let id = TypeId(u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX));
+            snapshot.types.push(types::classify(response));
+            id
+        });
+        snapshot.node_types.insert(*node, type_id);
+    }
+
+    Ok(())
+}
+
+/// Rewrite an absolute path into a machine-independent workspace URI.
+///
+/// RFC §20.4: absolute machine paths are remapped so builds are reproducible and
+/// a release artifact never carries a developer's home directory.
+fn workspace_uri(root: &Utf8Path, path: &Utf8Path) -> String {
+    let relative = path.strip_prefix(root).unwrap_or(path);
+    format!("nts-workspace:///{relative}")
+}

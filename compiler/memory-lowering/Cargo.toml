@@ -1,0 +1,15 @@
+[package]
+name = "nts-memory-lowering"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+nts-diagnostics.workspace = true
+nts-core.workspace = true
+rustc-hash.workspace = true
+
+[lints]
+workspace = true

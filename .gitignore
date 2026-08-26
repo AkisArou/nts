@@ -1,0 +1,10 @@
+# Rust
+/target
+
+# TypeScript / pnpm
+node_modules/
+*.tsbuildinfo
+
+# Build outputs
+/out
+/.nts

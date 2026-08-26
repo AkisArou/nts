@@ -1,0 +1,70 @@
+[workspace]
+resolver = "3"
+members = [
+    "compiler/diagnostics",
+    "compiler/semantic-schema",
+    "compiler/frontend-ts",
+    "compiler/core",
+    "compiler/memory-lowering",
+    "compiler/debug-lowering",
+    "compiler/codegen/c",
+    "build",
+    "tooling/cli",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.97"
+license = "Apache-2.0"
+repository = "https://github.com/AkisArou/nts"
+publish = false
+
+[workspace.dependencies]
+# Internal crates. Kept here so a version or path move happens in one place.
+nts-build = { path = "build" }
+nts-codegen-c = { path = "compiler/codegen/c" }
+nts-core = { path = "compiler/core" }
+nts-debug-lowering = { path = "compiler/debug-lowering" }
+nts-diagnostics = { path = "compiler/diagnostics" }
+nts-frontend-ts = { path = "compiler/frontend-ts" }
+nts-memory-lowering = { path = "compiler/memory-lowering" }
+nts-semantic-schema = { path = "compiler/semantic-schema" }
+
+# External. Deliberately small; every addition is a maintenance obligation.
+anyhow = "1"
+camino = { version = "1", features = ["serde1"] }
+codespan-reporting = "0.12"
+indexmap = { version = "2", features = ["serde"] }
+postcard = { version = "1", features = ["use-std"] }
+rustc-hash = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[workspace.lints.rust]
+# The IR, analysis, and codegen layers have no business containing unsafe.
+# Crates that genuinely need it opt out locally with a documented reason.
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+# Pedantic minus the noise that fights domain vocabulary.
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# These are real bugs in a compiler, not style.
+dbg_macro = "deny"
+todo = "warn"
+unwrap_used = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+# A compiler is unusable in debug builds if its dependencies are too.
+[profile.dev.package."*"]
+opt-level = 2
