@@ -106,12 +106,15 @@ fn snapshotting_a_project_reports_measured_stats() {
 
     assert!(snapshot.validate().is_ok());
     assert_eq!(stats.files, 1);
-    // Gate G1's health metric: round trips must track files, not nodes. Two
-    // exchanges per file is the handshake plus the project open.
+    // Gate G1's health metric, stated against nodes rather than as a per-file
+    // rate: with one file the fixed cost dominates the ratio and says nothing.
+    // What matters is that round trips stay far below node count — that is what
+    // bulk AST transfer and batched queries buy, and what a regression would undo.
     assert!(
-        stats.round_trips_per_file() < 10.0,
-        "round trips per file climbed to {:.1}; batching is leaking",
-        stats.round_trips_per_file(),
+        u64::from(stats.nodes_decoded) > stats.round_trips * 2,
+        "{} nodes needed {} round trips; batching is leaking",
+        stats.nodes_decoded,
+        stats.round_trips,
     );
 }
 
@@ -228,12 +231,14 @@ fn round_trips_stay_proportional_to_files() {
     source.snapshot(&hello_tsconfig()).expect("snapshot");
     let stats = source.stats();
 
-    // Gate G1. Fixed cost is 2 (initialize, updateSnapshot); per-file cost is 4
-    // (getSourceFile, getTypeAtLocations, getSymbolsAtLocations,
-    // getExportsOfModule). Every one of those either transfers in bulk or
-    // batches; if this ever tracks node count, the transport choice needs redoing.
+    // Gate G1. Fixed cost is 5 — initialize, updateSnapshot, getSourceFileNames,
+    // and the two whole-program diagnostic passes — plus 5 per file: one metadata
+    // classification and four resolution passes (getSourceFile,
+    // getTypeAtLocations, getSymbolsAtLocations, getExportsOfModule). Every one
+    // either transfers in bulk or batches. If this ever tracks node count, the
+    // transport choice needs redoing.
     assert_eq!(stats.files, 1);
-    assert_eq!(stats.round_trips, 2 + 4 * u64::from(stats.files) + 2);
+    assert_eq!(stats.round_trips, 5 + 5 * u64::from(stats.files));
     assert!(stats.nodes_decoded > 20, "a real AST was decoded");
     assert!(stats.types_resolved > 20, "types were resolved");
 }

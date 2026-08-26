@@ -114,5 +114,5 @@ fn the_gate_costs_a_constant_not_a_per_file_charge() {
     // Two fixed exchanges for the session, four per file, and two more fixed for
     // syntactic and semantic diagnostics over the whole program. Asking per file
     // would have made the gate scale with the thing it is guarding.
-    assert_eq!(stats.round_trips, 2 + 4 * u64::from(stats.files) + 2);
+    assert_eq!(stats.round_trips, 5 + 5 * u64::from(stats.files));
 }

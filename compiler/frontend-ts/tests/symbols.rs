@@ -129,7 +129,7 @@ fn symbol_resolution_stays_linear_in_files() {
     // Gate G1, extended. Two fixed exchanges, then four per file: getSourceFile,
     // getTypeAtLocations, getSymbolsAtLocations, getExportsOfModule. Symbols and
     // types both batch; if either stopped batching this would track node count.
-    assert_eq!(stats.round_trips, 2 + 4 * u64::from(stats.files) + 2);
+    assert_eq!(stats.round_trips, 5 + 5 * u64::from(stats.files));
     assert!(stats.symbols > 0);
     assert_eq!(stats.modules, stats.files);
 }

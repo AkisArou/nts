@@ -456,3 +456,19 @@ pub struct GetSignaturePropertyParams {
     #[serde(rename = "objectId")]
     pub signature: u64,
 }
+
+/// Program-stored facts about one source file.
+///
+/// The authority on whether a file is this project's to compile. Path shape is a
+/// prefilter, not a decision: a project can legitimately live under a directory
+/// whose name resembles a package's.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceFileMetadata {
+    /// A `lib.*.d.ts` supplied by the compiler.
+    #[serde(default)]
+    pub is_default_library: bool,
+    /// Resolved from a package rather than written by the project.
+    #[serde(default)]
+    pub is_from_external_library: bool,
+}

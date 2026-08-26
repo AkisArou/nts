@@ -52,8 +52,8 @@ use proto::{
     GetSignaturePropertyParams, GetSignaturesOfTypeParams, GetSourceFileParams,
     GetSymbolsAtLocationsParams, GetTypeAtLocationsParams, GetTypePropertyParams,
     GetTypesOfSymbolsParams, InitializeResponse, NodeHandle, ProjectHandle, SignatureKind,
-    SignatureResponse, SnapshotHandle, SymbolResponse, TypeResponse, UpdateSnapshotParams,
-    UpdateSnapshotResponse,
+    SignatureResponse, SnapshotHandle, SourceFileMetadata, SymbolResponse, TypeResponse,
+    UpdateSnapshotParams, UpdateSnapshotResponse,
 };
 use wire::{Frame, MessageType, WireError, read_frame, write_frame};
 
@@ -468,6 +468,40 @@ impl Client {
         )
     }
 
+    /// Every source file in a project, not only its roots.
+    ///
+    /// Includes imported files, ambient declarations, and the default library.
+    pub fn source_file_names(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+    ) -> Result<Vec<String>, TsgoError> {
+        self.request(
+            proto::method::GET_SOURCE_FILE_NAMES,
+            &proto::GetSourceFileNamesParams {
+                snapshot,
+                project: project.clone(),
+            },
+        )
+    }
+
+    /// Program-stored facts about one source file.
+    pub fn source_file_metadata(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        file: &Utf8Path,
+    ) -> Result<SourceFileMetadata, TsgoError> {
+        self.request(
+            proto::method::GET_SOURCE_FILE_METADATA,
+            &GetSourceFileParams {
+                snapshot,
+                project: project.clone(),
+                file: DocumentIdentifier::file(file),
+            },
+        )
+    }
+
     /// Base types of a class or interface type.
     ///
     /// Answers an empty list for a type with no heritage, which is the common
@@ -667,8 +701,9 @@ impl SemanticSource for TsgoApi {
         let mut file_bases: Vec<(String, u32)> = Vec::new();
 
         for project in &opened.projects {
-            for path in &project.root_files {
-                let path = Utf8Path::new(path);
+            let compiled = compiled_files(&mut client, opened.snapshot, &project.id)?;
+            for path in &compiled {
+                let path = path.as_path();
                 let bytes = client.source_file(opened.snapshot, &project.id, path)?;
 
                 // A file the program lists but cannot produce comes back empty
@@ -921,4 +956,47 @@ fn count_severity(snapshot: &SemanticSnapshot, severity: nts_diagnostics::Severi
             .count(),
     )
     .unwrap_or(u32::MAX)
+}
+
+/// Prefix tsgo gives the libraries it bundles.
+///
+/// Unambiguous and compiler-generated, so it can be filtered without asking.
+const BUNDLED_LIB_PREFIX: &str = "bundled:///";
+
+/// Which of a project's source files this compiler should compile.
+///
+/// Not `root_files`: those are only what the tsconfig `include` names, so a file
+/// reached by an import from outside that set is missing — and every symbol it
+/// declares then has no node, no declaration, and no arena identity. Measured on
+/// a two-file project importing one file from a sibling directory, `root_files`
+/// gave 2 of the 3 files that make up the program.
+///
+/// Not every source file either: a project's program also contains the default
+/// library and anything resolved from a package. Those are not this compiler's to
+/// lower — the same boundary type decomposition stops at — and the default
+/// library alone is 63 files.
+fn compiled_files(
+    client: &mut Client,
+    snapshot: SnapshotHandle,
+    project: &ProjectHandle,
+) -> Result<Vec<Utf8PathBuf>, TsgoError> {
+    let names = client.source_file_names(snapshot, project)?;
+    let mut compiled = Vec::new();
+
+    for name in names {
+        // The bundled prefix is a cheap, exact prefilter. Asking about 63 library
+        // files would cost more round trips than compiling the project.
+        if name.starts_with(BUNDLED_LIB_PREFIX) {
+            continue;
+        }
+        let path = Utf8PathBuf::from(name);
+        // Path shape is a prefilter; the program's own metadata is the authority.
+        let metadata = client.source_file_metadata(snapshot, project, &path)?;
+        if metadata.is_default_library || metadata.is_from_external_library {
+            continue;
+        }
+        compiled.push(path);
+    }
+
+    Ok(compiled)
 }
