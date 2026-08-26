@@ -334,6 +334,8 @@ double sumTo(double n);
 double triangle(void);
 double hash(double seed, double rounds);
 double countDown(double start);
+double countdown(double seed);
+double inclusive(double seed);
 int main(void) {{
     check("sumTo(100)", sumTo(100), 4950);
     check("sumTo(0)", sumTo(0), 0);
@@ -343,6 +345,14 @@ int main(void) {{
     check("hash(-7.5,10)", hash(-7.5, 10), 17598);
     check("countDown(1000)", countDown(1000), 1000);
     check("countDown(0)", countDown(0), 0);
+    // Counting down, where the trip count is measured from the other end.
+    // 500 iterations of (12345 & 15) = 9.
+    check("countdown(12345)", countdown(12345), 4500);
+    // -1 masks to 15, the largest the increment can be -- the exact bound the
+    // accumulator was proven against.
+    check("countdown(-1)", countdown(-1), 7500);
+    // `>=` runs 101 times, not 100.
+    check("inclusive(12345)", inclusive(12345), 101);
     return failures ? 1 : 0;
 }}
 "#

@@ -36,3 +36,23 @@ export function countDown(start: number): number {
   }
   return steps;
 }
+
+// Counting down, which the trip count has to measure from the other end.
+export function countdown(seed: number): number {
+  let total = 0;
+  for (let i = 500; i > 0; i--) {
+    total += (seed | 0) & 15;
+  }
+  return total;
+}
+
+// `>=` admits one more iteration than `>`, and getting that wrong is an
+// off-by-one in a bound rather than in a loop -- it would not show up as a
+// wrong answer, only as a refused specialization or an unsound one.
+export function inclusive(seed: number): number {
+  let total = 0;
+  for (let i = 100; i >= 0; i--) {
+    total += (seed | 0) & 3;
+  }
+  return total;
+}

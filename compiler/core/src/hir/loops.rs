@@ -67,15 +67,18 @@ pub fn accumulator_caps(func: &Func, analysis: &Analysis) -> FxHashMap<ValueId, 
 
         let params = &func.blocks[header.0 as usize].params;
         for (slot, param) in params.iter().enumerate() {
-            let Some(increment) = step_of(func, *param, loop_shape.latch_args.get(slot).copied())
-            else {
+            let Some(increment) = step_of(
+                func,
+                analysis,
+                *param,
+                loop_shape.latch_args.get(slot).copied(),
+            ) else {
                 continue;
             };
             let Some(start) = loop_shape.entry_args.get(slot) else {
                 continue;
             };
             let start = analysis.get(*start);
-            let increment = analysis.get(increment);
             if !start.lo.is_finite() || !increment.lo.is_finite() || !increment.hi.is_finite() {
                 continue;
             }
@@ -190,23 +193,27 @@ fn shape(
     })
 }
 
-/// The value a header parameter gains each time round, if it gains a fixed one.
-fn step_of(func: &Func, param: ValueId, latch_arg: Option<ValueId>) -> Option<ValueId> {
-    let OpKind::Binary {
-        op: BinOp::Add,
-        lhs,
-        rhs,
-    } = func.values[latch_arg?.0 as usize].kind
-    else {
+/// What a header parameter gains each time round, if it gains a fixed amount.
+///
+/// Returned as facts rather than a value, because `i--` gains `-1` and there is
+/// no value in the function holding that.
+fn step_of(
+    func: &Func,
+    analysis: &Analysis,
+    param: ValueId,
+    latch_arg: Option<ValueId>,
+) -> Option<Facts> {
+    let OpKind::Binary { op, lhs, rhs } = func.values[latch_arg?.0 as usize].kind else {
         return None;
     };
-    // `param + x` or `x + param`; either way the step is the other operand.
-    if lhs == param {
-        Some(rhs)
-    } else if rhs == param {
-        Some(lhs)
-    } else {
-        None
+    match op {
+        // `param + x` or `x + param`; either way the step is the other operand.
+        BinOp::Add if lhs == param => Some(analysis.get(rhs)),
+        BinOp::Add if rhs == param => Some(analysis.get(lhs)),
+        // `param - x` steps by `-x`. `x - param` is not an induction variable:
+        // it reflects around `x` rather than advancing.
+        BinOp::Sub if lhs == param => Some(super::facts::neg(analysis.get(rhs))),
+        _ => None,
     }
 }
 
@@ -223,36 +230,48 @@ fn trip_count(func: &Func, analysis: &Analysis, header: BlockId, shape: &Shape) 
     else {
         return None;
     };
-    // Only an upper-bounded counter. `>` and `>=` count down, which is the same
-    // argument mirrored, and not yet written.
-    if !matches!(comparison, BinOp::Lt | BinOp::Le) {
-        return None;
-    }
+    let ascending = match comparison {
+        BinOp::Lt | BinOp::Le => true,
+        BinOp::Gt | BinOp::Ge => false,
+        _ => return None,
+    };
 
     let params = &func.blocks[header.0 as usize].params;
     let slot = params.iter().position(|param| *param == counter)?;
-    let step = analysis.get(step_of(func, counter, shape.latch_args.get(slot).copied())?);
-    // A step that is not a fixed positive amount gives no trip count: the
-    // counter might stand still, or move backwards. A bound is never NaN — the
-    // domain guarantees it — so the plain comparison is exhaustive.
-    if !step.is_singleton() || step.lo <= 0.0 {
+    let step = step_of(func, analysis, counter, shape.latch_args.get(slot).copied())?;
+    // A step that is not a fixed amount moving toward the bound gives no trip
+    // count: the counter might stand still, or move away and never arrive. A
+    // bound is never NaN — the domain guarantees it — so the plain comparisons
+    // are exhaustive.
+    if !step.is_singleton() {
+        return None;
+    }
+    if ascending && step.lo <= 0.0 {
+        return None;
+    }
+    if !ascending && step.lo >= 0.0 {
         return None;
     }
 
     let start = analysis.get(*shape.entry_args.get(slot)?);
     let bound = analysis.get(limit);
-    if !start.lo.is_finite() || !bound.hi.is_finite() {
-        return None;
-    }
 
-    // `<=` admits one more iteration than `<`.
-    let span = bound.hi - start.lo
-        + if matches!(comparison, BinOp::Le) {
-            1.0
-        } else {
-            0.0
-        };
-    let trips = (span / step.lo).ceil();
+    // Measured from the far end of the start toward the far end of the bound,
+    // so an imprecise start gives more iterations rather than fewer. `<=` and
+    // `>=` admit one more than their strict forms.
+    let inclusive = matches!(comparison, BinOp::Le | BinOp::Ge);
+    let span = if ascending {
+        if !start.lo.is_finite() || !bound.hi.is_finite() {
+            return None;
+        }
+        bound.hi - start.lo + if inclusive { 1.0 } else { 0.0 }
+    } else {
+        if !start.hi.is_finite() || !bound.lo.is_finite() {
+            return None;
+        }
+        start.hi - bound.lo + if inclusive { 1.0 } else { 0.0 }
+    };
+    let trips = (span / step.lo.abs()).ceil();
     if !(trips.is_finite() && trips <= MAX_TRIPS) {
         return None;
     }
