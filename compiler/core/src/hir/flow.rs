@@ -92,6 +92,18 @@ pub struct Analysis {
 }
 
 impl Analysis {
+    /// How many values were analyzed.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    /// Whether the function had no values at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
     /// What is known about a value.
     #[must_use]
     pub fn get(&self, value: ValueId) -> Facts {
@@ -143,6 +155,11 @@ pub struct Context {
     pub params: Vec<Facts>,
     /// What each function returns, by name.
     pub returns: FxHashMap<String, Facts>,
+    /// Interval bounds for loop-carried values, from counting iterations.
+    ///
+    /// The value domain cannot derive these: it knows what one round does, not
+    /// how many rounds there are. See [`super::loops`].
+    pub caps: FxHashMap<ValueId, Facts>,
 }
 
 /// Compute what is provable about every value in a function, alone.
@@ -210,6 +227,21 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
                 // back in and the bound crawls upward again.
                 entry[index] = Some(refinements.clone());
             }
+            // What counting iterations proved, applied whether or not widening
+            // ran. Without it an accumulator's bound grows by one increment per
+            // round until widening sends it to infinity — and an infinite bound
+            // is not a whole number, so the accumulator stays a double.
+            if !context.caps.is_empty() {
+                for param in &func.blocks[index].params {
+                    if let (Some(cap), Some(current)) =
+                        (context.caps.get(param), refinements.get(param).copied())
+                    {
+                        refinements.insert(*param, current.narrow(*cap));
+                    }
+                }
+                entry[index] = Some(refinements.clone());
+            }
+
             previous[index] = Some(refinements.clone());
 
             changed |= transfer_block(

@@ -64,6 +64,7 @@ pub fn analyze_program(program: &Program) -> Vec<Analysis> {
                     &Context {
                         params: params[index].clone(),
                         returns: returns.clone(),
+                        caps: FxHashMap::default(),
                     },
                 )
             })
@@ -114,6 +115,46 @@ pub fn analyze_program(program: &Program) -> Vec<Analysis> {
         }
         params = next;
         returns = next_returns;
+    }
+
+    // Counting iterations needs facts, and produces facts the value domain
+    // cannot reach on its own — so it runs once the ordinary fixpoint has
+    // settled, and the whole thing settles again with what it found.
+    //
+    // Repeated, because the two feed each other. The first round bounds a
+    // counter using an increment that widening had already sent to the int32
+    // threshold; with the counter now tight, the *next* round bounds the
+    // accumulator by the real increment. `for (i = 0; i < 1000; i++) total += i`
+    // goes from `[0, 2147483647000]` to `[0, 999000]` this way, which is the
+    // difference between an i64 and an i32.
+    let mut caps: Vec<FxHashMap<super::ValueId, Facts>> = Vec::new();
+    for _ in 0..ROUND_CAP {
+        let next_caps: Vec<_> = program
+            .funcs
+            .iter()
+            .zip(&analyses)
+            .map(|(func, analysis)| super::loops::accumulator_caps(func, analysis))
+            .collect();
+        if next_caps == caps || next_caps.iter().all(FxHashMap::is_empty) {
+            break;
+        }
+        caps = next_caps;
+
+        analyses = program
+            .funcs
+            .iter()
+            .enumerate()
+            .map(|(index, func)| {
+                flow::analyze_with(
+                    func,
+                    &Context {
+                        params: params[index].clone(),
+                        returns: returns.clone(),
+                        caps: caps[index].clone(),
+                    },
+                )
+            })
+            .collect();
     }
 
     analyses

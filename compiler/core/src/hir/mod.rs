@@ -29,6 +29,7 @@ pub mod facts;
 pub mod flow;
 pub mod fold;
 pub mod interprocedural;
+pub mod loops;
 
 pub mod lower;
 pub mod specialize;
