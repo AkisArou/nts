@@ -28,9 +28,10 @@ pub mod facts;
 pub mod flow;
 
 pub mod lower;
+pub mod specialize;
 pub mod verify;
 
-use nts_semantic_schema::{Origin, TypeId};
+use nts_semantic_schema::{Origin, SemanticSnapshot, TypeId};
 
 /// How a value is represented in a machine.
 ///
@@ -267,6 +268,13 @@ pub enum OpKind {
         op: UnOp,
         operand: ValueId,
     },
+    /// Reinterpret a value in a different representation.
+    ///
+    /// The one operation whose whole content is its result type. It appears only
+    /// where specialization decided two adjacent values should live in different
+    /// machine types — and each one is a cost, so a pass that inserts many is
+    /// telling you it chose badly.
+    Convert(ValueId),
     /// A call whose callee the checker resolved.
     Call {
         callee: Callee,
@@ -331,6 +339,52 @@ pub enum UnOp {
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub funcs: Vec<Func>,
+}
+
+/// Everything a backend needs, in the one order that is correct.
+///
+/// Lower, specialize, verify. Kept here rather than in each caller because a
+/// backend that skipped specialization would emit slower code than the tests
+/// measured, and one that skipped verification would emit code from HIR nothing
+/// checked. Both have happened; neither is visible in the output.
+#[derive(Debug)]
+pub struct Prepared {
+    pub program: Program,
+    /// What could not be lowered. Reported, not fatal: a program may have one
+    /// unsupported function and many supported ones.
+    pub diagnostics: Vec<nts_diagnostics::Diagnostic>,
+    pub specialized: usize,
+    pub conversions: usize,
+}
+
+/// Lower a snapshot and make it ready to emit.
+///
+/// # Errors
+///
+/// If the result is not valid SSA. A backend is entitled to trust its input
+/// only because something checked it, and specialization rewrites types and
+/// inserts operations — so it has to earn that trust again rather than inherit
+/// it from the lowering.
+pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Vec<verify::Invalid>> {
+    let lowered = lower::lower(snapshot);
+    let mut program = lowered.program;
+    let mut specialized = 0;
+    let mut conversions = 0;
+
+    for func in &mut program.funcs {
+        let analysis = flow::analyze(func);
+        let report = specialize::specialize(func, &analysis);
+        specialized += report.specialized;
+        conversions += report.conversions;
+    }
+
+    verify::verify(&program)?;
+    Ok(Prepared {
+        program,
+        diagnostics: lowered.diagnostics,
+        specialized,
+        conversions,
+    })
 }
 
 #[cfg(test)]

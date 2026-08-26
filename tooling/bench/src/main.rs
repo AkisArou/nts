@@ -166,15 +166,15 @@ fn emit(tsconfig: &Utf8Path) -> Result<String> {
         bail!("{tsconfig} does not typecheck");
     }
 
-    let lowered = hir::lower::lower(&snapshot);
-    for diagnostic in &lowered.diagnostics {
+    let prepared = match hir::prepare(&snapshot) {
+        Ok(prepared) => prepared,
+        Err(problems) => bail!("invalid HIR: {problems:?}"),
+    };
+    for diagnostic in &prepared.diagnostics {
         eprintln!("  {} {}", diagnostic.code, diagnostic.message);
     }
-    if let Err(problems) = hir::verify::verify(&lowered.program) {
-        bail!("invalid HIR: {problems:?}");
-    }
 
-    let emitted = nts_codegen_c::emit(&lowered.program);
+    let emitted = nts_codegen_c::emit(&prepared.program);
     for diagnostic in &emitted.diagnostics {
         eprintln!("  {} {}", diagnostic.code, diagnostic.message);
     }

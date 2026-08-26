@@ -51,9 +51,11 @@ fn run(example: &str, harness: &str) -> Option<String> {
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "{example} should typecheck");
 
-    let lowered = hir::lower::lower(&snapshot);
-    hir::verify::verify(&lowered.program).expect("lowered HIR should verify");
-    let emitted = nts_codegen_c::emit(&lowered.program);
+    // The same pipeline the CLI runs, specialization included — otherwise these
+    // tests would prove that *unspecialized* code computes the right answers,
+    // which is not what ships.
+    let prepared = hir::prepare(&snapshot).expect("prepared HIR should verify");
+    let emitted = nts_codegen_c::emit(&prepared.program);
 
     // Keyed by the harness as well as the example: two tests exercising one
     // example otherwise share a directory, and cargo runs them concurrently.

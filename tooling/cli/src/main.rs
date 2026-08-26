@@ -327,6 +327,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
                 rhs.0
             )
         }
+        OpKind::Convert(operand) => format!("%{index} = convert %{} : {ty}", operand.0),
         OpKind::Unary { op: un, operand } => {
             let operator = match un {
                 nts_core::hir::UnOp::Neg => "neg",
@@ -414,20 +415,21 @@ fn emit_c(tsconfig: &Utf8Path) -> Result<()> {
         bail!("the program does not typecheck");
     }
 
-    let lowered = hir::lower::lower(&snapshot);
-    for diagnostic in &lowered.diagnostics {
+    let prepared = match hir::prepare(&snapshot) {
+        Ok(prepared) => prepared,
+        Err(problems) => {
+            for problem in &problems {
+                eprintln!("invalid HIR: {problem:?}");
+            }
+            bail!("refusing to emit code from invalid HIR");
+        }
+    };
+    for diagnostic in &prepared.diagnostics {
         eprintln!("{} {}", diagnostic.code, diagnostic.message);
     }
+    let program = prepared.program;
 
-    // A backend is entitled to trust its input only because something checked it.
-    if let Err(problems) = hir::verify::verify(&lowered.program) {
-        for problem in &problems {
-            eprintln!("invalid HIR: {problem:?}");
-        }
-        bail!("refusing to emit code from invalid HIR");
-    }
-
-    let emitted = nts_codegen_c::emit(&lowered.program);
+    let emitted = nts_codegen_c::emit(&program);
     print!("{}", emitted.writer.text());
     for diagnostic in &emitted.diagnostics {
         eprintln!("{} {}", diagnostic.code, diagnostic.message);

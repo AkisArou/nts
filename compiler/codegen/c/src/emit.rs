@@ -381,7 +381,8 @@ fn emit_op(writer: &mut CodeWriter, func: &Func, value: ValueId) -> Result<(), D
             };
             // `%` is integer-only in C. On doubles it is `fmod`, and emitting `%`
             // would not compile — which is better than emitting something that
-            // does and is wrong, but still worth naming.
+            // does and is wrong, but still worth naming. On integers it is
+            // exactly JavaScript's remainder: both take the sign of the dividend.
             if matches!(bin, BinOp::Rem) && matches!(op.ty, HirType::Float { .. }) {
                 return Err(Diagnostic::error(
                     "NTS2003",
@@ -394,6 +395,13 @@ fn emit_op(writer: &mut CodeWriter, func: &Func, value: ValueId) -> Result<(), D
                 value_name(*lhs),
                 value_name(*rhs)
             )
+        }
+        OpKind::Convert(operand) => {
+            // A C cast. Between an integer and a double this is one instruction,
+            // and every one of them is a place specialization decided two
+            // adjacent values should live in different machine types.
+            let target = c_type(&op.ty, &op.origin)?;
+            format!("{name} = ({target}){};", value_name(*operand))
         }
         OpKind::Unary { op: un, operand } => {
             let operator = match un {
