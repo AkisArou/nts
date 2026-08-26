@@ -204,7 +204,13 @@ fn emit(tsconfig: &Utf8Path, specialize: bool) -> Result<String> {
         bail!("{tsconfig} does not typecheck");
     }
 
-    let prepared = match hir::prepare_with(&snapshot, specialize) {
+    let prepared = match hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            specialize_numbers: specialize,
+            ..hir::Options::default()
+        },
+    ) {
         Ok(prepared) => prepared,
         Err(problems) => bail!("invalid HIR: {problems:?}"),
     };

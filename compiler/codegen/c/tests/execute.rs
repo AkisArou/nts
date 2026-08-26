@@ -90,7 +90,20 @@ fn build_and_run(example: &str, harness: &str) -> Option<std::process::Output> {
     std::fs::write(&runtime, nts_codegen_c::RUNTIME_SOURCE).expect("write runtime");
 
     let compile = std::process::Command::new("clang")
-        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-o"])
+        // `--gc-sections` is reachability's other half: the compiler drops what
+        // no export reaches, and the linker drops what survives compilation and
+        // is never referenced -- an unused runtime function, most of all.
+        .args([
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-O2",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-Wl,--gc-sections",
+            "-o",
+        ])
         .arg(&binary)
         .arg(&generated)
         .arg(&main)

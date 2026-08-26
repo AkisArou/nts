@@ -22,3 +22,16 @@ export function pipeline(rounds: 64): number {
 export function exposed(v: number): number {
   return clamp(v);
 }
+
+// Nothing exported reaches this, so it is dropped before any analysis runs --
+// it costs no interprocedural pass, no specialization, no bounds proof and no
+// codegen. The linker would also drop it, but only after all of that.
+function neverCalled(v: number): number {
+  return v * 3 + 1;
+}
+
+// ...and neither is this, even though `neverCalled` calls it. Reachability is
+// from the exports, not from "is called by something".
+function onlyCalledByTheUnreachable(v: number): number {
+  return neverCalled(v) + 1;
+}

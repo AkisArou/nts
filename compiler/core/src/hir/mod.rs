@@ -33,6 +33,7 @@ pub mod interprocedural;
 pub mod loops;
 
 pub mod lower;
+pub mod reachable;
 pub mod specialize;
 pub mod verify;
 
@@ -475,6 +476,8 @@ pub struct Prepared {
     pub checks_removed: usize,
     /// Bounds checks that remain.
     pub checks_kept: usize,
+    /// Functions dropped because nothing reachable from an export calls them.
+    pub pruned: usize,
 }
 
 /// Lower a snapshot and make it ready to emit.
@@ -486,7 +489,31 @@ pub struct Prepared {
 /// inserts operations — so it has to earn that trust again rather than inherit
 /// it from the lowering.
 pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Vec<verify::Invalid>> {
-    prepare_with(snapshot, true)
+    prepare_with(snapshot, &Options::default())
+}
+
+/// What to compile, and how.
+#[derive(Debug, Clone, Copy)]
+pub struct Options<'a> {
+    /// Whether to prove numbers into integers. Off is not a supported way to
+    /// build anything — it is how the benchmarks measure what the analysis is
+    /// worth, by compiling one program both ways.
+    pub specialize_numbers: bool,
+    /// Where reachability starts. See [`reachable::Roots`]: an executable and a
+    /// library have different public surfaces, so they keep different things.
+    pub roots: reachable::Roots<'a>,
+}
+
+impl Default for Options<'_> {
+    fn default() -> Self {
+        Self {
+            specialize_numbers: true,
+            // The safe choice when the product is unknown: a library may have
+            // any export called from outside. An executable keeps more than it
+            // needs until it says what it is.
+            roots: reachable::Roots::EveryExport,
+        }
+    }
 }
 
 /// As [`prepare`], with specialization optional.
@@ -500,10 +527,16 @@ pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Vec<verify::Inva
 /// As [`prepare`].
 pub fn prepare_with(
     snapshot: &SemanticSnapshot,
-    specialize_numbers: bool,
+    options: &Options<'_>,
 ) -> Result<Prepared, Vec<verify::Invalid>> {
+    let specialize_numbers = options.specialize_numbers;
     let lowered = lower::lower(snapshot);
     let mut program = lowered.program;
+
+    // First, before anything expensive. Everything that survives here gets
+    // analyzed interprocedurally, specialized, proven and emitted, and a
+    // function nothing can call should pay for none of that.
+    let pruned = reachable::prune(&mut program, options.roots);
     let mut specialized = 0;
     let mut conversions = 0;
 
@@ -566,6 +599,7 @@ pub fn prepare_with(
         conversions,
         checks_removed,
         checks_kept,
+        pruned,
     })
 }
 
