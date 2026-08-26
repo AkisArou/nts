@@ -29,12 +29,28 @@
 //!
 //! # Why here and not left to the linker
 //!
-//! The linker does drop unreferenced functions, given `--gc-sections`, and it
-//! should still be asked to. But it can only drop what survives compilation,
-//! and everything that survives compilation was first *analyzed*: an unreachable
-//! function costs interprocedural analysis, specialization, bounds proofs and
-//! codegen before anything discards it. Dropping it here is the difference
-//! between compiling a library's public surface and compiling the library.
+//! The linker does drop unreferenced functions, given `-ffunction-sections` and
+//! `--gc-sections`, and it should still be asked to. But it runs last, and two
+//! things follow from that.
+//!
+//! The smaller one is cost: everything the linker drops was first lowered,
+//! analyzed interprocedurally, specialized, bounds-proven, emitted and compiled.
+//! Using ten functions from a hundred means paying for a hundred to ship ten.
+//!
+//! The one that matters is **precision**, and no linker can undo it. Facts cross
+//! function boundaries, so a call site widens what its callee's parameters are
+//! known to be — including a call site that can never execute:
+//!
+//! ```text
+//! function scale(v: number) { return v * 2; }        // called from `hot` with 0..99
+//! function dead(v: number)  { return scale(v); }     // unreachable, `v` unbounded
+//! ```
+//!
+//! With `dead` present, `scale`'s parameter is unbounded and it compiles to
+//! `v0 * 2.0`. With `dead` pruned, it compiles to `(int64_t)v0 * 2`. Same
+//! function, same body; the difference is a caller that cannot run. Dead code
+//! does not merely cost bytes, it costs the surviving code its proofs — and by
+//! the time the linker sees the program, the damage is in the object file.
 
 use rustc_hash::FxHashSet;
 
