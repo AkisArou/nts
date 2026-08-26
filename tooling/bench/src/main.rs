@@ -160,8 +160,10 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
          | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n",
     );
     for row in rows {
-        table.push_str(&format!(
-            "| {} | {} | **{}** | {} | {} | {:.2}x | {:.2}x |\n",
+        use std::fmt::Write as _;
+        let _ = writeln!(
+            table,
+            "| {} | {} | **{}** | {} | {} | {:.2}x | {:.2}x |",
             row.case,
             human(row.cpp),
             human(row.nts),
@@ -169,7 +171,7 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
             human(row.node),
             row.nts / row.cpp,
             row.nts / row.node,
-        ));
+        );
     }
 
     let legend = "\n\
