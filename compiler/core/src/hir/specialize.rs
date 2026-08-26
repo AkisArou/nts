@@ -115,6 +115,16 @@ pub fn specialize(func: &mut Func, analysis: &Analysis) -> Report {
     for value in &func.values {
         if let OpKind::Binary { op, lhs, rhs } = &value.kind
             && op.is_comparison()
+            // ...unless one side is a function parameter. Its representation is
+            // the signature, so it can never move, and joining to it can only
+            // drag the other side down with it. `for (i = 0; i < limit; i++)`
+            // with `limit: 100` would otherwise specialize nothing at all: the
+            // counter is provable, the parameter is immovable, and the class is
+            // only as good as its worst member. Converting the parameter at the
+            // comparison costs one instruction, which the C compiler hoists out
+            // of the loop because it does not change.
+            && !is_parameter(func, *lhs)
+            && !is_parameter(func, *rhs)
         {
             classes.union(lhs.0, rhs.0);
         }
@@ -173,8 +183,13 @@ pub fn specialize(func: &mut Func, analysis: &Analysis) -> Report {
         }
     }
 
-    report.conversions = insert_conversions(func);
+    report.conversions = insert_conversions(func, analysis);
     report
+}
+
+/// Whether a value is one of the function's own parameters.
+fn is_parameter(func: &Func, value: ValueId) -> bool {
+    matches!(func.values[value.0 as usize].kind, OpKind::Param(_))
 }
 
 /// The edges a block's terminator carries, as (target, arguments).
@@ -269,7 +284,7 @@ fn width_of(func: &Func, analysis: &Analysis, index: usize) -> Option<u8> {
 }
 
 /// Add the conversions the new types require, and count them.
-fn insert_conversions(func: &mut Func) -> usize {
+fn insert_conversions(func: &mut Func, analysis: &Analysis) -> usize {
     let mut blocks = std::mem::take(&mut func.blocks);
     let return_type = func.return_type.clone();
     let mut count = 0;
@@ -288,7 +303,7 @@ fn insert_conversions(func: &mut Func) -> usize {
                 OpKind::Binary { op: bin, lhs, rhs } if bin.is_comparison() => {
                     // A comparison's operands must agree with each other rather
                     // than with its result, which is a bool either way.
-                    let wanted = comparison_type(func, lhs, rhs);
+                    let wanted = comparison_type(func, analysis, lhs, rhs);
                     let lhs = coerce(func, lhs, &wanted);
                     let rhs = coerce(func, rhs, &wanted);
                     Some(OpKind::Binary { op: bin, lhs, rhs })
@@ -346,18 +361,39 @@ fn insert_conversions(func: &mut Func) -> usize {
     count
 }
 
-/// Whether two operands of a comparison can be compared as integers.
-fn comparison_type(func: &Func, lhs: ValueId, rhs: ValueId) -> HirType {
-    let left = &func.values[lhs.0 as usize].ty;
-    let right = &func.values[rhs.0 as usize].ty;
+/// The type two operands of a comparison should be brought to.
+///
+/// Preferring the integer side when the other is *provably* integral matters
+/// more than it looks. `for (i = 0; i < limit; i++)` with `limit: 100` compares
+/// an `int32` against a `double` every iteration; converting the counter costs
+/// a conversion per iteration, while converting the bound costs one that never
+/// changes and that the C compiler lifts out of the loop.
+fn comparison_type(func: &Func, analysis: &Analysis, lhs: ValueId, rhs: ValueId) -> HirType {
+    let left = func.values[lhs.0 as usize].ty.clone();
+    let right = func.values[rhs.0 as usize].ty.clone();
     if left == right {
-        left.clone()
-    } else {
-        // Mixed. Comparing in doubles is the only choice that cannot be wrong:
-        // every integer this pass produces is inside 2^53 and so is exact as an
-        // `f64`, while narrowing the other side would not be.
-        HirType::NUMBER
+        return left;
     }
+
+    // Narrowing the other side is only allowed if it is provably a whole number
+    // already inside that integer's range — otherwise the conversion would
+    // change which values compare equal.
+    let fits = |value: ValueId, target: &HirType| match target {
+        HirType::Int { bits: 32, .. } => analysis.is_integral_within(value, I32_MIN, I32_MAX),
+        HirType::Int { .. } => analysis.is_integral_within(value, facts::SAFE_MIN, facts::SAFE_MAX),
+        _ => false,
+    };
+    if matches!(left, HirType::Int { .. }) && fits(rhs, &left) {
+        return left;
+    }
+    if matches!(right, HirType::Int { .. }) && fits(lhs, &right) {
+        return right;
+    }
+
+    // Otherwise compare in doubles. It is the only choice that cannot be wrong:
+    // every integer this pass produces is inside 2^53 and so is exact as an
+    // `f64`, while narrowing the other side would not be.
+    HirType::NUMBER
 }
 
 /// A value of the wanted type, converting if it is not already.
