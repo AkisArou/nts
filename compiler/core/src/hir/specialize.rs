@@ -183,6 +183,38 @@ pub fn specialize(func: &mut Func, analysis: &Analysis) -> Report {
         }
     }
 
+    // A coercion whose operand is already provably in range is a truncation,
+    // and C spells that as a cast. The general helper exists for values that
+    // might be anything at all — NaN, an infinity, 1e21 — and a value proven not
+    // to be any of those should not pay for the possibility.
+    //
+    // The range is what has to be proven, not integrality: `(int32_t)3.7` is
+    // `3`, which is exactly what `ToInt32(3.7)` is.
+    for index in 0..count {
+        let OpKind::Unary {
+            op: UnOp::ToInt32,
+            operand,
+        } = func.values[index].kind
+        else {
+            continue;
+        };
+        // Only where specialization gave the result an int32 to be converted
+        // *to*; a `Convert` to `f64` would be a different operation entirely.
+        if func.values[index].ty
+            != (HirType::Int {
+                bits: 32,
+                signed: true,
+            })
+        {
+            continue;
+        }
+        // Truncation must land in int32, so the operand may reach one step past
+        // each bound before truncating.
+        if analysis.is_within(operand, I32_MIN - 1.0, I32_MAX + 1.0) {
+            func.values[index].kind = OpKind::Convert(operand);
+        }
+    }
+
     report.conversions = insert_conversions(func, analysis);
     report
 }

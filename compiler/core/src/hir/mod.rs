@@ -28,6 +28,7 @@ pub mod dce;
 pub mod facts;
 pub mod flow;
 pub mod fold;
+pub mod interprocedural;
 
 pub mod lower;
 pub mod specialize;
@@ -442,16 +443,22 @@ pub fn prepare_with(
     let mut conversions = 0;
 
     if specialize_numbers {
-        for func in &mut program.funcs {
+        // Analyzed as a program rather than a function at a time: a parameter is
+        // written by callers and a call's result by the callee, and neither is
+        // visible from inside.
+        let analyses = interprocedural::analyze_program(&program);
+        for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
             // Folding first, because a folded constant is a smaller thing to
             // specialize and because a coercion of a known value should never
             // reach the backend as a call.
-            let analysis = flow::analyze(func);
-            fold::fold(func, &analysis);
+            fold::fold(func, analysis);
+        }
 
-            // Re-analyzed, since folding changed what the operations are.
-            let analysis = flow::analyze(func);
-            let report = specialize::specialize(func, &analysis);
+        // Re-analyzed, since folding changed what the operations are — and a
+        // folded return value is a sharper fact for every caller.
+        let analyses = interprocedural::analyze_program(&program);
+        for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
+            let report = specialize::specialize(func, analysis);
             specialized += report.specialized;
             conversions += report.conversions;
         }

@@ -383,3 +383,37 @@ int main(void) {{
     assert!(output.contains("weigh(3) = 30"), "{output}");
     assert!(output.contains("plain(2.5) = 25"), "{output}");
 }
+
+#[test]
+fn facts_cross_function_boundaries() {
+    // A parameter is written by callers and a call's result by the callee, so a
+    // function analyzed alone knows neither. `pipeline` is fully provable only
+    // because `clamp`'s return bounds `twice`'s parameter, which bounds the
+    // accumulator, which bounds `clamp`'s parameter again -- a fixpoint over the
+    // call graph.
+    //
+    // `exposed` is the boundary. It is exported, so its parameter stays as wide
+    // as `number` however few callers are visible here, and calling `clamp` from
+    // it widens `clamp`'s parameter too. That is the analysis being honest
+    // rather than clever, and the values below prove the resulting code still
+    // handles anything: -1 and 1e21 are exactly what an unbounded double means.
+    let harness = format!(
+        r#"{CHECK}
+double pipeline(double rounds);
+double exposed(double v);
+int main(void) {{
+    check("pipeline(64)", pipeline(64), 382);
+    check("exposed(300)", exposed(300), 44);
+    check("exposed(-1)", exposed(-1), 255);
+    check("exposed(1e21)", exposed(1e21), 0);
+    check("exposed(NaN)", exposed(0.0 / 0.0), 0);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("interprocedural", &harness) else {
+        return;
+    };
+    assert!(output.contains("pipeline(64) = 382"), "{output}");
+    assert!(output.contains("exposed(1e21) = 0"), "{output}");
+}

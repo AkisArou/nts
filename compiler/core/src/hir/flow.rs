@@ -28,7 +28,7 @@
 use rustc_hash::FxHashMap;
 
 use super::facts::{self, Facts};
-use super::{BinOp, BlockId, Func, OpKind, Terminator, UnOp, ValueId};
+use super::{BinOp, BlockId, Callee, Func, OpKind, Terminator, UnOp, ValueId};
 
 /// Rounds before a loop header stops trying for precision and widens.
 ///
@@ -98,6 +98,18 @@ impl Analysis {
         self.values[value.0 as usize]
     }
 
+    /// Whether a value is provably inside a range, whole or not.
+    ///
+    /// Weaker than [`Self::is_integral_within`] on purpose. Truncating `3.7` to
+    /// `3` is exactly what `ToInt32` does, so a coercion only needs its operand
+    /// to be *in range* — being an integer already is not required, and
+    /// demanding it would refuse the ordinary case.
+    #[must_use]
+    pub fn is_within(&self, value: ValueId, lo: f64, hi: f64) -> bool {
+        let facts = self.get(value);
+        !facts.is_bottom() && !facts.maybe_nan && facts.lo >= lo && facts.hi <= hi
+    }
+
     /// Whether a value is provably a whole number within a range, and therefore
     /// representable exactly as an integer.
     ///
@@ -119,9 +131,29 @@ impl Analysis {
 /// Values whose facts an edge refined, relative to their own definitions.
 type Refinements = FxHashMap<ValueId, Facts>;
 
-/// Compute what is provable about every value in a function.
+/// What the rest of the program contributes to one function's analysis.
+///
+/// Empty means "assume nothing", which is what a function analyzed on its own
+/// must do. Neither field can be inferred from inside the function: a parameter
+/// is written by callers and a call's result by the callee.
+#[derive(Debug, Default, Clone)]
+pub struct Context {
+    /// Facts for each parameter, overriding the declared type. Absent entries
+    /// fall back to the declaration.
+    pub params: Vec<Facts>,
+    /// What each function returns, by name.
+    pub returns: FxHashMap<String, Facts>,
+}
+
+/// Compute what is provable about every value in a function, alone.
 #[must_use]
 pub fn analyze(func: &Func) -> Analysis {
+    analyze_with(func, &Context::default())
+}
+
+/// Compute what is provable, given what the rest of the program contributes.
+#[must_use]
+pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
     // Start at BOTTOM and grow. A value's fact only ever widens as more paths
     // are discovered, so the fixpoint is the least one.
     let mut values = vec![Facts::BOTTOM; func.values.len()];
@@ -133,10 +165,7 @@ pub fn analyze(func: &Func) -> Analysis {
     // unsoundness this analysis exists to avoid.
     for (index, op) in func.values.iter().enumerate() {
         if let OpKind::Param(slot) = op.kind {
-            values[index] = func
-                .params
-                .get(slot as usize)
-                .map_or(Facts::TOP, |param| param.known);
+            values[index] = parameter_facts(func, context, slot);
         }
     }
 
@@ -185,6 +214,7 @@ pub fn analyze(func: &Func) -> Analysis {
 
             changed |= transfer_block(
                 func,
+                context,
                 BlockId(u32::try_from(index).unwrap_or(0)),
                 refinements,
                 &mut values,
@@ -200,8 +230,22 @@ pub fn analyze(func: &Func) -> Analysis {
 }
 
 /// Run one block, then hand its successors what it proved.
+/// What a parameter holds: what callers were proven to pass, if anything
+/// determined that, and otherwise what its declared type admits.
+fn parameter_facts(func: &Func, context: &Context, slot: u32) -> Facts {
+    let declared = func
+        .params
+        .get(slot as usize)
+        .map_or(Facts::TOP, |param| param.known);
+    context
+        .params
+        .get(slot as usize)
+        .map_or(declared, |from_callers| from_callers.narrow(declared))
+}
+
 fn transfer_block(
     func: &Func,
+    context: &Context,
     block: BlockId,
     mut refinements: Refinements,
     values: &mut [Facts],
@@ -248,10 +292,14 @@ fn transfer_block(
             // in the entry block like any other, so without this arm the
             // transfer recomputes it as TOP and joins that over the seed —
             // silently discarding the one thing that makes a parameter provable.
-            OpKind::Param(slot) => func
-                .params
-                .get(*slot as usize)
-                .map_or(Facts::TOP, |param| param.known),
+            OpKind::Param(slot) => parameter_facts(func, context, *slot),
+            // What the callee was proven to return. Without this every call is
+            // a wall: an unanalyzed result poisons everything downstream of it,
+            // which for a program made of small functions is everything.
+            OpKind::Call {
+                callee: Callee::Direct(name),
+                ..
+            } => context.returns.get(name).copied().unwrap_or(Facts::TOP),
             // A bool is not a number, and a call's result needs the callee
             // analyzed — neither is a claim this pass can make.
             _ => Facts::TOP,

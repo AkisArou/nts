@@ -213,6 +213,26 @@ impl Facts {
         self.lo <= value && value <= self.hi
     }
 
+    /// The intersection: what is true if *both* are true.
+    ///
+    /// The dual of [`Self::join`], and used where two independent sources
+    /// constrain one value — a parameter bounded both by its declared type and
+    /// by every argument any caller passes. Either may prove wholeness; only
+    /// their agreement admits NaN.
+    #[must_use]
+    pub fn narrow(self, other: Self) -> Self {
+        if self.is_bottom() || other.is_bottom() {
+            return Self::BOTTOM;
+        }
+        Self::new(
+            self.lo.max(other.lo),
+            self.hi.min(other.hi),
+            self.whole || other.whole,
+            self.maybe_nan && other.maybe_nan,
+            self.maybe_negative_zero && other.maybe_negative_zero,
+        )
+    }
+
     /// Whether every member of `self` is also a member of `other`.
     ///
     /// The soundness relation. Used by the tests to state the property that

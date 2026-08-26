@@ -76,8 +76,10 @@ fn dump_facts(tsconfig: &Utf8Path) -> Result<()> {
     }
 
     let lowered = hir::lower::lower(&snapshot);
-    for func in &lowered.program.funcs {
-        let analysis = hir::flow::analyze(func);
+    // The whole-program analysis, so this reports what the compiler actually
+    // knows rather than what one function could work out alone.
+    let analyses = hir::interprocedural::analyze_program(&lowered.program);
+    for (func, analysis) in lowered.program.funcs.iter().zip(&analyses) {
         let numeric: Vec<usize> = (0..func.values.len())
             .filter(|index| matches!(func.values[*index].ty, HirType::Float { .. }))
             .collect();
