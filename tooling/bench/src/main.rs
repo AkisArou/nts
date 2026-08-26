@@ -103,6 +103,17 @@ fn main() -> Result<()> {
 
     let out = root.join("target/bench");
     std::fs::create_dir_all(&out).context("creating the build directory")?;
+    // Written once; every case compiles against it.
+    std::fs::write(
+        out.join(nts_codegen_c::RUNTIME_HEADER_NAME),
+        nts_codegen_c::RUNTIME_HEADER,
+    )
+    .context("writing the runtime header")?;
+    std::fs::write(
+        out.join(nts_codegen_c::RUNTIME_SOURCE_NAME),
+        nts_codegen_c::RUNTIME_SOURCE,
+    )
+    .context("writing the runtime")?;
 
     println!(
         "{:<12} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>10} {:>9}",
@@ -137,6 +148,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
         let mut sources = vec![
             case.join(variant.source),
             root.join("benches/common/main.c"),
+            out.join(nts_codegen_c::RUNTIME_SOURCE_NAME),
         ];
         match variant.generated {
             Generated::Specialized => sources.push(specialized.clone()),
@@ -217,6 +229,8 @@ fn compile(root: &Utf8Path, sources: &[Utf8PathBuf], binary: &Utf8Path) -> Resul
         .args(["-std=c11", "-O2", "-flto", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
         .arg(root.join("benches/common"))
+        .arg("-I")
+        .arg(root.join("target/bench"))
         .args(sources)
         .arg("-o")
         .arg(binary)

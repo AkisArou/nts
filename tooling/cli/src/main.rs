@@ -5,7 +5,7 @@
 //! than no command: RFC §4.1 requires that unsupported reachable behavior be
 //! diagnosed precisely, and that promise starts here.
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir::facts;
 use nts_core::hir::{self, BinOp, HirType, ManagedType, OpKind};
@@ -29,11 +29,19 @@ fn main() -> Result<()> {
         }
         Some("emit-c") => {
             let rest: Vec<String> = args.collect();
-            let tsconfig = rest
-                .iter()
-                .find(|a| !a.starts_with("--"))
+            let mut positional = rest.iter().filter(|a| !a.starts_with("--"));
+            let tsconfig = positional
+                .next()
                 .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
-            emit_c(&tsconfig)
+            // `--out <dir>` writes the program *and* the runtime, which is what
+            // it takes to compile anything. Without it the program goes to
+            // stdout, which is convenient to read and not enough to build.
+            let out = rest
+                .iter()
+                .position(|a| a == "--out")
+                .and_then(|at| rest.get(at + 1))
+                .map(Utf8PathBuf::from);
+            emit_c(&tsconfig, out.as_deref())
         }
         Some("hir") => {
             let rest: Vec<String> = args.collect();
@@ -446,7 +454,7 @@ const fn render_bin(op: BinOp) -> &'static str {
 }
 
 /// Lower a project and print the C it becomes.
-fn emit_c(tsconfig: &Utf8Path) -> Result<()> {
+fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
@@ -472,9 +480,33 @@ fn emit_c(tsconfig: &Utf8Path) -> Result<()> {
     let program = prepared.program;
 
     let emitted = nts_codegen_c::emit(&program);
-    print!("{}", emitted.writer.text());
     for diagnostic in &emitted.diagnostics {
         eprintln!("{} {}", diagnostic.code, diagnostic.message);
     }
+
+    let Some(out) = out else {
+        print!("{}", emitted.writer.text());
+        return Ok(());
+    };
+
+    // The runtime is a translation unit of its own, so a buildable output is
+    // three files rather than one.
+    std::fs::create_dir_all(out).with_context(|| format!("creating {out}"))?;
+    let program_path = out.join("program.c");
+    std::fs::write(&program_path, emitted.writer.text())
+        .with_context(|| format!("writing {program_path}"))?;
+    std::fs::write(
+        out.join(nts_codegen_c::RUNTIME_HEADER_NAME),
+        nts_codegen_c::RUNTIME_HEADER,
+    )?;
+    std::fs::write(
+        out.join(nts_codegen_c::RUNTIME_SOURCE_NAME),
+        nts_codegen_c::RUNTIME_SOURCE,
+    )?;
+    println!(
+        "wrote program.c, {}, {} to {out}",
+        nts_codegen_c::RUNTIME_HEADER_NAME,
+        nts_codegen_c::RUNTIME_SOURCE_NAME
+    );
     Ok(())
 }

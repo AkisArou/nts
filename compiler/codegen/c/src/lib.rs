@@ -27,4 +27,6 @@
 
 pub mod emit;
 
-pub use emit::{Emitted, emit};
+pub use emit::{
+    Emitted, RUNTIME_HEADER, RUNTIME_HEADER_NAME, RUNTIME_SOURCE, RUNTIME_SOURCE_NAME, emit,
+};

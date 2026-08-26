@@ -79,12 +79,24 @@ fn build_and_run(example: &str, harness: &str) -> Option<std::process::Output> {
     let binary = dir.join("run");
     std::fs::write(&generated, emitted.writer.text()).expect("write generated C");
     std::fs::write(&main, harness).expect("write harness");
+    // The runtime is a real translation unit, so it is written beside the
+    // generated file and compiled with it rather than pasted into it.
+    let runtime = dir.join(nts_codegen_c::RUNTIME_SOURCE_NAME);
+    std::fs::write(
+        dir.join(nts_codegen_c::RUNTIME_HEADER_NAME),
+        nts_codegen_c::RUNTIME_HEADER,
+    )
+    .expect("write runtime header");
+    std::fs::write(&runtime, nts_codegen_c::RUNTIME_SOURCE).expect("write runtime");
 
     let compile = std::process::Command::new("clang")
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-o"])
         .arg(&binary)
         .arg(&generated)
         .arg(&main)
+        .arg(&runtime)
+        .arg("-I")
+        .arg(&dir)
         // The generated prelude uses fmod and trunc for JavaScript's integer
         // coercions.
         .arg("-lm")
