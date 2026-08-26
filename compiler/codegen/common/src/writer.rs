@@ -65,6 +65,21 @@ impl CodeWriter {
         self.dedent();
     }
 
+    /// Append another writer's output, keeping its origins aligned.
+    ///
+    /// Lets a caller build something speculatively and commit it only if it
+    /// succeeded — a half-emitted function is worse than none, because it
+    /// compiles into a shell that can be called.
+    pub fn append(&mut self, other: Self) {
+        self.text.push_str(&other.text);
+        self.origins.extend(other.origins);
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.text.is_empty()
+    }
+
     #[must_use]
     pub fn text(&self) -> &str {
         &self.text

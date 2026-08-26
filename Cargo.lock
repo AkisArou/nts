@@ -158,10 +158,15 @@ dependencies = [
 name = "nts-codegen-c"
 version = "0.0.0"
 dependencies = [
+ "camino",
+ "nts-codegen-common",
  "nts-core",
  "nts-debug-lowering",
  "nts-diagnostics",
+ "nts-frontend-ts",
  "nts-memory-lowering",
+ "nts-semantic-schema",
+ "rustc-hash",
 ]
 
 [[package]]

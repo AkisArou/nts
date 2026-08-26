@@ -24,3 +24,7 @@
 //! `nts-memory-lowering` and consumed identically here. The proof of concept measured what
 //! happens otherwise: two emitters spelling one predicate two ways, and a
 //! divergence that only a differential lane caught.
+
+pub mod emit;
+
+pub use emit::{Emitted, emit};

@@ -10,7 +10,14 @@ publish.workspace = true
 nts-diagnostics.workspace = true
 nts-core.workspace = true
 nts-memory-lowering.workspace = true
+nts-codegen-common.workspace = true
+rustc-hash.workspace = true
 nts-debug-lowering.workspace = true
+nts-semantic-schema.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+nts-frontend-ts.workspace = true
+camino.workspace = true

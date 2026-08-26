@@ -26,6 +26,14 @@ fn main() -> Result<()> {
                 .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
             frontend(&tsconfig, decompose, calls, constants)
         }
+        Some("emit-c") => {
+            let rest: Vec<String> = args.collect();
+            let tsconfig = rest
+                .iter()
+                .find(|a| !a.starts_with("--"))
+                .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
+            emit_c(&tsconfig)
+        }
         Some("hir") => {
             let rest: Vec<String> = args.collect();
             let tsconfig = rest
@@ -302,4 +310,37 @@ const fn render_bin(op: BinOp) -> &'static str {
         BinOp::Eq => "eq",
         BinOp::Ne => "ne",
     }
+}
+
+/// Lower a project and print the C it becomes.
+fn emit_c(tsconfig: &Utf8Path) -> Result<()> {
+    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let mut source = TsgoApi::new(tsgo_binary).with_call_resolution(Budget::DEFAULT);
+    let snapshot = source.snapshot(tsconfig)?;
+    if snapshot.has_errors() {
+        for diagnostic in &snapshot.diagnostics {
+            eprintln!("{} {}", diagnostic.code, diagnostic.message);
+        }
+        bail!("the program does not typecheck");
+    }
+
+    let lowered = hir::lower::lower(&snapshot);
+    for diagnostic in &lowered.diagnostics {
+        eprintln!("{} {}", diagnostic.code, diagnostic.message);
+    }
+
+    // A backend is entitled to trust its input only because something checked it.
+    if let Err(problems) = hir::verify::verify(&lowered.program) {
+        for problem in &problems {
+            eprintln!("invalid HIR: {problem:?}");
+        }
+        bail!("refusing to emit code from invalid HIR");
+    }
+
+    let emitted = nts_codegen_c::emit(&lowered.program);
+    print!("{}", emitted.writer.text());
+    for diagnostic in &emitted.diagnostics {
+        eprintln!("{} {}", diagnostic.code, diagnostic.message);
+    }
+    Ok(())
 }
