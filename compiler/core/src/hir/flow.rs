@@ -1,0 +1,685 @@
+//! Propagating [`Facts`] through a function.
+//!
+//! # Why this is short
+//!
+//! Classic range analysis threads an environment keyed by *variable* through
+//! the program, because in a tree-shaped IR a variable's value depends on where
+//! you are standing. In SSA it does not: a value is assigned once, so the set of
+//! numbers it may hold is decided at its definition and is the same everywhere
+//! it is readable.
+//!
+//! What is left is the part SSA does not solve. Two of them:
+//!
+//! - **Block parameters** genuinely differ by edge, and their facts are the join
+//!   of the arguments each predecessor passes.
+//! - **Guards** tell you more than a definition does. `i` defined as `0` and
+//!   incremented in a loop is unbounded from its definitions alone; it is the
+//!   `i < n` on the loop header that bounds it. That information belongs to an
+//!   *edge*, not to a value, which is the one thing SSA does not already carry.
+//!
+//! So the environment here exists only to hold what an edge refined, and
+//! everything else is read from the value's own fact.
+
+// Exact float comparison, for the same reason as in `facts`: these are questions
+// about which IEEE value a bound *is*, not about whether two measurements are
+// close. See the note there.
+#![allow(clippy::float_cmp)]
+
+use rustc_hash::FxHashMap;
+
+use super::facts::{self, Facts};
+use super::{BinOp, BlockId, Func, OpKind, Terminator, UnOp, ValueId};
+
+/// Rounds before a loop header stops trying for precision and widens.
+///
+/// A counter's bound grows by one per round, so a loop that runs a million
+/// times would need a million rounds. Three is enough to see that a bound is
+/// still moving without giving up on one that was going to settle.
+const WIDEN_AFTER: u32 = 3;
+
+/// A hard bound on the whole fixpoint, in case a lattice mistake makes some
+/// value oscillate rather than converge. Thresholds converge far earlier;
+/// reaching this means a bug, and looping forever would hide it.
+const ROUND_CAP: u32 = 64;
+
+/// Blocks a back edge returns to.
+///
+/// The only places a value can grow without bound, and therefore the only
+/// places widening belongs. Applying it anywhere else destroys information
+/// rather than forcing convergence: a loop *body* holds values a guard just
+/// narrowed, and widening those throws the guard away.
+fn loop_headers(func: &Func) -> rustc_hash::FxHashSet<BlockId> {
+    const UNVISITED: u8 = 0;
+    const ON_STACK: u8 = 1;
+    const DONE: u8 = 2;
+
+    let mut headers = rustc_hash::FxHashSet::default();
+    let mut state = vec![UNVISITED; func.blocks.len()];
+    let mut stack = vec![(BlockId(0), 0_usize)];
+    state[0] = ON_STACK;
+
+    // An edge to a block already on the search stack is a back edge, and its
+    // target is a loop header. Iterative rather than recursive: a deeply nested
+    // function should not decide how much stack the compiler needs.
+    while let Some(&mut (block, ref mut next)) = stack.last_mut() {
+        let successors = func.blocks[block.0 as usize].terminator.successors();
+        let Some(successor) = successors.get(*next).copied() else {
+            state[block.0 as usize] = DONE;
+            stack.pop();
+            continue;
+        };
+        *next += 1;
+        match state[successor.0 as usize] {
+            UNVISITED => {
+                state[successor.0 as usize] = ON_STACK;
+                stack.push((successor, 0));
+            }
+            ON_STACK => {
+                headers.insert(successor);
+            }
+            _ => {}
+        }
+    }
+    headers
+}
+
+/// What was proven about each value in one function.
+#[derive(Debug, Clone)]
+pub struct Analysis {
+    /// Indexed by [`ValueId`]. The set of numbers the value may hold, anywhere
+    /// it can be read.
+    values: Vec<Facts>,
+}
+
+impl Analysis {
+    /// What is known about a value.
+    #[must_use]
+    pub fn get(&self, value: ValueId) -> Facts {
+        self.values[value.0 as usize]
+    }
+
+    /// Whether a value is provably a whole number within a range, and therefore
+    /// representable exactly as an integer.
+    ///
+    /// The three obligations together: not NaN, integral on every path, and
+    /// inside the given bounds. `-0` refuses too — an integer slot cannot hold
+    /// it, and `1 / -0` can tell that it was lost.
+    #[must_use]
+    pub fn is_integral_within(&self, value: ValueId, lo: f64, hi: f64) -> bool {
+        let facts = self.get(value);
+        !facts.is_bottom()
+            && facts.whole
+            && !facts.maybe_nan
+            && !facts.maybe_negative_zero
+            && facts.lo >= lo
+            && facts.hi <= hi
+    }
+}
+
+/// Values whose facts an edge refined, relative to their own definitions.
+type Refinements = FxHashMap<ValueId, Facts>;
+
+/// Compute what is provable about every value in a function.
+#[must_use]
+pub fn analyze(func: &Func) -> Analysis {
+    // Start at BOTTOM and grow. A value's fact only ever widens as more paths
+    // are discovered, so the fixpoint is the least one.
+    let mut values = vec![Facts::BOTTOM; func.values.len()];
+
+    // A parameter is an input. Nothing inside the function constrains it, and
+    // assuming otherwise is exactly the unsoundness this analysis exists to
+    // avoid. Narrowing these needs the call sites, which is a later pass.
+    for (index, op) in func.values.iter().enumerate() {
+        if matches!(op.kind, OpKind::Param(_)) {
+            values[index] = Facts::TOP;
+        }
+    }
+
+    let mut entry: Vec<Option<Refinements>> = vec![None; func.blocks.len()];
+    entry[0] = Some(Refinements::default());
+    // What each block was handed last time, so that widening compares against
+    // the previous round rather than against one predecessor's contribution.
+    let mut previous: Vec<Option<Refinements>> = vec![None; func.blocks.len()];
+    let mut visits = vec![0_u32; func.blocks.len()];
+    let headers = loop_headers(func);
+
+    for _ in 0..ROUND_CAP {
+        let mut changed = false;
+        for index in 0..func.blocks.len() {
+            let Some(mut refinements) = entry[index].clone() else {
+                // Not yet reached by any path.
+                continue;
+            };
+            visits[index] += 1;
+
+            // Widening, once per header per round and only on the parameters
+            // that actually accumulate across iterations. Two restrictions, each
+            // of which was a bug without it:
+            //
+            // - once per *block*, not once per incoming edge, or a header with
+            //   two predecessors takes two threshold jumps per round of growth;
+            // - only at a *header*, or a loop body widens the value its guard
+            //   just narrowed, and the loop stops being provable at all.
+            let block = BlockId(u32::try_from(index).unwrap_or(0));
+            if visits[index] > WIDEN_AFTER
+                && headers.contains(&block)
+                && let Some(before) = &previous[index]
+            {
+                for param in &func.blocks[index].params {
+                    if let (Some(earlier), Some(now)) =
+                        (before.get(param).copied(), refinements.get(param).copied())
+                    {
+                        refinements.insert(*param, facts::widen(earlier, now));
+                    }
+                }
+                // Keep the widened value, or the next round joins the narrow one
+                // back in and the bound crawls upward again.
+                entry[index] = Some(refinements.clone());
+            }
+            previous[index] = Some(refinements.clone());
+
+            changed |= transfer_block(
+                func,
+                BlockId(u32::try_from(index).unwrap_or(0)),
+                refinements,
+                &mut values,
+                &mut entry,
+            );
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    Analysis { values }
+}
+
+/// Run one block, then hand its successors what it proved.
+fn transfer_block(
+    func: &Func,
+    block: BlockId,
+    mut refinements: Refinements,
+    values: &mut [Facts],
+    entry: &mut [Option<Refinements>],
+) -> bool {
+    let record = &func.blocks[block.0 as usize];
+    let mut changed = false;
+
+    // A block parameter's fact is whatever its predecessors passed, which the
+    // edges recorded here.
+    for param in &record.params {
+        if let Some(passed) = refinements.get(param) {
+            changed |= widen_into(&mut values[param.0 as usize], *passed);
+        }
+    }
+
+    for &value in &record.ops {
+        let op = &func.values[value.0 as usize];
+        let computed = match &op.kind {
+            OpKind::ConstFloat(v) => Facts::constant(*v),
+            #[allow(clippy::cast_precision_loss)]
+            OpKind::ConstInt(v) => Facts::constant(*v as f64),
+            OpKind::Binary { op: bin, lhs, rhs } => facts::transfer_binary(
+                *bin,
+                lookup(&refinements, values, *lhs),
+                lookup(&refinements, values, *rhs),
+            )
+            .unwrap_or(Facts::TOP),
+            OpKind::Unary {
+                op: UnOp::Neg,
+                operand,
+            } => facts::neg(lookup(&refinements, values, *operand)),
+            // A booleans is not a number, and a call's result needs the callee
+            // analyzed — neither is a claim this pass can make.
+            _ => Facts::TOP,
+        };
+        // Monotone: a value's fact only grows as more paths reach it, so joining
+        // rather than assigning keeps the iteration from oscillating.
+        let slot = &mut values[value.0 as usize];
+        let joined = slot.join(computed);
+        if joined != *slot {
+            *slot = joined;
+            changed = true;
+        }
+        refinements.insert(value, joined);
+    }
+
+    match &record.terminator {
+        Terminator::Return(_) | Terminator::Unreachable => {}
+        Terminator::Jump { target, args } => {
+            changed |= send(func, *target, args, &refinements, values, entry);
+        }
+        Terminator::Branch {
+            cond,
+            then_target,
+            then_args,
+            else_target,
+            else_args,
+        } => {
+            // Each edge carries what taking it proves. This is the only place
+            // a value learns something its definition did not say.
+            let on_then = refine_edge(func, &refinements, values, *cond, true);
+            let on_else = refine_edge(func, &refinements, values, *cond, false);
+            changed |= send(func, *then_target, then_args, &on_then, values, entry);
+            changed |= send(func, *else_target, else_args, &on_else, values, entry);
+        }
+    }
+    changed
+}
+
+/// Hand an edge's facts to its target, binding the target's parameters to the
+/// arguments this edge passes.
+fn send(
+    func: &Func,
+    target: BlockId,
+    args: &[ValueId],
+    refinements: &Refinements,
+    values: &[Facts],
+    entry: &mut [Option<Refinements>],
+) -> bool {
+    let mut outgoing = refinements.clone();
+    for (param, arg) in func.blocks[target.0 as usize].params.iter().zip(args) {
+        outgoing.insert(*param, lookup(refinements, values, *arg));
+    }
+
+    let slot = &mut entry[target.0 as usize];
+    let Some(existing) = slot else {
+        *slot = Some(outgoing);
+        return true;
+    };
+
+    let mut changed = false;
+    for (value, incoming) in outgoing {
+        let previous = existing
+            .get(&value)
+            .copied()
+            .unwrap_or(values[value.0 as usize]);
+        let joined = previous.join(incoming);
+        if joined != previous {
+            existing.insert(value, joined);
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// What a value holds here: what an edge refined it to, or its own definition.
+fn lookup(refinements: &Refinements, values: &[Facts], value: ValueId) -> Facts {
+    refinements
+        .get(&value)
+        .copied()
+        .unwrap_or_else(|| values[value.0 as usize])
+}
+
+fn widen_into(slot: &mut Facts, incoming: Facts) -> bool {
+    let joined = slot.join(incoming);
+    if joined == *slot {
+        return false;
+    }
+    *slot = joined;
+    true
+}
+
+/// The comparison with its operands swapped.
+const fn flip(op: BinOp) -> BinOp {
+    match op {
+        BinOp::Lt => BinOp::Gt,
+        BinOp::Le => BinOp::Ge,
+        BinOp::Gt => BinOp::Lt,
+        BinOp::Ge => BinOp::Le,
+        other => other,
+    }
+}
+
+/// The comparison that holds when this one does not.
+const fn negate(op: BinOp) -> BinOp {
+    match op {
+        BinOp::Lt => BinOp::Ge,
+        BinOp::Le => BinOp::Gt,
+        BinOp::Gt => BinOp::Le,
+        BinOp::Ge => BinOp::Lt,
+        BinOp::Eq => BinOp::Ne,
+        BinOp::Ne => BinOp::Eq,
+        other => other,
+    }
+}
+
+/// Facts that hold on one side of a branch.
+fn refine_edge(
+    func: &Func,
+    refinements: &Refinements,
+    values: &[Facts],
+    cond: ValueId,
+    taken: bool,
+) -> Refinements {
+    let mut refined = refinements.clone();
+    let OpKind::Binary {
+        op: comparison,
+        lhs,
+        rhs,
+    } = &func.values[cond.0 as usize].kind
+    else {
+        return refined;
+    };
+    if !matches!(
+        comparison,
+        BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne
+    ) {
+        return refined;
+    }
+
+    let holds = if taken {
+        *comparison
+    } else {
+        negate(*comparison)
+    };
+
+    // An ordered comparison is false whenever either side is NaN, so only the
+    // *true* edge proves NaN absent. Taking the false edge proves nothing about
+    // it — which is why this cannot simply be the negated comparison.
+    let excludes_nan = taken
+        && matches!(
+            comparison,
+            BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq
+        );
+
+    let a = lookup(refinements, values, *lhs);
+    let b = lookup(refinements, values, *rhs);
+    refined.insert(*lhs, refine(holds, a, b, excludes_nan));
+    refined.insert(*rhs, refine(flip(holds), b, a, excludes_nan));
+    refined
+}
+
+/// Narrow `a` to an interval, keeping the flags an interval cannot express.
+fn meet(a: Facts, lo: f64, hi: f64, clear_nan: bool) -> Facts {
+    let new_lo = a.lo.max(lo);
+    let new_hi = a.hi.min(hi);
+    if new_lo > new_hi {
+        // No numeric member survives, though NaN may still reach here.
+        return Facts {
+            maybe_nan: if clear_nan { false } else { a.maybe_nan },
+            ..Facts::BOTTOM
+        };
+    }
+    Facts::new(
+        new_lo,
+        new_hi,
+        a.whole,
+        if clear_nan { false } else { a.maybe_nan },
+        a.maybe_negative_zero,
+    )
+}
+
+/// Narrow `a` given that `a OP b` holds.
+///
+/// Wholeness sharpens a strict bound by a full step: a whole `x < b` is not
+/// merely `x <= b`, it is `x <= ceil(b) - 1`. That single rule is what turns
+/// `while (i < 10)` into `i` in `[0, 9]` rather than `[0, 10]` — and an
+/// off-by-one in a range analysis is an off-by-one in the emitted program.
+fn refine(op: BinOp, a: Facts, b: Facts, clear_nan: bool) -> Facts {
+    let cleared = Facts {
+        maybe_nan: if clear_nan { false } else { a.maybe_nan },
+        ..a
+    };
+    if a.lo > a.hi || b.lo > b.hi {
+        return cleared;
+    }
+    // On a failed ordered comparison, a NaN on the other side satisfies the
+    // failure whatever this side holds, so nothing about this side is proven.
+    if !clear_nan && b.maybe_nan && matches!(op, BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge) {
+        return cleared;
+    }
+
+    match op {
+        BinOp::Lt => meet(
+            a,
+            f64::NEG_INFINITY,
+            if a.whole { b.hi.ceil() - 1.0 } else { b.hi },
+            clear_nan,
+        ),
+        BinOp::Le => meet(
+            a,
+            f64::NEG_INFINITY,
+            if a.whole { b.hi.floor() } else { b.hi },
+            clear_nan,
+        ),
+        BinOp::Gt => meet(
+            a,
+            if a.whole { b.lo.floor() + 1.0 } else { b.lo },
+            f64::INFINITY,
+            clear_nan,
+        ),
+        BinOp::Ge => meet(
+            a,
+            if a.whole { b.lo.ceil() } else { b.lo },
+            f64::INFINITY,
+            clear_nan,
+        ),
+        BinOp::Eq => meet(a, b.lo, b.hi, clear_nan),
+        // Knowing a value is not equal to something only helps when that
+        // something sits on one of its endpoints; otherwise the set has a hole
+        // in it, which an interval cannot represent.
+        BinOp::Ne => {
+            if b.is_singleton() && a.whole && b.lo.fract() == 0.0 {
+                if a.lo == b.lo {
+                    return meet(a, a.lo + 1.0, a.hi, clear_nan);
+                }
+                if a.hi == b.lo {
+                    return meet(a, a.lo, a.hi - 1.0, clear_nan);
+                }
+            }
+            cleared
+        }
+        _ => cleared,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hir::{Block, HirType, Op, Param};
+    use nts_diagnostics::{Location, SourceId, Span};
+    use nts_semantic_schema::Origin;
+
+    fn origin() -> Origin {
+        Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        })
+    }
+
+    fn op(kind: OpKind) -> Op {
+        Op {
+            kind,
+            ty: HirType::Float { bits: 64 },
+            origin: origin(),
+        }
+    }
+
+    fn func(values: Vec<Op>, blocks: Vec<Block>, params: usize) -> Func {
+        Func {
+            name: "f".to_owned(),
+            params: (0..params)
+                .map(|_| Param {
+                    name: "n".to_owned(),
+                    ty: HirType::Float { bits: 64 },
+                    origin: origin(),
+                })
+                .collect(),
+            return_type: HirType::Float { bits: 64 },
+            values,
+            blocks,
+            origin: origin(),
+            exported: true,
+        }
+    }
+
+    fn block(params: Vec<ValueId>, ops: Vec<ValueId>, terminator: Terminator) -> Block {
+        Block {
+            params,
+            ops,
+            terminator,
+        }
+    }
+
+    /// `let i = 0; while (i < 10) { i = i + 1 } return i`
+    ///
+    /// The shape the whole analysis exists for. Nothing about `i`'s definitions
+    /// bounds it — `0` and `i + 1` are all a definition-walk sees. The bound
+    /// comes from the guard on the edge into the body.
+    fn counted_loop(limit: f64) -> Func {
+        let values = vec![
+            op(OpKind::ConstFloat(0.0)),     // %0  i = 0
+            op(OpKind::BlockParam(0)),       // %1  i at the header
+            op(OpKind::ConstFloat(limit)),   // %2  the limit
+            op(Op_binary(BinOp::Lt, 1, 2)),  // %3  i < limit
+            op(OpKind::ConstFloat(1.0)),     // %4
+            op(Op_binary(BinOp::Add, 1, 4)), // %5  i + 1
+        ];
+        func(
+            values,
+            vec![
+                block(
+                    Vec::new(),
+                    vec![ValueId(0)],
+                    Terminator::Jump {
+                        target: BlockId(1),
+                        args: vec![ValueId(0)],
+                    },
+                ),
+                block(
+                    vec![ValueId(1)],
+                    vec![ValueId(2), ValueId(3)],
+                    Terminator::Branch {
+                        cond: ValueId(3),
+                        then_target: BlockId(2),
+                        then_args: Vec::new(),
+                        else_target: BlockId(3),
+                        else_args: Vec::new(),
+                    },
+                ),
+                block(
+                    Vec::new(),
+                    vec![ValueId(4), ValueId(5)],
+                    Terminator::Jump {
+                        target: BlockId(1),
+                        args: vec![ValueId(5)],
+                    },
+                ),
+                block(Vec::new(), Vec::new(), Terminator::Return(Some(ValueId(1)))),
+            ],
+            0,
+        )
+    }
+
+    #[allow(non_snake_case)]
+    fn Op_binary(op: BinOp, lhs: u32, rhs: u32) -> OpKind {
+        OpKind::Binary {
+            op,
+            lhs: ValueId(lhs),
+            rhs: ValueId(rhs),
+        }
+    }
+
+    #[test]
+    fn a_constant_bounded_counter_is_provably_an_integer() {
+        let analysis = analyze(&counted_loop(10.0));
+        let counter = analysis.get(ValueId(1));
+        assert!(counter.whole, "the counter is whole: {counter:?}");
+        assert!(!counter.maybe_nan);
+        assert_eq!(counter.lo, 0.0);
+
+        // The upper bound is the widening threshold, not 10. A counter's bound
+        // grows by one per round, so a loop bounded by a million would need a
+        // million rounds; widening jumps a still-growing bound to the next point
+        // where a verdict could change. The verdict is what matters, and it is
+        // preserved: this is still provably `i32`.
+        assert!(analysis.is_integral_within(ValueId(1), -2_147_483_648.0, 2_147_483_647.0));
+    }
+
+    #[test]
+    fn widening_does_not_manufacture_a_verdict_it_cannot_prove() {
+        // The counterpart to the test above, and the reason those thresholds are
+        // the ones they are. A counter bounded past `i32` widens to the *next*
+        // threshold rather than stopping at a convenient one, so it is reported
+        // as `i64` and not as `i32`. Widening only ever grows a bound, so the
+        // answer stays an over-approximation of the truth.
+        let analysis = analyze(&counted_loop(3_000_000_000.0));
+        assert!(
+            !analysis.is_integral_within(ValueId(1), -2_147_483_648.0, 2_147_483_647.0),
+            "{:?} does not fit i32",
+            analysis.get(ValueId(1))
+        );
+        assert!(analysis.is_integral_within(ValueId(1), facts::SAFE_MIN, facts::SAFE_MAX));
+    }
+
+    #[test]
+    fn a_counter_bounded_by_a_parameter_is_not() {
+        // Same loop, but the limit is an unanalyzed input. This is the case that
+        // makes exported functions hard, and the analysis has to say so rather
+        // than guess: the counter really can exceed any integer range.
+        let mut function = counted_loop(10.0);
+        function.values[2] = op(OpKind::Param(0));
+        function.params.push(Param {
+            name: "limit".to_owned(),
+            ty: HirType::Float { bits: 64 },
+            origin: origin(),
+        });
+
+        let analysis = analyze(&function);
+        assert!(
+            !analysis.is_integral_within(ValueId(1), -2_147_483_648.0, 2_147_483_647.0),
+            "an unbounded counter must not be claimed as i32: {:?}",
+            analysis.get(ValueId(1))
+        );
+    }
+
+    #[test]
+    fn wholeness_sharpens_a_strict_bound_by_a_full_step() {
+        // A whole `x < 10` is `x <= 9`, not `x <= 10`. Without this the loop
+        // above proves `[0, 11]` and every derived bound is one too wide.
+        let whole = Facts::new(0.0, 100.0, true, false, false);
+        let limit = Facts::constant(10.0);
+        assert_eq!(refine(BinOp::Lt, whole, limit, true).hi, 9.0);
+
+        // A value that is not known to be whole gets only the weak bound: it
+        // may be 9.5.
+        let fractional = Facts::new(0.0, 100.0, false, false, false);
+        assert_eq!(refine(BinOp::Lt, fractional, limit, true).hi, 10.0);
+    }
+
+    #[test]
+    fn a_failed_ordered_comparison_proves_nothing_about_nan() {
+        // `!(x < 10)` does not mean `x >= 10`: a NaN fails every ordered
+        // comparison. Narrowing on the false edge would let a NaN be proven to
+        // be a large integer.
+        let unknown = Facts::TOP;
+        let limit = Facts::constant(10.0);
+        let refined = refine(BinOp::Ge, unknown, limit, false);
+        assert!(
+            refined.maybe_nan,
+            "NaN survives the false edge: {refined:?}"
+        );
+
+        // The true edge does exclude it: `x < 10` being true means `x` is a
+        // number.
+        let taken = refine(BinOp::Lt, unknown, limit, true);
+        assert!(!taken.maybe_nan);
+    }
+
+    #[test]
+    fn a_parameter_is_unknown_rather_than_assumed() {
+        let function = func(
+            vec![op(OpKind::Param(0))],
+            vec![block(
+                Vec::new(),
+                vec![ValueId(0)],
+                Terminator::Return(Some(ValueId(0))),
+            )],
+            1,
+        );
+        let analysis = analyze(&function);
+        let facts = analysis.get(ValueId(0));
+        assert!(facts.maybe_nan && !facts.whole, "{facts:?}");
+    }
+}

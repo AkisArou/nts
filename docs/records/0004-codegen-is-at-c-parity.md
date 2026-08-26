@@ -57,3 +57,57 @@ program shaped like real code. Compiling it found four lowering bugs that every
 fixture had missed: merge blocks without parameters, an arm terminated at the
 wrong block, loop-body declarations treated as loop-carried, and no support for
 parentheses or unary operators. Benchmarks are tests.
+
+## Addendum: the 1.7x is real, and `fib` cannot claim it
+
+Written after the analysis in `hir::flow` could report what is actually
+provable, which is the evidence this record was missing.
+
+The table above prices `C (int64)` against `C (double)` at 1.7x on `fib` and
+calls it "the prize for proving a `number` is integral". The measurement is
+right and the framing is wrong. **`fib` cannot be specialized to `int64` at
+all**, for a reason that has nothing to do with its parameter:
+
+```text
+fib(92) = 7540113804746346429   fits in int64
+fib(93) = 12200160415121876738  does not
+```
+
+At 93 the integer version wraps and the double version does not, so the two
+compute different functions. The range obligation fails on the *result*, and no
+knowledge about the argument rescues it. `benches/cases/fib/ref-int.c` is
+therefore an upper bound on what integer arithmetic costs, not a target the
+compiler may aim at. The harness's checksum comparison would catch this if the
+workload were ever raised past 92 — which is what it is for.
+
+So the honest statement is: 1.7x is what double arithmetic costs relative to
+integer arithmetic for that shape of code, and it is claimable only where all
+three obligations hold. Where they hold on real code is now measurable:
+
+```text
+escapes    15/29 numbers provably i32     (mandelbrot's inner kernel)
+mandelbrot  8/24
+accumulate  4/12                          (only the literals)
+```
+
+The pattern is consistent. What proves are **loop counters against constant
+bounds**, **flags**, and **literals**. What does not prove are values derived
+from an unconstrained parameter — and every exported function's parameters are
+unconstrained, because its callers are outside the compiled program.
+
+That reshapes the work. The remaining precision is not in a better lattice; it
+is in three things the analysis currently cannot see:
+
+- **Call sites.** A non-exported function's parameters are bounded by its
+  callers, and nothing propagates that yet.
+- **Bitwise operators.** `x | 0` and `x & 1023` are how integer code is written
+  in JavaScript, and they are *proofs* — `ToInt32` makes the result whole and
+  int32-ranged whatever the input was. The lowering does not accept them.
+- **`Math.trunc`/`floor`/`ceil`/`round`.** The author stating integer intent
+  outright.
+
+Note also that `escapes` proving 15/29 did not make `mandelbrot` faster: its
+`C (int64)` column is within noise of `C (double)`, because the inner loop is
+float arithmetic that no amount of counter specialization touches. Proving a
+value is an integer is worth something only where integer operations replace
+floating-point ones on a hot path.

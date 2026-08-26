@@ -25,6 +25,7 @@
 //!   symbol resolution had to land before this.
 
 pub mod facts;
+pub mod flow;
 
 pub mod lower;
 pub mod verify;

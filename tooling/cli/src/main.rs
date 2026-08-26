@@ -7,6 +7,7 @@
 
 use anyhow::{Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
+use nts_core::hir::facts;
 use nts_core::hir::{self, BinOp, HirType, ManagedType, OpKind};
 use nts_core::reachability;
 use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo, tsgo::decompose::Budget};
@@ -42,6 +43,14 @@ fn main() -> Result<()> {
                 .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
             dump_hir(&tsconfig)
         }
+        Some("facts") => {
+            let rest: Vec<String> = args.collect();
+            let tsconfig = rest
+                .iter()
+                .find(|a| !a.starts_with("--"))
+                .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
+            dump_facts(&tsconfig)
+        }
         Some("version") | None => {
             println!("nts {}", env!("CARGO_PKG_VERSION"));
             println!("snapshot schema v{SCHEMA_VERSION}");
@@ -49,6 +58,80 @@ fn main() -> Result<()> {
             Ok(())
         }
         Some(other) => bail!("unknown command `{other}`; try `nts version`"),
+    }
+}
+
+/// Show what the number analysis proves, value by value.
+///
+/// Exists so that a specialization strategy is chosen against evidence rather
+/// than against a guess about what real code looks like. The interesting column
+/// is the last one: what fraction of a function's numbers are provably integers,
+/// and which ones are not.
+fn dump_facts(tsconfig: &Utf8Path) -> Result<()> {
+    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let mut source = TsgoApi::new(tsgo_binary).with_call_resolution(Budget::DEFAULT);
+    let snapshot = source.snapshot(tsconfig)?;
+    if snapshot.has_errors() {
+        bail!("the program does not typecheck");
+    }
+
+    let lowered = hir::lower::lower(&snapshot);
+    for func in &lowered.program.funcs {
+        let analysis = hir::flow::analyze(func);
+        let numeric: Vec<usize> = (0..func.values.len())
+            .filter(|index| matches!(func.values[*index].ty, HirType::Float { .. }))
+            .collect();
+        let provable = numeric
+            .iter()
+            .filter(|index| {
+                analysis.is_integral_within(
+                    hir::ValueId(u32::try_from(**index).unwrap_or(0)),
+                    -2_147_483_648.0,
+                    2_147_483_647.0,
+                )
+            })
+            .count();
+
+        println!(
+            "{} — {provable}/{} numbers provably i32",
+            func.name,
+            numeric.len()
+        );
+        for index in numeric {
+            let id = hir::ValueId(u32::try_from(index).unwrap_or(0));
+            let facts = analysis.get(id);
+            let verdict = if analysis.is_integral_within(id, -2_147_483_648.0, 2_147_483_647.0) {
+                "i32"
+            } else if analysis.is_integral_within(id, facts::SAFE_MIN, facts::SAFE_MAX) {
+                "i64"
+            } else {
+                "f64"
+            };
+            println!(
+                "  %{index:<3} {verdict:<4} [{}, {}]{}{}{}",
+                render_bound(facts.lo),
+                render_bound(facts.hi),
+                if facts.whole { " whole" } else { "" },
+                if facts.maybe_nan { " nan?" } else { "" },
+                if facts.maybe_negative_zero {
+                    " -0?"
+                } else {
+                    ""
+                },
+            );
+        }
+        println!();
+    }
+    Ok(())
+}
+
+fn render_bound(value: f64) -> String {
+    if value == f64::INFINITY {
+        "+inf".to_owned()
+    } else if value == f64::NEG_INFINITY {
+        "-inf".to_owned()
+    } else {
+        format!("{value}")
     }
 }
 
