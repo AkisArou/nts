@@ -143,7 +143,9 @@ fn hex(bytes: &[u8]) -> String {
 /// inspectable, and the point of this layer is that its decisions are visible.
 fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
-    let mut source = TsgoApi::new(tsgo_binary);
+    // Call resolution is not optional here: without it a call site has no known
+    // target and lowering refuses it.
+    let mut source = TsgoApi::new(tsgo_binary).with_call_resolution(Budget::DEFAULT);
     let snapshot = source.snapshot(tsconfig)?;
 
     if snapshot.has_errors() {
@@ -218,6 +220,14 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
                 lhs.0,
                 rhs.0
             )
+        }
+        OpKind::Call { callee, args } => {
+            let rendered: Vec<String> = args.iter().map(|a| format!("%{}", a.0)).collect();
+            let (kind, name) = match callee {
+                nts_core::hir::Callee::Direct(name) => ("call", name),
+                nts_core::hir::Callee::External(name) => ("call.extern", name),
+            };
+            format!("%{index} = {kind} {name}({}) : {ty}", rendered.join(", "))
         }
         OpKind::Return(Some(v)) => format!("ret %{}", v.0),
         OpKind::Return(None) => "ret".to_owned(),

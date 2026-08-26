@@ -172,8 +172,29 @@ pub enum OpKind {
         lhs: ValueId,
         rhs: ValueId,
     },
+    /// A call whose callee the checker resolved.
+    Call {
+        callee: Callee,
+        args: Vec<ValueId>,
+    },
     /// Return, with a value unless the function is `void`.
     Return(Option<ValueId>),
+}
+
+/// What a call reaches.
+///
+/// Not a value: a resolved call names its target statically, which is the whole
+/// reason to have resolved it. A callee that had to be computed would be a
+/// different operation, and one this lowering does not yet accept.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Callee {
+    /// A function declared in the compiled program. Emits a static call.
+    Direct(String),
+    /// Declared outside the compiled set — an import from a package, or an
+    /// ambient declaration. The signature is known, so the call is still typed
+    /// exactly; what is missing is a definition to call, which the linker or the
+    /// platform supplies.
+    External(String),
 }
 
 /// A binary operator, after the source operator has been resolved against its

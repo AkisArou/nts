@@ -17,7 +17,7 @@ use nts_semantic_schema::{
     LiteralValue, NodeId, NodeKind, Origin, SemanticSnapshot, TypeId, TypeKind, syntax,
 };
 
-use super::{BinOp, Func, HirType, ManagedType, Op, OpKind, Param, Program, ValueId};
+use super::{BinOp, Callee, Func, HirType, ManagedType, Op, OpKind, Param, Program, ValueId};
 
 /// What a lowering produced, and what it could not.
 #[derive(Debug, Default)]
@@ -279,6 +279,7 @@ impl<'a> FuncBuilder<'a> {
                 Ok(())
             }
             Some(syntax::BLOCK) => self.lower_block(id),
+            Some(syntax::VARIABLE_STATEMENT) => self.lower_variable_statement(id),
             _ => Err(self.unsupported(id, "this statement")),
         }
     }
@@ -287,9 +288,117 @@ impl<'a> FuncBuilder<'a> {
         match self.kind_of(id) {
             Some(syntax::IDENTIFIER) => self.lower_identifier(id),
             Some(syntax::NUMERIC_LITERAL) => self.lower_number(id),
+            Some(syntax::STRING_LITERAL) => self.lower_string(id),
             Some(syntax::BINARY_EXPRESSION) => self.lower_binary(id),
+            Some(syntax::CALL_EXPRESSION) => self.lower_call(id),
             _ => Err(self.unsupported(id, "this expression")),
         }
+    }
+
+    /// `const x = expr` / `let x = expr`.
+    ///
+    /// A declaration with an initializer binds its symbol to the initializer's
+    /// value — no slot and no store, because nothing here can reassign it yet.
+    /// When assignment arrives, a `let` will need one and a `const` still will
+    /// not, which is what the snapshot's variable kind is for.
+    fn lower_variable_statement(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        // A `VariableDeclarationList` is an ordinary syntax node, not a NodeList,
+        // so `children` does not flatten it away — the declarations sit one level
+        // further down than they appear to.
+        let declarations: Vec<NodeId> = self
+            .children(id)
+            .into_iter()
+            .flat_map(|child| {
+                if self.kind_of(child) == Some(syntax::VARIABLE_DECLARATION_LIST) {
+                    self.children(child)
+                } else {
+                    vec![child]
+                }
+            })
+            .collect();
+
+        for declaration in declarations {
+            if self.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION) {
+                continue;
+            }
+            let children = self.children(declaration);
+            let [name, initializer] = children.as_slice() else {
+                return Err(self.unsupported(declaration, "a declaration without an initializer"));
+            };
+            let value = self.lower_expression(*initializer)?;
+            let symbol = self
+                .node(*name)
+                .symbol
+                .ok_or_else(|| self.unsupported(*name, "an unresolved declaration"))?;
+            self.bindings.insert(symbol.0, value);
+        }
+        Ok(())
+    }
+
+    fn lower_string(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let text = self
+            .snapshot
+            .node_types
+            .get(&id)
+            .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
+            .and_then(|record| match &record.kind {
+                TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+                _ => None,
+            })
+            .ok_or_else(|| self.unsupported(id, "a string literal with no known value"))?;
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::ConstString(text),
+            HirType::Managed(ManagedType::String),
+            origin,
+        ))
+    }
+
+    /// A call to a statically resolved target.
+    ///
+    /// Requires the frontend's call resolution: without it there is no way to
+    /// know *which* function a call site reaches, and guessing from the callee's
+    /// spelling would pick the wrong overload silently. Refusing is the honest
+    /// answer, and the diagnostic says what is missing rather than what is
+    /// unsupported.
+    fn lower_call(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let Some(target) = self.snapshot.call_targets.get(&id) else {
+            return Err(Diagnostic::error(
+                "NTS1002",
+                "this call was not resolved to a target; the frontend's call \
+                 resolution pass has to run before lowering",
+                self.location(id),
+            ));
+        };
+
+        let children = self.children(id);
+        let callee_node = *children
+            .first()
+            .ok_or_else(|| self.unsupported(id, "a call with no callee"))?;
+        let name = self
+            .node(callee_node)
+            .text
+            .clone()
+            .ok_or_else(|| self.unsupported(callee_node, "a computed callee"))?;
+
+        // A callee inside the compiled program becomes a static call; one outside
+        // it is still typed exactly, and the definition comes from elsewhere.
+        let callee = if target.callee.is_some() {
+            Callee::Direct(name)
+        } else {
+            Callee::External(name)
+        };
+
+        let mut args = Vec::new();
+        for argument in children.iter().skip(1) {
+            args.push(self.lower_expression(*argument)?);
+        }
+
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::Call { callee, args }, ty, origin))
     }
 
     fn lower_identifier(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {

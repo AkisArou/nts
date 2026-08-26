@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_core::hir::{self, BinOp, Func, HirType, ManagedType, OpKind, lower::Lowered};
+use nts_core::hir::{self, BinOp, Callee, Func, HirType, ManagedType, OpKind, lower::Lowered};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 fn lowered(fixture: &str) -> Option<Lowered> {
@@ -19,7 +19,9 @@ fn lowered(fixture: &str) -> Option<Lowered> {
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("examples/{fixture} is checked in"));
+    // Call resolution is a precondition for lowering a call at all.
     let snapshot = TsgoApi::new(tsgo)
+        .with_call_resolution(nts_frontend_ts::tsgo::decompose::Budget::DEFAULT)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "fixture must typecheck");
@@ -163,4 +165,116 @@ fn an_unsupported_construct_is_refused_rather_than_skipped() {
 
     let span = lowered.diagnostics[0].primary.span;
     assert!(span.start < span.end, "the refusal points somewhere real");
+}
+
+#[test]
+fn a_const_binding_costs_nothing() {
+    let Some(lowered) = lowered("calls2") else {
+        return;
+    };
+    // `const scaled = double(a); const shifted = scaled + b; return shifted;`
+    // Neither local survives as a slot or a store — each name is bound to the
+    // value its initializer produced, and later mentions resolve to that value.
+    let compute = func(&lowered, "compute");
+    assert!(
+        !compute
+            .ops
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::ConstFloat(_))),
+        "no spurious materialization",
+    );
+    assert_eq!(compute.ops.len(), 5, "two params, a call, an add, a return");
+}
+
+#[test]
+fn a_resolved_call_names_its_target_statically() {
+    let Some(lowered) = lowered("calls2") else {
+        return;
+    };
+    // The point of resolving call targets in the frontend: the backend emits a
+    // static call rather than going through a function value.
+    let compute = func(&lowered, "compute");
+    let callee = compute
+        .ops
+        .iter()
+        .find_map(|op| match &op.kind {
+            OpKind::Call { callee, .. } => Some(callee.clone()),
+            _ => None,
+        })
+        .expect("compute calls double");
+    assert_eq!(callee, Callee::Direct("double".to_owned()));
+}
+
+#[test]
+fn a_call_passes_the_values_it_was_given() {
+    let Some(lowered) = lowered("calls2") else {
+        return;
+    };
+    let compute = func(&lowered, "compute");
+    let args = compute
+        .ops
+        .iter()
+        .find_map(|op| match &op.kind {
+            OpKind::Call { args, .. } => Some(args.clone()),
+            _ => None,
+        })
+        .expect("the call");
+    assert_eq!(args.len(), 1);
+    // `double(a)` — the argument is the first parameter, not a reload of it.
+    assert!(matches!(
+        compute.ops[args[0].0 as usize].kind,
+        OpKind::Param(0)
+    ));
+}
+
+#[test]
+fn a_private_function_is_lowered_but_not_marked_exported() {
+    let Some(lowered) = lowered("calls2") else {
+        return;
+    };
+    // `double` is not exported, so it is not a reachability root — but it is
+    // called, so it must still be lowered.
+    assert!(!func(&lowered, "double").exported);
+    assert!(func(&lowered, "compute").exported);
+}
+
+#[test]
+fn string_locals_and_concatenation_lower_together() {
+    let Some(lowered) = lowered("calls2") else {
+        return;
+    };
+    let greet = func(&lowered, "greet");
+    assert_eq!(greet.return_type, HirType::Managed(ManagedType::String));
+    assert!(greet.ops.iter().any(|op| matches!(
+        &op.kind,
+        OpKind::Binary {
+            op: BinOp::Concat,
+            ..
+        }
+    )));
+    assert!(
+        greet
+            .ops
+            .iter()
+            .any(|op| matches!(&op.kind, OpKind::ConstString(text) if text == "world")),
+    );
+}
+
+#[test]
+fn a_call_through_a_member_access_is_refused_for_now() {
+    let Some(lowered) = lowered("calls2") else {
+        return;
+    };
+    // `Math.max(n, 0)`. The callee is a property access rather than a name, and
+    // member access is not lowered yet — so it is refused rather than guessed at
+    // from the callee's spelling.
+    assert!(!lowered.is_complete());
+    assert!(
+        lowered
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("computed callee")),
+        "{:?}",
+        lowered.diagnostics,
+    );
 }
