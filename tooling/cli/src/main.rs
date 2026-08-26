@@ -17,11 +17,12 @@ fn main() -> Result<()> {
             let rest: Vec<String> = args.collect();
             let decompose = rest.iter().any(|a| a == "--decompose");
             let calls = rest.iter().any(|a| a == "--calls");
+            let constants = rest.iter().any(|a| a == "--constants");
             let tsconfig = rest
                 .iter()
                 .find(|a| !a.starts_with("--"))
                 .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
-            frontend(&tsconfig, decompose, calls)
+            frontend(&tsconfig, decompose, calls, constants)
         }
         Some("version") | None => {
             println!("nts {}", env!("CARGO_PKG_VERSION"));
@@ -38,7 +39,7 @@ fn main() -> Result<()> {
 /// This exists before `nts build` on purpose. Gate G1 is the measurement that
 /// validates the `tsgo --api` transport decision, and a gate nobody can run is
 /// not a gate.
-fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool) -> Result<()> {
+fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let mut source = TsgoApi::new(tsgo_binary);
     if decompose {
@@ -46,6 +47,9 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool) -> Result<()> {
     }
     if calls {
         source = source.with_call_resolution(Budget::DEFAULT);
+    }
+    if constants {
+        source = source.with_constant_folding(Budget::DEFAULT);
     }
 
     let snapshot = source.snapshot(tsconfig)?;
@@ -59,6 +63,9 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool) -> Result<()> {
     println!("modules          {}", stats.modules);
     if calls {
         println!("calls resolved   {}", stats.calls_resolved);
+    }
+    if constants {
+        println!("constants folded {}", stats.constants_folded);
     }
     if decompose {
         println!("  decomposed     {}", stats.decomposed);

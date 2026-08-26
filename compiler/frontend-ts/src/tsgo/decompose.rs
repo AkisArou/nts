@@ -27,8 +27,8 @@
 //! that hits it says so instead of quietly returning a partial type graph.
 
 use nts_semantic_schema::{
-    CallTarget, NodeId, NodeKind, ParameterRecord, SemanticSnapshot, SignatureId, SignatureRecord,
-    SymbolId, TypeId, TypeKind,
+    CallTarget, ConstantValue, NodeId, NodeKind, ParameterRecord, SemanticSnapshot, SignatureId,
+    SignatureRecord, TypeId, TypeKind,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -76,12 +76,6 @@ pub struct Decomposer<'a> {
     interned: FxHashMap<u32, TypeId>,
     /// tsgo type ids already decomposed, so a cyclic type graph terminates.
     done: FxHashSet<u32>,
-    /// tsgo symbol id → our arena index, for naming a signature's parameters.
-    ///
-    /// Populated by symbol resolution. A parameter whose symbol never appeared at
-    /// a node — an imported function's, say — is not in here, and gets a
-    /// positional name instead of a wrong one.
-    symbol_names: FxHashMap<u32, SymbolId>,
 }
 
 impl std::fmt::Debug for Decomposer<'_> {
@@ -104,7 +98,6 @@ impl<'a> Decomposer<'a> {
         handle: SnapshotHandle,
         project: ProjectHandle,
         interned: FxHashMap<u32, TypeId>,
-        symbol_names: FxHashMap<u32, SymbolId>,
     ) -> Self {
         Self {
             client,
@@ -112,7 +105,6 @@ impl<'a> Decomposer<'a> {
             project,
             interned,
             done: FxHashSet::default(),
-            symbol_names,
         }
     }
 
@@ -309,6 +301,68 @@ impl<'a> Decomposer<'a> {
         Ok(stats)
     }
 
+    /// Fold every enum member and enum read into a constant.
+    ///
+    /// Two node kinds are worth asking about. An `EnumMember` carries the
+    /// declaration's value; a `PropertyAccessExpression` is the *use* — `Color.Red`
+    /// — and folding it is what turns a property load into an immediate.
+    ///
+    /// For a `const enum` this is not an optimization. The enum object does not
+    /// exist at runtime, so a backend that emitted a load would be reading a
+    /// member of nothing.
+    pub fn fold_constants(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        file_bases: &[(String, u32)],
+        budget: Budget,
+    ) -> Result<DecomposeStats, TsgoError> {
+        let before = self.client.round_trips();
+        let mut stats = DecomposeStats::default();
+
+        let candidates: Vec<(NodeId, NodeHandle)> = snapshot
+            .nodes
+            .iter()
+            .enumerate()
+            .filter_map(|(index, node)| {
+                let NodeKind::Syntax(kind) = node.kind else {
+                    return None;
+                };
+                if kind != syntax::ENUM_MEMBER && kind != syntax::PROPERTY_ACCESS_EXPRESSION {
+                    return None;
+                }
+                let arena = u32::try_from(index).unwrap_or(u32::MAX);
+                let (path, base) = file_of(file_bases, arena)?;
+                Some((
+                    NodeId(arena),
+                    NodeHandle(types::node_handle(arena - base + 1, kind, path)),
+                ))
+            })
+            .collect();
+
+        for (node, handle) in candidates {
+            if stats.decomposed as usize >= budget.max_types {
+                stats.exhausted = true;
+                break;
+            }
+            let Some(value) = self
+                .client
+                .constant_value(self.handle, &self.project, handle)?
+            else {
+                // Most property accesses are not constant. Absence is the normal
+                // answer, not a failure.
+                continue;
+            };
+            let Some(folded) = to_constant(&value) else {
+                continue;
+            };
+            snapshot.constants.insert(node, folded);
+            stats.decomposed += 1;
+        }
+
+        stats.round_trips = self.client.round_trips() - before;
+        Ok(stats)
+    }
+
     /// Resolve one call signature into a schema record.
     ///
     /// Costs two exchanges beyond the `getSignaturesOfType` that found it: one
@@ -324,10 +378,15 @@ impl<'a> Decomposer<'a> {
         stats: &mut DecomposeStats,
         seeded: &FxHashSet<u32>,
     ) -> Result<SignatureId, TsgoError> {
+        // Deliberately not `signature.parameters`: those ids are unregistered and
+        // cannot be resolved. See `Client::parameters_of_signature`.
+        let parameters =
+            self.client
+                .parameters_of_signature(self.handle, &self.project, signature.id)?;
         let parameter_types = self.client.types_of_symbols(
             self.handle,
             &self.project,
-            signature.parameters.clone(),
+            parameters.iter().map(|p| p.id).collect(),
         )?;
         let parameter_ids = self.intern_all(snapshot, &parameter_types, worklist, stats, seeded);
 
@@ -349,19 +408,20 @@ impl<'a> Decomposer<'a> {
         // Only the last parameter can be a rest parameter, and the flag is on the
         // signature rather than the parameter.
         let has_rest = signature.flags & signature_flags::HAS_REST_PARAMETER != 0;
-        let last = signature.parameters.len().saturating_sub(1);
+        let last = parameters.len().saturating_sub(1);
 
-        let parameters = signature
-            .parameters
+        let parameters = parameters
             .iter()
             .zip(parameter_ids)
             .enumerate()
             .map(|(index, (symbol, ty))| ParameterRecord {
-                name: self
-                    .symbol_names
-                    .get(symbol)
-                    .and_then(|id| snapshot.symbols.get(id.0 as usize))
-                    .map_or_else(|| format!("arg{index}"), |s| s.name.clone()),
+                // The endpoint carries the real name, so the positional fallback
+                // is only reached for a parameter with none.
+                name: if symbol.name.is_empty() {
+                    format!("arg{index}")
+                } else {
+                    symbol.name.clone()
+                },
                 ty,
                 // Optionality is not on `SignatureResponse`. Recording every
                 // parameter as required would be a claim the checker never made,
@@ -415,6 +475,20 @@ impl<'a> Decomposer<'a> {
     pub fn into_interned(self) -> FxHashMap<u32, TypeId> {
         self.interned
     }
+}
+
+/// Convert a folded JSON value into a schema constant.
+///
+/// Anything that is neither a number nor a string is declined rather than
+/// coerced: a constant that lowers to the wrong immediate is worse than one the
+/// backend has to load.
+fn to_constant(value: &serde_json::Value) -> Option<ConstantValue> {
+    if let Some(number) = value.as_f64() {
+        return Some(ConstantValue::Number(number));
+    }
+    value
+        .as_str()
+        .map(|text| ConstantValue::String(text.to_owned()))
 }
 
 /// Which file an arena index belongs to, and where that file starts.

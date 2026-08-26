@@ -47,12 +47,13 @@ use serde::de::DeserializeOwned;
 
 use crate::source::{FrontendStats, SemanticSource};
 use proto::{
-    CheckerSignatureParams, CheckerSymbolParams, CheckerTypeParams, DiagnosticResponse,
-    DocumentIdentifier, GetDiagnosticsParams, GetResolvedSignatureParams,
-    GetSignaturesOfTypeParams, GetSourceFileParams, GetSymbolsAtLocationsParams,
-    GetTypeAtLocationsParams, GetTypePropertyParams, GetTypesOfSymbolsParams, InitializeResponse,
-    NodeHandle, ProjectHandle, SignatureKind, SignatureResponse, SnapshotHandle, SymbolResponse,
-    TypeResponse, UpdateSnapshotParams, UpdateSnapshotResponse,
+    CheckerNodeParams, CheckerSignatureParams, CheckerSymbolParams, CheckerTypeParams,
+    DiagnosticResponse, DocumentIdentifier, GetDiagnosticsParams, GetResolvedSignatureParams,
+    GetSignaturePropertyParams, GetSignaturesOfTypeParams, GetSourceFileParams,
+    GetSymbolsAtLocationsParams, GetTypeAtLocationsParams, GetTypePropertyParams,
+    GetTypesOfSymbolsParams, InitializeResponse, NodeHandle, ProjectHandle, SignatureKind,
+    SignatureResponse, SnapshotHandle, SymbolResponse, TypeResponse, UpdateSnapshotParams,
+    UpdateSnapshotResponse,
 };
 use wire::{Frame, MessageType, WireError, read_frame, write_frame};
 
@@ -369,6 +370,26 @@ impl Client {
         Ok(all)
     }
 
+    /// The compile-time value of a node, if the checker folded one.
+    ///
+    /// Answers `null` for a node with no constant value, which is the common case
+    /// — so the caller decides which nodes are worth asking about.
+    pub fn constant_value(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        location: NodeHandle,
+    ) -> Result<Option<serde_json::Value>, TsgoError> {
+        self.request(
+            proto::method::GET_CONSTANT_VALUE,
+            &CheckerNodeParams {
+                snapshot,
+                project: project.clone(),
+                location,
+            },
+        )
+    }
+
     /// Which signature a call site resolves to, after overload resolution.
     ///
     /// Per call site; there is no batch form.
@@ -384,6 +405,31 @@ impl Client {
                 snapshot,
                 project: project.clone(),
                 location,
+            },
+        )
+    }
+
+    /// Parameter symbols of a signature.
+    ///
+    /// Not the same as `SignatureResponse::parameters`. Those ids come from
+    /// `symbolHandles`, which returns raw `ast.GetSymbolId` values **without
+    /// entering them in the snapshot's symbol registry** — so no symbol endpoint
+    /// can resolve them, and passing them to `getTypesOfSymbols` fails with
+    /// "symbol handle N not found". This endpoint answers through
+    /// `newSymbolResponse`, which registers, so its ids are usable. It also
+    /// carries the parameter names.
+    pub fn parameters_of_signature(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        signature: u64,
+    ) -> Result<Vec<SymbolResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_PARAMETERS_OF_SIGNATURE,
+            &GetSignaturePropertyParams {
+                snapshot,
+                project: project.clone(),
+                signature,
             },
         )
     }
@@ -515,6 +561,7 @@ pub struct TsgoApi {
     executable: Utf8PathBuf,
     decompose: Option<decompose::Budget>,
     resolve_calls: Option<decompose::Budget>,
+    fold_constants: Option<decompose::Budget>,
     stats: FrontendStats,
 }
 
@@ -528,6 +575,7 @@ impl TsgoApi {
             executable: executable.into(),
             decompose: None,
             resolve_calls: None,
+            fold_constants: None,
             stats: FrontendStats::default(),
         }
     }
@@ -555,6 +603,17 @@ impl TsgoApi {
     #[must_use]
     pub const fn with_call_resolution(mut self, budget: decompose::Budget) -> Self {
         self.resolve_calls = Some(budget);
+        self
+    }
+
+    /// Also fold enum members and enum reads into constants.
+    ///
+    /// Off by default like the other per-item passes, though this one is cheap in
+    /// practice: only enum members and property accesses are asked about, and
+    /// most programs have few.
+    #[must_use]
+    pub const fn with_constant_folding(mut self, budget: decompose::Budget) -> Self {
+        self.fold_constants = Some(budget);
         self
     }
 
@@ -649,24 +708,24 @@ impl SemanticSource for TsgoApi {
         // set: when it does, only this argument changes.
         let mut decomposed = None;
         let mut resolved = None;
-        if self.decompose.is_some() || self.resolve_calls.is_some() {
+        let mut folded = None;
+        if self.decompose.is_some() || self.resolve_calls.is_some() || self.fold_constants.is_some()
+        {
             let seeds: Vec<u32> = interned.keys().copied().collect();
             let project = opened
                 .projects
                 .first()
                 .map_or_else(|| ProjectHandle(String::new()), |p| p.id.clone());
-            let mut deep = decompose::Decomposer::new(
-                &mut client,
-                opened.snapshot,
-                project,
-                interned,
-                symbol_ids,
-            );
+            let mut deep =
+                decompose::Decomposer::new(&mut client, opened.snapshot, project, interned);
             if let Some(budget) = self.decompose {
                 decomposed = Some(deep.run(&mut snapshot, seeds, budget)?);
             }
             if let Some(budget) = self.resolve_calls {
                 resolved = Some(deep.resolve_calls(&mut snapshot, &file_bases, budget)?);
+            }
+            if let Some(budget) = self.fold_constants {
+                folded = Some(deep.fold_constants(&mut snapshot, &file_bases, budget)?);
             }
         }
 
@@ -682,6 +741,7 @@ impl SemanticSource for TsgoApi {
             symbols: u32::try_from(snapshot.symbols.len()).unwrap_or(u32::MAX),
             modules: symbols::module_count(&snapshot),
             calls_resolved: resolved.map_or(0, |r| r.decomposed),
+            constants_folded: folded.map_or(0, |f| f.decomposed),
             decomposed: decomposed.map_or(0, |d| d.decomposed),
             decomposition_exhausted: decomposed.is_some_and(|d| d.exhausted),
         };

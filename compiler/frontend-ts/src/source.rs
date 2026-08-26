@@ -67,6 +67,8 @@ pub struct FrontendStats {
     pub modules: u32,
     /// Call sites resolved to a target signature.
     pub calls_resolved: u32,
+    /// Nodes folded to a compile-time constant.
+    pub constants_folded: u32,
     /// Structured types resolved into members or properties.
     pub decomposed: u32,
     /// True when decomposition stopped on its budget with work outstanding.

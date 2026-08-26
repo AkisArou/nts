@@ -36,3 +36,9 @@ export const immutable = 2;
 declare function ambient(n: number): number;
 
 export default class Widget {}
+
+// Enum reads: these must fold to immediates. For `Mode` it is not optional —
+// a const enum has no runtime object to load from.
+export const red = Color.Red;
+export const blue = Color.Blue;
+export const fast = Mode.Fast;

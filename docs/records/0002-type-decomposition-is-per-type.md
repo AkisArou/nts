@@ -89,3 +89,35 @@ one argument whenever it arrives.
   type, so the naive path yields `length`, `push`, `map` and the rest of the
   prototype instead of an element type. There is a test asserting no decomposed
   object carries a `push` property.
+
+## Addendum: the closure reaches the standard library
+
+Measured after call resolution and constant folding landed, on
+`examples/classes` — a single 180-node file.
+
+| | Value |
+| --- | ---: |
+| Nodes decoded | 180 |
+| Distinct types after decomposition | **5,773** |
+| Types decomposed before the budget stopped it | 4,096 |
+| Round trips | 15,578 |
+
+A 180-node file produces 5,773 distinct types. `Promise<void>`, a class and its
+prototype, and an `implements` clause are enough to pull the standard library's
+type graph in transitively, and the walk does not terminate anywhere useful
+because nothing tells it where the program ends.
+
+Two things follow.
+
+**The budget earns its place.** It stopped at 4,096 and reported
+`decomposition_exhausted`, so the result is a partial type graph that says it is
+partial. Without it this run would have returned a subset presented as complete —
+a backend reading it would find members missing with no way to tell whether the
+type really has none.
+
+**Seeding is not an optimization here.** The earlier framing in this record —
+half a second on 250 files, worth removing but not a wall — holds only for
+programs whose types stay inside themselves. As soon as a program touches
+`Promise`, `Array`, or a DOM type, the unseeded closure is the standard library
+and the walk is unbounded in the only sense that matters. Reachability is what
+gives the walk an edge to stop at.

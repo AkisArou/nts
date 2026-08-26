@@ -27,6 +27,8 @@ pub mod method {
     pub const GET_RESOLVED_SIGNATURE: &str = "getResolvedSignature";
     pub const GET_SEMANTIC_DIAGNOSTICS: &str = "getSemanticDiagnostics";
 
+    pub const GET_CONSTANT_VALUE: &str = "getConstantValue";
+    pub const GET_PARAMETERS_OF_SIGNATURE: &str = "getParametersOfSignature";
     pub const GET_EXPORTS_OF_MODULE: &str = "getExportsOfModule";
     pub const GET_SYNTACTIC_DIAGNOSTICS: &str = "getSyntacticDiagnostics";
     pub const GET_RETURN_TYPE_OF_SIGNATURE: &str = "getReturnTypeOfSignature";
@@ -432,4 +434,24 @@ pub struct GetResolvedSignatureParams {
     pub snapshot: SnapshotHandle,
     pub project: ProjectHandle,
     pub location: NodeHandle,
+}
+
+/// Parameters for the checker endpoints that take a node.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckerNodeParams {
+    pub snapshot: SnapshotHandle,
+    pub project: ProjectHandle,
+    pub location: NodeHandle,
+}
+
+/// Parameters for the signature *property* endpoints.
+///
+/// The wire field is `objectId`, unlike [`CheckerSignatureParams`]'s `signature`.
+#[derive(Debug, Clone, Serialize)]
+pub struct GetSignaturePropertyParams {
+    pub snapshot: SnapshotHandle,
+    pub project: ProjectHandle,
+    #[serde(rename = "objectId")]
+    pub signature: u64,
 }

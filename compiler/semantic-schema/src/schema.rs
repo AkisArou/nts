@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 6;
+pub const SCHEMA_VERSION: u32 = 7;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -71,6 +71,13 @@ pub struct SemanticSnapshot {
     pub signatures: Vec<SignatureRecord>,
     /// Indexed by [`NodeId`]. Flattened from tsgo's encoded AST.
     pub nodes: Vec<NodeRecord>,
+    /// Compile-time constant value of a node, where the checker folded one.
+    ///
+    /// Covers enum members and the sites that read them. `Color.Red` becomes an
+    /// immediate rather than a property load, and a `const enum` member *must*
+    /// fold: the enum object does not exist at runtime, so a backend that emitted
+    /// a load would be reading a member of nothing.
+    pub constants: FxHashMap<NodeId, ConstantValue>,
     /// Which signature each call site resolves to.
     ///
     /// The difference between emitting a static call and emitting a dispatch. A
@@ -186,6 +193,17 @@ impl VariableKind {
         }
     }
 }
+
+/// A value the checker folded at compile time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ConstantValue {
+    Number(f64),
+    String(String),
+}
+
+// Constants are compared for identity rather than numeric equality, and the
+// checker does not fold a NaN.
+impl Eq for ConstantValue {}
 
 /// What a call site reaches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
