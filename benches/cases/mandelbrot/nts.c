@@ -1,0 +1,5 @@
+double mandelbrot(double size);
+double bench_run(void) {
+    volatile double size = 64;
+    return mandelbrot(size);
+}

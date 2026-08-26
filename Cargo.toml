@@ -11,6 +11,7 @@ members = [
     "compiler/codegen/c",
     "build",
     "tooling/cli",
+    "tooling/bench",
 ]
 
 [workspace.package]
