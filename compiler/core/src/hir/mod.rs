@@ -24,6 +24,8 @@
 //!   one [`ValueId`]. Binding identity is what makes that possible, which is why
 //!   symbol resolution had to land before this.
 
+pub mod facts;
+
 pub mod lower;
 pub mod verify;
 
