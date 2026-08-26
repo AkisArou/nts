@@ -940,13 +940,19 @@ fn without_reference_counting_the_same_program_leaks() {
     // The control. Not a complaint about NoGC -- RFC 9.1 says it allocates and
     // never frees, and this is what that means when a program runs for a while.
     // It is here so the test above is measuring something.
+    //
+    // It has to be `borrowChain`, whose object comes back from `makeCounter`
+    // and therefore reaches the heap. `run` used to work here and does not any
+    // more: its counter never escapes, so escape analysis puts it in the frame
+    // and there is nothing left to leak. A control that measures zero either
+    // way would be worse than no control.
     let harness = format!(
         r#"{CHECK}
 #include "nts_runtime.h"
-double run(double step, double times);
+double borrowChain(double step, double times);
 int main(void) {{
-    check("run(3,4)", run(3, 4), 12);
-    for (int i = 0; i < 99; i++) {{ run(3, 4); }}
+    check("borrowChain(3,4)", borrowChain(3, 4), 12);
+    for (int i = 0; i < 99; i++) {{ borrowChain(3, 4); }}
     printf("live objects after 100 calls: %zu\n", nts_live_count());
     return failures ? 1 : 0;
 }}

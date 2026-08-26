@@ -363,13 +363,22 @@ fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program
             let Ok(ty) = c_type_of(program, &field.ty, origin) else {
                 continue;
             };
-            // `readonly` is semantic, not syntactic — `Readonly<T>` counts — and
-            // saying so lets the C compiler hoist loads across calls.
-            let qualifier = if field.readonly { "const " } else { "" };
-            writer.line(
-                origin,
-                format!("    {qualifier}{ty} {};", c_identifier(&field.name)),
-            );
+            // `readonly` is semantic, not syntactic — `Readonly<T>` counts — but
+            // it is deliberately *not* emitted as `const` on the member.
+            //
+            // It used to be, to let clang hoist loads across calls, and the
+            // construction store wrote through the qualifier with a cast. That
+            // is defined for heap storage, which has no declared type, and
+            // undefined the moment the same struct is declared in a frame --
+            // which is now something the compiler does whenever an object does
+            // not escape. One of the two had to go, and an object that never
+            // reaches the allocator is worth an order of magnitude more than a
+            // qualifier on storage whose declared type does not exist.
+            //
+            // The fact is not lost: `readonly` stays in the HIR, where a field
+            // load that cannot change is something this compiler can common up
+            // itself. That is strictly more than the C qualifier was buying.
+            writer.line(origin, format!("    {ty} {};", c_identifier(&field.name)));
         }
         writer.line(origin, "};");
         // RFC 8.3: where this object's references are, as byte offsets. Written
@@ -776,6 +785,22 @@ fn emit_body(
             continue;
         }
         let ty = c_type_of(context.program, &op.ty, &op.origin)?;
+        // An object that does not escape lives here rather than on the heap, so
+        // it needs storage as well as a pointer to it. Declared with the other
+        // locals, which means one slot per allocation site rather than one per
+        // execution of it -- correct precisely because nothing outlives the
+        // iteration that made it.
+        if let OpKind::ObjectNew { frame: true } = op.kind {
+            let layout = layout_of(context.program, &op.ty, &op.origin)?;
+            writer.line(
+                &op.origin,
+                format!(
+                    "{} {}_frame;",
+                    object_type_name(layout),
+                    value_name(ValueId(u32::try_from(index).unwrap_or(0)))
+                ),
+            );
+        }
         writer.line(
             &op.origin,
             format!(
@@ -1075,10 +1100,31 @@ fn managed_op(
     let op = func.value(value);
     let name = value_name(value);
     let text = match &op.kind {
-        OpKind::ObjectNew => {
+        OpKind::ObjectNew { frame } => {
             let layout = layout_of(context.program, &op.ty, &op.origin)?;
             let type_name = object_type_name(layout);
-            format!("{name} = ({type_name} *)nts_object_new(&nts_desc_{type_name});")
+            if *frame {
+                // The storage is a local declared with the others; this only
+                // fills in the header and takes its address. The descriptor is
+                // written because anything that reads an object reads it there,
+                // and the count is `NTS_IMMORTAL` so that a retain or release
+                // that reaches a frame object is a no-op rather than a call to
+                // `free` on a stack address.
+                //
+                // Both stores are dead in every program that does not read
+                // them, and clang removes them along with the object itself.
+                writer.line(
+                    &op.origin,
+                    format!("{name}_frame.header.descriptor = &nts_desc_{type_name};"),
+                );
+                writer.line(
+                    &op.origin,
+                    format!("{name}_frame.header.reserved = NTS_IMMORTAL;"),
+                );
+                format!("{name} = &{name}_frame;")
+            } else {
+                format!("{name} = ({type_name} *)nts_object_new(&nts_desc_{type_name});")
+            }
         }
         OpKind::FieldGet { object, field } => {
             let field = field_of(context.program, func, *object, *field, &op.origin)?;
@@ -1102,25 +1148,6 @@ fn managed_op(
                 )
             })?;
             let field = c_identifier(&declared.name);
-            if declared.readonly {
-                // `readonly` means "never written *after* construction", and
-                // this is the construction. The field is `const` so that loads
-                // can be hoisted across calls; the one store that establishes
-                // it writes through the qualifier. The storage is heap, never
-                // const-qualified itself, so this is defined.
-                let ty = c_type(&declared.ty, &op.origin)?;
-                return {
-                    writer.line(
-                        &op.origin,
-                        format!(
-                            "*({ty} *)&{}->{field} = {};",
-                            value_name(*object),
-                            value_name(*stored)
-                        ),
-                    );
-                    Ok(())
-                };
-            }
             format!(
                 "{}->{field} = {};",
                 value_name(*object),
@@ -1218,7 +1245,7 @@ fn emit_op(
             }
         }
         OpKind::Unary { op: un, operand } => unary_text(func, &name, *un, *operand, &op.ty),
-        OpKind::ObjectNew
+        OpKind::ObjectNew { .. }
         | OpKind::FieldGet { .. }
         | OpKind::FieldSet { .. }
         | OpKind::ArrayNew { .. }

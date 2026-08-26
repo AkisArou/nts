@@ -1382,7 +1382,7 @@ impl<'a> FuncBuilder<'a> {
         };
         let layout = self.layout_of(id, type_id)?;
         let origin = self.origin(id);
-        let object = self.push(OpKind::ObjectNew, ty, origin.clone());
+        let object = self.push(OpKind::ObjectNew { frame: false }, ty, origin.clone());
 
         // Source order, since an initializer may have effects and they happen
         // where the author wrote them. The *field index* is what puts them in
@@ -1583,7 +1583,11 @@ impl<'a> FuncBuilder<'a> {
         self.layout_of(id, type_id)?;
 
         let origin = self.origin(id);
-        let object = self.push(OpKind::ObjectNew, ty.clone(), origin.clone());
+        let object = self.push(
+            OpKind::ObjectNew { frame: false },
+            ty.clone(),
+            origin.clone(),
+        );
 
         let mut args = vec![object];
         for argument in children.iter().skip(1) {

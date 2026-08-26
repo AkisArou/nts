@@ -117,12 +117,19 @@ fn ordered(func: &Func, values: &rustc_hash::FxHashSet<ValueId>) -> Vec<ValueId>
 
 /// Whether a value needs counting at all.
 ///
-/// A string literal is static data with no count to change, and the runtime
-/// treats it as immortal — but it is cheaper to not emit the call than to have
-/// the runtime ignore it.
 fn counted(func: &Func, value: ValueId) -> bool {
     let op = &func.values[value.0 as usize];
-    op.ty.is_managed() && !matches!(op.kind, OpKind::ConstString(_))
+    op.ty.is_managed()
+        && !matches!(
+            op.kind,
+            // Static data with no count to change, and the runtime treats it as
+            // immortal anyway.
+            OpKind::ConstString(_)
+                // In the frame, so it goes away when the frame does. Counting it
+                // would at best be wasted work and at worst call `free` on a
+                // stack address.
+                | OpKind::ObjectNew { frame: true }
+        )
 }
 
 /// Whether this function holds a reference of its own to a value.
@@ -138,7 +145,7 @@ fn owned(func: &Func, value: ValueId) -> bool {
 fn produces_owned(kind: &OpKind) -> bool {
     matches!(
         kind,
-        OpKind::ObjectNew
+        OpKind::ObjectNew { .. }
             | OpKind::ArrayNew { .. }
             | OpKind::Call { .. }
             | OpKind::Binary {
@@ -418,7 +425,7 @@ impl Fresh {
     /// Take an operation into account.
     fn observe(&mut self, func: &Func, value: ValueId, kind: &OpKind) {
         match kind {
-            OpKind::ObjectNew | OpKind::ArrayNew { .. } => {
+            OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } => {
                 self.bases.insert(value);
             }
             OpKind::FieldSet { object, field, .. } => {

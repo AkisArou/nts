@@ -309,7 +309,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::ConstFloat(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
-        | OpKind::ObjectNew => Vec::new(),
+        | OpKind::ObjectNew { .. } => Vec::new(),
         OpKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
         OpKind::Unary { operand, .. } | OpKind::Convert(operand) => vec![*operand],
         OpKind::Call { args, .. } => args.clone(),

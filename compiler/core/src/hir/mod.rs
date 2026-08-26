@@ -26,6 +26,7 @@
 
 pub mod bounds;
 pub mod dce;
+pub mod escape;
 pub mod facts;
 pub mod flow;
 pub mod fold;
@@ -345,7 +346,16 @@ pub enum OpKind {
     Release(ValueId),
     /// Allocate an object. The type is carried by the operation's own type,
     /// which is a [`ManagedType::Object`].
-    ObjectNew,
+    /// Allocate an object.
+    ///
+    /// `frame: true` puts it in the caller's stack frame instead of the heap,
+    /// which [`escape`] decides: a reference that never leaves the function
+    /// that made it does not need to be anywhere a collector can see. A frame
+    /// object is not reference counted, because there is nothing to count -- it
+    /// goes away when the frame does.
+    ObjectNew {
+        frame: bool,
+    },
     /// `object.field`, by index into the type's [`Layout`].
     ///
     /// An index rather than a name: the layout already decided the order, and
@@ -614,6 +624,8 @@ pub struct Prepared {
     pub pruned: usize,
     /// Retains and releases inserted, if the provider counts references.
     pub counting: rc::Report,
+    /// Allocations that stayed in the frame instead of reaching the allocator.
+    pub framed: usize,
 }
 
 /// Lower a snapshot and make it ready to emit.
@@ -738,6 +750,12 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         dce::eliminate(func);
     }
 
+    // Escape analysis before reference counting, because an object that stays
+    // in the frame should not be counted at all -- and after dead-code
+    // elimination, because an allocation nothing reads is not evidence of
+    // anything.
+    let framed = place_allocations(&mut program);
+
     // Reference counting, after everything that could move or remove an
     // operation: a retain inserted before dead-code elimination would keep
     // alive exactly what that pass was about to drop.
@@ -778,7 +796,39 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         checks_kept,
         pruned,
         counting,
+        framed,
     }
+}
+
+/// Move every allocation that can be in the frame into it.
+///
+/// Returns how many moved, which is worth reporting: it is the difference
+/// between a loop that calls the allocator and one that does not, and on the
+/// `objects` benchmark it is the entire gap to hand-written C.
+fn place_allocations(program: &mut Program) -> usize {
+    let escapes = escape::analyze_program(program);
+    let layouts = program.layouts.clone();
+    let mut framed = 0;
+
+    for (func, escapes) in program.funcs.iter_mut().zip(&escapes) {
+        for index in 0..func.values.len() {
+            let value = ValueId(u32::try_from(index).unwrap_or(0));
+            if !matches!(func.values[index].kind, OpKind::ObjectNew { frame: false }) {
+                continue;
+            }
+            let Some(layout) = layouts.iter().find(|layout| {
+                matches!(&func.values[index].ty, HirType::Managed(ManagedType::Object(id))
+                    if layout.types.contains(id))
+            }) else {
+                continue;
+            };
+            if escapes.is_frame_local(value, layout) {
+                func.values[index].kind = OpKind::ObjectNew { frame: true };
+                framed += 1;
+            }
+        }
+    }
+    framed
 }
 
 #[cfg(test)]
