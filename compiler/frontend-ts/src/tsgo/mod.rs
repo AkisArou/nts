@@ -688,8 +688,10 @@ impl SemanticSource for TsgoApi {
                     file,
                 };
 
-                resolve_types(&mut client, &mut snapshot, &mut interned, ctx)?;
+                // Symbols first: a type's declaring symbol must be interned before the
+                // type records it, or the type would carry no arena index for it.
                 symbols::resolve(&mut client, &mut snapshot, &mut symbol_ids, ctx)?;
+                resolve_types(&mut client, &mut snapshot, &mut interned, &symbol_ids, ctx)?;
 
                 snapshot.sources.push(SourceFile {
                     uri: workspace_uri(cwd, path),
@@ -716,8 +718,13 @@ impl SemanticSource for TsgoApi {
                 .projects
                 .first()
                 .map_or_else(|| ProjectHandle(String::new()), |p| p.id.clone());
-            let mut deep =
-                decompose::Decomposer::new(&mut client, opened.snapshot, project, interned);
+            let mut deep = decompose::Decomposer::new(
+                &mut client,
+                opened.snapshot,
+                project,
+                interned,
+                symbol_ids,
+            );
             if let Some(budget) = self.decompose {
                 decomposed = Some(deep.run(&mut snapshot, seeds, budget)?);
             }
@@ -760,6 +767,7 @@ fn resolve_types(
     client: &mut Client,
     snapshot: &mut SemanticSnapshot,
     interned: &mut FxHashMap<u32, TypeId>,
+    symbols: &FxHashMap<u32, SymbolId>,
     ctx: symbols::FileContext<'_>,
 ) -> Result<(), TsgoError> {
     // Lists are skipped, not because their type is uninteresting but because a
@@ -792,7 +800,7 @@ fn resolve_types(
     for ((node, _), response) in addressable.iter().zip(&responses) {
         let type_id = *interned.entry(response.id).or_insert_with(|| {
             let id = TypeId(u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX));
-            snapshot.types.push(types::classify(response));
+            snapshot.types.push(types::classify(response, symbols));
             id
         });
         snapshot.node_types.insert(*node, type_id);

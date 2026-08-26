@@ -7,6 +7,7 @@
 
 use anyhow::{Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
+use nts_core::reachability;
 use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo, tsgo::decompose::Budget};
 use nts_semantic_schema::SCHEMA_VERSION;
 
@@ -77,6 +78,16 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) 
     println!("  per file       {:.2}", stats.round_trips_per_file());
     println!("elapsed          {} ms", stats.elapsed_ms);
     println!("snapshot digest  {}", hex(&snapshot.digest()?));
+
+    // Pure computation over the snapshot — no round trips. Reported always,
+    // because the ratio is what says whether a deep pass is worth its cost.
+    let reached = reachability::from_exports(&snapshot);
+    println!(
+        "reachable        {} nodes, {} types of {}",
+        reached.nodes.len(),
+        reached.types.len(),
+        snapshot.types.len(),
+    );
 
     if !snapshot.diagnostics.is_empty() {
         println!();

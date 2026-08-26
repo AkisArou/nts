@@ -28,3 +28,7 @@
 //! [`nts_semantic_schema::schema`] for the reasoning — it applies with more force
 //! here, because MIR is what gets cached, diffed for incremental builds, and
 //! serialized into HMR generations.
+
+pub mod reachability;
+
+pub use reachability::Reachability;

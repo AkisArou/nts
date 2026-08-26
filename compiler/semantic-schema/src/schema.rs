@@ -18,7 +18,7 @@
 //! module without bumping it will serve stale artifacts, so the bump is not
 //! optional bookkeeping — it is the correctness mechanism.
 
-use nts_diagnostics::{Location, SourceFile};
+use nts_diagnostics::SourceFile;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 7;
+pub const SCHEMA_VERSION: u32 = 8;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -236,7 +236,15 @@ pub struct SymbolRecord {
     pub name: String,
     pub flags: SymbolFlags,
     /// Where the symbol is declared. A merged declaration has more than one.
-    pub declarations: Vec<Location>,
+    ///
+    /// Nodes rather than spans: a span answers "where in the text", and every
+    /// consumer that wants the declaration then has to search for it. A node is
+    /// strictly more — its span is on its origin — and it is what reachability
+    /// walks along to get from a reference to a definition.
+    ///
+    /// Empty for a symbol declared outside the decoded file set, which is honest:
+    /// there is no node to point at.
+    pub declarations: Vec<NodeId>,
     /// The symbol's type, if the checker resolved one.
     pub ty: Option<TypeId>,
 }
@@ -535,7 +543,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-    use nts_diagnostics::{SourceId, Span};
+    use nts_diagnostics::{Location, SourceId, Span};
 
     fn origin() -> Origin {
         Origin::source(Location {

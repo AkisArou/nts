@@ -28,7 +28,7 @@
 
 use nts_semantic_schema::{
     CallTarget, ConstantValue, NodeId, NodeKind, ParameterRecord, SemanticSnapshot, SignatureId,
-    SignatureRecord, TypeId, TypeKind,
+    SignatureRecord, SymbolId, TypeId, TypeKind,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -76,6 +76,8 @@ pub struct Decomposer<'a> {
     interned: FxHashMap<u32, TypeId>,
     /// tsgo type ids already decomposed, so a cyclic type graph terminates.
     done: FxHashSet<u32>,
+    /// tsgo symbol id → arena index, for mapping a type's declaring symbol.
+    symbols: FxHashMap<u32, SymbolId>,
 }
 
 impl std::fmt::Debug for Decomposer<'_> {
@@ -98,6 +100,7 @@ impl<'a> Decomposer<'a> {
         handle: SnapshotHandle,
         project: ProjectHandle,
         interned: FxHashMap<u32, TypeId>,
+        symbols: FxHashMap<u32, SymbolId>,
     ) -> Self {
         Self {
             client,
@@ -105,6 +108,7 @@ impl<'a> Decomposer<'a> {
             project,
             interned,
             done: FxHashSet::default(),
+            symbols,
         }
     }
 
@@ -141,6 +145,16 @@ impl<'a> Decomposer<'a> {
             let TypeKind::Structured { flags: bits } = snapshot.types[slot.0 as usize].kind else {
                 continue;
             };
+
+            if !Self::is_ours(snapshot, slot) {
+                // Stop at the library boundary. `Promise<void>` and a class
+                // prototype are enough to pull the standard library's whole type
+                // graph in transitively — measured at 5,773 types from a 180-node
+                // file. A type declared outside the compiled files is not this
+                // compiler's to lower; it stays a placeholder carrying its flags,
+                // the same way a foreign platform object does (RFC §14).
+                continue;
+            }
 
             let kind = self.resolve(snapshot, ty, bits, &mut worklist, &mut stats, &seeded)?;
             snapshot.types[slot.0 as usize].kind = kind;
@@ -301,6 +315,24 @@ impl<'a> Decomposer<'a> {
         Ok(stats)
     }
 
+    /// Whether a type was declared in the files being compiled.
+    ///
+    /// An anonymous type — an object literal's, say — has no declaring symbol and
+    /// counts as ours: it exists only where it was written. A named type counts as
+    /// ours only if its symbol has a declaration node in the decoded set.
+    fn is_ours(snapshot: &SemanticSnapshot, slot: TypeId) -> bool {
+        let Some(record) = snapshot.types.get(slot.0 as usize) else {
+            return false;
+        };
+        let Some(symbol) = record.symbol else {
+            return true;
+        };
+        snapshot
+            .symbols
+            .get(symbol.0 as usize)
+            .is_some_and(|declared| !declared.declarations.is_empty())
+    }
+
     /// Fold every enum member and enum read into a constant.
     ///
     /// Two node kinds are worth asking about. An `EnumMember` carries the
@@ -458,7 +490,9 @@ impl<'a> Decomposer<'a> {
             .map(|response| {
                 let id = *self.interned.entry(response.id).or_insert_with(|| {
                     let id = TypeId(u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX));
-                    snapshot.types.push(types::classify(response));
+                    snapshot
+                        .types
+                        .push(types::classify(response, &self.symbols));
                     id
                 });
                 if !seeded.contains(&response.id) && !self.done.contains(&response.id) {

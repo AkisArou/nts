@@ -18,6 +18,7 @@
 //!   batch loses every type in it. Lists are filtered out before the request.
 
 use nts_semantic_schema::{LiteralValue, SymbolId, TypeKind, TypeRecord};
+use rustc_hash::FxHashMap;
 
 use super::proto::TypeResponse;
 
@@ -53,8 +54,15 @@ pub mod flags {
 /// Primitives and literals are decided by flags alone, which costs nothing.
 /// Everything structured becomes [`TypeKind::Structured`] carrying its flags,
 /// because deciding its members would take another round trip per type.
+///
+/// `symbols` maps tsgo's symbol ids onto this compiler's arena. It is required
+/// rather than optional because [`TypeRecord::symbol`] is an arena index: storing
+/// tsgo's raw id there would make any lookup read a different symbol entirely.
 #[must_use]
-pub fn classify(response: &TypeResponse) -> TypeRecord {
+// FxHashMap concretely: this map is consulted once per type in a program, and
+// letting a caller substitute a cryptographic hasher defeats the reason for it.
+#[allow(clippy::implicit_hasher)]
+pub fn classify(response: &TypeResponse, symbols: &FxHashMap<u32, SymbolId>) -> TypeRecord {
     let f = response.flags;
 
     // Order matters: a literal type carries both its literal bit and, for enum
@@ -105,7 +113,13 @@ pub fn classify(response: &TypeResponse) -> TypeRecord {
 
     TypeRecord {
         kind,
-        symbol: (response.symbol != 0).then_some(SymbolId(response.symbol)),
+        // Mapped through the interning table, not passed through. `omitzero` on
+        // the wire makes 0 mean "no symbol", and a symbol tsgo names but this
+        // compiler never interned — anything declared outside the decoded files —
+        // has no arena index to give.
+        symbol: (response.symbol != 0)
+            .then(|| symbols.get(&response.symbol).copied())
+            .flatten(),
     }
 }
 
@@ -196,6 +210,10 @@ mod tests {
         }
     }
 
+    fn classify(response: &TypeResponse) -> TypeRecord {
+        super::classify(response, &FxHashMap::default())
+    }
+
     #[test]
     fn primitives_classify_from_flags() {
         for (bit, expected) in [
@@ -244,6 +262,28 @@ mod tests {
     fn a_symbol_id_of_zero_means_absent() {
         // tsgo marks the field `omitzero`, so 0 is "no symbol" rather than symbol 0.
         assert_eq!(classify(&response(flags::STRING, None)).symbol, None);
+    }
+
+    #[test]
+    fn an_uninterned_symbol_yields_no_arena_index() {
+        // A symbol declared outside the decoded files is named by tsgo but has no
+        // index here. Passing its raw id through would point at an unrelated
+        // symbol — the arena is dense and any id is in range.
+        let mut response = response(flags::OBJECT, None);
+        response.symbol = 9_999;
+        assert_eq!(classify(&response).symbol, None);
+    }
+
+    #[test]
+    fn an_interned_symbol_is_mapped_not_passed_through() {
+        let mut response = response(flags::OBJECT, None);
+        response.symbol = 42;
+        let mut symbols = FxHashMap::default();
+        symbols.insert(42u32, SymbolId(7));
+        assert_eq!(
+            super::classify(&response, &symbols).symbol,
+            Some(SymbolId(7))
+        );
     }
 
     #[test]

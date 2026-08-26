@@ -15,7 +15,7 @@
 //!
 //! [`docs/records/0001`]: https://github.com/AkisArou/nts/blob/main/docs/records/0001-frontend-transport-cost.md
 
-use nts_diagnostics::{Location, SourceId};
+use nts_diagnostics::SourceId;
 use nts_semantic_schema::{
     ModuleRecord, NodeId, NodeKind, SemanticSnapshot, SymbolFlags, SymbolId, SymbolRecord,
 };
@@ -174,7 +174,7 @@ fn intern(
     root: &camino::Utf8Path,
     path: &str,
     base: u32,
-    file: SourceId,
+    _file: SourceId,
 ) -> SymbolId {
     // FxHashMap rather than a generic hasher: this map is hit once per node in a
     // program, and the point of choosing it is lost if a caller can substitute a
@@ -190,12 +190,8 @@ fn intern(
         // Shift past the nil sentinel and onto the shared arena, the same way the
         // AST decoder does. A declaration in another file yields no index here.
         .filter_map(|index| index.checked_sub(1).map(|i| i + base))
-        .filter_map(|index| {
-            snapshot.nodes.get(index as usize).map(|node| Location {
-                file,
-                span: node.origin.location.span,
-            })
-        })
+        .filter(|index| (*index as usize) < snapshot.nodes.len())
+        .map(NodeId)
         .collect();
 
     let id = SymbolId(u32::try_from(snapshot.symbols.len()).unwrap_or(u32::MAX));

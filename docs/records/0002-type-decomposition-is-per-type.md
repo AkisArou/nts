@@ -121,3 +121,48 @@ programs whose types stay inside themselves. As soon as a program touches
 `Promise`, `Array`, or a DOM type, the unseeded closure is the standard library
 and the walk is unbounded in the only sense that matters. Reachability is what
 gives the walk an edge to stop at.
+
+## Addendum 2: the bound is the library boundary, not reachability
+
+The previous addendum concluded that reachability was what would give the
+decomposition walk an edge to stop at. That was wrong, and the correction is the
+useful part.
+
+Reachability bounds the **seeds**. It does nothing about the **closure**: a
+reachable `Promise<void>` still pulls in `then`, `catch`, their signatures, and
+onward through the standard library. Measured on `examples/classes`, declaration
+reachability retained 37 of 39 shallow types — because the fixture exports nearly
+everything — and would not have prevented the explosion at all.
+
+What bounds the walk is refusing to decompose a type declared outside the files
+being compiled. A named type whose symbol has no declaration node in the decoded
+set is not this compiler's to lower; it stays a placeholder carrying its flags,
+the same treatment a foreign platform object gets (RFC §14). An anonymous type
+has no declaring symbol and is always ours, because it exists only where it was
+written.
+
+`examples/classes`, a single 180-node file, with every deep pass enabled:
+
+| | Before | After |
+| --- | ---: | ---: |
+| Distinct types | 5,773 | **43** |
+| Types decomposed | 4,096 (budget exhausted) | 20 |
+| Round trips | 15,578 | **87** |
+| Elapsed | 4,555 ms | 1,603 ms |
+
+179x fewer round trips, and the budget is no longer reached, so the type graph is
+complete rather than truncated.
+
+Reachability is still worth having — it is what narrows seeds for a real product,
+and it is the roots a library's public surface defines (RFC §27.1). But it is an
+optimization on top of the boundary, not the mechanism that makes the walk
+terminate.
+
+### A bug the boundary depended on
+
+Implementing this exposed that `TypeRecord::symbol` was being filled with tsgo's
+raw symbol id while typed as an arena index. The arena is dense, so any raw id is
+in range: every lookup would have silently returned an unrelated symbol rather
+than failing. Symbol ids are now mapped through the interning table, and a type
+whose symbol was never interned records `None` instead of a plausible wrong
+answer.
