@@ -34,6 +34,31 @@ Node 24 strips TypeScript types natively, so `bench.mjs` imports the same
 `src/main.ts` the compiler consumes. There is no second copy of the program to
 drift out of step.
 
+## Providers
+
+A case that allocates per iteration has to say so, in a `provider` file next to
+its `tsconfig.json`, containing `rc`. The default is NoGC, which never frees --
+so a run calibrated to a hundred millisecond of work would touch hundreds of
+megabytes of fresh memory and measure page faults rather than the code. The
+provider is a property of the workload, not of the compiler, and the case name
+is printed with the provider it used.
+
+`objects` is currently the only case that allocates. It is also the only case
+nts loses, by 10x, and the reason is visible in the generated C: the loop body
+is three arithmetic operations wrapped in an allocation and a free. The C column
+does not allocate at all -- clang removes a `malloc`/`free` pair whose result
+does not escape, which is exactly the optimization nts does not have -- and V8
+does not either, because it scalar-replaces the object. Neither column is
+cheating; both are what those compilers do with a program whose objects are
+provably local, and nts allocating anyway is a real gap rather than an artifact
+of the benchmark.
+
+`C (int)` reports single-digit nanoseconds there, which is not a measurement of
+anything: integer arithmetic is associative, so clang derives a closed form for
+the whole loop. It stays in the table because removing a column per case would
+be worse, but the README's warning about `C (int)` applies to this row harder
+than to any other.
+
 ## Rules the harness enforces
 
 **Every variant returns a checksum and the runner compares them.** A benchmark

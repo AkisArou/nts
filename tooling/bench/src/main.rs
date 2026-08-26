@@ -133,11 +133,30 @@ fn main() -> Result<()> {
 fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
     let name = case.file_name().context("a case needs a name")?;
     let tsconfig = case.join("tsconfig.json");
+
+    // A case that allocates per iteration has to say so. Under NoGC it would
+    // never free, so a run calibrated to a hundred milliseconds would measure
+    // page faults rather than the code -- and the provider is a property of the
+    // workload, not of the compiler.
+    let provider = match std::fs::read_to_string(case.join("provider")) {
+        Ok(text) if text.trim() == "rc" => hir::Provider::ReferenceCounting,
+        _ => hir::Provider::NoGc,
+    };
+    let defines: &[&str] = match provider {
+        hir::Provider::ReferenceCounting => &["-DNTS_PROVIDER_RC"],
+        hir::Provider::NoGc => &[],
+    };
+    let shown = match provider {
+        hir::Provider::ReferenceCounting => format!("{name} (rc)"),
+        hir::Provider::NoGc => name.to_owned(),
+    };
+
     let specialized = out.join(format!("{name}.specialized.c"));
     let plain = out.join(format!("{name}.plain.c"));
-    std::fs::write(&specialized, emit(&tsconfig, true)?)
+    std::fs::write(&specialized, emit(&tsconfig, true, provider)?)
         .with_context(|| format!("writing {specialized}"))?;
-    std::fs::write(&plain, emit(&tsconfig, false)?).with_context(|| format!("writing {plain}"))?;
+    std::fs::write(&plain, emit(&tsconfig, false, provider)?)
+        .with_context(|| format!("writing {plain}"))?;
 
     let mut results = Vec::new();
     for variant in VARIANTS {
@@ -155,7 +174,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
             Generated::Unspecialized => sources.push(plain.clone()),
             Generated::None => {}
         }
-        compile(root, &sources, &binary)?;
+        compile(root, &sources, &binary, defines)?;
         results.push(measure(&mut std::process::Command::new(&binary))?);
     }
 
@@ -183,7 +202,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
     // they cannot (see docs/records/0004). A single column would need a
     // footnote per row to mean anything, so the columns are left to be read.
     println!(
-        "{name:<12} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9.2}x {:>8.1}x",
+        "{shown:<12} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9.2}x {:>8.1}x",
         human(nts.ns_per_op),
         human(unspecialized.ns_per_op),
         human(results[2].ns_per_op),
@@ -197,7 +216,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
 
 /// The compiler's own pipeline, not a shell out to the CLI — a benchmark that
 /// measured a stale generated file would be worse than no benchmark.
-fn emit(tsconfig: &Utf8Path, specialize: bool) -> Result<String> {
+fn emit(tsconfig: &Utf8Path, specialize: bool, provider: hir::Provider) -> Result<String> {
     let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(tsconfig)?;
     if snapshot.has_errors() {
@@ -208,6 +227,7 @@ fn emit(tsconfig: &Utf8Path, specialize: bool) -> Result<String> {
         &snapshot,
         &hir::Options {
             specialize_numbers: specialize,
+            provider,
             ..hir::Options::default()
         },
     ) {
@@ -225,7 +245,12 @@ fn emit(tsconfig: &Utf8Path, specialize: bool) -> Result<String> {
     Ok(emitted.writer.text().to_owned())
 }
 
-fn compile(root: &Utf8Path, sources: &[Utf8PathBuf], binary: &Utf8Path) -> Result<()> {
+fn compile(
+    root: &Utf8Path,
+    sources: &[Utf8PathBuf],
+    binary: &Utf8Path,
+    defines: &[&str],
+) -> Result<()> {
     let output = std::process::Command::new("clang")
         // Link-time optimization, for fairness rather than for speed. A
         // reference variant defines its workload and `bench_run` in one
@@ -233,6 +258,7 @@ fn compile(root: &Utf8Path, sources: &[Utf8PathBuf], binary: &Utf8Path) -> Resul
         // the nts workload is necessarily in a separate unit and could not be.
         // That gap would show up as a codegen defect that does not exist.
         .args(["-std=c11", "-O2", "-flto", "-Wall", "-Wextra", "-Werror"])
+        .args(defines)
         .arg("-I")
         .arg(root.join("benches/common"))
         .arg("-I")
