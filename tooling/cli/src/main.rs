@@ -69,7 +69,7 @@ fn main() -> Result<()> {
 /// and which ones are not.
 fn dump_facts(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
-    let mut source = TsgoApi::new(tsgo_binary).with_call_resolution(Budget::DEFAULT);
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
@@ -236,7 +236,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     // Call resolution is not optional here: without it a call site has no known
     // target and lowering refuses it.
-    let mut source = TsgoApi::new(tsgo_binary).with_call_resolution(Budget::DEFAULT);
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
 
     if snapshot.has_errors() {
@@ -414,7 +414,7 @@ const fn render_bin(op: BinOp) -> &'static str {
 /// Lower a project and print the C it becomes.
 fn emit_c(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
-    let mut source = TsgoApi::new(tsgo_binary).with_call_resolution(Budget::DEFAULT);
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {

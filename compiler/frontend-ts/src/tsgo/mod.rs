@@ -783,6 +783,19 @@ impl TsgoApi {
     ///
     /// The process is not spawned until [`SemanticSource::snapshot`] runs.
     #[must_use]
+    /// Configured the way the compiler needs it.
+    ///
+    /// Kept here rather than at each call site because "what the frontend must
+    /// be asked for" is a property of the compiler, not of whoever is invoking
+    /// it. Decomposition in particular is not optional: without it a union
+    /// arrives as an opaque `Structured`, and `0 | 1 | 2` — the strongest thing
+    /// TypeScript can say about a parameter — is refused as unrepresentable.
+    pub fn for_compilation(executable: impl Into<Utf8PathBuf>) -> Self {
+        Self::new(executable)
+            .with_call_resolution(decompose::Budget::DEFAULT)
+            .with_decomposition(decompose::Budget::DEFAULT)
+    }
+
     pub fn new(executable: impl Into<Utf8PathBuf>) -> Self {
         Self {
             executable: executable.into(),

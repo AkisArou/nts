@@ -236,6 +236,15 @@ pub struct Param {
     pub name: String,
     pub ty: HirType,
     pub origin: Origin,
+    /// What the *declared type* says the value can be.
+    ///
+    /// A parameter is an input, so nothing inside a function constrains it —
+    /// which is why an exported `(n: number)` defeats every proof downstream of
+    /// it. But TypeScript's types often say more than `number`: `0 | 1 | 2` is a
+    /// union of literal types, and `const` gives a literal type of its own. That
+    /// is a fact about every possible caller, available without seeing one, and
+    /// it is the only way a parameter becomes provable at all.
+    pub known: facts::Facts,
 }
 
 /// One operation.

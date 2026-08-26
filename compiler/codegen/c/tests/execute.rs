@@ -16,7 +16,7 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
+use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 /// Compile an example to C, link it with a harness, run it.
 ///
@@ -45,8 +45,7 @@ fn run(example: &str, harness: &str) -> Option<String> {
         .canonicalize_utf8()
         .expect("example fixture is checked in");
 
-    let snapshot = TsgoApi::new(tsgo)
-        .with_call_resolution(Budget::DEFAULT)
+    let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "{example} should typecheck");
@@ -353,4 +352,34 @@ int main(void) {{
     };
     assert!(output.contains("triangle() = 499500"), "{output}");
     assert!(output.contains("hash(-7.5,10) = 17598"), "{output}");
+}
+
+#[test]
+fn literal_types_make_a_parameter_provable() {
+    // The only way a parameter becomes provable without seeing a call site: its
+    // declared type is a fact about every possible caller. `mode: 0 | 1 | 2 | 3`
+    // proves [0, 3] and the multiplication becomes integer arithmetic, while the
+    // same function taking `number` cannot.
+    let harness = format!(
+        r#"{CHECK}
+double weigh(double mode);
+double fixed(double scale);
+double loose(double mode);
+double plain(double n);
+int main(void) {{
+    check("weigh(0)", weigh(0), 0);
+    check("weigh(3)", weigh(3), 30);
+    check("fixed(8)", fixed(8), 64);
+    check("loose(5)", loose(5), 50);
+    // Unspecialized, so it still divides and multiplies as a double.
+    check("plain(2.5)", plain(2.5), 25);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("literals", &harness) else {
+        return;
+    };
+    assert!(output.contains("weigh(3) = 30"), "{output}");
+    assert!(output.contains("plain(2.5) = 25"), "{output}");
 }

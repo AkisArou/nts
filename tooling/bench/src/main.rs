@@ -28,7 +28,7 @@
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
+use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 /// One measurement.
 struct Measured {
@@ -159,9 +159,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<()> {
 /// measured a stale generated file would be worse than no benchmark.
 fn emit(tsconfig: &Utf8Path) -> Result<String> {
     let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
-    let snapshot = TsgoApi::new(tsgo)
-        .with_call_resolution(Budget::DEFAULT)
-        .snapshot(tsconfig)?;
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(tsconfig)?;
     if snapshot.has_errors() {
         bail!("{tsconfig} does not typecheck");
     }

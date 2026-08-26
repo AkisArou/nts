@@ -126,12 +126,17 @@ pub fn analyze(func: &Func) -> Analysis {
     // are discovered, so the fixpoint is the least one.
     let mut values = vec![Facts::BOTTOM; func.values.len()];
 
-    // A parameter is an input. Nothing inside the function constrains it, and
-    // assuming otherwise is exactly the unsoundness this analysis exists to
-    // avoid. Narrowing these needs the call sites, which is a later pass.
+    // A parameter is an input, so nothing inside the function constrains it.
+    // What *does* constrain it is its declared type — `0 | 1 | 2` is a fact
+    // about every possible caller, available without seeing one. For an ordinary
+    // `number` this is TOP, and assuming otherwise would be exactly the
+    // unsoundness this analysis exists to avoid.
     for (index, op) in func.values.iter().enumerate() {
-        if matches!(op.kind, OpKind::Param(_)) {
-            values[index] = Facts::TOP;
+        if let OpKind::Param(slot) = op.kind {
+            values[index] = func
+                .params
+                .get(slot as usize)
+                .map_or(Facts::TOP, |param| param.known);
         }
     }
 
@@ -239,7 +244,15 @@ fn transfer_block(
                 op: UnOp::ToUint32,
                 operand,
             } => facts::to_uint32(lookup(&refinements, values, *operand)),
-            // A booleans is not a number, and a call's result needs the callee
+            // A parameter keeps what its declared type said. It is an operation
+            // in the entry block like any other, so without this arm the
+            // transfer recomputes it as TOP and joins that over the seed —
+            // silently discarding the one thing that makes a parameter provable.
+            OpKind::Param(slot) => func
+                .params
+                .get(*slot as usize)
+                .map_or(Facts::TOP, |param| param.known),
+            // A bool is not a number, and a call's result needs the callee
             // analyzed — neither is a claim this pass can make.
             _ => Facts::TOP,
         };
@@ -514,6 +527,7 @@ mod tests {
                     name: "n".to_owned(),
                     ty: HirType::Float { bits: 64 },
                     origin: origin(),
+                    known: Facts::TOP,
                 })
                 .collect(),
             return_type: HirType::Float { bits: 64 },
@@ -634,6 +648,7 @@ mod tests {
             name: "limit".to_owned(),
             ty: HirType::Float { bits: 64 },
             origin: origin(),
+            known: Facts::TOP,
         });
 
         let analysis = analyze(&function);

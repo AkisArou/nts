@@ -17,6 +17,7 @@ use nts_semantic_schema::{
     LiteralValue, NodeData, NodeId, NodeKind, Origin, SemanticSnapshot, TypeId, TypeKind, syntax,
 };
 
+use super::facts::Facts;
 use super::{
     BinOp, Block, BlockId, Callee, Func, HirType, ManagedType, Op, OpKind, Param, Program,
     Terminator, UnOp, ValueId,
@@ -85,6 +86,26 @@ pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType
             HirType::Managed(ManagedType::Array(Box::new(element)))
         }
         TypeKind::Object { .. } => HirType::Managed(ManagedType::Object(ty)),
+
+        // A union whose members all share one representation has that
+        // representation. `0 | 1 | 2` is three literal types and one machine
+        // type, and refusing it would reject the most useful thing TypeScript
+        // can tell this compiler about a parameter.
+        //
+        // A union whose members disagree — `number | undefined`, `string | number`
+        // — needs a tagged representation, which is a decision this pass does
+        // not get to make on its own.
+        TypeKind::Union(members) => {
+            let mut shared: Option<HirType> = None;
+            for member in members {
+                let member = representation(snapshot, *member)?;
+                match &shared {
+                    Some(existing) if *existing != member => return None,
+                    _ => shared = Some(member),
+                }
+            }
+            shared?
+        }
 
         // `any` and `unknown` fall here and are refused, which is right for one
         // of them and wrong for the other.
@@ -336,6 +357,14 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| self.unsupported(id, "a parameter of an unrepresentable type"))?;
 
         let origin = self.origin(name_node);
+        // What the declared type says, before anything in the body is seen.
+        let known = self
+            .snapshot
+            .node_types
+            .get(&name_node)
+            .map_or(Facts::TOP, |declared| {
+                known_values(self.snapshot, *declared, 0)
+            });
         let value = self.push(OpKind::Param(index), ty.clone(), origin.clone());
         // Bound by symbol, so every later mention of this name resolves to the
         // same value rather than to a fresh load.
@@ -343,7 +372,12 @@ impl<'a> FuncBuilder<'a> {
             self.bindings.insert(symbol.0, value);
         }
 
-        Ok(Param { name, ty, origin })
+        Ok(Param {
+            name,
+            ty,
+            origin,
+            known,
+        })
     }
 
     fn lower_block(&mut self, id: NodeId) -> Result<(), Diagnostic> {
@@ -1253,4 +1287,27 @@ const fn bitwise_operator_of(op: BinOp) -> bool {
         op,
         BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr | BinOp::UShr
     )
+}
+
+/// The values a declared type admits.
+///
+/// Only literal types and unions of them say anything useful; everything else
+/// is as wide as its representation. Bounded so that a self-referential union
+/// cannot make this recurse forever — the checker should not produce one, but a
+/// stack overflow is a poor way to find out.
+fn known_values(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> Facts {
+    const MAX_DEPTH: u32 = 8;
+    if depth > MAX_DEPTH {
+        return Facts::TOP;
+    }
+    let Some(record) = snapshot.types.get(ty.0 as usize) else {
+        return Facts::TOP;
+    };
+    match &record.kind {
+        TypeKind::Literal(LiteralValue::Number(value)) => Facts::constant(*value),
+        TypeKind::Union(members) => members.iter().fold(Facts::BOTTOM, |accumulated, member| {
+            accumulated.join(known_values(snapshot, *member, depth + 1))
+        }),
+        _ => Facts::TOP,
+    }
 }
