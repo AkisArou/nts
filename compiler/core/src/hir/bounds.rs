@@ -49,6 +49,11 @@ pub fn eliminate_checks(func: &mut Func, analysis: &Analysis) -> usize {
                 index: index_value,
                 checked: true,
                 ..
+            }
+            | OpKind::StringUnitAt {
+                string: array,
+                index: index_value,
+                checked: true,
             }) = func.values[value.0 as usize].kind
             else {
                 continue;
@@ -57,7 +62,9 @@ pub fn eliminate_checks(func: &mut Func, analysis: &Analysis) -> usize {
                 continue;
             }
             match &mut func.values[value.0 as usize].kind {
-                OpKind::ArrayGet { checked, .. } | OpKind::ArraySet { checked, .. } => {
+                OpKind::ArrayGet { checked, .. }
+                | OpKind::ArraySet { checked, .. }
+                | OpKind::StringUnitAt { checked, .. } => {
                     *checked = false;
                     removed += 1;
                 }
@@ -104,10 +111,19 @@ fn provably_in_bounds(
     })
 }
 
-/// What is known about an array's length.
+/// What is known about an array's — or a string's — length.
+///
+/// A literal's is written down in the literal, which is what makes a scan over
+/// one provably in bounds without any reasoning about the loop. The count is of
+/// UTF-16 code units and not of characters, because that is what `length` means:
+/// an emoji is two.
 fn length_facts(func: &Func, analysis: &Analysis, at: BlockId, array: ValueId) -> Facts {
-    match func.values[array.0 as usize].kind {
-        OpKind::ArrayNew { length } => analysis.get_at(at, length),
+    match &func.values[array.0 as usize].kind {
+        OpKind::ArrayNew { length } => analysis.get_at(at, *length),
+        OpKind::ConstString(text) => {
+            let units = text.encode_utf16().count();
+            Facts::constant(f64::from(u32::try_from(units).unwrap_or(u32::MAX)))
+        }
         _ => Facts::BOTTOM,
     }
 }

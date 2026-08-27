@@ -404,6 +404,16 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::Convert(operand) => format!("%{index} = convert %{} : {ty}", operand.0),
         OpKind::ArrayNew { length } => format!("%{index} = array.new %{} : {ty}", length.0),
         OpKind::Length(array) => format!("%{index} = array.len %{} : {ty}", array.0),
+        OpKind::StringUnitAt {
+            string,
+            index: at,
+            checked,
+        } => format!(
+            "%{index} = str.unit{} %{}[%{}] : {ty}",
+            if *checked { "" } else { " unchecked" },
+            string.0,
+            at.0
+        ),
         OpKind::GlobalGet(global) => format!("%{index} = global.get {global} : {ty}"),
         OpKind::GlobalSet { global, value } => {
             format!("global.set {global} = %{}", value.0)

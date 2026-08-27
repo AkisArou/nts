@@ -459,11 +459,23 @@ fn transfer_block(
             // here with a known size, it is that size exactly — which is what
             // lets an index into an array literal be proven in bounds by the
             // interval domain alone, with no reasoning about the array at all.
+            // A code unit is a `uint16`. Out of range is NaN rather than a
+            // trap, so an unproven index is the same set plus NaN -- and once
+            // the index is proven inside the string it is just the range, which
+            // is what lets a scan by code unit stay in integers.
+            OpKind::StringUnitAt { checked, .. } => Facts::new(0.0, 65535.0, true, *checked, false),
             OpKind::Length(array) => {
                 let bound = Facts::new(0.0, facts::U32_MAX, true, false, false);
-                match func.values[array.0 as usize].kind {
+                match &func.values[array.0 as usize].kind {
                     OpKind::ArrayNew { length } => {
-                        lookup(&refinements, values, length).narrow(bound)
+                        lookup(&refinements, values, *length).narrow(bound)
+                    }
+                    // A literal's length is written down in the literal. It is
+                    // the count of UTF-16 code units and not of characters,
+                    // which is what `String::length` means -- an emoji is two.
+                    OpKind::ConstString(text) => {
+                        let units = text.encode_utf16().count();
+                        Facts::constant(f64::from(u32::try_from(units).unwrap_or(u32::MAX)))
                     }
                     _ => bound,
                 }

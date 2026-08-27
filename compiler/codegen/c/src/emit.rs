@@ -117,13 +117,22 @@ pub fn emit(program: &Program) -> Emitted {
     }
 
     // Collected before emission so that every reference names the same static.
+    //
+    // From the values each block still *executes*, not from every value the
+    // function defines. Dead-code elimination leaves the definitions behind --
+    // they are addressed by index, so removing one would renumber the rest --
+    // and a static nothing reads is an error under `-Wunused-const-variable`,
+    // which is the setting that makes a warning from generated code a compiler
+    // bug rather than a style preference.
     let mut literals: Vec<String> = Vec::new();
     for func in &program.funcs {
-        for op in &func.values {
-            if let OpKind::ConstString(text) = &op.kind
-                && !literals.contains(text)
-            {
-                literals.push(text.clone());
+        for block in &func.blocks {
+            for value in &block.ops {
+                if let OpKind::ConstString(text) = &func.values[value.0 as usize].kind
+                    && !literals.contains(text)
+                {
+                    literals.push(text.clone());
+                }
             }
         }
     }
@@ -1444,6 +1453,27 @@ fn emit_op(
         // Enough digits to round-trip an f64 exactly. Fewer would change the
         // program's arithmetic.
         OpKind::ConstFloat(v) => format!("{name} = {};", float_literal(*v)),
+        OpKind::StringUnitAt {
+            string,
+            index,
+            checked,
+        } => {
+            // Proven inside the string, so there is no NaN to produce and no
+            // range to test: a load, and the index is already an integer.
+            if *checked {
+                format!(
+                    "{name} = nts_str_char_code_at({}, {});",
+                    value_name(*string),
+                    value_name(*index)
+                )
+            } else {
+                format!(
+                    "{name} = nts_unit({}, (uint32_t){});",
+                    value_name(*string),
+                    value_name(*index)
+                )
+            }
+        }
         OpKind::GlobalGet(global) => format!("{name} = {};", global_name(context.program, *global)),
         OpKind::GlobalSet { global, value } => format!(
             "{} = {};",

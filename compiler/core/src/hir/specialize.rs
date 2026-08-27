@@ -292,7 +292,14 @@ fn width_of(func: &Func, analysis: &Analysis, index: usize) -> Option<u8> {
             ..
         }
         | OpKind::ConstFloat(_)
-        | OpKind::BlockParam(_) => true,
+        | OpKind::BlockParam(_)
+        // A code unit proven inside its string is a `uint16`: integral, in
+        // range, and not NaN. Leaving it a double drags whatever it is
+        // multiplied into and added to along with it, and a loop-carried
+        // `int -> double -> int` round trip costs more than everything else in
+        // a scan put together. The `checked` case is not this: out of range is
+        // NaN, and NaN is not an integer.
+        | OpKind::StringUnitAt { checked: false, .. } => true,
 
         // Everything else stays a double, for one of three reasons:
         //

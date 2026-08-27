@@ -312,6 +312,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::ObjectNew { .. }
         | OpKind::GlobalGet(_) => Vec::new(),
         OpKind::GlobalSet { value, .. } => vec![*value],
+        OpKind::StringUnitAt { string, index, .. } => vec![*string, *index],
         OpKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
         OpKind::Unary { operand, .. } | OpKind::Convert(operand) => vec![*operand],
         OpKind::Call { args, .. } => args.clone(),

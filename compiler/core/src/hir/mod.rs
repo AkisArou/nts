@@ -347,6 +347,23 @@ pub enum OpKind {
     Release(ValueId),
     /// Allocate an object. The type is carried by the operation's own type,
     /// which is a [`ManagedType::Object`].
+    /// One UTF-16 code unit of a string: `s.charCodeAt(i)`.
+    ///
+    /// An operation and not a call, for the same reason [`OpKind::ArrayGet`] is
+    /// one. As a call its index has to match a C signature, which pins the index
+    /// — and therefore the loop counter that produces it — to a `double`, and
+    /// then every arithmetic step downstream is floating point. As an operation
+    /// the analysis sees a `uint32` index and a result in `[0, 65535]`.
+    ///
+    /// `checked` is the reverse of an array's: out of range is `NaN` rather than
+    /// a trap, so the flag says whether the result may be one. Where the index
+    /// is proven inside the string, it cannot be, and the whole expression stays
+    /// integral.
+    StringUnitAt {
+        string: ValueId,
+        index: ValueId,
+        checked: bool,
+    },
     /// Read a module-scope variable.
     GlobalGet(u32),
     /// Write one. Produces nothing.
@@ -834,6 +851,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let pruned = reachable::prune(&mut program, options.roots);
     let mut specialized = 0;
     let mut conversions = 0;
+    let mut checks_removed = 0;
 
     if specialize_numbers {
         // Analyzed as a program rather than a function at a time: a parameter is
@@ -849,6 +867,18 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
 
         // Re-analyzed, since folding changed what the operations are — and a
         // folded return value is a sharper fact for every caller.
+        let analyses = interprocedural::analyze_program(&program);
+
+        // Bounds first, because proving an access safe *sharpens the facts*
+        // rather than merely removing a test. A `charCodeAt` that might be out
+        // of range might be NaN, and a NaN cannot be an integer -- so a scan by
+        // code unit stayed floating point until this ran, and running it after
+        // specialization was too late to matter. It runs again at the end, for
+        // what specialization itself sharpens.
+        for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
+            checks_removed += bounds::eliminate_checks(func, analysis);
+        }
+
         let analyses = interprocedural::analyze_program(&program);
         for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
             let report = specialize::specialize(func, analysis);
@@ -891,7 +921,6 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // Bounds checks last, once the facts are as sharp as they are going to get:
     // a check is removed only where the index was proven, and specialization
     // and folding are what sharpen the index.
-    let mut checks_removed = 0;
     if specialize_numbers {
         let analyses = interprocedural::analyze_program(&program);
         for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {

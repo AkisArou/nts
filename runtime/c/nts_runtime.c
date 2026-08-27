@@ -517,14 +517,6 @@ NtsString *nts_concat(const NtsString *a, const NtsString *b) {
     return out;
 }
 
-/* One code unit of a string, whichever width it is stored in. */
-static uint16_t nts_unit(const NtsString *s, uint32_t at) {
-    if ((s->flags & NTS_TWO_BYTE) != 0) {
-        return NTS_ELEMENTS(s, uint16_t)[at];
-    }
-    return NTS_ELEMENTS(s, unsigned char)[at];
-}
-
 /* Allocate a string of `length` code units, narrow if every unit fits a byte.
  *
  * The two representations are not a detail a caller should reproduce: a slice of
@@ -581,18 +573,6 @@ static NtsString *nts_str_range(const NtsString *s, uint32_t from, uint32_t to) 
     return out;
 }
 
-/* `ToIntegerOrInfinity`: truncate toward zero, and NaN becomes zero.
- *
- * An index is not required to be a whole number. `s.charCodeAt(0.5)` is the
- * character at 0, not an error and not NaN -- rejecting the fraction instead was
- * the first thing differential testing found here. */
-static double nts_to_integer(double value) {
-    if (value != value) {
-        return 0.0;
-    }
-    return value < 0 ? -floor(-value) : floor(value);
-}
-
 /* `ToIntegerOrInfinity` then a clamp into `[0, length]`, with a negative index
  * counted from the end -- which is what makes `s.slice(-2)` the last two. */
 static uint32_t nts_str_clamp(double index, uint32_t length, int relative) {
@@ -609,13 +589,44 @@ static uint32_t nts_str_clamp(double index, uint32_t length, int relative) {
     return (uint32_t)index;
 }
 
-/* Where `needle` first occurs at or after `from`, or -1. */
+/* Where `needle` first occurs at or after `from`, or -1.
+ *
+ * The narrow-narrow case gets `memchr` and `memcmp`, which is not a
+ * micro-optimization: both are vectorized in every C library worth using, and
+ * the naive form -- a branch per code unit, through a function that has to ask
+ * which width the string is -- was fourteen times more work than the loop this
+ * benchmark was written to measure. Most strings in most programs are narrow,
+ * so this is the path that runs. */
 static double nts_str_find(const NtsString *s, const NtsString *needle, uint32_t from,
                            int backwards) {
     if (needle->length > s->length) {
         return -1.0;
     }
     uint32_t last = s->length - needle->length;
+
+    const int both_narrow = ((s->flags | needle->flags) & NTS_TWO_BYTE) == 0;
+    if (both_narrow && !backwards) {
+        const unsigned char *text = NTS_ELEMENTS(s, unsigned char);
+        const unsigned char *want = NTS_ELEMENTS(needle, unsigned char);
+        if (needle->length == 0) {
+            return (double)(from <= last ? from : last);
+        }
+        uint32_t at = from;
+        while (at <= last) {
+            const unsigned char *hit =
+                (const unsigned char *)memchr(text + at, want[0], (size_t)(last - at) + 1u);
+            if (!hit) {
+                return -1.0;
+            }
+            at = (uint32_t)(hit - text);
+            if (memcmp(hit, want, needle->length) == 0) {
+                return (double)at;
+            }
+            at++;
+        }
+        return -1.0;
+    }
+
     for (uint32_t start = 0; start <= last; start++) {
         uint32_t at = backwards ? last - start : start;
         if (!backwards && at < from) {
@@ -631,15 +642,6 @@ static double nts_str_find(const NtsString *s, const NtsString *needle, uint32_t
         }
     }
     return -1.0;
-}
-
-double nts_str_char_code_at(const NtsString *s, double at) {
-    at = nts_to_integer(at);
-    if (at < 0 || at >= (double)s->length) {
-        /* Out of range is NaN, not an error and not zero. */
-        return (double)NAN;
-    }
-    return (double)nts_unit(s, (uint32_t)at);
 }
 
 double nts_str_code_point_at(const NtsString *s, double at) {

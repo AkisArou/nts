@@ -352,7 +352,7 @@ fn compile(
     ];
 
     let mut objects = Vec::new();
-    for (driver, standard, sources) in [("clang++", "-std=c++17", cpp), ("clang", "-std=c11", c)] {
+    for (driver, standard, sources) in [("clang++", "-std=c++20", cpp), ("clang", "-std=c11", c)] {
         for source in sources {
             let object = binary.with_extension(format!(
                 "{}.o",

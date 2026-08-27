@@ -2517,8 +2517,27 @@ impl<'a> FuncBuilder<'a> {
 
         // (runtime function, how many arguments after the receiver, result)
         let string = HirType::Managed(ManagedType::String);
+        // `charCodeAt` is an operation rather than a call: as a call its index
+        // would have to match a C signature, which pins the loop counter that
+        // produces it to a `double` and makes every step downstream floating
+        // point.
+        if name == "charCodeAt"
+            && let [argument] = arguments
+        {
+            let index = self.lower_expression(*argument)?;
+            let origin = self.origin(id);
+            return Ok(self.push(
+                OpKind::StringUnitAt {
+                    string: receiver,
+                    index,
+                    checked: true,
+                },
+                HirType::NUMBER,
+                origin,
+            ));
+        }
+
         let (helper, arity, ty) = match name.as_str() {
-            "charCodeAt" => ("nts_str_char_code_at", 1, HirType::NUMBER),
             "codePointAt" => ("nts_str_code_point_at", 1, HirType::NUMBER),
             "indexOf" => ("nts_str_index_of", 1, HirType::NUMBER),
             "lastIndexOf" => ("nts_str_last_index_of", 1, HirType::NUMBER),

@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 /* RFC 8.1: every managed object references an immutable descriptor, which
  * describes the shape rather than the contents -- so there is one per element
@@ -177,7 +178,6 @@ bool nts_string_eq(const NtsString *a, const NtsString *b);
  * the length, which is what the specification says and what makes `s.slice(-2)`
  * mean the last two. A caller that passes `INFINITY` means "to the end", which
  * is how an omitted trailing argument reaches here. */
-double nts_str_char_code_at(const NtsString *s, double at);
 double nts_str_code_point_at(const NtsString *s, double at);
 double nts_str_index_of(const NtsString *s, const NtsString *needle);
 double nts_str_last_index_of(const NtsString *s, const NtsString *needle);
@@ -196,6 +196,40 @@ NtsString *nts_str_substring(const NtsString *s, double from, double to);
  * valid UTF-8 yields U+FFFD for each bad byte, which is what every decoder that
  * has to keep going does. */
 NtsString *nts_string_from_utf8(const char *bytes, size_t length);
+
+/* One code unit of a string, whichever width it is stored in.
+ *
+ * Inline, and so is `charCodeAt` below it. A scan by code unit is the inner loop
+ * of every string-heavy program, and as an opaque call it was fifty times slower
+ * than the same loop in C++ -- the work is a load and a compare, and the call
+ * around it was the whole cost. */
+static inline uint16_t nts_unit(const NtsString *s, uint32_t at) {
+    if ((s->flags & NTS_TWO_BYTE) != 0) {
+        return NTS_ELEMENTS(s, uint16_t)[at];
+    }
+    return NTS_ELEMENTS(s, unsigned char)[at];
+}
+
+/* `ToIntegerOrInfinity`: truncate toward zero, and NaN becomes zero.
+ *
+ * An index is not required to be a whole number. `s.charCodeAt(0.5)` is the
+ * character at 0, not an error and not NaN -- rejecting the fraction was the
+ * first thing differential testing found here. */
+static inline double nts_to_integer(double value) {
+    if (value != value) {
+        return 0.0;
+    }
+    return value < 0 ? -floor(-value) : floor(value);
+}
+
+static inline double nts_str_char_code_at(const NtsString *s, double at) {
+    at = nts_to_integer(at);
+    if (at < 0 || at >= (double)s->length) {
+        /* Out of range is NaN, not an error and not zero. */
+        return (double)NAN;
+    }
+    return (double)nts_unit(s, (uint32_t)at);
+}
 
 /* One unsigned comparison catches a negative index too: it wraps to something
  * enormous, which is not less than the length. */
@@ -224,17 +258,46 @@ static inline uint32_t nts_index(const NtsArray *array, double index) {
  * path costs calls to trunc and fmod and is 2.6x slower. NaN fails both
  * comparisons and falls through to the isfinite check. */
 static inline int32_t nts_to_int32(double x) {
+    /* The common case: already in range, so the hardware conversion is the
+     * answer and it truncates toward zero exactly as ToInt32 says. */
     if (x > -2147483649.0 && x < 2147483648.0) {
         return (int32_t)x;
     }
-    if (!isfinite(x)) {
+
+    /* Out of range, which `x | 0` after any real arithmetic usually is: a
+     * product of two int32s is not one. This used to reduce modulo 2^32 with
+     * `fmod`, which is a library call of roughly a hundred cycles -- and in a
+     * loop that is the whole cost of the loop. Reading the exponent and shifting
+     * the mantissa does the same reduction in about ten instructions, none of
+     * them a call.
+     *
+     * NaN and the infinities fall out of the same test: their exponent is 1024,
+     * which is past the point where every one of the low thirty-two bits is
+     * zero, so they return 0 -- which is what ToInt32 says they are. */
+    uint64_t bits;
+    memcpy(&bits, &x, sizeof bits);
+    const int exponent = (int)((bits >> 52) & 0x7FFu) - 1023;
+    if (exponent < 0) {
+        /* |x| < 1, so truncation is zero -- including for -0. */
         return 0;
     }
-    double m = fmod(trunc(x), 4294967296.0);
-    if (m < 0.0) {
-        m += 4294967296.0;
+    if (exponent > 83) {
+        /* A multiple of 2^32 (or NaN, or an infinity): nothing in the low
+         * thirty-two bits. */
+        return 0;
     }
-    return (int32_t)(uint32_t)m;
+    const uint64_t mantissa = (bits & 0xFFFFFFFFFFFFFull) | 0x10000000000000ull;
+    uint32_t magnitude;
+    if (exponent < 52) {
+        magnitude = (uint32_t)(mantissa >> (52 - exponent));
+    } else {
+        /* Only the low thirty-two bits survive, so the shift is done in
+         * thirty-two and cannot overflow out of the range that matters. */
+        magnitude = (uint32_t)mantissa << (exponent - 52);
+    }
+    /* Negation in unsigned arithmetic: `-(int32_t)0x80000000` is undefined, and
+     * that value is reachable. */
+    return (bits >> 63) != 0 ? (int32_t)(0u - magnitude) : (int32_t)magnitude;
 }
 
 /* JavaScript ToUint32. As above; the fast path is the non-negative half of the

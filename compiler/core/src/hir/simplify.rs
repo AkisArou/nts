@@ -129,6 +129,10 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::ObjectNew { .. }
         | OpKind::GlobalGet(_) => {}
         OpKind::GlobalSet { value, .. } => *value = of(*value),
+        OpKind::StringUnitAt { string, index, .. } => {
+            *string = of(*string);
+            *index = of(*index);
+        }
         OpKind::Binary { lhs, rhs, .. } => {
             *lhs = of(*lhs);
             *rhs = of(*rhs);
