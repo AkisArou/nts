@@ -418,7 +418,14 @@ fn literal(value: f64) -> String {
 /// to say to each other beyond this string.
 fn native_harness(testable: &[Testable]) -> String {
     let mut main = String::from(
-        "#include <math.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\
+        // Deliberately *not* `<stdlib.h>`. The generated program includes
+        // `nts_runtime.h` and nothing else, so a TypeScript function called
+        // `div` or `abs` keeps its name -- and a harness that pulled in more
+        // headers than the program does would collide on names the program was
+        // entitled to use. `<string.h>` is here for `memcpy` and declares
+        // nothing a program is likely to want.
+        "#include <math.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n\
+         long strtol(const char *, char **, int);\n\
          #include \"nts_runtime.h\"\n\n\
          /* A string is compared by its code units, which is what a JavaScript\n\
           * string is. Printing them beats printing the text: it needs no\n\
@@ -478,7 +485,7 @@ fn native_harness(testable: &[Testable]) -> String {
     // anything to compare there.
     main.push_str(
         "int main(int argc, char **argv) {\n\
-         \x20   long from = argc > 1 ? atol(argv[1]) : 0;\n\
+         \x20   long from = argc > 1 ? strtol(argv[1], 0, 10) : 0;\n\
          \x20   long at_case = -1;\n",
     );
     for (one, at, tuple) in interleaved(testable) {
