@@ -141,17 +141,27 @@ fn settle(
             .collect();
 
         for (caller, func) in program.funcs.iter().enumerate() {
-            for value in &func.values {
-                let OpKind::Call { callee, args } = &value.kind else {
-                    continue;
-                };
-                for callee in targets_of(callee, &by_name, in_slot) {
-                    if outward.contains(program.funcs[callee].name.as_str()) {
+            // By block, because what an argument is worth is what is known
+            // *where the call happens* rather than where the value was defined.
+            // A loop counter is `[0, 8]` at its definition -- the exit value is
+            // one of the things it can be -- and `[0, 7]` inside the body,
+            // which is the only place the call is. Joining the definition's
+            // fact hands the callee a bound one past the end, and an index one
+            // past the end is exactly the one a bounds check cannot remove.
+            for (at, block) in func.blocks.iter().enumerate() {
+                let at = super::BlockId(u32::try_from(at).unwrap_or(0));
+                for value in &block.ops {
+                    let OpKind::Call { callee, args } = &func.values[value.0 as usize].kind else {
                         continue;
-                    }
-                    for (slot, arg) in args.iter().enumerate() {
-                        if let Some(slot) = params[callee].get_mut(slot) {
-                            *slot = slot.join(analyses[caller].get(*arg));
+                    };
+                    for callee in targets_of(callee, &by_name, in_slot) {
+                        if outward.contains(program.funcs[callee].name.as_str()) {
+                            continue;
+                        }
+                        for (slot, arg) in args.iter().enumerate() {
+                            if let Some(slot) = params[callee].get_mut(slot) {
+                                *slot = slot.join(analyses[caller].get_at(at, *arg));
+                            }
                         }
                     }
                 }

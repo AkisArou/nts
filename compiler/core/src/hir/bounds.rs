@@ -32,7 +32,11 @@ use super::flow::Analysis;
 use super::{BlockId, Func, OpKind, ValueId};
 
 /// Turn off the checks that cannot fail, and report how many.
-pub fn eliminate_checks(func: &mut Func, analysis: &Analysis) -> usize {
+pub fn eliminate_checks(
+    func: &mut Func,
+    analysis: &Analysis,
+    field_lengths: &super::fields::FieldFacts,
+) -> usize {
     let mut removed = 0;
     let blocks = std::mem::take(&mut func.blocks);
 
@@ -58,7 +62,7 @@ pub fn eliminate_checks(func: &mut Func, analysis: &Analysis) -> usize {
             else {
                 continue;
             };
-            if !provably_in_bounds(func, analysis, at, array, index_value) {
+            if !provably_in_bounds(func, analysis, field_lengths, at, array, index_value) {
                 continue;
             }
             match &mut func.values[value.0 as usize].kind {
@@ -81,6 +85,7 @@ pub fn eliminate_checks(func: &mut Func, analysis: &Analysis) -> usize {
 fn provably_in_bounds(
     func: &Func,
     analysis: &Analysis,
+    field_lengths: &super::fields::FieldFacts,
     at: BlockId,
     array: ValueId,
     index: ValueId,
@@ -98,7 +103,7 @@ fn provably_in_bounds(
     // Where the length is known, the interval settles it. The *smallest*
     // possible length is what has to exceed the index, since a larger one only
     // helps.
-    let length = length_facts(func, analysis, at, array);
+    let length = length_facts(func, analysis, field_lengths, at, array);
     if !length.is_bottom() && facts.hi < length.lo {
         return true;
     }
@@ -117,8 +122,24 @@ fn provably_in_bounds(
 /// one provably in bounds without any reasoning about the loop. The count is of
 /// UTF-16 code units and not of characters, because that is what `length` means:
 /// an emoji is two.
-fn length_facts(func: &Func, analysis: &Analysis, at: BlockId, array: ValueId) -> Facts {
+fn length_facts(
+    func: &Func,
+    analysis: &Analysis,
+    field_lengths: &super::fields::FieldFacts,
+    at: BlockId,
+    array: ValueId,
+) -> Facts {
     match &func.values[array.0 as usize].kind {
+        // The array a field points at, whose length `hir::fields` works out
+        // over the whole program -- the only way to know it, since a method
+        // that reads `this.flags` has no allocation in front of it to look at.
+        OpKind::FieldGet { object, field } => match &func.values[object.0 as usize].ty {
+            super::HirType::Managed(super::ManagedType::Object(ty)) => field_lengths
+                .get(&(*ty, *field))
+                .copied()
+                .unwrap_or(Facts::BOTTOM),
+            _ => Facts::BOTTOM,
+        },
         OpKind::ArrayNew { length } if super::allocated_length_is_exact(func, array) => {
             analysis.get_at(at, *length)
         }

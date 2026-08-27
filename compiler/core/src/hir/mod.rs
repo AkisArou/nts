@@ -1007,8 +1007,9 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         // code unit stayed floating point until this ran, and running it after
         // specialization was too late to matter. It runs again at the end, for
         // what specialization itself sharpens.
+        let field_lengths = fields::lengths(&program, &analyses);
         for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
-            checks_removed += bounds::eliminate_checks(func, analysis);
+            checks_removed += bounds::eliminate_checks(func, analysis, &field_lengths);
         }
 
         let analyses = interprocedural::analyze_program(&program, options.roots);
@@ -1055,8 +1056,9 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // and folding are what sharpen the index.
     if specialize_numbers {
         let analyses = interprocedural::analyze_program(&program, options.roots);
+        let field_lengths = fields::lengths(&program, &analyses);
         for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
-            checks_removed += bounds::eliminate_checks(func, analysis);
+            checks_removed += bounds::eliminate_checks(func, analysis, &field_lengths);
         }
     }
     let checks_kept = program

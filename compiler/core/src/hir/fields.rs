@@ -101,6 +101,127 @@ pub fn analyze(program: &Program, analyses: &[Analysis]) -> FieldFacts {
     visible
 }
 
+/// How long the array in each `(type, field)` is, where that is knowable.
+///
+/// The length of an array a *field* points at is not written down where the
+/// read is -- unlike a local, which has its allocation in front of it. So this
+/// is the only way an index into `this.flags` can be proven in bounds, and
+/// every remaining bounds check in the Are We Fast Yet micro benchmarks is one
+/// of those.
+///
+/// The soundness condition is [`super::allocated_length_is_exact`]'s, applied
+/// program-wide: an array whose reference is handed to a call may come back
+/// longer, and the object does not move, so every reference sees the new
+/// length.
+#[must_use]
+pub fn lengths(program: &Program, analyses: &[Analysis]) -> FieldFacts {
+    let mut stored: FxHashMap<(usize, u32), Facts> = FxHashMap::default();
+    let mut grown: rustc_hash::FxHashSet<(usize, u32)> = rustc_hash::FxHashSet::default();
+
+    for (index, func) in program.funcs.iter().enumerate() {
+        for op in &func.values {
+            match &op.kind {
+                OpKind::FieldSet {
+                    object,
+                    field,
+                    value,
+                } => {
+                    let Some(layout) = layout_of(program, &func.values[object.0 as usize].ty)
+                    else {
+                        continue;
+                    };
+                    let entry: &mut Facts = stored.entry((layout, *field)).or_insert(Facts::BOTTOM);
+                    *entry = entry.join(allocated_length(func, &analyses[index], *value));
+                }
+                // A reference that leaves the function can be grown by whatever
+                // receives it.
+                OpKind::Call { args, .. } => {
+                    for arg in args {
+                        let OpKind::FieldGet { object, field } = &func.values[arg.0 as usize].kind
+                        else {
+                            continue;
+                        };
+                        if let Some(layout) = layout_of(program, &func.values[object.0 as usize].ty)
+                        {
+                            grown.insert((layout, *field));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut visible: FieldFacts = FxHashMap::default();
+    for layout in &program.layouts {
+        for field in 0..u32::try_from(layout.fields.len()).unwrap_or(0) {
+            if !matches!(
+                layout.fields[field as usize].ty,
+                HirType::Managed(ManagedType::Array(_))
+            ) {
+                continue;
+            }
+            // Every layout a store through a base-typed pointer could land in.
+            let mut length = Facts::BOTTOM;
+            for (other, candidate) in program.layouts.iter().enumerate() {
+                if !shares_storage(layout, candidate, field) {
+                    continue;
+                }
+                if grown.contains(&(other, field)) {
+                    length = Facts::TOP;
+                    break;
+                }
+                length = length.join(stored.get(&(other, field)).copied().unwrap_or(Facts::TOP));
+            }
+            if length.is_bottom() || length == Facts::TOP {
+                continue;
+            }
+            for ty in &layout.types {
+                visible.insert((*ty, field), length);
+            }
+        }
+    }
+    visible
+}
+
+/// How long the array a value refers to is, where that is written down.
+///
+/// `new Array(8)` says it. So does `new Array(8).fill(true)`: `fill` returns the
+/// array it was handed, which is why `xs.fill(0).length` means something, and it
+/// is how three of the Are We Fast Yet benchmarks make their working set.
+fn allocated_length(func: &super::Func, analysis: &Analysis, value: super::ValueId) -> Facts {
+    let mut at = value;
+    for _ in 0..8 {
+        match &func.values[at.0 as usize].kind {
+            OpKind::ArrayNew { length } => return analysis.get(*length),
+            // The absent reference contributes no length, and excluding it
+            // costs no safety: reading `length` through a null array faults,
+            // and so does the bounds check that would have read it. A
+            // constructor writing `this.rows = null` before the real array
+            // arrives is otherwise enough to make every index into that field
+            // checked forever.
+            OpKind::ConstNull => return Facts::BOTTOM,
+            OpKind::Call {
+                callee: super::Callee::External(name),
+                args,
+            } if RETURNS_ITS_ARRAY.contains(&name.as_str()) => match args.first() {
+                Some(receiver) => at = *receiver,
+                None => return Facts::TOP,
+            },
+            _ => return Facts::TOP,
+        }
+    }
+    Facts::TOP
+}
+
+/// Runtime helpers that hand back the array they were given.
+const RETURNS_ITS_ARRAY: &[&str] = &[
+    "nts_array_fill",
+    "nts_array_fill_bool",
+    "nts_array_fill_ref",
+    "nts_array_reverse",
+];
+
 /// Whether two layouts put `field` at the same place, holding the same thing.
 ///
 /// Agreement on the whole prefix, which under base-first layout is exactly when

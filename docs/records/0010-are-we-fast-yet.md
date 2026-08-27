@@ -128,19 +128,45 @@ Net across the seven benchmarks it was inside the run-to-run spread on this
 machine. Two analyses on every compile and two more things that can be wrong is
 not worth an unmeasurable difference.
 
-**Field-held array lengths.** `this.flags[i]` is bounds-checked because the
-length of an array a *field* points at is not written down where the read is —
-unlike a local, which has its allocation in front of it. Computing it per
-`(layout, field)` over the whole program is sound under the condition
-`allocated_length_is_exact` already uses: an array handed to a call may come
-back longer.
+**Field-held array lengths.** *This one was wrong to revert, and the record of
+being wrong is the useful part.*
 
-It removed no checks at all. `queens` emits seven and kept all seven: three are
-genuinely unprovable (`freeMaxs[c + r]` with an unbounded `c`), and the rest did
-not fire for a reason worth chasing only if the payoff were larger. The measured
-result was zero checks removed across every benchmark in the suite, which is a
-much better measurement than a timer on a machine whose C++ column moves 10%
-between runs.
+`this.flags[i]` is bounds-checked because the length of an array a *field*
+points at is not written down where the read is — unlike a local, which has its
+allocation in front of it. Computing it per `(layout, field)` over the whole
+program is sound under the condition `allocated_length_is_exact` already uses:
+an array handed to a call may come back longer.
+
+The first version removed no checks at all, and "zero checks removed" looked
+like a decisive negative measurement. It was a decisive measurement of a broken
+pass. Two things were wrong, and both are about the *other* half of the proof:
+
+- The constructor writes `this.freeRows = null` before the real array arrives,
+  and that store joined into the length, making it unknown forever. A null
+  contributes no length, and excluding it costs no safety: reading `length`
+  through a null array faults, and so does the bounds check that would have
+  read it.
+- A parameter's facts were joined from the argument's fact *at its definition*
+  rather than at the call. A loop counter is `[0, 8]` where it is defined — the
+  exit value is one of the things it can be — and `[0, 7]` inside the body,
+  which is the only place the call is. One past the end is exactly the bound a
+  bounds check cannot remove.
+
+With both fixed:
+
+| | before | after |
+| --- | ---: | ---: |
+| awfy-queens vs C++ | 3.25x | **1.95x** |
+| awfy-queens vs V8 | 1.03x | **0.67x** |
+
+`permute` and `towers` keep their checks, and correctly: both index by a value
+that descends through a recursion, so the interval domain widens to `-inf`
+without a termination argument. C++ does not check at all, which is a different
+thing from proving.
+
+The lesson is narrower than "measure": it is that a measurement of *zero* is the
+one most likely to be measuring your own bug, and deserves a look at why before
+it is believed.
 
 ## What is not ported yet
 
