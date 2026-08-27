@@ -47,34 +47,38 @@ export function makeCommon() {
       throw new Skip(reason ?? "skipped");
     },
 
+    // A regular function, not an arrow: node's listeners are called with the
+    // emitter as `this`, and a wrapper that dropped it would make
+    // `this.listeners('baz')` inside a test throw. Forwarding `this` is part
+    // of the contract, not a detail.
     mustCall(fn = () => {}, expected = 1) {
       const record = { expected, actual: 0, name: fn.name || "anonymous" };
       pending.push(record);
-      return (...args) => {
+      return function (...args) {
         record.actual++;
-        return fn(...args);
+        return fn.apply(this, args);
       };
     },
 
     mustCallAtLeast(fn = () => {}, minimum = 1) {
       const record = { expected: minimum, actual: 0, atLeast: true, name: fn.name || "anonymous" };
       pending.push(record);
-      return (...args) => {
+      return function (...args) {
         record.actual++;
-        return fn(...args);
+        return fn.apply(this, args);
       };
     },
 
     mustNotCall(message = "should not have been called") {
-      return () => {
+      return function () {
         throw new Error(message);
       };
     },
 
     mustSucceed(fn = () => {}, expected = 1) {
-      return this.mustCall((err, ...rest) => {
+      return this.mustCall(function (err, ...rest) {
         if (err) throw err;
-        return fn(...rest);
+        return fn.apply(this, rest);
       }, expected);
     },
 

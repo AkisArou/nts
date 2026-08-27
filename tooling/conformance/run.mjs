@@ -89,8 +89,17 @@ const notApplicable = readList(join(ROOT, "runtime/node", moduleName, "not-appli
 const extraPath = join(ROOT, "runtime/node", moduleName, "extra-tests");
 const extra = [...readList(extraPath).keys()];
 
+// `test-<module>.js` and `test-<module>-*.js` by default. Node does not name
+// them all that way -- `events` has thirty-odd `test-event-emitter-*.js` -- so a
+// module may say which files are its own in a `test-pattern` file holding one
+// regular expression.
+const patternPath = join(ROOT, "runtime/node", moduleName, "test-pattern");
+const pattern = existsSync(patternPath)
+  ? new RegExp(readFileSync(patternPath, "utf8").trim())
+  : new RegExp(`^test-${moduleName}(-.*)?\\.js$`);
+
 const files = [
-  ...readdirSync(SUITE).filter((f) => new RegExp(`^test-${moduleName}(-.*)?\\.js$`).test(f)),
+  ...readdirSync(SUITE).filter((f) => pattern.test(f)),
   ...extra,
 ]
   .filter((f, i, all) => all.indexOf(f) === i)
@@ -113,6 +122,21 @@ for (const name of files) {
     const line = out.trim().split("\n").filter((l) => l.startsWith("{")).pop();
     result = line ? JSON.parse(line) : { kind: "fail", why: "no result from the child" };
   } catch (e) {
+    // A non-zero exit *after* a result was reported means an exit handler
+    // threw. Many of node's tests do their real assertion in
+    // `process.on('exit')`, so this is a failure the child could not know
+    // about when it printed.
+    const printed = (e.stdout ?? "").trim().split("\n").filter((l) => l.startsWith("{")).pop();
+    if (printed) {
+      const reported = JSON.parse(printed);
+      const why = (e.stderr ?? "").split("\n").find((l) => l.includes("Error") || l.includes("Assertion"));
+      rows.push(
+        reported.kind === "pass"
+          ? { name, kind: "fail", why: (why ?? "an exit handler failed").trim().slice(0, 110), detail: e.stderr }
+          : { name, ...reported },
+      );
+      continue;
+    }
     // A child that died rather than reported: a crash, a timeout, or a
     // `process.exit` inside the test. All are failures, and saying which
     // matters more than the exit code.

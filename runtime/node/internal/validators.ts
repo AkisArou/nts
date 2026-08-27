@@ -5,7 +5,7 @@
 // wrapper, and JavaScript has no types. `readFileSync(42)` has to throw the
 // error node throws, not read a file named "42".
 
-import { ERR_INVALID_ARG_TYPE } from "./errors.ts";
+import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE } from "./errors.ts";
 
 export function validateString(value: unknown, name: string): void {
   if (typeof value !== "string") {
@@ -28,5 +28,21 @@ export function validateNumber(value: unknown, name: string): void {
 export function validateBoolean(value: unknown, name: string): void {
   if (typeof value !== "boolean") {
     throw new ERR_INVALID_ARG_TYPE(name, "boolean", value);
+  }
+}
+
+export function validateFunction(value: unknown, name: string): void {
+  if (typeof value !== "function") {
+    throw new ERR_INVALID_ARG_TYPE(name, "Function", value);
+  }
+}
+
+/** `validateNumber` with an optional lower bound, node's `min` parameter. */
+export function validateNumberRange(value: unknown, name: string, min?: number): void {
+  if (typeof value !== "number") {
+    throw new ERR_INVALID_ARG_TYPE(name, "number", value);
+  }
+  if (Number.isNaN(value) || (min !== undefined && value < min)) {
+    throw new ERR_OUT_OF_RANGE(name, min === undefined ? "a number" : `>= ${min}`, value);
   }
 }

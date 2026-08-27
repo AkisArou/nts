@@ -23,9 +23,32 @@ const HERE = dirname(new URL(import.meta.url).pathname);
 const ROOT = resolvePath(HERE, "../..");
 const moduleDir = join(ROOT, "runtime/node", moduleName);
 
+/**
+ * Report, then let the process exit on its own.
+ *
+ * Deliberately not `process.exit`: many of node's tests assert inside a
+ * `process.on('exit')` handler, and killing the process here would skip them --
+ * the child would report a pass that nothing had checked. Exiting normally runs
+ * those handlers, and a throw from one sets a non-zero exit status that the
+ * parent turns into a failure.
+ */
 function report(result) {
   process.stdout.write(`${JSON.stringify(result)}\n`);
-  process.exit(0);
+}
+
+/**
+ * Let the loop turn before deciding whether a `mustCall` was called.
+ *
+ * `process.emitWarning` delivers on the next tick, and a test that expects a
+ * warning is not wrong just because we asked too early. Three turns covers a
+ * microtask, a `setImmediate` and a zero timer, which is everything these
+ * tests use.
+ */
+async function settle() {
+  for (let i = 0; i < 3; i++) {
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
 }
 
 let underTest;
@@ -88,6 +111,7 @@ try {
   );
   run(shimmedRequire, module, module.exports, file, dirname(file),
       process, globalThis, globalThis, console);
+  await settle();
   const missed = checkPending();
   if (missed.length > 0) {
     const m = missed[0];
@@ -97,10 +121,17 @@ try {
 } catch (e) {
   if (e instanceof Skip || e?.name === "Skip") {
     report({ kind: "skip", why: e.message });
+    process.exit(0);
   }
   report({
     kind: "fail",
     why: (e?.message ?? String(e)).split("\n").find((l) => l.trim())?.trim() ?? "",
-    detail: (e?.message ?? String(e)).split("\n").slice(0, 24).join("\n"),
+    // The message and the frames that are ours. Node's own frames and the
+    // harness's are noise; the test file and the module under test are not.
+    detail: [
+      (e?.message ?? String(e)).split("\n").slice(0, 16).join("\n"),
+      ...(e?.stack ?? "").split("\n").filter((l) => l.includes("/runtime/node/") || l.includes("/test/parallel/")).slice(0, 6),
+    ].join("\n"),
   });
 }
+

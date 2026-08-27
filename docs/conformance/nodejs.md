@@ -49,7 +49,8 @@ rather than inferred by a rule, so the number can be audited.
 | --- | :---: | :---: | --- |
 | `path` | **15 / 16** | 1 / 39 | complete but for `matchesGlob`; the skip is Windows-only |
 | `os` | **4 / 4** | 16 / 31 | complete |
-| `fs` | 11 / 260 | 39 / 68 | the sync surface; async, streams and `Buffer` are absent |
+| `events` | **26 / 33** | 0 / 47 | complete but for domains, `EventTarget` and the promise forms |
+| `fs` | 9 / 260 | 39 / 68 | the sync surface; async, streams and `Buffer` are absent |
 | `querystring` | — | — | not started |
 | `url` | — | — | not started |
 | `buffer` | — | — | not started |
@@ -113,6 +114,42 @@ right on one and silently wrong on the other.
 Where node's C++ binding returns one flat `v8::Array` of mixed strings and
 numbers, ours returns one typed array per column and the TypeScript assembles
 the same objects. The result is identical and the declarations stay typed.
+
+## `events`
+
+`EventEmitter` complete, from node v24.20.0 `lib/events.js`: `on`,
+`addListener`, `once`, `prependListener`, `prependOnceListener`,
+`removeListener`, `off`, `removeAllListeners`, `emit`, `listeners`,
+`rawListeners`, `listenerCount`, `eventNames`, `setMaxListeners`,
+`getMaxListeners`, the `defaultMaxListeners` accessor, `errorMonitor`, and the
+module-level `once`, `getEventListeners`, `getMaxListeners`, `listenerCount`
+and `setMaxListeners`.
+
+26 of 33 applicable files pass. What is left:
+
+| failing | needs |
+| --- | --- |
+| `test-event-emitter-subclass.js` | `EventEmitter.call(this)` — see below |
+| `test-event-emitter-no-error-provided-to-error-event.js` | `node:domain` integration |
+| `test-events-getmaxlisteners.js` | `EventTarget` |
+| `test-events-once.js`, `test-event-capture-rejections.js` | promises |
+| `test-events-uncaught-exception-stack.js` | stack rewriting for a rethrown `error` |
+
+Three more skip on `internal/event_target`.
+
+**The one deliberate difference.** Node's `EventEmitter` is a *function*, so
+ES5-era subclassing writes `EventEmitter.call(this)`. Ours is a `class`, which
+cannot be called without `new`. Keeping the class is the right TypeScript and
+the right shape for a compiler that lays out classes; the alternative is a
+function with a prototype assembled by hand, which is neither. `class X extends
+EventEmitter` works exactly as it does in node.
+
+Two representation choices are upstream's rather than ours, and both are
+load-bearing. The listener store holds *either* one listener or an array,
+because `emit` branches on it and a single-listener emitter then allocates no
+array. And the store has a null prototype, so an event named `toString` is a
+key that is absent until something registers it rather than an inherited
+method.
 
 ## `fs`
 

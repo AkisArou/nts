@@ -112,19 +112,50 @@ const kTypes = [
   "symbol",
 ];
 
+/**
+ * `a`, `a or b`, `a, b, or c`. Node `lib/internal/errors.js`'s `formatList`
+ * with the conjunction fixed to "or", which is the only one these errors use.
+ */
+function formatList(items: string[]): string {
+  if (items.length <= 2) {
+    return items.join(" or ");
+  }
+  return `${items.slice(0, -1).join(", ")}, or ${items[items.length - 1]}`;
+}
+
 /** `The "path" argument must be of type string. Received type number (42)`. */
 export class ERR_INVALID_ARG_TYPE extends TypeError {
   readonly code = "ERR_INVALID_ARG_TYPE";
 
-  constructor(name: string, expected: string, actual: unknown) {
-    // node `lib/internal/errors.js:1390`, narrowed to a single expected type,
-    // which is every use in the modules built so far. A list formats as
-    // "one of type a or b" and belongs here when a caller needs one.
+  constructor(name: string, expected: string | string[], actual: unknown) {
+    // node `lib/internal/errors.js:1390`. Expected types split into the ones
+    // `typeof` can name and the ones that are classes, because the two read
+    // differently: "of type string" against "an instance of Buffer".
     const kind = name.includes(".") ? "property" : "argument";
     const subject = name.endsWith(" argument") ? `${name} ` : `"${name}" ${kind} `;
-    const described = kTypes.includes(expected)
-      ? `of type ${expected.toLowerCase()}`
-      : `an instance of ${expected}`;
+
+    const wanted = Array.isArray(expected) ? expected : [expected];
+    const types: string[] = [];
+    const instances: string[] = [];
+    for (const one of wanted) {
+      if (kTypes.includes(one)) {
+        types.push(one.toLowerCase());
+      } else {
+        instances.push(one);
+      }
+    }
+
+    let described = "";
+    if (types.length > 0) {
+      described += `${types.length > 1 ? "one of type" : "of type"} ${formatList(types)}`;
+      if (instances.length > 0) {
+        described += " or ";
+      }
+    }
+    if (instances.length > 0) {
+      described += `an instance of ${formatList(instances)}`;
+    }
+
     super(`The ${subject}must be ${described}. Received ${determineSpecificType(actual)}`);
     this.name = "TypeError";
   }
@@ -176,7 +207,7 @@ export class ERR_OUT_OF_RANGE extends RangeError {
  * failed a range check is a number, a bigint, or something simple enough to
  * name.
  */
-function inspectValue(value: unknown): string {
+export function inspectValue(value: unknown): string {
   if (typeof value === "string") {
     return JSON.stringify(value).replace(/^"|"$/g, "'");
   }
@@ -210,5 +241,23 @@ export class ERR_INVALID_ARG_VALUE extends TypeError {
     const kind = name.includes(".") ? "property" : "argument";
     super(`The ${kind} '${name}' ${reason}. Received ${determineSpecificType(value)}`);
     this.name = "TypeError";
+  }
+}
+
+/** `The "listener" argument must be of type function. Received …`. */
+export class ERR_INVALID_ARG_TYPE_FUNCTION extends ERR_INVALID_ARG_TYPE {
+  constructor(name: string, actual: unknown) {
+    super(name, "function", actual);
+  }
+}
+
+/** `Unhandled error. (…)` — an `error` event with nobody listening. */
+export class ERR_UNHANDLED_ERROR extends Error {
+  readonly code = "ERR_UNHANDLED_ERROR";
+  context: unknown;
+
+  constructor(err?: string) {
+    super(`Unhandled error.${err === undefined ? "" : ` (${err})`}`);
+    this.name = "Error";
   }
 }
