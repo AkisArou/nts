@@ -64,16 +64,16 @@ What is stopping the rest, in order:
 | --- | ---: |
 | a parameter of unrepresentable type (a union) | 19 |
 | a name declared outside this function | 11 |
-| a function without a body | 6 |
 | a parameter of unrepresentable type (the type parameter `T`) | 6 |
 | a parameter of unrepresentable type (a structured type (flags 0x100000)) | 5 |
 | a parameter of unrepresentable type (any) | 5 |
+| a function without a body | 4 |
 | a module-scope variable whose initializer is not constant | 4 |
 | a module-scope variable with no initializer | 4 |
+| this statement | 4 |
 | a class of unrepresentable type (a structured type (flags 0x100000)) | 3 |
-| this statement | 3 |
+| an object with an optional property | 3 |
 | a parameter of unrepresentable type (a tuple) | 2 |
-| a parameter of unrepresentable type (an array type) | 2 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->

@@ -526,6 +526,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let closures = collect_closures(snapshot);
     let hierarchy = collect_hierarchy(snapshot, &closures);
     lowered.program.globals.clone_from(&module.globals);
+    let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
@@ -559,6 +560,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
                     Ok(func) => lowered.program.funcs.push(func),
                     Err(diagnostic) => lowered.diagnostics.push(diagnostic),
                 }
+                wanted.extend(builder.used_closures.iter().copied());
                 collect_layouts(&mut lowered.program, builder.layouts);
             }
             continue;
@@ -577,23 +579,32 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => lowered.diagnostics.push(diagnostic),
         }
+        wanted.extend(builder.used_closures.iter().copied());
         collect_layouts(&mut lowered.program, builder.layouts);
     }
 
-    // Each closure last, and each as a function of its own. Nothing about it
-    // depends on the function that allocates it -- that is the point of putting
-    // the captures in an object rather than on a chain of frames.
-    for (index, closure) in closures.iter().enumerate() {
+    // Each closure something allocated, and each as a function of its own.
+    // Nothing about it depends on the function that allocates it -- that is the
+    // point of putting the captures in an object rather than on a chain of
+    // frames.
+    //
+    // A worklist rather than a pass, because a closure body can allocate
+    // another one. Taken in index order, so one compiler on one input emits its
+    // functions in one order.
+    let mut done: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
+    while let Some(index) = wanted.iter().copied().find(|at| !done.contains(at)) {
+        done.insert(index);
         let mut builder = FuncBuilder::within(
             snapshot,
             module.clone(),
             hierarchy.clone(),
             closures.clone(),
         );
-        match builder.lower_closure(index, closure) {
+        match builder.lower_closure(index, &closures[index]) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => lowered.diagnostics.push(diagnostic),
         }
+        wanted.extend(builder.used_closures.iter().copied());
         collect_layouts(&mut lowered.program, builder.layouts);
     }
 
@@ -867,6 +878,13 @@ struct FuncBuilder<'a> {
     /// Every arrow function in the program, so that one written here can be
     /// matched to the class that was collected for it.
     closures: Vec<ClosureInfo>,
+    /// Which of them this function allocated.
+    ///
+    /// A closure nobody creates is not lowered at all. That is the rule
+    /// module-scope declarations already follow, for the same reason: a file
+    /// that declares one thing this compiler cannot represent should not be
+    /// reported as failing on it unless something reaches it.
+    used_closures: Vec<usize>,
 }
 
 impl<'a> FuncBuilder<'a> {
@@ -887,6 +905,7 @@ impl<'a> FuncBuilder<'a> {
             base: None,
             module: ModuleScope::default(),
             closures: Vec::new(),
+            used_closures: Vec::new(),
         }
     }
 
@@ -2584,6 +2603,8 @@ impl<'a> FuncBuilder<'a> {
         if let Some(reason) = info.refusal {
             return Err(self.unsupported(id, reason));
         }
+
+        self.used_closures.push(index);
 
         let ty = HirType::Managed(ManagedType::Object(closure_type(index)));
         let origin = self.origin(id);

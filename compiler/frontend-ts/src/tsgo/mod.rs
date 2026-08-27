@@ -850,28 +850,34 @@ impl TsgoApi {
     }
 }
 
+/// Start tsgo beside the config file it is being asked about, and shake hands.
+fn connect(executable: &Utf8Path, tsconfig: &Utf8Path) -> Result<Client, TsgoError> {
+    let cwd = tsconfig.parent().unwrap_or(Utf8Path::new("."));
+    let mut client = Client::spawn(executable, cwd)?;
+    client.initialize()?;
+    Ok(client)
+}
+
+/// A path tsgo can resolve.
+///
+/// It resolves what it is given against *its own* working directory, which is
+/// set to the config file's own directory -- so a relative path would be joined
+/// to itself. Making it absolute here is the one place that fixes every caller.
+fn absolute(path: &Utf8Path) -> Utf8PathBuf {
+    if path.is_absolute() {
+        return path.to_owned();
+    }
+    Utf8PathBuf::from_path_buf(std::env::current_dir().unwrap_or_default())
+        .map_or_else(|_| path.to_owned(), |cwd| cwd.join(path))
+}
+
 impl SemanticSource for TsgoApi {
     fn snapshot(&mut self, tsconfig: &Utf8Path) -> Result<SemanticSnapshot, SnapshotError> {
         let started = Instant::now();
 
-        // tsgo resolves the path it is given against *its own* working
-        // directory, which is set below to the file's own directory -- so a
-        // relative path would be joined to itself. It wants an absolute one,
-        // and here is the single place that can be made true.
-        let absolute;
-        let tsconfig = if tsconfig.is_absolute() {
-            tsconfig
-        } else {
-            absolute = Utf8PathBuf::from_path_buf(std::env::current_dir().unwrap_or_default())
-                .map(|cwd| cwd.join(tsconfig))
-                .unwrap_or_else(|_| tsconfig.to_owned());
-            &absolute
-        };
-
+        let tsconfig = &absolute(tsconfig);
         let cwd = tsconfig.parent().unwrap_or(Utf8Path::new("."));
-        let mut client = Client::spawn(&self.executable, cwd)?;
-
-        client.initialize()?;
+        let mut client = connect(&self.executable, tsconfig)?;
         let opened = client.open_project(tsconfig)?;
 
         let mut snapshot = SemanticSnapshot {
