@@ -231,9 +231,10 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
 
     let specialized = out.join(format!("{name}.specialized.c"));
     let plain = out.join(format!("{name}.plain.c"));
-    std::fs::write(&specialized, emit(&tsconfig, true, provider)?)
+    let entry = entry_points(case)?;
+    std::fs::write(&specialized, emit(&tsconfig, &entry, true, provider)?)
         .with_context(|| format!("writing {specialized}"))?;
-    std::fs::write(&plain, emit(&tsconfig, false, provider)?)
+    std::fs::write(&plain, emit(&tsconfig, &entry, false, provider)?)
         .with_context(|| format!("writing {plain}"))?;
 
     let mut results = Vec::new();
@@ -294,19 +295,75 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
 
 /// The compiler's own pipeline, not a shell out to the CLI — a benchmark that
 /// measured a stale generated file would be worse than no benchmark.
-fn emit(tsconfig: &Utf8Path, specialize: bool, provider: hir::Provider) -> Result<String> {
+/// What the C harness calls, read off the harness.
+///
+/// A benchmark is an executable and its entry points are exactly the functions
+/// `nts.cpp` declares -- it is the only caller the compiled program has. Taking
+/// them from the file rather than fixing a name keeps a case free to call its
+/// workload whatever the workload is.
+fn entry_points(case: &Utf8Path) -> Result<Vec<String>> {
+    let source = std::fs::read_to_string(case.join("nts.cpp"))
+        .with_context(|| format!("reading {case}/nts.cpp"))?;
+    let mut names = Vec::new();
+    let mut inside = false;
+    for line in source.lines() {
+        let line = line.trim();
+        if line.starts_with("extern \"C\"") {
+            inside = true;
+            continue;
+        }
+        if inside && line == "}" {
+            inside = false;
+            continue;
+        }
+        // `double scan(double seed);` -- the name is what precedes the paren.
+        if let Some(open) = line.find('(')
+            && inside
+            && line.ends_with(");")
+            && let Some(name) = line[..open].split_whitespace().last()
+        {
+            names.push(name.trim_start_matches('*').to_owned());
+        }
+    }
+    if names.is_empty() {
+        bail!("{case}/nts.cpp declares no entry point");
+    }
+    Ok(names)
+}
+
+fn emit(
+    tsconfig: &Utf8Path,
+    entry: &[String],
+    specialize: bool,
+    provider: hir::Provider,
+) -> Result<String> {
     let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(tsconfig)?;
     if snapshot.has_errors() {
         bail!("{tsconfig} does not typecheck");
     }
 
+    // A benchmark is an *executable* whose entry point is `work`, and RFC §6.8
+    // says an executable's exports are not roots: nothing outside the program
+    // can call them, because there is no outside.
+    //
+    // The default is the library answer, which is right when the product is
+    // unknown and wrong here in a way that matters. A class exported so that
+    // `main.ts` can import it made every one of its methods a root, and a root
+    // is a wall: its parameters are as wide as their declared types, because
+    // the next caller is a linker away. `Sieve#sieve(flags, size)` had `size`
+    // unbounded and every index in it a double, for a program whose only caller
+    // passes 5000.
+    //
+    // It is the same information the other columns have. clang sees the whole
+    // program under LTO with `bench_run` as its entry; V8 sees the module and
+    // specializes on the types it observes.
     let prepared = match hir::prepare_with(
         &snapshot,
         &hir::Options {
             specialize_numbers: specialize,
             provider,
-            ..hir::Options::default()
+            roots: hir::reachable::Roots::Entry(entry),
         },
     ) {
         Ok(prepared) => prepared,

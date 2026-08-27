@@ -989,7 +989,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         // Analyzed as a program rather than a function at a time: a parameter is
         // written by callers and a call's result by the callee, and neither is
         // visible from inside.
-        let analyses = interprocedural::analyze_program(&program);
+        let analyses = interprocedural::analyze_program(&program, options.roots);
         for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
             // Folding first, because a folded constant is a smaller thing to
             // specialize and because a coercion of a known value should never
@@ -999,7 +999,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
 
         // Re-analyzed, since folding changed what the operations are — and a
         // folded return value is a sharper fact for every caller.
-        let analyses = interprocedural::analyze_program(&program);
+        let analyses = interprocedural::analyze_program(&program, options.roots);
 
         // Bounds first, because proving an access safe *sharpens the facts*
         // rather than merely removing a test. A `charCodeAt` that might be out
@@ -1011,7 +1011,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
             checks_removed += bounds::eliminate_checks(func, analysis);
         }
 
-        let analyses = interprocedural::analyze_program(&program);
+        let analyses = interprocedural::analyze_program(&program, options.roots);
         for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
             let report = specialize::specialize(func, analysis);
             specialized += report.specialized;
@@ -1054,7 +1054,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // a check is removed only where the index was proven, and specialization
     // and folding are what sharpen the index.
     if specialize_numbers {
-        let analyses = interprocedural::analyze_program(&program);
+        let analyses = interprocedural::analyze_program(&program, options.roots);
         for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
             checks_removed += bounds::eliminate_checks(func, analysis);
         }

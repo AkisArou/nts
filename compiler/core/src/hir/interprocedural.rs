@@ -74,11 +74,14 @@ struct Crossing {
 
 /// Analyze every function, letting facts cross between them.
 #[must_use]
-pub fn analyze_program(program: &Program) -> Vec<Analysis> {
+pub fn analyze_program(program: &Program, roots: super::reachable::Roots<'_>) -> Vec<Analysis> {
     let in_slot = program.slot_targets();
+    let outward: rustc_hash::FxHashSet<&str> = super::reachable::root_names(program, roots)
+        .into_iter()
+        .collect();
     let mut caps: Vec<FxHashMap<ValueId, Facts>> =
         program.funcs.iter().map(|_| FxHashMap::default()).collect();
-    let mut analyses = settle(program, &in_slot, &caps);
+    let mut analyses = settle(program, &in_slot, &outward, &caps);
 
     for _ in 0..FEEDBACK_CAP {
         let next: Vec<_> = program
@@ -91,7 +94,7 @@ pub fn analyze_program(program: &Program) -> Vec<Analysis> {
             break;
         }
         caps = next;
-        analyses = settle(program, &in_slot, &caps);
+        analyses = settle(program, &in_slot, &outward, &caps);
     }
     analyses
 }
@@ -100,6 +103,7 @@ pub fn analyze_program(program: &Program) -> Vec<Analysis> {
 fn settle(
     program: &Program,
     in_slot: &FxHashMap<u32, Vec<usize>>,
+    outward: &rustc_hash::FxHashSet<&str>,
     caps: &[FxHashMap<ValueId, Facts>],
 ) -> Vec<Analysis> {
     let by_name: FxHashMap<&str, usize> = program
@@ -127,7 +131,7 @@ fn settle(
             .funcs
             .iter()
             .map(|func| {
-                if func.exported {
+                if outward.contains(func.name.as_str()) {
                     // The program's edge. Callers are outside it.
                     declared_params(func)
                 } else {
@@ -142,7 +146,7 @@ fn settle(
                     continue;
                 };
                 for callee in targets_of(callee, &by_name, in_slot) {
-                    if program.funcs[callee].exported {
+                    if outward.contains(program.funcs[callee].name.as_str()) {
                         continue;
                     }
                     for (slot, arg) in args.iter().enumerate() {

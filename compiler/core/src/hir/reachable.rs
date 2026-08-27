@@ -88,10 +88,20 @@ pub fn undeclared<'a>(program: &Program, declared: &'a [String]) -> Vec<&'a str>
         .collect()
 }
 
-/// Remove every function the roots cannot reach, and report how many.
-pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
-    let mut reached: FxHashSet<&str> = FxHashSet::default();
-    let mut pending: Vec<&str> = match roots {
+/// The functions something outside this compilation can call.
+///
+/// Two passes need this and they need the *same* answer. Reachability starts
+/// here; the interprocedural analysis stops here, because a root's parameters
+/// are written by a caller it cannot see and are therefore as wide as their
+/// declared types.
+///
+/// Using `exported` for the second question is what an executable gets wrong.
+/// A class exported so another module can import it makes every one of its
+/// methods exported -- and in an executable, none of them is callable from
+/// outside, because there is no outside.
+#[must_use]
+pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
+    match roots {
         Roots::Entry(names) | Roots::Declared(names) => program
             .funcs
             .iter()
@@ -104,7 +114,13 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             .filter(|func| func.exported)
             .map(|func| func.name.as_str())
             .collect(),
-    };
+    }
+}
+
+/// Remove every function the roots cannot reach, and report how many.
+pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
+    let mut reached: FxHashSet<&str> = FxHashSet::default();
+    let mut pending: Vec<&str> = root_names(program, roots);
     reached.extend(pending.iter().copied());
 
     while let Some(name) = pending.pop() {

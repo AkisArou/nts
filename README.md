@@ -25,31 +25,29 @@ them, so read the ratios rather than the absolute times.
 <!-- benchmarks:start -->
 | case | C++ | nts | nts f64 | V8 | nts/C++ | nts/V8 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| accumulate | 1.37 us | **1.85 us** | 28.59 us | 3.69 us | 1.35x | 0.50x |
-| array-methods | 3.37 us | **2.71 us** | 3.88 us | 5.71 us | 0.80x | 0.47x |
-| arrays | 1.75 us | **1.87 us** | 5.21 us | 2.78 us | 1.07x | 0.67x |
-| awfy-bounce | 4.31 us | **8.79 us** | 12.39 us | 10.92 us | 2.04x | 0.81x |
-| awfy-list | 8.51 us | **8.43 us** | 8.44 us | 13.75 us | 0.99x | 0.61x |
-| awfy-mandelbrot | 23.12 ms | **24.54 ms** | 28.11 ms | 23.27 ms | 1.06x | 1.05x |
-| awfy-permute | 11.51 us | **27.63 us** | 27.60 us | 24.75 us | 2.40x | 1.12x |
-| awfy-queens | 5.57 us | **19.16 us** | 21.33 us | 16.18 us | 3.44x | 1.18x |
-| awfy-sieve | 4.28 us | **16.61 us** | 16.70 us | 9.86 us | 3.88x | 1.68x |
-| awfy-towers | 12.57 us | **24.27 us** | 24.12 us | 37.00 us | 1.93x | 0.66x |
-| checksum | 6.38 us | **6.38 us** | 64.61 us | 8.93 us | 1.00x | 0.72x |
-| closures | 1.23 us | **1.24 us** | 52.76 us | 3.63 us | 1.01x | 0.34x |
-| fib | 343.36 us | **652.44 us** | 633.14 us | 1.06 ms | 1.90x | 0.62x |
-| loop | 1.02 us | **874.2 ns** | 874.9 ns | 1.02 us | 0.86x | 0.86x |
-| mandelbrot | 77.24 us | **77.05 us** | 76.68 us | 78.26 us | 1.00x | 0.98x |
-| objects (rc) | 2.10 us | **2.13 us** | 2.41 us | 2.22 us | 1.01x | 0.96x |
-| strings | 572.3 ns | **1.10 us** | 29.00 us | 3.04 us | 1.92x | 0.36x |
+| accumulate | 1.42 us | **1.93 us** | 29.45 us | 3.70 us | 1.36x | 0.52x |
+| array-methods | 3.80 us | **2.80 us** | 4.04 us | 6.60 us | 0.74x | 0.42x |
+| arrays | 1.83 us | **1.92 us** | 5.53 us | 2.99 us | 1.05x | 0.64x |
+| awfy-bounce | 4.77 us | **8.74 us** | 13.42 us | 12.76 us | 1.83x | 0.69x |
+| awfy-list | 9.40 us | **9.46 us** | 9.37 us | 16.31 us | 1.01x | 0.58x |
+| awfy-mandelbrot | 23.63 ms | **25.02 ms** | 28.65 ms | 23.47 ms | 1.06x | 1.07x |
+| awfy-permute | 11.94 us | **27.72 us** | 29.49 us | 26.45 us | 2.32x | 1.05x |
+| awfy-queens | 6.14 us | **20.10 us** | 22.08 us | 17.22 us | 3.28x | 1.17x |
+| awfy-sieve | 4.34 us | **8.06 us** | 17.24 us | 10.44 us | 1.86x | 0.77x |
+| awfy-towers | 14.20 us | **26.50 us** | 26.18 us | 39.16 us | 1.87x | 0.68x |
+| checksum | 6.57 us | **6.61 us** | 66.10 us | 7.87 us | 1.01x | 0.84x |
+| closures | 1.42 us | **1.27 us** | 52.64 us | 4.07 us | 0.90x | 0.31x |
+| fib | 377.11 us | **672.94 us** | 591.57 us | 1.13 ms | 1.78x | 0.59x |
+| loop | 1.04 us | **860.8 ns** | 880.0 ns | 1.05 us | 0.83x | 0.82x |
+| mandelbrot | 75.98 us | **79.24 us** | 76.94 us | 79.43 us | 1.04x | 1.00x |
+| objects (rc) | 2.13 us | **2.21 us** | 2.40 us | 2.38 us | 1.03x | 0.93x |
+| strings | 583.3 ns | **1.10 us** | 29.10 us | 3.11 us | 1.88x | 0.35x |
 
 Both ratios are nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, `nts/V8` under 1.00 beats V8.
 
 `nts f64` is the same TypeScript with number specialization switched off. It is the column that makes a speedup a measurement rather than a claim — one program, compiled two ways, run against each other.
 
-The `awfy-` cases are [Are We Fast Yet](https://github.com/smarr/are-we-fast-yet), ported to TypeScript in `benches/awfy`. The suite exists to compare *language implementations* fairly, so its benchmarks are held to a subset of features common across JavaScript, Java, C++, Ruby and Smalltalk — which is this compiler's design point too. Three things keep the port honest: `benches/awfy/fidelity.mjs` runs the upstream `.js` and our `.ts` on the same engine and compares, each benchmark's own `verifyResult` checks against the constant the suite recorded, and their reference column is *their* C++ port rather than anything written here.
-
-`C++` is otherwise one hand-written reference per case, being what a C++ programmer would actually write for that program; each `ref.cpp` says why in a comment. Every variant returns a checksum and the runner refuses to report a case whose variants disagree, so a backend cannot win by computing the wrong answer quickly. Node is timed inside its own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in its column.
+`C++` is one hand-written reference per case, being what a C++ programmer would actually write for that program; each `ref.cpp` says why in a comment. Every variant returns a checksum and the runner refuses to report a case whose variants disagree, so a backend cannot win by computing the wrong answer quickly. Node is timed inside its own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in its column.
 <!-- benchmarks:end -->
 
 ### What it can compile
