@@ -380,6 +380,31 @@ impl<'a> Decomposer<'a> {
             }
         }
 
+        // What a generic type was instantiated at -- and, for the declaration
+        // itself, its own type parameters. The checker substitutes a generic
+        // class's *properties* but not the bodies of its methods, whose AST nodes
+        // every instantiation shares, so zipping the declaration's list against
+        // an instantiation's is what supplies the missing substitution.
+        //
+        // Guarded by the target query, which answers `null` for a type that is
+        // not a reference. Asking for the arguments directly crashes the server
+        // on one -- see `proto::method::GET_TARGET_OF_TYPE`.
+        let arguments = if self
+            .client
+            .target_of_type(self.handle, &self.project, ty)?
+            .is_some()
+        {
+            self.client.type_arguments(self.handle, &self.project, ty)?
+        } else {
+            Vec::new()
+        };
+        if !arguments.is_empty() {
+            let ids = self.intern_all(snapshot, &arguments, walk);
+            if let Some(&slot) = self.interned.get(&ty) {
+                snapshot.type_arguments.insert(slot, ids);
+            }
+        }
+
         // An index signature decides representation before any property does: a
         // type with one cannot be a flat struct, because its keys are not known at
         // compile time.

@@ -86,6 +86,21 @@ pub struct SemanticSnapshot {
     /// `field_info`; in C, base fields must come first at fixed offsets so an
     /// upcast is a no-op pointer cast.
     pub base_types: FxHashMap<TypeId, Vec<TypeId>>,
+    /// Type arguments of a generic type reference, in declaration order.
+    ///
+    /// A generic class arrives here as *two* object types: the declaration, whose
+    /// arguments are its own type parameters, and one instantiation per distinct
+    /// use, whose arguments are what it was instantiated at and whose properties
+    /// the checker has already substituted. Both carry the declaring symbol, so
+    /// they can be grouped; zipping the two argument lists is what turns `T` into
+    /// `number` for the bodies, which the checker does not substitute because the
+    /// AST nodes inside a generic method are shared by every instantiation.
+    ///
+    /// A side map rather than a field on [`TypeKind::Object`], for the reason
+    /// [`Self::base_types`] is one: it is a fact *about* a type that only some
+    /// types have, and putting it in the kind would make every match on an object
+    /// type mention it.
+    pub type_arguments: FxHashMap<TypeId, Vec<TypeId>>,
     /// Compile-time constant value of a node, where the checker folded one.
     ///
     /// Covers enum members and the sites that read them. `Color.Red` becomes an

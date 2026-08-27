@@ -578,6 +578,26 @@ impl Client {
         )
     }
 
+    /// What a generic type reference was made from, or `None` where the type is
+    /// not one. See [`proto::method::GET_TARGET_OF_TYPE`].
+    pub fn target_of_type(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        ty: u32,
+    ) -> Result<Option<TypeResponse>, TsgoError> {
+        // A *property of a handle* endpoint, so `objectId` on the wire, unlike
+        // `getTypeArguments` next to it, which takes `type`.
+        self.request(
+            proto::method::GET_TARGET_OF_TYPE,
+            &GetTypePropertyParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+            },
+        )
+    }
+
     /// Index signatures of a type.
     pub fn index_infos_of_type(
         &mut self,

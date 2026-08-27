@@ -50,6 +50,14 @@ pub mod method {
     pub const GET_SIGNATURES_OF_TYPE: &str = "getSignaturesOfType";
     pub const GET_TYPES_OF_TYPE: &str = "getTypesOfType";
     pub const GET_PROPERTIES_OF_TYPE: &str = "getPropertiesOfType";
+    /// What a generic type reference was made from: `Box<number>` gives `Box`.
+    ///
+    /// Also the guard for [`Self::GET_TYPE_ARGUMENTS`], which crashes the server
+    /// on anything that is not a type reference -- `getTypeArguments` does an
+    /// unchecked `AsTypeReference()` and dereferences the nil. This one tests
+    /// the flags first and answers `null`, so asking it first is what makes
+    /// asking the other one safe.
+    pub const GET_TARGET_OF_TYPE: &str = "getTargetOfType";
     pub const GET_TYPE_ARGUMENTS: &str = "getTypeArguments";
     pub const IS_ARRAY_TYPE: &str = "isArrayType";
     pub const IS_TUPLE_TYPE: &str = "isTupleType";
