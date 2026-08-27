@@ -88,37 +88,58 @@ The same applies to `$262.createRealm`, `detachArrayBuffer` and the agent API,
 which neither bare runtime provides — a case needing one would throw under
 *both*, and counting that as agreement would be a false pass.
 
-## Where this compiler stands
+## Where this compiler stands: the mechanism fits, the compiler does not
 
-The mechanism needs nothing new from us. In particular:
+The protocol needs nothing new from us. `nts_thrown` already calls `abort()`, so
+a failed assertion exits non-zero, which is the whole signal. No Node-API addon
+is required, no test is edited, and no type annotation is added to one.
 
-- **`throw` already produces the right signal.** `nts_thrown` prints the message
-  and calls `abort()`, so a failed assertion exits non-zero, which is exactly
-  what the protocol reads.
-- **No Node-API addon is required.** The addon is the right answer for embedding
-  a compiled module in node; it is not needed here.
-- **No test is modified**, and no type annotations are added to one. A
-  conformance suite you edit is a suite you have agreed with.
+**But we cannot run it yet, and the blocker is larger than the harness.**
 
-What stands in the way is only our own language coverage, and it stands in the
-way *at the harness*: to compile a case we must first compile `sta.js` and
-`assert.js`. `assert.js` is 184 lines and needs a function carrying properties
-(`assert.sameValue = …`), `throw`, string building and `typeof`. Object-literal
-methods are a known silent gap, so today almost everything would bucket as
-`compile-fail`.
+test262 is *untyped JavaScript*, and this compiler requires types. Not exotic
+types — any types at all. The smallest possible case:
 
-**That is the measurement, not a reason to postpone it.** `compile-fail` counted
-per directory *is* the conformance gap, and it ratchets: every feature added
-moves cases out of that bucket without anyone maintaining a list. It is the same
-instrument as the tsgo corpus, pointed at the language rather than at the
-typechecker.
+```js
+function SwitchTest(value) {   // value is `any`
+  var result = 0;
+  if (value === 0) { result += 2; }
+  return result;
+}
+```
 
-One shortcut is available and worth considering: the signal is only the exit
-code, so our harness does not have to build a nice failure message — it only has
-to throw. A minimal `assert` written in TypeScript, used by **both** sides, would
-be far smaller than 184 lines. It would still have to be one object with
-`sameValue`, `notSameValue`, `throws` and the rest hanging off it, which is
-precisely the object-literal-method gap.
+is refused with *a parameter of unrepresentable type (any)*, and its caller is
+refused with it. That is every test262 file, for the same reason, before any
+question of `switch` or `assert.js` arises.
+
+So running the suite today would produce **one bug reported fifty thousand
+times**, which is not a measurement. An earlier version of this section said the
+refusal count would be a useful per-directory conformance signal; that is only
+true once cases start failing for *different* reasons.
+
+### What would have to change first
+
+`any` is refused by design for application code, and rightly — `docs/any-unknown.md`
+is explicit that none may reach MIR. What test262 needs is the neighbouring
+capability that document also describes for `unknown`: a representation chosen by
+**whole-program analysis** rather than by an annotation — a primitive, a managed
+reference, a closed union, or a general erased value, whichever is cheapest
+across all reachable uses.
+
+That is a real feature and a large one. It is also the same feature that would
+let this compiler accept ordinary JavaScript at all, so its value is not confined
+to a test suite.
+
+Until it exists, the honest position is:
+
+- **the technique is settled and written down**, and costs nothing to keep;
+- **test262's usable slice for us stays the expression harvest below**, which is
+  small but real and has already caught a bug;
+- **the language half is tested by TypeScript we write ourselves**, compiled and
+  compared against node by `nts check`. test262 is worth *reading* for which edge
+  cases to write.
+
+Anyone who proposes "just run test262" should be shown the five-line function
+above first.
 
 ## What is in the repository
 
@@ -165,12 +186,12 @@ Two defects in it, found by reading it:
 
 ## What to do, in order
 
-1. **Build the runner.** Assemble, run both sides, bucket by agreement, report
-   per directory. It is a script, and the design is settled — the hard thinking
-   is done and written down above.
-2. **Take the first number**, however bad, and check it is bad for the reason we
-   expect: `compile-fail` at the harness.
-3. **Make the harness compile.** Object-literal methods, which are a known silent
-   defect anyway. This single change is what converts the whole suite from
-   unusable to a ratchet.
-4. **Fix the expression extractor's allow-list**, which is hours and pure gain.
+1. **Fix the expression extractor's allow-list**, which is hours and pure gain
+   against a mechanism that already works.
+2. **Do not build the runner yet.** It would report one bug fifty thousand times.
+   The design above is the deliverable for now; it costs nothing to hold.
+3. **When representation inference for untyped code exists** — the `unknown` work
+   in `docs/any-unknown.md` — build the runner that week. It is a script, and the
+   hard thinking is already done.
+4. Object-literal methods are worth fixing regardless: they are a *silent* defect
+   today, and `assert.js` needs them the moment step 3 lands.

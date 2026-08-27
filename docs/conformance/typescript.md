@@ -227,11 +227,12 @@ preamble + any `includes:` + the test — compile the whole thing, and compare t
 exit code against node running the identical script. Nothing is harvested,
 nothing is substituted, no test is edited.
 
-What stands in the way is only this compiler's own coverage, and it stands in the
-way at the *harness*: `assert.js` needs a function carrying properties, which is
-the object-literal-method defect below. Until that compiles, nearly every case
-buckets as "we refused it" — which is exactly the measurement, per directory, and
-it ratchets as coverage grows.
+What stands in the way is that test262 is *untyped JavaScript* and this compiler
+requires types. `function f(value)` is `any`, and `any` is refused — so every
+case fails for one reason before any question of `switch` or `assert.js` arises.
+Running it today would report one bug fifty thousand times. The technique is
+settled and costs nothing to hold; what unlocks it is representation inference
+for untyped code, which is the `unknown` work rather than a test-harness task.
 
 The two things test262 still says nothing about: **TypeScript types** (it is a
 JavaScript suite) and **anything the compiler does rather than computes** —
