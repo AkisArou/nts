@@ -37,9 +37,18 @@ const CASES = [
   { name: "bounce", run: (b) => b.benchmark() },
   { name: "list", run: (b) => b.benchmark() },
   { name: "mandelbrot", run: (b) => b.mandelbrot(500) },
+  // Overrides `innerBenchmarkLoop`, so there is no `benchmark()` upstream to
+  // call. Both sides check the same recorded constant instead, which is a
+  // stronger statement than agreeing with each other.
+  {
+    name: "nbody",
+    run: (b) => b.innerBenchmarkLoop(250000),
+    ours: (b) => b.verifyResult(b.benchmark()),
+  },
   { name: "permute", run: (b) => b.benchmark() },
   { name: "queens", run: (b) => b.benchmark(), ours: (b) => b.benchmark() === 1 },
   { name: "sieve", run: (b) => b.benchmark() },
+  { name: "storage", run: (b) => b.benchmark() },
   { name: "towers", run: (b) => b.benchmark() },
 ];
 
@@ -47,9 +56,11 @@ const CLASSES = {
   bounce: "Bounce",
   list: "List",
   mandelbrot: "Mandelbrot",
+  nbody: "NBody",
   permute: "Permute",
   queens: "Queens",
   sieve: "Sieve",
+  storage: "Storage",
   towers: "Towers",
 };
 

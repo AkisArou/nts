@@ -9,9 +9,11 @@
 import { Bounce } from "./bounce.ts";
 import { List } from "./list.ts";
 import { Mandelbrot } from "./mandelbrot.ts";
+import { NBody } from "./nbody.ts";
 import { Permute } from "./permute.ts";
 import { Queens } from "./queens.ts";
 import { Sieve } from "./sieve.ts";
+import { Storage } from "./storage.ts";
 import { Towers } from "./towers.ts";
 
 export function bounceResult(): number {
@@ -26,6 +28,10 @@ export function mandelbrotResult(): number {
   return new Mandelbrot().mandelbrot(500);
 }
 
+export function nbodyResult(): number {
+  return new NBody().benchmark();
+}
+
 export function permuteResult(): number {
   return new Permute().benchmark();
 }
@@ -36,6 +42,10 @@ export function queensResult(): number {
 
 export function sieveResult(): number {
   return new Sieve().benchmark();
+}
+
+export function storageResult(): number {
+  return new Storage().benchmark();
 }
 
 export function towersResult(): number {

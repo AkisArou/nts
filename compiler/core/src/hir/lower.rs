@@ -846,7 +846,17 @@ pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
         TypeKind::IndexedAccess { .. } => "an indexed access".to_owned(),
         TypeKind::TemplateLiteral { .. } => "a template literal type".to_owned(),
         TypeKind::Object { .. } => "an object type".to_owned(),
-        TypeKind::Array(_) => "an array type".to_owned(),
+        // Worth distinguishing, because the two are refused for entirely
+        // different reasons and only one of them is about *this* type. An
+        // ordinary array is refused when its element is; `type Tree = Tree[]`
+        // is refused because there is no finite `HirType` that spells it.
+        TypeKind::Array(_) => {
+            if contains_a_cycle(snapshot, ty, &mut Vec::new()) {
+                "a recursive array type".to_owned()
+            } else {
+                "an array type".to_owned()
+            }
+        }
         TypeKind::Structured { flags } => format!("a structured type (flags {flags:#x})"),
         TypeKind::Unsupported { rendered, .. } => format!("`{rendered}`"),
         TypeKind::Void
@@ -859,8 +869,79 @@ pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
     }
 }
 
+/// Whether following element and member types from here ever revisits a type.
+///
+/// A *cycle* rather than a return to the starting type: `type Tree = Tree[]`
+/// reaches this compiler as an instantiation whose element is the alias whose
+/// element is the alias, so the loop that has no finite representation need not
+/// pass through the type being asked about. `type A = B[]; type B = A[]` is the
+/// same shape with the ids spelled out.
+///
+/// Only through arrays and unions, which are the two kinds whose representation
+/// is built out of another's. An object stops the walk for the reason it
+/// terminates in [`representation`]: its representation is a pointer, and a
+/// pointer to something that leads back here is an ordinary linked list.
+fn contains_a_cycle(snapshot: &SemanticSnapshot, ty: TypeId, path: &mut Vec<TypeId>) -> bool {
+    if path.contains(&ty) {
+        return true;
+    }
+    path.push(ty);
+    let found = match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+        Some(TypeKind::Array(element)) => contains_a_cycle(snapshot, *element, path),
+        Some(TypeKind::Union(members)) => members
+            .iter()
+            .any(|member| contains_a_cycle(snapshot, *member, path)),
+        _ => false,
+    };
+    path.pop();
+    found
+}
+
 #[must_use]
 pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType> {
+    representation_within(snapshot, ty, &mut Vec::new())
+}
+
+/// [`representation`], refusing a type that contains itself.
+///
+/// # Why a type can do that at all
+///
+/// `class Node { next: Node }` is fine and common, and it terminates here
+/// because an object's representation is a *pointer* — the arm returns without
+/// looking at the fields. `type Tree = Tree[]` does not: an array's
+/// representation names its element type, and the element is the array. There
+/// is no finite `HirType` for it, so building one recurses until the stack ends.
+///
+/// # Why refusing is the answer for now and not forever
+///
+/// The runtime is already more relaxed than this: an array of references uses
+/// one descriptor for all of them, because *every* reference is a pointer and
+/// the descriptor describes the element's shape rather than what it points at.
+/// So a representation exists; what is missing is a way to *spell* it, which
+/// means a recursion marker in `HirType` and every pass agreeing about what it
+/// means. That is a type-system change and is refused rather than guessed at.
+///
+/// The list is a path rather than a set: two sibling fields of the same array
+/// type are not a cycle, and treating them as one would refuse ordinary code.
+fn representation_within(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    path: &mut Vec<TypeId>,
+) -> Option<HirType> {
+    if path.contains(&ty) {
+        return None;
+    }
+    path.push(ty);
+    let result = representation_of(snapshot, ty, path);
+    path.pop();
+    result
+}
+
+fn representation_of(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    path: &mut Vec<TypeId>,
+) -> Option<HirType> {
     let record = snapshot.types.get(ty.0 as usize)?;
     Some(match &record.kind {
         TypeKind::Void | TypeKind::Undefined => HirType::Void,
@@ -874,7 +955,7 @@ pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType
             HirType::Managed(ManagedType::String)
         }
         TypeKind::Array(element) => {
-            let element = representation(snapshot, *element)?;
+            let element = representation_within(snapshot, *element, path)?;
             HirType::Managed(ManagedType::Array(Box::new(element)))
         }
         // A function value is an object with one method, which is why it shares
@@ -914,7 +995,7 @@ pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType
                     absent = true;
                     continue;
                 }
-                let member = representation(snapshot, *member)?;
+                let member = representation_within(snapshot, *member, path)?;
                 match &shared {
                     Some(existing) if *existing != member => return None,
                     _ => shared = Some(member),
