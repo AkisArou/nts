@@ -40,6 +40,7 @@ pub mod reachable;
 pub mod simplify;
 pub mod specialize;
 pub mod verify;
+pub mod zero_sign;
 
 use nts_semantic_schema::{Origin, SemanticSnapshot, TypeId};
 

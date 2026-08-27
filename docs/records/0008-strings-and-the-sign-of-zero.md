@@ -1,8 +1,9 @@
-# 0008 — Why a string scan is nine times slower than V8
+# 0008 — A string scan, and the sign of a zero
 
-`strings` is the one benchmark nts loses to V8, and by a lot. This records what
-it costs, what it is not, and the one thing standing in the way — which turns out
-to be a fact about negative zero.
+`strings` was the one benchmark nts lost to V8, by nine times. It now beats V8 by
+five and is within a factor of two of hand-written C++. This records what the
+cost turned out to be, the three plausible causes that were not it, and the one
+that was — which is a fact about negative zero.
 
 ## The numbers
 
@@ -70,7 +71,7 @@ Everything needed to avoid it is already proven. Four steps got most of the way:
 After all four, the index and the counter are `i32` and the read is unchecked.
 The arithmetic is still floating point.
 
-## The blocker: negative zero
+## The blocker: negative zero — and the fix
 
 ```
 %17  f64  [0, 65535] whole
@@ -92,18 +93,43 @@ Division, `Object.is`, and conversion to a string are the ways it can be seen.
 Where none of them is reachable from a value, a `-0` and a `+0` are the same
 number and the value can be an integer.
 
-That is a use analysis, not a range analysis, and it is the next thing worth
-building for this benchmark. It would also help anywhere else a product or a
-negation feeds an accumulator, which is most numeric code.
+That is a use analysis, not a range analysis, and `hir::zero_sign` is it. It runs
+backward from the four places that can distinguish the two zeros — division by
+the value, `Math.min`/`Math.max`, leaving the function, and arithmetic that
+carries a zero's sign into something already observed — and marks what they
+reach. Everything else may be an integer.
 
-## What was kept
+With it, the chain becomes `i64` end to end:
 
-- `charCodeAt` as `StringUnitAt`, with `checked` meaning "may be NaN" rather than
-  "may trap" — the reverse of an array's, because out of range is `NaN` here.
-- Exact length for a string literal, in the facts and in the bounds proof.
-- Bounds elimination before specialization as well as after.
-- `nts_to_int32` without `fmod`.
-- `memchr`/`memcmp` search for narrow strings.
+| | ns | against C++ | against node |
+| --- | ---: | ---: | ---: |
+| before | 28,500 | 48.3x | 9.1x |
+| after | **1,100** | **1.96x** | **0.21x** |
 
-None of these moved this benchmark. All of them are right, and three of them
-will matter as soon as the sign-of-zero question is answered.
+Twenty-five times faster, and from nine times slower than V8 to nearly five times
+faster.
+
+The risk in a change like this is not a crash. It is `+Infinity` where the
+program said `-Infinity`, in a corner nobody tests. What makes it believable is
+that `nts check` runs `examples/negative-zero` — every way the sign can escape,
+including across a loop-carried accumulator — against node over a pool containing
+both zeros, and that all 29 examples, the end-to-end suite and the test262 slice
+agree afterwards.
+
+## What was kept from the false starts
+
+- `nts_to_int32` without `fmod`. `x | 0` after any real arithmetic is usually
+  outside `int32`, and that path was a library call.
+- `memchr`/`memcmp` search for narrow strings, which most strings are.
+- `charCodeAt` and `nts_unit` inline in the header.
+
+None of the three moved this benchmark. All three are right anyway, and the first
+two matter for programs shaped differently from this one.
+
+## What is left
+
+`nts/C++` is 1.96x. The remaining gap is that the C++ text is a `constexpr
+string_view`, so clang can and does fold parts of the scan at compile time
+against a string it knows. nts treats the literal as a runtime object. Whether
+that is worth closing is a separate question from whether the code is good —
+V8 does not fold it either, and nts is now five times faster than V8.

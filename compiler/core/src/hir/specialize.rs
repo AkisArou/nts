@@ -131,8 +131,9 @@ pub fn specialize(func: &mut Func, analysis: &Analysis) -> Report {
     }
 
     // What each value could be on its own, ignoring the company it keeps.
+    let observed = super::zero_sign::observed(func);
     let eligible: Vec<Option<u8>> = (0..count)
-        .map(|index| width_of(func, analysis, index))
+        .map(|index| width_of(func, analysis, &observed, index))
         .collect();
 
     // A class is only as good as its worst member, and needs the widest
@@ -243,15 +244,32 @@ fn edges(block: &Block) -> Vec<(usize, &[ValueId])> {
 }
 
 /// The narrowest integer this value is provably within, if any.
-fn width_of(func: &Func, analysis: &Analysis, index: usize) -> Option<u8> {
+fn width_of(
+    func: &Func,
+    analysis: &Analysis,
+    observed: &rustc_hash::FxHashSet<ValueId>,
+    index: usize,
+) -> Option<u8> {
     let id = ValueId(u32::try_from(index).unwrap_or(0));
     if !matches!(func.values[index].ty, HirType::Float { .. }) {
         return None;
     }
 
+    // `-0` and `0` are different doubles and the same integer, so a value that
+    // might be `-0` cannot normally be one. Where nothing downstream can tell
+    // the two apart it can: see `super::zero_sign` for what counts as telling.
+    // Without this a product is stuck in floating point because `0 * -5` is
+    // `-0`, and that one fact drags an entire accumulator with it.
+    let integral = |value: ValueId, lo: f64, hi: f64| {
+        if observed.contains(&value) {
+            analysis.is_integral_within(value, lo, hi)
+        } else {
+            analysis.is_integral_within_ignoring_zero_sign(value, lo, hi)
+        }
+    };
+
     let provable = |value: ValueId| {
-        analysis.is_integral_within(value, I32_MIN, I32_MAX)
-            || analysis.is_integral_within(value, facts::SAFE_MIN, facts::SAFE_MAX)
+        integral(value, I32_MIN, I32_MAX) || integral(value, facts::SAFE_MIN, facts::SAFE_MAX)
     };
 
     let usable = match &func.values[index].kind {
@@ -318,9 +336,9 @@ fn width_of(func: &Func, analysis: &Analysis, index: usize) -> Option<u8> {
         return None;
     }
 
-    if analysis.is_integral_within(id, I32_MIN, I32_MAX) {
+    if integral(id, I32_MIN, I32_MAX) {
         Some(32)
-    } else if analysis.is_integral_within(id, facts::SAFE_MIN, facts::SAFE_MAX) {
+    } else if integral(id, facts::SAFE_MIN, facts::SAFE_MAX) {
         // Past 2^53 an `f64` cannot tell adjacent integers apart, so there is
         // nothing to prove and nothing to represent.
         Some(64)

@@ -182,11 +182,31 @@ impl Analysis {
     /// it, and `1 / -0` can tell that it was lost.
     #[must_use]
     pub fn is_integral_within(&self, value: ValueId, lo: f64, hi: f64) -> bool {
+        self.integral_within(value, lo, hi, false)
+    }
+
+    /// The same, for a value whose zero's sign nothing can distinguish.
+    ///
+    /// `-0` and `0` are different doubles and the same integer, so a value that
+    /// might be `-0` normally cannot be one. Where nothing downstream can tell
+    /// the two apart — see [`super::zero_sign`] — the difference is not a
+    /// difference, and refusing to represent it costs a great deal for nothing.
+    #[must_use]
+    pub fn is_integral_within_ignoring_zero_sign(
+        &self,
+        value: ValueId,
+        lo: f64,
+        hi: f64,
+    ) -> bool {
+        self.integral_within(value, lo, hi, true)
+    }
+
+    fn integral_within(&self, value: ValueId, lo: f64, hi: f64, any_zero: bool) -> bool {
         let facts = self.get(value);
         !facts.is_bottom()
             && facts.whole
             && !facts.maybe_nan
-            && !facts.maybe_negative_zero
+            && (any_zero || !facts.maybe_negative_zero)
             && facts.lo >= lo
             && facts.hi <= hi
     }
