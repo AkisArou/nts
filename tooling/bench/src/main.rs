@@ -120,10 +120,10 @@ fn main() -> Result<()> {
     .context("writing the runtime")?;
 
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9}",
-        "case", "C++", "nts", "nts f64", "node", "bun", "nts/C++", "nts/node"
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
+        "case", "C++", "nts", "nts f64", "node", "bun", "nts/C++", "nts/node", "nts/bun"
     );
-    println!("{}", "-".repeat(102));
+    println!("{}", "-".repeat(112));
 
     let mut rows = Vec::new();
     for case in &cases {
@@ -157,8 +157,8 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
     let mut table = String::new();
     let with_bun = rows.iter().any(|row| row.bun.is_some());
     table.push_str(if with_bun {
-        "| case | C++ | nts | nts f64 | V8 | Bun | nts/C++ | nts/V8 |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+        "| case | C++ | nts | nts f64 | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
     } else {
         "| case | C++ | nts | nts f64 | V8 | nts/C++ | nts/V8 |\n\
          | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n"
@@ -170,9 +170,14 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         } else {
             String::new()
         };
+        let against_bun = if with_bun {
+            format!(" {} |", row.against_bun())
+        } else {
+            String::new()
+        };
         let _ = writeln!(
             table,
-            "| {} | {} | **{}** | {} | {} |{bun} {:.2}x | {:.2}x |",
+            "| {} | {} | **{}** | {} | {} |{bun} {:.2}x | {:.2}x |{against_bun}",
             row.case,
             human(row.cpp),
             human(row.nts),
@@ -184,9 +189,9 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
     }
 
     let legend = "\n\
-        Both ratios are nts divided by the other, so **lower is better and 1.00 is \
-        parity**: `nts/C++` under 1.00 beats hand-written C++, `nts/V8` under 1.00 \
-        beats V8.\n\n\
+        Every ratio is nts divided by the other, so **lower is better and 1.00 is \
+        parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and \
+        `nts/Bun` under 1.00 beat those engines.\n\n\
         `nts f64` is the same TypeScript with number specialization switched off. \
         It is the column that makes a speedup a measurement rather than a claim — \
         one program, compiled two ways, run against each other.\n\n\
@@ -224,6 +229,15 @@ struct Row {
     /// Bun, where it is installed. `None` skips the column rather than
     /// reporting a zero that reads like a win.
     bun: Option<f64>,
+}
+
+impl Row {
+    /// How this case compares against Bun, in the same direction as the other
+    /// two ratios: lower is better, and 1.00 is parity.
+    fn against_bun(&self) -> String {
+        self.bun
+            .map_or_else(|| "--".to_owned(), |bun| format!("{:.2}x", self.nts / bun))
+    }
 }
 
 fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
@@ -309,7 +323,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         bun: bun.map(|result| result.ns_per_op),
     };
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>8.2}x {:>8.2}x",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>8.2}x {:>8.2}x {:>9}",
         row.case,
         human(row.cpp),
         human(row.nts),
@@ -318,6 +332,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         row.bun.map_or_else(|| "--".to_owned(), human),
         row.nts / row.cpp,
         row.nts / row.node,
+        row.against_bun(),
     );
     Ok(row)
 }

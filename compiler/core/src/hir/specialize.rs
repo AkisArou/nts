@@ -157,6 +157,14 @@ pub fn specialize(
     // A class with no arithmetic in it has nothing to make faster. Specializing
     // one costs a conversion at every use and saves nothing — which is exactly
     // what a lone `const 5` compared against a double was doing.
+    //
+    // Arithmetic reaches a class in two ways, and both have to count. The
+    // obvious one is *being* the arithmetic. The other is *feeding* it: a code
+    // unit multiplied by something, an `indexOf` added to a total. Arithmetic
+    // operands are deliberately not joined into one class -- doing that let one
+    // unprovable operand sink the other -- so an operand sits in a class of its
+    // own, and judging that class on its own contents says it has nothing to
+    // gain. It has: the conversion at the use is the thing being avoided.
     let mut worthwhile: FxHashMap<u32, bool> = FxHashMap::default();
     for (index, value) in func.values.iter().enumerate() {
         let pays = match &value.kind {
@@ -164,9 +172,12 @@ pub fn specialize(
             OpKind::Unary { .. } | OpKind::BlockParam(_) => true,
             _ => false,
         };
-        if pays {
-            let root = classes.find(u32::try_from(index).unwrap_or(0));
-            worthwhile.insert(root, true);
+        if !pays {
+            continue;
+        }
+        worthwhile.insert(classes.find(u32::try_from(index).unwrap_or(0)), true);
+        for operand in super::verify::operands(&value.kind) {
+            worthwhile.insert(classes.find(operand.0), true);
         }
     }
 
@@ -332,7 +343,14 @@ fn width_of(
         // `int -> double -> int` round trip costs more than everything else in
         // a scan put together. The `checked` case is not this: out of range is
         // NaN, and NaN is not an integer.
-        | OpKind::StringUnitAt { checked: false, .. } => true,
+        | OpKind::StringUnitAt { checked: false, .. }
+        // A call's result, where the callee *was* analyzed. That is now the
+        // ordinary case rather than the exception: a function this program
+        // defines has its returns in the interprocedural fixpoint, and one of
+        // the runtime's own has known results. Where neither applies the facts
+        // are TOP and the test below refuses on its own, so this arm does not
+        // need to ask which case it is in.
+        | OpKind::Call { .. } => true,
 
         // A field whose *storage* is an integer. `hir::fields` decided that
         // from every store in the program, so the load produces one and there
@@ -340,16 +358,14 @@ fn width_of(
         // the class, because a class is only as good as its worst member.
         OpKind::FieldGet { .. } => matches!(func.values[id.0 as usize].ty, HirType::Int { .. }),
 
-        // Everything else stays a double, for one of three reasons:
+        // Everything else stays a double, for one of two reasons:
         //
         // - A parameter's representation is the function's ABI, and this pass
-        //   does not get to change a signature. Specializing across call
-        //   boundaries is a separate decision with a separate cost.
+        //   does not get to change a signature. `hir::signatures` does, before
+        //   this runs.
         // - Integer division is a different function from real division: `7 / 2`
         //   is `3.5` and C would say `3`. The analysis only proves a quotient
         //   whole when it is exact, but the margin is not worth what it buys.
-        // - A call's result needs the callee analyzed, and a comparison is not a
-        //   number at all.
         _ => false,
     };
 

@@ -210,12 +210,30 @@ bool nts_string_eq(const NtsString *a, const NtsString *b);
  * the length, which is what the specification says and what makes `s.slice(-2)`
  * mean the last two. A caller that passes `INFINITY` means "to the end", which
  * is how an omitted trailing argument reaches here. */
-double nts_str_code_point_at(const NtsString *s, double at);
-double nts_str_index_of(const NtsString *s, const NtsString *needle);
-double nts_str_last_index_of(const NtsString *s, const NtsString *needle);
-bool nts_str_includes(const NtsString *s, const NtsString *needle);
-bool nts_str_starts_with(const NtsString *s, const NtsString *needle);
-bool nts_str_ends_with(const NtsString *s, const NtsString *needle);
+/* A function that reads memory and does nothing else.
+ *
+ * Not decoration. `text.indexOf("brown")` inside a loop is loop-invariant, and
+ * a C compiler may only hoist it if it knows the call has no side effects --
+ * which it cannot know from a declaration alone. Without this every search runs
+ * once per iteration; the hand-written C++ reference gets the same hoist for
+ * free because `std::string_view::find` is defined where the compiler can see
+ * it.
+ *
+ * `pure` rather than `const`: these read through their pointers, so two calls
+ * are only equal while the memory between them is unchanged, which is exactly
+ * what `pure` promises. */
+#if defined(__GNUC__) || defined(__clang__)
+#define NTS_READS_ONLY __attribute__((pure))
+#else
+#define NTS_READS_ONLY
+#endif
+
+NTS_READS_ONLY double nts_str_code_point_at(const NtsString *s, double at);
+NTS_READS_ONLY double nts_str_index_of(const NtsString *s, const NtsString *needle);
+NTS_READS_ONLY double nts_str_last_index_of(const NtsString *s, const NtsString *needle);
+NTS_READS_ONLY bool nts_str_includes(const NtsString *s, const NtsString *needle);
+NTS_READS_ONLY bool nts_str_starts_with(const NtsString *s, const NtsString *needle);
+NTS_READS_ONLY bool nts_str_ends_with(const NtsString *s, const NtsString *needle);
 NtsString *nts_str_char_at(const NtsString *s, double at);
 NtsString *nts_str_repeat(const NtsString *s, double times);
 NtsString *nts_str_slice(const NtsString *s, double from, double to);
@@ -252,10 +270,10 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  * are not inline: every reference anyone holds stays valid. */
 double nts_array_push(NtsArray *a, double value);
 double nts_array_pop(NtsArray *a);
-double nts_array_index_of(const NtsArray *a, double needle);
-double nts_array_last_index_of(const NtsArray *a, double needle);
-bool nts_array_includes(const NtsArray *a, double needle);
-double nts_array_at(const NtsArray *a, double at);
+NTS_READS_ONLY double nts_array_index_of(const NtsArray *a, double needle);
+NTS_READS_ONLY double nts_array_last_index_of(const NtsArray *a, double needle);
+NTS_READS_ONLY bool nts_array_includes(const NtsArray *a, double needle);
+NTS_READS_ONLY double nts_array_at(const NtsArray *a, double at);
 /* Report an uncaught throw and stop.
  *
  * There is no `try`/`catch` yet, so every throw is uncaught by construction and

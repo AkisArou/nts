@@ -430,6 +430,50 @@ fn parameter_facts(func: &Func, context: &Context, slot: u32) -> Facts {
         .map_or(declared, |from_callers| from_callers.narrow(declared))
 }
 
+/// What a call is worth, whoever it is calling.
+///
+/// A function this program defines has its returns in the interprocedural
+/// fixpoint. A dispatch has the join over every body its slot can reach -- the
+/// tables are the complete list, so the join is sound. One of the runtime's own
+/// has a known result. Anything else is a wall.
+fn call_result(context: &Context, callee: &Callee) -> Facts {
+    match callee {
+        Callee::Direct(name) => context.returns.get(name).copied().unwrap_or(Facts::TOP),
+        Callee::Virtual { slot, .. } | Callee::Closure { slot } => context
+            .slot_returns
+            .get(slot)
+            .copied()
+            .unwrap_or(Facts::TOP),
+        Callee::External(name) => runtime_result(name).unwrap_or(Facts::TOP),
+    }
+}
+
+/// What one of the runtime's own functions returns.
+///
+/// Only the ones whose result is certainly a whole number in a known range. A
+/// helper that can return `NaN` -- `pop` and `at` on an empty array, which is
+/// what `undefined` is for a number -- is absent, because absent means TOP and
+/// TOP is the truth about those.
+///
+/// An index is `-1` or a position, and a position is bounded by a length, which
+/// is a `uint32`. So the range is exactly `[-1, 2^32 - 1]`.
+fn runtime_result(name: &str) -> Option<Facts> {
+    const INDEX: &[&str] = &[
+        "nts_str_index_of",
+        "nts_str_last_index_of",
+        "nts_array_index_of",
+        "nts_array_last_index_of",
+    ];
+    const LENGTH: &[&str] = &["nts_array_push"];
+    if INDEX.contains(&name) {
+        return Some(Facts::new(-1.0, facts::U32_MAX, true, false, false));
+    }
+    if LENGTH.contains(&name) {
+        return Some(Facts::new(0.0, facts::U32_MAX, true, false, false));
+    }
+    None
+}
+
 /// What a field of an object of this type can hold.
 fn field_facts(context: &Context, object: &super::HirType, field: u32) -> Facts {
     let super::HirType::Managed(super::ManagedType::Object(ty)) = object else {
@@ -533,20 +577,7 @@ fn transfer_block(
             // What the callee was proven to return. Without this every call is
             // a wall: an unanalyzed result poisons everything downstream of it,
             // which for a program made of small functions is everything.
-            OpKind::Call {
-                callee: Callee::Direct(name),
-                ..
-            } => context.returns.get(name).copied().unwrap_or(Facts::TOP),
-            // The same for a dispatch, over every body the slot can reach. The
-            // tables are the complete list, so the join is sound.
-            OpKind::Call {
-                callee: Callee::Virtual { slot, .. } | Callee::Closure { slot },
-                ..
-            } => context
-                .slot_returns
-                .get(slot)
-                .copied()
-                .unwrap_or(Facts::TOP),
+            OpKind::Call { callee, .. } => call_result(context, callee),
             // What was stored into this field, anywhere in the program.
             OpKind::FieldGet { object, field } => {
                 field_facts(context, &func.values[object.0 as usize].ty, *field)
