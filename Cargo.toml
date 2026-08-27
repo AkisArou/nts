@@ -12,6 +12,7 @@ members = [
     "build",
     "tooling/cli",
     "tooling/bench",
+    "tooling/suite",
 ]
 
 [workspace.package]

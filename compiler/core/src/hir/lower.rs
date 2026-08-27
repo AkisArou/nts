@@ -165,6 +165,45 @@ fn canonicalize_objects(program: &mut Program) {
 /// The decision the whole layer exists to make. Unspecialized, so `number`
 /// becomes `f64` — correct, and the thing specialization improves on once
 /// analysis can show a value is integral and in range.
+/// A short name for a type, for a diagnostic to quote.
+///
+/// A refusal that says only "unrepresentable" is not a work queue. Run over a
+/// corpus, "a parameter of an unrepresentable type" was the largest bar in the
+/// histogram by a factor of two, and it said nothing about what to build. The
+/// checker's own rendering is in the snapshot for exactly this.
+#[must_use]
+pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
+    let Some(record) = snapshot.types.get(ty.0 as usize) else {
+        return "an unknown type".to_owned();
+    };
+    match &record.kind {
+        TypeKind::Any => "any".to_owned(),
+        TypeKind::Unknown => "unknown".to_owned(),
+        TypeKind::Null => "null".to_owned(),
+        TypeKind::BigInt => "bigint".to_owned(),
+        TypeKind::Symbol => "symbol".to_owned(),
+        TypeKind::Union(_) => "a union".to_owned(),
+        TypeKind::Intersection(_) => "an intersection".to_owned(),
+        TypeKind::Tuple(_) => "a tuple".to_owned(),
+        TypeKind::Function(_) => "a function type".to_owned(),
+        TypeKind::TypeParameter { name, .. } => format!("the type parameter `{name}`"),
+        TypeKind::Conditional { .. } => "a conditional type".to_owned(),
+        TypeKind::IndexedAccess { .. } => "an indexed access".to_owned(),
+        TypeKind::TemplateLiteral { .. } => "a template literal type".to_owned(),
+        TypeKind::Object { .. } => "an object type".to_owned(),
+        TypeKind::Array(_) => "an array type".to_owned(),
+        TypeKind::Structured { flags } => format!("a structured type (flags {flags:#x})"),
+        TypeKind::Unsupported { rendered, .. } => format!("`{rendered}`"),
+        TypeKind::Void
+        | TypeKind::Undefined
+        | TypeKind::Never
+        | TypeKind::Boolean
+        | TypeKind::Number
+        | TypeKind::String
+        | TypeKind::Literal(_) => "a representable type".to_owned(),
+    }
+}
+
 #[must_use]
 pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType> {
     let record = snapshot.types.get(ty.0 as usize)?;
@@ -366,6 +405,15 @@ impl<'a> FuncBuilder<'a> {
         id
     }
 
+    /// Refuse, naming the type that could not be represented.
+    fn unrepresentable(&self, id: NodeId, what: &str) -> Diagnostic {
+        let named = self.snapshot.node_types.get(&id).map_or_else(
+            || "an untyped node".to_owned(),
+            |ty| describe(self.snapshot, *ty),
+        );
+        self.unsupported(id, &format!("{what} of unrepresentable type ({named})"))
+    }
+
     fn unsupported(&self, id: NodeId, what: &str) -> Diagnostic {
         Diagnostic::error(
             "NTS1001",
@@ -419,7 +467,7 @@ impl<'a> FuncBuilder<'a> {
         // is what the checker gives the class declaration's name.
         let instance = self
             .type_of(class)
-            .ok_or_else(|| self.unsupported(class, "a class of unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(class, "a class"))?;
         let origin = self.origin(member);
         let receiver = self.push(OpKind::Param(0), instance.clone(), origin.clone());
         self.this = Some(receiver);
@@ -584,7 +632,7 @@ impl<'a> FuncBuilder<'a> {
             .unwrap_or_else(|| format!("arg{index}"));
         let ty = self
             .type_of(name_node)
-            .ok_or_else(|| self.unsupported(id, "a parameter of an unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(name_node, "a parameter"))?;
 
         let origin = self.origin(name_node);
         // What the declared type says, before anything in the body is seen.
@@ -1053,7 +1101,7 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let ty = self
             .type_of(id)
-            .ok_or_else(|| self.unsupported(id, "a step of unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "a step"))?;
         let one = self.push(OpKind::ConstFloat(1.0), ty.clone(), origin.clone());
         let stepped = self.push(
             OpKind::Binary {
@@ -1322,7 +1370,7 @@ impl<'a> FuncBuilder<'a> {
     fn lower_array_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let ty = self
             .type_of(id)
-            .ok_or_else(|| self.unsupported(id, "an array literal of unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "an array literal"))?;
         if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
             return Err(self.unsupported(id, "an array literal that is not an array"));
         }
@@ -1376,7 +1424,7 @@ impl<'a> FuncBuilder<'a> {
     fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let ty = self
             .type_of(id)
-            .ok_or_else(|| self.unsupported(id, "an object literal of unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "an object literal"))?;
         let HirType::Managed(ManagedType::Object(type_id)) = ty else {
             return Err(self.unsupported(id, "an object literal that is not an object"));
         };
@@ -1511,7 +1559,7 @@ impl<'a> FuncBuilder<'a> {
             // later, because that is a fact about the layout and the layout is
             // decided here.
             let field_ty = representation(self.snapshot, property.ty)
-                .ok_or_else(|| self.unsupported(id, "a property of unrepresentable type"))?;
+                .ok_or_else(|| self.unrepresentable(id, "a property"))?;
             fields.push(Field {
                 name: property.name.clone(),
                 ty: field_ty,
@@ -1574,7 +1622,7 @@ impl<'a> FuncBuilder<'a> {
 
         let ty = self
             .type_of(id)
-            .ok_or_else(|| self.unsupported(id, "a `new` of unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "a `new`"))?;
         let HirType::Managed(ManagedType::Object(type_id)) = ty else {
             return Err(self.unsupported(id, "a `new` that does not produce an object"));
         };
@@ -1714,7 +1762,7 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let ty = self
             .type_of(id)
-            .ok_or_else(|| self.unsupported(id, "a conditional of unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "a conditional"))?;
 
         let then_block = self.new_block();
         let else_block = self.new_block();
@@ -1905,7 +1953,7 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let ty = self
             .type_of(id)
-            .ok_or_else(|| self.unsupported(id, "a unary expression of unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "a unary expression"))?;
         Ok(self.push(OpKind::Unary { op, operand: value }, ty, origin))
     }
 
@@ -1945,9 +1993,9 @@ impl<'a> FuncBuilder<'a> {
             let value = if self.kind_of(initializer) == Some(syntax::ARRAY_LITERAL_EXPRESSION)
                 && self.children(initializer).is_empty()
             {
-                let declared = self.type_of(name).ok_or_else(|| {
-                    self.unsupported(declaration, "an empty array of unrepresentable type")
-                })?;
+                let declared = self
+                    .type_of(name)
+                    .ok_or_else(|| self.unrepresentable(declaration, "an empty array"))?;
                 self.lower_empty_array(initializer, declared)?
             } else {
                 self.lower_expression(initializer)?
