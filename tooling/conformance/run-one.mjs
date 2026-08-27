@@ -15,6 +15,8 @@ import { createRequire } from "node:module";
 import assert from "node:assert";
 import process from "node:process";
 import { makeCommon, checkPending, Skip } from "./common.mjs";
+import tmpdir from "./tmpdir.mjs";
+import fixtures from "./fixtures.mjs";
 
 const [, , moduleName, file, addon] = process.argv;
 const HERE = dirname(new URL(import.meta.url).pathname);
@@ -57,9 +59,8 @@ function shimmedRequire(id) {
   }
   if (bare === "assert" || bare === "assert/strict") return assert;
   if (id.endsWith("../common")) return common;
-  if (id.endsWith("common/fixtures")) {
-    return { path: join(ROOT, "third_party/node/test/fixtures") };
-  }
+  if (id.endsWith("common/tmpdir")) return tmpdir;
+  if (id.endsWith("common/fixtures")) return fixtures;
   // Anything else is infrastructure rather than the subject: `node:test` is a
   // test runner, `child_process` spawns, `util` formats. Node's own is the
   // right answer for those -- substituting ours would test ours. A module we

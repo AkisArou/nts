@@ -82,6 +82,49 @@ export function makeCommon() {
       return fn;
     },
 
+    /**
+     * Node freezes an options object to catch a callee that mutates it.
+     * Freezing is the whole check, so this does it rather than returning the
+     * object unchanged -- a stand-in that skipped the freeze would pass a test
+     * whose entire subject is whether we mutate.
+     */
+    mustNotMutateObjectDeep(original) {
+      if (original === null || typeof original !== "object") return original;
+      for (const value of Object.values(original)) {
+        this.mustNotMutateObjectDeep(value);
+      }
+      return Object.freeze(original);
+    },
+
+    /** Node quotes for `sh -c`; the tests use it to build a shell command. */
+    escapePOSIXShell(strings, ...args) {
+      let command = strings[0];
+      for (let i = 0; i < args.length; i++) {
+        command += `'${String(args[i]).replaceAll("'", "'\\''")}'${strings[i + 1]}`;
+      }
+      return [command];
+    },
+
+    /** Node skips symlink tests without the privilege; posix always has it. */
+    canCreateSymLink() {
+      return true;
+    },
+
+    /**
+     * Node asserts that a `process.emitWarning` happened. Ours records the
+     * expectation and checks it the same way `mustCall` does, so a test that
+     * expects a warning we never emit fails rather than passes quietly.
+     */
+    expectWarning(nameOrMap, expected) {
+      const names = typeof nameOrMap === "string" ? [nameOrMap] : Object.keys(nameOrMap ?? {});
+      const record = { expected: names.length, actual: 0, atLeast: true, name: `warning ${names.join(", ")}` };
+      pending.push(record);
+      process.on("warning", () => {
+        record.actual++;
+      });
+      void expected;
+    },
+
     // Node's own leak and handle checking. No-ops here: they configure a
     // harness we are not running, and pretending to implement them would be a
     // claim we cannot back.

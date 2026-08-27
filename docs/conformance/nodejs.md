@@ -49,7 +49,7 @@ rather than inferred by a rule, so the number can be audited.
 | --- | :---: | :---: | --- |
 | `path` | **15 / 16** | 1 / 39 | complete but for `matchesGlob`; the skip is Windows-only |
 | `os` | **4 / 4** | 16 / 31 | complete |
-| `fs` | — | — | not started |
+| `fs` | 11 / 260 | 39 / 68 | the sync surface; async, streams and `Buffer` are absent |
 | `querystring` | — | — | not started |
 | `url` | — | — | not started |
 | `buffer` | — | — | not started |
@@ -113,6 +113,46 @@ right on one and silently wrong on the other.
 Where node's C++ binding returns one flat `v8::Array` of mixed strings and
 numbers, ours returns one typed array per column and the TypeScript assembles
 the same objects. The result is identical and the declarations stay typed.
+
+## `fs`
+
+The synchronous surface, from node v24.20.0 `lib/fs.js`: `statSync`,
+`lstatSync`, `fstatSync`, `existsSync`, `accessSync`, `readFileSync`,
+`writeFileSync`, `appendFileSync`, `openSync`, `closeSync`, `readdirSync`,
+`mkdirSync` (including `recursive`), `rmdirSync`, `rmSync`, `mkdtempSync`,
+`unlinkSync`, `renameSync`, `copyFileSync`, `linkSync`, `symlinkSync`,
+`readlinkSync`, `realpathSync`, `chmodSync`, `chownSync`, `truncateSync`,
+`utimesSync`, plus `Stats`, `Dirent` and `constants`.
+
+11 of 260 test files pass, and the shortfall is three absent subsystems rather
+than a long tail of small bugs:
+
+| cause | files |
+| --- | ---: |
+| the callback forms — `fs.open`, `fs.readFile`, `fs.stat`, … | ~40 |
+| streams — `createReadStream`, `createWriteStream` | 26 |
+| `fs.promises` | 16 |
+| `fs.watch`, `fs.watchFile` | 15 |
+| `Buffer` | 7 |
+
+The callback and promise forms are not omitted because they are hard to write.
+They need an event loop and a pool to run the work on, and a `readFile(path, cb)`
+that calls `cb` before returning is not the function node documents. That is a
+runtime decision — see *the runtime* in [`typescript.md`](typescript.md) — and
+`node:fs` is downstream of it.
+
+`readFileSync` without an encoding returns a `Buffer` in node. There is no
+`node:buffer`, so that call is refused with the reason rather than answered
+with a string, which would differ from node silently. The encoded form is
+complete.
+
+Errors are libuv's, built from `uv_err_name` and `uv_strerror` through the
+binding, so `err.code`, `err.errno`, `err.syscall` and `err.path` carry what
+node's carry and the message reads the same:
+
+```
+ENOENT: no such file or directory, stat '/nope/x'
+```
 
 ## What stops `path` compiling
 

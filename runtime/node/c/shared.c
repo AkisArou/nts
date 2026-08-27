@@ -1,3 +1,4 @@
+#include <string.h>
 #include "shared.h"
 
 const NtsDescriptor nts_desc_double = {NTS_KIND_ARRAY, sizeof(double), 0, 0, 0, 0,
@@ -28,4 +29,19 @@ size_t nts_node_to_utf8(const NtsString *s, char *buf, size_t cap) {
     }
     buf[n] = 0;
     return n;
+}
+
+/* libuv's own name and message for an error code. Node exposes the same pair
+ * through `internalBinding('uv')`; taking them from libuv rather than from a
+ * table means they cannot drift from the platform. */
+#include <uv.h>
+
+NtsString *nts_uv_err_name(double code) {
+    const char *name = uv_err_name((int)code);
+    return nts_string_from_utf8(name, name ? strlen(name) : 0);
+}
+
+NtsString *nts_uv_err_message(double code) {
+    const char *message = uv_strerror((int)code);
+    return nts_string_from_utf8(message, message ? strlen(message) : 0);
 }
