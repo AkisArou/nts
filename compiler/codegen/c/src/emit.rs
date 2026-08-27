@@ -1345,7 +1345,7 @@ fn binary_text(
     bin: BinOp,
     lhs: ValueId,
     rhs: ValueId,
-) -> Result<String, Diagnostic> {
+) -> String {
     // A bitwise operator's operands are always coercion results — the lowering
     // guarantees it — so they hold int32 values whatever their representation
     // says. When specialization did not give them an integer type, the
@@ -1380,7 +1380,7 @@ fn binary_text(
         _ => None,
     };
     if let Some(helper) = helper {
-        return Ok(wrap(format!("{helper}({}, {})", cast(lhs), cast(rhs))));
+        return wrap(format!("{helper}({}, {})", cast(lhs), cast(rhs)));
     }
 
     // A comparison against the absent reference is a comparison of addresses,
@@ -1388,11 +1388,11 @@ fn binary_text(
     // `s === null` is a question about the pointer, and answering it by reading
     // through the pointer would read through the null one.
     if let Some(text) = null_comparison(func, name, bin, lhs, rhs) {
-        return Ok(text);
+        return text;
     }
 
     if let Some(text) = string_comparison(func, name, bin, lhs, rhs) {
-        return Ok(text);
+        return text;
     }
 
     let operator = match bin {
@@ -1420,53 +1420,53 @@ fn binary_text(
                 && matches!(func.values[rhs.0 as usize].ty, HirType::Int { .. });
             if both_integers {
                 let test = if matches!(bin, BinOp::Min) { "<" } else { ">" };
-                return Ok(format!(
+                return format!(
                     "{name} = {0} {test} {1} ? {0} : {1};",
                     value_name(lhs),
                     value_name(rhs)
-                ));
+                );
             }
             let helper = if matches!(bin, BinOp::Min) {
                 "nts_min"
             } else {
                 "nts_max"
             };
-            return Ok(wrap(format!(
+            return wrap(format!(
                 "{helper}({}, {})",
-                value_name(lhs),
-                value_name(rhs)
-            )));
-        }
-        BinOp::Concat => {
-            return Ok(format!(
-                "{name} = nts_concat({}, {});",
                 value_name(lhs),
                 value_name(rhs)
             ));
         }
+        BinOp::Concat => {
+            return format!(
+                "{name} = nts_concat({}, {});",
+                value_name(lhs),
+                value_name(rhs)
+            );
+        }
     };
 
     if matches!(bin, BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor) {
-        return Ok(wrap(format!("{} {operator} {}", cast(lhs), cast(rhs))));
+        return wrap(format!("{} {operator} {}", cast(lhs), cast(rhs)));
     }
 
-    // `%` is integer-only in C. On doubles it is `fmod`, and emitting `%` would
-    // not compile — better than emitting something that does and is wrong, but
-    // still worth naming. On integers it is exactly JavaScript's remainder:
-    // both take the sign of the dividend.
+    // `%` is integer-only in C, and on doubles it is `fmod` -- which is not an
+    // approximation of JavaScript's remainder but exactly it: ECMAScript
+    // defines `%` as truncated division with the sign of the dividend, and so
+    // does C99. `-4 % 2` is `-0` on both sides, and `x % 0` is NaN on both.
+    //
+    // Specialization turns most of these into an integer `%` first, where the
+    // two are also the same operation. This is what is left: a remainder over
+    // values the analysis could not prove whole.
     if matches!(bin, BinOp::Rem) && matches!(op.ty, HirType::Float { .. }) {
-        return Err(Diagnostic::error(
-            "NTS2003",
-            "floating-point remainder needs `fmod`, which is not wired up yet",
-            op.origin.location,
-        ));
+        return format!("{name} = fmod({}, {});", value_name(lhs), value_name(rhs));
     }
 
-    Ok(format!(
+    format!(
         "{name} = {} {operator} {};",
         value_name(lhs),
         value_name(rhs)
-    ))
+    )
 }
 
 /// The C spelling of a unary operation.
@@ -1808,7 +1808,7 @@ fn emit_op(
                 literal_name(context.literals, text)
             )
         }
-        OpKind::Binary { op: bin, lhs, rhs } => binary_text(func, op, &name, *bin, *lhs, *rhs)?,
+        OpKind::Binary { op: bin, lhs, rhs } => binary_text(func, op, &name, *bin, *lhs, *rhs),
         OpKind::Call { callee, args } => {
             call_text(func, &name, value, callee, args, context, &op.origin)?
         }

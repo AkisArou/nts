@@ -13,12 +13,12 @@ Needs `clang` and `node` on `PATH`.
 Each case is one TypeScript source compiled four ways. The numbers that matter
 are the gaps between them, not any single column.
 
-| Variant | What it is | What the gap means |
-| --- | --- | --- |
-| `C++` | hand-written C++, what a C++ programmer would write | the ceiling |
-| `nts` | `src/main.ts`, compiled by this compiler | — |
-| `nts f64` | the same, with number specialization **off** | the gap is what the analysis is worth |
-| `node` | the same `.ts`, run on V8 | the thing being replaced |
+| Variant   | What it is                                          | What the gap means                    |
+| --------- | --------------------------------------------------- | ------------------------------------- |
+| `C++`     | hand-written C++, what a C++ programmer would write | the ceiling                           |
+| `nts`     | `src/main.ts`, compiled by this compiler            | —                                     |
+| `nts f64` | the same, with number specialization **off**        | the gap is what the analysis is worth |
+| `node`    | the same `.ts`, run on V8                           | the thing being replaced              |
 
 `nts f64` is the column that makes a speedup a measurement rather than a claim:
 one program, compiled two ways, run against each other.

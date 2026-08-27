@@ -25,22 +25,31 @@ them, so read the ratios rather than the absolute times.
 <!-- benchmarks:start -->
 | case | C++ | nts | nts f64 | V8 | nts/C++ | nts/V8 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| accumulate | 1.42 us | **1.94 us** | 31.58 us | 3.70 us | 1.37x | 0.53x |
-| array-methods | 4.09 us | **2.87 us** | 3.88 us | 6.73 us | 0.70x | 0.43x |
-| arrays | 1.79 us | **1.92 us** | 6.05 us | 3.44 us | 1.07x | 0.56x |
-| checksum | 6.39 us | **6.44 us** | 67.38 us | 7.84 us | 1.01x | 0.82x |
-| closures | 1.20 us | **1.22 us** | 49.94 us | 3.62 us | 1.01x | 0.34x |
-| fib | 353.56 us | **641.74 us** | 635.40 us | 1.24 ms | 1.82x | 0.52x |
-| loop | 1.02 us | **865.8 ns** | 863.5 ns | 1.03 us | 0.85x | 0.84x |
-| mandelbrot | 75.82 us | **77.96 us** | 75.62 us | 81.83 us | 1.03x | 0.95x |
-| objects (rc) | 2.09 us | **2.14 us** | 2.36 us | 2.34 us | 1.02x | 0.92x |
-| strings | 561.8 ns | **1.08 us** | 28.20 us | 3.00 us | 1.92x | 0.36x |
+| accumulate | 1.37 us | **1.85 us** | 28.59 us | 3.69 us | 1.35x | 0.50x |
+| array-methods | 3.37 us | **2.71 us** | 3.88 us | 5.71 us | 0.80x | 0.47x |
+| arrays | 1.75 us | **1.87 us** | 5.21 us | 2.78 us | 1.07x | 0.67x |
+| awfy-bounce | 4.31 us | **8.79 us** | 12.39 us | 10.92 us | 2.04x | 0.81x |
+| awfy-list | 8.51 us | **8.43 us** | 8.44 us | 13.75 us | 0.99x | 0.61x |
+| awfy-mandelbrot | 23.12 ms | **24.54 ms** | 28.11 ms | 23.27 ms | 1.06x | 1.05x |
+| awfy-permute | 11.51 us | **27.63 us** | 27.60 us | 24.75 us | 2.40x | 1.12x |
+| awfy-queens | 5.57 us | **19.16 us** | 21.33 us | 16.18 us | 3.44x | 1.18x |
+| awfy-sieve | 4.28 us | **16.61 us** | 16.70 us | 9.86 us | 3.88x | 1.68x |
+| awfy-towers | 12.57 us | **24.27 us** | 24.12 us | 37.00 us | 1.93x | 0.66x |
+| checksum | 6.38 us | **6.38 us** | 64.61 us | 8.93 us | 1.00x | 0.72x |
+| closures | 1.23 us | **1.24 us** | 52.76 us | 3.63 us | 1.01x | 0.34x |
+| fib | 343.36 us | **652.44 us** | 633.14 us | 1.06 ms | 1.90x | 0.62x |
+| loop | 1.02 us | **874.2 ns** | 874.9 ns | 1.02 us | 0.86x | 0.86x |
+| mandelbrot | 77.24 us | **77.05 us** | 76.68 us | 78.26 us | 1.00x | 0.98x |
+| objects (rc) | 2.10 us | **2.13 us** | 2.41 us | 2.22 us | 1.01x | 0.96x |
+| strings | 572.3 ns | **1.10 us** | 29.00 us | 3.04 us | 1.92x | 0.36x |
 
 Both ratios are nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, `nts/V8` under 1.00 beats V8.
 
 `nts f64` is the same TypeScript with number specialization switched off. It is the column that makes a speedup a measurement rather than a claim — one program, compiled two ways, run against each other.
 
-`C++` is one hand-written reference per case, being what a C++ programmer would actually write for that program; each `ref.cpp` says why in a comment. Every variant returns a checksum and the runner refuses to report a case whose variants disagree, so a backend cannot win by computing the wrong answer quickly. Node is timed inside its own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in its column.
+The `awfy-` cases are [Are We Fast Yet](https://github.com/smarr/are-we-fast-yet), ported to TypeScript in `benches/awfy`. The suite exists to compare *language implementations* fairly, so its benchmarks are held to a subset of features common across JavaScript, Java, C++, Ruby and Smalltalk — which is this compiler's design point too. Three things keep the port honest: `benches/awfy/fidelity.mjs` runs the upstream `.js` and our `.ts` on the same engine and compares, each benchmark's own `verifyResult` checks against the constant the suite recorded, and their reference column is *their* C++ port rather than anything written here.
+
+`C++` is otherwise one hand-written reference per case, being what a C++ programmer would actually write for that program; each `ref.cpp` says why in a comment. Every variant returns a checksum and the runner refuses to report a case whose variants disagree, so a backend cannot win by computing the wrong answer quickly. Node is timed inside its own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in its column.
 <!-- benchmarks:end -->
 
 ### What it can compile

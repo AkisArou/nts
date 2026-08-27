@@ -344,12 +344,20 @@ fn compile(
     defines: &[&str],
 ) -> Result<()> {
     const SHARED: &[&str] = &["-O2", "-flto", "-Wall", "-Wextra", "-Werror"];
-    let includes = [
+    let mut includes = vec![
         "-I".to_owned(),
         root.join("benches/common").to_string(),
         "-I".to_owned(),
         root.join("target/bench").to_string(),
     ];
+    // Are We Fast Yet's own C++ port, where it has been cloned. As a *system*
+    // include: it is somebody else's source, so its warnings are not ours to
+    // fix and `-Werror` should not stop on them.
+    let awfy = root.join("third_party/are-we-fast-yet/benchmarks/C++/src");
+    if awfy.is_dir() {
+        includes.push("-isystem".to_owned());
+        includes.push(awfy.to_string());
+    }
 
     let mut objects = Vec::new();
     for (driver, standard, sources) in [("clang++", "-std=c++20", cpp), ("clang", "-std=c11", c)] {
