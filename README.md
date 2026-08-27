@@ -81,18 +81,18 @@ What is stopping the rest, in order:
 
 | refused | files |
 | --- | ---: |
-| a name declared outside this function | 10 |
+| a name declared outside this function | 12 |
+| a parameter with a default | 7 |
 | a property of unrepresentable type (an object type) | 6 |
 | a module-scope variable whose initializer is not constant | 4 |
 | a module-scope variable with no initializer | 4 |
 | a parameter of unrepresentable type (the type parameter `T`) | 4 |
-| this statement | 4 |
+| a rest parameter | 4 |
 | a parameter of unrepresentable type (any) | 3 |
 | a class of unrepresentable type (a structured type (flags 0x100000)) | 2 |
-| a parameter of unrepresentable type (a tuple) | 2 |
-| a parameter of unrepresentable type (a union of a structured type (flags 0x100000) | null | number | undefined) | 2 |
-| a parameter of unrepresentable type (a union of a structured type (flags 0x100000) | null | number) | 2 |
-| a parameter of unrepresentable type (a union of a tuple) | 2 |
+| a parameter of unrepresentable type (unknown) | 2 |
+| an object with an optional property | 2 |
+| `null` or `undefined` where what it stands in for is not a reference | 1 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->

@@ -696,9 +696,9 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
             .modifiers
             .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
         {
-            lowered.diagnostics.push(
-                FuncBuilder::new(snapshot).unsupported(id, "an `async` function"),
-            );
+            lowered
+                .diagnostics
+                .push(FuncBuilder::new(snapshot).unsupported(id, "an `async` function"));
             continue;
         }
 
@@ -1187,6 +1187,57 @@ struct PartialBlock {
 }
 
 /// Builds one function.
+/// A construct `break` can leave.
+///
+/// A loop is one and so is a `switch`, and the difference between them is
+/// exactly `continue`: a loop has a latch to restart, a switch has none, and a
+/// `continue` written inside a switch belongs to the loop around it.
+#[derive(Debug, Clone)]
+struct Breakable {
+    /// The block after the construct, and its parameters — **created on first
+    /// use**.
+    ///
+    /// A construct nothing leaves has no block after it. `for (;;) { return }`
+    /// is the plain case, and a `switch` whose every clause returns is another.
+    /// Allocating an exit for those would leave a block no edge reaches, which
+    /// is invalid SSA rather than merely dead code — the verifier says so, and
+    /// it was saying so about infinite loops before this was lazy.
+    exit: Option<(BlockId, Vec<ValueId>)>,
+    /// What an exit parameter would be typed, per carried name, and where to
+    /// say it came from when one is finally made.
+    exit_types: Vec<HirType>,
+    origin: Origin,
+    /// Where `continue` goes, for the things that have one.
+    latch: Option<BlockId>,
+    /// The symbols this construct carries, in parameter order.
+    carried: Vec<u32>,
+}
+
+/// One loop under construction: where it jumps back to, where it leaves
+/// through, and what it carries between the two.
+#[derive(Debug, Clone)]
+struct Loop {
+    header: BlockId,
+    body: BlockId,
+    /// Where this loop sits on the enclosing-construct stack, which is how its
+    /// exit is reached: the exit is created on demand and shared, so it lives
+    /// there rather than here.
+    depth: usize,
+    /// Where an iteration *ends*, and so where `continue` goes.
+    ///
+    /// The header for a loop with no update. For `for (;; i++)` it is a block
+    /// of its own that runs the update before jumping back, because `continue`
+    /// must not skip it — `for (;; i++) { continue; }` that jumped straight to
+    /// the header would never step and never finish.
+    latch: BlockId,
+    /// The latch's parameters, when it is a block of its own.
+    latch_params: Vec<ValueId>,
+    /// The symbols the loop carries, in parameter order.
+    carried: Vec<u32>,
+    /// Each carried name's value at the top of an iteration.
+    header_params: Vec<ValueId>,
+}
+
 struct FuncBuilder<'a> {
     snapshot: &'a SemanticSnapshot,
     /// Every value the function defines.
@@ -1233,6 +1284,11 @@ struct FuncBuilder<'a> {
     /// machinery is keyed by symbol. Numbering down from the top keeps a
     /// synthetic name from colliding with one the checker assigned.
     synthetic: u32,
+    /// What encloses the statement being lowered, innermost last.
+    ///
+    /// `break` and `continue` name no target in the source, so the target is
+    /// wherever they are — which is a stack rather than a value.
+    breakables: Vec<Breakable>,
     /// Which of them this function allocated.
     ///
     /// A closure nobody creates is not lowered at all. That is the rule
@@ -1262,6 +1318,7 @@ impl<'a> FuncBuilder<'a> {
             closures: Vec::new(),
             expecting: None,
             synthetic: 0,
+            breakables: Vec::new(),
             used_closures: Vec::new(),
             substitution: Substitution::default(),
         }
@@ -1784,7 +1841,7 @@ impl<'a> FuncBuilder<'a> {
         self.materialize(member, &return_type)?;
 
         self.lower_block(body)?;
-        self.terminate(Terminator::Return(None));
+        self.close_body(&return_type);
 
         // A method is reachable from outside exactly when its class is, so the
         // class's `export` is what makes it a root.
@@ -1831,9 +1888,7 @@ impl<'a> FuncBuilder<'a> {
 
         self.lower_block(body)?;
 
-        // A body that falls off its end returns nothing. TypeScript already
-        // rejects that for a non-void function, so reaching it means void.
-        self.terminate(Terminator::Return(None));
+        self.close_body(&return_type);
 
         let origin = self.origin(id);
         let exported = self
@@ -2162,12 +2217,273 @@ impl<'a> FuncBuilder<'a> {
         self.declared_symbols(*body, &mut declared);
         carried.retain(|symbol| !declared.contains(symbol));
 
-        let header = self.new_block();
         let origin = self.origin(id);
-        let (params, exit) = self.enter_loop(id, header, &carried, Some(*condition), &origin)?;
+        let record = self.begin_loop(id, &carried, false, &origin)?;
+        self.enter_loop(&record, Some(*condition))?;
 
         self.lower_statement(*body)?;
-        self.close_loop(header, &carried, &params, exit);
+        self.end_loop(&record, None)
+    }
+
+    /// `switch (x) { case a: .. }`.
+    ///
+    /// # Two orders, and they are not the same order
+    ///
+    /// A `switch` is *tested* in source order until something matches, and it
+    /// is *laid out* in source order so that a clause without a `break` falls
+    /// into the next one. `default` takes part in the second and not the first:
+    /// it is reached only when every case has been tried, wherever it was
+    /// written. So the tests form a chain that skips it and ends at it, while
+    /// the clause blocks are threaded together in the order they appear.
+    ///
+    /// # Why every clause block takes parameters
+    ///
+    /// A clause is a merge: control arrives either from its own test or by
+    /// falling out of the clause above, and those two disagree about what the
+    /// carried names hold. That is the same reason a loop's exit takes
+    /// parameters, for the same kind of reason.
+    ///
+    /// The comparison is `===` on the discriminant, which for the numbers and
+    /// strings this compiler represents is what the specification's
+    /// `StrictEquals` reduces to.
+    fn lower_switch(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let children = self.children(id);
+        let [discriminant, case_block] = children.as_slice() else {
+            return Err(self.unsupported(id, "a `switch` of unexpected shape"));
+        };
+        let (discriminant, case_block) = (*discriminant, *case_block);
+        if self.kind_of(case_block) != Some(syntax::CASE_BLOCK) {
+            return Err(self.unsupported(id, "a `switch` without a case block"));
+        }
+        let clauses = self.children(case_block);
+        let origin = self.origin(id);
+
+        let mut carried = Vec::new();
+        let mut declared = Vec::new();
+        for clause in &clauses {
+            self.assigned_symbols(*clause, &mut carried);
+            self.declared_symbols(*clause, &mut declared);
+        }
+        carried.retain(|symbol| !declared.contains(symbol));
+
+        let subject = self.lower_expression(discriminant)?;
+
+        // Every block a clause or the exit needs, with its parameters, before
+        // anything is lowered into one -- a fall-through edge is written before
+        // the block it lands in has been visited.
+        let mut blocks = Vec::new();
+        for _ in &clauses {
+            blocks.push(self.new_block());
+        }
+        let entering = self.carried_now(&carried);
+        let mut exit_types = Vec::new();
+        let mut clause_params: Vec<Vec<ValueId>> = vec![Vec::new(); clauses.len()];
+        for value in &entering {
+            let ty = self.values[value.0 as usize].ty.clone();
+            exit_types.push(ty.clone());
+            for (clause, block) in clause_params.iter_mut().zip(&blocks) {
+                clause.push(self.push_block_param(*block, ty.clone(), origin.clone()));
+            }
+        }
+
+        let depth = self.breakables.len();
+        self.breakables.push(Breakable {
+            exit: None,
+            exit_types,
+            origin: origin.clone(),
+            latch: None,
+            carried: carried.clone(),
+        });
+
+        self.lower_case_chain(&clauses, &blocks, subject, depth, &carried, &origin)?;
+
+        // The clauses, threaded in source order so a missing `break` falls
+        // through -- which is what it means.
+        for (at, clause) in clauses.iter().enumerate() {
+            self.switch_to(blocks[at]);
+            for (symbol, param) in carried.iter().zip(&clause_params[at]) {
+                self.bindings.insert(*symbol, *param);
+            }
+            let statements: Vec<NodeId> = self
+                .children(*clause)
+                .into_iter()
+                .skip(usize::from(
+                    self.kind_of(*clause) == Some(syntax::CASE_CLAUSE),
+                ))
+                .collect();
+            for statement in statements {
+                if self.is_terminated() {
+                    break;
+                }
+                self.lower_statement(statement)?;
+            }
+            if !self.is_terminated() {
+                let reached = self.carried_now(&carried);
+                let next = match blocks.get(at + 1) {
+                    Some(block) => *block,
+                    None => self.exit_of(depth).0,
+                };
+                self.terminate(Terminator::Jump {
+                    target: next,
+                    args: reached,
+                });
+            }
+        }
+
+        // A `switch` every clause returns from, with a `default` so nothing
+        // falls past it, has nothing after it.
+        let left = self.breakables[depth].exit.clone();
+        self.breakables.pop();
+        if let Some((exit, params)) = left {
+            self.switch_to(exit);
+            for (symbol, param) in carried.iter().zip(&params) {
+                self.bindings.insert(*symbol, *param);
+            }
+        }
+        Ok(())
+    }
+
+    /// The comparison chain a `switch` tests through, in source order.
+    ///
+    /// `default` is not in it. It is reached when every case has been tried,
+    /// which is where the chain ends rather than somewhere along it — and that
+    /// is true wherever in the source it was written.
+    fn lower_case_chain(
+        &mut self,
+        clauses: &[NodeId],
+        blocks: &[BlockId],
+        subject: ValueId,
+        depth: usize,
+        carried: &[u32],
+        origin: &Origin,
+    ) -> Result<(), Diagnostic> {
+        let default_at = clauses
+            .iter()
+            .position(|clause| self.kind_of(*clause) == Some(syntax::DEFAULT_CLAUSE));
+        let cases: Vec<usize> = (0..clauses.len())
+            .filter(|at| Some(*at) != default_at)
+            .collect();
+
+        // `switch (x) { }` and `switch (x) { default: }` have nothing to test.
+        if cases.is_empty() {
+            let reached = self.carried_now(carried);
+            let target = match default_at {
+                Some(at) => blocks[at],
+                None => self.exit_of(depth).0,
+            };
+            self.terminate(Terminator::Jump {
+                target,
+                args: reached,
+            });
+            return Ok(());
+        }
+
+        for (which, at) in cases.iter().enumerate() {
+            let clause = clauses[*at];
+            let label = *self
+                .children(clause)
+                .first()
+                .ok_or_else(|| self.unsupported(clause, "a `case` with no label"))?;
+            let label = self.lower_expression(label)?;
+            // `Eq` on a string-typed operand reaches the backend as
+            // `nts_string_eq`, so this one operation is `===` for every type
+            // this compiler can switch on.
+            let matched = self.push(
+                OpKind::Binary {
+                    op: BinOp::Eq,
+                    lhs: subject,
+                    rhs: label,
+                },
+                HirType::Bool,
+                origin.clone(),
+            );
+
+            let reached = self.carried_now(carried);
+            // A block in the middle of the chain is straight-line: control
+            // arrives one way and the names are unchanged, so it takes no
+            // parameters. Only the ends of the chain are merges.
+            let chaining = which + 1 < cases.len();
+            let (otherwise, otherwise_args) = if chaining {
+                (self.new_block(), Vec::new())
+            } else if let Some(at) = default_at {
+                (blocks[at], reached.clone())
+            } else {
+                (self.exit_of(depth).0, reached.clone())
+            };
+            self.terminate(Terminator::Branch {
+                cond: matched,
+                then_target: blocks[*at],
+                then_args: reached,
+                else_target: otherwise,
+                else_args: otherwise_args,
+            });
+            if chaining {
+                self.switch_to(otherwise);
+            }
+        }
+        Ok(())
+    }
+
+    /// `do { .. } while (c)`.
+    ///
+    /// The same loop as `while`, entered at the body instead of at the test.
+    /// The header still holds the parameters, because the back edge still
+    /// arrives there — what changes is only that the first pass reaches the
+    /// body without asking.
+    fn lower_do_while(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let children = self.children(id);
+        let [body, condition] = children.as_slice() else {
+            return Err(self.unsupported(id, "a `do` of unexpected shape"));
+        };
+        let (body, condition) = (*body, *condition);
+
+        let mut carried = Vec::new();
+        self.assigned_symbols(body, &mut carried);
+        let mut declared = Vec::new();
+        self.declared_symbols(body, &mut declared);
+        carried.retain(|symbol| !declared.contains(symbol));
+
+        let origin = self.origin(id);
+        // A `do` loop tests at the *end*, so the header is where the test goes
+        // and the body is entered from it unconditionally on every pass. The
+        // first pass reaches the header through the entry edge like any other,
+        // which is what makes "runs at least once" fall out rather than be
+        // arranged: the header's only job is to hold the parameters.
+        let record = self.begin_loop(id, &carried, true, &origin)?;
+        self.enter_loop(&record, None)?;
+
+        self.lower_statement(body)?;
+        // The latch is where the test lives, so `continue` reaches it and the
+        // condition is evaluated -- which is what `do { continue; } while (c)`
+        // means.
+        if !self.is_terminated() {
+            let reached = self.carried_now(&record.carried);
+            self.terminate(Terminator::Jump {
+                target: record.latch,
+                args: reached,
+            });
+        }
+        self.switch_to(record.latch);
+        for (symbol, param) in record.carried.iter().zip(&record.latch_params) {
+            self.bindings.insert(*symbol, *param);
+        }
+        let cond = self.lower_expression(condition)?;
+        let cond = self.truthy(condition, cond);
+        let carried_here = self.carried_now(&record.carried);
+        let (exit, exit_params) = self.exit_of(record.depth);
+        self.terminate(Terminator::Branch {
+            cond,
+            then_target: record.header,
+            then_args: carried_here.clone(),
+            else_target: exit,
+            else_args: carried_here,
+        });
+
+        self.breakables.pop();
+        self.switch_to(exit);
+        for (symbol, param) in record.carried.iter().zip(&exit_params) {
+            self.bindings.insert(*symbol, *param);
+        }
         Ok(())
     }
 
@@ -2181,13 +2497,31 @@ impl<'a> FuncBuilder<'a> {
     /// and a test is lowered where its operations belong, which is the header
     /// rather than the block before it. A `while` lowers an expression there; a
     /// `for...of` builds a comparison there that no source node describes.
-    fn open_loop(
+    /// Begin a loop: the blocks, the parameters, and the record `break` and
+    /// `continue` will look up.
+    ///
+    /// # Why the exit takes parameters
+    ///
+    /// A loop can be left two ways and they disagree about what its carried
+    /// names hold. Leaving by the test means the *header's* parameters are the
+    /// answer — the value at the top of the iteration that failed. Leaving by a
+    /// `break` means whatever the body had reached at that point.
+    ///
+    /// So the exit is a merge, and a merge takes parameters here like any
+    /// other. Before `break` existed there was one way out, the exit needed
+    /// none, and the names were rebound to the header's — which was correct for
+    /// exactly as long as it was the only way out.
+    fn begin_loop(
         &mut self,
         id: NodeId,
-        header: BlockId,
         carried: &[u32],
+        steps: bool,
         origin: &Origin,
-    ) -> Result<Vec<ValueId>, Diagnostic> {
+    ) -> Result<Loop, Diagnostic> {
+        let header = self.new_block();
+        let body = self.new_block();
+        let latch = if steps { self.new_block() } else { header };
+
         // The values entering the loop, in the order the parameters take them.
         let mut incoming = Vec::new();
         for symbol in carried {
@@ -2201,84 +2535,206 @@ impl<'a> FuncBuilder<'a> {
             args: incoming.clone(),
         });
 
-        // Inside the loop, each carried name *is* its parameter.
+        // Inside the loop, each carried name *is* its header parameter.
         self.switch_to(header);
-        let mut params = Vec::new();
+        let mut header_params = Vec::new();
+        let mut latch_params = Vec::new();
+        let mut exit_types = Vec::new();
         for (symbol, entering) in carried.iter().zip(&incoming) {
             let ty = self.values[entering.0 as usize].ty.clone();
-            let param = self.push_block_param(header, ty, origin.clone());
+            let param = self.push_block_param(header, ty.clone(), origin.clone());
             self.bindings.insert(*symbol, param);
-            params.push(param);
+            header_params.push(param);
+            exit_types.push(ty.clone());
+            if latch != header {
+                latch_params.push(self.push_block_param(latch, ty, origin.clone()));
+            }
         }
-        Ok(params)
+
+        let depth = self.breakables.len();
+        self.breakables.push(Breakable {
+            exit: None,
+            exit_types,
+            origin: origin.clone(),
+            latch: Some(latch),
+            carried: carried.to_vec(),
+        });
+        Ok(Loop {
+            header,
+            body,
+            depth,
+            latch,
+            latch_params,
+            carried: carried.to_vec(),
+            header_params,
+        })
     }
 
-    fn enter_loop(
-        &mut self,
-        id: NodeId,
-        header: BlockId,
-        carried: &[u32],
-        condition: Option<NodeId>,
-        origin: &Origin,
-    ) -> Result<(Vec<ValueId>, BlockId), Diagnostic> {
-        let params = self.open_loop(id, header, carried, origin)?;
-        let (body_block, exit) = self.loop_blocks();
+    /// Emit the loop's test and switch to its body.
+    ///
+    /// `None` is `for (;;)`, whose exit is reachable only through a `break` or
+    /// a `return` — which is what the source says.
+    fn enter_loop(&mut self, record: &Loop, condition: Option<NodeId>) -> Result<(), Diagnostic> {
         match condition {
             Some(condition) => {
                 let cond = self.lower_expression(condition)?;
                 let cond = self.truthy(condition, cond);
-                self.test_loop(cond, body_block, exit);
+                self.test_loop(cond, record);
             }
-            // `for (;;)`. The exit block stays reachable only through a `return`
-            // inside the body, which is exactly what the source says.
             None => self.terminate(Terminator::Jump {
-                target: body_block,
+                target: record.body,
                 args: Vec::new(),
             }),
         }
-
-        self.switch_to(body_block);
-        Ok((params, exit))
+        self.switch_to(record.body);
+        Ok(())
     }
 
-    /// The body and exit blocks a loop needs, allocated in that order.
-    fn loop_blocks(&mut self) -> (BlockId, BlockId) {
-        (self.new_block(), self.new_block())
-    }
-
-    /// End a loop header on its test.
-    fn test_loop(&mut self, cond: ValueId, body: BlockId, exit: BlockId) {
+    /// Into the body, or out of the loop with what the header holds.
+    fn test_loop(&mut self, cond: ValueId, record: &Loop) {
+        let (exit, _) = self.exit_of(record.depth);
         self.terminate(Terminator::Branch {
             cond,
-            then_target: body,
+            then_target: record.body,
             then_args: Vec::new(),
             else_target: exit,
-            else_args: Vec::new(),
+            else_args: record.header_params.clone(),
         });
     }
 
-    /// Close a loop: take the back edge, restore the carried names, and continue
-    /// after the loop.
-    fn close_loop(&mut self, header: BlockId, carried: &[u32], params: &[ValueId], exit: BlockId) {
+    /// The block after an enclosing construct, made the first time something
+    /// needs one.
+    fn exit_of(&mut self, depth: usize) -> (BlockId, Vec<ValueId>) {
+        if let Some(made) = &self.breakables[depth].exit {
+            return made.clone();
+        }
+        let types = self.breakables[depth].exit_types.clone();
+        let origin = self.breakables[depth].origin.clone();
+        let block = self.new_block();
+        let params: Vec<ValueId> = types
+            .into_iter()
+            .map(|ty| self.push_block_param(block, ty, origin.clone()))
+            .collect();
+        let made = (block, params);
+        self.breakables[depth].exit = Some(made.clone());
+        made
+    }
+
+    /// Close the iteration, run the update where there is one, and leave the
+    /// loop with its names bound to the exit's parameters — which is where
+    /// every way out of it agrees.
+    fn end_loop(&mut self, record: &Loop, update: Option<NodeId>) -> Result<(), Diagnostic> {
+        // The body falls into the latch, which is the header unless the loop
+        // steps.
         if !self.is_terminated() {
-            // The back edge carries whatever the body left in each name.
-            let updated: Vec<ValueId> =
-                carried.iter().map(|symbol| self.bindings[symbol]).collect();
+            let reached = self.carried_now(&record.carried);
             self.terminate(Terminator::Jump {
-                target: header,
-                args: updated,
+                target: record.latch,
+                args: reached,
             });
         }
 
-        // After the loop the live value of a carried name is the header
-        // parameter, and the bindings must be put back to it. The body
-        // overwrote them with values defined in the body block — which the exit
-        // does not dominate, so using one after the loop is invalid SSA that
-        // reads whatever the last iteration happened to leave.
-        for (symbol, param) in carried.iter().zip(params) {
-            self.bindings.insert(*symbol, *param);
+        if record.latch != record.header {
+            self.switch_to(record.latch);
+            for (symbol, param) in record.carried.iter().zip(&record.latch_params) {
+                self.bindings.insert(*symbol, *param);
+            }
+            if let Some(update) = update {
+                self.lower_expression(update)?;
+            }
+            let stepped = self.carried_now(&record.carried);
+            self.terminate(Terminator::Jump {
+                target: record.header,
+                args: stepped,
+            });
         }
-        self.switch_to(exit);
+
+        // A loop nothing leaves has no exit, and what follows it is
+        // unreachable -- so the enclosing block stays closed, exactly as it
+        // does when both arms of an `if` end.
+        let left = self.breakables[record.depth].exit.clone();
+        self.breakables.pop();
+        if let Some((exit, params)) = left {
+            self.switch_to(exit);
+            for (symbol, param) in record.carried.iter().zip(&params) {
+                self.bindings.insert(*symbol, *param);
+            }
+        }
+        Ok(())
+    }
+
+    /// Terminate whatever block a body ended in.
+    ///
+    /// Falling off the end of a `void` function returns nothing, which is what
+    /// it means. Falling off the end of one that returns a value cannot happen:
+    /// TypeScript rejects a function that might, so the point is unreachable
+    /// and saying `return;` there is a type error in C rather than a
+    /// conservative choice.
+    ///
+    /// `while (true) { ... return x; }` is the ordinary way to arrive here. The
+    /// loop's exit is a real edge — the condition is constant but the branch is
+    /// not folded when this runs — and nothing follows it.
+    fn close_body(&mut self, return_type: &HirType) {
+        if matches!(return_type, HirType::Void) {
+            self.terminate(Terminator::Return(None));
+        } else {
+            self.terminate(Terminator::Unreachable);
+        }
+    }
+
+    /// What each carried name holds right here.
+    fn carried_now(&self, carried: &[u32]) -> Vec<ValueId> {
+        carried.iter().map(|symbol| self.bindings[symbol]).collect()
+    }
+
+    /// `break` — leave the innermost loop or switch, carrying what has been
+    /// reached.
+    fn lower_break(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let depth = self.enclosing(id, "break", |it| it.latch.is_some() || it.latch.is_none())?;
+        let carried = self.breakables[depth].carried.clone();
+        let args = self.carried_now(&carried);
+        let (exit, _) = self.exit_of(depth);
+        self.terminate(Terminator::Jump { target: exit, args });
+        Ok(())
+    }
+
+    /// `continue` — begin the next iteration with what the body has reached.
+    ///
+    /// It looks past a `switch`, which is not a thing to continue.
+    fn lower_continue(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let depth = self.enclosing(id, "continue", |it| it.latch.is_some())?;
+        let it = self.breakables[depth].clone();
+        let args = self.carried_now(&it.carried);
+        let latch = it.latch.expect("the predicate above admits only loops");
+        self.terminate(Terminator::Jump {
+            target: latch,
+            args,
+        });
+        Ok(())
+    }
+
+    /// What a bare `break` or `continue` belongs to.
+    ///
+    /// A label is refused rather than ignored: `break outer` and `break` are
+    /// different statements, and lowering one as the other would compile and
+    /// leave the wrong construct.
+    fn enclosing(
+        &mut self,
+        id: NodeId,
+        what: &str,
+        mut wanted: impl FnMut(&Breakable) -> bool,
+    ) -> Result<usize, Diagnostic> {
+        if self
+            .children(id)
+            .iter()
+            .any(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+        {
+            return Err(self.unsupported(id, &format!("a labelled `{what}`")));
+        }
+        self.breakables
+            .iter()
+            .rposition(&mut wanted)
+            .ok_or_else(|| self.unsupported(id, &format!("a `{what}` outside a loop")))
     }
 
     /// `for (init; cond; update) body`.
@@ -2318,18 +2774,12 @@ impl<'a> FuncBuilder<'a> {
         self.declared_symbols(body, &mut declared);
         carried.retain(|symbol| !declared.contains(symbol));
 
-        let header = self.new_block();
         let origin = self.origin(id);
-        let (params, exit) = self.enter_loop(id, header, &carried, condition, &origin)?;
+        let record = self.begin_loop(id, &carried, update.is_some(), &origin)?;
+        self.enter_loop(&record, condition)?;
 
         self.lower_statement(body)?;
-        if let Some(update) = update
-            && !self.is_terminated()
-        {
-            self.lower_expression(update)?;
-        }
-        self.close_loop(header, &carried, &params, exit);
-        Ok(())
+        self.end_loop(&record, update)
     }
 
     /// A node's children assigned to their declared property slots.
@@ -2397,9 +2847,7 @@ impl<'a> FuncBuilder<'a> {
         self.declared_symbols(body, &mut declared);
         carried.retain(|symbol| *symbol == index || !declared.contains(symbol));
 
-        let header = self.new_block();
-        let params = self.open_loop(id, header, &carried, &origin)?;
-        let (body_block, exit) = self.loop_blocks();
+        let record = self.begin_loop(id, &carried, false, &origin)?;
 
         // `index < xs.length`, built rather than lowered: the source has no node
         // for it.
@@ -2418,8 +2866,8 @@ impl<'a> FuncBuilder<'a> {
             HirType::Bool,
             origin.clone(),
         );
-        self.test_loop(cond, body_block, exit);
-        self.switch_to(body_block);
+        self.test_loop(cond, &record);
+        self.switch_to(record.body);
 
         // `const x = xs[index]`, checked: the length was read once and the
         // bounds pass is what proves the index inside it.
@@ -2450,8 +2898,7 @@ impl<'a> FuncBuilder<'a> {
             );
             self.bindings.insert(index, next);
         }
-        self.close_loop(header, &carried, &params, exit);
-        Ok(())
+        self.end_loop(&record, None)
     }
 
     /// `throw new Error("...")`.
@@ -2952,8 +3399,14 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::BLOCK) => self.lower_block(id),
             Some(syntax::IF_STATEMENT) => self.lower_if(id),
             Some(syntax::WHILE_STATEMENT) => self.lower_while(id),
+            Some(syntax::DO_STATEMENT) => self.lower_do_while(id),
+            Some(syntax::SWITCH_STATEMENT) => self.lower_switch(id),
             Some(syntax::FOR_STATEMENT) => self.lower_for(id),
             Some(syntax::FOR_OF_STATEMENT) => self.lower_for_of(id),
+            Some(syntax::BREAK_STATEMENT) => self.lower_break(id),
+            Some(syntax::CONTINUE_STATEMENT) => self.lower_continue(id),
+            // `;` on its own. Nothing to lower and nothing wrong with it.
+            Some(syntax::EMPTY_STATEMENT) => Ok(()),
             Some(syntax::THROW_STATEMENT) => self.lower_throw(id),
             Some(syntax::EXPRESSION_STATEMENT) => {
                 let Some(expression) = self.children(id).first().copied() else {
@@ -4560,9 +5013,7 @@ impl<'a> FuncBuilder<'a> {
         self.declared_symbols(body, &mut declared);
         carried.retain(|symbol| *symbol == index || !declared.contains(symbol));
 
-        let header = self.new_block();
-        let params = self.open_loop(id, header, &carried, &origin)?;
-        let (body_block, exit) = self.loop_blocks();
+        let record = self.begin_loop(id, &carried, false, &origin)?;
 
         let at = self.bindings[&index];
         let length = self.push(OpKind::Length(receiver), HirType::NUMBER, origin.clone());
@@ -4575,8 +5026,8 @@ impl<'a> FuncBuilder<'a> {
             HirType::Bool,
             origin.clone(),
         );
-        self.test_loop(cond, body_block, exit);
-        self.switch_to(body_block);
+        self.test_loop(cond, &record);
+        self.switch_to(record.body);
 
         let at = self.bindings[&index];
         let value = self.push(
@@ -4611,7 +5062,7 @@ impl<'a> FuncBuilder<'a> {
             );
             self.bindings.insert(index, next);
         }
-        self.close_loop(header, &carried, &params, exit);
+        self.end_loop(&record, None)?;
 
         // `forEach` evaluates to `undefined`, which is `void` here. Nothing
         // reads it -- an expression statement is the only place this appears --
