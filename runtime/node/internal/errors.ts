@@ -271,3 +271,13 @@ export class ERR_INVALID_URI extends URIError {
     this.name = "URIError";
   }
 }
+
+/** `Unknown encoding: utf9`. */
+export class ERR_UNKNOWN_ENCODING extends TypeError {
+  readonly code = "ERR_UNKNOWN_ENCODING";
+
+  constructor(encoding: string) {
+    super(`Unknown encoding: ${encoding}`);
+    this.name = "TypeError";
+  }
+}

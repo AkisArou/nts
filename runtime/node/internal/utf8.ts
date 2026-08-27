@@ -87,74 +87,90 @@ export function utf8Write(
 }
 
 /**
- * Decode UTF-8, replacing every byte of an invalid sequence with U+FFFD.
+ * Decode UTF-8, substituting U+FFFD for each maximal invalid subpart.
  *
- * Replacing rather than throwing is what every decoder that has to keep going
- * does, and it is what `Buffer.prototype.toString` promises.
+ * This is the WHATWG Encoding standard's decoder, state variable for state
+ * variable, and the *number* of replacement characters is the reason it is
+ * written that way rather than as a switch on the lead byte. `E8 AA 62` is one
+ * bad sequence followed by `b`, so it decodes to two characters: a decoder that
+ * restarts one byte after the lead emits three, and no test using ASCII would
+ * ever catch the difference.
+ *
+ * The boundaries move with the lead byte — `E0` requires `A0..BF` where `E1`
+ * accepts `80..BF` — which is what rules out an overlong encoding without a
+ * separate check afterwards.
  */
 export function utf8Decode(bytes: Uint8Array, start: number, end: number): string {
   let out = "";
+  let codePoint = 0;
+  let bytesSeen = 0;
+  let bytesNeeded = 0;
+  let lowerBoundary = 0x80;
+  let upperBoundary = 0xbf;
+
   let i = start;
   while (i < end) {
-    const b0 = bytes[i]!;
-    if (b0 < 0x80) {
-      out += String.fromCharCode(b0);
-      i += 1;
-      continue;
-    }
+    const byte = bytes[i]!;
 
-    let needed: number;
-    let code: number;
-    let lowest: number;
-    if ((b0 & 0xe0) === 0xc0) {
-      needed = 1;
-      code = b0 & 0x1f;
-      lowest = 0x80;
-    } else if ((b0 & 0xf0) === 0xe0) {
-      needed = 2;
-      code = b0 & 0x0f;
-      lowest = 0x800;
-    } else if ((b0 & 0xf8) === 0xf0) {
-      needed = 3;
-      code = b0 & 0x07;
-      lowest = 0x10000;
-    } else {
-      out += "�";
-      i += 1;
-      continue;
-    }
-
-    if (i + needed >= end + 1 && i + needed > end - 1) {
-      out += "�";
-      i += 1;
-      continue;
-    }
-
-    let valid = true;
-    for (let k = 1; k <= needed; k++) {
-      const b = bytes[i + k]!;
-      if ((b & 0xc0) !== 0x80) {
-        valid = false;
-        break;
+    if (bytesNeeded === 0) {
+      i++;
+      if (byte <= 0x7f) {
+        out += String.fromCharCode(byte);
+      } else if (byte >= 0xc2 && byte <= 0xdf) {
+        bytesNeeded = 1;
+        codePoint = byte & 0x1f;
+      } else if (byte >= 0xe0 && byte <= 0xef) {
+        if (byte === 0xe0) lowerBoundary = 0xa0;
+        if (byte === 0xed) upperBoundary = 0x9f;
+        bytesNeeded = 2;
+        codePoint = byte & 0x0f;
+      } else if (byte >= 0xf0 && byte <= 0xf4) {
+        if (byte === 0xf0) lowerBoundary = 0x90;
+        if (byte === 0xf4) upperBoundary = 0x8f;
+        bytesNeeded = 3;
+        codePoint = byte & 0x07;
+      } else {
+        // C0, C1 and F5..FF cannot begin a sequence at all.
+        out += "\ufffd";
       }
-      code = (code << 6) | (b & 0x3f);
-    }
-
-    // An overlong encoding, a surrogate, or a value past the last code point
-    // is invalid however well-formed its bytes are.
-    if (!valid || code < lowest || (code >= 0xd800 && code < 0xe000) || code > 0x10ffff) {
-      out += "�";
-      i += 1;
       continue;
     }
 
-    i += needed + 1;
-    if (code > 0xffff) {
-      code -= 0x10000;
-      out += String.fromCharCode(0xd800 + (code >> 10), 0xdc00 + (code & 0x3ff));
-    } else {
-      out += String.fromCharCode(code);
+    if (byte < lowerBoundary || byte > upperBoundary) {
+      // The sequence ends here and this byte is not part of it, so it is
+      // *reprocessed* as a fresh start rather than consumed.
+      codePoint = 0;
+      bytesNeeded = 0;
+      bytesSeen = 0;
+      lowerBoundary = 0x80;
+      upperBoundary = 0xbf;
+      out += "\ufffd";
+      continue;
     }
+
+    lowerBoundary = 0x80;
+    upperBoundary = 0xbf;
+    codePoint = (codePoint << 6) | (byte & 0x3f);
+    bytesSeen++;
+    i++;
+
+    if (bytesSeen === bytesNeeded) {
+      if (codePoint > 0xffff) {
+        const c = codePoint - 0x10000;
+        out += String.fromCharCode(0xd800 + (c >> 10), 0xdc00 + (c & 0x3ff));
+      } else {
+        out += String.fromCharCode(codePoint);
+      }
+      codePoint = 0;
+      bytesNeeded = 0;
+      bytesSeen = 0;
+    }
+  }
+
+  // A sequence cut off by the end of the input is one error, however many
+  // bytes of it arrived.
+  if (bytesNeeded !== 0) {
+    out += "\ufffd";
   }
   return out;
 }

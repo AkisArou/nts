@@ -55,6 +55,7 @@ rather than inferred by a rule, so the number can be audited.
 | `url` | — | — | not started |
 | `buffer` | **49 / 60** | 0 / 65 | complete enough for `fs` and `string_decoder` |
 | `events` | — | — | not started |
+| `string_decoder` | **2 / 3** | 0 / 24 | complete; the failure is the class-vs-function difference |
 | `stream` | — | — | not started |
 | `assert` | — | — | not started |
 
@@ -191,6 +192,13 @@ accepted anywhere bytes are, and it is what node does.
 `--allow-natives-syntax` to drive V8's optimiser, which is a question about V8
 rather than about `node:buffer`.
 
+The UTF-8 decoder is the WHATWG Encoding standard's, state variable for state
+variable. That is not pedantry about which spec to cite: the standard defines
+how many U+FFFD an invalid sequence produces, and `E8 AA 62` is *one* bad
+sequence followed by `b`. A decoder that restarts one byte past the lead emits
+three characters where node emits two, and no test over ASCII would ever show
+it. 60,000 random byte sequences now agree with V8 exactly.
+
 `allocUnsafe` returns zeroed memory here and does not in node, which hands back
 a slice of a pool. The name is kept because the API is the contract, and code
 that reads before writing is wrong either way.
@@ -199,6 +207,32 @@ Floats go through a one-element typed array rather than hand-rolled bit
 manipulation: reproducing IEEE-754 rounding by hand is a way to be subtly wrong.
 The integer accessors are byte arithmetic, as upstream's are, because they are
 what a protocol parser calls in its inner loop.
+
+## `string_decoder`
+
+Complete from node v24.20.0. Node's JavaScript here is a shell over
+`internalBinding('string_decoder')` — the state machine that carries an
+incomplete character across `write` calls is C++, because it runs once per chunk
+of every stream. What it implements is what this implements.
+
+Two of three files pass. The third uses `StringDecoder.call(decoder)`, the same
+class-versus-function difference described under `events`.
+
+Getting this right needed three corrections that no small test would have found,
+and all three were located by fuzzing against node rather than by reading:
+
+- **`utf8CheckByte` accepted `C0..C1` and `F5..F7` as lead bytes.** They cannot
+  begin a sequence: the first pair can only introduce an overlong encoding of
+  ASCII, the second something past U+10FFFF.
+- **The byte after a lead has a lead-specific range.** `E0` forbids `80..9F`,
+  `ED` forbids `A0..BF`, `F0` forbids `80..8F`, `F4` forbids `90..BF`. Checking
+  only `80..BF` accepts overlong encodings and surrogates.
+- **`end()` has to reset.** Node documents that a decoder can be reused after
+  it; ours flushed without clearing, so the *next* stream's first `write`
+  completed a character from the previous one.
+
+The last one is the kind of bug that survives a test suite: every single-stream
+test passes, and only reuse exposes it.
 
 ## `fs`
 
