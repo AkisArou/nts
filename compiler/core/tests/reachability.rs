@@ -1,18 +1,15 @@
 //! What survives a walk from the exports.
 //!
-//! Skips without `NTS_TSGO`.
+//! Skips only when `tsgo` is not built.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 fn prepared(fixture: &str) -> Option<hir::Prepared> {
-    let tsgo = Utf8PathBuf::from(std::env::var("NTS_TSGO").ok()?);
-    if !tsgo.exists() {
-        return None;
-    }
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples")
         .join(fixture)

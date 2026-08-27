@@ -65,6 +65,24 @@ use wire::{Frame, MessageType, WireError, read_frame, write_frame};
 /// run of the frontend conformance fixtures.
 pub const PINNED_TSGO: &str = "7.0.2";
 
+/// Where the frontend binary is, for a caller that was not told.
+///
+/// `NTS_TSGO` when it is set, and otherwise the one this repository builds. It
+/// exists because the tests skip silently without a path, so a suite run with
+/// the variable unset is green whatever it would have found — which is not a
+/// hypothetical: a test written to fail was passing in a `cargo test
+/// --workspace` gate that did not set it.
+///
+/// Still returns `None` when the binary genuinely is not built, so a checkout
+/// that has never run the build step skips rather than fails.
+#[must_use]
+pub fn locate() -> Option<Utf8PathBuf> {
+    let named = std::env::var("NTS_TSGO").ok().map(Utf8PathBuf::from);
+    let path = named
+        .unwrap_or_else(|| Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tsgo"));
+    path.exists().then_some(path)
+}
+
 /// Why the frontend failed.
 #[derive(Debug, thiserror::Error)]
 pub enum TsgoError {

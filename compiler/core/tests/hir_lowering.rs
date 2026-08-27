@@ -1,20 +1,17 @@
 //! Lowering a real program to HIR.
 //!
-//! Runs the frontend, so it skips without `NTS_TSGO`.
+//! Runs the frontend, so it skips only when `tsgo` is not built.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use nts_core::hir::{
     self, BinOp, Callee, Func, HirType, ManagedType, OpKind, Terminator, lower::Lowered,
 };
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 fn lowered(fixture: &str) -> Option<Lowered> {
-    let tsgo = Utf8PathBuf::from(std::env::var("NTS_TSGO").ok()?);
-    if !tsgo.exists() {
-        return None;
-    }
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples")
         .join(fixture)
@@ -171,6 +168,25 @@ fn an_unsupported_construct_is_refused_rather_than_skipped() {
 
     let span = lowered.diagnostics[0].primary.span;
     assert!(span.start < span.end, "the refusal points somewhere real");
+}
+
+#[test]
+fn an_async_function_is_refused_rather_than_emptied() {
+    let Some(lowered) = lowered("async-unsupported") else {
+        return;
+    };
+    // `await` and `new Promise` are already refused. `async` on its own is not:
+    // `Promise<number>` becomes `void`, the return value is converted away, and
+    // the verifier accepts the result. A caller then reads `undefined` where it
+    // asked for a number, with nothing said at compile time.
+    //
+    // Which is the failure `an_unsupported_construct_is_refused_rather_than_skipped`
+    // guards against — and cannot catch, because one refusal among many
+    // satisfies it while the silent case sits in the same file.
+    assert!(
+        !lowered.program.funcs.iter().any(|f| f.name == "twice"),
+        "an async function should be refused, not lowered to one that returns nothing",
+    );
 }
 
 #[test]

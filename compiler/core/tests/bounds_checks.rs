@@ -5,19 +5,16 @@
 //! happened to be there — a wrong answer, silently. Removing one is therefore a
 //! claim, and this is where the claim is tested.
 //!
-//! Skips without `NTS_TSGO`.
+//! Skips only when `tsgo` is not built.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use nts_core::hir::{self, Func, OpKind};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 fn prepared(fixture: &str) -> Option<hir::Prepared> {
-    let tsgo = Utf8PathBuf::from(std::env::var("NTS_TSGO").ok()?);
-    if !tsgo.exists() {
-        return None;
-    }
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples")
         .join(fixture)
