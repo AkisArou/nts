@@ -85,6 +85,62 @@ pub fn install(program: &mut super::Program, roots: &super::reachable::RootNames
     made
 }
 
+/// Undo a guard whose copy turned out to gain nothing.
+///
+/// Whether the test pays cannot be known before the analysis runs: it pays
+/// exactly when [`super::signatures`] can narrow the copy's signature with what
+/// the test established. So the guard is installed first and taken out again
+/// here, where the answer is a fact rather than a guess.
+///
+/// Taking it out is one edge: the original body is still there, as the path the
+/// test rejects, so the entry jumps straight to it. The test's operations and
+/// the copy are then unreachable, and the passes that remove unreachable things
+/// remove them.
+pub fn retract(program: &mut super::Program) -> usize {
+    let unchanged: Vec<String> = program
+        .funcs
+        .iter()
+        .filter_map(|clone| {
+            let original = clone.name.strip_suffix("#whole")?;
+            let source = program.funcs.iter().find(|func| func.name == original)?;
+            // The copy exists to have a narrower signature. If it does not, it
+            // is a copy.
+            let narrowed = clone
+                .params
+                .iter()
+                .zip(&source.params)
+                .any(|(mine, theirs)| mine.ty != theirs.ty)
+                || clone.return_type != source.return_type;
+            (!narrowed).then(|| original.to_owned())
+        })
+        .collect();
+
+    for name in &unchanged {
+        let Some(func) = program.funcs.iter_mut().find(|func| func.name == *name) else {
+            continue;
+        };
+        // The block the test falls through to when it fails, which is the
+        // original body's entry: the last thing `rewrite_as_guard` pushed
+        // before the fast path and the tests.
+        let Some(Terminator::Branch { else_target, .. }) =
+            func.blocks.first().map(|b| &b.terminator)
+        else {
+            continue;
+        };
+        let slow = *else_target;
+        let parameters = func.blocks[0].ops.clone();
+        func.blocks[0].ops = parameters
+            .into_iter()
+            .filter(|value| matches!(func.values[value.0 as usize].kind, OpKind::Param(_)))
+            .collect();
+        func.blocks[0].terminator = Terminator::Jump {
+            target: slow,
+            args: Vec::new(),
+        };
+    }
+    unchanged.len()
+}
+
 /// Whether a body runs often enough to amortise a test and a copy.
 ///
 /// A back edge or a call to itself. Both mean the body is entered many times

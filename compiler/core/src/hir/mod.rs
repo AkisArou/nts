@@ -1036,6 +1036,11 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
 
         let analyses = interprocedural::analyze_program(&program, options.roots);
         signatures::specialize(&mut program, &analyses, &outward);
+        // A test that bought nothing is a test and a copy for nothing. Whether
+        // it bought anything is only knowable now.
+        if guards::retract(&mut program) > 0 {
+            reachable::prune(&mut program, options.roots);
+        }
         let expected = signatures::expected(&program);
 
         let analyses = interprocedural::analyze_program(&program, options.roots);

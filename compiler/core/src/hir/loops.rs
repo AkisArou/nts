@@ -47,6 +47,13 @@ use super::{BinOp, BlockId, Func, OpKind, Terminator, ValueId};
 /// below cannot itself lose precision.
 const MAX_TRIPS: f64 = 1e9;
 
+/// How many merges deep a step may be followed.
+///
+/// One covers `if (c) { total += 1 }`; two covers a nested `if`. Past that the
+/// bound is a sum of several conditional increments and this analysis is not
+/// the right one to be asking.
+const MERGE_DEPTH: u32 = 3;
+
 /// Interval bounds for loop-carried values that iteration counting can prove.
 ///
 /// Only the interval is constrained. Wholeness, NaN and negative zero are left
@@ -61,7 +68,7 @@ pub fn accumulator_caps(func: &Func, analysis: &Analysis) -> FxHashMap<ValueId, 
         let Some(loop_shape) = shape(func, &predecessors, header) else {
             continue;
         };
-        let Some(trips) = trip_count(func, analysis, header, &loop_shape) else {
+        let Some(trips) = trip_count(func, analysis, &predecessors, header, &loop_shape) else {
             continue;
         };
 
@@ -70,8 +77,10 @@ pub fn accumulator_caps(func: &Func, analysis: &Analysis) -> FxHashMap<ValueId, 
             let Some(increment) = step_of(
                 func,
                 analysis,
+                &predecessors,
                 *param,
                 loop_shape.latch_args.get(slot).copied(),
+                MERGE_DEPTH,
             ) else {
                 continue;
             };
@@ -200,25 +209,80 @@ fn shape(
 fn step_of(
     func: &Func,
     analysis: &Analysis,
+    predecessors: &[Vec<(BlockId, Vec<ValueId>)>],
     param: ValueId,
     latch_arg: Option<ValueId>,
+    depth: u32,
 ) -> Option<Facts> {
-    let OpKind::Binary { op, lhs, rhs } = func.values[latch_arg?.0 as usize].kind else {
-        return None;
-    };
-    match op {
+    let latch = latch_arg?;
+    // Unchanged on this path, which is a step of zero. Only reachable through a
+    // merge below -- a latch argument that *is* the parameter is a loop that
+    // never moves, and `trip_count` rejects it for that reason.
+    if latch == param {
+        return Some(Facts::constant(0.0));
+    }
+    match func.values[latch.0 as usize].kind {
         // `param + x` or `x + param`; either way the step is the other operand.
-        BinOp::Add if lhs == param => Some(analysis.get(rhs)),
-        BinOp::Add if rhs == param => Some(analysis.get(lhs)),
+        OpKind::Binary {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        } if lhs == param => Some(analysis.get(rhs)),
+        OpKind::Binary {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        } if rhs == param => Some(analysis.get(lhs)),
         // `param - x` steps by `-x`. `x - param` is not an induction variable:
         // it reflects around `x` rather than advancing.
-        BinOp::Sub if lhs == param => Some(super::facts::neg(analysis.get(rhs))),
+        OpKind::Binary {
+            op: BinOp::Sub,
+            lhs,
+            rhs,
+        } if lhs == param => Some(super::facts::neg(analysis.get(rhs))),
+
+        // A merge. `if (found) { total += 1 }` inside a loop reaches the latch
+        // through a block parameter whose incoming values are the accumulator
+        // itself on one path and `accumulator + 1` on the other -- so the step
+        // is *either* zero or one, and the join says so.
+        //
+        // Without this a conditional accumulator has no bound at all, which is
+        // most of the counters real programs write: `primeCount`, `bounces`,
+        // `movesDone`.
+        OpKind::BlockParam(slot) => {
+            if depth == 0 {
+                return None;
+            }
+            let block = func
+                .blocks
+                .iter()
+                .position(|block| block.params.contains(&latch))?;
+            let mut joined = Facts::BOTTOM;
+            for (_, args) in &predecessors[block] {
+                let incoming = args.get(slot as usize).copied();
+                joined = joined.join(step_of(
+                    func,
+                    analysis,
+                    predecessors,
+                    param,
+                    incoming,
+                    depth - 1,
+                )?);
+            }
+            (!joined.is_bottom()).then_some(joined)
+        }
         _ => None,
     }
 }
 
 /// How many times the loop can run.
-fn trip_count(func: &Func, analysis: &Analysis, header: BlockId, shape: &Shape) -> Option<f64> {
+fn trip_count(
+    func: &Func,
+    analysis: &Analysis,
+    predecessors: &[Vec<(BlockId, Vec<ValueId>)>],
+    header: BlockId,
+    shape: &Shape,
+) -> Option<f64> {
     let Terminator::Branch { cond, .. } = func.blocks[header.0 as usize].terminator else {
         return None;
     };
@@ -238,7 +302,14 @@ fn trip_count(func: &Func, analysis: &Analysis, header: BlockId, shape: &Shape) 
 
     let params = &func.blocks[header.0 as usize].params;
     let slot = params.iter().position(|param| *param == counter)?;
-    let step = step_of(func, analysis, counter, shape.latch_args.get(slot).copied())?;
+    let step = step_of(
+        func,
+        analysis,
+        predecessors,
+        counter,
+        shape.latch_args.get(slot).copied(),
+        MERGE_DEPTH,
+    )?;
     // A step that is not a fixed amount moving toward the bound gives no trip
     // count: the counter might stand still, or move away and never arrive. A
     // bound is never NaN — the domain guarantees it — so the plain comparisons
