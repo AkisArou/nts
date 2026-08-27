@@ -51,7 +51,7 @@ rather than inferred by a rule, so the number can be audited.
 | `os` | **4 / 4** | 16 / 31 | complete |
 | `events` | **26 / 33** | 0 / 47 | complete but for domains, `EventTarget` and the promise forms |
 | `fs` | 9 / 260 | 39 / 68 | the sync surface; async, streams and `Buffer` are absent |
-| `querystring` | — | — | not started |
+| `querystring` | **3 / 4** | 0 / 17 | complete but for `unescapeBuffer`, which returns a `Buffer` |
 | `url` | — | — | not started |
 | `buffer` | — | — | not started |
 | `events` | — | — | not started |
@@ -150,6 +150,23 @@ because `emit` branches on it and a single-listener emitter then allocates no
 array. And the store has a null prototype, so an event named `toString` is a
 key that is absent until something registers it rather than an inherited
 method.
+
+## `querystring`
+
+Complete from node v24.20.0 `lib/querystring.js`: `parse`, `stringify`,
+`escape`, `unescape`, and the `decode`/`encode` aliases. 3 of 4 test files pass.
+
+The parser is one pass with no allocation per character — it tracks where the
+last field began and slices only at a separator — and it decides whether a key
+needs decoding by watching for `%` followed by two hex digits as it scans,
+rather than making a second pass. Both are upstream's design and the reason
+`parse` is fast on a long query, so they are transcribed rather than replaced
+with `split`.
+
+`unescapeBuffer` is the one gap: it returns a `Buffer`, and the test reads
+`b[0]` and calls `.toString()` on it, which needs `Buffer`'s UTF-8 decoding
+rather than `Uint8Array`'s comma-joined digits. The percent-decoding itself is
+implemented and reachable through `unescape`.
 
 ## `fs`
 

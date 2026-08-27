@@ -261,3 +261,13 @@ export class ERR_UNHANDLED_ERROR extends Error {
     this.name = "Error";
   }
 }
+
+/** `URI malformed` — a lone surrogate, which has no UTF-8 encoding. */
+export class ERR_INVALID_URI extends URIError {
+  readonly code = "ERR_INVALID_URI";
+
+  constructor() {
+    super("URI malformed");
+    this.name = "URIError";
+  }
+}
