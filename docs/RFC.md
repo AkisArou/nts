@@ -661,7 +661,57 @@ renderer nodes
 
 Trace routines should be generated from MIR layouts rather than handwritten per class.
 
-## 8.4 Identity under moving GC
+## 8.4 A closure is an object
+
+*Amended after implementation. The original text listed "closure environments"
+among the things needing generated trace routines, which implied a
+representation of their own.*
+
+A closure is captured state plus code. So is an object. The implementation
+lowers a closure to a class with one method, and every part of this section
+applies to it unchanged: it has a descriptor, a header, and a reference-field
+description generated from its layout like any other.
+
+```text
+class Closure<n>
+    base    = the arrow's signature type, which has no fields
+    fields  = what the body reads from the scope around it
+    methods = { call }
+```
+
+Three consequences follow, and the point of the design is that none of them is
+new machinery:
+
+- **The signature type is the base.** It has no fields, so base-first layout
+  makes a pointer to the closure a pointer to the signature. An upcast is free,
+  and a value declared `(x: number) => number` is any closure of that shape.
+- **The slot is shared.** Every closure's `call` occupies one dispatch slot. A
+  slot per signature would make every table in the program as long as the number
+  of signatures in it, for a distinction no call site can observe: a call
+  through the slot spells the signature it is making.
+- **Capture is by value, and only where that is the same thing.** JavaScript
+  captures by reference. For a name nothing assigns to, the two agree; for one
+  something writes to, they do not, and the compiler refuses rather than
+  choosing. A boxed cell is the eventual answer and is not free.
+
+### Cost, and what it takes to reach it
+
+A closure class is **final** — nothing extends it, and only its own arrow fills
+its slot. So a call whose receiver's static type is the class rather than the
+signature has one possible body and is emitted as a direct call.
+
+That leaves the case where a closure crosses a function boundary, and there the
+receiver is the signature type. A backend cannot recover it: to fold the table
+load, a C compiler would have to know the callee does not write the receiver's
+descriptor, and it cannot know the callee without folding the load. So the
+compiler specializes the *callee* instead — one copy per closure class, which is
+what `template <typename F>` does in C++ with the difference that the concrete
+type comes from the call site rather than from the author.
+
+Measured against a C++ lambda passed to a template, which monomorphizes and
+inlines: parity. See `docs/records/0009-a-closure-is-an-object.md`.
+
+## 8.5 Identity under moving GC
 
 Object identity must not equal the object address.
 
