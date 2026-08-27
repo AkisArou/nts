@@ -53,7 +53,7 @@ rather than inferred by a rule, so the number can be audited.
 | `fs` | 9 / 260 | 39 / 68 | the sync surface; async, streams and `Buffer` are absent |
 | `querystring` | **3 / 4** | 0 / 17 | complete but for `unescapeBuffer`, which returns a `Buffer` |
 | `url` | — | — | not started |
-| `buffer` | — | — | not started |
+| `buffer` | **49 / 60** | 0 / 65 | complete enough for `fs` and `string_decoder` |
 | `events` | — | — | not started |
 | `stream` | — | — | not started |
 | `assert` | — | — | not started |
@@ -167,6 +167,34 @@ with `split`.
 `b[0]` and calls `.toString()` on it, which needs `Buffer`'s UTF-8 decoding
 rather than `Uint8Array`'s comma-joined digits. The percent-decoding itself is
 implemented and reachable through `unescape`.
+
+## `buffer`
+
+`Buffer` as a `Uint8Array` subclass, from node v24.20.0 `lib/buffer.js`.
+Subclassing rather than wrapping is the design: it is what makes a `Buffer`
+accepted anywhere bytes are, and it is what node does.
+
+| | |
+| --- | --- |
+| allocation | `alloc`, `allocUnsafe`, `allocUnsafeSlow`, `from`, `of`, `concat`, `SlowBuffer` |
+| encodings | `utf8`, `hex`, `base64`, `base64url`, `latin1`/`binary`, `ascii`, `ucs2`/`utf16le` |
+| reading | `toString`, `toJSON`, `write`, the `read*`/`write*` integer and float family |
+| comparison | `equals`, `compare`, the static `compare` |
+| searching | `indexOf`, `lastIndexOf`, `includes` |
+| other | `copy`, `slice`, `subarray`, `fill`, `swap16`/`32`/`64`, `byteLength`, `isBuffer`, `isEncoding`, `isUtf8`, `isAscii`, `atob`, `btoa`, `constants` |
+
+49 of 60 applicable files pass. Two are not applicable: they need
+`--allow-natives-syntax` to drive V8's optimiser, which is a question about V8
+rather than about `node:buffer`.
+
+`allocUnsafe` returns zeroed memory here and does not in node, which hands back
+a slice of a pool. The name is kept because the API is the contract, and code
+that reads before writing is wrong either way.
+
+Floats go through a one-element typed array rather than hand-rolled bit
+manipulation: reproducing IEEE-754 rounding by hand is a way to be subtly wrong.
+The integer accessors are byte arithmetic, as upstream's are, because they are
+what a protocol parser calls in its inner loop.
 
 ## `fs`
 

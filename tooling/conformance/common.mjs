@@ -109,6 +109,13 @@ export function makeCommon() {
       return [command];
     },
 
+    /** Node skips a few tests that need a 64-bit address space. */
+    skipIf32Bits() {},
+    skipIfInspectorDisabled() {
+      throw new Skip("needs the inspector");
+    },
+    skipIfWorker() {},
+
     /** Node skips symlink tests without the privilege; posix always has it. */
     canCreateSymLink() {
       return true;

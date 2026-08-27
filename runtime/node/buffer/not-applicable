@@ -1,0 +1,5 @@
+# Tests that need V8's natives syntax (`%OptimizeFunctionOnNextCall`), which
+# requires `--allow-natives-syntax`. They exercise how V8 compiles node's own
+# fast paths, which is a question about V8 rather than about `node:buffer`.
+test-buffer-isutf8-isascii-fast.js: needs --allow-natives-syntax (a V8 fast-path test)
+test-buffer-swap-fast.js: needs --allow-natives-syntax (a V8 fast-path test)
