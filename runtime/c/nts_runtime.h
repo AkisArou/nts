@@ -162,6 +162,41 @@ void nts_bounds(double index, uint32_t length);
 NtsString *nts_concat(const NtsString *a, const NtsString *b);
 bool nts_string_eq(const NtsString *a, const NtsString *b);
 
+/* String methods.
+ *
+ * Every one of these is defined over UTF-16 code units, which is what a
+ * `NtsString` holds and what JavaScript means by a string's contents, so each is
+ * the operation the specification describes rather than an approximation of it.
+ *
+ * `toUpperCase`, `toLowerCase` and `trim` are deliberately absent. All three are
+ * defined over Unicode rather than over ASCII, and an ASCII version would be
+ * right for most inputs and quietly wrong for the rest.
+ *
+ * Indices arrive as doubles because that is what a JavaScript number is, and
+ * each function does its own clamping -- `ToIntegerOrInfinity` then a clamp to
+ * the length, which is what the specification says and what makes `s.slice(-2)`
+ * mean the last two. A caller that passes `INFINITY` means "to the end", which
+ * is how an omitted trailing argument reaches here. */
+double nts_str_char_code_at(const NtsString *s, double at);
+double nts_str_code_point_at(const NtsString *s, double at);
+double nts_str_index_of(const NtsString *s, const NtsString *needle);
+double nts_str_last_index_of(const NtsString *s, const NtsString *needle);
+bool nts_str_includes(const NtsString *s, const NtsString *needle);
+bool nts_str_starts_with(const NtsString *s, const NtsString *needle);
+bool nts_str_ends_with(const NtsString *s, const NtsString *needle);
+NtsString *nts_str_char_at(const NtsString *s, double at);
+NtsString *nts_str_repeat(const NtsString *s, double times);
+NtsString *nts_str_slice(const NtsString *s, double from, double to);
+NtsString *nts_str_substring(const NtsString *s, double from, double to);
+
+/* Build a string from UTF-8, which is how a C caller has one.
+ *
+ * The conversion is to UTF-16 code units, because that is what a JavaScript
+ * string is and what every operation above counts. A byte sequence that is not
+ * valid UTF-8 yields U+FFFD for each bad byte, which is what every decoder that
+ * has to keep going does. */
+NtsString *nts_string_from_utf8(const char *bytes, size_t length);
+
 /* One unsigned comparison catches a negative index too: it wraps to something
  * enormous, which is not less than the length. */
 static inline uint32_t nts_check(const NtsArray *array, uint32_t index) {

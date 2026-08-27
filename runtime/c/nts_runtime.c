@@ -517,6 +517,305 @@ NtsString *nts_concat(const NtsString *a, const NtsString *b) {
     return out;
 }
 
+/* One code unit of a string, whichever width it is stored in. */
+static uint16_t nts_unit(const NtsString *s, uint32_t at) {
+    if ((s->flags & NTS_TWO_BYTE) != 0) {
+        return NTS_ELEMENTS(s, uint16_t)[at];
+    }
+    return NTS_ELEMENTS(s, unsigned char)[at];
+}
+
+/* Allocate a string of `length` code units, narrow if every unit fits a byte.
+ *
+ * The two representations are not a detail a caller should reproduce: a slice of
+ * a wide string can be entirely narrow, and storing it wide would make an
+ * equality test between it and a narrow literal take the slow path forever. */
+static NtsString *nts_str_alloc(const uint16_t *units, uint32_t length) {
+    int wide = 0;
+    for (uint32_t at = 0; at < length; at++) {
+        if (units[at] > 0xFFu) {
+            wide = 1;
+            break;
+        }
+    }
+    size_t width = wide ? 2u : 1u;
+    NtsString *out =
+        (NtsString *)nts_alloc(sizeof(NtsHeader) + ((size_t)length + 1) * width);
+    out->descriptor = wide ? &nts_desc_string2 : &nts_desc_string1;
+    out->reserved = 1;
+    nts_allocated++;
+    out->flags = wide ? NTS_TWO_BYTE : 0u;
+    out->length = length;
+    if (wide) {
+        uint16_t *into = NTS_ELEMENTS(out, uint16_t);
+        for (uint32_t at = 0; at < length; at++) {
+            into[at] = units[at];
+        }
+        into[length] = 0;
+    } else {
+        unsigned char *into = NTS_ELEMENTS(out, unsigned char);
+        for (uint32_t at = 0; at < length; at++) {
+            into[at] = (unsigned char)units[at];
+        }
+        into[length] = 0;
+    }
+    return out;
+}
+
+/* Copy a range of code units out of a string. */
+static NtsString *nts_str_range(const NtsString *s, uint32_t from, uint32_t to) {
+    uint32_t length = to > from ? to - from : 0u;
+    if (length == 0) {
+        return nts_str_alloc(0, 0);
+    }
+    uint16_t *units = (uint16_t *)malloc((size_t)length * sizeof(uint16_t));
+    if (!units) {
+        fprintf(stderr, "nts: out of memory\n");
+        abort();
+    }
+    for (uint32_t at = 0; at < length; at++) {
+        units[at] = nts_unit(s, from + at);
+    }
+    NtsString *out = nts_str_alloc(units, length);
+    free(units);
+    return out;
+}
+
+/* `ToIntegerOrInfinity`: truncate toward zero, and NaN becomes zero.
+ *
+ * An index is not required to be a whole number. `s.charCodeAt(0.5)` is the
+ * character at 0, not an error and not NaN -- rejecting the fraction instead was
+ * the first thing differential testing found here. */
+static double nts_to_integer(double value) {
+    if (value != value) {
+        return 0.0;
+    }
+    return value < 0 ? -floor(-value) : floor(value);
+}
+
+/* `ToIntegerOrInfinity` then a clamp into `[0, length]`, with a negative index
+ * counted from the end -- which is what makes `s.slice(-2)` the last two. */
+static uint32_t nts_str_clamp(double index, uint32_t length, int relative) {
+    index = nts_to_integer(index);
+    if (relative && index < 0) {
+        index += (double)length;
+    }
+    if (index < 0) {
+        return 0u;
+    }
+    if (index >= (double)length) {
+        return length;
+    }
+    return (uint32_t)index;
+}
+
+/* Where `needle` first occurs at or after `from`, or -1. */
+static double nts_str_find(const NtsString *s, const NtsString *needle, uint32_t from,
+                           int backwards) {
+    if (needle->length > s->length) {
+        return -1.0;
+    }
+    uint32_t last = s->length - needle->length;
+    for (uint32_t start = 0; start <= last; start++) {
+        uint32_t at = backwards ? last - start : start;
+        if (!backwards && at < from) {
+            continue;
+        }
+        uint32_t matched = 0;
+        while (matched < needle->length
+               && nts_unit(s, at + matched) == nts_unit(needle, matched)) {
+            matched++;
+        }
+        if (matched == needle->length) {
+            return (double)at;
+        }
+    }
+    return -1.0;
+}
+
+double nts_str_char_code_at(const NtsString *s, double at) {
+    at = nts_to_integer(at);
+    if (at < 0 || at >= (double)s->length) {
+        /* Out of range is NaN, not an error and not zero. */
+        return (double)NAN;
+    }
+    return (double)nts_unit(s, (uint32_t)at);
+}
+
+double nts_str_code_point_at(const NtsString *s, double at) {
+    at = nts_to_integer(at);
+    double unit = nts_str_char_code_at(s, at);
+    if (unit != unit) {
+        return unit;
+    }
+    uint32_t index = (uint32_t)at;
+    uint16_t lead = (uint16_t)unit;
+    /* A surrogate pair is one code point spread over two units. */
+    if (lead >= 0xD800u && lead <= 0xDBFFu && index + 1 < s->length) {
+        uint16_t trail = nts_unit(s, index + 1);
+        if (trail >= 0xDC00u && trail <= 0xDFFFu) {
+            return (double)(0x10000u + ((lead - 0xD800u) << 10) + (trail - 0xDC00u));
+        }
+    }
+    return unit;
+}
+
+double nts_str_index_of(const NtsString *s, const NtsString *needle) {
+    return nts_str_find(s, needle, 0u, 0);
+}
+
+double nts_str_last_index_of(const NtsString *s, const NtsString *needle) {
+    return nts_str_find(s, needle, 0u, 1);
+}
+
+bool nts_str_includes(const NtsString *s, const NtsString *needle) {
+    return nts_str_find(s, needle, 0u, 0) >= 0.0;
+}
+
+bool nts_str_starts_with(const NtsString *s, const NtsString *needle) {
+    if (needle->length > s->length) {
+        return false;
+    }
+    for (uint32_t at = 0; at < needle->length; at++) {
+        if (nts_unit(s, at) != nts_unit(needle, at)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool nts_str_ends_with(const NtsString *s, const NtsString *needle) {
+    if (needle->length > s->length) {
+        return false;
+    }
+    uint32_t offset = s->length - needle->length;
+    for (uint32_t at = 0; at < needle->length; at++) {
+        if (nts_unit(s, offset + at) != nts_unit(needle, at)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+NtsString *nts_str_char_at(const NtsString *s, double at) {
+    at = nts_to_integer(at);
+    if (at < 0 || at >= (double)s->length) {
+        /* Out of range is the empty string, unlike `charCodeAt`'s NaN. */
+        return nts_str_alloc(0, 0);
+    }
+    uint32_t index = (uint32_t)at;
+    return nts_str_range(s, index, index + 1u);
+}
+
+NtsString *nts_str_repeat(const NtsString *s, double times) {
+    if (times != times || times < 0) {
+        times = 0;
+    }
+    times = floor(times);
+    /* A repeat that cannot fit in a string's length is an allocation that would
+     * fail anyway; refusing loudly beats a truncated answer. */
+    if (times * (double)s->length > 4294967295.0) {
+        fprintf(stderr, "nts: repeat produces a string longer than 2^32-1\n");
+        abort();
+    }
+    uint32_t total = (uint32_t)(times * (double)s->length);
+    if (total == 0) {
+        return nts_str_alloc(0, 0);
+    }
+    uint16_t *units = (uint16_t *)malloc((size_t)total * sizeof(uint16_t));
+    if (!units) {
+        fprintf(stderr, "nts: out of memory\n");
+        abort();
+    }
+    for (uint32_t at = 0; at < total; at++) {
+        units[at] = nts_unit(s, at % s->length);
+    }
+    NtsString *out = nts_str_alloc(units, total);
+    free(units);
+    return out;
+}
+
+NtsString *nts_str_slice(const NtsString *s, double from, double to) {
+    /* Negative counts from the end, which is what distinguishes `slice` from
+     * `substring`. */
+    uint32_t start = nts_str_clamp(from, s->length, 1);
+    uint32_t end = nts_str_clamp(to, s->length, 1);
+    return nts_str_range(s, start, end);
+}
+
+NtsString *nts_str_substring(const NtsString *s, double from, double to) {
+    /* Negative clamps to zero and the two ends swap if they are out of order,
+     * which is what distinguishes `substring` from `slice`. */
+    uint32_t start = nts_str_clamp(from, s->length, 0);
+    uint32_t end = nts_str_clamp(to, s->length, 0);
+    if (start > end) {
+        uint32_t swap = start;
+        start = end;
+        end = swap;
+    }
+    return nts_str_range(s, start, end);
+}
+
+NtsString *nts_string_from_utf8(const char *bytes, size_t length) {
+    /* At most one code unit per byte for the BMP, two for a supplementary
+     * character -- which is also at most one per byte, since those take four. */
+    uint16_t *units = (uint16_t *)malloc((length + 1u) * sizeof(uint16_t));
+    if (!units) {
+        fprintf(stderr, "nts: out of memory\n");
+        abort();
+    }
+    uint32_t count = 0;
+    size_t at = 0;
+    while (at < length) {
+        unsigned char lead = (unsigned char)bytes[at];
+        uint32_t point;
+        size_t extra;
+        if (lead < 0x80u) {
+            point = lead;
+            extra = 0;
+        } else if ((lead & 0xE0u) == 0xC0u) {
+            point = lead & 0x1Fu;
+            extra = 1;
+        } else if ((lead & 0xF0u) == 0xE0u) {
+            point = lead & 0x0Fu;
+            extra = 2;
+        } else if ((lead & 0xF8u) == 0xF0u) {
+            point = lead & 0x07u;
+            extra = 3;
+        } else {
+            point = 0xFFFDu;
+            extra = 0;
+        }
+        if (at + extra >= length + (extra == 0 ? 1u : 0u) && extra > 0) {
+            point = 0xFFFDu;
+            extra = 0;
+        }
+        for (size_t step = 1; step <= extra; step++) {
+            unsigned char next = (unsigned char)bytes[at + step];
+            if ((next & 0xC0u) != 0x80u) {
+                point = 0xFFFDu;
+                extra = 0;
+                break;
+            }
+            point = (point << 6) | (next & 0x3Fu);
+        }
+        at += extra + 1u;
+
+        if (point > 0xFFFFu) {
+            /* A supplementary character is a surrogate pair, and `length`
+             * counts both halves -- which is what JavaScript reports. */
+            point -= 0x10000u;
+            units[count++] = (uint16_t)(0xD800u + (point >> 10));
+            units[count++] = (uint16_t)(0xDC00u + (point & 0x3FFu));
+        } else {
+            units[count++] = (uint16_t)point;
+        }
+    }
+    NtsString *out = nts_str_alloc(units, count);
+    free(units);
+    return out;
+}
+
 /* Equality is by value, not by identity: `"a" + "b" === "ab"` is true in
  * JavaScript, and the two are different allocations. */
 bool nts_string_eq(const NtsString *a, const NtsString *b) {

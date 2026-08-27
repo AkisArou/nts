@@ -1186,3 +1186,74 @@ int main(void) {{
         "module state should carry between calls: {output}",
     );
 }
+
+#[test]
+fn string_methods_count_utf16_code_units() {
+    // Every one of these is defined over UTF-16 code units, which is what a
+    // JavaScript string is. The interesting inputs are the ones where that
+    // matters: a character above the byte boundary, so the narrow and wide
+    // representations both appear, and one outside the basic plane, where
+    // `length` counts two and a code point is one.
+    //
+    // Every expected value came from running the same expressions on node.
+    let harness = format!(
+        r#"{CHECK}
+#include <string.h>
+#include "nts_runtime.h"
+double unitAt(NtsString *s, double i);
+double pointAt(NtsString *s, double i);
+double firstOf(NtsString *s, NtsString *needle);
+double lastOf(NtsString *s, NtsString *needle);
+bool contains(NtsString *s, NtsString *needle);
+NtsString *tail(NtsString *s, double from);
+NtsString *between(NtsString *s, double from, double to);
+NtsString *repeated(NtsString *s, double times);
+
+static void same(const char *what, NtsString *got, const char *want) {{
+    NtsString *expected = nts_string_from_utf8(want, strlen(want));
+    if (nts_string_eq(got, expected)) {{
+        printf("ok %s\n", what);
+    }} else {{
+        printf("FAIL %s: length %u, wanted %u\n", what, got->length, expected->length);
+        failures++;
+    }}
+}}
+
+int main(void) {{
+    NtsString *plain = nts_string_from_utf8("abcabc", 6);
+    /* "a" U+1F600 "b": the middle character is a surrogate pair, so length is 4.
+       Written a byte at a time, because a hex escape next to a printable hex
+       digit would swallow it -- "\x80b" is one escape, not two characters. */
+    static const char emoji[] = {{'a', (char)0xF0, (char)0x9F, (char)0x98, (char)0x80, 'b'}};
+    NtsString *wide = nts_string_from_utf8(emoji, sizeof emoji);
+
+    check("length of a surrogate pair", (double)wide->length, 4);
+    check("unitAt(1) is the lead surrogate", unitAt(wide, 1), 55357);
+    check("pointAt(1) is the whole code point", pointAt(wide, 1), 128512);
+    /* A fractional index truncates rather than failing. */
+    check("unitAt(1.9)", unitAt(wide, 1.9), 55357);
+    check("unitAt past the end is NaN", isnan(unitAt(wide, 99)) ? 1 : 0, 1);
+
+    check("firstOf", firstOf(plain, nts_string_from_utf8("bc", 2)), 1);
+    check("lastOf", lastOf(plain, nts_string_from_utf8("bc", 2)), 4);
+    check("contains", contains(plain, nts_string_from_utf8("cab", 3)) ? 1 : 0, 1);
+
+    /* Negative counts from the end, which is what `slice` does and
+       `substring` does not. */
+    same("tail(-2)", tail(plain, -2), "bc");
+    /* `substring` swaps ends that are out of order. */
+    same("between(4, 1)", between(plain, 4, 1), "bca");
+    same("repeated twice", repeated(nts_string_from_utf8("ab", 2), 2), "abab");
+    same("repeated zero times", repeated(plain, 0), "");
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("strings", &harness) else {
+        return;
+    };
+    assert!(
+        output.contains("ok pointAt(1) is the whole code point"),
+        "a surrogate pair is two units and one code point: {output}",
+    );
+}

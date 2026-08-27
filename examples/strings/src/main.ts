@@ -54,3 +54,54 @@ export function mixedEquals(): boolean {
 export function sizeOf(s: string): number {
   return s.length;
 }
+
+// String methods, every one of them defined over UTF-16 code units -- which is
+// what a string holds and what JavaScript counts. `toUpperCase`, `toLowerCase`
+// and `trim` are deliberately absent: all three are defined over Unicode rather
+// than ASCII, and an ASCII version would be right for most inputs and quietly
+// wrong for the rest.
+export function unitAt(s: string, i: number): number {
+  return s.charCodeAt(i);
+}
+
+export function pointAt(s: string, i: number): number {
+  return s.codePointAt(i)!;
+}
+
+export function firstOf(s: string, needle: string): number {
+  return s.indexOf(needle);
+}
+
+export function lastOf(s: string, needle: string): number {
+  return s.lastIndexOf(needle);
+}
+
+export function contains(s: string, needle: string): boolean {
+  return s.includes(needle);
+}
+
+export function opens(s: string, needle: string): boolean {
+  return s.startsWith(needle);
+}
+
+export function closes(s: string, needle: string): boolean {
+  return s.endsWith(needle);
+}
+
+// Negative counts from the end, which is what separates `slice` from
+// `substring` -- and `substring` swaps its ends when they are out of order.
+export function tail(s: string, from: number): string {
+  return s.slice(from);
+}
+
+export function between(s: string, from: number, to: number): string {
+  return s.substring(from, to);
+}
+
+export function single(s: string, i: number): string {
+  return s.charAt(i);
+}
+
+export function repeated(s: string, times: number): string {
+  return s.repeat(times);
+}

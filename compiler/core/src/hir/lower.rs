@@ -2358,6 +2358,16 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(callee_node, "a method call of unexpected shape"));
             };
             let receiver = self.lower_expression(*receiver_node)?;
+
+            // A string's methods are the runtime's, not the program's: there is
+            // no `String` class here to resolve a call against.
+            if matches!(
+                self.values[receiver.0 as usize].ty,
+                HirType::Managed(ManagedType::String)
+            ) {
+                return self.lower_string_method(id, receiver, *member, &children[1..]);
+            }
+
             let HirType::Managed(ManagedType::Object(type_id)) =
                 self.values[receiver.0 as usize].ty.clone()
             else {
@@ -2478,6 +2488,81 @@ impl<'a> FuncBuilder<'a> {
             // be wrong in a way nothing downstream could detect.
             _ => Err(self.unsupported(id, "a `Math` call with this many arguments")),
         }
+    }
+
+    /// A method on a string.
+    ///
+    /// Every one of these is a runtime call, because a string has no layout to
+    /// resolve a member against and no class the program declares. The set is
+    /// deliberately the operations that are *exactly* expressible over UTF-16
+    /// code units, which is what a `NtsString` holds -- so each is the same
+    /// function JavaScript specifies rather than an approximation of it.
+    ///
+    /// `toUpperCase`, `toLowerCase` and `trim` are absent for that reason. All
+    /// three are defined over Unicode, not over ASCII, and an ASCII version
+    /// would be right for most inputs and quietly wrong for the rest. Refusing
+    /// beats that.
+    fn lower_string_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let name = self
+            .node(member)
+            .text
+            .clone()
+            .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
+
+        // (runtime function, how many arguments after the receiver, result)
+        let string = HirType::Managed(ManagedType::String);
+        let (helper, arity, ty) = match name.as_str() {
+            "charCodeAt" => ("nts_str_char_code_at", 1, HirType::NUMBER),
+            "codePointAt" => ("nts_str_code_point_at", 1, HirType::NUMBER),
+            "indexOf" => ("nts_str_index_of", 1, HirType::NUMBER),
+            "lastIndexOf" => ("nts_str_last_index_of", 1, HirType::NUMBER),
+            "includes" => ("nts_str_includes", 1, HirType::Bool),
+            "startsWith" => ("nts_str_starts_with", 1, HirType::Bool),
+            "endsWith" => ("nts_str_ends_with", 1, HirType::Bool),
+            "charAt" => ("nts_str_char_at", 1, string.clone()),
+            "repeat" => ("nts_str_repeat", 1, string.clone()),
+            "slice" => ("nts_str_slice", 2, string.clone()),
+            "substring" => ("nts_str_substring", 2, string.clone()),
+            "concat" => ("nts_concat", 1, string),
+            _ => return Err(self.unsupported(member, "this string method")),
+        };
+
+        let mut args = vec![receiver];
+        for argument in arguments {
+            args.push(self.lower_expression(*argument)?);
+        }
+        let origin = self.origin(id);
+
+        // An omitted trailing argument becomes the default the specification
+        // gives it, which for every two-argument member here is "to the end".
+        // Passing it explicitly means the runtime has one signature rather than
+        // two, and the default is written down once.
+        while args.len() < arity + 1 {
+            let end = self.push(
+                OpKind::ConstFloat(f64::INFINITY),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            args.push(end);
+        }
+        if args.len() != arity + 1 {
+            return Err(self.unsupported(id, "a string method with this many arguments"));
+        }
+
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::External(helper.to_owned()),
+                args,
+            },
+            ty,
+            origin,
+        ))
     }
 
     fn lower_identifier(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {

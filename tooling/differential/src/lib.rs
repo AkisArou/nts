@@ -111,6 +111,12 @@ struct Testable {
 /// own endpoints are added: a literal type like `64` admits exactly one value
 /// and the pool does not happen to contain it.
 fn inputs(ty: &HirType, known: Facts) -> Vec<f64> {
+    if is_string(ty) {
+        // An index into `STRINGS`, carried as a double so that one tuple type
+        // serves both kinds of parameter. Which pool a slot draws from is
+        // decided by its type, at every point that reads it.
+        return (0..STRINGS.len()).map(|at| at as f64).collect();
+    }
     if matches!(ty, HirType::Bool) {
         return vec![0.0, 1.0];
     }
@@ -135,6 +141,7 @@ fn inputs(ty: &HirType, known: Facts) -> Vec<f64> {
 /// How a type is spelled in C.
 fn c_type(ty: &HirType) -> &'static str {
     match ty {
+        HirType::Managed(nts_core::hir::ManagedType::String) => "NtsString *",
         HirType::Bool => "bool",
         HirType::Int { bits: 8, signed } => {
             if *signed {
@@ -200,7 +207,7 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
         .iter()
         .filter(|func| func.exported)
         .filter(|func| {
-            scalar(&func.return_type) && func.params.iter().all(|param| scalar(&param.ty))
+            drivable(&func.return_type) && func.params.iter().all(|param| drivable(&param.ty))
         })
         .map(|func| Testable {
             name: func.name.clone(),
@@ -236,6 +243,24 @@ fn scalar(ty: &HirType) -> bool {
     )
 }
 
+/// Whether a type is a string, which this passes and compares differently.
+fn is_string(ty: &HirType) -> bool {
+    matches!(ty, HirType::Managed(nts_core::hir::ManagedType::String))
+}
+
+/// Whether this can drive a function at all.
+fn drivable(ty: &HirType) -> bool {
+    scalar(ty) || is_string(ty)
+}
+
+/// Strings chosen to reach the places a UTF-16 implementation goes wrong.
+///
+/// Empty, ASCII, a repeated substring so `indexOf` and `lastIndexOf` differ, a
+/// character above the byte boundary so the narrow and wide representations both
+/// appear, and one outside the basic plane so a surrogate pair is in play --
+/// where `length` counts two and a code point is one.
+const STRINGS: &[&str] = &["", "hello world", "abcabc", "héllo wörld", "a\u{1F600}b"];
+
 /// The file to hand to node.
 fn entry_module(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<Utf8PathBuf> {
     let module = snapshot
@@ -263,14 +288,17 @@ fn tuples(params: &[(HirType, Facts)]) -> Vec<Vec<f64>> {
         .map(|(ty, known)| inputs(ty, *known))
         .collect();
     // What a parameter holds while a different one is under test: the quiet
-    // value if its type admits it, and otherwise whatever its type does admit.
+    // value if its type admits it, and otherwise something from the middle of
+    // its pool. Not the first -- for a string that is the empty one, and every
+    // sweep of the *other* parameters would then be asking what happens at an
+    // index into nothing.
     let resting: Vec<f64> = pools
         .iter()
         .map(|pool| {
             pool.iter()
                 .copied()
                 .find(|value| *value == QUIET)
-                .unwrap_or(pool[0])
+                .unwrap_or_else(|| pool[pool.len() / 2])
         })
         .collect();
 
@@ -283,6 +311,29 @@ fn tuples(params: &[(HirType, Facts)]) -> Vec<Vec<f64>> {
         }
     }
     out
+}
+
+/// A string as a C expression building it.
+///
+/// The bytes are written as hex escapes and the length is passed explicitly, so
+/// nothing depends on C's escaping rules agreeing with anyone else's and an
+/// embedded zero would survive.
+fn c_string(text: &str) -> String {
+    let escaped: String = text
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("\\x{byte:02x}"))
+        .collect();
+    format!("nts_string_from_utf8(\"{escaped}\", {})", text.len())
+}
+
+/// The same string as a JavaScript expression.
+///
+/// `String.fromCharCode` of the UTF-16 units, for the same reason: it is exactly
+/// what the C side built, with no escaping rules in between.
+fn js_string(text: &str) -> String {
+    let units: Vec<String> = text.encode_utf16().map(|unit| unit.to_string()).collect();
+    format!("String.fromCharCode({})", units.join(", "))
 }
 
 /// A double as C would print it and as JavaScript would print it: its bits.
@@ -316,7 +367,20 @@ fn run_native(
     std::fs::write(&runtime, nts_codegen_c::RUNTIME_SOURCE)?;
 
     let mut main = String::from(
-        "#include <math.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n\n\
+        "#include <math.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n\
+         #include \"nts_runtime.h\"\n\n\
+         /* A string is compared by its code units, which is what a JavaScript\n\
+          * string is. Printing them beats printing the text: it needs no\n\
+          * escaping rules, and a surrogate pair shows up as the two units\n\
+          * `length` counts rather than as one character. */\n\
+         static void show_string(const char *name, int at, const NtsString *s) {\n\
+         \x20   printf(\"%s %d str %u\", name, at, s->length);\n\
+         \x20   for (uint32_t i = 0; i < s->length; i++) {\n\
+         \x20       printf(\",%u\", (unsigned)nts_str_char_code_at(s, (double)i));\n\
+         \x20   }\n\
+         \x20   printf(\"\\n\");\n\
+         \x20   fflush(stdout);\n\
+         }\n\n\
          static void show(const char *name, int at, double value) {\n\
          \x20   uint64_t bits;\n\
          \x20   /* Every NaN is the same NaN as far as JavaScript can tell: there\n\
@@ -362,15 +426,23 @@ fn run_native(
             let args: Vec<String> = tuple
                 .iter()
                 .zip(&one.params)
-                .map(|(value, (ty, _))| format!("({}){}", c_type(ty), literal(*value)))
+                .map(|(value, (ty, _))| {
+                    if is_string(ty) {
+                        return c_string(STRINGS[*value as usize]);
+                    }
+                    format!("({}){}", c_type(ty), literal(*value))
+                })
                 .collect();
-            let _ = writeln!(
-                main,
-                "    show(\"{}\", {at}, (double){}({}));",
-                one.name,
+            let call = format!(
+                "{}({})",
                 nts_codegen_c::c_identifier(&one.name),
                 args.join(", ")
             );
+            let _ = if is_string(&one.returns) {
+                writeln!(main, "    show_string(\"{}\", {at}, {call});", one.name)
+            } else {
+                writeln!(main, "    show(\"{}\", {at}, (double){call});", one.name)
+            };
         }
     }
     main.push_str("    return 0;\n}\n");
@@ -409,6 +481,11 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
     let mut driver = format!(
         "const m = await import({:?});\n\
          const view = new DataView(new ArrayBuffer(8));\n\
+         function showString(name, at, s) {{\n\
+         \x20 let out = `${{name}} ${{at}} str ${{s.length}}`;\n\
+         \x20 for (let i = 0; i < s.length; i++) out += `,${{s.charCodeAt(i)}}`;\n\
+         \x20 process.stdout.write(out + \"\\n\");\n\
+         }}\n\
          function show(name, at, value) {{\n\
          \x20 const n = Number(value);\n\
          \x20 if (Number.isNaN(n)) {{ process.stdout.write(`${{name}} ${{at}} nan\\n`); return; }}\n\
@@ -426,6 +503,9 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
                 .iter()
                 .zip(&one.params)
                 .map(|(value, (ty, _))| {
+                    if is_string(ty) {
+                        return js_string(STRINGS[*value as usize]);
+                    }
                     if matches!(ty, HirType::Bool) {
                         return if *value == 0.0 { "false" } else { "true" }.to_owned();
                     }
@@ -438,9 +518,14 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
                     }
                 })
                 .collect();
+            let show = if is_string(&one.returns) {
+                "showString"
+            } else {
+                "show"
+            };
             let _ = writeln!(
                 driver,
-                "show({:?}, {at}, m.{exported}({}));",
+                "{show}({:?}, {at}, m.{exported}({}));",
                 one.name,
                 args.join(", ")
             );
