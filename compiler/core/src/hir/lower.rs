@@ -960,6 +960,12 @@ struct FuncBuilder<'a> {
     /// Every arrow function in the program, so that one written here can be
     /// matched to the class that was collected for it.
     closures: Vec<ClosureInfo>,
+    /// How many names this lowering has invented.
+    ///
+    /// A `for...of` needs an index the source does not name, and the loop
+    /// machinery is keyed by symbol. Numbering down from the top keeps a
+    /// synthetic name from colliding with one the checker assigned.
+    synthetic: u32,
     /// Which of them this function allocated.
     ///
     /// A closure nobody creates is not lowered at all. That is the rule
@@ -987,6 +993,7 @@ impl<'a> FuncBuilder<'a> {
             base: None,
             module: ModuleScope::default(),
             closures: Vec::new(),
+            synthetic: 0,
             used_closures: Vec::new(),
         }
     }
@@ -1760,14 +1767,19 @@ impl<'a> FuncBuilder<'a> {
     /// test the condition, and leave the builder positioned in the body.
     ///
     /// Returns the header's parameters and the exit block.
-    fn enter_loop(
+    /// Jump into a loop's header and give it a parameter per carried name.
+    ///
+    /// Stops there, in the header, because what comes next is the *test* --
+    /// and a test is lowered where its operations belong, which is the header
+    /// rather than the block before it. A `while` lowers an expression there; a
+    /// `for...of` builds a comparison there that no source node describes.
+    fn open_loop(
         &mut self,
         id: NodeId,
         header: BlockId,
         carried: &[u32],
-        condition: Option<NodeId>,
         origin: &Origin,
-    ) -> Result<(Vec<ValueId>, BlockId), Diagnostic> {
+    ) -> Result<Vec<ValueId>, Diagnostic> {
         // The values entering the loop, in the order the parameters take them.
         let mut incoming = Vec::new();
         for symbol in carried {
@@ -1790,20 +1802,24 @@ impl<'a> FuncBuilder<'a> {
             self.bindings.insert(*symbol, param);
             params.push(param);
         }
+        Ok(params)
+    }
 
-        let body_block = self.new_block();
-        let exit = self.new_block();
+    fn enter_loop(
+        &mut self,
+        id: NodeId,
+        header: BlockId,
+        carried: &[u32],
+        condition: Option<NodeId>,
+        origin: &Origin,
+    ) -> Result<(Vec<ValueId>, BlockId), Diagnostic> {
+        let params = self.open_loop(id, header, carried, origin)?;
+        let (body_block, exit) = self.loop_blocks();
         match condition {
             Some(condition) => {
                 let cond = self.lower_expression(condition)?;
                 let cond = self.truthy(condition, cond);
-                self.terminate(Terminator::Branch {
-                    cond,
-                    then_target: body_block,
-                    then_args: Vec::new(),
-                    else_target: exit,
-                    else_args: Vec::new(),
-                });
+                self.test_loop(cond, body_block, exit);
             }
             // `for (;;)`. The exit block stays reachable only through a `return`
             // inside the body, which is exactly what the source says.
@@ -1815,6 +1831,22 @@ impl<'a> FuncBuilder<'a> {
 
         self.switch_to(body_block);
         Ok((params, exit))
+    }
+
+    /// The body and exit blocks a loop needs, allocated in that order.
+    fn loop_blocks(&mut self) -> (BlockId, BlockId) {
+        (self.new_block(), self.new_block())
+    }
+
+    /// End a loop header on its test.
+    fn test_loop(&mut self, cond: ValueId, body: BlockId, exit: BlockId) {
+        self.terminate(Terminator::Branch {
+            cond,
+            then_target: body,
+            then_args: Vec::new(),
+            else_target: exit,
+            else_args: Vec::new(),
+        });
     }
 
     /// Close a loop: take the back edge, restore the carried names, and continue
@@ -1902,6 +1934,124 @@ impl<'a> FuncBuilder<'a> {
     /// which happened: `for (;; i++)` becomes an infinite loop with `i++` as its
     /// condition, and `c ? a : b` picks up the `:` token as its true branch —
     /// which at least fails loudly, being a token where an expression belongs.
+    /// `for (const x of xs)` over an array.
+    ///
+    /// Desugared to an index loop, which is what it is: the source names the
+    /// element and this names the index. There is no iterator protocol here --
+    /// `Symbol.iterator` is a dynamic dispatch through a property, and an array
+    /// is the one case where the answer is known and the loop is a counter.
+    fn lower_for_of(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let children = self.children(id);
+        let [initializer, sequence, body] = children.as_slice() else {
+            // An `await` modifier makes four. `for await` needs the async
+            // machinery rather than a different loop shape.
+            return Err(self.unsupported(id, "a `for...of` of unexpected shape"));
+        };
+        let (initializer, sequence, body) = (*initializer, *sequence, *body);
+
+        // The element name. One declaration, one identifier: a destructuring
+        // pattern is a separate feature and refusing it says so.
+        let element_name = self
+            .children(initializer)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::VARIABLE_DECLARATION))
+            .map(|declaration| self.children(declaration))
+            .and_then(|parts| {
+                parts
+                    .into_iter()
+                    .find(|part| self.kind_of(*part) == Some(syntax::IDENTIFIER))
+            })
+            .ok_or_else(|| self.unsupported(initializer, "a `for...of` binding of this shape"))?;
+        let element_symbol = self
+            .node(element_name)
+            .symbol
+            .ok_or_else(|| self.unsupported(element_name, "a `for...of` name with no symbol"))?
+            .0;
+
+        let sequence_value = self.lower_expression(sequence)?;
+        let HirType::Managed(ManagedType::Array(element_ty)) =
+            self.values[sequence_value.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(sequence, "a `for...of` over something not an array"));
+        };
+
+        let origin = self.origin(id);
+        // The index. A double, like the counter a hand-written `for` produces,
+        // so that specialization decides its machine type by the same rule
+        // rather than by which loop it came from.
+        let index = self.synthetic_symbol();
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        self.bindings.insert(index, zero);
+
+        let mut carried = vec![index];
+        self.assigned_symbols(body, &mut carried);
+        let mut declared = vec![element_symbol];
+        self.declared_symbols(body, &mut declared);
+        carried.retain(|symbol| *symbol == index || !declared.contains(symbol));
+
+        let header = self.new_block();
+        let params = self.open_loop(id, header, &carried, &origin)?;
+        let (body_block, exit) = self.loop_blocks();
+
+        // `index < xs.length`, built rather than lowered: the source has no node
+        // for it.
+        let at = self.bindings[&index];
+        let length = self.push(
+            OpKind::Length(sequence_value),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let cond = self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: at,
+                rhs: length,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.test_loop(cond, body_block, exit);
+        self.switch_to(body_block);
+
+        // `const x = xs[index]`, checked: the length was read once and the
+        // bounds pass is what proves the index inside it.
+        let at = self.bindings[&index];
+        let value = self.push(
+            OpKind::ArrayGet {
+                array: sequence_value,
+                index: at,
+                checked: true,
+            },
+            *element_ty,
+            origin.clone(),
+        );
+        self.bindings.insert(element_symbol, value);
+
+        self.lower_statement(body)?;
+        if !self.is_terminated() {
+            let at = self.bindings[&index];
+            let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+            let next = self.push(
+                OpKind::Binary {
+                    op: BinOp::Add,
+                    lhs: at,
+                    rhs: one,
+                },
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            self.bindings.insert(index, next);
+        }
+        self.close_loop(header, &carried, &params, exit);
+        Ok(())
+    }
+
+    /// A name no source can have, for a value only the lowering knows about.
+    fn synthetic_symbol(&mut self) -> u32 {
+        self.synthetic += 1;
+        u32::MAX - self.synthetic
+    }
+
     fn child_slots<const N: usize>(&self, id: NodeId) -> Option<[Option<NodeId>; N]> {
         let NodeData::Children { present, .. } = self.node(id).data else {
             return None;
@@ -2273,6 +2423,7 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::IF_STATEMENT) => self.lower_if(id),
             Some(syntax::WHILE_STATEMENT) => self.lower_while(id),
             Some(syntax::FOR_STATEMENT) => self.lower_for(id),
+            Some(syntax::FOR_OF_STATEMENT) => self.lower_for_of(id),
             Some(syntax::EXPRESSION_STATEMENT) => {
                 let Some(expression) = self.children(id).first().copied() else {
                     return Ok(());
@@ -2750,6 +2901,31 @@ impl<'a> FuncBuilder<'a> {
             .text
             .clone()
             .ok_or_else(|| self.unsupported(callee, "a computed constructor"))?;
+
+        // `new Array(n)` is an allocation with a length, which is what
+        // `ArrayNew` already is. It is worth taking rather than asking authors
+        // to write `[]` and push: an array made at its final size allocates
+        // once, and a benchmark that pre-sizes its array is measuring that.
+        //
+        // The type comes from where the result goes, because the constructor's
+        // own type is a union of the overloads in `lib.d.ts` and says nothing
+        // about the element.
+        if class == "Array" {
+            let ty = self
+                .type_of(id)
+                .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Array(_))))
+                .or_else(|| self.contextual_type(id, 0))
+                .ok_or_else(|| self.unrepresentable(id, "a `new Array`"))?;
+            if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
+                return Err(self.unsupported(id, "a `new Array` that is not an array"));
+            }
+            let origin = self.origin(id);
+            let Some(count) = children.get(1) else {
+                return self.lower_empty_array(id, ty);
+            };
+            let length = self.lower_expression(*count)?;
+            return Ok(self.push(OpKind::ArrayNew { length }, ty, origin));
+        }
 
         let ty = self
             .type_of(id)

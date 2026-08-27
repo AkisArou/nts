@@ -170,7 +170,14 @@ impl<'a> Decomposer<'a> {
                 continue;
             };
 
-            if !Self::is_ours(snapshot, slot) {
+            // An array is a type this compiler represents natively, and
+            // `Array<T>` is declared in `lib.d.ts` -- so the boundary below
+            // would leave `Ball[]` a placeholder for the wrong reason.
+            // Decomposing one pulls in its element type and nothing else, which
+            // is exactly what the boundary is protecting against.
+            let array_like = self.client.is_array_type(self.handle, &self.project, ty)?
+                || self.client.is_tuple_type(self.handle, &self.project, ty)?;
+            if !array_like && !Self::is_ours(snapshot, slot) {
                 // Stop at the library boundary. `Promise<void>` and a class
                 // prototype are enough to pull the standard library's whole type
                 // graph in transitively — measured at 5,773 types from a 180-node

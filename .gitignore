@@ -16,3 +16,13 @@ node_modules/
 #   cd third_party/test262 && git sparse-checkout set \
 #     test/built-ins/Math test/built-ins/Number test/language/expressions
 /third_party/test262
+
+# Are We Fast Yet, cloned sparsely. Not vendored, for the same reason: it is
+# somebody else's repository, and the TypeScript port in `benches/awfy` is ours.
+# What the clone is for is the *fidelity gate* -- running their `.js` and our
+# `.ts` on node and comparing -- and the reference C++ column.
+#   git clone --depth 1 --filter=blob:none --sparse \
+#     https://github.com/smarr/are-we-fast-yet third_party/are-we-fast-yet
+#   cd third_party/are-we-fast-yet && git sparse-checkout set \
+#     benchmarks/JavaScript 'benchmarks/C++' docs
+/third_party/are-we-fast-yet

@@ -75,6 +75,7 @@ pub const READONLY_KEYWORD: u16 = 148;
 pub const NUMBER_KEYWORD: u16 = 150;
 pub const DO_STATEMENT: u16 = 247;
 pub const FOR_STATEMENT: u16 = 249;
+pub const FOR_OF_STATEMENT: u16 = 251;
 pub const PARAMETER: u16 = 170;
 pub const PROPERTY_DECLARATION: u16 = 173;
 pub const METHOD_DECLARATION: u16 = 175;
