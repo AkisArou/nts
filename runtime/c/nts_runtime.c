@@ -968,8 +968,8 @@ NtsString *nts_str_slice(const NtsString *s, double from, double to) {
   return nts_str_slice_into(NULL, s, from, to);
 }
 
-NtsString *nts_str_substring_into(NtsHeader *into, const NtsString *s,
-                                  double from, double to) {
+NtsString *nts_str_substring_general(NtsHeader *into, const NtsString *s,
+                                     double from, double to) {
   /* Negative clamps to zero and the two ends swap if they are out of order,
    * which is what distinguishes `substring` from `slice`. */
   uint32_t start = nts_str_clamp(from, s->length, 0);
@@ -983,7 +983,7 @@ NtsString *nts_str_substring_into(NtsHeader *into, const NtsString *s,
 }
 
 NtsString *nts_str_substring(const NtsString *s, double from, double to) {
-  return nts_str_substring_into(NULL, s, from, to);
+  return nts_str_substring_general(NULL, s, from, to);
 }
 
 /* The elements of an array of numbers. */

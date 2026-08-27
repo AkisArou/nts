@@ -256,8 +256,8 @@ NtsString *nts_str_substring(const NtsString *s, double from, double to);
 NtsString *nts_str_char_at_into(NtsHeader *into, const NtsString *s, double at);
 NtsString *nts_str_slice_into(NtsHeader *into, const NtsString *s, double from,
                               double to);
-NtsString *nts_str_substring_into(NtsHeader *into, const NtsString *s,
-                                  double from, double to);
+NtsString *nts_str_substring_general(NtsHeader *into, const NtsString *s,
+                                     double from, double to);
 NtsString *nts_concat_into(NtsHeader *into, const NtsString *a,
                            const NtsString *b);
 
@@ -520,6 +520,46 @@ static inline double nts_round(double x) {
         return -0.0;
     }
     return rounded;
+}
+
+/* `substring` into the frame, with the case a tokenizer is spelled out here.
+ *
+ * Two indices the caller already computed as positions in this string, in
+ * order, and a narrow source: then clamping is a comparison, the width question
+ * is already answered, and the whole operation is a header and a `memcpy`.
+ * Anything else -- a negative index, a fraction, a reversed pair, a wide source
+ * -- goes to the general form.
+ *
+ * Worth spelling out because the out-of-line call re-derives what the caller
+ * knew: the compiler held two `int32`s and widened them to doubles to pass
+ * them, and the callee's first act was to work out that they were whole and in
+ * range. The same trade as `nts_unit`, made for the same reason -- the work is
+ * a copy, and the call around it was most of the cost.
+ *
+ * The order of the tests is load-bearing. `from` and `to` are proved to be in
+ * `[0, length]` *before* either is converted, because converting a double
+ * outside `uint32` is undefined rather than merely wrong. A NaN fails every
+ * comparison and leaves by the same door. */
+static inline NtsString *nts_str_substring_into(NtsHeader *into,
+                                                const NtsString *s, double from,
+                                                double to) {
+    if (into != 0 && from >= 0.0 && to >= from && to <= (double)s->length
+        && (s->flags & NTS_TWO_BYTE) == 0) {
+        const uint32_t start = (uint32_t)from;
+        const uint32_t end = (uint32_t)to;
+        if (from == (double)start && to == (double)end) {
+            const uint32_t length = end - start;
+            into->descriptor = &nts_desc_string1;
+            into->reserved = NTS_IMMORTAL;
+            into->flags = 0;
+            into->length = length;
+            unsigned char *bytes = NTS_ELEMENTS(into, unsigned char);
+            memcpy(bytes, NTS_ELEMENTS(s, const unsigned char) + start, length);
+            bytes[length] = 0;
+            return into;
+        }
+    }
+    return nts_str_substring_general(into, s, from, to);
 }
 
 /* JavaScript Math.min: NaN wins, and -0 is below 0. C's fmin does neither. */
