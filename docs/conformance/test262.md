@@ -1,31 +1,126 @@
-# test262: what is in it, and how much of it we can use
+# test262: what is in it, and how to run it
 
-The whole repository is checked out now — 53,872 tests, the harness, and the
+The whole repository is checked out — 53,872 tests, the harness, and the
 metadata specification. It used to be a sparse checkout of three directories,
-which meant the answer to "can we test this?" was often "the files aren't here",
-which is a bad reason.
+which meant the answer to "can we test this?" was too often "the files are not
+here".
 
-## Why it cannot be run as a suite
+## The correction that matters
 
-Every test expects a JavaScript engine. It needs `assert.js` and `sta.js`
-evaluated first, an `Object.prototype` to hang things off, and often `eval`. The
-first file in `language/expressions/compound-assignment` is:
+Two earlier drafts of this document said test262 could not test *language*
+semantics — only built-in library functions — because there was nothing to
+substitute for an operator or a statement, and because a differential needs a
+value to compare.
 
-```js
-assert.throws(ReferenceError, function() { eval("_11_13_2_1 *= 1;"); });
+**Both premises were wrong, and the second is why.**
+
+A test262 case is **self-checking**. It is silent on success and it `throw`s on
+failure. So the signal is the **exit code**, not a returned value. Nothing has to
+be harvested, nothing has to be substituted, no function needs a comparable
+signature, and no test is edited.
+
+`~/perry` — an ahead-of-time TypeScript compiler in the same position as this one
+— does it this way, and its `test-compat/test262/README.md` is the best
+description of the technique available.
+
+## How it actually works
+
+Assemble each case exactly as TC39's own runner does, into **one script**:
+
+```text
+sta.js  +  assert.js  +  preamble.js  +  any `includes:`  +  the test source
 ```
 
-Running that means being a JavaScript engine, which is the thing this project
-exists not to ship. So the question is never "how do we run test262" — it is
-"which parts of it can be turned into something we *can* run, and against what
-oracle".
+`preamble.js` is a tiny host shim providing the two intrinsics a bare runtime
+does not have: `print` (async cases report through it) and `$DONOTEVALUATE`
+(negative *parse* cases call it on the first line as a tripwire). `onlyStrict`
+cases get a `"use strict"` prologue; `raw` cases run verbatim with no harness at
+all.
 
-**The oracle is always node.** A test file's own expected value is discarded even
-when it is available, because node is the engine and the file is only an
-assertion about one. This also means a test's assertions are not needed at all —
-only its *code*.
+Then run that same assembled script two ways — compiled by us, and under node —
+and compare exit codes, with stdout as a tiebreak.
 
-## What is in it
+Because **both sides load the identical assembled script**, the comparison is
+between the two runtimes' builtins and never between their harnesses.
+
+### The node side must not be `node case.js`
+
+`node file.js` evaluates a file as a **CommonJS module**, so its top-level `var`
+and `function` declarations land in the module wrapper instead of on the global
+object. A conforming test262 host runs a case as a *global script*, and so does a
+compiled binary. The difference is invisible for most cases and breaks any test
+whose harness intrinsics must be reachable from global scope.
+
+The fix is one line — run the assembled script through `vm.runInThisContext`,
+which restores true script semantics: top-level declarations become globals,
+top-level `this` is `globalThis`, and a syntax error still throws at compile time
+so negative parse cases keep exiting non-zero.
+
+### Bucket by *agreement*, not by pass
+
+This is the part that makes the numbers honest, because test262 is full of
+negative tests where the correct behaviour is to reject:
+
+| bucket | meaning |
+| --- | --- |
+| `pass` | both ran clean with matching stdout, **or** both rejected — node exits non-zero and we reject at compile *or* run time |
+| `diff` | both ran clean, stdout differs |
+| `runtime-fail` | we compiled it and disagreed with node |
+| `compile-fail` | we refused to compile a case node ran clean |
+| `skip` | could not be assembled, needs a `$262` host intrinsic, or is categorically impossible ahead of time |
+
+**A compile refusal is a `pass` when node also rejected.** That is what makes the
+4,729 negative tests count correctly instead of being noise.
+
+`parity = pass / (pass + diff + runtime-fail + compile-fail)`, with `skip`
+outside the denominator so nothing impossible is charged against the compiler.
+
+### What is legitimately out of scope
+
+An ahead-of-time compiler has no interpreter in the produced binary, so an
+`eval()` or `new Function()` whose source is only known at run time cannot be
+evaluated — nor can a runtime-computed dynamic `import()`. Perry compiles those
+to a site that throws a recognisable sentinel, and the runner buckets them
+`skip`. That is a deliberate WONTFIX: closing it would mean embedding a
+JavaScript interpreter, which is the thing an AOT compiler exists not to do.
+
+The same applies to `$262.createRealm`, `detachArrayBuffer` and the agent API,
+which neither bare runtime provides — a case needing one would throw under
+*both*, and counting that as agreement would be a false pass.
+
+## Where this compiler stands
+
+The mechanism needs nothing new from us. In particular:
+
+- **`throw` already produces the right signal.** `nts_thrown` prints the message
+  and calls `abort()`, so a failed assertion exits non-zero, which is exactly
+  what the protocol reads.
+- **No Node-API addon is required.** The addon is the right answer for embedding
+  a compiled module in node; it is not needed here.
+- **No test is modified**, and no type annotations are added to one. A
+  conformance suite you edit is a suite you have agreed with.
+
+What stands in the way is only our own language coverage, and it stands in the
+way *at the harness*: to compile a case we must first compile `sta.js` and
+`assert.js`. `assert.js` is 184 lines and needs a function carrying properties
+(`assert.sameValue = …`), `throw`, string building and `typeof`. Object-literal
+methods are a known silent gap, so today almost everything would bucket as
+`compile-fail`.
+
+**That is the measurement, not a reason to postpone it.** `compile-fail` counted
+per directory *is* the conformance gap, and it ratchets: every feature added
+moves cases out of that bucket without anyone maintaining a list. It is the same
+instrument as the tsgo corpus, pointed at the language rather than at the
+typechecker.
+
+One shortcut is available and worth considering: the signal is only the exit
+code, so our harness does not have to build a nice failure message — it only has
+to throw. A minimal `assert` written in TypeScript, used by **both** sides, would
+be far smaller than 184 lines. It would still have to be one object with
+`sameValue`, `notSameValue`, `throws` and the rest hanging off it, which is
+precisely the object-literal-method gap.
+
+## What is in the repository
 
 | | files |
 | --- | ---: |
@@ -39,162 +134,43 @@ only its *code*.
 | `test/built-ins/Set`, `Map` | 383, 204 |
 | `test/built-ins/Number`, `Math` | 340, 327 |
 | `test/built-ins/JSON` | 165 |
-| everything else | the rest of 53,872 |
-
-Also worth knowing about:
-
-- **`harness/`** — `assert.js` is 184 lines, `sta.js` 28, `propertyHelper.js` 510.
-  `assert.sameValue` throws a `Test262Error` built by string concatenation, so
-  implementing it in TypeScript needs exceptions. A *stub* that records a boolean
-  instead compiles today, and is all the comparison needs.
-- **`INTERPRETING.md`** — the frontmatter specification, and the reason any of
-  this can be filtered mechanically. Every test declares `includes`, `flags`,
-  `features` and `negative`.
-- **`features.txt`** — 196 named features. Less useful as a conformance checklist
-  than it sounds: it covers proposals and ES6+ additions, so there is no flag for
-  `switch` or `for`, which are ES1.
-
-## The funnel
-
-Filtering by the metadata alone — no `includes`, no `eval`, not a `negative`
-test, not `async`, not `module`, and no prototype, `Proxy`, `Reflect`, `Symbol`,
-`arguments` or `this`:
-
-| | files |
-| --- | ---: |
 | all tests | 53,872 |
-| **need no engine machinery** | **10,484** |
-| …of which `language/expressions` | 2,786 |
-| …`built-ins/Object` | 1,640 |
-| …`language/statements` | 1,245 |
-| …`built-ins/Math`, `Number`, `String` | 158, 119, 149 |
+| negative tests (rejection is the correct answer) | 4,729 |
 
-10,484 is the ceiling for "could conceivably be compiled". The real number is
-lower, because those files are still *untyped JavaScript* — see the honest
-blocker below.
+- **`harness/`** — `assert.js` 184 lines, `sta.js` 28, `propertyHelper.js` 510.
+- **`INTERPRETING.md`** — the frontmatter specification: every test declares
+  `includes`, `flags`, `features` and `negative`, which is what makes the suite
+  filterable at all.
+- **`features.txt`** — 196 named features. Perry curates a 98-line
+  allow-list from it; there is no flag for `switch` or `for`, which are ES1.
 
-Against that, what is used today: **121 expressions**.
+## The expression harvest we do today
 
-## Three levels of leverage
+`tooling/suite/src/test262.rs` takes closed expressions out of tests and compares
+them against node — 121 of them. It found `Math.round` wrong near 2^53, in the
+folder and the runtime both, so it has earned its place.
 
-### 1. Harvest expressions — what happens today
+It stays useful *alongside* the runner above, because it tests something the
+runner does not: an expression made entirely of literals is computed by
+`hir::fold` at **compile time**, so what it compares is the constant folder
+against node's run time.
 
-Take a closed expression out of a test, compile it, compare against node.
-`Math.round(-0.5)`, `(-2147483648 | 0) >>> 0`. This is how `Math.round` near
-2^53 was found wrong in the folder and the runtime both.
-
-Narrow, and narrower than it needs to be. Two defects in our own extractor:
+Two defects in it, found by reading it:
 
 - **It is narrower than the compiler.** Seven `Math` members are allowed where
   eight are supported: `Math.sqrt` has ten test files and every one is skipped
   for no reason.
-- **A closed expression folds.** `hir::fold` computes it at compile time, so what
-  is compared is the *constant folder* against node — worth having, and not a
-  test of the runtime helper beside it. Substituting one operand for a parameter
-  would exercise both paths from the same harvested expression.
+- **Everything it takes folds.** Substituting one operand for a parameter would
+  exercise the runtime helper as well, from the same harvested expression.
 
-### 2. Harvest *functions*, and drive them with `nts check`
+## What to do, in order
 
-The limitation was never "only expressions" — it is that the extractor only
-*takes* expressions. `nts check` already compiles a whole function, runs it
-natively, runs the same source in node, and compares bit patterns.
-
-So a test like `language/statements/switch/S12.11_A1_T1.js`:
-
-```js
-function SwitchTest(value) {
-  var result = 0;
-  switch (value) { case 0: result += 2; case 1: result += 4; break; /* … */ }
-  return result;
-}
-```
-
-is a plain function from a number to a number. Once `switch` exists, this
-compiles and `nts check` drives it — and its assertions are not needed, because
-node computes the expected answer.
-
-This unlocks everything whose *signature* is scalar: control flow, classes,
-closures, recursion.
-
-### 3. Substitute our implementation into node — no edits to any test
-
-This is the one that changes the shape of the problem, and it runs test262
-**unmodified**.
-
-`compiler/codegen/napi` compiles a program into a Node-API addon that node loads
-and calls in process. So instead of trying to compile a test, replace the thing
-the test is testing:
-
-```js
-const nts = require("./nts_math.node");
-Math.round = nts.round;             // ours, compiled to native
-// then run built-ins/Math/round/*.js exactly as written
-```
-
-node supplies everything we cannot — `assert.js`, `Object.prototype`, `eval`,
-the error types, the whole object model. We supply one function. The test file
-is untouched, which is the only way a conformance suite is worth anything: a
-suite you edit is a suite you have agreed with.
-
-**Editing tests to add type annotations, which an earlier draft of this document
-proposed, is the wrong idea and is struck from it.** It would mean maintaining a
-fork of 50,000 files, and every annotation is a claim about the test that the
-test did not make.
-
-#### What this covers
-
-Anything that is a *substitutable value*:
-
-| | tests | note |
-| --- | ---: | --- |
-| `built-ins/Math` | 327 | every member is a plain function |
-| `built-ins/Number` | 340 | statics and `Number.prototype` |
-| `built-ins/String` | 1,223 | `String.prototype` methods take a string and return one |
-| `built-ins/Array` | 3,082 | needs array marshalling both ways |
-| `built-ins/JSON`, `Map`, `Set` | 165, 204, 383 | objects and classes rather than functions — harder, still substitutable |
-| `parseInt`, `parseFloat`, `isNaN`, `isFinite` | 139 | globals |
-
-#### What it does not cover, and cannot
-
-**Language semantics.** A test for `**`, `switch`, `for`, a class or a closure
-exercises node's own parser and evaluator. There is nothing to substitute — you
-cannot replace an operator or a statement with a function. Running
-`language/expressions/exponentiation/*.js` against a patched global tests node's
-`**`, not ours, however much of our compiler is loaded beside it.
-
-So the 11,164 files under `language/expressions` and 9,350 under
-`language/statements` — the two largest directories, and the ones covering most
-of what this compiler is not done with — stay out of reach by this route.
-
-**TypeScript.** Generics, interfaces, `keyof`, tagged unions. test262 is a
-JavaScript suite; there is nothing there to run.
-
-**Everything the compiler does rather than computes.** Substituting `Math.round`
-tests our `Math.round`. It says nothing about loop specialization, escape
-analysis, or reference counting, which is right — those are meant to be
-invisible.
-
-#### Two honest costs
-
-- **Marshalling.** A JavaScript string has to become an `NtsString` and back on
-  every call. That is the addon's job and it is correctness-neutral, but it means
-  what is measured is our *semantics*, never our speed.
-- **A share of the tests are not about behaviour.** They check a function's
-  `length` and `name`, or its property descriptor: 37% of `Math`, 16% of `String`
-  and `Array`, 14% of `Number`. A wrapper can set most of that deliberately, but
-  a failure there is a fact about the wrapper rather than about the
-  implementation, and counting them as conformance would be dishonest.
-
-## What to do first, in order of value per hour
-
-1. **Fix the extractor's allow-list** so it is not narrower than the compiler.
-   Hours, pure gain, and `Math.sqrt`'s ten files stop being skipped for nothing.
-2. **Parameterise one operand** of a harvested expression, so the runtime helper
-   is tested and not only the constant folder.
-3. **Substitution, starting with `Math`.** 327 tests, every member a plain
-   `number -> number` function, no marshalling harder than a double. It is the
-   smallest possible version of the whole mechanism, and if it works the same
-   harness reaches `Number`, `parseInt`, then `String` and `Array`.
-4. **Accept that the language half is ours to write.** Roughly 20,000 test262
-   files cover operators and statements and none of them can be used. Knowing
-   that is worth more than another attempt at making them fit.
+1. **Build the runner.** Assemble, run both sides, bucket by agreement, report
+   per directory. It is a script, and the design is settled — the hard thinking
+   is done and written down above.
+2. **Take the first number**, however bad, and check it is bad for the reason we
+   expect: `compile-fail` at the harness.
+3. **Make the harness compile.** Object-literal methods, which are a known silent
+   defect anyway. This single change is what converts the whole suite from
+   unusable to a ratchet.
+4. **Fix the expression extractor's allow-list**, which is hours and pure gain.

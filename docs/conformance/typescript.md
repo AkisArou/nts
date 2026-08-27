@@ -216,74 +216,27 @@ suspension, so building promises first means building unwinding twice.
 
 ---
 
-## What test262 can and cannot check
+## What test262 can check
 
-Worth stating per feature, because the answer is "a narrow band of the table, and
-none of the interesting rows".
+**All of it, in principle** — see [`test262.md`](test262.md).
 
-### Why it cannot be run as a suite
+A test262 case is *self-checking*: silent on success, `throw` on failure. So the
+signal is the exit code, not a compared value, and the technique is to assemble
+each case the way TC39's runner does — `sta.js` + `assert.js` + a small host
+preamble + any `includes:` + the test — compile the whole thing, and compare the
+exit code against node running the identical script. Nothing is harvested,
+nothing is substituted, no test is edited.
 
-Every test262 file expects a JavaScript runtime: `assert.js` and `sta.js` loaded,
-an `Object.prototype` to hang things off, and often `eval`. The first test in
-`language/expressions/compound-assignment` is
+What stands in the way is only this compiler's own coverage, and it stands in the
+way at the *harness*: `assert.js` needs a function carrying properties, which is
+the object-literal-method defect below. Until that compiles, nearly every case
+buckets as "we refused it" — which is exactly the measurement, per directory, and
+it ratchets as coverage grows.
 
-```js
-assert.throws(ReferenceError, function() { eval("_11_13_2_1 *= 1;"); });
-```
-
-A harness that ran that would be a small JavaScript engine, which is the thing
-this project exists not to ship.
-
-### What is taken instead
-
-The *arguments*, with the expected values discarded and node as the oracle —
-`tooling/suite/src/test262.rs`. `Math.round(-0.5)`, `Math.max(-0, 0)`,
-`(-2147483648 | 0) >>> 0`: thousands of expressions written by people trying to
-break implementations, and every one a case nobody here would have thought to
-write. That is how `Math.round` near 2^53 was found wrong in the folder and the
-runtime both.
-
-So the discriminator is: **can the feature's behaviour be written as a closed
-expression over literals?**
-
-| tier | features | why |
-| --- | --- | --- |
-| **testable today** — the files are checked out and only the filter is too narrow | every numeric operator (`**`, `>>>`, `<<`, `>>`, `%`, `/`, `*`, `+`, `-`, comparisons, `===`), all of `Math`, all of `Number` | the checkout has 327 `Math` files, 340 `Number` files and 11,164 under `language/expressions` |
-| **testable, files now present** | `String` and `Array` methods, `Object`, `Map`, `Set`, `JSON`, `RegExp`, typed arrays, `parseInt`/`isNaN`, and `language/statements` | the checkout was widened from three directories to the whole repository |
-| **test262 says nothing** | generics, interfaces, type annotations, `keyof`, tagged unions, `readonly`, parameter properties, abstract classes | test262 is JavaScript; none of this exists in it. The oracle for these is `nts check` against node, plus the tsgo corpus |
-| **test262 says little** | statements and control flow, classes, closures, `async`, exceptions | a statement has no value to compare, so using these tests means *running* them, which means the harness above. Hand-written differential cases are the better oracle |
-| **not observable** | memory providers, escape analysis, specialization | behaviourally invisible by design — that is what makes them safe |
-
-### The filter takes 0.6% of what it scans
-
-| | |
-| --- | ---: |
-| files scanned | 11,831 |
-| expressions taken | 121 |
-| skipped as not yet expressible | 18,599 |
-| disagreements with node | **0** |
-
-Two things are wrong with that ratio, and neither is the compiler:
-
-- **The filter is narrower than the compiler.** It allows seven `Math` members;
-  the compiler supports eight. `Math.sqrt` has ten test262 files and every one is
-  skipped for no reason at all.
-- **Closed expressions fold.** An expression made entirely of literals is
-  computed by `hir::fold` at compile time, so what is compared is the *folder*
-  against node — which is worth having, and is not a test of the runtime helper
-  beside it. Substituting one operand with a parameter would exercise both paths
-  from the same harvested expression.
-
-See [`test262.md`](test262.md) for the full survey: what is in the repository,
-how much of it needs no engine machinery (10,484 of 53,872), and the three
-levels of leverage.
-
-### The honest summary
-
-test262 is a source of adversarial *arguments* for the value semantics of
-primitives and their built-in methods, and that is a real and under-used asset —
-maybe twenty-five rows of the tables above. It has nothing to say about the
-structural half, which is most of what is not done yet.
+The two things test262 still says nothing about: **TypeScript types** (it is a
+JavaScript suite) and **anything the compiler does rather than computes** —
+specialization, escape analysis, reference counting — which is right, since those
+are meant to be invisible.
 
 ## Known defects
 
