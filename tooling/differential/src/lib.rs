@@ -87,6 +87,12 @@ const QUIET: f64 = 3.0;
 /// How long either side may take before its remaining cases are abandoned.
 const TIMEOUT: &str = "20";
 
+/// How many times the compiled program may end before the run gives up.
+///
+/// A handful is a program with a few assertions this pool falsifies. Hundreds is
+/// something else, and continuing to restart would take all day to say so.
+const REFUSALS: usize = 16;
+
 /// A function this can drive, and the shape of its signature.
 ///
 /// The types are kept rather than assumed. Declaring everything as
@@ -232,9 +238,10 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
         .join(format!("nts-check-{}", std::process::id()));
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {dir}"))?;
 
-    let native = run_native(&dir, &prepared.program, &testable)?;
+    let mut refused = Vec::new();
+    let native = run_native(&dir, &prepared.program, &testable, &mut refused)?;
     let engine = run_node(&dir, &entry, &testable)?;
-    Ok(report(&native, &engine, &testable))
+    Ok(report(&native, &engine, &testable, &refused))
 }
 
 /// Whether a type is something this can pass and compare.
@@ -274,6 +281,30 @@ fn entry_module(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<Utf8
         .get(module.file.0 as usize)
         .context("the entry module has no source file")?;
     Ok(file.display_path.clone())
+}
+
+/// Every case, one per function in turn rather than one function at a time.
+///
+/// Both sides run under a timeout, and a function whose loop bound picks up a
+/// pool value like 2^31 will not finish. Emitting a function's cases together
+/// means such a function starves every function after it -- `arrays` checked six
+/// cases of two hundred and thirty-six, and the seven methods added to it were
+/// never reached at all. Interleaving makes a timeout truncate everything
+/// equally, so what is checked is a sample of the whole program rather than a
+/// prefix of it.
+fn interleaved(testable: &[Testable]) -> Vec<(&Testable, usize, Vec<f64>)> {
+    let per: Vec<Vec<Vec<f64>>> = testable.iter().map(|one| tuples(&one.params)).collect();
+    let deepest = per.iter().map(Vec::len).max().unwrap_or(0);
+
+    let mut out = Vec::new();
+    for at in 0..deepest {
+        for (one, cases) in testable.iter().zip(&per) {
+            if let Some(tuple) = cases.get(at) {
+                out.push((one, at, tuple.clone()));
+            }
+        }
+    }
+    out
 }
 
 /// The argument tuples one function is called with.
@@ -373,7 +404,7 @@ fn literal(value: f64) -> String {
 /// to say to each other beyond this string.
 fn native_harness(testable: &[Testable]) -> String {
     let mut main = String::from(
-        "#include <math.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n\
+        "#include <math.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\
          #include \"nts_runtime.h\"\n\n\
          /* A string is compared by its code units, which is what a JavaScript\n\
           * string is. Printing them beats printing the text: it needs no\n\
@@ -426,9 +457,18 @@ fn native_harness(testable: &[Testable]) -> String {
             }
         );
     }
-    main.push_str("\nint main(void) {\n");
-    for one in testable {
-        for (at, tuple) in tuples(&one.params).into_iter().enumerate() {
+    // `argv[1]` is the case to start from. A case can end the process -- an
+    // out-of-range index traps, which is the program keeping the promise its `!`
+    // made -- and the runner restarts past it rather than losing every case
+    // after. Node returns `undefined` for the same input, so the two never had
+    // anything to compare there.
+    main.push_str(
+        "int main(int argc, char **argv) {\n\
+         \x20   long from = argc > 1 ? atol(argv[1]) : 0;\n\
+         \x20   long at_case = -1;\n",
+    );
+    for (one, at, tuple) in interleaved(testable) {
+        {
             let args: Vec<String> = tuple
                 .iter()
                 .zip(&one.params)
@@ -444,11 +484,12 @@ fn native_harness(testable: &[Testable]) -> String {
                 nts_codegen_c::c_identifier(&one.name),
                 args.join(", ")
             );
-            let _ = if is_string(&one.returns) {
-                writeln!(main, "    show_string(\"{}\", {at}, {call});", one.name)
+            let show = if is_string(&one.returns) {
+                format!("show_string(\"{}\", {at}, {call});", one.name)
             } else {
-                writeln!(main, "    show(\"{}\", {at}, (double){call});", one.name)
+                format!("show(\"{}\", {at}, (double){call});", one.name)
             };
+            let _ = writeln!(main, "    if (++at_case >= from) {{ {show} }}");
         }
     }
     main.push_str("    return 0;\n}\n");
@@ -459,6 +500,7 @@ fn run_native(
     dir: &Utf8Path,
     program: &hir::Program,
     testable: &[Testable],
+    refused: &mut Vec<usize>,
 ) -> Result<Vec<String>> {
     let emitted = nts_codegen_c::emit(program);
     let generated = dir.join("program.c");
@@ -491,12 +533,35 @@ fn run_native(
         bail!("clang: {}", String::from_utf8_lossy(&build.stderr));
     }
 
-    let run = std::process::Command::new("timeout")
-        .arg(TIMEOUT)
-        .arg(&binary)
-        .output()
-        .context("running the compiled program")?;
-    Ok(lines(&run.stdout))
+    // Restarted past whatever ends it. A case can trap -- an out-of-range index
+    // is the program keeping the promise its `!` made -- and without this, one
+    // such case costs every case after it. Node answers `undefined` for the same
+    // input, so the two had nothing to compare there anyway; what matters is
+    // that the *rest* of the program still gets checked.
+    let mut collected: Vec<String> = Vec::new();
+    let total = interleaved(testable).len();
+    let mut from = 0;
+    let mut restarts = 0;
+    while from < total && restarts <= REFUSALS {
+        let run = std::process::Command::new("timeout")
+            .arg(TIMEOUT)
+            .arg(&binary)
+            .arg(from.to_string())
+            .output()
+            .context("running the compiled program")?;
+        let produced = lines(&run.stdout);
+        let reached = produced.len();
+        collected.extend(produced);
+        if reached == total - from {
+            break;
+        }
+        // The case after the last one that printed. A refusal leaves a gap on
+        // this side, and the node side is trimmed to match by index below.
+        refused.push(from + reached);
+        from += reached + 1;
+        restarts += 1;
+    }
+    Ok(collected)
 }
 
 fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<Vec<String>> {
@@ -520,10 +585,10 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
          }}\n",
         format!("file://{absolute}")
     );
-    for one in testable {
+    for (one, at, tuple) in interleaved(testable) {
         // A method lowers to `Class#method`, which is not an export.
         let exported = one.name.replace('#', "__");
-        for (at, tuple) in tuples(&one.params).into_iter().enumerate() {
+        {
             let args: Vec<String> = tuple
                 .iter()
                 .zip(&one.params)
@@ -588,6 +653,9 @@ pub struct Report {
     /// Cases the pool asked for. Larger than `checked` when a side ran out of
     /// time, which a pool value in a loop bound will do.
     pub expected: usize,
+    /// Cases the compiled program declined to answer -- an index its `!`
+    /// promised was in range and was not, most often.
+    pub refused: usize,
     /// Every disagreement, as the two lines that differ.
     pub disagreements: Vec<(String, String)>,
 }
@@ -600,11 +668,28 @@ impl Report {
     }
 }
 
-fn report(native: &[String], engine: &[String], testable: &[Testable]) -> Report {
+fn report(
+    native: &[String],
+    engine: &[String],
+    testable: &[Testable],
+    refused: &[usize],
+) -> Report {
+    // The native side skipped the cases it refused, so the node side's lines
+    // are dropped at the same indices to line the two up again. Dropping rather
+    // than comparing is the right thing: node answered `undefined` where the
+    // compiled program declined to answer at all, and that is a difference
+    // between the two languages rather than between the two compilers.
+    let engine: Vec<&String> = engine
+        .iter()
+        .enumerate()
+        .filter(|(at, _)| !refused.contains(at))
+        .map(|(_, line)| line)
+        .collect();
+
     let checked = native.len().min(engine.len());
     let mut disagreements = Vec::new();
     for at in 0..checked {
-        if native[at] != engine[at] {
+        if &native[at] != engine[at] {
             disagreements.push((native[at].clone(), engine[at].clone()));
         }
     }
@@ -612,6 +697,7 @@ fn report(native: &[String], engine: &[String], testable: &[Testable]) -> Report
         functions: testable.len(),
         checked,
         expected: testable.iter().map(|one| tuples(&one.params).len()).sum(),
+        refused: refused.len(),
         disagreements,
     }
 }

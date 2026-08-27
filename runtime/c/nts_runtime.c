@@ -758,6 +758,92 @@ NtsString *nts_str_substring(const NtsString *s, double from, double to) {
     return nts_str_range(s, start, end);
 }
 
+/* The elements of an array of numbers. */
+static double *nts_numbers(const NtsArray *a) {
+    return NTS_ELEMENTS(a, double);
+}
+
+double nts_array_index_of(const NtsArray *a, double needle) {
+    /* Strict equality, so a NaN is never found -- `[NaN].indexOf(NaN)` is -1.
+     * `includes` differs here, deliberately. */
+    const double *items = nts_numbers(a);
+    for (uint32_t at = 0; at < a->length; at++) {
+        if (items[at] == needle) {
+            return (double)at;
+        }
+    }
+    return -1.0;
+}
+
+double nts_array_last_index_of(const NtsArray *a, double needle) {
+    const double *items = nts_numbers(a);
+    for (uint32_t step = 0; step < a->length; step++) {
+        uint32_t at = a->length - 1u - step;
+        if (items[at] == needle) {
+            return (double)at;
+        }
+    }
+    return -1.0;
+}
+
+bool nts_array_includes(const NtsArray *a, double needle) {
+    /* SameValueZero, which is `===` except that it finds a NaN. That one
+     * difference is the thing an implementation is most likely to get wrong. */
+    const double *items = nts_numbers(a);
+    const int wanted_nan = needle != needle;
+    for (uint32_t at = 0; at < a->length; at++) {
+        if (wanted_nan ? items[at] != items[at] : items[at] == needle) {
+            return true;
+        }
+    }
+    return false;
+}
+
+double nts_array_at(const NtsArray *a, double at) {
+    /* Negative counts from the end, and out of range is `undefined` -- which
+     * for a number is NaN, the only value a double has to say "not one". */
+    at = nts_to_integer(at);
+    if (at < 0) {
+        at += (double)a->length;
+    }
+    if (at < 0 || at >= (double)a->length) {
+        return (double)NAN;
+    }
+    return nts_numbers(a)[(uint32_t)at];
+}
+
+NtsArray *nts_array_fill(NtsArray *a, double value) {
+    double *items = nts_numbers(a);
+    for (uint32_t at = 0; at < a->length; at++) {
+        items[at] = value;
+    }
+    /* In place, returning what it was given -- which is what makes
+     * `xs.fill(0).length` mean something. */
+    return a;
+}
+
+NtsArray *nts_array_reverse(NtsArray *a) {
+    double *items = nts_numbers(a);
+    for (uint32_t at = 0; at * 2u + 1u < a->length; at++) {
+        double swap = items[at];
+        items[at] = items[a->length - 1u - at];
+        items[a->length - 1u - at] = swap;
+    }
+    return a;
+}
+
+NtsArray *nts_array_slice(const NtsArray *a, double from, double to) {
+    /* Negative counts from the end, as `String.prototype.slice` does. */
+    uint32_t start = nts_str_clamp(from, a->length, 1);
+    uint32_t end = nts_str_clamp(to, a->length, 1);
+    uint32_t count = end > start ? end - start : 0u;
+    NtsArray *out = nts_array_new(a->descriptor, (double)count);
+    if (count != 0) {
+        memcpy(nts_numbers(out), nts_numbers(a) + start, (size_t)count * sizeof(double));
+    }
+    return out;
+}
+
 NtsString *nts_string_from_utf8(const char *bytes, size_t length) {
     /* At most one code unit per byte for the BMP, two for a supplementary
      * character -- which is also at most one per byte, since those take four. */

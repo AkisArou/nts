@@ -192,12 +192,7 @@ impl Analysis {
     /// the two apart — see [`super::zero_sign`] — the difference is not a
     /// difference, and refusing to represent it costs a great deal for nothing.
     #[must_use]
-    pub fn is_integral_within_ignoring_zero_sign(
-        &self,
-        value: ValueId,
-        lo: f64,
-        hi: f64,
-    ) -> bool {
+    pub fn is_integral_within_ignoring_zero_sign(&self, value: ValueId, lo: f64, hi: f64) -> bool {
         self.integral_within(value, lo, hi, true)
     }
 

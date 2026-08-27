@@ -41,6 +41,14 @@ fn main() -> Result<()> {
                 );
                 return Ok(());
             }
+            if report.refused > 0 {
+                println!(
+                    "{} case(s) the compiled program declined -- an index its `!` \
+                     promised was in range and was not, most often; node answers \
+                     `undefined` there and the two have nothing to compare",
+                    report.refused
+                );
+            }
             if report.checked < report.expected {
                 println!(
                     "checked {} of {} cases; the rest were not reached (a pool \

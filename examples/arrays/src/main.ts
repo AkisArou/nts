@@ -54,3 +54,45 @@ export function readAt(i: number): number {
   const xs = [10, 20, 30];
   return xs[i]!;
 }
+
+// Array methods that need neither a growable representation nor a callback.
+//
+// `push`, `pop` and `splice` change the length, and the elements live inline
+// after the header, so growing would move the object and every reference to it.
+// `map`, `filter` and `forEach` take a function. Both are real extensions, and
+// refusing beats guessing.
+function digits(): number[] {
+  return [3, 1, 4, 1, 5, 9, 2, 6];
+}
+
+// `indexOf` compares with `===`, so it never finds a NaN.
+export function firstAt(x: number): number {
+  return digits().indexOf(x);
+}
+
+export function lastAt(x: number): number {
+  return digits().lastIndexOf(x);
+}
+
+// `includes` uses SameValueZero, which *does* find a NaN. That one difference
+// is the thing an implementation is most likely to get wrong.
+export function holds(x: number): boolean {
+  return digits().includes(x);
+}
+
+// Negative counts from the end, and out of range is `undefined`.
+export function nth(i: number): number {
+  return digits().at(i)!;
+}
+
+export function filledWith(v: number): number {
+  return digits().fill(v)[0]!;
+}
+
+export function reversedHead(): number {
+  return digits().reverse()[0]!;
+}
+
+export function slicedLength(from: number, to: number): number {
+  return digits().slice(from, to).length;
+}

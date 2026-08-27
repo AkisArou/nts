@@ -197,6 +197,29 @@ NtsString *nts_str_substring(const NtsString *s, double from, double to);
  * has to keep going does. */
 NtsString *nts_string_from_utf8(const char *bytes, size_t length);
 
+/* Array methods, over arrays of numbers.
+ *
+ * What is here is what can be done *without growing* the array: the elements
+ * live inline after the header, so growing would move the object and every
+ * reference to it. `push`, `pop` and `splice` need a representation that keeps
+ * the elements somewhere else, which is a decision with a cost -- an indirection
+ * on every access -- and worth making deliberately rather than by accident.
+ *
+ * `map`, `filter` and `forEach` are absent for the other reason: they take a
+ * function, and this compiler has no closures yet.
+ *
+ * `indexOf` and friends compare by value, which for numbers is what `===` does
+ * -- except that `NaN === NaN` is false, so a `NaN` is never found. `includes`
+ * uses SameValueZero and *does* find one, which is the one place the two differ
+ * and the one thing an implementation is likely to get wrong. */
+double nts_array_index_of(const NtsArray *a, double needle);
+double nts_array_last_index_of(const NtsArray *a, double needle);
+bool nts_array_includes(const NtsArray *a, double needle);
+double nts_array_at(const NtsArray *a, double at);
+NtsArray *nts_array_fill(NtsArray *a, double value);
+NtsArray *nts_array_reverse(NtsArray *a);
+NtsArray *nts_array_slice(const NtsArray *a, double from, double to);
+
 /* One code unit of a string, whichever width it is stored in.
  *
  * Inline, and so is `charCodeAt` below it. A scan by code unit is the inner loop

@@ -2367,6 +2367,11 @@ impl<'a> FuncBuilder<'a> {
             ) {
                 return self.lower_string_method(id, receiver, *member, &children[1..]);
             }
+            if let HirType::Managed(ManagedType::Array(element)) =
+                self.values[receiver.0 as usize].ty.clone()
+            {
+                return self.lower_array_method(id, receiver, &element, *member, &children[1..]);
+            }
 
             let HirType::Managed(ManagedType::Object(type_id)) =
                 self.values[receiver.0 as usize].ty.clone()
@@ -2572,6 +2577,77 @@ impl<'a> FuncBuilder<'a> {
         }
         if args.len() != arity + 1 {
             return Err(self.unsupported(id, "a string method with this many arguments"));
+        }
+
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::External(helper.to_owned()),
+                args,
+            },
+            ty,
+            origin,
+        ))
+    }
+
+    /// A method on an array.
+    ///
+    /// The same shape as a string's: a runtime call, because an array has no
+    /// layout to resolve a member against. The set is what can be done *without
+    /// growing* the array and without a callback -- `push`, `splice` and the
+    /// rest change the length, which the current representation cannot do
+    /// because the elements are inline and growing would move the object;
+    /// `map`, `filter` and `forEach` take a function, which needs closures.
+    /// Both are real extensions rather than oversights.
+    ///
+    /// Elements must be numbers. A reference array's `indexOf` compares by
+    /// identity and its `slice` has to retain what it copies, and neither is
+    /// something to guess at.
+    fn lower_array_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        element: &HirType,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let name = self
+            .node(member)
+            .text
+            .clone()
+            .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
+
+        if !matches!(element, HirType::Float { .. } | HirType::Int { .. }) {
+            return Err(self.unsupported(member, "an array method on a non-numeric array"));
+        }
+        let array = HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)));
+
+        // (runtime function, arguments after the receiver, result)
+        let (helper, arity, ty) = match name.as_str() {
+            "indexOf" => ("nts_array_index_of", 1, HirType::NUMBER),
+            "lastIndexOf" => ("nts_array_last_index_of", 1, HirType::NUMBER),
+            "includes" => ("nts_array_includes", 1, HirType::Bool),
+            "at" => ("nts_array_at", 1, HirType::NUMBER),
+            "fill" => ("nts_array_fill", 1, array.clone()),
+            "reverse" => ("nts_array_reverse", 0, array.clone()),
+            "slice" => ("nts_array_slice", 2, array),
+            _ => return Err(self.unsupported(member, "this array method")),
+        };
+
+        let mut args = vec![receiver];
+        for argument in arguments {
+            args.push(self.lower_expression(*argument)?);
+        }
+        let origin = self.origin(id);
+        while args.len() < arity + 1 {
+            let end = self.push(
+                OpKind::ConstFloat(f64::INFINITY),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            args.push(end);
+        }
+        if args.len() != arity + 1 {
+            return Err(self.unsupported(id, "an array method with this many arguments"));
         }
 
         Ok(self.push(

@@ -1257,3 +1257,58 @@ int main(void) {{
         "a surrogate pair is two units and one code point: {output}",
     );
 }
+
+#[test]
+fn array_methods_follow_javascript_and_not_intuition() {
+    // The interesting cases are where `indexOf` and `includes` part company.
+    // `indexOf` compares with `===`, which is false for NaN against itself, so
+    // it never finds one; `includes` uses SameValueZero, which does. An
+    // implementation that shares one loop between them gets exactly this wrong.
+    //
+    // Every expected value came from running the same expressions on node.
+    let harness = format!(
+        r#"{CHECK}
+#include "nts_runtime.h"
+double firstAt(double x);
+double lastAt(double x);
+bool holds(double x);
+double nth(double i);
+double filledWith(double v);
+double reversedHead(void);
+double slicedLength(double from, double to);
+int main(void) {{
+    /* [3, 1, 4, 1, 5, 9, 2, 6] */
+    check("firstAt(1)", firstAt(1), 1);
+    check("lastAt(1)", lastAt(1), 3);
+    check("firstAt(7) is -1", firstAt(7), -1);
+
+    /* `===` never finds a NaN; SameValueZero does. */
+    check("firstAt(NaN) is -1", firstAt((double)NAN), -1);
+    check("holds(NaN)", holds((double)NAN) ? 1 : 0, 0);
+    check("holds(9)", holds(9) ? 1 : 0, 1);
+
+    /* Negative counts from the end, and out of range is undefined. */
+    check("nth(-1)", nth(-1), 6);
+    check("nth(0)", nth(0), 3);
+    check("nth(99) is NaN", isnan(nth(99)) ? 1 : 0, 1);
+
+    check("filledWith(7)", filledWith(7), 7);
+    check("reversedHead", reversedHead(), 6);
+
+    check("slicedLength(2, 5)", slicedLength(2, 5), 3);
+    /* Backwards is empty rather than an error. */
+    check("slicedLength(5, 2)", slicedLength(5, 2), 0);
+    /* Negative counts from the end here too. */
+    check("slicedLength(-3, 99)", slicedLength(-3, 99), 3);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("arrays", &harness) else {
+        return;
+    };
+    assert!(
+        output.contains("ok firstAt(NaN) is -1") && output.contains("ok holds(NaN) = 0"),
+        "`indexOf` and `includes` must disagree about NaN: {output}",
+    );
+}

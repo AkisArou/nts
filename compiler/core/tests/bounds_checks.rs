@@ -114,8 +114,18 @@ fn the_report_counts_what_was_removed_and_what_remains() {
     let Some(prepared) = prepared("arrays") else {
         return;
     };
-    // Two checks remain across the fixture, both of them unconstrained indexes.
-    assert_eq!(prepared.checks_kept, 2, "only the unprovable ones remain");
+    // Four checks remain across the fixture, and each is a place there is no
+    // proof to be had:
+    //
+    // - `at` and `readAt` index with a number nothing constrains.
+    // - `filledWith` and `reversedHead` index the *result of a method*, and the
+    //   analysis knows nothing about what a runtime call returns -- `fill` and
+    //   `reverse` hand back the array they were given, but saying so needs a
+    //   summary for each of them rather than a rule.
+    //
+    // The last two are the honest cost of adding array methods as opaque calls,
+    // and are what a `[0]` on a returned array costs until they are not opaque.
+    assert_eq!(prepared.checks_kept, 4, "only the unprovable ones remain");
     assert!(
         prepared.checks_removed >= 15,
         "the literal stores and both loops should all be proven, got {}",
