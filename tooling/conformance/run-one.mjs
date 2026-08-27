@@ -60,11 +60,18 @@ function shimmedRequire(id) {
   if (id.endsWith("common/fixtures")) {
     return { path: join(ROOT, "third_party/node/test/fixtures") };
   }
-  try {
-    return realRequire(bare);
-  } catch {
-    throw new Skip(`needs ${id}`);
+  // Anything else is infrastructure rather than the subject: `node:test` is a
+  // test runner, `child_process` spawns, `util` formats. Node's own is the
+  // right answer for those -- substituting ours would test ours. A module we
+  // do not have is a skip, and the reason names it.
+  for (const candidate of [id, bare]) {
+    try {
+      return realRequire(candidate);
+    } catch {
+      // try the next spelling
+    }
   }
+  throw new Skip(`needs ${id}`);
 }
 
 const src = readFileSync(file, "utf8");

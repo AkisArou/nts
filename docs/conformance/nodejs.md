@@ -40,11 +40,16 @@ implementation bug: fails compiled, passes on node, is a compiler bug.
 
 ## Modules
 
+Counts are `passed / applicable`, where applicable excludes tests that spawn a
+real `node` child — those assert on node's binary, which our module is not in.
+Each exclusion is listed with a reason in the module's `not-applicable` file
+rather than inferred by a rule, so the number can be audited.
+
 | module | node's tests | compiles | note |
 | --- | :---: | :---: | --- |
-| `path` | **15 / 17** | no | complete but for `matchesGlob`; 1 skip is Windows-only |
-| `os` | — | — | not started |
-| `fs` | — | — | a sketch, not an implementation |
+| `path` | **15 / 16** | 1 / 39 | complete but for `matchesGlob`; the skip is Windows-only |
+| `os` | **4 / 4** | 16 / 31 | complete |
+| `fs` | — | — | not started |
 | `querystring` | — | — | not started |
 | `url` | — | — | not started |
 | `buffer` | — | — | not started |
@@ -81,6 +86,34 @@ Argument validation is included — `validateString`, and the
 compare against a string built by `common.invalidArgTypeHelper` and a
 paraphrase fails a test the throw itself would pass.
 
+## `os`
+
+Complete, from node v24.20.0 `lib/os.js`. Every function, `os.constants`, and
+the `Symbol.toPrimitive` that makes `` `${os.hostname}` `` the hostname rather
+than a function's source.
+
+| | |
+| --- | --- |
+| identity | `hostname`, `type`, `release`, `version`, `machine`, `arch`, `platform`, `endianness` |
+| directories | `homedir`, `tmpdir`, `devNull` |
+| machine | `uptime`, `totalmem`, `freemem`, `availableParallelism`, `loadavg`, `cpus` |
+| network | `networkInterfaces`, with `getCIDR` |
+| user | `userInfo` |
+| priority | `getPriority`, `setPriority` |
+| values | `EOL`, `constants` |
+
+All four applicable test files pass. Two skip on `internal/test/binding`, node's
+private hook for forcing a binding to fail; two are not applicable.
+
+`os.constants` comes from the platform's own headers through the binding rather
+than a table written down here, because the values differ by platform —
+`SIGUSR1` is 10 on Linux and 30 on macOS — and a transcribed table would be
+right on one and silently wrong on the other.
+
+Where node's C++ binding returns one flat `v8::Array` of mixed strings and
+numbers, ours returns one typed array per column and the TypeScript assembles
+the same objects. The result is identical and the declarations stay typed.
+
 ## What stops `path` compiling
 
 `nts hir` refuses 38 constructs and lowers 1 function. Ranked, and every one of
@@ -99,6 +132,21 @@ anything specific to Node:
 
 None of these is a design question. They are the ordinary language, and the
 module compiles unchanged when they arrive.
+
+## What stops `os` compiling
+
+16 of 31 functions lower. The rest:
+
+| refused | count | what needs it |
+| --- | ---: | --- |
+| indexing something that is not an array | 3 | `Record<string, number>` for `os.constants` |
+| a parameter of unrepresentable type (`unknown`) | 3 | the validators |
+| an object with an optional property | 3 | `NetworkInterfaceInfo.scopeid` |
+| a parameter with a default | 2 | `getPriority(pid = 0)` |
+| a union of `number \| undefined` | 1 | `setPriority(pid, priority?)` |
+| `null` where it is not a reference | 1 | `UserInfo.shell` is `string \| null` |
+| an array method on a non-numeric array | 1 | `push` onto `CpuInfo[]` |
+| a name declared outside this function | 1 | |
 
 ## Conventions
 

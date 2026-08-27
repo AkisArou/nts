@@ -130,6 +130,78 @@ export class ERR_INVALID_ARG_TYPE extends TypeError {
   }
 }
 
+/**
+ * Digit groups, node `lib/internal/errors.js`. A number large enough to be
+ * unreadable is printed as `1_000_000` in the message, which is why the
+ * threshold is 2^32 rather than a round decimal.
+ */
+function addNumericalSeparator(value: string): string {
+  let result = "";
+  let i = value.length;
+  const start = value[0] === "-" ? 1 : 0;
+  for (; i >= start + 4; i -= 3) {
+    result = `_${value.slice(i - 3, i)}${result}`;
+  }
+  return `${value.slice(0, i)}${result}`;
+}
+
+/** `The value of "pid" is out of range. It must be an integer. Received NaN`. */
+export class ERR_OUT_OF_RANGE extends RangeError {
+  readonly code = "ERR_OUT_OF_RANGE";
+
+  constructor(name: string, range: string, input: unknown, replaceDefaultBoolean = false) {
+    let received: string;
+    if (typeof input === "number" && Number.isInteger(input) && Math.abs(input) > 2 ** 32) {
+      received = addNumericalSeparator(String(input));
+    } else if (typeof input === "bigint") {
+      received = String(input);
+      if (input > 2n ** 32n || input < -(2n ** 32n)) {
+        received = addNumericalSeparator(received);
+      }
+      received += "n";
+    } else {
+      received = inspectValue(input);
+    }
+    const head = replaceDefaultBoolean ? name : `The value of "${name}" is out of range.`;
+    super(`${head} It must be ${range}. Received ${received}`);
+    this.name = "RangeError";
+  }
+}
+
+/**
+ * What `util.inspect` prints for the values these errors report.
+ *
+ * A real `util.inspect` belongs in `node:util` and will replace this. The
+ * shapes reachable here are narrower than the general case: an argument that
+ * failed a range check is a number, a bigint, or something simple enough to
+ * name.
+ */
+function inspectValue(value: unknown): string {
+  if (typeof value === "string") {
+    return JSON.stringify(value).replace(/^"|"$/g, "'");
+  }
+  if (typeof value === "bigint") {
+    return `${value}n`;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value === null) {
+    return "null";
+  }
+  if (value === undefined) {
+    return "undefined";
+  }
+  if (Array.isArray(value)) {
+    return `[ ${value.map(inspectValue).join(", ")} ]`;
+  }
+  if (typeof value === "function") {
+    const named = (value as { name?: string }).name;
+    return named ? `[Function: ${named}]` : "[Function (anonymous)]";
+  }
+  return "[Object]";
+}
+
 /** `The "ext" argument must be of type string. Received ...` for a value. */
 export class ERR_INVALID_ARG_VALUE extends TypeError {
   readonly code = "ERR_INVALID_ARG_VALUE";

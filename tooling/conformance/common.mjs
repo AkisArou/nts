@@ -30,7 +30,8 @@ export class Skip extends Error {
 const pending = [];
 
 export function checkPending() {
-  const missed = pending.filter((p) => p.actual !== p.expected);
+  const missed = pending.filter((p) =>
+    p.atLeast ? p.actual < p.expected : p.actual !== p.expected);
   pending.length = 0;
   return missed;
 }
@@ -48,6 +49,15 @@ export function makeCommon() {
 
     mustCall(fn = () => {}, expected = 1) {
       const record = { expected, actual: 0, name: fn.name || "anonymous" };
+      pending.push(record);
+      return (...args) => {
+        record.actual++;
+        return fn(...args);
+      };
+    },
+
+    mustCallAtLeast(fn = () => {}, minimum = 1) {
+      const record = { expected: minimum, actual: 0, atLeast: true, name: fn.name || "anonymous" };
       pending.push(record);
       return (...args) => {
         record.actual++;

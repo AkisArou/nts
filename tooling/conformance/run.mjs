@@ -27,7 +27,7 @@
 //   node run.mjs --module path [--addon target/node/path.node] [--only f.js]
 //                              [--verbose] [--json]
 
-import { readdirSync, existsSync } from "node:fs";
+import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { join, dirname, resolve as resolvePath } from "node:path";
 import { execFileSync } from "node:child_process";
 import process from "node:process";
@@ -57,13 +57,37 @@ if (!existsSync(SUITE)) {
   process.exit(0);
 }
 
+// Some of node's tests spawn `process.execPath` and assert on what the child
+// prints. The child is real node running real node modules, so the assertion
+// is about node's binary and not about ours -- there is no way to inject our
+// module into a process we did not start.
+//
+// Those are listed per module in `not-applicable`, one `file: reason` per line.
+// Listed rather than detected on purpose: a rule like "skip anything that
+// requires child_process" would quietly drop tests that only use it for part
+// of their work, and a conformance number nobody can audit is not worth
+// reporting. Every exclusion here is a claim someone can check.
+function readList(path) {
+  if (!existsSync(path)) return new Map();
+  return new Map(
+    readFileSync(path, "utf8")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#"))
+      .map((l) => {
+        const at = l.indexOf(":");
+        return at === -1 ? [l, "not applicable"] : [l.slice(0, at).trim(), l.slice(at + 1).trim()];
+      }),
+  );
+}
+
+const notApplicable = readList(join(ROOT, "runtime/node", moduleName, "not-applicable"));
+
 // A module's tests are `test-<module>.js` and `test-<module>-*.js`. Node also
 // files some under other names; those are found by hand and listed in the
 // module's `extra-tests` file when they exist.
 const extraPath = join(ROOT, "runtime/node", moduleName, "extra-tests");
-const extra = existsSync(extraPath)
-  ? (await import("node:fs")).readFileSync(extraPath, "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))
-  : [];
+const extra = [...readList(extraPath).keys()];
 
 const files = [
   ...readdirSync(SUITE).filter((f) => new RegExp(`^test-${moduleName}(-.*)?\\.js$`).test(f)),
@@ -76,6 +100,10 @@ const files = [
 const rows = [];
 for (const name of files) {
   let result;
+  if (notApplicable.has(name)) {
+    rows.push({ name, kind: "n/a", why: notApplicable.get(name) });
+    continue;
+  }
   try {
     const out = execFileSync(
       process.execPath,
@@ -94,7 +122,7 @@ for (const name of files) {
   rows.push({ name, ...result });
 }
 
-const tally = { pass: 0, fail: 0, skip: 0 };
+const tally = { pass: 0, fail: 0, skip: 0, "n/a": 0 };
 for (const r of rows) tally[r.kind]++;
 
 if (asJson) {
@@ -103,12 +131,15 @@ if (asJson) {
   const label = addon ? addon.replace(`${ROOT}/`, "") : "TypeScript on node";
   console.log(`node:${moduleName} against node's own tests — ${label}\n`);
   for (const row of rows) {
-    const mark = { pass: "pass", fail: "FAIL", skip: "skip" }[row.kind];
+    const mark = { pass: "pass", fail: "FAIL", skip: "skip", "n/a": " n/a" }[row.kind];
     console.log(`  ${mark}  ${row.name}${row.why ? `\n          ${row.why}` : ""}`);
     if (verbose && row.detail) {
       console.log(row.detail.split("\n").map((l) => `        ${l}`).join("\n"));
     }
   }
-  console.log(`\n  ${files.length} file(s): ${tally.pass} passed, ${tally.fail} failed, ${tally.skip} skipped`);
+  console.log(
+    `\n  ${files.length} file(s): ${tally.pass} passed, ${tally.fail} failed, ` +
+      `${tally.skip} skipped, ${tally["n/a"]} not applicable`,
+  );
 }
 process.exitCode = tally.fail > 0 ? 1 : 0;
