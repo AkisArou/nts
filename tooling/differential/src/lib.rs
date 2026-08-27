@@ -175,7 +175,7 @@ fn c_type(ty: &HirType) -> &'static str {
 ///
 /// If the program does not typecheck, does not lower, does not compile, or the
 /// two sides disagree.
-pub(crate) fn check(tsconfig: &Utf8Path) -> Result<()> {
+pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
     let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let mut source = TsgoApi::for_compilation(tsgo);
     let snapshot = source.snapshot(tsconfig)?;
@@ -214,8 +214,7 @@ pub(crate) fn check(tsconfig: &Utf8Path) -> Result<()> {
         .collect();
 
     if testable.is_empty() {
-        println!("nothing to check: no exported function has scalar arguments and a scalar result");
-        return Ok(());
+        return Ok(Report::default());
     }
 
     let entry = entry_module(&snapshot)?;
@@ -226,7 +225,7 @@ pub(crate) fn check(tsconfig: &Utf8Path) -> Result<()> {
 
     let native = run_native(&dir, &prepared.program, &testable)?;
     let engine = run_node(&dir, &entry, &testable)?;
-    report(&native, &engine, &testable)
+    Ok(report(&native, &engine, &testable))
 }
 
 /// Whether a type is something this can pass and compare.
@@ -345,7 +344,11 @@ fn run_native(
             main,
             "{} {}({});",
             c_type(&one.returns),
-            one.name,
+            // The emitter mangles a name that a header already declares, so a
+            // TypeScript function called `round` is `round_` in the object file.
+            // Declaring it here by its TypeScript name would either not link or,
+            // worse, link against `<math.h>`.
+            nts_codegen_c::c_identifier(&one.name),
             if params.is_empty() {
                 "void".to_owned()
             } else {
@@ -365,7 +368,7 @@ fn run_native(
                 main,
                 "    show(\"{}\", {at}, (double){}({}));",
                 one.name,
-                one.name,
+                nts_codegen_c::c_identifier(&one.name),
                 args.join(", ")
             );
         }
@@ -465,37 +468,40 @@ fn lines(bytes: &[u8]) -> Vec<String> {
         .collect()
 }
 
-/// Compare, and say what was compared.
-fn report(native: &[String], engine: &[String], testable: &[Testable]) -> Result<()> {
-    let both = native.len().min(engine.len());
-    let expected: usize = testable.iter().map(|one| tuples(&one.params).len()).sum();
+/// What a run compared, and what it found.
+#[derive(Debug, Default)]
+pub struct Report {
+    /// Exported functions with scalar arguments and a scalar result.
+    pub functions: usize,
+    /// Cases both sides reached.
+    pub checked: usize,
+    /// Cases the pool asked for. Larger than `checked` when a side ran out of
+    /// time, which a pool value in a loop bound will do.
+    pub expected: usize,
+    /// Every disagreement, as the two lines that differ.
+    pub disagreements: Vec<(String, String)>,
+}
 
+impl Report {
+    /// Whether the two sides agreed on everything they both reached.
+    #[must_use]
+    pub fn agreed(&self) -> bool {
+        self.disagreements.is_empty()
+    }
+}
+
+fn report(native: &[String], engine: &[String], testable: &[Testable]) -> Report {
+    let checked = native.len().min(engine.len());
     let mut disagreements = Vec::new();
-    for at in 0..both {
+    for at in 0..checked {
         if native[at] != engine[at] {
             disagreements.push((native[at].clone(), engine[at].clone()));
         }
     }
-
-    if both < expected {
-        println!(
-            "checked {both} of {expected} cases; the rest were not reached \
-             (a pool value in a loop bound will do that)"
-        );
-    } else {
-        println!("checked {both} cases across {} function(s)", testable.len());
+    Report {
+        functions: testable.len(),
+        checked,
+        expected: testable.iter().map(|one| tuples(&one.params).len()).sum(),
+        disagreements,
     }
-
-    if disagreements.is_empty() {
-        println!("agreed on every case");
-        return Ok(());
-    }
-    for (native, engine) in disagreements.iter().take(20) {
-        println!("  nts  {native}");
-        println!("  node {engine}");
-    }
-    bail!(
-        "{} case(s) disagree between the compiled program and node",
-        disagreements.len()
-    )
 }

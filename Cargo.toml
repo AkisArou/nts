@@ -12,6 +12,7 @@ members = [
     "build",
     "tooling/cli",
     "tooling/bench",
+    "tooling/differential",
     "tooling/suite",
 ]
 
@@ -29,6 +30,7 @@ nts-build = { path = "build" }
 nts-codegen-c = { path = "compiler/codegen/c" }
 nts-codegen-common = { path = "compiler/codegen/common" }
 nts-core = { path = "compiler/core" }
+nts-differential = { path = "tooling/differential" }
 nts-debug-lowering = { path = "compiler/debug-lowering" }
 nts-diagnostics = { path = "compiler/diagnostics" }
 nts-frontend-ts = { path = "compiler/frontend-ts" }

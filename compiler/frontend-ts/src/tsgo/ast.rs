@@ -291,12 +291,28 @@ fn decode_nodes(
             NodeKind::Syntax(u16::try_from(raw.kind).unwrap_or(u16::MAX))
         };
 
-        let (data, text) = if is_list {
+        let (data, mut text) = if is_list {
             // A list's data field is a plain length, not the tagged union.
             (NodeData::ListLength(raw.data), None)
         } else {
             decode_data(raw.data, node_index, strings)?
         };
+
+        // A numeric literal carries no string index, so its value would have to
+        // come from the checker -- and the checker's value is not always the
+        // literal. tsgo returns `1` for `0.9999999999999999`, because a mantissa
+        // of sixteen nines is above 2^53 and rounds up before the division by a
+        // power of ten. The literal's own text is the authority on what it says,
+        // and it is already here.
+        if !is_list
+            && matches!(
+                u16::try_from(raw.kind),
+                Ok(nts_semantic_schema::syntax::NUMERIC_LITERAL)
+            )
+            && text.is_none()
+        {
+            text = strings.source(raw.pos, raw.end).map(str::to_owned);
+        }
 
         nodes.push(NodeRecord {
             kind,
@@ -441,6 +457,20 @@ impl StringTable<'_> {
                 })?;
 
         String::from_utf8(slice.to_vec()).map_err(|_| AstError::StringNotUtf8 { index })
+    }
+
+    /// The source text a node spans, when the string data is the file text.
+    ///
+    /// It usually is -- the encoder puts the file there and appends anything
+    /// else after it -- so a node's `pos`..`end` addresses its own source. A
+    /// slice that is out of range or not UTF-8 yields `None` rather than an
+    /// error, because every caller has something else to fall back on.
+    ///
+    /// `pos` in a TypeScript AST includes leading trivia, so the result is
+    /// trimmed.
+    fn source(&self, pos: u32, end: u32) -> Option<&str> {
+        let slice = self.data.get(pos as usize..end as usize)?;
+        Some(std::str::from_utf8(slice).ok()?.trim())
     }
 }
 

@@ -40,6 +40,8 @@ use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use rustc_hash::FxHashMap;
 
+mod test262;
+
 /// What happened to one file.
 enum Outcome {
     /// Lowered completely: every construct in it is supported.
@@ -73,6 +75,10 @@ fn main() -> Result<()> {
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(usize::MAX);
 
+    if std::env::args().any(|arg| arg == "test262") {
+        return numeric(&root);
+    }
+
     let corpus = root.join("third_party/typescript-go/testdata/tests/cases");
     if !corpus.is_dir() {
         bail!("no corpus at {corpus}; the typescript-go submodule is not checked out");
@@ -89,14 +95,93 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// The numeric slice of test262, compared against node.
+fn numeric(root: &Utf8Path) -> Result<()> {
+    let corpus = root.join("third_party/test262/test");
+    if !corpus.is_dir() {
+        bail!("no test262 at {corpus}; see the clone command in .gitignore");
+    }
+    let findings = test262::run(root, &corpus)?;
+    println!("\n{} files scanned", findings.files);
+    println!("  expressions taken      {}", findings.extracted);
+    println!("  expressions skipped    {}", findings.skipped);
+    println!("  cases compared         {}", findings.checked);
+    println!("  refused by lowering    {}", findings.refused);
+    println!("  disagreements          {}", findings.disagreements.len());
+    for (native, engine) in findings.disagreements.iter().take(30) {
+        println!("    nts  {native}");
+        println!("    node {engine}");
+    }
+    write_test262_readme(root, &findings)?;
+    println!("\nREADME updated.");
+    Ok(())
+}
+
+fn write_test262_readme(root: &Utf8Path, findings: &test262::Findings) -> Result<()> {
+    const START: &str = "<!-- test262:start -->";
+    const END: &str = "<!-- test262:end -->";
+
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "Expressions taken from test262's `Math`, `Number` and operator tests, \
+         compiled and compared against node. The expected values in those files \
+         are deliberately *not* used: node is the oracle, which is a better one, \
+         and it means the harness those files need is not needed here.\n"
+    );
+    out.push_str(
+        "| | |
+| --- | ---: |
+",
+    );
+    let _ = writeln!(out, "| files scanned | {} |", findings.files);
+    let _ = writeln!(out, "| expressions taken | {} |", findings.extracted);
+    let _ = writeln!(
+        out,
+        "| expressions skipped (not yet expressible) | {} |",
+        findings.skipped
+    );
+    let _ = writeln!(out, "| cases compared | **{}** |", findings.checked);
+    let _ = writeln!(out, "| refused by lowering | {} |", findings.refused);
+    let _ = writeln!(
+        out,
+        "| **disagreements with node** | **{}** |",
+        findings.disagreements.len()
+    );
+    out.push_str(
+        "\nMost of these are constant expressions, which means what runs on the \
+         native side is a value this compiler folded at compile time. That makes \
+         this a test of the abstract semantics in `hir::facts` against a real \
+         engine — which is where `Math.round` near 2^53 turned out to be wrong \
+         in the folder and the runtime both.\n",
+    );
+
+    let path = root.join("README.md");
+    let text = std::fs::read_to_string(&path)?;
+    let (Some(from), Some(to)) = (text.find(START), text.find(END)) else {
+        bail!("README.md has no test262 markers");
+    };
+    std::fs::write(
+        &path,
+        format!("{}{START}\n{out}{}", &text[..from], &text[to..]),
+    )?;
+    Ok(())
+}
+
 /// Every `.ts` and `.tsx` beneath a directory.
 fn collect(dir: &Utf8Path, into: &mut Vec<Utf8PathBuf>) -> Result<()> {
+    collect_with(dir, into, "ts")?;
+    collect_with(dir, into, "tsx")
+}
+
+/// Every file with one extension beneath a directory.
+pub fn collect_with(dir: &Utf8Path, into: &mut Vec<Utf8PathBuf>, extension: &str) -> Result<()> {
     for entry in std::fs::read_dir(dir).with_context(|| format!("reading {dir}"))? {
         let path = Utf8PathBuf::from_path_buf(entry?.path())
             .map_err(|path| anyhow::anyhow!("not utf-8: {}", path.display()))?;
         if path.is_dir() {
-            collect(&path, into)?;
-        } else if matches!(path.extension(), Some("ts" | "tsx")) {
+            collect_with(&path, into, extension)?;
+        } else if path.extension() == Some(extension) {
             into.push(path);
         }
     }

@@ -165,6 +165,51 @@ fn canonicalize_objects(program: &mut Program) {
 /// The decision the whole layer exists to make. Unspecialized, so `number`
 /// becomes `f64` — correct, and the thing specialization improves on once
 /// analysis can show a value is integral and in range.
+/// A JavaScript numeric literal, as the double it denotes.
+///
+/// Every spelling the language has: decimal with an optional exponent, and
+/// `0x`/`0o`/`0b` integers. Numeric separators are removed first — `1_000_000`
+/// is the same literal as `1000000`, and only the reader was meant to notice
+/// the difference.
+///
+/// Returns `None` rather than guessing. A `1n` is a `BigInt` and not this, and a
+/// spelling that is not here should reach the fallback rather than a wrong
+/// number.
+#[must_use]
+pub fn parse_number(text: &str) -> Option<f64> {
+    let text = text.replace('_', "");
+    if text.ends_with('n') {
+        // A BigInt literal, which is a different type with different arithmetic.
+        return None;
+    }
+    // `get(..2)` and not `[..2]`: `0` is a whole literal and is one byte long.
+    let radix = match text
+        .get(..2)
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "0x" => 16,
+        "0o" => 8,
+        "0b" => 2,
+        _ => {
+            // Decimal, where Rust's parser is correctly rounded and is the whole
+            // of the answer.
+            return text.parse::<f64>().ok();
+        }
+    };
+    // An integer literal in another base. `u128` because `0x` literals wider
+    // than `u64` are legal to write; the conversion to `f64` rounds, which is
+    // exactly what JavaScript does with an integer above 2^53.
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "rounding a large integer to the nearest double is the semantics"
+    )]
+    u128::from_str_radix(&text[2..], radix)
+        .ok()
+        .map(|value| value as f64)
+}
+
 /// A short name for a type, for a diagnostic to quote.
 ///
 /// A refusal that says only "unrepresentable" is not a work queue. Run over a
@@ -393,6 +438,44 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// What a function declaration returns.
+    ///
+    /// From its *signature*, not from an annotation node. Reading the annotation
+    /// works for `function f(): number` and silently gives `void` for
+    /// `function f()` -- so an un-annotated function had its result dropped, in
+    /// the generated C and in every analysis. TypeScript infers a return type
+    /// whether or not one is written down, and the inferred one is in the
+    /// snapshot exactly like the written one.
+    fn declared_return(&self, id: NodeId) -> Option<HirType> {
+        if let Some(ty) = self.snapshot.node_types.get(&id)
+            && let Some(record) = self.snapshot.types.get(ty.0 as usize)
+            && let nts_semantic_schema::TypeKind::Function(signature) = record.kind
+            && let Some(signature) = self.snapshot.signatures.get(signature.0 as usize)
+            && let Some(returned) = representation(self.snapshot, signature.return_type)
+        {
+            return Some(returned);
+        }
+
+        // No decomposed signature. That does not happen under the frontend
+        // configuration the compiler uses, and does happen under a lighter one,
+        // so the written annotation is read instead -- which is what this did
+        // before, and is right whenever there is one.
+        let body = self
+            .children(id)
+            .into_iter()
+            .rev()
+            .find(|child| self.kind_of(*child) == Some(syntax::BLOCK));
+        self.children(id)
+            .into_iter()
+            .filter(|child| {
+                !matches!(
+                    self.kind_of(*child),
+                    Some(syntax::PARAMETER | syntax::IDENTIFIER)
+                ) && Some(*child) != body
+            })
+            .find_map(|child| self.type_of(child))
+    }
+
     fn type_of(&self, id: NodeId) -> Option<HirType> {
         let ty = self.snapshot.node_types.get(&id)?;
         representation(self.snapshot, *ty)
@@ -502,16 +585,7 @@ impl<'a> FuncBuilder<'a> {
         let return_type = if is_constructor {
             HirType::Void
         } else {
-            self.children(member)
-                .into_iter()
-                .filter(|child| {
-                    !matches!(
-                        self.kind_of(*child),
-                        Some(syntax::PARAMETER | syntax::IDENTIFIER)
-                    ) && *child != body
-                })
-                .find_map(|child| self.type_of(child))
-                .unwrap_or(HirType::Void)
+            self.declared_return(member).unwrap_or(HirType::Void)
         };
 
         self.lower_block(body)?;
@@ -557,15 +631,7 @@ impl<'a> FuncBuilder<'a> {
             .copied()
             .ok_or_else(|| self.unsupported(id, "a function without a body"))?;
 
-        let return_type = children
-            .iter()
-            .filter(|child| {
-                self.kind_of(**child) != Some(syntax::PARAMETER)
-                    && self.kind_of(**child) != Some(syntax::IDENTIFIER)
-                    && **child != body
-            })
-            .find_map(|child| self.type_of(*child))
-            .unwrap_or(HirType::Void);
+        let return_type = self.declared_return(id).unwrap_or(HirType::Void);
 
         self.lower_block(body)?;
 
@@ -1939,12 +2005,22 @@ impl<'a> FuncBuilder<'a> {
             return self.step(id, *operand, op, current);
         }
 
+        // `~x` is `ToInt32(x) ^ -1`, which is what the specification says it is
+        // and what makes it a bitwise operator rather than an arithmetic one:
+        // the coercion is the whole of its behaviour on a non-integer, and
+        // `~3.7` is `-4` for that reason rather than by rounding.
+        if small & syntax::prefix_operator::MASK == syntax::prefix_operator::TILDE {
+            let value = self.lower_expression(*operand)?;
+            let origin = self.origin(id);
+            let ones = self.push(OpKind::ConstFloat(-1.0), HirType::NUMBER, origin.clone());
+            return Ok(self.push_bitwise(BinOp::BitXor, value, ones, HirType::NUMBER, &origin));
+        }
+
         let op = match small & syntax::prefix_operator::MASK {
             syntax::prefix_operator::PLUS => None,
             syntax::prefix_operator::MINUS => Some(UnOp::Neg),
             syntax::prefix_operator::EXCLAMATION => Some(UnOp::Not),
-            // `~` is `ToInt32` then a bitwise complement, and `++`/`--` assign.
-            // Both are lowerable; neither is a spelling of what is here.
+            // `++`/`--` assign, and are handled above.
             _ => return Err(self.unsupported(id, "this unary operator")),
         };
 
@@ -2189,6 +2265,29 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_identifier(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        // `Infinity`, `NaN` and `undefined` are global bindings that no scope in
+        // the program declares, and each is a constant. Resolving them by name
+        // is safe for a reason worth stating: all three are non-writable,
+        // non-configurable properties of the global object, so unlike an
+        // ordinary global they cannot have been reassigned. A local named
+        // `NaN` would shadow them, and is caught before this by the binding
+        // lookup below coming first.
+        if let Some(symbol) = self.node(id).symbol
+            && self.bindings.contains_key(&symbol.0)
+        {
+            return Ok(self.bindings[&symbol.0]);
+        }
+        let origin = self.origin(id);
+        match self.node(id).text.as_deref() {
+            Some("Infinity") => {
+                return Ok(self.push(OpKind::ConstFloat(f64::INFINITY), HirType::NUMBER, origin));
+            }
+            Some("NaN") => {
+                return Ok(self.push(OpKind::ConstFloat(f64::NAN), HirType::NUMBER, origin));
+            }
+            _ => {}
+        }
+
         let symbol = self
             .node(id)
             .symbol
@@ -2200,8 +2299,25 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_number(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
-        // The constant folder already answered this where it could; otherwise the
-        // literal type carries the value.
+        // The source text first, parsed here.
+        //
+        // The checker's value is a convenience and is not always right: tsgo
+        // returns `1` for `0.9999999999999999`, because a mantissa of sixteen
+        // nines is above 2^53 and rounds up before the division by a power of
+        // ten. `0.9999999999999998` survives, because that mantissa is even.
+        // test262 found it.
+        //
+        // Rust's float parser is correctly rounded, and the literal's own text
+        // is the authority on what the literal is -- so there is no reason to
+        // ask anyone else. The checker's value stays as the fallback for a
+        // spelling this does not read.
+        if let Some(text) = self.node(id).text.as_deref()
+            && let Some(value) = parse_number(text)
+        {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::ConstFloat(value), HirType::NUMBER, origin));
+        }
+
         let value = match self.snapshot.constants.get(&id) {
             Some(nts_semantic_schema::ConstantValue::Number(value)) => *value,
             _ => self
@@ -2402,4 +2518,49 @@ enum MathIntrinsic {
 enum Branch {
     Expression(NodeId),
     Value(ValueId),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_number;
+
+    /// Every spelling a JavaScript numeric literal has.
+    #[test]
+    fn a_literal_parses_as_the_double_it_denotes() {
+        assert_eq!(parse_number("0"), Some(0.0));
+        assert_eq!(parse_number("1_000_000"), Some(1_000_000.0));
+        assert_eq!(parse_number("1e-320"), Some(1e-320));
+        assert_eq!(parse_number("0x1f"), Some(31.0));
+        assert_eq!(parse_number("0o17"), Some(15.0));
+        assert_eq!(parse_number("0b1011"), Some(11.0));
+        assert_eq!(parse_number(".5"), Some(0.5));
+        assert_eq!(parse_number("1.7976931348623157e308"), Some(f64::MAX));
+
+        // A BigInt is a different type with different arithmetic, and is not
+        // this. Saying so beats parsing off the `n` and being quietly wrong.
+        assert_eq!(parse_number("1n"), None);
+    }
+
+    /// The reason this function exists rather than trusting the checker.
+    ///
+    /// tsgo returns `1` for this literal: a mantissa of sixteen nines is above
+    /// 2^53 and rounds up before the division by a power of ten. The neighbour
+    /// below survives, because that mantissa is even. Rust's parser is correctly
+    /// rounded and the literal's own text is the authority on what it says.
+    #[test]
+    fn seventeen_significant_digits_survive() {
+        assert_eq!(
+            parse_number("0.9999999999999999"),
+            Some(0.999_999_999_999_999_9)
+        );
+        assert_ne!(parse_number("0.9999999999999999"), Some(1.0));
+        assert_eq!(
+            parse_number("0.9999999999999998"),
+            Some(0.999_999_999_999_999_8)
+        );
+        assert_eq!(
+            parse_number("1.9999999999999998"),
+            Some(1.999_999_999_999_999_8)
+        );
+    }
 }

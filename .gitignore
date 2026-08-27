@@ -8,3 +8,11 @@ node_modules/
 # Build outputs
 /out
 /.nts
+
+# test262, cloned sparsely for the numeric suites. Not vendored: it is 64MB of
+# somebody else's repository and `nts-suite` skips gracefully without it.
+#   git clone --depth 1 --filter=blob:none --sparse \
+#     https://github.com/tc39/test262.git third_party/test262
+#   cd third_party/test262 && git sparse-checkout set \
+#     test/built-ins/Math test/built-ins/Number test/language/expressions
+/third_party/test262

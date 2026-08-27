@@ -160,6 +160,7 @@ dependencies = [
  "nts-core",
  "nts-debug-lowering",
  "nts-diagnostics",
+ "nts-differential",
  "nts-frontend-ts",
  "nts-memory-lowering",
  "nts-semantic-schema",
@@ -224,6 +225,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nts-differential"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "camino",
+ "nts-codegen-c",
+ "nts-core",
+ "nts-frontend-ts",
+ "nts-semantic-schema",
+]
+
+[[package]]
 name = "nts-frontend-ts"
 version = "0.0.0"
 dependencies = [
@@ -266,6 +279,7 @@ dependencies = [
  "anyhow",
  "camino",
  "nts-core",
+ "nts-differential",
  "nts-frontend-ts",
  "rustc-hash",
 ]

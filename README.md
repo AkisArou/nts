@@ -76,6 +76,23 @@ What is stopping the rest, in order:
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->
 
+### Whether its arithmetic is JavaScript's
+
+<!-- test262:start -->
+Expressions taken from test262's `Math`, `Number` and operator tests, compiled and compared against node. The expected values in those files are deliberately *not* used: node is the oracle, which is a better one, and it means the harness those files need is not needed here.
+
+| | |
+| --- | ---: |
+| files scanned | 11831 |
+| expressions taken | 121 |
+| expressions skipped (not yet expressible) | 18599 |
+| cases compared | **90** |
+| refused by lowering | 31 |
+| **disagreements with node** | **0** |
+
+Most of these are constant expressions, which means what runs on the native side is a value this compiler folded at compile time. That makes this a test of the abstract semantics in `hir::facts` against a real engine — which is where `Math.round` near 2^53 turned out to be wrong in the folder and the runtime both.
+<!-- test262:end -->
+
 ---
 
 ## What it compiles to

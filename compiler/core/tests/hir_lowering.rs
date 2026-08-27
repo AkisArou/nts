@@ -21,9 +21,11 @@ fn lowered(fixture: &str) -> Option<Lowered> {
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("examples/{fixture} is checked in"));
-    // Call resolution is a precondition for lowering a call at all.
-    let snapshot = TsgoApi::new(tsgo)
-        .with_call_resolution(nts_frontend_ts::tsgo::decompose::Budget::DEFAULT)
+    // The configuration the compiler itself uses. Building a lighter one here
+    // tested a snapshot no user of this compiler ever gets: without decomposed
+    // signatures, an un-annotated function's return type is unavailable and
+    // lowering has to fall back to reading the annotation that is not there.
+    let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "fixture must typecheck");

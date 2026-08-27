@@ -186,7 +186,8 @@ pub fn emit(program: &Program) -> Emitted {
 /// own `nts_` prefix. That is a separate slice; this list makes the current
 /// arrangement correct in the meantime.
 const RESERVED: &[&str] = &[
-    // C11 keywords and the macros <stdbool.h> defines.
+    // C11 keywords and the macros `<stdbool.h>` defines. Header-declared names
+    // are handled separately, by `collides_with_a_header`.
     "alignas",
     "alignof",
     "auto",
@@ -232,41 +233,131 @@ const RESERVED: &[&str] = &[
     "void",
     "volatile",
     "while",
-    // <math.h>, which the runtime header pulls in for the float builtins the
-    // emitter uses directly. This is the whole collision surface now: a
-    // generated file includes the runtime header and nothing else, so it no
-    // longer picks up the hundreds of names <stdio.h> and <stdlib.h> declare.
-    "acos",
-    "asin",
-    "atan",
-    "atan2",
-    "cbrt",
-    "ceil",
-    "cos",
-    "cosh",
-    "exp",
-    "fabs",
-    "floor",
-    "fmax",
-    "fmin",
-    "fmod",
-    "hypot",
-    "isfinite",
-    "isnan",
-    "log",
-    "log10",
-    "log2",
-    "modf",
-    "pow",
-    "round",
-    "signbit",
-    "sin",
-    "sinh",
-    "sqrt",
-    "tan",
-    "tanh",
-    "trunc",
 ];
+
+/// Names the headers a generated file includes already use.
+///
+/// A generated file includes `nts_runtime.h` and nothing else, and that header
+/// includes `<math.h>`, `<stdbool.h>`, `<stddef.h>` and `<stdint.h>`. Between
+/// them that is the entire collision surface -- it no longer picks up the
+/// hundreds of names `<stdio.h>` and `<stdlib.h>` declare, which is why the
+/// runtime moved to its own translation unit.
+///
+/// A predicate rather than a list, because `<math.h>` declares every function in
+/// three widths: `pow`, `powf`, `powl`. Listing all of them by hand is how
+/// `nan` came to be missing, which a TypeScript function called `nan` then
+/// found. Stripping the width suffix and asking about the stem covers all three
+/// and cannot go stale.
+///
+/// A false positive costs an underscore on a name that did not need one. That is
+/// the right direction to be wrong in: the alternative is a generated file that
+/// does not compile, and the mangling is reversible by inspection either way.
+fn collides_with_a_header(name: &str) -> bool {
+    /// Every `<math.h>` function and classification macro, in its `double`
+    /// spelling.
+    const MATH: &[&str] = &[
+        "acos",
+        "acosh",
+        "asin",
+        "asinh",
+        "atan",
+        "atan2",
+        "atanh",
+        "cbrt",
+        "ceil",
+        "copysign",
+        "cos",
+        "cosh",
+        "erf",
+        "erfc",
+        "exp",
+        "exp2",
+        "expm1",
+        "fabs",
+        "fdim",
+        "floor",
+        "fma",
+        "fmax",
+        "fmin",
+        "fmod",
+        "fpclassify",
+        "frexp",
+        "hypot",
+        "ilogb",
+        "isfinite",
+        "isgreater",
+        "isgreaterequal",
+        "isinf",
+        "isless",
+        "islessequal",
+        "islessgreater",
+        "isnan",
+        "isnormal",
+        "isunordered",
+        "ldexp",
+        "lgamma",
+        "llrint",
+        "llround",
+        "log",
+        "log10",
+        "log1p",
+        "log2",
+        "logb",
+        "lrint",
+        "lround",
+        "modf",
+        "nan",
+        "nearbyint",
+        "nextafter",
+        "nexttoward",
+        "pow",
+        "remainder",
+        "remquo",
+        "rint",
+        "round",
+        "scalbln",
+        "scalbn",
+        "signbit",
+        "sin",
+        "sinh",
+        "sqrt",
+        "tan",
+        "tanh",
+        "tgamma",
+        "trunc",
+    ];
+    /// Type names from `<stdint.h>` and `<stddef.h>`. Not functions, but a
+    /// function called `size_t` is still a redeclaration.
+    const TYPES: &[&str] = &[
+        "int8_t",
+        "int16_t",
+        "int32_t",
+        "int64_t",
+        "uint8_t",
+        "uint16_t",
+        "uint32_t",
+        "uint64_t",
+        "intptr_t",
+        "uintptr_t",
+        "intmax_t",
+        "uintmax_t",
+        "size_t",
+        "ptrdiff_t",
+        "wchar_t",
+        "offsetof",
+        "NULL",
+    ];
+
+    if MATH.contains(&name) || TYPES.contains(&name) {
+        return true;
+    }
+    // `powf` and `powl` are the same declaration in another width.
+    let stem = name
+        .strip_suffix('f')
+        .or_else(|| name.strip_suffix('l'))
+        .unwrap_or(name);
+    MATH.contains(&stem)
+}
 
 /// The C spelling of a function name.
 ///
@@ -274,7 +365,8 @@ const RESERVED: &[&str] = &[
 /// which matters because an exported name is an ABI that a human will link
 /// against. Names this backend generates itself (`v0`, `t0`, `b0`) are mangled
 /// the same way, so a function called `v0` cannot shadow a parameter.
-fn c_identifier(name: &str) -> String {
+#[must_use]
+pub fn c_identifier(name: &str) -> String {
     // A method's qualified name is `Class#method`. `#` cannot appear in a
     // TypeScript identifier, which is why it was chosen -- and it cannot appear
     // in a C one either, so it is spelled with an underscore pair here.
@@ -285,7 +377,11 @@ fn c_identifier(name: &str) -> String {
         && name.len() > 1
         && name[1..].bytes().all(|b| b.is_ascii_digit());
 
-    if RESERVED.contains(&name) || generated || name.starts_with('_') {
+    if RESERVED.contains(&name)
+        || collides_with_a_header(name)
+        || generated
+        || name.starts_with('_')
+    {
         format!("{name}_")
     } else {
         name.to_string()
@@ -296,6 +392,30 @@ fn c_identifier(name: &str) -> String {
 fn literal_name(literals: &[String], text: &str) -> String {
     let index = literals.iter().position(|known| known == text).unwrap_or(0);
     format!("nts_str_{index}")
+}
+
+/// A double as a C expression.
+///
+/// Rust prints the three non-finite doubles as `inf`, `-inf` and `NaN`, none of
+/// which is C. They reach here because `Infinity` and `NaN` are ordinary
+/// constants in a TypeScript program and because the constant folder produces
+/// them: dividing by zero is not an error in JavaScript, it is a value.
+fn float_literal(value: f64) -> String {
+    if value.is_nan() {
+        // The sign and payload of a NaN are not observable from JavaScript, so
+        // any NaN will do and `NAN` is the one `math.h` names.
+        return "(double)NAN".to_owned();
+    }
+    if value.is_infinite() {
+        return if value.is_sign_negative() {
+            "-(double)INFINITY".to_owned()
+        } else {
+            "(double)INFINITY".to_owned()
+        };
+    }
+    // `{:?}` round-trips: it prints the shortest decimal that reads back as the
+    // same double, and always with a decimal point so C reads it as one.
+    format!("{value:?}")
 }
 
 /// String literals, as static data.
@@ -1284,7 +1404,7 @@ fn emit_op(
         OpKind::ConstInt(v) => format!("{name} = {v};"),
         // Enough digits to round-trip an f64 exactly. Fewer would change the
         // program's arithmetic.
-        OpKind::ConstFloat(v) => format!("{name} = {v:?};"),
+        OpKind::ConstFloat(v) => format!("{name} = {};", float_literal(*v)),
         OpKind::ConstBool(v) => format!("{name} = {v};"),
         // A literal is immutable and known now, so it is static data rather
         // than an allocation. This is the difference between a string-heavy

@@ -5,8 +5,6 @@
 //! than no command: RFC §4.1 requires that unsupported reachable behavior be
 //! diagnosed precisely, and that promise starts here.
 
-mod check;
-
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir::facts;
@@ -35,7 +33,38 @@ fn main() -> Result<()> {
                 .iter()
                 .find(|a| !a.starts_with("--"))
                 .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
-            check::check(&tsconfig)
+            let report = nts_differential::check(&tsconfig)?;
+            if report.functions == 0 {
+                println!(
+                    "nothing to check: no exported function has scalar arguments \
+                     and a scalar result"
+                );
+                return Ok(());
+            }
+            if report.checked < report.expected {
+                println!(
+                    "checked {} of {} cases; the rest were not reached (a pool \
+                     value in a loop bound will do that)",
+                    report.checked, report.expected
+                );
+            } else {
+                println!(
+                    "checked {} cases across {} function(s)",
+                    report.checked, report.functions
+                );
+            }
+            for (native, engine) in report.disagreements.iter().take(20) {
+                println!("  nts  {native}");
+                println!("  node {engine}");
+            }
+            if report.agreed() {
+                println!("agreed on every case");
+                return Ok(());
+            }
+            bail!(
+                "{} case(s) disagree between the compiled program and node",
+                report.disagreements.len()
+            )
         }
         Some("emit-c") => {
             let rest: Vec<String> = args.collect();
