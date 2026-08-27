@@ -140,8 +140,11 @@ fn analyze(
                 }
                 OpKind::Call { callee, args } => match callee {
                     // A body that is not here could do anything with what it is
-                    // given.
-                    Callee::External(_) => escapes.values.extend(args.iter().copied()),
+                    // given -- and a virtual call's body is one of several, so
+                    // the same is true of it.
+                    Callee::External(_) | Callee::Virtual { .. } => {
+                        escapes.values.extend(args.iter().copied());
+                    }
                     Callee::Direct(name) => {
                         let Some(target) = by_name.get(name.as_str()) else {
                             escapes.values.extend(args.iter().copied());
@@ -306,6 +309,7 @@ mod tests {
                     ty: HirType::NUMBER,
                     readonly: false,
                 }],
+                methods: Vec::new(),
             }],
             globals: Vec::new(),
         };

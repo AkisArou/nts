@@ -68,6 +68,180 @@ struct ModuleScope {
     unsupported: rustc_hash::FxHashMap<u32, String>,
 }
 
+/// The class hierarchy, as far as method dispatch needs it.
+///
+/// The checker's property list is flattened, so a derived type's members give no
+/// hint which class declared them -- and the name of the function to call is
+/// exactly "the class that declared it". This recovers that, and answers the
+/// other question a call site has to ask: whether anything overrides the method,
+/// because a method nothing overrides is a static call and a method something
+/// overrides is not.
+#[derive(Debug, Clone, Default)]
+struct Hierarchy {
+    /// A class's superclass, by instance type.
+    base: rustc_hash::FxHashMap<TypeId, TypeId>,
+    /// The methods a class declares itself, as opposed to inherits.
+    declares: rustc_hash::FxHashMap<TypeId, Vec<String>>,
+    /// A class's name, which is half of the function name a call emits.
+    name: rustc_hash::FxHashMap<TypeId, String>,
+    /// The dispatch slot of each overridden method, keyed by the class that
+    /// *first* declares it.
+    ///
+    /// Keyed by the root rather than by the overrider, because a slot has to
+    /// mean the same thing everywhere in a hierarchy: a `Shape*` and a
+    /// `Square*` both look up `area` at the same index, which is the whole
+    /// mechanism.
+    slots: rustc_hash::FxHashMap<(TypeId, String), u32>,
+}
+
+impl Hierarchy {
+    /// The nearest class at or above `ty` that declares `member`.
+    fn declaring(&self, ty: TypeId, member: &str) -> Option<TypeId> {
+        let mut at = Some(ty);
+        // Bounded, because a hierarchy that contains a cycle is not one and
+        // walking it would not stop.
+        for _ in 0..64 {
+            let here = at?;
+            if self
+                .declares
+                .get(&here)
+                .is_some_and(|names| names.iter().any(|name| name == member))
+            {
+                return Some(here);
+            }
+            at = self.base.get(&here).copied();
+        }
+        None
+    }
+
+    /// The highest class at or above `ty` that declares `member`.
+    ///
+    /// The slot belongs to this one. `declaring` finds the *implementation* to
+    /// call; this finds the class the slot is numbered against.
+    fn root_declaring(&self, ty: TypeId, member: &str) -> Option<TypeId> {
+        let mut found = None;
+        let mut at = Some(ty);
+        for _ in 0..64 {
+            let Some(here) = at else { break };
+            if self
+                .declares
+                .get(&here)
+                .is_some_and(|names| names.iter().any(|name| name == member))
+            {
+                found = Some(here);
+            }
+            at = self.base.get(&here).copied();
+        }
+        found
+    }
+
+    /// The dispatch slot a call on `ty` would use, if it needs one.
+    fn slot_for(&self, ty: TypeId, member: &str) -> Option<u32> {
+        let root = self.root_declaring(ty, member)?;
+        self.slots.get(&(root, member.to_owned())).copied()
+    }
+
+    /// Whether `ty` is `ancestor` or descends from it.
+    fn descends_from(&self, ty: TypeId, ancestor: TypeId) -> bool {
+        let mut at = Some(ty);
+        for _ in 0..64 {
+            let Some(here) = at else { return false };
+            if here == ancestor {
+                return true;
+            }
+            at = self.base.get(&here).copied();
+        }
+        false
+    }
+
+    /// Whether a call on a receiver of type `ty` could reach more than one
+    /// implementation of `member`.
+    ///
+    /// True exactly when some class below `ty` declares it and is not the one
+    /// `ty` itself would reach. That is the whole condition for needing dynamic
+    /// dispatch, and it is why a class hierarchy with no overriding costs
+    /// nothing: every call in it is static.
+    fn overridden(&self, ty: TypeId, member: &str) -> bool {
+        let Some(target) = self.declaring(ty, member) else {
+            return false;
+        };
+        self.declares.iter().any(|(class, names)| {
+            *class != target
+                && names.iter().any(|name| name == member)
+                && self.descends_from(*class, ty)
+        })
+    }
+}
+
+/// Read every class declaration's name, base and own methods.
+fn collect_hierarchy(snapshot: &SemanticSnapshot) -> Hierarchy {
+    let mut hierarchy = Hierarchy::default();
+    let probe = FuncBuilder::new(snapshot);
+
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::CLASS_DECLARATION) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let Some(ty) = snapshot.node_types.get(&id).copied() else {
+            continue;
+        };
+
+        if let Some(name) = probe
+            .children(id)
+            .into_iter()
+            .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .and_then(|child| probe.node(child).text.clone())
+        {
+            hierarchy.name.insert(ty, name);
+        }
+        // `extends` first, then `implements`, and a class extends at most one
+        // class. An interface contributes no implementation, so it is not a
+        // base for dispatch even though it is one for assignability.
+        if let Some(base) = snapshot.base_types.get(&ty).and_then(|bases| bases.first()) {
+            hierarchy.base.insert(ty, *base);
+        }
+
+        let declared: Vec<String> = probe
+            .children(id)
+            .into_iter()
+            .filter(|child| probe.kind_of(*child) == Some(syntax::METHOD_DECLARATION))
+            .filter_map(|child| {
+                probe
+                    .children(child)
+                    .into_iter()
+                    .find(|part| probe.kind_of(*part) == Some(syntax::IDENTIFIER))
+                    .and_then(|part| probe.node(part).text.clone())
+            })
+            .collect();
+        hierarchy.declares.insert(ty, declared);
+    }
+
+    // A slot for every method something overrides, numbered against the class
+    // that first declares it. A method nothing overrides gets none, which is why
+    // a hierarchy with no overriding pays nothing: every call in it is static
+    // and no class carries a table.
+    let mut roots: Vec<(TypeId, String)> = Vec::new();
+    for (class, names) in &hierarchy.declares {
+        for name in names {
+            let Some(root) = hierarchy.root_declaring(*class, name) else {
+                continue;
+            };
+            if hierarchy.overridden(root, name) && !roots.contains(&(root, name.clone())) {
+                roots.push((root, name.clone()));
+            }
+        }
+    }
+    // Sorted, so one compiler on one input numbers the slots one way.
+    roots.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
+    for (at, key) in roots.into_iter().enumerate() {
+        hierarchy
+            .slots
+            .insert(key, u32::try_from(at).unwrap_or(u32::MAX));
+    }
+    hierarchy
+}
+
 /// Collect what a module declares outside any function.
 ///
 /// Scalars only. A managed global is a *root* -- reachable without being on any
@@ -172,6 +346,7 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
     let module = collect_module_scope(snapshot);
+    let hierarchy = collect_hierarchy(snapshot);
     lowered.program.globals.clone_from(&module.globals);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -196,7 +371,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
                     .collect()
             };
             for member in members {
-                let mut builder = FuncBuilder::within(snapshot, module.clone());
+                let mut builder = FuncBuilder::within(snapshot, module.clone(), hierarchy.clone());
                 match builder.lower_method(id, member) {
                     Ok(func) => lowered.program.funcs.push(func),
                     Err(diagnostic) => lowered.diagnostics.push(diagnostic),
@@ -209,7 +384,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         if node.kind != NodeKind::Syntax(syntax::FUNCTION_DECLARATION) {
             continue;
         }
-        let mut builder = FuncBuilder::within(snapshot, module.clone());
+        let mut builder = FuncBuilder::within(snapshot, module.clone(), hierarchy.clone());
         match builder.lower_function(id) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => lowered.diagnostics.push(diagnostic),
@@ -463,6 +638,14 @@ struct FuncBuilder<'a> {
     this: Option<ValueId>,
     /// What the module declares outside any function.
     module: ModuleScope,
+    /// What every class in the program declares, and what it extends.
+    hierarchy: Hierarchy,
+    /// The class this method's own class extends, if it extends one.
+    ///
+    /// `super(...)` and `super.m()` name it, and nothing else can: the checker
+    /// resolves a `super` call to the base's declaration, but the *name* of the
+    /// function to emit is this compiler's own construction.
+    base: Option<String>,
 }
 
 impl<'a> FuncBuilder<'a> {
@@ -479,14 +662,17 @@ impl<'a> FuncBuilder<'a> {
             bindings: rustc_hash::FxHashMap::default(),
             layouts: Vec::new(),
             this: None,
+            hierarchy: Hierarchy::default(),
+            base: None,
             module: ModuleScope::default(),
         }
     }
 
-    /// The same, knowing what the module declares.
-    fn within(snapshot: &'a SemanticSnapshot, module: ModuleScope) -> Self {
+    /// The same, knowing what the module and its classes declare.
+    fn within(snapshot: &'a SemanticSnapshot, module: ModuleScope, hierarchy: Hierarchy) -> Self {
         Self {
             module,
+            hierarchy,
             ..Self::new(snapshot)
         }
     }
@@ -756,6 +942,7 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(member);
         let receiver = self.push(OpKind::Param(0), instance.clone(), origin.clone());
         self.this = Some(receiver);
+        self.base = self.base_class(class);
         let mut params = vec![Param {
             name: "this".to_owned(),
             ty: instance.clone(),
@@ -1796,6 +1983,39 @@ impl<'a> FuncBuilder<'a> {
     /// Declaration order, which is the order the checker reports members in.
     /// When classes arrive this becomes base-first (RFC §8.1), so that a
     /// subclass's prefix is its base's layout and an upcast is free.
+    /// The member names a type inherits, in the order its bases declare them.
+    ///
+    /// `extends` comes before `implements` in `base_types`, and a class extends
+    /// at most one class, so the first base is the superclass and its order is
+    /// the one that has to be a prefix. An interface listed after it contributes
+    /// only names already placed.
+    fn inherited_order(&self, ty: TypeId, into: &mut Vec<String>, depth: u32) {
+        // A type that reaches itself through its bases is not a hierarchy, and
+        // recursing on one would not stop.
+        if depth > 32 {
+            return;
+        }
+        let Some(bases) = self.snapshot.base_types.get(&ty) else {
+            return;
+        };
+        for base in bases {
+            self.inherited_order(*base, into, depth + 1);
+            let Some(TypeKind::Object { properties }) = self
+                .snapshot
+                .types
+                .get(base.0 as usize)
+                .map(|record| &record.kind)
+            else {
+                continue;
+            };
+            for property in properties {
+                if !into.contains(&property.name) {
+                    into.push(property.name.clone());
+                }
+            }
+        }
+    }
+
     fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {
         if let Some(known) = self
             .layouts
@@ -1849,6 +2069,24 @@ impl<'a> FuncBuilder<'a> {
             });
         }
 
+        // Base first, so a derived object's fields start with exactly the base's
+        // and a pointer to one is a pointer to the other. That is what makes an
+        // upcast free: `Square#area` and `Shape#doubled` read the same offsets
+        // for the fields they share, so passing a `Square*` where a `Shape*` is
+        // expected needs no work at all.
+        //
+        // The checker's property list is flattened -- it already contains the
+        // inherited members with nothing to say where they came from -- so the
+        // order has to be recovered from the base chain rather than read off.
+        let mut order = Vec::new();
+        self.inherited_order(ty, &mut order, 0);
+        fields.sort_by_key(|field| {
+            order
+                .iter()
+                .position(|name| *name == field.name)
+                .unwrap_or(usize::MAX)
+        });
+
         // The declared name where there is one. An anonymous object type —
         // `{ x: number }` written inline — has no symbol, so it is named after
         // its type id, which is at least stable and unique.
@@ -1876,10 +2114,26 @@ impl<'a> FuncBuilder<'a> {
             return Ok(existing.clone());
         }
 
+        // What this class does for each dispatch slot. Empty where nothing in
+        // the hierarchy is overridden, which is most classes.
+        let mut methods = vec![None; self.hierarchy.slots.len()];
+        for ((root, member), slot) in &self.hierarchy.slots {
+            if !self.hierarchy.descends_from(ty, *root) {
+                continue;
+            }
+            let Some(owner) = self.hierarchy.declaring(ty, member) else {
+                continue;
+            };
+            if let Some(name) = self.hierarchy.name.get(&owner) {
+                methods[*slot as usize] = Some(format!("{name}#{member}"));
+            }
+        }
+
         let layout = Layout {
             types: vec![ty],
             name,
             fields,
+            methods,
         };
         self.layouts.push(layout.clone());
         Ok(layout)
@@ -2342,6 +2596,27 @@ impl<'a> FuncBuilder<'a> {
             .first()
             .ok_or_else(|| self.unsupported(id, "a call with no callee"))?;
 
+        // `super(...)` and `super.method()`. The base is known statically -- a
+        // class extends at most one -- so both are ordinary static calls with
+        // `this` as the receiver, which is what they are once `this` is
+        // explicit.
+        if self.kind_of(callee_node) == Some(syntax::SUPER_KEYWORD) {
+            return self.lower_super(id, "constructor", &children[1..]);
+        }
+        if self.kind_of(callee_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            let parts = self.children(callee_node);
+            if let [target, member] = parts.as_slice()
+                && self.kind_of(*target) == Some(syntax::SUPER_KEYWORD)
+            {
+                let name = self
+                    .node(*member)
+                    .text
+                    .clone()
+                    .ok_or_else(|| self.unsupported(*member, "a computed method name"))?;
+                return self.lower_super(id, &name, &children[1..]);
+            }
+        }
+
         // `Math.floor(x)` and friends are operations, not calls. Lowering them
         // as operations is what lets the analysis see that the result is a whole
         // number — which is the entire reason an author writes `Math.floor`
@@ -2378,29 +2653,7 @@ impl<'a> FuncBuilder<'a> {
             else {
                 return Err(self.unsupported(id, "a method call on something without methods"));
             };
-            let layout = self.layout_of(id, type_id)?;
-            let member_name = self
-                .node(*member)
-                .text
-                .clone()
-                .ok_or_else(|| self.unsupported(*member, "a computed method name"))?;
-
-            let mut args = vec![receiver];
-            for argument in children.iter().skip(1) {
-                args.push(self.lower_expression(*argument)?);
-            }
-            let ty = self
-                .type_of(id)
-                .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
-            let origin = self.origin(id);
-            return Ok(self.push(
-                OpKind::Call {
-                    callee: Callee::Direct(format!("{}#{member_name}", layout.name)),
-                    args,
-                },
-                ty,
-                origin,
-            ));
+            return self.lower_object_method(id, receiver, type_id, *member, &children[1..]);
         }
 
         let name = self
@@ -2658,6 +2911,109 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         ))
+    }
+
+    /// A method call on an object, once the receiver is lowered.
+    ///
+    /// Two questions, and they are different. Which class *declares* the method
+    /// is not always the receiver's -- `new Square(n).describe()` calls
+    /// `Shape#describe` when only `Shape` declares one. And whether the call is
+    /// static is decided by whether anything *below* the receiver's type
+    /// overrides it, which the compiler can answer because TypeScript closes the
+    /// hierarchy.
+    ///
+    /// So a call on a `Square` is static even where the same method on a `Shape`
+    /// dispatches: nothing below `Square` overrides anything.
+    fn lower_object_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        type_id: TypeId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let member_name = self
+            .node(member)
+            .text
+            .clone()
+            .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
+
+        let declaring = self
+            .hierarchy
+            .declaring(type_id, &member_name)
+            .unwrap_or(type_id);
+        let owner = match self.hierarchy.name.get(&declaring) {
+            Some(name) => name.clone(),
+            None => self.layout_of(id, declaring)?.name,
+        };
+
+        let callee = if self.hierarchy.overridden(type_id, &member_name)
+            && let Some(slot) = self.hierarchy.slot_for(type_id, &member_name)
+        {
+            Callee::Virtual {
+                slot,
+                declared: format!("{owner}#{member_name}"),
+            }
+        } else {
+            Callee::Direct(format!("{owner}#{member_name}"))
+        };
+
+        let mut args = vec![receiver];
+        for argument in arguments {
+            args.push(self.lower_expression(*argument)?);
+        }
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::Call { callee, args }, ty, origin))
+    }
+
+    /// A call into the base class, with `this` as the receiver.
+    fn lower_super(
+        &mut self,
+        id: NodeId,
+        member: &str,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let base = self
+            .base
+            .clone()
+            .ok_or_else(|| self.unsupported(id, "`super` outside a derived class"))?;
+        let receiver = self
+            .this
+            .ok_or_else(|| self.unsupported(id, "`super` outside a method"))?;
+
+        let mut args = vec![receiver];
+        for argument in arguments {
+            args.push(self.lower_expression(*argument)?);
+        }
+        let origin = self.origin(id);
+        // A `super(...)` produces nothing; `super.m()` produces whatever `m`
+        // does, and the checker typed the call node accordingly.
+        let ty = if member == "constructor" {
+            HirType::Void
+        } else {
+            self.type_of(id).unwrap_or(HirType::Void)
+        };
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::Direct(format!("{base}#{member}")),
+                args,
+            },
+            ty,
+            origin,
+        ))
+    }
+
+    /// The name of the class a class extends.
+    fn base_class(&self, class: NodeId) -> Option<String> {
+        let ty = self.snapshot.node_types.get(&class)?;
+        // `extends` first, then `implements`, and a class extends at most one
+        // class -- so the first base is the superclass when there is one.
+        let base = *self.snapshot.base_types.get(ty)?.first()?;
+        let symbol = self.snapshot.types.get(base.0 as usize)?.symbol?;
+        Some(self.snapshot.symbols.get(symbol.0 as usize)?.name.clone())
     }
 
     fn lower_identifier(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {

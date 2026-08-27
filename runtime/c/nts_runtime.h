@@ -68,6 +68,15 @@ typedef struct NtsDescriptor {
      * cyclic because unknown has to mean yes. */
     uint32_t cyclic;
     const uint32_t *offsets;
+    /* RFC 8.1 says a descriptor describes the shape rather than the contents,
+     * and a class's method table is part of its shape.
+     *
+     * Null for every class in a hierarchy where nothing is overridden, which is
+     * most of them: a method no subclass replaces is a static call and needs no
+     * table. Where there is one, a call is a load of this pointer and an
+     * indirect call through it -- which is what dispatch costs when the compiler
+     * has the whole hierarchy and can say which calls need it. */
+    void *const *methods;
     const char *name;
 } NtsDescriptor;
 

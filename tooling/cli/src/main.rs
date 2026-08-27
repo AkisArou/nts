@@ -480,8 +480,11 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::Call { callee, args } => {
             let rendered: Vec<String> = args.iter().map(|a| format!("%{}", a.0)).collect();
             let (kind, name) = match callee {
-                nts_core::hir::Callee::Direct(name) => ("call", name),
-                nts_core::hir::Callee::External(name) => ("call.extern", name),
+                nts_core::hir::Callee::Direct(name) => ("call".to_owned(), name),
+                nts_core::hir::Callee::External(name) => ("call.extern".to_owned(), name),
+                nts_core::hir::Callee::Virtual { slot, declared } => {
+                    (format!("call.virtual[{slot}]"), declared)
+                }
             };
             format!("%{index} = {kind} {name}({}) : {ty}", rendered.join(", "))
         }

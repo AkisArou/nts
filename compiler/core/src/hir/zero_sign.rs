@@ -147,13 +147,7 @@ fn carries_sign(kind: &OpKind) -> Vec<ValueId> {
             // `%` belongs here and is easy to miss: `-5 % 5` is `-0`, and so is
             // `-0 % 5`.
             op:
-                BinOp::Mul
-                | BinOp::Div
-                | BinOp::Add
-                | BinOp::Sub
-                | BinOp::Rem
-                | BinOp::Min
-                | BinOp::Max,
+                BinOp::Mul | BinOp::Div | BinOp::Add | BinOp::Sub | BinOp::Rem | BinOp::Min | BinOp::Max,
             lhs,
             rhs,
         } => vec![*lhs, *rhs],

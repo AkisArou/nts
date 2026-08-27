@@ -55,6 +55,9 @@ pub const TRUE_KEYWORD: u16 = 111;
 pub const CONST_KEYWORD: u16 = 86;
 pub const DEFAULT_KEYWORD: u16 = 89;
 pub const EXPORT_KEYWORD: u16 = 94;
+/// Determined empirically, like everything else here: the encoder's own
+/// documentation gives a different number.
+pub const SUPER_KEYWORD: u16 = 107;
 pub const THIS_KEYWORD: u16 = 109;
 pub const PRIVATE_KEYWORD: u16 = 122;
 pub const PROTECTED_KEYWORD: u16 = 123;

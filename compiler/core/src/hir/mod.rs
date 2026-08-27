@@ -420,6 +420,20 @@ pub enum Callee {
     /// exactly; what is missing is a definition to call, which the linker or the
     /// platform supplies.
     External(String),
+    /// A method something overrides, so which implementation runs depends on
+    /// what the receiver *is* rather than on what its type says.
+    ///
+    /// The slot is an index into the receiver's class table, numbered against
+    /// the class that first declared the method so that every class in a
+    /// hierarchy agrees about it. `declared` names the implementation the
+    /// receiver's static type would reach, which is what gives the call its
+    /// signature — the table stores untyped pointers, and something has to say
+    /// how to call one.
+    ///
+    /// A method nothing overrides is [`Callee::Direct`]. That is not an
+    /// optimization applied afterwards: a call site knows which it is, because
+    /// the hierarchy is closed and the compiler has all of it.
+    Virtual { slot: u32, declared: String },
 }
 
 /// A binary operator, after the source operator has been resolved against its
@@ -543,6 +557,11 @@ pub struct Layout {
     /// The source name, for diagnostics and for the emitted type's name.
     pub name: String,
     pub fields: Vec<Field>,
+    /// This class's implementation for each dispatch slot, where it has one.
+    ///
+    /// Empty for a class in a hierarchy where nothing is overridden, which is
+    /// most of them — and an empty table is no table at all in the emitted code.
+    pub methods: Vec<Option<String>>,
 }
 
 impl Layout {
@@ -986,6 +1005,7 @@ mod tests {
             types: vec![TypeId(id)],
             name: name.to_owned(),
             fields,
+            methods: Vec::new(),
         }
     }
 

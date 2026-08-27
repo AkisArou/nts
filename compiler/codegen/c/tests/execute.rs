@@ -1312,3 +1312,52 @@ int main(void) {{
         "`indexOf` and `includes` must disagree about NaN: {output}",
     );
 }
+
+#[test]
+fn a_method_something_overrides_dispatches_and_the_rest_do_not() {
+    // Three things at once, and the third is the one worth the machinery.
+    //
+    // A derived object's fields start with the base's, so `name` is at one
+    // offset in all three classes. `describe` is declared on `Shape`, nothing
+    // overrides it, and it is a static call even on a `Square`. And `describe`
+    // calls `this.area()`, which *is* overridden -- so through a `Rectangle` it
+    // has to reach `Rectangle`'s, which no static call could do.
+    //
+    // Every expected value came from running the same `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+double shapeArea(void);
+double rectangleArea(double w, double h);
+double squareArea(double side);
+double describeRectangle(double w, double h);
+double describeSquare(double side);
+double nameOf(double side);
+int main(void) {{
+    check("shapeArea", shapeArea(), 0);
+    check("rectangleArea(3,4)", rectangleArea(3, 4), 12);
+    /* `Square.area` calls `super.area()`, which must reach Rectangle's and not
+       dispatch back to its own. */
+    check("squareArea(5)", squareArea(5), 25);
+
+    /* `describe` is Shape's, and its `this.area()` reaches the override. */
+    check("describeRectangle(3,4)", describeRectangle(3, 4), 1012);
+    check("describeSquare(5)", describeSquare(5), 2025);
+
+    /* The base's field through a derived instance: same offset or nothing. */
+    check("nameOf(5)", nameOf(5), 2);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("inheritance", &harness) else {
+        return;
+    };
+    assert!(
+        output.contains("ok describeRectangle(3,4) = 1012"),
+        "a base method's `this.area()` must reach the override: {output}",
+    );
+    assert!(
+        output.contains("ok squareArea(5) = 25"),
+        "`super.area()` must not dispatch back to the caller: {output}",
+    );
+}

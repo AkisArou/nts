@@ -158,18 +158,22 @@ pub fn emit(program: &Program) -> Emitted {
     // `div`, a name a TypeScript program is entitled to use.
     writer.line(&origin, format!("#include \"{RUNTIME_HEADER_NAME}\""));
     emit_object_types(&mut writer, &origin, program);
+
+    // Forward declarations, so a call does not depend on definition order — and
+    // only for functions that actually have a definition. Before the
+    // descriptors, because a dispatch table takes the address of a function and
+    // C wants that declared.
+    for (signature, _, _) in &bodies {
+        writer.line(&origin, format!("{signature};"));
+    }
+    writer.blank(&origin);
+
+    emit_object_descriptors(&mut writer, &origin, program);
     emit_descriptors(&mut writer, &origin, &descriptors);
     emit_literals(&mut writer, &origin, &literals);
     if let Err(diagnostic) = emit_globals(&mut writer, program) {
         diagnostics.push(diagnostic);
     }
-
-    // Forward declarations, so a call does not depend on definition order — and
-    // only for functions that actually have a definition.
-    for (signature, _, _) in &bodies {
-        writer.line(&origin, format!("{signature};"));
-    }
-    writer.blank(&origin);
 
     for (_, body, _) in bodies {
         writer.append(body);
@@ -406,6 +410,111 @@ fn literal_name(literals: &[String], text: &str) -> String {
     format!("nts_str_{index}")
 }
 
+/// A call: static, external, or through the receiver's dispatch table.
+fn call_text(
+    func: &Func,
+    name: &str,
+    value: ValueId,
+    callee: &Callee,
+    args: &[ValueId],
+    context: &Context<'_>,
+    origin: &Origin,
+) -> Result<String, Diagnostic> {
+    // A virtual call names the implementation the receiver's *static* type would
+    // reach. That is not the one that runs -- the table decides that -- but it
+    // is what gives the call its signature, and an override has the same
+    // signature by definition.
+    let (Callee::Direct(target)
+    | Callee::External(target)
+    | Callee::Virtual {
+        declared: target, ..
+    }) = callee;
+
+    // A derived object passed where a base is expected. The layout is base
+    // first, so the two agree on every field the base has and the cast is a
+    // no-op -- but C will not take one pointer for the other without being told,
+    // and `super(...)` does exactly this.
+    //
+    // Only an *up*cast is reachable here: TypeScript checked assignability
+    // before any of this ran, so an argument that is not the parameter's type is
+    // a subtype of it.
+    let declared = context
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name == *target)
+        .map(|func| &func.params);
+    let arguments: Vec<String> = args
+        .iter()
+        .enumerate()
+        .map(|(at, argument)| {
+            let wanted = declared.and_then(|params| params.get(at)).map(|p| &p.ty);
+            let actual = &func.values[argument.0 as usize].ty;
+            match wanted {
+                Some(wanted) if wanted != actual && wanted.is_managed() => {
+                    match c_type_of(context.program, wanted, origin) {
+                        Ok(ty) => format!("({ty}){}", value_name(*argument)),
+                        Err(_) => value_name(*argument),
+                    }
+                }
+                _ => value_name(*argument),
+            }
+        })
+        .collect();
+
+    let call = if let Callee::Virtual { slot, .. } = callee {
+        // The table stores untyped pointers, so the call spells the signature it
+        // is making. `args[0]` is the receiver, and its descriptor is where the
+        // table lives -- one load and one indirect call, which is what dispatch
+        // costs when the compiler knows the whole hierarchy.
+        let signature = virtual_signature(context.program, target, origin)?;
+        let receiver = args
+            .first()
+            .map_or_else(|| "0".to_owned(), |value| value_name(*value));
+        format!(
+            "(({signature}){receiver}->header.descriptor->methods[{slot}])({})",
+            arguments.join(", ")
+        )
+    } else {
+        format!("{}({})", c_identifier(target), arguments.join(", "))
+    };
+
+    Ok(if context.read.contains(&value) {
+        format!("{name} = {call};")
+    } else {
+        // The call still happens; only its result is unwanted.
+        format!("{call};")
+    })
+}
+
+/// A function-pointer type for calling one implementation of a virtual method.
+fn virtual_signature(
+    program: &Program,
+    target: &str,
+    origin: &Origin,
+) -> Result<String, Diagnostic> {
+    let Some(func) = program.funcs.iter().find(|func| func.name == target) else {
+        return Err(Diagnostic::error(
+            "NTS2006",
+            format!("no declaration for `{target}` to take a signature from"),
+            origin.location,
+        ));
+    };
+    let mut params = Vec::new();
+    for param in &func.params {
+        params.push(c_type_of(program, &param.ty, origin)?);
+    }
+    Ok(format!(
+        "{} (*)({})",
+        c_type_of(program, &func.return_type, origin)?,
+        if params.is_empty() {
+            "void".to_owned()
+        } else {
+            params.join(", ")
+        }
+    ))
+}
+
 /// The C name of a module-scope variable.
 fn global_name(program: &Program, global: u32) -> String {
     program
@@ -521,8 +630,7 @@ fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program
         writer.blank(origin);
     }
 
-    let cyclic_layouts = program.cyclic_layouts();
-    for (index, layout) in program.layouts.iter().enumerate() {
+    for layout in &program.layouts {
         let name = object_type_name(layout);
         writer.line(origin, format!("struct {name} {{"));
         // The header first, so every managed object starts the same way and a
@@ -550,6 +658,19 @@ fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program
             writer.line(origin, format!("    {ty} {};", c_identifier(&field.name)));
         }
         writer.line(origin, "};");
+        writer.blank(origin);
+    }
+}
+
+/// Per-type data: the reference map, the dispatch table, and the descriptor.
+///
+/// Separate from the structs because a dispatch table takes the address of a
+/// function, and a function has to be declared before that is legal. The structs
+/// come first because a declaration's parameter types need them.
+fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+    let cyclic_layouts = program.cyclic_layouts();
+    for (index, layout) in program.layouts.iter().enumerate() {
+        let name = object_type_name(layout);
         // RFC 8.3: where this object's references are, as byte offsets. Written
         // with `offsetof` so the compiler that laid the struct out is the one
         // that says where its fields are -- padding, alignment and field order
@@ -559,6 +680,33 @@ fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program
         // Nothing reads this under NoGC, where a reference field is a pointer
         // and costs nothing. It is emitted anyway, because it is a fact about
         // the layout.
+        // The class's dispatch table, where the hierarchy has one. A slot the
+        // class does not implement is null, which is unreachable: a call only
+        // uses a slot the receiver's static type declares, and every class at or
+        // below that type fills it.
+        let methods = if layout.methods.iter().all(Option::is_none) {
+            "0".to_owned()
+        } else {
+            let entries: Vec<String> = layout
+                .methods
+                .iter()
+                .map(|method| {
+                    method.as_ref().map_or_else(
+                        || "0".to_owned(),
+                        |name| format!("(void *){}", c_identifier(name)),
+                    )
+                })
+                .collect();
+            writer.line(
+                origin,
+                format!(
+                    "static void *const nts_vtable_{name}[] = {{ {} }};",
+                    entries.join(", ")
+                ),
+            );
+            format!("nts_vtable_{name}")
+        };
+
         let references = layout.reference_fields();
         let offsets = if references.is_empty() {
             // No table, and no `static const uint32_t x[] = {};` either: a
@@ -586,7 +734,7 @@ fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program
             origin,
             format!(
                 "static const NtsDescriptor nts_desc_{name} = \
-                 {{ NTS_KIND_OBJECT, sizeof({name}), {}u, {cyclic}u, {offsets}, \"{}\" }};",
+                 {{ NTS_KIND_OBJECT, sizeof({name}), {}u, {cyclic}u, {offsets}, {methods}, \"{}\" }};",
                 references.len(),
                 layout.name
             ),
@@ -606,7 +754,7 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, \"{element}[]\" }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\" }};",
                 descriptor_name(element)
             ),
         );
@@ -1492,15 +1640,7 @@ fn emit_op(
         }
         OpKind::Binary { op: bin, lhs, rhs } => binary_text(func, op, &name, *bin, *lhs, *rhs)?,
         OpKind::Call { callee, args } => {
-            let (Callee::Direct(target) | Callee::External(target)) = callee;
-            let arguments: Vec<String> = args.iter().map(|a| value_name(*a)).collect();
-            let call = format!("{}({})", c_identifier(target), arguments.join(", "));
-            if context.read.contains(&value) {
-                format!("{name} = {call};")
-            } else {
-                // The call still happens; only its result is unwanted.
-                format!("{call};")
-            }
+            call_text(func, &name, value, callee, args, context, &op.origin)?
         }
         OpKind::Unary { op: un, operand } => {
             unary_text(func, &name, *un, *operand, &op.ty, &op.origin)?

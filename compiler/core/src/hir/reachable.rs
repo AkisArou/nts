@@ -114,14 +114,30 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
         for op in &func.values {
             // An external callee is not in this program, so there is nothing to
             // keep — the linker supplies it.
-            if let OpKind::Call {
-                callee: Callee::Direct(target),
-                ..
-            } = &op.kind
-                && let Some(callee) = program.funcs.iter().find(|f| f.name == *target)
-                && reached.insert(callee.name.as_str())
-            {
-                pending.push(callee.name.as_str());
+            let OpKind::Call { callee, .. } = &op.kind else {
+                continue;
+            };
+            // A virtual call reaches *every* implementation of its slot, because
+            // which one runs is decided by a receiver this cannot see. Keeping
+            // only the one the static type names would prune an override that a
+            // table still points at, and a table entry the linker cannot resolve
+            // is a link error at best.
+            let targets: Vec<&str> = match callee {
+                Callee::Direct(target) => vec![target.as_str()],
+                Callee::External(_) => Vec::new(),
+                Callee::Virtual { slot, .. } => program
+                    .layouts
+                    .iter()
+                    .filter_map(|layout| layout.methods.get(*slot as usize))
+                    .filter_map(|method| method.as_deref())
+                    .collect(),
+            };
+            for target in targets {
+                if let Some(callee) = program.funcs.iter().find(|f| f.name == target)
+                    && reached.insert(callee.name.as_str())
+                {
+                    pending.push(callee.name.as_str());
+                }
             }
         }
     }
