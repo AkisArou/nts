@@ -33,9 +33,13 @@
 //!   sign along, so a value feeding one of them is observed if the result is.
 //!
 //! Everything else destroys the sign before anyone can look. `ToInt32`, every
-//! bitwise operator, `Math.floor` and its family, and every comparison produce
-//! values that carry nothing back — which is why `(x * y) | 0` is safe to
-//! compute in integers however many negative zeros it passes through.
+//! bitwise operator and every comparison produce values that carry nothing back
+//! — which is why `(x * y) | 0` is safe to compute in integers however many
+//! negative zeros it passes through.
+//!
+//! The rounding family is *not* in that group, which is easy to get wrong and
+//! was: `Math.floor(-0)` is `-0`, and `Math.ceil(-0.5)` creates one out of a
+//! value that was not a zero at all. So is `%`, where `-5 % 5` is `-0`.
 //!
 //! # The direction it runs
 //!
@@ -140,19 +144,36 @@ fn carries_sign(kind: &OpKind) -> Vec<ValueId> {
         // zeros of the same sign, which is a case rather than a reason to
         // exclude them.
         OpKind::Binary {
-            op: BinOp::Mul | BinOp::Div | BinOp::Add | BinOp::Sub | BinOp::Min | BinOp::Max,
+            // `%` belongs here and is easy to miss: `-5 % 5` is `-0`, and so is
+            // `-0 % 5`.
+            op:
+                BinOp::Mul
+                | BinOp::Div
+                | BinOp::Add
+                | BinOp::Sub
+                | BinOp::Rem
+                | BinOp::Min
+                | BinOp::Max,
             lhs,
             rhs,
         } => vec![*lhs, *rhs],
         OpKind::Unary {
-            op: UnOp::Neg | UnOp::Abs,
+            // The rounding family carries a zero's sign and `ceil` can *create*
+            // one: `Math.ceil(-0.5)` is `-0`, and `Math.floor(-0)` is `-0`.
+            // Leaving them out of this list was a real bug, and test262 found
+            // it as `Math.floor(-0)` coming back `+0`.
+            //
+            // `Math.abs(-0)` is `+0`, so `Abs` destroys the sign rather than
+            // carrying it. It is listed anyway: being conservative here costs a
+            // specialization and being wrong costs an answer.
+            op: UnOp::Neg | UnOp::Abs | UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round,
             operand,
         }
         | OpKind::Convert(operand) => vec![*operand],
-        // Everything else destroys it. A coercion, a bitwise operator, a
-        // rounding and a comparison all produce something that carries nothing
-        // back -- which is why `(x * y) | 0` is safe however many negative
-        // zeros it passes through.
+        // Everything else destroys it. A coercion, a bitwise operator and a
+        // comparison all produce something that carries nothing back -- which is
+        // why `(x * y) | 0` is safe however many negative zeros it passes
+        // through.
         _ => Vec::new(),
     }
 }
@@ -282,5 +303,67 @@ mod tests {
             !seen.contains(&ValueId(2)),
             "the numerator is not: the quotient's own sign is hidden by the coercion",
         );
+    }
+}
+
+#[cfg(test)]
+mod rounding_tests {
+    use super::*;
+    use crate::hir::{Block, HirType, Op, Param, facts::Facts};
+    use nts_diagnostics::{Location, SourceId, Span};
+    use nts_semantic_schema::Origin;
+
+    /// `Math.floor(-0)` is `-0`, so a rounding carries its operand's sign and
+    /// the operand cannot become an integer. test262 found this as a `+0` where
+    /// node said `-0`.
+    #[test]
+    fn a_rounding_carries_the_sign_of_a_zero() {
+        let origin = || {
+            Origin::source(Location {
+                file: SourceId(0),
+                span: Span::new(0, 1),
+            })
+        };
+        let op = |kind| Op {
+            kind,
+            ty: HirType::NUMBER,
+            origin: origin(),
+        };
+        for rounding in [UnOp::Floor, UnOp::Ceil, UnOp::Trunc, UnOp::Round] {
+            let func = Func {
+                name: "f".to_owned(),
+                params: vec![Param {
+                    name: "a".to_owned(),
+                    ty: HirType::NUMBER,
+                    origin: origin(),
+                    known: Facts::TOP,
+                }],
+                return_type: HirType::NUMBER,
+                values: vec![
+                    op(OpKind::Param(0)),
+                    op(OpKind::Unary {
+                        op: UnOp::Neg,
+                        operand: ValueId(0),
+                    }),
+                    op(OpKind::Unary {
+                        op: rounding,
+                        operand: ValueId(1),
+                    }),
+                ],
+                blocks: vec![Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                    terminator: Terminator::Return(Some(ValueId(2))),
+                }],
+                origin: origin(),
+                exported: true,
+                initializes_receiver: false,
+            };
+            let seen = observed(&func);
+            assert!(
+                seen.contains(&ValueId(1)),
+                "{rounding:?} must carry its operand's zero sign",
+            );
+        }
     }
 }
