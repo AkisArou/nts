@@ -11,6 +11,7 @@ use nts_core::hir::facts;
 use nts_core::hir::{self, BinOp, HirType, ManagedType, OpKind};
 use nts_core::reachability;
 use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo, tsgo::decompose::Budget};
+use nts_diagnostics::Location;
 use nts_semantic_schema::SCHEMA_VERSION;
 
 fn main() -> Result<()> {
@@ -596,6 +597,30 @@ const fn render_bin(op: BinOp) -> &'static str {
     }
 }
 
+/// Where a diagnostic is, as `path:line:column`.
+///
+/// A refusal without a location is a scavenger hunt: the message says what is
+/// not supported and the program says nothing about where. Byte offsets are
+/// what the snapshot carries, because that is what tsgo's encoded AST carries;
+/// turning one into a line and a column means reading the file, which is a fine
+/// price to pay once per diagnostic.
+fn where_it_is(snapshot: &nts_semantic_schema::SemanticSnapshot, at: &Location) -> String {
+    let Some(source) = snapshot.sources.get(at.file.0 as usize) else {
+        return "<unknown>".to_owned();
+    };
+    let path = &source.display_path;
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return path.to_string();
+    };
+    let upto = &text.as_bytes()[..(at.span.start as usize).min(text.len())];
+    // Counted a byte at a time on purpose: this runs once per diagnostic, and
+    // a dependency on a vectorized byte counter for that would be absurd.
+    #[allow(clippy::naive_bytecount)]
+    let line = upto.iter().filter(|byte| **byte == b'\n').count() + 1;
+    let column = upto.len() - upto.iter().rposition(|byte| *byte == b'\n').map_or(0, |at| at + 1);
+    format!("{path}:{line}:{}", column + 1)
+}
+
 /// Lower a project and print the C it becomes.
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
@@ -632,13 +657,23 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
         }
     };
     for diagnostic in &prepared.diagnostics {
-        eprintln!("{} {}", diagnostic.code, diagnostic.message);
+        eprintln!(
+            "{}: {} {}",
+            where_it_is(&snapshot, &diagnostic.primary),
+            diagnostic.code,
+            diagnostic.message
+        );
     }
     let program = prepared.program;
 
     let emitted = nts_codegen_c::emit(&program);
     for diagnostic in &emitted.diagnostics {
-        eprintln!("{} {}", diagnostic.code, diagnostic.message);
+        eprintln!(
+            "{}: {} {}",
+            where_it_is(&snapshot, &diagnostic.primary),
+            diagnostic.code,
+            diagnostic.message
+        );
     }
 
     let Some(out) = out else {

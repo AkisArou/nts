@@ -383,11 +383,16 @@ fn collides_with_a_header(name: &str) -> bool {
 /// the same way, so a function called `v0` cannot shadow a parameter.
 #[must_use]
 pub fn c_identifier(name: &str) -> String {
-    // A method's qualified name is `Class#method`. `#` cannot appear in a
-    // TypeScript identifier, which is why it was chosen -- and it cannot appear
-    // in a C one either, so it is spelled with an underscore pair here.
+    // A method's qualified name is `Class#method`, and a static method's is
+    // `Class.method`. Neither `#` nor `.` can appear in a TypeScript identifier,
+    // which is why they were chosen -- and neither can appear in a C one, so
+    // both are spelled with an underscore pair here. The two stay distinct
+    // because one class may declare `static foo()` and `foo()` together.
     if name.contains('#') {
         return name.replace('#', "__");
+    }
+    if name.contains('.') {
+        return name.replace('.', "___");
     }
     let generated = matches!(name.as_bytes().first(), Some(b'v' | b't' | b'b'))
         && name.len() > 1

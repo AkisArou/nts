@@ -1003,11 +1003,69 @@ pub fn prepare_with(
 /// Exists so that an invalid program can be *read*. A verifier that returns only
 /// a list of complaints is a poor debugging tool, because the thing worth
 /// looking at is the program the complaints are about. Nothing that emits code
+/// Refuse every function that calls a function which was refused.
+///
+/// A refusal removes one function and leaves its callers behind, each holding a
+/// `Callee::Direct` naming something that is not there. That reaches the backend
+/// as a call to an undeclared function, which is C that does not compile — a
+/// *worse* outcome than the refusal that caused it, because the diagnostic
+/// explains a construct nobody can find in the program that failed to build.
+///
+/// Are We Fast Yet's `storage` found it: the benchmark's method is refused for
+/// a recursive array type, and the entry point that calls it was emitted
+/// anyway.
+///
+/// A fixpoint, because dropping a caller orphans *its* callers. Only
+/// `Callee::Direct` matters: an external callee is a runtime helper and is
+/// declared in the header, and a dispatch already tolerates a hole — the tables
+/// emit a null where an implementation is missing, which is the same thing this
+/// does for the other kind of call.
+fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
+    loop {
+        let present: rustc_hash::FxHashSet<&str> = lowered
+            .program
+            .funcs
+            .iter()
+            .map(|func| func.name.as_str())
+            .collect();
+        let mut refused = Vec::new();
+        for func in &lowered.program.funcs {
+            let missing = func.values.iter().find_map(|op| match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Direct(name),
+                    ..
+                } if !present.contains(name.as_str()) => Some((name.clone(), op.origin.clone())),
+                _ => None,
+            });
+            if let Some((name, origin)) = missing {
+                refused.push((func.name.clone(), name, origin));
+            }
+        }
+        if refused.is_empty() {
+            return;
+        }
+        for (caller, callee, origin) in refused {
+            lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+                "NTS1003",
+                format!(
+                    "`{caller}` cannot be compiled because it calls `{callee}`, \
+                     which was refused above"
+                ),
+                origin.location,
+            ));
+            lowered.program.funcs.retain(|func| func.name != caller);
+        }
+    }
+}
+
 /// should call this.
 #[must_use]
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
-    let lowered = lower::lower(snapshot);
+    let mut lowered = lower::lower(snapshot);
+    // Before anything looks at the program: a function that calls a refused one
+    // has a call to nothing in it.
+    drop_callers_of_refused(&mut lowered);
     let mut program = lowered.program;
 
     // First, before anything expensive. Everything that survives here gets

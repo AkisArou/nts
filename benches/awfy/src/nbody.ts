@@ -16,6 +16,11 @@ const PI = 3.141592653589793;
 const SOLAR_MASS = 4 * PI * PI;
 const DAYS_PER_YER = 365.24;
 
+// Are We Fast Yet passes this to `innerBenchmarkLoop`; here it is a constant
+// for the same reason every other port has one, and it is not adjustable: the
+// number `verifyResult` checks is the energy after exactly this many steps.
+const STEPS = 250000;
+
 class Body {
   x: number;
   y: number;
@@ -187,13 +192,9 @@ class NBodySystem {
 }
 
 export class NBody extends Benchmark {
-  // The suite's own count, and not adjustable: the constant `verifyResult`
-  // checks is the energy after exactly this many steps.
-  static readonly STEPS = 250000;
-
   override benchmark(): number {
     const system = new NBodySystem();
-    for (let i = 0; i < NBody.STEPS; i += 1) {
+    for (let i = 0; i < STEPS; i += 1) {
       system.advance(0.01);
     }
     return system.energy();

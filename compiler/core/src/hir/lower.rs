@@ -506,7 +506,7 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
             continue;
         };
 
-        let Some(value) = probe.constant_value(*initializer) else {
+        let Some(value) = probe.constant_value(*initializer, &scope.constants) else {
             scope.unsupported.insert(
                 symbol.0,
                 "a module-scope variable whose initializer is not constant".to_owned(),
@@ -1390,7 +1390,14 @@ impl<'a> FuncBuilder<'a> {
 
     /// An expression's value, when it is one the checker or this compiler can
     /// work out without running anything.
-    fn constant_value(&self, id: NodeId) -> Option<f64> {
+    /// What an expression is worth at compile time, if anything.
+    ///
+    /// `known` is the module-scope constants declared *before* this one, and
+    /// that is the right set rather than a convenient one: JavaScript gives
+    /// `const` a temporal dead zone, so an initializer naming a later `const` is
+    /// a run-time error rather than a program with a value to fold. Empty for
+    /// every caller that is not collecting module scope.
+    fn constant_value(&self, id: NodeId, known: &rustc_hash::FxHashMap<u32, f64>) -> Option<f64> {
         match self.kind_of(id) {
             // A boolean's storage is its truth value. `Global::ty` says which of
             // the two a zero means.
@@ -1409,13 +1416,45 @@ impl<'a> FuncBuilder<'a> {
                 let NodeData::Children { small, .. } = self.node(id).data else {
                     return None;
                 };
-                let inner = self.constant_value(*self.children(id).first()?)?;
+                let inner = self.constant_value(*self.children(id).first()?, known)?;
                 match small & syntax::prefix_operator::MASK {
                     syntax::prefix_operator::MINUS => Some(-inner),
                     syntax::prefix_operator::PLUS => Some(inner),
                     _ => None,
                 }
             }
+            // Arithmetic on two constants is a constant. Worth folding here
+            // because a module-scope initializer has nowhere to run: it is a
+            // static initializer in the emitted C, so `4 * PI * PI` is either
+            // computed now or refused, and refusing it means a program cannot
+            // name a derived constant.
+            //
+            // In `f64` and in the source's order, because that is what the
+            // program would compute at run time -- floating-point addition does
+            // not reassociate, and a fold that gets a different answer than the
+            // code it replaces is not a fold.
+            Some(syntax::BINARY_EXPRESSION) => {
+                let children = self.children(id);
+                let [lhs, operator, rhs] = children.as_slice() else {
+                    return None;
+                };
+                let lhs = self.constant_value(*lhs, known)?;
+                let rhs = self.constant_value(*rhs, known)?;
+                match self.kind_of(*operator)? {
+                    syntax::PLUS_TOKEN => Some(lhs + rhs),
+                    syntax::MINUS_TOKEN => Some(lhs - rhs),
+                    syntax::ASTERISK_TOKEN => Some(lhs * rhs),
+                    syntax::SLASH_TOKEN => Some(lhs / rhs),
+                    _ => None,
+                }
+            }
+            // A name that is itself a module-scope constant. `SOLAR_MASS` is
+            // `4 * PI * PI`, and a compiler that folds arithmetic but not names
+            // folds nothing anyone writes.
+            Some(syntax::IDENTIFIER) => self
+                .node(id)
+                .symbol
+                .and_then(|symbol| known.get(&symbol.0).copied()),
             _ => match self.snapshot.constants.get(&id) {
                 Some(nts_semantic_schema::ConstantValue::Number(value)) => Some(*value),
                 _ => None,
@@ -1447,12 +1486,11 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| self.unsupported(class, "an anonymous class"))?;
 
         // A static method has no receiver: it is a namespaced function, and its
-        // call sites name the class rather than an instance. Lowering one as if
-        // it took `this` would give it a parameter no caller passes.
+        // call sites name the class rather than an instance. So it is lowered
+        // without the `this` parameter, and without a slot -- nothing overrides
+        // a static method, because a call site names the class it is written on.
         let modifiers = self.node(member).modifiers;
-        if modifiers.contains(nts_semantic_schema::DeclarationModifiers::STATIC) {
-            return Err(self.unsupported(member, "a static method"));
-        }
+        let is_static = modifiers.contains(nts_semantic_schema::DeclarationModifiers::STATIC);
         if modifiers.contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT) {
             return Err(self.unsupported(member, "an abstract method"));
         }
@@ -1468,29 +1506,45 @@ impl<'a> FuncBuilder<'a> {
                 .ok_or_else(|| self.unsupported(member, "a method with a computed name"))?
         };
 
-        // `#` cannot appear in a TypeScript identifier, so a qualified name
-        // cannot collide with a plain function's.
-        let name = format!("{class_name}#{member_name}");
+        // Neither `#` nor `.` can appear in a TypeScript identifier, so a
+        // qualified name cannot collide with a plain function's -- and the two
+        // spellings keep `static foo()` and `foo()` apart, which one class is
+        // allowed to declare together.
+        let name = if is_static {
+            format!("{class_name}.{member_name}")
+        } else {
+            format!("{class_name}#{member_name}")
+        };
 
-        // `this` is parameter zero. Its type is the class's instance type, which
-        // is what the checker gives the class declaration's name.
-        let instance = self
-            .type_of(class)
-            .ok_or_else(|| self.unrepresentable(class, "a class"))?;
-        // `this` is a parameter like any other and needs its layout to exist.
-        // Nothing else builds it for a class nothing constructs -- an abstract
-        // base whose only role is to be extended is exactly that.
-        self.materialize(class, &instance)?;
         let origin = self.origin(member);
-        let receiver = self.push(OpKind::Param(0), instance.clone(), origin.clone());
-        self.this = Some(receiver);
-        self.base = self.base_class(class);
-        let mut params = vec![Param {
-            name: "this".to_owned(),
-            ty: instance.clone(),
-            origin: origin.clone(),
-            known: Facts::TOP,
-        }];
+        let mut params = Vec::new();
+        if is_static {
+            // No receiver, so no `this` and no base to resolve `super` against.
+            // Reaching either inside a static method is a TypeScript error, so
+            // there is nothing to refuse here that the checker has not.
+            self.this = None;
+            self.base = None;
+        } else {
+            // `this` is parameter zero. Its type is the class's instance type,
+            // which is what the checker gives the class declaration's name.
+            let instance = self
+                .type_of(class)
+                .ok_or_else(|| self.unrepresentable(class, "a class"))?;
+            // `this` is a parameter like any other and needs its layout to
+            // exist. Nothing else builds it for a class nothing constructs --
+            // an abstract base whose only role is to be extended is exactly
+            // that.
+            self.materialize(class, &instance)?;
+            let receiver = self.push(OpKind::Param(0), instance.clone(), origin.clone());
+            self.this = Some(receiver);
+            self.base = self.base_class(class);
+            params.push(Param {
+                name: "this".to_owned(),
+                ty: instance,
+                origin: origin.clone(),
+                known: Facts::TOP,
+            });
+        }
 
         for child in self.children(member) {
             if self.kind_of(child) != Some(syntax::PARAMETER) {
@@ -3659,6 +3713,23 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_math(id, intrinsic, &children[1..]);
         }
 
+        // `Body.jupiter()` — a *static* method. It looks like a method call and
+        // is not one: the thing before the dot is a class, which is a type
+        // rather than a value, so lowering it as a receiver would ask for the
+        // value of something that has none.
+        //
+        // Recognized from the checker's resolved target rather than from the
+        // syntax, so an aliased import resolves the same as a plain name.
+        if let Some(callee) = target.callee
+            && self
+                .node(callee)
+                .modifiers
+                .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
+            && let Some(class_name) = self.declaring_class_name(callee)
+        {
+            return self.lower_static_call(id, &class_name, callee, &children[1..]);
+        }
+
         // `c.advance()` — a method call. The receiver becomes the first
         // argument, which is what a method is once it is explicit.
         if self.kind_of(callee_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
@@ -3725,6 +3796,55 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(
             OpKind::Call {
                 callee,
+                args,
+                frame: None,
+            },
+            ty,
+            origin,
+        ))
+    }
+
+    /// The name of the class a member is declared on.
+    ///
+    /// By walking to the declaration's parent rather than reading the name
+    /// before the dot: `import { Body as B }` puts `B` at the call site and
+    /// `Body` on the function, and the two have to agree.
+    fn declaring_class_name(&self, member: NodeId) -> Option<String> {
+        let class = self.ancestor(member, syntax::CLASS_DECLARATION)?;
+        self.children(class)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .and_then(|child| self.node(child).text.clone())
+    }
+
+    /// `Class.member(...)`: an ordinary direct call to a function with no
+    /// receiver.
+    fn lower_static_call(
+        &mut self,
+        id: NodeId,
+        class_name: &str,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let member_name = self
+            .children(member)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .and_then(|child| self.node(child).text.clone())
+            .ok_or_else(|| self.unsupported(member, "a static method with a computed name"))?;
+
+        let mut args = Vec::new();
+        for argument in arguments {
+            args.push(self.lower_expression(*argument)?);
+        }
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
+        self.materialize(id, &ty)?;
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::Direct(format!("{class_name}.{member_name}")),
                 args,
                 frame: None,
             },
@@ -3981,6 +4101,15 @@ impl<'a> FuncBuilder<'a> {
             .clone()
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
 
+        // `xs.forEach(v => ...)` is a loop written as a call, and it is
+        // compiled as the loop. See [`Self::lower_for_each`].
+        if name == "forEach"
+            && let [callback] = arguments
+            && self.kind_of(*callback) == Some(syntax::ARROW_FUNCTION)
+        {
+            return self.lower_for_each(id, receiver, element, *callback);
+        }
+
         // `fill` is the one method whose element type does not have to be a
         // number: it writes a value it was given rather than comparing or
         // arithmetic-ing one, so the only thing that changes is how wide the
@@ -4083,6 +4212,145 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         ))
+    }
+
+    /// `xs.forEach(v => ...)` over an array, with the arrow written at the call.
+    ///
+    /// # Why a desugaring rather than a call
+    ///
+    /// Compiled as a closure it would allocate an object, pass it to a runtime
+    /// helper, and dispatch through a slot once per element. Every one of those
+    /// is machinery for a question the source has already answered: which body
+    /// runs is written right there.
+    ///
+    /// Compiled as a loop it is [`Self::lower_for_of`] with the element name
+    /// coming from the arrow's parameter instead of from a binding form, and it
+    /// costs exactly what the hand-written loop costs.
+    ///
+    /// # What it also fixes
+    ///
+    /// `collect_closures` refuses to capture a variable something *assigns* to,
+    /// because this compiler captures by value and JavaScript captures by
+    /// reference. So the shape Are We Fast Yet's nbody uses --
+    ///
+    /// ```text
+    /// bodies.forEach((b) => { px += b.vx * b.mass; });
+    /// ```
+    ///
+    /// -- could not be compiled at all. Inlined there is no capture: `px` is an
+    /// ordinary local the loop body assigns, and the loop carries it the way it
+    /// carries any other. The refusal is right about closures and simply does
+    /// not apply.
+    ///
+    /// Only for an arrow written at the call site. `xs.forEach(f)` where `f` is
+    /// a variable is a genuine dispatch, and monomorphization is the answer to
+    /// that one.
+    fn lower_for_each(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        element_ty: &HirType,
+        callback: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let parts = self.children(callback);
+        let element_name = parts
+            .iter()
+            .find(|child| self.kind_of(**child) == Some(syntax::PARAMETER))
+            .map(|parameter| self.children(*parameter))
+            .and_then(|fields| {
+                fields
+                    .into_iter()
+                    .find(|field| self.kind_of(*field) == Some(syntax::IDENTIFIER))
+            })
+            .ok_or_else(|| self.unsupported(callback, "a `forEach` callback of this shape"))?;
+        let element_symbol = self
+            .node(element_name)
+            .symbol
+            .ok_or_else(|| self.unsupported(element_name, "a `forEach` name with no symbol"))?
+            .0;
+        // The index parameter every `forEach` callback may take. Refused rather
+        // than bound, because binding it would need the loop counter's identity
+        // to survive into the body and this has no test for that yet.
+        if parts
+            .iter()
+            .filter(|child| self.kind_of(**child) == Some(syntax::PARAMETER))
+            .count()
+            > 1
+        {
+            return Err(self.unsupported(callback, "a `forEach` callback taking the index"));
+        }
+        let body = *parts
+            .last()
+            .ok_or_else(|| self.unsupported(callback, "a `forEach` callback with no body"))?;
+
+        let origin = self.origin(id);
+        let index = self.synthetic_symbol();
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        self.bindings.insert(index, zero);
+
+        let mut carried = vec![index];
+        self.assigned_symbols(body, &mut carried);
+        let mut declared = vec![element_symbol];
+        self.declared_symbols(body, &mut declared);
+        carried.retain(|symbol| *symbol == index || !declared.contains(symbol));
+
+        let header = self.new_block();
+        let params = self.open_loop(id, header, &carried, &origin)?;
+        let (body_block, exit) = self.loop_blocks();
+
+        let at = self.bindings[&index];
+        let length = self.push(OpKind::Length(receiver), HirType::NUMBER, origin.clone());
+        let cond = self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: at,
+                rhs: length,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.test_loop(cond, body_block, exit);
+        self.switch_to(body_block);
+
+        let at = self.bindings[&index];
+        let value = self.push(
+            OpKind::ArrayGet {
+                array: receiver,
+                index: at,
+                checked: true,
+            },
+            element_ty.clone(),
+            origin.clone(),
+        );
+        self.bindings.insert(element_symbol, value);
+
+        // A concise body is an expression rather than a block, and its value is
+        // discarded -- `forEach` returns nothing whatever the callback does.
+        if self.kind_of(body) == Some(syntax::BLOCK) {
+            self.lower_statement(body)?;
+        } else {
+            self.lower_expression(body)?;
+        }
+        if !self.is_terminated() {
+            let at = self.bindings[&index];
+            let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+            let next = self.push(
+                OpKind::Binary {
+                    op: BinOp::Add,
+                    lhs: at,
+                    rhs: one,
+                },
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            self.bindings.insert(index, next);
+        }
+        self.close_loop(header, &carried, &params, exit);
+
+        // `forEach` evaluates to `undefined`, which is `void` here. Nothing
+        // reads it -- an expression statement is the only place this appears --
+        // but the caller wants a value.
+        Ok(self.push(OpKind::ConstFloat(0.0), HirType::Void, origin))
     }
 
     fn lower_object_method(
