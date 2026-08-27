@@ -60,14 +60,17 @@ Every ratio is nts divided by the other, so **lower is better and 1.00 is parity
 
 | outcome | files |
 | --- | ---: |
-| lowered completely | **55** |
+| lowered completely | **56** |
 | refused a construct | 40 |
-| rejected by the typechecker | 89 |
+| rejected by the typechecker | 86 |
+| **the frontend fell over** | **2** |
 | **invalid HIR or a panic** | **0** |
 
-Of the 95 that typecheck, **57%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
+Of the 96 that typecheck, **58%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
 
-The last row is the one that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do.
+The last two rows are the ones that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do, and so is a query this compiler makes that the typechecker cannot answer.
+
+The second row was counted as a typecheck rejection until it was split out, which is how eight of these hid. Six are now survived: a batched query that crashes tsgo is bisected and retried, so one poisonous location costs its own type rather than the file. The two that remain are an enum member whose value is `NaN`, which tsgo cannot write as JSON at all — and they are reached through queries whose answers are *sets* rather than positional lists, where dropping the one that failed would quietly change a type rather than leave a hole.
 
 What is stopping the rest, in order:
 

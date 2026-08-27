@@ -31,6 +31,7 @@ pub mod facts;
 pub mod fields;
 pub mod flow;
 pub mod fold;
+pub mod generics;
 pub mod guards;
 pub mod interprocedural;
 pub mod liveness;
@@ -1335,9 +1336,7 @@ mod tests {
                 origin: origin(),
             },
             Op {
-                kind: OpKind::ArrayNew {
-                    length: ValueId(0),
-                },
+                kind: OpKind::ArrayNew { length: ValueId(0) },
                 ty: numbers.clone(),
                 origin: origin(),
             },
@@ -1392,14 +1391,22 @@ mod tests {
     fn an_allocated_length_is_exact_only_while_nothing_can_grow_an_array() {
         let quiet = allocating(false);
         assert!(!arrays_can_grow(&quiet));
-        assert!(allocated_length_is_exact(&quiet.funcs[0], ValueId(1), false));
+        assert!(allocated_length_is_exact(
+            &quiet.funcs[0],
+            ValueId(1),
+            false
+        ));
 
         // The same function, in a program that pushes somewhere. `fill` cannot
         // grow it and `push` can, and this does not distinguish them — passing
         // the array anywhere is now enough to lose the length.
         let growing = allocating(true);
         assert!(arrays_can_grow(&growing));
-        assert!(!allocated_length_is_exact(&growing.funcs[0], ValueId(1), true));
+        assert!(!allocated_length_is_exact(
+            &growing.funcs[0],
+            ValueId(1),
+            true
+        ));
     }
 
     #[test]

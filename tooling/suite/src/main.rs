@@ -51,6 +51,12 @@ enum Outcome {
     /// The typechecker rejected it, which for a corpus of compiler tests is
     /// usually the point of the file rather than a failure.
     Rejected,
+    /// The *frontend* failed: a transport error, or a query tsgo could not
+    /// answer. Always a bug, and counted apart from a typecheck rejection
+    /// because the two look identical from here and mean opposite things --
+    /// one is the corpus working as intended and the other is this compiler
+    /// falling over. Folding them together hid a real regression once.
+    Failed(String),
     /// Lowering produced HIR the verifier rejected. Always a bug.
     Invalid,
 }
@@ -59,6 +65,7 @@ struct Totals {
     lowered: usize,
     refused: usize,
     rejected: usize,
+    failed: usize,
     invalid: usize,
     reasons: FxHashMap<String, usize>,
 }
@@ -205,6 +212,7 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         lowered: 0,
         refused: 0,
         rejected: 0,
+        failed: 0,
         invalid: 0,
         reasons: FxHashMap::default(),
     };
@@ -235,7 +243,7 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         // point of a corpus is that some of these inputs are pathological.
         let mut source = TsgoApi::for_compilation(tsgo.clone());
         let outcome = match source.snapshot(&tsconfig) {
-            Err(_) => Outcome::Rejected,
+            Err(error) => Outcome::Failed(error.to_string()),
             Ok(snapshot) if snapshot.has_errors() => Outcome::Rejected,
             Ok(snapshot) => match hir::prepare(&snapshot) {
                 Err(_) => Outcome::Invalid,
@@ -253,6 +261,10 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         match outcome {
             Outcome::Lowered => totals.lowered += 1,
             Outcome::Rejected => totals.rejected += 1,
+            Outcome::Failed(error) => {
+                totals.failed += 1;
+                println!("FRONTEND FAILED: {file}: {error}");
+            }
             Outcome::Invalid => {
                 totals.invalid += 1;
                 println!("INVALID HIR: {file}");
@@ -280,11 +292,13 @@ fn shorten(message: &str) -> String {
 }
 
 fn report(totals: &Totals) {
-    let attempted = totals.lowered + totals.refused + totals.rejected + totals.invalid;
+    let attempted =
+        totals.lowered + totals.refused + totals.rejected + totals.failed + totals.invalid;
     println!("\n{attempted} single-file cases");
     println!("  lowered completely      {}", totals.lowered);
     println!("  refused a construct     {}", totals.refused);
     println!("  rejected by typecheck   {}", totals.rejected);
+    println!("  frontend failed         {}", totals.failed);
     println!("  invalid HIR             {}", totals.invalid);
 
     let mut reasons: Vec<(&String, &usize)> = totals.reasons.iter().collect();
@@ -299,7 +313,8 @@ fn write_readme(root: &Utf8Path, totals: &Totals) -> Result<()> {
     const START: &str = "<!-- corpus:start -->";
     const END: &str = "<!-- corpus:end -->";
 
-    let attempted = totals.lowered + totals.refused + totals.rejected + totals.invalid;
+    let attempted =
+        totals.lowered + totals.refused + totals.rejected + totals.failed + totals.invalid;
     let considered = totals.lowered + totals.refused;
     // Percentages of a few hundred files: integer arithmetic says it exactly and
     // says it without a cast anyone has to think about.
@@ -317,6 +332,11 @@ fn write_readme(root: &Utf8Path, totals: &Totals) -> Result<()> {
     let _ = writeln!(out, "| rejected by the typechecker | {} |", totals.rejected);
     let _ = writeln!(
         out,
+        "| **the frontend fell over** | **{}** |",
+        totals.failed
+    );
+    let _ = writeln!(
+        out,
         "| **invalid HIR or a panic** | **{}** |",
         totals.invalid
     );
@@ -328,9 +348,18 @@ fn write_readme(root: &Utf8Path, totals: &Totals) -> Result<()> {
     );
     let _ = writeln!(
         out,
-        "The last row is the one that must stay at zero: a panic or a rejected \
-         SSA form on arbitrary input is a bug however well the hand-written tests \
-         do.\n"
+        "The last two rows are the ones that must stay at zero: a panic or a \
+         rejected SSA form on arbitrary input is a bug however well the \
+         hand-written tests do, and so is a query this compiler makes that the \
+         typechecker cannot answer.\n\nThe second row was counted as a typecheck \
+         rejection until it was split out, which is how eight of these hid. Six \
+         are now survived: a batched query that crashes tsgo is bisected and \
+         retried, so one poisonous location costs its own type rather than the \
+         file. The two that remain are an enum member whose value is `NaN`, \
+         which tsgo cannot write as JSON at all — and they are reached through \
+         queries whose answers are *sets* rather than positional lists, where \
+         dropping the one that failed would quietly change a type rather than \
+         leave a hole.\n"
     );
 
     let mut reasons: Vec<(&String, &usize)> = totals.reasons.iter().collect();

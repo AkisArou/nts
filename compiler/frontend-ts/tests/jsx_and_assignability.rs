@@ -151,8 +151,11 @@ fn find_primitive(
         .collect();
 
     let responses = client.types_at(opened.snapshot, project, handles).ok()?;
+    // `None` where the checker crashed on that location rather than answering;
+    // see `Client::types_at`.
     responses
         .iter()
+        .flatten()
         .find(|response| {
             response.flags & wanted != 0 && response.flags & flags::STRING_LITERAL == 0
         })

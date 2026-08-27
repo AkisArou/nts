@@ -10,8 +10,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir::facts;
 use nts_core::hir::{self, BinOp, HirType, ManagedType, OpKind};
 use nts_core::reachability;
-use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo, tsgo::decompose::Budget};
 use nts_diagnostics::Location;
+use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo, tsgo::decompose::Budget};
 use nts_semantic_schema::SCHEMA_VERSION;
 
 /// The tsconfig a subcommand was pointed at: the first positional argument, or
@@ -611,7 +611,13 @@ fn print_types(tsconfig: &Utf8Path) -> Result<()> {
             .symbol
             .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
             .map_or_else(String::new, |symbol| format!(" `{}`", symbol.name));
-        println!("#{index}{named} {:?}", record.kind);
+        let arguments = snapshot
+            .type_arguments
+            .get(&nts_semantic_schema::TypeId(
+                u32::try_from(index).unwrap_or(0),
+            ))
+            .map_or_else(String::new, |args| format!(" args{args:?}"));
+        println!("#{index}{named}{arguments} {:?}", record.kind);
     }
     Ok(())
 }
@@ -636,7 +642,11 @@ fn where_it_is(snapshot: &nts_semantic_schema::SemanticSnapshot, at: &Location) 
     // a dependency on a vectorized byte counter for that would be absurd.
     #[allow(clippy::naive_bytecount)]
     let line = upto.iter().filter(|byte| **byte == b'\n').count() + 1;
-    let column = upto.len() - upto.iter().rposition(|byte| *byte == b'\n').map_or(0, |at| at + 1);
+    let column = upto.len()
+        - upto
+            .iter()
+            .rposition(|byte| *byte == b'\n')
+            .map_or(0, |at| at + 1);
     format!("{path}:{line}:{}", column + 1)
 }
 
@@ -714,6 +724,27 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
         out.join(nts_codegen_c::RUNTIME_SOURCE_NAME),
         nts_codegen_c::RUNTIME_SOURCE,
     )?;
+    // `--napi` adds the Node-API wrapper, which is what makes the compiled
+    // program callable from JavaScript -- and therefore what lets node's own
+    // test suite run against it. Node is a harness here, not a runtime: nothing
+    // this writes enters a shipped binary.
+    if std::env::args().any(|arg| arg == "--napi") {
+        let addon = nts_codegen_napi::emit(&program);
+        let addon_path = out.join(nts_codegen_napi::ADDON_SOURCE_NAME);
+        std::fs::write(&addon_path, &addon.source)
+            .with_context(|| format!("writing {addon_path}"))?;
+        for skipped in &addon.skipped {
+            eprintln!("no wrapper for {}: {}", skipped.function, skipped.reason);
+        }
+        println!(
+            "wrote program.c, {}, {}, {} to {out}",
+            nts_codegen_c::RUNTIME_HEADER_NAME,
+            nts_codegen_c::RUNTIME_SOURCE_NAME,
+            nts_codegen_napi::ADDON_SOURCE_NAME
+        );
+        return Ok(());
+    }
+
     println!(
         "wrote program.c, {}, {} to {out}",
         nts_codegen_c::RUNTIME_HEADER_NAME,

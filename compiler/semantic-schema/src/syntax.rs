@@ -151,3 +151,44 @@ pub mod postfix_operator {
     pub const PLUS_PLUS: u8 = 0;
     pub const MINUS_MINUS: u8 = 1;
 }
+
+/// Whether a syntax kind is a *type* rather than an expression.
+///
+/// A transcription of tsgo's `ast.IsTypeNodeKind`, and it has to be one rather
+/// than an approximation: a call's children arrive flattened, so
+/// `new Box<number>([1, 2, 3])` reaches a lowering as
+/// `[Box, number, [1, 2, 3]]` with nothing structural to say that the middle one
+/// is a type argument. Guessing wrong in one direction lowers a type as an
+/// expression; guessing wrong in the other drops a real argument, which
+/// compiles and calls the wrong thing.
+///
+/// The keywords are listed rather than ranged because they are not contiguous
+/// and are not inside the type-node range. `void` is here and is safe: `void x`
+/// is a `VoidExpression` whose child is the operand, so the keyword is never a
+/// call's child. `null`, `true` and `false` are *not* here, because in a type
+/// position they arrive wrapped in a `LiteralType` while as expressions they are
+/// bare.
+#[must_use]
+pub fn is_type_node(kind: u16) -> bool {
+    /// `KindTypePredicate`, tsgo's `KindFirstTypeNode`.
+    const FIRST_TYPE_NODE: u16 = 183;
+    /// `KindImportType`, tsgo's `KindLastTypeNode`.
+    const LAST_TYPE_NODE: u16 = 206;
+
+    matches!(
+        kind,
+        115 // void
+        | 132 // any
+        | 135 // boolean
+        | 141 // intrinsic
+        | 146 // never
+        | 150 // number
+        | 151 // object
+        | 154 // string
+        | 155 // symbol
+        | 157 // undefined
+        | 159 // unknown
+        | 163 // bigint
+        | 234 // an expression with type arguments
+    ) || (FIRST_TYPE_NODE..=LAST_TYPE_NODE).contains(&kind)
+}

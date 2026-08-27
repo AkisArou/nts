@@ -386,15 +386,25 @@ impl<'a> Decomposer<'a> {
         // every instantiation shares, so zipping the declaration's list against
         // an instantiation's is what supplies the missing substitution.
         //
-        // Guarded by the target query, which answers `null` for a type that is
-        // not a reference. Asking for the arguments directly crashes the server
-        // on one -- see `proto::method::GET_TARGET_OF_TYPE`.
+        // Two guards, because one is not enough. The target query answers `null`
+        // for most types that are not references, which keeps the common case
+        // from reaching a handler that would crash on it. But `Target()` is also
+        // non-nil for an instantiated *anonymous* type -- a mapped type, an
+        // object literal's type -- which is not a `TypeReference` either, and
+        // `getTypeArguments` dereferences a nil for those.
+        //
+        // So the residual failure is swallowed, and that is sound rather than
+        // convenient: `getTypeArguments` crashes exactly when the type is not a
+        // reference, and a type that is not a reference has no type arguments.
+        // The answer this discards is the empty one.
         let arguments = if self
             .client
             .target_of_type(self.handle, &self.project, ty)?
             .is_some()
         {
-            self.client.type_arguments(self.handle, &self.project, ty)?
+            self.client
+                .type_arguments(self.handle, &self.project, ty)
+                .unwrap_or_default()
         } else {
             Vec::new()
         };

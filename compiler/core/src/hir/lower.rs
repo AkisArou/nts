@@ -208,55 +208,103 @@ impl Hierarchy {
     }
 }
 
+/// Which class declarations are generic, and what each was instantiated at.
+///
+/// Keyed by the declaration rather than by its symbol, because the lowering
+/// walks nodes.
+fn generic_classes(
+    snapshot: &SemanticSnapshot,
+) -> rustc_hash::FxHashMap<NodeId, Vec<super::generics::Instantiation>> {
+    let by_symbol = super::generics::instantiations(snapshot);
+    let probe = FuncBuilder::new(snapshot);
+    snapshot
+        .nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| node.kind == NodeKind::Syntax(syntax::CLASS_DECLARATION))
+        .filter_map(|(index, _)| {
+            let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+            let symbol = probe
+                .children(id)
+                .into_iter()
+                .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
+                .and_then(|child| probe.node(child).symbol)?;
+            Some((id, by_symbol.get(&symbol)?.clone()))
+        })
+        .collect()
+}
+
 /// Read every class declaration's name, base and own methods.
 fn collect_hierarchy(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> Hierarchy {
     let mut hierarchy = Hierarchy::default();
     let probe = FuncBuilder::new(snapshot);
+    let instantiations = super::generics::instantiations(snapshot);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::CLASS_DECLARATION) {
             continue;
         }
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        let Some(ty) = snapshot.node_types.get(&id).copied() else {
+        let Some(declared) = snapshot.node_types.get(&id).copied() else {
             continue;
         };
-
-        if let Some(name) = probe
+        // A generic class's facts belong to each *instantiation*, because that
+        // is the type a `new` and a method call name. The declaration's own type
+        // is never constructed and never laid out.
+        let types: Vec<TypeId> = probe
             .children(id)
             .into_iter()
             .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
-            .and_then(|child| probe.node(child).text.clone())
-        {
-            hierarchy.name.insert(ty, name);
-        }
-        // `extends` first, then `implements`, and a class extends at most one
-        // class. An interface contributes no implementation, so it is not a
-        // base for dispatch even though it is one for assignability.
-        if let Some(base) = snapshot.base_types.get(&ty).and_then(|bases| bases.first()) {
-            hierarchy.base.insert(ty, *base);
-        }
+            .and_then(|child| probe.node(child).symbol)
+            .and_then(|symbol| instantiations.get(&symbol))
+            .map_or_else(
+                || vec![declared],
+                |instances| instances.iter().map(|instance| instance.ty).collect(),
+            );
 
-        let declared: Vec<String> = probe
-            .children(id)
-            .into_iter()
-            .filter(|child| probe.kind_of(*child) == Some(syntax::METHOD_DECLARATION))
-            .filter_map(|child| {
-                probe
-                    .children(child)
-                    .into_iter()
-                    .find(|part| probe.kind_of(*part) == Some(syntax::IDENTIFIER))
-                    .and_then(|part| probe.node(part).text.clone())
-            })
-            .collect();
-        if probe
-            .children(id)
-            .into_iter()
-            .any(|child| probe.kind_of(child) == Some(syntax::CONSTRUCTOR))
-        {
-            hierarchy.constructs.insert(ty);
+        for ty in types {
+            if let Some(name) = probe
+                .children(id)
+                .into_iter()
+                .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
+                .and_then(|child| probe.node(child).text.clone())
+            {
+                // Qualified for an instantiation, by the same construction
+                // `layout_of` uses: a call site names its callee through this
+                // map and the function was named through that one, so the two
+                // have to agree letter for letter.
+                hierarchy
+                    .name
+                    .insert(ty, format!("{name}{}", instantiation_suffix(snapshot, ty)));
+            }
+            // `extends` first, then `implements`, and a class extends at most one
+            // class. An interface contributes no implementation, so it is not a
+            // base for dispatch even though it is one for assignability.
+            if let Some(base) = snapshot.base_types.get(&ty).and_then(|bases| bases.first()) {
+                hierarchy.base.insert(ty, *base);
+            }
+
+            let declared_methods: Vec<String> = probe
+                .children(id)
+                .into_iter()
+                .filter(|child| probe.kind_of(*child) == Some(syntax::METHOD_DECLARATION))
+                .filter_map(|child| {
+                    probe
+                        .children(child)
+                        .into_iter()
+                        .find(|part| probe.kind_of(*part) == Some(syntax::IDENTIFIER))
+                        .and_then(|part| probe.node(part).text.clone())
+                })
+                .collect();
+            if probe
+                .children(id)
+                .into_iter()
+                .any(|child| probe.kind_of(child) == Some(syntax::CONSTRUCTOR))
+            {
+                hierarchy.constructs.insert(ty);
+            }
+            hierarchy.declares.insert(ty, declared_methods.clone());
         }
-        hierarchy.declares.insert(ty, declared);
     }
 
     // A slot for every method something overrides, numbered against the class
@@ -570,6 +618,8 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     lowered.program.globals.clone_from(&module.globals);
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
+    let generic = generic_classes(snapshot);
+
     for (index, node) in snapshot.nodes.iter().enumerate() {
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
 
@@ -591,19 +641,38 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
                     })
                     .collect()
             };
-            for member in members {
-                let mut builder = FuncBuilder::within(
-                    snapshot,
-                    module.clone(),
-                    hierarchy.clone(),
-                    closures.clone(),
-                );
-                match builder.lower_method(id, member) {
-                    Ok(func) => lowered.program.funcs.push(func),
-                    Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+            // A generic class is lowered once per instantiation and not at all
+            // as itself: a field of type `T` has no width, and `Vector<Body>`
+            // and `Vector<double>` are two classes that happen to share a
+            // source. A class with type parameters that nothing instantiates is
+            // dead, and lowering it would report a refusal for a program nobody
+            // wrote.
+            let copies: Vec<(Option<TypeId>, Substitution)> = generic.get(&id).map_or_else(
+                || vec![(None, Substitution::default())],
+                |instances| {
+                    instances
+                        .iter()
+                        .map(|instance| (Some(instance.ty), instance.substitution.clone()))
+                        .collect()
+                },
+            );
+
+            for (instance, substitution) in copies {
+                for &member in &members {
+                    let mut builder = FuncBuilder::instantiating(
+                        snapshot,
+                        module.clone(),
+                        hierarchy.clone(),
+                        closures.clone(),
+                        substitution.clone(),
+                    );
+                    match builder.lower_method_of(id, member, instance) {
+                        Ok(func) => lowered.program.funcs.push(func),
+                        Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+                    }
+                    wanted.extend(builder.used_closures.iter().copied());
+                    collect_layouts(&mut lowered.program, builder.layouts);
                 }
-                wanted.extend(builder.used_closures.iter().copied());
-                collect_layouts(&mut lowered.program, builder.layouts);
             }
             continue;
         }
@@ -897,9 +966,49 @@ fn contains_a_cycle(snapshot: &SemanticSnapshot, ty: TypeId, path: &mut Vec<Type
     found
 }
 
+/// `<id>` where a type is a generic *instantiation*, and nothing otherwise.
+///
+/// The declaration is not one: its arguments are its own type parameters, and
+/// it is never laid out — a field of type `T` has no width.
+fn instantiation_suffix(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
+    let arguments = snapshot.type_arguments.get(&ty);
+    let instantiated = arguments.is_some_and(|arguments| {
+        !arguments.is_empty()
+            && !arguments.iter().all(|argument| {
+                matches!(
+                    snapshot.types.get(argument.0 as usize).map(|r| &r.kind),
+                    Some(TypeKind::TypeParameter { .. })
+                )
+            })
+    });
+    if instantiated {
+        format!("<{}>", ty.0)
+    } else {
+        String::new()
+    }
+}
+
 #[must_use]
 pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType> {
-    representation_within(snapshot, ty, &mut Vec::new())
+    representation_with(snapshot, ty, &Substitution::default())
+}
+
+/// What a type parameter stands for, while lowering one instantiation.
+///
+/// Keyed by the *type parameter's* own [`TypeId`], which is what a body's nodes
+/// resolve to: the AST inside a generic method is shared by every
+/// instantiation, so the checker leaves `T` there and this is what turns it
+/// into the machine type for the copy being lowered.
+pub type Substitution = rustc_hash::FxHashMap<TypeId, HirType>;
+
+/// [`representation`], resolving type parameters through a substitution.
+#[must_use]
+pub fn representation_with(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    subst: &Substitution,
+) -> Option<HirType> {
+    representation_within(snapshot, ty, &mut Vec::new(), subst)
 }
 
 /// [`representation`], refusing a type that contains itself.
@@ -927,12 +1036,13 @@ fn representation_within(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     path: &mut Vec<TypeId>,
+    subst: &Substitution,
 ) -> Option<HirType> {
     if path.contains(&ty) {
         return None;
     }
     path.push(ty);
-    let result = representation_of(snapshot, ty, path);
+    let result = representation_of(snapshot, ty, path, subst);
     path.pop();
     result
 }
@@ -941,6 +1051,7 @@ fn representation_of(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     path: &mut Vec<TypeId>,
+    subst: &Substitution,
 ) -> Option<HirType> {
     let record = snapshot.types.get(ty.0 as usize)?;
     Some(match &record.kind {
@@ -955,7 +1066,7 @@ fn representation_of(
             HirType::Managed(ManagedType::String)
         }
         TypeKind::Array(element) => {
-            let element = representation_within(snapshot, *element, path)?;
+            let element = representation_within(snapshot, *element, path, subst)?;
             HirType::Managed(ManagedType::Array(Box::new(element)))
         }
         // A function value is an object with one method, which is why it shares
@@ -995,7 +1106,7 @@ fn representation_of(
                     absent = true;
                     continue;
                 }
-                let member = representation_within(snapshot, *member, path)?;
+                let member = representation_within(snapshot, *member, path, subst)?;
                 match &shared {
                     Some(existing) if *existing != member => return None,
                     _ => shared = Some(member),
@@ -1009,6 +1120,11 @@ fn representation_of(
             }
             shared
         }
+
+        // A type parameter has no representation of its own -- that is what
+        // makes it one. It has the representation of whatever this instantiation
+        // put there, and outside an instantiation there is nothing to say.
+        TypeKind::TypeParameter { .. } => subst.get(&ty)?.clone(),
 
         // `any` and `unknown` fall here and are refused, which is right for one
         // of them and wrong for the other.
@@ -1068,6 +1184,10 @@ struct FuncBuilder<'a> {
     /// Every arrow function in the program, so that one written here can be
     /// matched to the class that was collected for it.
     closures: Vec<ClosureInfo>,
+    /// What each type parameter stands for, while lowering one instantiation of
+    /// a generic class. Empty everywhere else, which is every function that is
+    /// not one of those copies.
+    substitution: Substitution,
     /// The type a bare `null` should take, where the caller knows it.
     ///
     /// `contextual_type` recovers this from the tree for the shapes the tree
@@ -1112,6 +1232,7 @@ impl<'a> FuncBuilder<'a> {
             expecting: None,
             synthetic: 0,
             used_closures: Vec::new(),
+            substitution: Substitution::default(),
         }
     }
 
@@ -1127,6 +1248,20 @@ impl<'a> FuncBuilder<'a> {
             hierarchy,
             closures,
             ..Self::new(snapshot)
+        }
+    }
+
+    /// The same, lowering one instantiation of a generic class.
+    fn instantiating(
+        snapshot: &'a SemanticSnapshot,
+        module: ModuleScope,
+        hierarchy: Hierarchy,
+        closures: Vec<ClosureInfo>,
+        substitution: Substitution,
+    ) -> Self {
+        Self {
+            substitution,
+            ..Self::within(snapshot, module, hierarchy, closures)
         }
     }
 
@@ -1257,7 +1392,7 @@ impl<'a> FuncBuilder<'a> {
             && let Some(record) = self.snapshot.types.get(ty.0 as usize)
             && let nts_semantic_schema::TypeKind::Function(signature) = record.kind
             && let Some(signature) = self.snapshot.signatures.get(signature.0 as usize)
-            && let Some(returned) = representation(self.snapshot, signature.return_type)
+            && let Some(returned) = self.represent(signature.return_type)
         {
             return Some(returned);
         }
@@ -1340,7 +1475,13 @@ impl<'a> FuncBuilder<'a> {
 
     fn type_of(&self, id: NodeId) -> Option<HirType> {
         let ty = self.snapshot.node_types.get(&id)?;
-        representation(self.snapshot, *ty)
+        self.represent(*ty)
+    }
+
+    /// A type's machine representation, with this instantiation's substitution
+    /// applied. The one place the two are combined.
+    fn represent(&self, ty: TypeId) -> Option<HirType> {
+        representation_with(self.snapshot, ty, &self.substitution)
     }
 
     fn push(&mut self, kind: OpKind, ty: HirType, origin: Origin) -> ValueId {
@@ -1477,13 +1618,30 @@ impl<'a> FuncBuilder<'a> {
     /// the first argument — which is what a method *is* once the receiver is
     /// explicit. A vtable only becomes necessary where a call site has more than
     /// one possible target, and TypeScript tells us when that is.
-    fn lower_method(&mut self, class: NodeId, member: NodeId) -> Result<Func, Diagnostic> {
-        let class_name = self
-            .children(class)
-            .into_iter()
-            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
-            .and_then(|child| self.node(child).text.clone())
-            .ok_or_else(|| self.unsupported(class, "an anonymous class"))?;
+    /// One method, of one class — or of one *instantiation* of a generic class,
+    /// which is a different class with the same source.
+    ///
+    /// `instance` is the instantiated object type. Its properties the checker
+    /// already substituted, so the layout needs nothing; what needs the
+    /// substitution this builder carries is the body, whose nodes are shared
+    /// with every other copy.
+    fn lower_method_of(
+        &mut self,
+        class: NodeId,
+        member: NodeId,
+        instance: Option<TypeId>,
+    ) -> Result<Func, Diagnostic> {
+        let class_name = match instance {
+            // The layout's name rather than the declaration's, because two
+            // instantiations of one class must not produce one function.
+            Some(ty) => self.layout_of(class, ty)?.name,
+            None => self
+                .children(class)
+                .into_iter()
+                .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+                .and_then(|child| self.node(child).text.clone())
+                .ok_or_else(|| self.unsupported(class, "an anonymous class"))?,
+        };
 
         // A static method has no receiver: it is a namespaced function, and its
         // call sites name the class rather than an instance. So it is lowered
@@ -1526,10 +1684,14 @@ impl<'a> FuncBuilder<'a> {
             self.base = None;
         } else {
             // `this` is parameter zero. Its type is the class's instance type,
-            // which is what the checker gives the class declaration's name.
-            let instance = self
-                .type_of(class)
-                .ok_or_else(|| self.unrepresentable(class, "a class"))?;
+            // which is what the checker gives the class declaration's name --
+            // or, for one copy of a generic class, the instantiation's.
+            let instance = match instance {
+                Some(ty) => HirType::Managed(ManagedType::Object(ty)),
+                None => self
+                    .type_of(class)
+                    .ok_or_else(|| self.unrepresentable(class, "a class"))?,
+            };
             // `this` is a parameter like any other and needs its layout to
             // exist. Nothing else builds it for a class nothing constructs --
             // an abstract base whose only role is to be extended is exactly
@@ -3045,7 +3207,8 @@ impl<'a> FuncBuilder<'a> {
             // references is recorded on the layout for the collector that comes
             // later, because that is a fact about the layout and the layout is
             // decided here.
-            let field_ty = representation(self.snapshot, property.ty)
+            let field_ty = self
+                .represent(property.ty)
                 .ok_or_else(|| self.unrepresentable(id, "a property"))?;
             fields.push(Field {
                 name: property.name.clone(),
@@ -3079,6 +3242,12 @@ impl<'a> FuncBuilder<'a> {
             .symbol
             .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
             .map_or_else(|| format!("Type{}", ty.0), |symbol| symbol.name.clone());
+        // `Vector<Body>` and `Vector<double>` share the declaring symbol and so
+        // share this name, and they are different classes with different field
+        // widths. The type id tells them apart, and `<>` cannot appear in a
+        // TypeScript identifier so the qualified name cannot collide with a
+        // plain one. `nts types` is what reads the number back.
+        let name = format!("{name}{}", instantiation_suffix(self.snapshot, ty));
         // What this class does for each dispatch slot. Empty where nothing in
         // the hierarchy is overridden, which is most classes.
         let mut methods = vec![None; self.hierarchy.table_size()];
@@ -3189,6 +3358,20 @@ impl<'a> FuncBuilder<'a> {
     /// it is handed and returns nothing, so `new` is an allocation and a call
     /// rather than an allocation, a call, and a pointer round-trip that every
     /// stage downstream has to prove is the identity.
+    /// The children of a call or `new` that are *arguments*.
+    ///
+    /// Explicit type arguments are flattened in among them --
+    /// `new Box<number>(xs)` arrives as `[Box, number, xs]` -- so they are
+    /// dropped by asking the same question tsgo asks. Nothing structural
+    /// distinguishes them: a list is not a node here.
+    fn arguments_of(&self, id: NodeId) -> Vec<NodeId> {
+        self.children(id)
+            .into_iter()
+            .skip(1)
+            .filter(|child| !syntax::is_type_node(self.kind_of(*child).unwrap_or(0)))
+            .collect()
+    }
+
     fn lower_new(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let children = self.children(id);
         let callee = *children
@@ -3218,7 +3401,8 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(id, "a `new Array` that is not an array"));
             }
             let origin = self.origin(id);
-            let Some(count) = children.get(1) else {
+            let arguments = self.arguments_of(id);
+            let Some(count) = arguments.first() else {
                 return self.lower_empty_array(id, ty);
             };
             let length = self.lower_expression(*count)?;
@@ -3247,8 +3431,9 @@ impl<'a> FuncBuilder<'a> {
         // to it directly is the same call with one frame fewer. A class with no
         // constructor anywhere in its chain has nothing to run at all -- the
         // allocation is zeroed and that is the whole of `new C()`.
+        let arguments = self.arguments_of(id);
         let Some(declaring) = self.hierarchy.constructor(type_id) else {
-            if children.len() > 1 {
+            if !arguments.is_empty() {
                 return Err(self.unsupported(id, "a `new` with arguments and no constructor"));
             }
             return Ok(object);
@@ -3261,7 +3446,7 @@ impl<'a> FuncBuilder<'a> {
             .unwrap_or(class);
 
         let mut args = vec![object];
-        for argument in children.iter().skip(1) {
+        for argument in &arguments {
             args.push(self.lower_expression(*argument)?);
         }
         self.push(
@@ -3683,13 +3868,16 @@ impl<'a> FuncBuilder<'a> {
         let callee_node = *children
             .first()
             .ok_or_else(|| self.unsupported(id, "a call with no callee"))?;
+        // Explicit type arguments are flattened in among the arguments, so
+        // `f<number>(x)` would otherwise lower `number` as a value.
+        let arguments = self.arguments_of(id);
 
         // `super(...)` and `super.method()`. The base is known statically -- a
         // class extends at most one -- so both are ordinary static calls with
         // `this` as the receiver, which is what they are once `this` is
         // explicit.
         if self.kind_of(callee_node) == Some(syntax::SUPER_KEYWORD) {
-            return self.lower_super(id, "constructor", &children[1..]);
+            return self.lower_super(id, "constructor", &arguments);
         }
         if self.kind_of(callee_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
             let parts = self.children(callee_node);
@@ -3701,7 +3889,7 @@ impl<'a> FuncBuilder<'a> {
                     .text
                     .clone()
                     .ok_or_else(|| self.unsupported(*member, "a computed method name"))?;
-                return self.lower_super(id, &name, &children[1..]);
+                return self.lower_super(id, &name, &arguments);
             }
         }
 
@@ -3710,7 +3898,7 @@ impl<'a> FuncBuilder<'a> {
         // number — which is the entire reason an author writes `Math.floor`
         // rather than a division.
         if let Some(intrinsic) = self.math_intrinsic(callee_node) {
-            return self.lower_math(id, intrinsic, &children[1..]);
+            return self.lower_math(id, intrinsic, &arguments);
         }
 
         // `Body.jupiter()` — a *static* method. It looks like a method call and
@@ -3727,7 +3915,7 @@ impl<'a> FuncBuilder<'a> {
                 .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
             && let Some(class_name) = self.declaring_class_name(callee)
         {
-            return self.lower_static_call(id, &class_name, callee, &children[1..]);
+            return self.lower_static_call(id, &class_name, callee, &arguments);
         }
 
         // `c.advance()` — a method call. The receiver becomes the first
@@ -3745,12 +3933,12 @@ impl<'a> FuncBuilder<'a> {
                 self.values[receiver.0 as usize].ty,
                 HirType::Managed(ManagedType::String)
             ) {
-                return self.lower_string_method(id, receiver, *member, &children[1..]);
+                return self.lower_string_method(id, receiver, *member, &arguments);
             }
             if let HirType::Managed(ManagedType::Array(element)) =
                 self.values[receiver.0 as usize].ty.clone()
             {
-                return self.lower_array_method(id, receiver, &element, *member, &children[1..]);
+                return self.lower_array_method(id, receiver, &element, *member, &arguments);
             }
 
             let HirType::Managed(ManagedType::Object(type_id)) =
@@ -3758,7 +3946,7 @@ impl<'a> FuncBuilder<'a> {
             else {
                 return Err(self.unsupported(id, "a method call on something without methods"));
             };
-            return self.lower_object_method(id, receiver, type_id, *member, &children[1..]);
+            return self.lower_object_method(id, receiver, type_id, *member, &arguments);
         }
 
         // `f(x)` where `f` is a parameter, a local, or `pick(1)(x)` where it is
@@ -3767,7 +3955,7 @@ impl<'a> FuncBuilder<'a> {
         // object with one method, and this is a dispatch through that method's
         // slot with the closure itself as the receiver.
         if self.is_function_typed(callee_node) && !self.names_a_declared_function(callee_node) {
-            return self.lower_closure_call(id, callee_node, &children[1..]);
+            return self.lower_closure_call(id, callee_node, &arguments);
         }
 
         let name = self
@@ -3785,7 +3973,7 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = Vec::new();
-        for argument in children.iter().skip(1) {
+        for argument in &arguments {
             args.push(self.lower_expression(*argument)?);
         }
 
@@ -4635,7 +4823,7 @@ impl<'a> FuncBuilder<'a> {
                 let target = self.snapshot.call_targets.get(&parent)?;
                 let signature = self.snapshot.signatures.get(target.signature.0 as usize)?;
                 let parameter = signature.parameters.get(argument)?;
-                representation(self.snapshot, parameter.ty)
+                self.represent(parameter.ty)
             }
             // The receiver of `x.m()`, for the same reason.
             Some(syntax::PROPERTY_ACCESS_EXPRESSION) => {

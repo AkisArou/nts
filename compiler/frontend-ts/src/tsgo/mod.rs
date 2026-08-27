@@ -265,23 +265,50 @@ impl Client {
     /// Every handle must resolve: `handleGetTypeAtLocations` returns on the first
     /// failure, so a single unresolvable location loses the whole batch. Callers
     /// filter `NodeList`s out before calling.
+    ///
+    /// # Surviving a location the checker crashes on
+    ///
+    /// Some nodes make tsgo panic rather than answer — a nil dereference on an
+    /// unresolved import's clause, a `TypeReference` cast to a `TupleType`, an
+    /// enum member whose value is `NaN` and cannot be written as JSON. The panic
+    /// is recovered server-side and comes back as an error, but it takes the
+    /// whole batch with it, so *one* such node loses the types for an entire
+    /// file.
+    ///
+    /// So a failed batch is bisected and retried, and a single location that
+    /// still fails answers `None`. One poisonous node then costs `log2(n)` extra
+    /// exchanges and its own type, rather than the file.
+    ///
+    /// Only a *server* error is retried this way. A broken pipe would otherwise
+    /// be bisected into an exponential number of doomed requests.
     pub fn types_at(
         &mut self,
         snapshot: SnapshotHandle,
         project: &ProjectHandle,
-        locations: Vec<NodeHandle>,
-    ) -> Result<Vec<TypeResponse>, TsgoError> {
+        mut locations: Vec<NodeHandle>,
+    ) -> Result<Vec<Option<TypeResponse>>, TsgoError> {
         if locations.is_empty() {
             return Ok(Vec::new());
         }
-        self.request(
+        let answered: Result<Vec<TypeResponse>, TsgoError> = self.request(
             proto::method::GET_TYPE_AT_LOCATIONS,
             &GetTypeAtLocationsParams {
                 snapshot,
                 project: project.clone(),
-                locations,
+                locations: locations.clone(),
             },
-        )
+        );
+        match answered {
+            Ok(types) => Ok(types.into_iter().map(Some).collect()),
+            Err(TsgoError::Server { .. }) if locations.len() == 1 => Ok(vec![None]),
+            Err(TsgoError::Server { .. }) => {
+                let rest = locations.split_off(locations.len() / 2);
+                let mut left = self.types_at(snapshot, project, locations)?;
+                left.extend(self.types_at(snapshot, project, rest)?);
+                Ok(left)
+            }
+            Err(other) => Err(other),
+        }
     }
 
     /// Resolve the symbols at many locations in one exchange.
@@ -1066,6 +1093,13 @@ fn resolve_types(
     let responses = client.types_at(ctx.handle, ctx.project, handles)?;
 
     for ((node, _), response) in addressable.iter().zip(&responses) {
+        // `None` where the checker crashed on this location rather than
+        // answering. The node simply has no recorded type, which every lowering
+        // already handles: it is the same as a node the frontend never asked
+        // about.
+        let Some(response) = response else {
+            continue;
+        };
         let type_id = *interned.entry(response.id).or_insert_with(|| {
             let id = TypeId(u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX));
             snapshot.types.push(types::classify(response, symbols));
