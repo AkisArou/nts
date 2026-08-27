@@ -441,7 +441,11 @@ fn insert_conversions(
                     let operand = coerce(func, operand, &ty);
                     Some(OpKind::Unary { op, operand })
                 }
-                OpKind::Call { callee, args } => {
+                OpKind::Call {
+                    callee,
+                    args,
+                    frame,
+                } => {
                     // What the callee says it takes. `hir::signatures` may have
                     // narrowed a parameter to an integer, in which case the
                     // argument is converted to *that* rather than widened back
@@ -476,7 +480,11 @@ fn insert_conversions(
                             }
                         })
                         .collect();
-                    Some(OpKind::Call { callee, args })
+                    Some(OpKind::Call {
+                        callee,
+                        args,
+                        frame,
+                    })
                 }
                 OpKind::Return(Some(operand)) => {
                     let operand = coerce(func, operand, &return_type);

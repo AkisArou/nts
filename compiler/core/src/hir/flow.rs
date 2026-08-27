@@ -483,7 +483,7 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
 ///
 /// Only the *upper* bound is claimed. A slice can be empty whatever it was cut
 /// from, which is why every case here starts at zero.
-fn string_span(func: &Func, value: ValueId, depth: u32) -> Option<Facts> {
+pub(super) fn string_span(func: &Func, value: ValueId, depth: u32) -> Option<Facts> {
     /// A slice of a slice of a slice is worth following; an unbounded chain is
     /// not, and a cheap cap means this needs no reasoning about cycles.
     const MAX_DEPTH: u32 = 8;
@@ -508,11 +508,18 @@ fn string_span(func: &Func, value: ValueId, depth: u32) -> Option<Facts> {
         OpKind::Call {
             callee: super::Callee::External(name),
             args,
+            ..
         } => match (name.as_str(), args.first()) {
             // Both clamp into the receiver, so neither can be longer than it.
             ("nts_str_substring" | "nts_str_slice", Some(&source)) => upto(span(source)?),
             // One code unit, or none where the index is out of range.
             ("nts_str_char_at", _) => upto(1.0),
+            // `a.concat(b)`. The `a + b` spelling is a `BinOp::Concat` and is
+            // handled above.
+            ("nts_concat", _) => match (args.first(), args.get(1)) {
+                (Some(&a), Some(&b)) => upto(span(a)? + span(b)?),
+                _ => return None,
+            },
             _ => return None,
         },
         _ => return None,

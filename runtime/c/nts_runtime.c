@@ -605,34 +605,66 @@ static void nts_widen(uint16_t *into, const NtsString *from) {
   }
 }
 
+static NtsString *nts_str_raw(uint32_t length, int wide);
+
+/* Give storage the caller already has a string's header, instead of allocating
+ * one.
+ *
+ * The count is `NTS_IMMORTAL`, which is what makes the rest of the system need
+ * no new rule: retain and release already do nothing to an immortal object, and
+ * the compiler emits a release wherever this string's live range ends whether
+ * it is on the heap or not. `nts_allocated` is deliberately not touched -- this
+ * did not allocate, and `nts_live_count` is how reference counting is tested. */
+static NtsString *nts_str_place(NtsHeader *into, uint32_t length, int wide) {
+  into->descriptor = wide ? &nts_desc_string2 : &nts_desc_string1;
+  into->reserved = NTS_IMMORTAL;
+  into->flags = wide ? NTS_TWO_BYTE : 0u;
+  into->length = length;
+  if (wide) {
+    NTS_ELEMENTS(into, uint16_t)[length] = 0;
+  } else {
+    NTS_ELEMENTS(into, unsigned char)[length] = 0;
+  }
+  return into;
+}
+
+/* The caller's frame where it offered one, the heap otherwise.
+ *
+ * A caller offers storage only where the compiler proved two things: that this
+ * string does not outlive the frame, and that its length cannot exceed what the
+ * storage holds. So there is no fallback path here and no test of the capacity
+ * -- a run-time fallback would be a heap object the compiler already decided
+ * not to release. */
+static NtsString *nts_str_build(NtsHeader *into, uint32_t length, int wide) {
+  return into ? nts_str_place(into, length, wide) : nts_str_raw(length, wide);
+}
+
 /* Concatenation is the only string operation that allocates. A literal does
  * not: it is immutable and known at compile time, so the compiler emits it as
  * static data and references it. */
-NtsString *nts_concat(const NtsString *a, const NtsString *b) {
+NtsString *nts_concat_into(NtsHeader *into, const NtsString *a,
+                           const NtsString *b) {
   uint32_t total = a->length + b->length;
   int wide = ((a->flags | b->flags) & NTS_TWO_BYTE) != 0;
-  size_t width = wide ? 2u : 1u;
   /* One extra code unit, kept at zero, so a one-byte string can be handed to
-   * C directly. */
-  NtsString *out =
-      (NtsString *)nts_alloc(sizeof(NtsHeader) + ((size_t)total + 1) * width);
-  out->descriptor = wide ? &nts_desc_string2 : &nts_desc_string1;
-  out->reserved = 1;
-  nts_allocated++;
-  out->flags = wide ? NTS_TWO_BYTE : 0u;
-  out->length = total;
+   * C directly. `nts_str_build` writes it. */
+  NtsString *out = nts_str_build(into, total, wide);
   if (wide) {
     uint16_t *into = NTS_ELEMENTS(out, uint16_t);
     nts_widen(into, a);
     nts_widen(into + a->length, b);
     into[total] = 0;
   } else {
-    unsigned char *into = NTS_ELEMENTS(out, unsigned char);
-    memcpy(into, NTS_ELEMENTS(a, unsigned char), a->length);
-    memcpy(into + a->length, NTS_ELEMENTS(b, unsigned char), b->length);
-    into[total] = 0;
+    unsigned char *bytes = NTS_ELEMENTS(out, unsigned char);
+    memcpy(bytes, NTS_ELEMENTS(a, unsigned char), a->length);
+    memcpy(bytes + a->length, NTS_ELEMENTS(b, unsigned char), b->length);
+    bytes[total] = 0;
   }
   return out;
+}
+
+NtsString *nts_concat(const NtsString *a, const NtsString *b) {
+  return nts_concat_into(NULL, a, b);
 }
 
 /* Allocate a string of `length` code units, narrow if every unit fits a byte.
@@ -689,12 +721,14 @@ static NtsString *nts_str_alloc(const uint16_t *units, uint32_t length) {
   return out;
 }
 
-/* Copy a range of code units out of a string. */
-static NtsString *nts_str_range(const NtsString *s, uint32_t from,
-                                uint32_t to) {
+
+/* Copy a range of code units out of a string, into the caller's storage where
+ * it supplied one. */
+static NtsString *nts_str_range(NtsHeader *into, const NtsString *s,
+                               uint32_t from, uint32_t to) {
   uint32_t length = to > from ? to - from : 0u;
   if (length == 0) {
-    return nts_str_alloc(0, 0);
+    return nts_str_build(into, 0, 0);
   }
 
   /* A slice of a narrow string is narrow, and every code unit is one byte in
@@ -708,7 +742,7 @@ static NtsString *nts_str_range(const NtsString *s, uint32_t from,
    * copy some bytes. Slicing is what a parser does, so it is worth the special
    * case rather than the generality. */
   if (!(s->flags & NTS_TWO_BYTE)) {
-    NtsString *out = nts_str_raw(length, 0);
+    NtsString *out = nts_str_build(into, length, 0);
     memcpy(NTS_ELEMENTS(out, unsigned char),
            NTS_ELEMENTS(s, const unsigned char) + from, length);
     return out;
@@ -725,7 +759,7 @@ static NtsString *nts_str_range(const NtsString *s, uint32_t from,
       break;
     }
   }
-  NtsString *out = nts_str_raw(length, wide);
+  NtsString *out = nts_str_build(into, length, wide);
   if (wide) {
     memcpy(NTS_ELEMENTS(out, uint16_t), units, (size_t)length * sizeof(uint16_t));
   } else {
@@ -879,14 +913,18 @@ bool nts_str_ends_with(const NtsString *s, const NtsString *needle) {
   return true;
 }
 
-NtsString *nts_str_char_at(const NtsString *s, double at) {
+NtsString *nts_str_char_at_into(NtsHeader *into, const NtsString *s, double at) {
   at = nts_to_integer(at);
   if (at < 0 || at >= (double)s->length) {
     /* Out of range is the empty string, unlike `charCodeAt`'s NaN. */
-    return nts_str_alloc(0, 0);
+    return nts_str_build(into, 0, 0);
   }
   uint32_t index = (uint32_t)at;
-  return nts_str_range(s, index, index + 1u);
+  return nts_str_range(into, s, index, index + 1u);
+}
+
+NtsString *nts_str_char_at(const NtsString *s, double at) {
+  return nts_str_char_at_into(NULL, s, at);
 }
 
 NtsString *nts_str_repeat(const NtsString *s, double times) {
@@ -917,15 +955,21 @@ NtsString *nts_str_repeat(const NtsString *s, double times) {
   return out;
 }
 
-NtsString *nts_str_slice(const NtsString *s, double from, double to) {
+NtsString *nts_str_slice_into(NtsHeader *into, const NtsString *s, double from,
+                              double to) {
   /* Negative counts from the end, which is what distinguishes `slice` from
    * `substring`. */
   uint32_t start = nts_str_clamp(from, s->length, 1);
   uint32_t end = nts_str_clamp(to, s->length, 1);
-  return nts_str_range(s, start, end);
+  return nts_str_range(into, s, start, end);
 }
 
-NtsString *nts_str_substring(const NtsString *s, double from, double to) {
+NtsString *nts_str_slice(const NtsString *s, double from, double to) {
+  return nts_str_slice_into(NULL, s, from, to);
+}
+
+NtsString *nts_str_substring_into(NtsHeader *into, const NtsString *s,
+                                  double from, double to) {
   /* Negative clamps to zero and the two ends swap if they are out of order,
    * which is what distinguishes `substring` from `slice`. */
   uint32_t start = nts_str_clamp(from, s->length, 0);
@@ -935,7 +979,11 @@ NtsString *nts_str_substring(const NtsString *s, double from, double to) {
     start = end;
     end = swap;
   }
-  return nts_str_range(s, start, end);
+  return nts_str_range(into, s, start, end);
+}
+
+NtsString *nts_str_substring(const NtsString *s, double from, double to) {
+  return nts_str_substring_into(NULL, s, from, to);
 }
 
 /* The elements of an array of numbers. */

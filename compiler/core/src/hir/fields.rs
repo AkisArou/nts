@@ -355,6 +355,7 @@ fn allocated_length(func: &super::Func, analysis: &Analysis, value: super::Value
             OpKind::Call {
                 callee: super::Callee::External(name),
                 args,
+                ..
             } if RETURNS_ITS_ARRAY.contains(&name.as_str()) => match args.first() {
                 Some(receiver) => at = *receiver,
                 None => return Facts::TOP,

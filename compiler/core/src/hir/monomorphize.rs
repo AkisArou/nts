@@ -122,6 +122,7 @@ fn find_request(
             let OpKind::Call {
                 callee: Callee::Direct(name),
                 args,
+                ..
             } = &op.kind
             else {
                 continue;
@@ -210,7 +211,7 @@ fn retype_parameter(clone: &mut Func, slot: u32, concrete: TypeId) {
     // here rather than there.
     let target = super::lower::closure_method(concrete);
     for value in &mut clone.values {
-        let OpKind::Call { callee, args } = &mut value.kind else {
+        let OpKind::Call { callee, args, .. } = &mut value.kind else {
             continue;
         };
         if !matches!(callee, Callee::Closure { .. }) || args.first() != Some(&param) {
@@ -235,6 +236,7 @@ fn redirect(program: &mut Program, request: &Request, name: &str) {
             let OpKind::Call {
                 callee: Callee::Direct(target),
                 args,
+                ..
             } = &mut op.kind
             else {
                 continue;

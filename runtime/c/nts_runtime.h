@@ -239,6 +239,44 @@ NtsString *nts_str_repeat(const NtsString *s, double times);
 NtsString *nts_str_slice(const NtsString *s, double from, double to);
 NtsString *nts_str_substring(const NtsString *s, double from, double to);
 
+/* The same four, building into storage the caller supplies.
+ *
+ * A tokenizer's substrings are the shape this is for: made, read, and dropped
+ * without ever being stored or returned. The compiler proves that -- the same
+ * escape analysis that keeps an object in the frame -- and proves a bound on
+ * the length, so the frame can hold one and the allocator is never called.
+ *
+ * `into` is `NTS_FRAME_STRING(n)`'s header, and the result is `NTS_IMMORTAL`,
+ * so the release the counting pass emits for it is a no-op. Passing `NULL` is
+ * the heap, which is what the four functions above do.
+ *
+ * The result *may be shorter* than the storage. That is the point of a bound:
+ * `text.substring(start, i)` has no length until it runs, and what the compiler
+ * knows is that it cannot exceed the string it came from. */
+NtsString *nts_str_char_at_into(NtsHeader *into, const NtsString *s, double at);
+NtsString *nts_str_slice_into(NtsHeader *into, const NtsString *s, double from,
+                              double to);
+NtsString *nts_str_substring_into(NtsHeader *into, const NtsString *s,
+                                  double from, double to);
+NtsString *nts_concat_into(NtsHeader *into, const NtsString *a,
+                           const NtsString *b);
+
+/* Frame storage for a string of at most `units` code units.
+ *
+ * `uint16_t` because a slice of a wide string is wide, and this has to hold the
+ * widest the result can be. The extra unit is the terminating zero every
+ * `NtsString` carries so that a one-byte string is directly usable as a C
+ * string.
+ *
+ * One of these is declared per allocation *site* rather than per execution of
+ * it, which is correct for exactly the reason the whole optimisation is: nothing
+ * built here outlives the iteration that built it. */
+#define NTS_FRAME_STRING(units)  \
+    struct {                     \
+        NtsHeader header;        \
+        uint16_t data[(units) + 1]; \
+    }
+
 /* Build a string from UTF-8, which is how a C caller has one.
  *
  * The conversion is to UTF-16 code units, because that is what a JavaScript

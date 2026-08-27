@@ -491,6 +491,19 @@ fn call_text(
             "(({signature}){receiver}->header.descriptor->methods[{slot}])({})",
             arguments.join(", ")
         )
+    } else if matches!(
+        func.values[value.0 as usize].kind,
+        OpKind::Call { frame: Some(_), .. }
+    ) {
+        // The `_into` form of the same helper, handed the storage declared
+        // above. The frame is where the result lives; everything else about the
+        // call is unchanged, which is the point of doing it this way rather than
+        // with a second operation.
+        format!(
+            "{}_into(&{name}_frame.header, {})",
+            c_identifier(target),
+            arguments.join(", ")
+        )
     } else {
         format!("{}({})", c_identifier(target), arguments.join(", "))
     };
@@ -1293,6 +1306,21 @@ fn emit_body(
         // locals, which means one slot per allocation site rather than one per
         // execution of it -- correct precisely because nothing outlives the
         // iteration that made it.
+        // A string built in the frame needs room for its code units as well as
+        // a pointer to them. The capacity is what the compiler proved the result
+        // cannot exceed, which is not the same as what it will be.
+        if let OpKind::Call {
+            frame: Some(units), ..
+        } = op.kind
+        {
+            writer.line(
+                &op.origin,
+                format!(
+                    "NTS_FRAME_STRING({units}) {}_frame;",
+                    value_name(ValueId(u32::try_from(index).unwrap_or(0)))
+                ),
+            );
+        }
         if let OpKind::ObjectNew { frame: true } = op.kind {
             let layout = layout_of(context.program, &op.ty, &op.origin)?;
             writer.line(
@@ -1830,7 +1858,7 @@ fn emit_op(
             )
         }
         OpKind::Binary { op: bin, lhs, rhs } => binary_text(func, op, &name, *bin, *lhs, *rhs),
-        OpKind::Call { callee, args } => {
+        OpKind::Call { callee, args, .. } => {
             call_text(func, &name, value, callee, args, context, &op.origin)?
         }
         OpKind::Unary { op: un, operand } => {

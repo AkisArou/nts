@@ -2138,6 +2138,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Call {
                 callee: Callee::External("nts_thrown".to_owned()),
                 args: vec![message],
+                frame: None,
             },
             HirType::Void,
             origin,
@@ -3132,6 +3133,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Call {
                 callee: Callee::Direct(format!("{owner}#constructor")),
                 args,
+                frame: None,
             },
             HirType::Void,
             origin,
@@ -3639,7 +3641,15 @@ impl<'a> FuncBuilder<'a> {
             .type_of(id)
             .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
         let origin = self.origin(id);
-        Ok(self.push(OpKind::Call { callee, args }, ty, origin))
+        Ok(self.push(
+            OpKind::Call {
+                callee,
+                args,
+                frame: None,
+            },
+            ty,
+            origin,
+        ))
     }
 
     /// `f(x)` where `f` holds a closure.
@@ -3690,7 +3700,15 @@ impl<'a> FuncBuilder<'a> {
             .type_of(id)
             .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
         let origin = self.origin(id);
-        Ok(self.push(OpKind::Call { callee, args }, ty, origin))
+        Ok(self.push(
+            OpKind::Call {
+                callee,
+                args,
+                frame: None,
+            },
+            ty,
+            origin,
+        ))
     }
 
     /// The `Math` member a callee names, if it names one.
@@ -3848,6 +3866,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Call {
                 callee: Callee::External(helper.to_owned()),
                 args,
+                frame: None,
             },
             ty,
             origin,
@@ -3932,6 +3951,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Call {
                 callee: Callee::External(helper.to_owned()),
                 args,
+                frame: None,
             },
             ty,
             origin,
@@ -3977,6 +3997,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Call {
                 callee: Callee::External(helper.to_owned()),
                 args: vec![receiver, value],
+                frame: None,
             },
             ty,
             origin,
@@ -4025,7 +4046,15 @@ impl<'a> FuncBuilder<'a> {
             .type_of(id)
             .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
         let origin = self.origin(id);
-        Ok(self.push(OpKind::Call { callee, args }, ty, origin))
+        Ok(self.push(
+            OpKind::Call {
+                callee,
+                args,
+                frame: None,
+            },
+            ty,
+            origin,
+        ))
     }
 
     /// A call into the base class, with `this` as the receiver.
@@ -4084,6 +4113,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Call {
                 callee: Callee::Direct(format!("{base}#{member}")),
                 args,
+                frame: None,
             },
             ty,
             origin,

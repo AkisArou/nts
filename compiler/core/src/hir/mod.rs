@@ -316,6 +316,19 @@ pub enum OpKind {
     Call {
         callee: Callee,
         args: Vec<ValueId>,
+        /// Storage for the result, in the frame, measured in code units.
+        ///
+        /// Only for an external helper that returns a *fresh* string. Set by
+        /// [`place_allocations`] where two facts hold together: the result does
+        /// not escape ([`escape`]), and its length cannot exceed this capacity
+        /// ([`flow::string_span`]). The helper then fills storage the caller
+        /// supplies instead of calling the allocator, and the result is
+        /// `NTS_IMMORTAL`, so the release the counting pass emits is a no-op.
+        ///
+        /// This is [`OpKind::ObjectNew`]'s `frame` for a value whose size is not
+        /// its type's. An object's layout says how big it is; a string's does
+        /// not, which is why this carries a number and that carries a flag.
+        frame: Option<u32>,
     },
     /// Return, with a value unless the function is `void`.
     Return(Option<ValueId>),
@@ -1131,15 +1144,64 @@ fn place_allocations(program: &mut Program) -> usize {
     for (func, escapes) in program.funcs.iter_mut().zip(&escapes) {
         for index in 0..func.values.len() {
             let value = ValueId(u32::try_from(index).unwrap_or(0));
-            if matches!(func.values[index].kind, OpKind::ObjectNew { frame: false })
-                && escapes.is_frame_local(value)
-            {
+            if !escapes.is_frame_local(value) {
+                continue;
+            }
+            if matches!(func.values[index].kind, OpKind::ObjectNew { frame: false }) {
                 func.values[index].kind = OpKind::ObjectNew { frame: true };
+                framed += 1;
+            } else if let Some(units) = frame_capacity(func, value)
+                && let OpKind::Call { frame, .. } = &mut func.values[index].kind
+            {
+                *frame = Some(units);
                 framed += 1;
             }
         }
     }
     framed
+}
+
+/// Frame storage for a fresh string, where one is worth having.
+///
+/// An object's size is its type's, so keeping one in the frame needs no number.
+/// A string's is not, and nothing at the allocation site says what it will be —
+/// which is why this needs [`flow::string_span`], and why a *tokenizer* is the
+/// program that gains: it makes strings whose length is written down nowhere.
+///
+/// The caller has already established the other half, that the reference does
+/// not outlive the frame. Both are required and neither implies the other.
+fn frame_capacity(func: &Func, value: ValueId) -> Option<u32> {
+    /// Code units a frame string may hold.
+    ///
+    /// Storage is per allocation *site*, so a function with several pays for all
+    /// of them for its whole call — and a deep recursion pays again per level.
+    /// Past this the heap is the right answer, and a long slice is one where the
+    /// allocation is a smaller share of the copy anyway.
+    const LIMIT: u32 = 128;
+
+    let OpKind::Call {
+        callee: Callee::External(name),
+        ..
+    } = &func.values[value.0 as usize].kind
+    else {
+        return None;
+    };
+    // The helpers with an `_into` form: each returns a *fresh* string, so
+    // nothing else can hold the one this builds.
+    if !matches!(
+        name.as_str(),
+        "nts_str_substring" | "nts_str_slice" | "nts_str_char_at" | "nts_concat"
+    ) {
+        return None;
+    }
+    let span = flow::string_span(func, value, 0)?;
+    if !(span.hi >= 0.0 && span.hi <= f64::from(LIMIT)) {
+        return None;
+    }
+    // Exact: the test above put it inside `0..=LIMIT`, and every whole number
+    // there is representable in both.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    Some(span.hi as u32)
 }
 
 #[cfg(test)]

@@ -506,10 +506,19 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             };
             format!("%{index} = {operator} %{} : {ty}", operand.0)
         }
-        OpKind::Call { callee, args } => {
+        OpKind::Call {
+            callee,
+            args,
+            frame,
+        } => {
             let rendered: Vec<String> = args.iter().map(|a| format!("%{}", a.0)).collect();
             let (kind, name) = render_callee(callee, args);
-            format!("%{index} = {kind} {name}({}) : {ty}", rendered.join(", "))
+            // Where the result lives, when it is not the heap.
+            let at = frame.map_or_else(String::new, |units| format!(" frame[{units}]"));
+            format!(
+                "%{index} = {kind} {name}({}){at} : {ty}",
+                rendered.join(", ")
+            )
         }
         OpKind::Return(Some(v)) => format!("ret %{}", v.0),
         OpKind::Return(None) => "ret".to_owned(),

@@ -252,6 +252,7 @@ fn rewrite_as_guard(func: &mut Func, whole: &str, observed: &FxHashSet<ValueId>)
         kind: OpKind::Call {
             callee: Callee::Direct(whole.to_owned()),
             args: handed,
+            frame: None,
         },
         ty: func.return_type.clone(),
         origin,

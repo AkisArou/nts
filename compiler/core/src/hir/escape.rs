@@ -148,7 +148,7 @@ fn analyze(
                 OpKind::FieldSet { value: stored, .. } | OpKind::ArraySet { value: stored, .. } => {
                     escapes.values.insert(*stored);
                 }
-                OpKind::Call { callee, args } => match callee {
+                OpKind::Call { callee, args, .. } => match callee {
                     // A body that is not here could do anything with what it is
                     // given.
                     Callee::External(_) => {
@@ -410,6 +410,7 @@ mod tests {
                     OpKind::Call {
                         callee: Callee::Direct("reader".to_owned()),
                         args: vec![ValueId(0)],
+                        frame: None,
                     },
                     HirType::NUMBER,
                 ),
@@ -418,6 +419,7 @@ mod tests {
                     OpKind::Call {
                         callee: Callee::Direct("keeper".to_owned()),
                         args: vec![ValueId(0), ValueId(2)],
+                        frame: None,
                     },
                     HirType::Void,
                 ),

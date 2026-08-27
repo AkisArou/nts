@@ -148,7 +148,8 @@ fn settle(
             for (at, block) in func.blocks.iter().enumerate() {
                 let at = super::BlockId(u32::try_from(at).unwrap_or(0));
                 for value in &block.ops {
-                    let OpKind::Call { callee, args } = &func.values[value.0 as usize].kind else {
+                    let OpKind::Call { callee, args, .. } = &func.values[value.0 as usize].kind
+                    else {
                         continue;
                     };
                     for callee in targets_of(callee, &by_name, in_slot) {
