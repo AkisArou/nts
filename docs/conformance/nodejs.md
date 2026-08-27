@@ -300,21 +300,43 @@ unblocks, rather than by how often it appears in a corpus of test files.
 
 | refused | count | what it is |
 | --- | ---: | --- |
-| a property of unrepresentable type (an object type) | 236 | a record with a record in it — `CpuInfo.times`, `Stats`, every options object |
-| a parameter of unrepresentable type (`unknown`) | 60 | the validators; a JavaScript caller can pass anything |
-| an object with an optional property | 46 | `{ encoding?, flag?, mode? }`, which is every `fs` signature |
+| **`unknown`** | **~296** | 236 as a property, 60 as a parameter — one feature |
+| an object with an optional property | 46 | `{ encoding?, flag?, mode? }`, which is most of `fs`; also every class extending `Error`, because `stack` and `cause` are optional |
 | a name declared outside this function | 45 | module-scope tables: `hexTable`, `WINDOWS_RESERVED_NAMES`, the encodings |
-| a structured type (flags 0x100000) | 27 | interfaces used as parameter types |
+| a structured type (flags 0x100000) | 27 | `Uint8Array` used as a parameter type |
 | a property of unrepresentable type (a function type) | 15 | a callback stored in a record |
 | indexing something that is not an array | 11 | `Record<string, number>` |
 | a rest parameter | 8 | `resolve(...args)`, `join(...args)` |
 | `toUpperCase` / `toLowerCase` | 8 | the win32 device comparison, encoding names |
 | a parameter with a default | 8 | `getPriority(pid = 0)` and most options |
 
-The first row is worth its own note: it is not one feature but the single
-largest thing standing between this profile and compiling. Almost every Node
-API takes or returns a record, and most of those records have a record inside
-them.
+**Two things about this table are worth more than the ranking.**
+
+The first row reads as one item only after a correction. `a property of
+unrepresentable type (an object type)` looks like it is about records, and it is
+not: `unknown` reaches the diagnostic as `TypeKind::Object` and prints as "an
+object type", so a property typed `unknown` is indistinguishable from a property
+typed `{…}`. Records nest fine — named, inline, two deep, built as a literal,
+in an array — which is what makes the label misleading rather than merely vague.
+Two lines reproduce it:
+
+```ts
+export class Holder { context: unknown = 0; }
+export function make(): number { const h = new Holder(); return 1; }
+```
+
+And **the counts are per use site, not per cause.** There are six `unknown`-typed
+properties in the whole profile. One of them — `context` on an error class in
+`internal/errors.ts` — produces 176 of the 236, because every module imports
+those errors and nearly every function can throw. A ranked histogram of use
+sites promotes whatever lives in a shared module, which is the direction that
+wastes the most time. Read this table as a list of causes, not a tally.
+
+Why `unknown` is unavoidable here rather than a style choice: every one of those
+296 is a validator or an error field. `validateString(value: unknown, name:
+string)` exists because a module reached through the Node-API wrapper is called
+from JavaScript, which has no types — `readFileSync(42)` has to throw node's
+error rather than open a file named `42`.
 
 ## What stops `path` compiling
 
