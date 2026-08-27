@@ -14,6 +14,14 @@ use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo, tsgo::decompose::Budget};
 use nts_diagnostics::Location;
 use nts_semantic_schema::SCHEMA_VERSION;
 
+/// The tsconfig a subcommand was pointed at: the first positional argument, or
+/// the one in the working directory.
+fn project(rest: &[String]) -> Utf8PathBuf {
+    rest.iter()
+        .find(|a| !a.starts_with("--"))
+        .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from)
+}
+
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
@@ -22,18 +30,12 @@ fn main() -> Result<()> {
             let decompose = rest.iter().any(|a| a == "--decompose");
             let calls = rest.iter().any(|a| a == "--calls");
             let constants = rest.iter().any(|a| a == "--constants");
-            let tsconfig = rest
-                .iter()
-                .find(|a| !a.starts_with("--"))
-                .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
+            let tsconfig = project(&rest);
             frontend(&tsconfig, decompose, calls, constants)
         }
         Some("check") => {
             let rest: Vec<String> = args.collect();
-            let tsconfig = rest
-                .iter()
-                .find(|a| !a.starts_with("--"))
-                .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
+            let tsconfig = project(&rest);
             let report = nts_differential::check(&tsconfig)?;
             if report.functions == 0 {
                 println!(
@@ -91,20 +93,22 @@ fn main() -> Result<()> {
                 .map(Utf8PathBuf::from);
             emit_c(&tsconfig, out.as_deref())
         }
+        // Every type the frontend resolved, as the schema records it. A
+        // lowering refusal names a *type*, and until now there was no way to see
+        // what that type actually is — which is a scavenger hunt for anyone
+        // working on representation.
+        Some("types") => {
+            let rest: Vec<String> = args.collect();
+            print_types(&project(&rest))
+        }
         Some("hir") => {
             let rest: Vec<String> = args.collect();
-            let tsconfig = rest
-                .iter()
-                .find(|a| !a.starts_with("--"))
-                .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
+            let tsconfig = project(&rest);
             dump_hir(&tsconfig)
         }
         Some("facts") => {
             let rest: Vec<String> = args.collect();
-            let tsconfig = rest
-                .iter()
-                .find(|a| !a.starts_with("--"))
-                .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
+            let tsconfig = project(&rest);
             dump_facts(&tsconfig)
         }
         Some("version") | None => {
@@ -595,6 +599,21 @@ const fn render_bin(op: BinOp) -> &'static str {
         BinOp::Min => "min",
         BinOp::Max => "max",
     }
+}
+
+/// Every type the frontend resolved, as the schema records it.
+fn print_types(tsconfig: &Utf8Path) -> Result<()> {
+    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let snapshot = source.snapshot(tsconfig)?;
+    for (index, record) in snapshot.types.iter().enumerate() {
+        let named = record
+            .symbol
+            .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
+            .map_or_else(String::new, |symbol| format!(" `{}`", symbol.name));
+        println!("#{index}{named} {:?}", record.kind);
+    }
+    Ok(())
 }
 
 /// Where a diagnostic is, as `path:line:column`.
