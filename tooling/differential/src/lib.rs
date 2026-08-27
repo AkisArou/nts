@@ -115,7 +115,9 @@ fn inputs(ty: &HirType, known: Facts) -> Vec<f64> {
         // An index into `STRINGS`, carried as a double so that one tuple type
         // serves both kinds of parameter. Which pool a slot draws from is
         // decided by its type, at every point that reads it.
-        return (0..STRINGS.len()).map(|at| at as f64).collect();
+        return (0..STRINGS.len())
+            .map(|at| f64::from(u32::try_from(at).unwrap_or(0)))
+            .collect();
     }
     if matches!(ty, HirType::Bool) {
         return vec![0.0, 1.0];
@@ -313,17 +315,30 @@ fn tuples(params: &[(HirType, Facts)]) -> Vec<Vec<f64>> {
     out
 }
 
+/// The string a tuple slot names.
+///
+/// A string parameter's "value" in a tuple is an index into [`STRINGS`], carried
+/// as a double so that one tuple type serves both kinds of parameter.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the value is an index this module put there, and the guard covers the rest"
+)]
+fn string_at(index: f64) -> &'static str {
+    let at = if index >= 0.0 { index as u32 } else { 0 };
+    STRINGS.get(at as usize).copied().unwrap_or("")
+}
+
 /// A string as a C expression building it.
 ///
 /// The bytes are written as hex escapes and the length is passed explicitly, so
 /// nothing depends on C's escaping rules agreeing with anyone else's and an
 /// embedded zero would survive.
 fn c_string(text: &str) -> String {
-    let escaped: String = text
-        .as_bytes()
-        .iter()
-        .map(|byte| format!("\\x{byte:02x}"))
-        .collect();
+    let mut escaped = String::new();
+    for byte in text.as_bytes() {
+        let _ = write!(escaped, "\\x{byte:02x}");
+    }
     format!("nts_string_from_utf8(\"{escaped}\", {})", text.len())
 }
 
@@ -351,21 +366,12 @@ fn literal(value: f64) -> String {
     }
 }
 
-fn run_native(
-    dir: &Utf8Path,
-    program: &hir::Program,
-    testable: &[Testable],
-) -> Result<Vec<String>> {
-    let emitted = nts_codegen_c::emit(program);
-    let generated = dir.join("program.c");
-    std::fs::write(&generated, emitted.writer.text())?;
-    std::fs::write(
-        dir.join(nts_codegen_c::RUNTIME_HEADER_NAME),
-        nts_codegen_c::RUNTIME_HEADER,
-    )?;
-    let runtime = dir.join(nts_codegen_c::RUNTIME_SOURCE_NAME);
-    std::fs::write(&runtime, nts_codegen_c::RUNTIME_SOURCE)?;
-
+/// The C harness: one declaration per function, then one call per case.
+///
+/// Separate from the building and running because it is the part worth
+/// reading when a case does not compile, and because the two have nothing
+/// to say to each other beyond this string.
+fn native_harness(testable: &[Testable]) -> String {
     let mut main = String::from(
         "#include <math.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n\
          #include \"nts_runtime.h\"\n\n\
@@ -428,7 +434,7 @@ fn run_native(
                 .zip(&one.params)
                 .map(|(value, (ty, _))| {
                     if is_string(ty) {
-                        return c_string(STRINGS[*value as usize]);
+                        return c_string(string_at(*value));
                     }
                     format!("({}){}", c_type(ty), literal(*value))
                 })
@@ -446,6 +452,25 @@ fn run_native(
         }
     }
     main.push_str("    return 0;\n}\n");
+    main
+}
+
+fn run_native(
+    dir: &Utf8Path,
+    program: &hir::Program,
+    testable: &[Testable],
+) -> Result<Vec<String>> {
+    let emitted = nts_codegen_c::emit(program);
+    let generated = dir.join("program.c");
+    std::fs::write(&generated, emitted.writer.text())?;
+    std::fs::write(
+        dir.join(nts_codegen_c::RUNTIME_HEADER_NAME),
+        nts_codegen_c::RUNTIME_HEADER,
+    )?;
+    let runtime = dir.join(nts_codegen_c::RUNTIME_SOURCE_NAME);
+    std::fs::write(&runtime, nts_codegen_c::RUNTIME_SOURCE)?;
+
+    let main = native_harness(testable);
     let main_path = dir.join("check_main.c");
     std::fs::write(&main_path, main)?;
 
@@ -504,7 +529,7 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
                 .zip(&one.params)
                 .map(|(value, (ty, _))| {
                     if is_string(ty) {
-                        return js_string(STRINGS[*value as usize]);
+                        return js_string(string_at(*value));
                     }
                     if matches!(ty, HirType::Bool) {
                         return if *value == 0.0 { "false" } else { "true" }.to_owned();
