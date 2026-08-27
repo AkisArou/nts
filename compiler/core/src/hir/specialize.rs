@@ -330,6 +330,12 @@ fn width_of(
         // NaN, and NaN is not an integer.
         | OpKind::StringUnitAt { checked: false, .. } => true,
 
+        // A field whose *storage* is an integer. `hir::fields` decided that
+        // from every store in the program, so the load produces one and there
+        // is nothing to convert -- and leaving it out of its class would sink
+        // the class, because a class is only as good as its worst member.
+        OpKind::FieldGet { .. } => matches!(func.values[id.0 as usize].ty, HirType::Int { .. }),
+
         // Everything else stays a double, for one of three reasons:
         //
         // - A parameter's representation is the function's ABI, and this pass

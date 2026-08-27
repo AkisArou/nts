@@ -1012,6 +1012,14 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
             checks_removed += bounds::eliminate_checks(func, analysis, &field_lengths);
         }
 
+        // A field's *storage* before the bodies that read it. `number` is a
+        // double, but a field every store puts a small whole number into holds
+        // one every time -- and an `int32` member is half the object and
+        // integer arithmetic on the other side of the load.
+        let analyses = interprocedural::analyze_program(&program, options.roots);
+        let narrowed = fields::representations(&program, &analyses);
+        fields::narrow(&mut program, &narrowed);
+
         let analyses = interprocedural::analyze_program(&program, options.roots);
         for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
             let report = specialize::specialize(func, analysis);

@@ -577,6 +577,46 @@ fn null_comparison(
     ))
 }
 
+/// `obj.f = v`, with the truncation spelled where there is one.
+///
+/// A field narrowed to an integer by `hir::fields` is stored into from a double
+/// the analysis proved whole and in range, so the cast is the identity on every
+/// value the program can produce -- but C should be told rather than left to
+/// convert implicitly.
+fn field_store(
+    func: &Func,
+    op: &nts_core::hir::Op,
+    object: ValueId,
+    field: u32,
+    stored: ValueId,
+    context: &Context<'_>,
+) -> Result<String, Diagnostic> {
+    let layout = layout_of(
+        context.program,
+        &func.values[object.0 as usize].ty,
+        &op.origin,
+    )?;
+    let declared = layout.fields.get(field as usize).ok_or_else(|| {
+        Diagnostic::error(
+            "NTS2006",
+            "a field index outside its layout",
+            op.origin.location,
+        )
+    })?;
+    let cast = if declared.ty == func.values[stored.0 as usize].ty {
+        String::new()
+    } else {
+        c_type_of(context.program, &declared.ty, &op.origin)
+            .map_or_else(|_| String::new(), |ty| format!("({ty})"))
+    };
+    Ok(format!(
+        "{}->{} = {cast}{};",
+        value_name(object),
+        c_identifier(&declared.name),
+        value_name(stored)
+    ))
+}
+
 /// The cast an upcast needs, or nothing where the types already agree.
 ///
 /// TypeScript checked assignability before any of this ran, so a reference
@@ -1665,26 +1705,7 @@ fn managed_op(
             object,
             field,
             value: stored,
-        } => {
-            let layout = layout_of(
-                context.program,
-                &func.values[object.0 as usize].ty,
-                &op.origin,
-            )?;
-            let declared = layout.fields.get(*field as usize).ok_or_else(|| {
-                Diagnostic::error(
-                    "NTS2006",
-                    "a field index outside its layout",
-                    op.origin.location,
-                )
-            })?;
-            let field = c_identifier(&declared.name);
-            format!(
-                "{}->{field} = {};",
-                value_name(*object),
-                value_name(*stored)
-            )
-        }
+        } => field_store(func, op, *object, *field, *stored, context)?,
         OpKind::ArrayNew { length } => {
             format!(
                 "{name} = nts_array_new(&{}, {});",

@@ -36,6 +36,12 @@ use super::facts::Facts;
 use super::flow::Analysis;
 use super::{HirType, ManagedType, OpKind, Program};
 
+/// The machine type each `(layout, field)` was narrowed to.
+///
+/// By layout rather than by type, because it is a decision about *storage* and
+/// storage is what a layout is.
+pub type FieldWidths = FxHashMap<(usize, u32), HirType>;
+
 /// What each `(type, field)` can hold.
 ///
 /// Keyed by type rather than by layout, because a `FieldGet` names a type and
@@ -100,6 +106,151 @@ pub fn analyze(program: &Program, analyses: &[Analysis]) -> FieldFacts {
     }
     visible
 }
+
+/// Give every field the narrowest machine type every store into it allows.
+///
+/// # Why a field is the place this matters most
+///
+/// A `number` field is a double because `number` is a double. But a program
+/// that puts small whole numbers in a field puts them there *every time* — and
+/// the join over every store says so. `Ball` in Are We Fast Yet holds four
+/// coordinates that never leave `int32`, so the C++ port declares four
+/// `int32_t` and this compiler was declaring four `double`: twice the object,
+/// twice the memory traffic, and floating-point arithmetic for values that fit
+/// in a register.
+///
+/// Unlike specializing a *local*, this changes the object's layout, so it has
+/// to hold for every layout that shares the field's storage — which base-first
+/// makes exact: a store through a `Shape *` lands in a `Square`, and the two
+/// must agree on the width or the store writes four bytes where the read wants
+/// eight.
+///
+/// # Why it is exact rather than lossy
+///
+/// The store is a truncation the analysis proved is not one: every value that
+/// reaches the field is a whole number inside the range, so the cast is the
+/// identity on every value the program can produce. A field that might hold a
+/// fraction, a NaN, an infinity, or a negative zero keeps its double — `-0`
+/// especially, because an integer slot cannot hold it and `1 / -0` can tell.
+#[must_use]
+pub fn representations(program: &Program, analyses: &[Analysis]) -> FieldWidths {
+    // What every store into each field, by layout, is worth.
+    let mut stored: FxHashMap<(usize, u32), Facts> = FxHashMap::default();
+    for (index, func) in program.funcs.iter().enumerate() {
+        for op in &func.values {
+            let OpKind::FieldSet {
+                object,
+                field,
+                value,
+            } = &op.kind
+            else {
+                continue;
+            };
+            let Some(layout) = layout_of(program, &func.values[object.0 as usize].ty) else {
+                continue;
+            };
+            if !is_number(program, layout, *field) {
+                continue;
+            }
+            let entry: &mut Facts = stored.entry((layout, *field)).or_insert(Facts::BOTTOM);
+            *entry = entry.join(analyses[index].get(*value));
+        }
+    }
+
+    // Decided against the *original* types, then applied: narrowing one field
+    // changes what `shares_storage` says about the fields after it, and a
+    // decision that depended on a decision would depend on the order.
+    let mut narrowed = FxHashMap::default();
+    for (at, layout) in program.layouts.iter().enumerate() {
+        for field in 0..u32::try_from(layout.fields.len()).unwrap_or(0) {
+            if !matches!(layout.fields[field as usize].ty, HirType::Float { .. }) {
+                continue;
+            }
+            // Zero, because that is what the allocator leaves -- and a whole
+            // number in range, so it never decides the answer on its own.
+            let mut held = Facts::constant(0.0);
+            for (other, candidate) in program.layouts.iter().enumerate() {
+                if !shares_storage(layout, candidate, field) {
+                    continue;
+                }
+                // A layout in the group that nothing stores into is a field
+                // read before it is written, which is the allocator's zero.
+                held = held.join(
+                    stored
+                        .get(&(other, field))
+                        .copied()
+                        .unwrap_or(Facts::BOTTOM),
+                );
+            }
+            let Some(bits) = width_for(held) else {
+                continue;
+            };
+            narrowed.insert((at, field), HirType::Int { bits, signed: true });
+        }
+    }
+    narrowed
+}
+
+/// The width a field's contents fit in, if any.
+fn width_for(held: Facts) -> Option<u8> {
+    if held.is_bottom() || !held.whole || held.maybe_nan || held.maybe_negative_zero {
+        return None;
+    }
+    if held.lo >= -2_147_483_648.0 && held.hi <= 2_147_483_647.0 {
+        Some(32)
+    } else if held.lo >= super::facts::SAFE_MIN && held.hi <= super::facts::SAFE_MAX {
+        // Past 2^53 an `f64` cannot tell adjacent integers apart, so there is
+        // nothing to prove and nothing to represent.
+        Some(64)
+    } else {
+        None
+    }
+}
+
+/// Apply what [`representations`] decided, to the layouts and to every read.
+///
+/// A `FieldGet` carries the type it produces, and everything downstream reads
+/// that rather than the layout — so the two have to move together or the
+/// emitter declares an `int32_t` member and assigns a `double` local from it.
+pub fn narrow(program: &mut Program, narrowed: &FieldWidths) -> usize {
+    if narrowed.is_empty() {
+        return 0;
+    }
+    for ((layout, field), ty) in narrowed {
+        if let Some(slot) = program.layouts[*layout].fields.get_mut(*field as usize) {
+            slot.ty = ty.clone();
+        }
+    }
+
+    // By type id, since that is what a read names.
+    let mut by_type: FieldTypes = FxHashMap::default();
+    for ((layout, field), ty) in narrowed {
+        for id in &program.layouts[*layout].types {
+            by_type.insert((*id, *field), ty.clone());
+        }
+    }
+
+    let mut retyped = 0;
+    for func in &mut program.funcs {
+        for index in 0..func.values.len() {
+            let OpKind::FieldGet { object, field } = func.values[index].kind else {
+                continue;
+            };
+            let HirType::Managed(ManagedType::Object(id)) = func.values[object.0 as usize].ty
+            else {
+                continue;
+            };
+            if let Some(ty) = by_type.get(&(id, field)) {
+                func.values[index].ty = ty.clone();
+                retyped += 1;
+            }
+        }
+    }
+    retyped
+}
+
+/// The machine type of each `(type, field)`, for the reads that name one.
+type FieldTypes = FxHashMap<(super::TypeId, u32), HirType>;
 
 /// How long the array in each `(type, field)` is, where that is knowable.
 ///
