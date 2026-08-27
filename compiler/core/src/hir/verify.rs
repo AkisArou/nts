@@ -309,7 +309,9 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::ConstFloat(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
-        | OpKind::ObjectNew { .. } => Vec::new(),
+        | OpKind::ObjectNew { .. }
+        | OpKind::GlobalGet(_) => Vec::new(),
+        OpKind::GlobalSet { value, .. } => vec![*value],
         OpKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
         OpKind::Unary { operand, .. } | OpKind::Convert(operand) => vec![*operand],
         OpKind::Call { args, .. } => args.clone(),
@@ -382,6 +384,7 @@ mod tests {
     fn func(values: Vec<Op>, blocks: Vec<Block>) -> Program {
         Program {
             layouts: Vec::new(),
+            globals: Vec::new(),
             funcs: vec![Func {
                 name: "f".to_owned(),
                 params: Vec::<Param>::new(),

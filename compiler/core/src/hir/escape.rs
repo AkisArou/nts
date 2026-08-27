@@ -249,6 +249,7 @@ mod tests {
         let program = Program {
             funcs: vec![func("reader", 1, values, blocks)],
             layouts: Vec::new(),
+            globals: Vec::new(),
         };
         let escapes = analyze_program(&program);
         assert!(!escapes[0].escapes(ValueId(0)));
@@ -283,6 +284,7 @@ mod tests {
         let program = Program {
             funcs: vec![func("keeper", 2, values, blocks)],
             layouts: Vec::new(),
+            globals: Vec::new(),
         };
         let escapes = analyze_program(&program);
         assert!(!escapes[0].escapes(ValueId(0)));
@@ -305,6 +307,7 @@ mod tests {
                     readonly: false,
                 }],
             }],
+            globals: Vec::new(),
         };
 
         // `reader(o) { return o.f }`
@@ -405,6 +408,7 @@ mod tests {
                 }],
             )],
             layouts: Vec::new(),
+            globals: Vec::new(),
         };
         let escapes = analyze_program(&program);
         assert!(escapes[0].is_frame_local(ValueId(0)));

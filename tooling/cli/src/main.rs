@@ -404,6 +404,10 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::Convert(operand) => format!("%{index} = convert %{} : {ty}", operand.0),
         OpKind::ArrayNew { length } => format!("%{index} = array.new %{} : {ty}", length.0),
         OpKind::Length(array) => format!("%{index} = array.len %{} : {ty}", array.0),
+        OpKind::GlobalGet(global) => format!("%{index} = global.get {global} : {ty}"),
+        OpKind::GlobalSet { global, value } => {
+            format!("global.set {global} = %{}", value.0)
+        }
         OpKind::ObjectNew { frame } => {
             let where_ = if *frame { "frame" } else { "heap" };
             format!("%{index} = object.new {where_} : {ty}")

@@ -35,6 +35,7 @@ pub fn eliminate(func: &mut Func) -> usize {
                 OpKind::Call { .. }
                     | OpKind::ArraySet { .. }
                     | OpKind::FieldSet { .. }
+                    | OpKind::GlobalSet { .. }
                     | OpKind::Retain(_)
                     | OpKind::Release(_)
             ) {

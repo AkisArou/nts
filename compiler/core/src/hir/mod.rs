@@ -347,6 +347,13 @@ pub enum OpKind {
     Release(ValueId),
     /// Allocate an object. The type is carried by the operation's own type,
     /// which is a [`ManagedType::Object`].
+    /// Read a module-scope variable.
+    GlobalGet(u32),
+    /// Write one. Produces nothing.
+    GlobalSet {
+        global: u32,
+        value: ValueId,
+    },
     /// Allocate an object.
     ///
     /// `frame: true` puts it in the caller's stack frame instead of the heap,
@@ -575,6 +582,31 @@ pub struct Program {
     pub funcs: Vec<Func>,
     /// Layouts for every object type the program uses.
     pub layouts: Vec<Layout>,
+    /// Variables declared at module scope, indexed by [`OpKind::GlobalGet`].
+    pub globals: Vec<Global>,
+}
+
+/// A variable that outlives every call.
+///
+/// Only `let` and `var` reach here. A module-scope `const` with a constant
+/// initializer is resolved to its value at each use instead — a better answer
+/// than storage that is read and never written, and what makes `const TAU = 6.28`
+/// cost nothing at all.
+///
+/// Scalars only, for now. A managed global is a *root*: reachable without being
+/// on any stack, so a collector has to be told about it, and RFC §10.2 puts root
+/// registration in the memory provider rather than in a backend. Refusing until
+/// that exists beats a global nothing traces.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Global {
+    pub name: String,
+    pub ty: HirType,
+    /// What it holds before anything runs. A `bool` stores its truth value here;
+    /// `ty` says which of the two a zero means.
+    pub initial: f64,
+    /// Visible outside the compiled set, so it keeps its name in the artifact.
+    pub exported: bool,
+    pub origin: Origin,
 }
 
 impl Program {
@@ -946,6 +978,7 @@ mod tests {
         // in a cycle, which is the case that matters: it is the common one.
         let program = Program {
             funcs: Vec::new(),
+            globals: Vec::new(),
             layouts: vec![
                 // 0: Node { next: Node } -- a cycle in one line.
                 layout("Node", 1, vec![field("next", object(1))]),
@@ -981,6 +1014,7 @@ mod tests {
         // skip a cycle.
         let program = Program {
             funcs: Vec::new(),
+            globals: Vec::new(),
             layouts: vec![layout("Holder", 1, vec![field("other", object(99))])],
         };
         assert_eq!(program.cyclic_layouts(), vec![true]);

@@ -42,10 +42,125 @@ impl Lowered {
     }
 }
 
+/// What a module declares outside any function.
+///
+/// Two maps rather than one, because the two are not the same thing. A `const`
+/// with a constant initializer is resolved to its value at each use, so it costs
+/// nothing and reads like an immediate; a `let` is storage that every function
+/// shares.
+#[derive(Debug, Clone, Default)]
+struct ModuleScope {
+    /// Symbol to value, for a `const` this could evaluate.
+    constants: rustc_hash::FxHashMap<u32, f64>,
+    /// Symbol to index in [`Program::globals`].
+    variables: rustc_hash::FxHashMap<u32, u32>,
+    /// The type of each global, by the same index.
+    types: Vec<HirType>,
+}
+
+/// Collect what a module declares outside any function.
+///
+/// Scalars only. A managed global is a *root* -- reachable without being on any
+/// stack -- so a collector has to be told about it, and RFC §10.2 puts root
+/// registration in the memory provider rather than in a backend. Until that
+/// exists, refusing is better than a global nothing traces.
+///
+/// An initializer that is not a constant is refused for a different reason:
+/// running it needs a module initializer, which is a real thing to design (what
+/// order, and what happens when one throws) rather than something to improvise
+/// here.
+fn collect_module_scope(snapshot: &SemanticSnapshot, lowered: &mut Lowered) -> ModuleScope {
+    let mut scope = ModuleScope::default();
+    let probe = FuncBuilder::new(snapshot);
+
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::VARIABLE_DECLARATION) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        // Inside a function, and therefore an ordinary local.
+        if probe.is_within_a_function(id) {
+            continue;
+        }
+
+        let children = probe.children(id);
+        let Some(name_node) = children
+            .iter()
+            .find(|child| probe.kind_of(**child) == Some(syntax::IDENTIFIER))
+        else {
+            continue;
+        };
+        let Some(symbol) = probe.node(*name_node).symbol else {
+            continue;
+        };
+        let Some(initializer) = children.iter().rev().find(|child| {
+            **child != *name_node && probe.kind_of(**child) != Some(syntax::IDENTIFIER)
+        }) else {
+            lowered
+                .diagnostics
+                .push(probe.unsupported(id, "a module-scope variable with no initializer"));
+            continue;
+        };
+
+        let Some(value) = probe.constant_value(*initializer) else {
+            lowered.diagnostics.push(probe.unsupported(
+                id,
+                "a module-scope variable whose initializer is not constant",
+            ));
+            continue;
+        };
+        let Some(ty) = probe.type_of(*name_node) else {
+            lowered
+                .diagnostics
+                .push(probe.unrepresentable(*name_node, "a module-scope variable"));
+            continue;
+        };
+        if !ty.is_scalar() {
+            lowered
+                .diagnostics
+                .push(probe.unsupported(id, "a module-scope variable holding a reference"));
+            continue;
+        }
+
+        // `const` is a value, not storage. The kind lives on the enclosing
+        // `VariableDeclarationList`, not on the declaration itself.
+        // The kind lives on the enclosing `VariableDeclarationList`, which is
+        // the declaration's parent -- except when the encoder wraps the list in
+        // a `VariableStatement`, so the flags are taken from whichever ancestor
+        // is the list.
+        let kind = probe
+            .ancestor(id, syntax::VARIABLE_DECLARATION_LIST)
+            .map_or(nts_semantic_schema::VariableKind::Var, |list| {
+                nts_semantic_schema::VariableKind::from_flags(probe.node(list).flags)
+            });
+        if kind == nts_semantic_schema::VariableKind::Const {
+            scope.constants.insert(symbol.0, value);
+            continue;
+        }
+
+        let global = u32::try_from(lowered.program.globals.len()).unwrap_or(u32::MAX);
+        lowered.program.globals.push(super::Global {
+            name: probe
+                .node(*name_node)
+                .text
+                .clone()
+                .unwrap_or_else(|| format!("global{global}")),
+            ty: ty.clone(),
+            initial: value,
+            exported: false,
+            origin: probe.origin(*name_node),
+        });
+        scope.variables.insert(symbol.0, global);
+        scope.types.push(ty);
+    }
+    scope
+}
+
 /// Lower every function declaration in a snapshot.
 #[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
+    let module = collect_module_scope(snapshot, &mut lowered);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
@@ -69,7 +184,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
                     .collect()
             };
             for member in members {
-                let mut builder = FuncBuilder::new(snapshot);
+                let mut builder = FuncBuilder::within(snapshot, module.clone());
                 match builder.lower_method(id, member) {
                     Ok(func) => lowered.program.funcs.push(func),
                     Err(diagnostic) => lowered.diagnostics.push(diagnostic),
@@ -82,7 +197,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         if node.kind != NodeKind::Syntax(syntax::FUNCTION_DECLARATION) {
             continue;
         }
-        let mut builder = FuncBuilder::new(snapshot);
+        let mut builder = FuncBuilder::within(snapshot, module.clone());
         match builder.lower_function(id) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => lowered.diagnostics.push(diagnostic),
@@ -334,6 +449,8 @@ struct FuncBuilder<'a> {
     layouts: Vec<Layout>,
     /// The receiver, in a method.
     this: Option<ValueId>,
+    /// What the module declares outside any function.
+    module: ModuleScope,
 }
 
 impl<'a> FuncBuilder<'a> {
@@ -350,6 +467,15 @@ impl<'a> FuncBuilder<'a> {
             bindings: rustc_hash::FxHashMap::default(),
             layouts: Vec::new(),
             this: None,
+            module: ModuleScope::default(),
+        }
+    }
+
+    /// The same, knowing what the module declares.
+    fn within(snapshot: &'a SemanticSnapshot, module: ModuleScope) -> Self {
+        Self {
+            module,
+            ..Self::new(snapshot)
         }
     }
 
@@ -495,6 +621,70 @@ impl<'a> FuncBuilder<'a> {
             |ty| describe(self.snapshot, *ty),
         );
         self.unsupported(id, &format!("{what} of unrepresentable type ({named})"))
+    }
+
+    /// The nearest ancestor of a given kind.
+    fn ancestor(&self, id: NodeId, kind: u16) -> Option<NodeId> {
+        let mut at = self.node(id).parent;
+        while let Some(parent) = at {
+            if self.kind_of(parent) == Some(kind) {
+                return Some(parent);
+            }
+            at = self.node(parent).parent;
+        }
+        None
+    }
+
+    /// Whether a node has a function or method above it.
+    fn is_within_a_function(&self, id: NodeId) -> bool {
+        let mut at = self.node(id).parent;
+        while let Some(parent) = at {
+            if matches!(
+                self.kind_of(parent),
+                Some(
+                    syntax::FUNCTION_DECLARATION | syntax::METHOD_DECLARATION | syntax::CONSTRUCTOR
+                )
+            ) {
+                return true;
+            }
+            at = self.node(parent).parent;
+        }
+        false
+    }
+
+    /// An expression's value, when it is one the checker or this compiler can
+    /// work out without running anything.
+    fn constant_value(&self, id: NodeId) -> Option<f64> {
+        match self.kind_of(id) {
+            // A boolean's storage is its truth value. `Global::ty` says which of
+            // the two a zero means.
+            Some(syntax::TRUE_KEYWORD) => Some(1.0),
+            Some(syntax::FALSE_KEYWORD) => Some(0.0),
+            Some(syntax::NUMERIC_LITERAL) => self
+                .node(id)
+                .text
+                .as_deref()
+                .and_then(parse_number)
+                .or_else(|| match self.snapshot.constants.get(&id) {
+                    Some(nts_semantic_schema::ConstantValue::Number(value)) => Some(*value),
+                    _ => None,
+                }),
+            Some(syntax::PREFIX_UNARY_EXPRESSION) => {
+                let NodeData::Children { small, .. } = self.node(id).data else {
+                    return None;
+                };
+                let inner = self.constant_value(*self.children(id).first()?)?;
+                match small & syntax::prefix_operator::MASK {
+                    syntax::prefix_operator::MINUS => Some(-inner),
+                    syntax::prefix_operator::PLUS => Some(inner),
+                    _ => None,
+                }
+            }
+            _ => match self.snapshot.constants.get(&id) {
+                Some(nts_semantic_schema::ConstantValue::Number(value)) => Some(*value),
+                _ => None,
+            },
+        }
     }
 
     fn unsupported(&self, id: NodeId, what: &str) -> Diagnostic {
@@ -1106,6 +1296,20 @@ impl<'a> FuncBuilder<'a> {
             .node(*lhs_node)
             .symbol
             .ok_or_else(|| self.unsupported(*lhs_node, "assignment to a computed target"))?;
+
+        // A module-scope variable is a store, not a rebinding: every function
+        // sees the same one, so there is nothing to shadow.
+        if !self.bindings.contains_key(&symbol.0)
+            && let Some(global) = self.module.variables.get(&symbol.0).copied()
+        {
+            let origin = self.origin(id);
+            self.push(OpKind::GlobalSet { global, value }, HirType::Void, origin);
+            return Ok(value);
+        }
+        if self.module.constants.contains_key(&symbol.0) {
+            return Err(self.unsupported(*lhs_node, "assigning to a `const`"));
+        }
+
         self.bindings.insert(symbol.0, value);
         Ok(value)
     }
@@ -2292,10 +2496,21 @@ impl<'a> FuncBuilder<'a> {
             .node(id)
             .symbol
             .ok_or_else(|| self.unsupported(id, "an unresolved name"))?;
-        self.bindings
-            .get(&symbol.0)
-            .copied()
-            .ok_or_else(|| self.unsupported(id, "a name declared outside this function"))
+        if let Some(value) = self.bindings.get(&symbol.0) {
+            return Ok(*value);
+        }
+
+        // Declared at module scope. A constant is its value; a variable is a
+        // load.
+        let origin = self.origin(id);
+        if let Some(constant) = self.module.constants.get(&symbol.0) {
+            return Ok(self.push(OpKind::ConstFloat(*constant), HirType::NUMBER, origin));
+        }
+        if let Some(global) = self.module.variables.get(&symbol.0) {
+            let ty = self.module.types[*global as usize].clone();
+            return Ok(self.push(OpKind::GlobalGet(*global), ty, origin));
+        }
+        Err(self.unsupported(id, "a name declared outside this function"))
     }
 
     fn lower_number(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {

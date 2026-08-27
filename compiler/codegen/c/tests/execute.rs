@@ -1143,3 +1143,46 @@ int main(void) {{
         "{printed}",
     );
 }
+
+#[test]
+fn module_scope_state_persists_between_calls() {
+    // A `let` at module scope is one location every function shares, so the
+    // answer to a call depends on the calls before it. That is the whole point
+    // and is also the thing a compiler can quietly get wrong -- by reading a
+    // stale copy, or by dropping a store nothing reads back.
+    //
+    // A `const` with a constant initializer is not storage at all: it resolves
+    // to its value at each use. `scaled` is the check on that, and its C has an
+    // immediate rather than a load.
+    let harness = format!(
+        r#"{CHECK}
+double bump(double by);
+double readCounter(void);
+double reset(void);
+bool toggle(void);
+double scaled(double x);
+int main(void) {{
+    check("bump(5)", bump(5), 47.5);
+    check("bump(5)", bump(5), 97.5);
+    check("readCounter", readCounter(), 10);
+    check("reset", reset(), 0);
+    check("readCounter after reset", readCounter(), 0);
+    check("bump(1)", bump(1), 7.5);
+
+    check("toggle", toggle() ? 1 : 0, 1);
+    check("toggle again", toggle() ? 1 : 0, 0);
+
+    // Reads a constant, so the store above cannot have touched it.
+    check("scaled(3)", scaled(3), 30);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("globals", &harness) else {
+        return;
+    };
+    assert!(
+        output.contains("ok bump(5) = 47.5"),
+        "module state should carry between calls: {output}",
+    );
+}

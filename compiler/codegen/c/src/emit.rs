@@ -151,6 +151,9 @@ pub fn emit(program: &Program) -> Emitted {
     emit_object_types(&mut writer, &origin, program);
     emit_descriptors(&mut writer, &origin, &descriptors);
     emit_literals(&mut writer, &origin, &literals);
+    if let Err(diagnostic) = emit_globals(&mut writer, program) {
+        diagnostics.push(diagnostic);
+    }
 
     // Forward declarations, so a call does not depend on definition order — and
     // only for functions that actually have a definition.
@@ -392,6 +395,42 @@ pub fn c_identifier(name: &str) -> String {
 fn literal_name(literals: &[String], text: &str) -> String {
     let index = literals.iter().position(|known| known == text).unwrap_or(0);
     format!("nts_str_{index}")
+}
+
+/// The C name of a module-scope variable.
+fn global_name(program: &Program, global: u32) -> String {
+    program
+        .globals
+        .get(global as usize)
+        .map_or_else(|| format!("nts_global_{global}"), |g| c_identifier(&g.name))
+}
+
+/// Module-scope variables, as file-scope storage.
+///
+/// `static` unless exported, so a name a program keeps to itself does not become
+/// part of the artifact's ABI -- and so the linker can drop one nothing reads,
+/// which is the same reachability argument `--gc-sections` makes for functions.
+fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagnostic> {
+    for global in &program.globals {
+        let ty = c_type(&global.ty, &global.origin)?;
+        let visibility = if global.exported { "" } else { "static " };
+        writer.line(
+            &global.origin,
+            format!(
+                "{visibility}{ty} {} = {};",
+                c_identifier(&global.name),
+                if matches!(global.ty, HirType::Bool) {
+                    (global.initial != 0.0).to_string()
+                } else {
+                    float_literal(global.initial)
+                }
+            ),
+        );
+    }
+    if !program.globals.is_empty() {
+        writer.blank(&program.globals[0].origin);
+    }
+    Ok(())
 }
 
 /// A double as a C expression.
@@ -1405,6 +1444,12 @@ fn emit_op(
         // Enough digits to round-trip an f64 exactly. Fewer would change the
         // program's arithmetic.
         OpKind::ConstFloat(v) => format!("{name} = {};", float_literal(*v)),
+        OpKind::GlobalGet(global) => format!("{name} = {};", global_name(context.program, *global)),
+        OpKind::GlobalSet { global, value } => format!(
+            "{} = {};",
+            global_name(context.program, *global),
+            value_name(*value)
+        ),
         OpKind::ConstBool(v) => format!("{name} = {v};"),
         // A literal is immutable and known now, so it is static data rather
         // than an allocation. This is the difference between a string-heavy
