@@ -94,10 +94,33 @@ typedef struct NtsHeader {
     uint32_t length;
 } NtsHeader;
 
-typedef NtsHeader NtsArray;
 typedef NtsHeader NtsString;
 
+/* An array is a header, a capacity, and a pointer to its elements.
+ *
+ * RFC 8.2 said an array and a string differ by descriptor rather than by shape,
+ * with the elements inline after the header. That is right for a string and
+ * wrong for an array, and the difference is `push`: an array grows, and growing
+ * something whose elements are inline means moving it, which invalidates every
+ * reference anyone holds. A string never grows, so it keeps the inline shape and
+ * pays nothing for a field it would never use.
+ *
+ * `elements` points just past the struct until something grows the array, so a
+ * fixed array still has its contents next to its header and reads them with the
+ * same locality. What it costs is one load, and that load is loop-invariant --
+ * clang hoists it out of any loop that does not call something which could
+ * grow the array, which is most loops. */
+typedef struct NtsArray {
+    NtsHeader header;
+    /* Elements the block can hold. `header.length` is how many it does hold. */
+    uint32_t capacity;
+    void *elements;
+} NtsArray;
+
+/* The inline elements of a string. */
 #define NTS_ELEMENTS(a, T) ((T *)((unsigned char *)(a) + sizeof(NtsHeader)))
+/* The elements of an array, wherever they are. */
+#define NTS_ITEMS(a, T) ((T *)((a)->elements))
 
 /* A string is a sequence of UTF-16 code units, which is what JavaScript means
  * by one: `length` counts them and `charCodeAt` indexes them. Storing UTF-8
@@ -221,6 +244,14 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  * -- except that `NaN === NaN` is false, so a `NaN` is never found. `includes`
  * uses SameValueZero and *does* find one, which is the one place the two differ
  * and the one thing an implementation is likely to get wrong. */
+/* Growth. `push` returns the new length, which is what the expression is worth
+ * in JavaScript, and reallocates the element block when the capacity runs out --
+ * doubling, so a loop of pushes is linear rather than quadratic.
+ *
+ * The array object itself never moves, which is the whole reason the elements
+ * are not inline: every reference anyone holds stays valid. */
+double nts_array_push(NtsArray *a, double value);
+double nts_array_pop(NtsArray *a);
 double nts_array_index_of(const NtsArray *a, double needle);
 double nts_array_last_index_of(const NtsArray *a, double needle);
 bool nts_array_includes(const NtsArray *a, double needle);
@@ -266,8 +297,8 @@ static inline double nts_str_char_code_at(const NtsString *s, double at) {
 /* One unsigned comparison catches a negative index too: it wraps to something
  * enormous, which is not less than the length. */
 static inline uint32_t nts_check(const NtsArray *array, uint32_t index) {
-    if (index >= array->length) {
-        nts_bounds((double)index, array->length);
+    if (index >= array->header.length) {
+        nts_bounds((double)index, array->header.length);
     }
     return index;
 }
@@ -276,9 +307,9 @@ static inline uint32_t nts_check(const NtsArray *array, uint32_t index) {
  * `xs[1.5]` is a property in JavaScript, not a slot. NaN fails the first
  * comparison. */
 static inline uint32_t nts_index(const NtsArray *array, double index) {
-    if (!(index >= 0.0 && index < (double)array->length
+    if (!(index >= 0.0 && index < (double)array->header.length
           && index == (double)(uint32_t)index)) {
-        nts_bounds(index, array->length);
+        nts_bounds(index, array->header.length);
     }
     return (uint32_t)index;
 }

@@ -1361,3 +1361,51 @@ int main(void) {{
         "`super.area()` must not dispatch back to the caller: {output}",
     );
 }
+
+#[test]
+fn an_array_grows_without_moving() {
+    // The point of putting an array's elements in a block it points at rather
+    // than inline: it can grow under a reference someone else is holding.
+    // `sharedGrowth` is that case, and it is the one an inline representation
+    // cannot do at all -- growing would move the object and leave the alias
+    // pointing at nothing.
+    //
+    // Every expected value came from running the same `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+double grow(double n);
+double drain(double n);
+double lengthAfterPush(double extra);
+double sharedGrowth(double n);
+int main(void) {{
+    /* 0 + 2 + 4 + ... + 2(n-1) = n(n-1) */
+    check("grow(0)", grow(0), 0);
+    check("grow(1)", grow(1), 0);
+    check("grow(10)", grow(10), 90);
+    /* Past the initial capacity of four, so the block has been reallocated
+       three times by here. */
+    check("grow(100)", grow(100), 9900);
+
+    check("drain(10)", drain(10), 45);
+    check("drain(0)", drain(0), 0);
+
+    check("lengthAfterPush", lengthAfterPush(9), 4);
+
+    /* Two pushes through `xs`, both visible through `alias`. */
+    check("sharedGrowth(5)", sharedGrowth(5), 206);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = run("growable", &harness) else {
+        return;
+    };
+    assert!(
+        output.contains("ok sharedGrowth(5) = 206"),
+        "an alias must see what was pushed through the other name: {output}",
+    );
+    assert!(
+        output.contains("ok grow(100) = 9900"),
+        "growing past the initial capacity must not lose elements: {output}",
+    );
+}

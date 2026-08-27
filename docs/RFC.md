@@ -623,6 +623,27 @@ ObjectHeader
 
 The exact layout may differ by provider. It is not public ABI.
 
+**Amended, after implementing it.** A string and an array do *not* have the same
+shape, and trying to give them one was wrong. A string keeps its code units
+inline after the header, which is right: it never changes length, so inline
+storage costs nothing and buys locality. An array keeps a capacity and a pointer
+to its elements, because `push` exists — growing something whose elements are
+inline means moving the object, and moving it invalidates every reference anyone
+holds. JavaScript promises the opposite: an array grows under every reference to
+it at once.
+
+The pointer starts out addressing the block immediately after the array's own
+header, so an array nothing grows still reads its elements with the locality
+inline storage had. What it costs is one load, and that load is loop-invariant:
+clang hoists it out of any loop that does not call something which could grow the
+array. Measured on the `arrays` benchmark, the difference was nothing.
+
+The alternative — deciding per array type whether it can grow, and using two
+representations — was considered and rejected. It is sound only with a
+whole-program analysis, because a `number[]` parameter can receive either kind,
+and the coarse version of it makes one `push` anywhere slow down every array in
+the program.
+
 ## 8.3 Reference-field descriptions
 
 Fixed-layout objects may use pointer bitmaps.

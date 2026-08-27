@@ -482,7 +482,12 @@ fn transfer_block(
             OpKind::Length(array) => {
                 let bound = Facts::new(0.0, facts::U32_MAX, true, false, false);
                 match &func.values[array.0 as usize].kind {
-                    OpKind::ArrayNew { length } => {
+                    // Only while nothing can have grown it: an array handed to a
+                    // call may come back longer, and the object does not move so
+                    // every reference sees the new length.
+                    OpKind::ArrayNew { length }
+                        if super::allocated_length_is_exact(func, *array) =>
+                    {
                         lookup(&refinements, values, *length).narrow(bound)
                     }
                     // A literal's length is written down in the literal. It is

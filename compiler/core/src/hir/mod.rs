@@ -745,6 +745,27 @@ pub fn operands_of(kind: &OpKind) -> Vec<ValueId> {
     verify::operands(kind)
 }
 
+/// Whether an array's allocated length is still its length.
+///
+/// `[1, 2, 3].length` is 3, and that is what lets an index into a literal be
+/// proven in bounds by the interval domain alone. It stops being true the moment
+/// something can `push`: the array object does not move, so every reference to
+/// it stays valid and every one of them sees a longer array.
+///
+/// The rule is deliberately blunt -- an array that is handed to *anything* loses
+/// the claim, because what a callee does with it is not visible here. An array
+/// literal that is only indexed keeps it, which is the case the claim exists for.
+#[must_use]
+pub fn allocated_length_is_exact(func: &Func, array: ValueId) -> bool {
+    if !matches!(func.values[array.0 as usize].kind, OpKind::ArrayNew { .. }) {
+        return false;
+    }
+    !func
+        .values
+        .iter()
+        .any(|op| matches!(&op.kind, OpKind::Call { args, .. } if args.contains(&array)))
+}
+
 /// The values a terminator reads.
 #[must_use]
 pub fn operands_of_terminator(terminator: &Terminator) -> Vec<ValueId> {

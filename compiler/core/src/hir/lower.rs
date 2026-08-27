@@ -2876,6 +2876,11 @@ impl<'a> FuncBuilder<'a> {
 
         // (runtime function, arguments after the receiver, result)
         let (helper, arity, ty) = match name.as_str() {
+            // `push` returns the new length, which is what the expression is
+            // worth in JavaScript, and `pop` returns what it removed -- NaN from
+            // an empty array, because that is what `undefined` is for a number.
+            "push" => ("nts_array_push", 1, HirType::NUMBER),
+            "pop" => ("nts_array_pop", 0, HirType::NUMBER),
             "indexOf" => ("nts_array_index_of", 1, HirType::NUMBER),
             "lastIndexOf" => ("nts_array_last_index_of", 1, HirType::NUMBER),
             "includes" => ("nts_array_includes", 1, HirType::Bool),

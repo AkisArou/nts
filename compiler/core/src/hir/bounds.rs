@@ -119,7 +119,9 @@ fn provably_in_bounds(
 /// an emoji is two.
 fn length_facts(func: &Func, analysis: &Analysis, at: BlockId, array: ValueId) -> Facts {
     match &func.values[array.0 as usize].kind {
-        OpKind::ArrayNew { length } => analysis.get_at(at, *length),
+        OpKind::ArrayNew { length } if super::allocated_length_is_exact(func, array) => {
+            analysis.get_at(at, *length)
+        }
         OpKind::ConstString(text) => {
             let units = text.encode_utf16().count();
             Facts::constant(f64::from(u32::try_from(units).unwrap_or(u32::MAX)))

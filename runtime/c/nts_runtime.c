@@ -128,7 +128,7 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *)) {
     return;
   }
   if (descriptor->kind == NTS_KIND_ARRAY) {
-    NtsHeader **slots = NTS_ELEMENTS(object, NtsHeader *);
+    NtsHeader **slots = NTS_ITEMS((const NtsArray *)object, NtsHeader *);
     for (uint32_t index = 0; index < object->length; index++) {
       if (slots[index]) {
         visit(slots[index]);
@@ -462,18 +462,58 @@ NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length) {
     abort();
   }
   uint32_t count = (uint32_t)length;
-  size_t bytes = sizeof(NtsHeader) + (size_t)count * descriptor->size;
+  size_t bytes = sizeof(NtsArray) + (size_t)count * descriptor->size;
   NtsArray *array = (NtsArray *)nts_alloc(bytes);
-  array->descriptor = descriptor;
-  array->reserved = 1;
+  array->header.descriptor = descriptor;
+  array->header.reserved = 1;
   nts_allocated++;
-  array->flags = 0;
-  array->length = count;
+  array->header.flags = 0;
+  array->header.length = count;
+  array->capacity = count;
+  /* Just past the struct, so an array nothing grows keeps its elements next to
+   * its header and reads them with the locality inline storage had. */
+  array->elements = (unsigned char *)array + sizeof(NtsArray);
   /* Zeroed rather than left as holes: there is no `undefined` in a double, so
    * a hole has no representation to leave behind. */
-  memset((unsigned char *)array + sizeof(NtsHeader), 0,
-         (size_t)count * descriptor->size);
+  memset(array->elements, 0, (size_t)count * descriptor->size);
   return array;
+}
+
+double nts_array_push(NtsArray *a, double value) {
+  if (a->header.length == a->capacity) {
+    /* Doubling, so a loop of pushes is linear rather than quadratic. The first
+     * growth moves the elements out of the block the array itself lives in, and
+     * every one after reallocates -- but the array object stays where it is, so
+     * nothing holding a reference to it notices. That is the whole reason the
+     * elements are not inline. */
+    uint32_t wanted = a->capacity ? a->capacity * 2u : 4u;
+    size_t bytes = (size_t)wanted * a->header.descriptor->size;
+    void *moved = malloc(bytes);
+    if (!moved) {
+      fprintf(stderr, "nts: out of memory growing an array\n");
+      abort();
+    }
+    memcpy(moved, a->elements,
+           (size_t)a->header.length * a->header.descriptor->size);
+    if (a->elements != (unsigned char *)a + sizeof(NtsArray)) {
+      /* Not the inline block, so it was one of ours to free. */
+      free(a->elements);
+    }
+    a->elements = moved;
+    a->capacity = wanted;
+  }
+  NTS_ITEMS(a, double)[a->header.length] = value;
+  a->header.length++;
+  return (double)a->header.length;
+}
+
+double nts_array_pop(NtsArray *a) {
+  /* Popping nothing is `undefined`, which for a number is NaN. */
+  if (a->header.length == 0) {
+    return (double)NAN;
+  }
+  a->header.length--;
+  return NTS_ITEMS(a, double)[a->header.length];
 }
 
 /* Copy a string into two-byte slots, whichever way it was stored. */
@@ -762,14 +802,14 @@ NtsString *nts_str_substring(const NtsString *s, double from, double to) {
 
 /* The elements of an array of numbers. */
 static double *nts_numbers(const NtsArray *a) {
-  return NTS_ELEMENTS(a, double);
+  return NTS_ITEMS(a, double);
 }
 
 double nts_array_index_of(const NtsArray *a, double needle) {
   /* Strict equality, so a NaN is never found -- `[NaN].indexOf(NaN)` is -1.
    * `includes` differs here, deliberately. */
   const double *items = nts_numbers(a);
-  for (uint32_t at = 0; at < a->length; at++) {
+  for (uint32_t at = 0; at < a->header.length; at++) {
     if (items[at] == needle) {
       return (double)at;
     }
@@ -779,8 +819,8 @@ double nts_array_index_of(const NtsArray *a, double needle) {
 
 double nts_array_last_index_of(const NtsArray *a, double needle) {
   const double *items = nts_numbers(a);
-  for (uint32_t step = 0; step < a->length; step++) {
-    uint32_t at = a->length - 1u - step;
+  for (uint32_t step = 0; step < a->header.length; step++) {
+    uint32_t at = a->header.length - 1u - step;
     if (items[at] == needle) {
       return (double)at;
     }
@@ -793,7 +833,7 @@ bool nts_array_includes(const NtsArray *a, double needle) {
    * difference is the thing an implementation is most likely to get wrong. */
   const double *items = nts_numbers(a);
   const int wanted_nan = needle != needle;
-  for (uint32_t at = 0; at < a->length; at++) {
+  for (uint32_t at = 0; at < a->header.length; at++) {
     if (wanted_nan ? items[at] != items[at] : items[at] == needle) {
       return true;
     }
@@ -806,9 +846,9 @@ double nts_array_at(const NtsArray *a, double at) {
    * for a number is NaN, the only value a double has to say "not one". */
   at = nts_to_integer(at);
   if (at < 0) {
-    at += (double)a->length;
+    at += (double)a->header.length;
   }
-  if (at < 0 || at >= (double)a->length) {
+  if (at < 0 || at >= (double)a->header.length) {
     return (double)NAN;
   }
   return nts_numbers(a)[(uint32_t)at];
@@ -816,7 +856,7 @@ double nts_array_at(const NtsArray *a, double at) {
 
 NtsArray *nts_array_fill(NtsArray *a, double value) {
   double *items = nts_numbers(a);
-  for (uint32_t at = 0; at < a->length; at++) {
+  for (uint32_t at = 0; at < a->header.length; at++) {
     items[at] = value;
   }
   /* In place, returning what it was given -- which is what makes
@@ -826,20 +866,20 @@ NtsArray *nts_array_fill(NtsArray *a, double value) {
 
 NtsArray *nts_array_reverse(NtsArray *a) {
   double *items = nts_numbers(a);
-  for (uint32_t at = 0; at * 2u + 1u < a->length; at++) {
+  for (uint32_t at = 0; at * 2u + 1u < a->header.length; at++) {
     double swap = items[at];
-    items[at] = items[a->length - 1u - at];
-    items[a->length - 1u - at] = swap;
+    items[at] = items[a->header.length - 1u - at];
+    items[a->header.length - 1u - at] = swap;
   }
   return a;
 }
 
 NtsArray *nts_array_slice(const NtsArray *a, double from, double to) {
   /* Negative counts from the end, as `String.prototype.slice` does. */
-  uint32_t start = nts_str_clamp(from, a->length, 1);
-  uint32_t end = nts_str_clamp(to, a->length, 1);
+  uint32_t start = nts_str_clamp(from, a->header.length, 1);
+  uint32_t end = nts_str_clamp(to, a->header.length, 1);
   uint32_t count = end > start ? end - start : 0u;
-  NtsArray *out = nts_array_new(a->descriptor, (double)count);
+  NtsArray *out = nts_array_new(a->header.descriptor, (double)count);
   if (count != 0) {
     memcpy(nts_numbers(out), nts_numbers(a) + start,
            (size_t)count * sizeof(double));

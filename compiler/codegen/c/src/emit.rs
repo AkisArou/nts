@@ -1542,7 +1542,18 @@ fn managed_op(
         }
         OpKind::Length(array) => {
             let target = c_type(&op.ty, &op.origin)?;
-            format!("{name} = ({target}){}->length;", value_name(*array))
+            // A string keeps its length in the header; an array has a header of
+            // its own inside a larger struct, because it can grow and a string
+            // cannot.
+            let of = if matches!(
+                func.values[array.0 as usize].ty,
+                HirType::Managed(ManagedType::Array(_))
+            ) {
+                format!("{}->header.length", value_name(*array))
+            } else {
+                format!("{}->length", value_name(*array))
+            };
+            format!("{name} = ({target}){of};")
         }
         OpKind::ArrayGet {
             array,
@@ -1556,7 +1567,7 @@ fn managed_op(
             )?;
             let slot = index_expression(func, *array, *index, *checked);
             format!(
-                "{name} = NTS_ELEMENTS({}, {element})[{slot}];",
+                "{name} = NTS_ITEMS({}, {element})[{slot}];",
                 value_name(*array)
             )
         }
@@ -1573,7 +1584,7 @@ fn managed_op(
             )?;
             let slot = index_expression(func, *array, *index, *checked);
             format!(
-                "NTS_ELEMENTS({}, {element})[{slot}] = {};",
+                "NTS_ITEMS({}, {element})[{slot}] = {};",
                 value_name(*array),
                 value_name(*stored)
             )
