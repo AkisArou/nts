@@ -34,3 +34,10 @@ node_modules/
 #     https://github.com/nodejs/node.git third_party/node
 #   cd third_party/node && git sparse-checkout set lib
 /third_party/node
+
+# Deno, cloned sparsely to measure its extension JS and its Rust crates against
+# the Node question. Not vendored, for the same reason as the others.
+#   git clone --depth 1 --filter=blob:none --sparse \
+#     https://github.com/denoland/deno.git third_party/deno
+#   cd third_party/deno && git sparse-checkout set ext core
+/third_party/deno
