@@ -9,7 +9,15 @@ export function measure(run) {
 
   // Let the JIT reach steady state. Timing a cold interpreter would flatter us
   // enormously and mean nothing.
-  for (let i = 0; i < 20000; i++) {
+  //
+  // Bounded by *time* as well as by count. Twenty thousand iterations is right
+  // for a one-microsecond case and absurd for a twenty-millisecond one, where
+  // it is eight minutes of warmup for a half-second measurement -- and a
+  // benchmark that takes eight minutes to warm up does not get run. A long
+  // call tiers up inside itself through on-stack replacement, so it does not
+  // need the count anyway.
+  const until = process.hrtime.bigint() + 300_000_000n;
+  for (let i = 0; i < 20000 && process.hrtime.bigint() < until; i++) {
     run();
   }
 

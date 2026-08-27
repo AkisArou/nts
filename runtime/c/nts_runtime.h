@@ -313,6 +313,24 @@ static inline uint16_t nts_unit(const NtsString *s, uint32_t at) {
  * character at 0, not an error and not NaN -- rejecting the fraction was the
  * first thing differential testing found here. */
 static inline double nts_to_integer(double value) {
+    /* The case every index in every real program actually is: a value whose
+     * truncation fits in an `int64`. That is one instruction, and the round
+     * trip back to a double is exact -- a number in this range that was
+     * already whole is unchanged, and one that was not is truncated toward
+     * zero, which is what ToIntegerOrInfinity says.
+     *
+     * `floor` is a call into libm, and a call inside a scan loop costs more
+     * than the loop does. It clobbers every caller-saved register, so the
+     * constants the surrounding code was holding across the loop are spilled
+     * and reloaded around it -- five reloads per call in the string
+     * benchmark, for a truncation.
+     *
+     * NaN fails both comparisons and falls through to the check below; the
+     * infinities fail them too and reach `floor`, which returns them
+     * unchanged, as ToIntegerOrInfinity requires. */
+    if (value > -9223372036854775808.0 && value < 9223372036854775808.0) {
+        return (double)(int64_t)value;
+    }
     if (value != value) {
         return 0.0;
     }

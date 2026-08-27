@@ -103,7 +103,17 @@ fn provably_in_bounds(
     // Where the length is known, the interval settles it. The *smallest*
     // possible length is what has to exceed the index, since a larger one only
     // helps.
-    let length = length_facts(func, analysis, field_lengths, at, array);
+    // Two independent sources, and either alone can settle it: what the
+    // container's *shape* says, and what the program proved about a length it
+    // read for itself. `BOTTOM` from the first means "nothing structural to
+    // say" rather than an empty set, so it is not narrowed into.
+    let structural = length_facts(func, analysis, field_lengths, at, array);
+    let computed = computed_length(func, analysis, at, array);
+    let length = if structural.is_bottom() {
+        computed
+    } else {
+        structural.narrow(computed)
+    };
     if !length.is_bottom() && facts.hi < length.lo {
         return true;
     }
@@ -114,6 +124,41 @@ fn provably_in_bounds(
     analysis.guarded_by(at, index, |candidate| {
         matches!(func.values[candidate.0 as usize].kind, OpKind::Length(of) if of == array)
     })
+}
+
+/// A length the program computed for itself, refined by whatever guarded this
+/// block.
+///
+/// `if (word.length > 0) { word.charCodeAt(0) }` is the shape, and nothing
+/// structural can prove it: a slice's length is `[0, n]` whatever it was cut
+/// from, and it is the *branch* that rules out the empty case. The fact is
+/// already there — `word.length` is an ordinary value and the comparison
+/// narrowed it — so all this does is look.
+///
+/// # Why only for a string
+///
+/// A string's length is fixed for its lifetime, so `Length(s)` is the same
+/// number wherever it is read and a fact proved about it anywhere holds here.
+/// An array's is not: `push` makes a length read from before it a fact about
+/// the past, and using one to bound a later index would remove a check that
+/// can fail.
+fn computed_length(func: &Func, analysis: &Analysis, at: BlockId, array: ValueId) -> Facts {
+    if !matches!(
+        func.values[array.0 as usize].ty,
+        super::HirType::Managed(super::ManagedType::String)
+    ) {
+        return Facts::TOP;
+    }
+    let mut known = Facts::TOP;
+    for (index, value) in func.values.iter().enumerate() {
+        if matches!(value.kind, OpKind::Length(of) if of == array) {
+            let length = analysis.get_at(at, ValueId(u32::try_from(index).unwrap_or(0)));
+            if !length.is_bottom() {
+                known = known.narrow(length);
+            }
+        }
+    }
+    known
 }
 
 /// What is known about an array's — or a string's — length.

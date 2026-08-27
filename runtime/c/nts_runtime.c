@@ -41,6 +41,50 @@ static size_t nts_bytes_held = 0;
 
 size_t nts_live_bytes(void) { return nts_bytes_held; }
 
+#ifdef NTS_PROVIDER_RC
+/* Whether this build recycles memory itself.
+ *
+ * Not under AddressSanitizer. A recycling allocator hands the same address back
+ * after a free, which is precisely the pattern the sanitizer exists to catch --
+ * so a build made to find use-after-free must get its memory from `malloc` and
+ * give it back. The cycle collector's use-after-free was found that way and
+ * would have been invisible behind a free list.
+ *
+ * `NTS_NO_RECYCLE` forces the same, for anyone measuring what the recycling is
+ * worth. */
+#if defined(__SANITIZE_ADDRESS__) || defined(NTS_NO_RECYCLE)
+#define NTS_RECYCLES 0
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define NTS_RECYCLES 0
+#else
+#define NTS_RECYCLES 1
+#endif
+#else
+#define NTS_RECYCLES 1
+#endif
+
+/* Blocks that have been given back, by size.
+ *
+ * Reference counting knows the moment an object dies, which is what makes this
+ * worth having: the memory is free *now*, and the next allocation of that size
+ * is almost always about to happen. A parser that slices a string per token
+ * allocates and frees the same few sizes forever, and `malloc` is asked to
+ * solve a general problem it does not have.
+ *
+ * Segregated by size so a free is a push and an allocation is a pop, with no
+ * search and no coalescing. Sizes above the largest class fall through to
+ * `malloc`, which is the right tool once the allocation is large enough that
+ * one call does not matter.
+ *
+ * This is what a nursery buys a tracing collector, arrived at from the other
+ * direction: RFC 9.2's counting already knows what 9.3's collector would have
+ * to discover. */
+#define NTS_CLASS_STEP 16u
+#define NTS_CLASSES 65u /* up to 1024 bytes */
+static void *nts_recycled[NTS_CLASSES];
+#endif
+
 void *nts_alloc(size_t bytes) {
   bytes = (bytes + 15u) & ~(size_t)15u;
   nts_bytes_held += bytes;
@@ -49,6 +93,16 @@ void *nts_alloc(size_t bytes) {
   /* Its own allocation, because it will be given back. The size is kept in
    * front of the object so that `nts_free` knows what it is returning without
    * consulting the descriptor -- which a freed object may no longer have. */
+#if NTS_RECYCLES
+  size_t klass = bytes / NTS_CLASS_STEP;
+  if (klass < NTS_CLASSES && nts_recycled[klass]) {
+    void *block = nts_recycled[klass];
+    /* The list is threaded through the free blocks themselves, in the word
+     * after the size -- which is dead while the block is dead. */
+    nts_recycled[klass] = *(void **)((unsigned char *)block + 8u);
+    return (unsigned char *)block + 16u;
+  }
+#endif
   size_t *block = (size_t *)malloc(bytes + 16u);
   if (!block) {
     fprintf(stderr, "nts: out of memory\n");
@@ -79,7 +133,16 @@ void *nts_alloc(size_t bytes) {
 static void nts_free(void *object) {
 #ifdef NTS_PROVIDER_RC
   size_t *block = (size_t *)((unsigned char *)object - 16u);
-  nts_bytes_held -= *block;
+  size_t bytes = *block;
+  nts_bytes_held -= bytes;
+#if NTS_RECYCLES
+  size_t klass = bytes / NTS_CLASS_STEP;
+  if (klass < NTS_CLASSES) {
+    *(void **)((unsigned char *)block + 8u) = nts_recycled[klass];
+    nts_recycled[klass] = block;
+    return;
+  }
+#endif
   free(block);
 #else
   (void)object;
@@ -677,6 +740,22 @@ static NtsString *nts_str_range(const NtsString *s, uint32_t from,
 /* `ToIntegerOrInfinity` then a clamp into `[0, length]`, with a negative index
  * counted from the end -- which is what makes `s.slice(-2)` the last two. */
 static uint32_t nts_str_clamp(double index, uint32_t length, int relative) {
+  /* The case every real call is: a whole number the caller already computed as
+   * an index into this string. Three comparisons settle it, where the general
+   * path below costs a `trunc` and the sign handling that `s.slice(-2)` needs
+   * and this does not.
+   *
+   * The cast is defined because the range test came first: a value in
+   * `[0, length]` is inside `uint32`. And `x == (double)(uint32_t)x` is false
+   * for a fraction and for a NaN, so both fall through to the general path
+   * rather than being quietly truncated here.
+   *
+   * Worth a special case because slicing is what a parser does, and a parser
+   * indexes with integers. Two of these run per `substring`. */
+  if (index >= 0.0 && index <= (double)length &&
+      index == (double)(uint32_t)index) {
+    return (uint32_t)index;
+  }
   index = nts_to_integer(index);
   if (relative && index < 0) {
     index += (double)length;

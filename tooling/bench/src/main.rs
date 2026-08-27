@@ -520,7 +520,33 @@ fn compile(
     Ok(())
 }
 
+/// How many processes each variant is run in, best taken.
+///
+/// A best-of-five *inside* one process is not enough for a JIT. Measured over
+/// five processes, node spread 18% and bun 26% on the same case -- and a single
+/// low outlier from bun was enough to make it look 18% faster than nts on a
+/// benchmark where the two are level. Native code varies far less, but it is
+/// measured the same way so that no column gets an advantage the others do not.
+///
+/// Nearly free: compiling a case costs seconds and running it costs
+/// milliseconds, so the extra passes are lost in the build.
+const RUNS: usize = 3;
+
 fn measure(command: &mut std::process::Command) -> Result<Measured> {
+    let mut best: Option<Measured> = None;
+    for _ in 0..RUNS {
+        let attempt = measure_once(command)?;
+        if best
+            .as_ref()
+            .is_none_or(|held| attempt.ns_per_op < held.ns_per_op)
+        {
+            best = Some(attempt);
+        }
+    }
+    best.context("a benchmark produced no measurement")
+}
+
+fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
     let output = command.output().context("running a benchmark")?;
     if !output.status.success() {
         bail!(

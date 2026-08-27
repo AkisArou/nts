@@ -457,6 +457,73 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
 ///
 /// An index is `-1` or a position, and a position is bounded by a length, which
 /// is a `uint32`. So the range is exactly `[-1, 2^32 - 1]`.
+/// How long a string can be, from the operation that produced it.
+///
+/// # Why a string needs this and an array does not
+///
+/// An array's length is its allocation's, and the allocation is usually right
+/// in front of the read. A string's is not: the whole point of a tokenizer is
+/// that it makes strings whose length is never written down anywhere, and
+/// without a bound every one of them is `[0, 2^32)`.
+///
+/// That is not a bounds-check question -- string reads are already checked
+/// against a length the object carries. It is an *arithmetic* question.
+/// `total + word.length * step` with an unbounded length is a product that can
+/// leave the exactly-representable integers, so it has to be computed in
+/// doubles and truncated back with the full wrapping `ToInt32`. With a bound it
+/// is an `int64` multiply and a cast, and on `benches/cases/substrings` that
+/// difference is 27% of the benchmark.
+///
+/// # The rule
+///
+/// Every string-producing operation this compiler emits either says its length
+/// outright or bounds it by its input's, so the bound follows the chain back to
+/// a literal. Where the chain reaches something else -- a parameter, a field, a
+/// phi -- there is no bound and the caller keeps `[0, 2^32)`.
+///
+/// Only the *upper* bound is claimed. A slice can be empty whatever it was cut
+/// from, which is why every case here starts at zero.
+fn string_span(func: &Func, value: ValueId, depth: u32) -> Option<Facts> {
+    /// A slice of a slice of a slice is worth following; an unbounded chain is
+    /// not, and a cheap cap means this needs no reasoning about cycles.
+    const MAX_DEPTH: u32 = 8;
+
+    if depth > MAX_DEPTH {
+        return None;
+    }
+    let span = |of: ValueId| Some(string_span(func, of, depth + 1)?.hi);
+    Some(match &func.values[value.0 as usize].kind {
+        // A literal's length is written down in the literal. It is the count of
+        // UTF-16 code units and not of characters, which is what
+        // `String::length` means -- an emoji is two.
+        OpKind::ConstString(text) => {
+            let units = text.encode_utf16().count();
+            Facts::constant(f64::from(u32::try_from(units).unwrap_or(u32::MAX)))
+        }
+        OpKind::Binary {
+            op: super::BinOp::Concat,
+            lhs,
+            rhs,
+        } => upto(span(*lhs)? + span(*rhs)?),
+        OpKind::Call {
+            callee: super::Callee::External(name),
+            args,
+        } => match (name.as_str(), args.first()) {
+            // Both clamp into the receiver, so neither can be longer than it.
+            ("nts_str_substring" | "nts_str_slice", Some(&source)) => upto(span(source)?),
+            // One code unit, or none where the index is out of range.
+            ("nts_str_char_at", _) => upto(1.0),
+            _ => return None,
+        },
+        _ => return None,
+    })
+}
+
+/// `[0, hi]`, saturating at the largest length a string can have.
+fn upto(hi: f64) -> Facts {
+    Facts::new(0.0, hi.min(facts::U32_MAX), true, false, false)
+}
+
 fn runtime_result(name: &str) -> Option<Facts> {
     const INDEX: &[&str] = &[
         "nts_str_index_of",
@@ -559,14 +626,9 @@ fn transfer_block(
                     {
                         lookup(&refinements, values, *length).narrow(bound)
                     }
-                    // A literal's length is written down in the literal. It is
-                    // the count of UTF-16 code units and not of characters,
-                    // which is what `String::length` means -- an emoji is two.
-                    OpKind::ConstString(text) => {
-                        let units = text.encode_utf16().count();
-                        Facts::constant(f64::from(u32::try_from(units).unwrap_or(u32::MAX)))
-                    }
-                    _ => bound,
+                    // A string's length is bounded by the string it was made
+                    // from, however many slices back that is.
+                    _ => string_span(func, *array, 0).unwrap_or(bound).narrow(bound),
                 }
             }
             // A parameter keeps what its declared type said. It is an operation
