@@ -105,6 +105,43 @@ the types it observes.
   JavaScript's remainder but exactly it: ECMAScript defines `%` as truncated
   division with the sign of the dividend, and so does C99.
 
+## Two optimisations that were tried and are not here
+
+Both were written, measured, and reverted. Recording them is cheaper than
+someone writing them again.
+
+**Specializing signatures.** `specialize` proves values into integers inside a
+function and stops at its boundary, so a *number* crosses every call as a
+double. Narrowing a non-root function's parameters to the machine types the
+interprocedural analysis already proves is sound — that analysis sees every call
+site — and it makes `queens` about 7% faster.
+
+It makes `bounce` and `permute` slightly *slower*, because a parameter narrowed
+to an integer is widened straight back when the body computes something the
+analysis cannot prove whole. `Queens#getRowColumn(r, c)` is the shape: `r` is
+provably `0..8` and `c` is a recursive counter that is not, so `c + r` is
+floating point and an `int32` `r` costs two conversions. A rule that declined to
+narrow in that case removed the regression *and* the gain, because the case it
+declined was the one that paid.
+
+Net across the seven benchmarks it was inside the run-to-run spread on this
+machine. Two analyses on every compile and two more things that can be wrong is
+not worth an unmeasurable difference.
+
+**Field-held array lengths.** `this.flags[i]` is bounds-checked because the
+length of an array a *field* points at is not written down where the read is —
+unlike a local, which has its allocation in front of it. Computing it per
+`(layout, field)` over the whole program is sound under the condition
+`allocated_length_is_exact` already uses: an array handed to a call may come
+back longer.
+
+It removed no checks at all. `queens` emits seven and kept all seven: three are
+genuinely unprovable (`freeMaxs[c + r]` with an unbounded `c`), and the rest did
+not fire for a reason worth chasing only if the payoff were larger. The measured
+result was zero checks removed across every benchmark in the suite, which is a
+much better measurement than a timer on a machine whose C++ column moves 10%
+between runs.
+
 ## What is not ported yet
 
 - **nbody** needs static methods (`Body.jupiter()`) and `forEach` with a
