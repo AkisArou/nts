@@ -495,14 +495,21 @@ interface MaxListenersExceededWarning extends Error {
   count: number;
 }
 
-declare function nts_process_emit_warning(
-  name: string,
+/**
+ * A distinct binding from `nts_process_emit_warning`, because this warning is
+ * not just a name and a message: node's tests read `emitter`, `type` and
+ * `count` off the object they catch, so the object the implementation built has
+ * to be the one that is emitted. Sharing the general binding would mean
+ * sharing its signature, and a symbol that means two things is a link error
+ * waiting to happen.
+ */
+declare function nts_events_emit_max_listeners_warning(
   message: string,
-  detail: unknown,
+  warning: unknown,
 ): void;
 
 function emitWarning(warning: MaxListenersExceededWarning): void {
-  nts_process_emit_warning(warning.name, warning.message, warning);
+  nts_events_emit_max_listeners_warning(warning.message, warning);
 }
 
 /** Upstream `lib/events.js:216`. */

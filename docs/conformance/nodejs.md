@@ -52,6 +52,7 @@ rather than inferred by a rule, so the number can be audited.
 | `events` | **26 / 33** | 0 / 47 | complete but for domains, `EventTarget` and the promise forms |
 | `fs` | 11 / 260 | 39 / 68 | the sync surface; async, streams and watchers are absent |
 | `querystring` | **4 / 4** | 0 / 17 | complete |
+| `punycode` | **1 / 1** | 0 / 22 | complete |
 | `url` | — | — | not started |
 | `buffer` | **49 / 60** | 0 / 65 | complete enough for `fs` and `string_decoder` |
 | `events` | — | — | not started |
@@ -233,6 +234,21 @@ and all three were located by fuzzing against node rather than by reading:
 
 The last one is the kind of bug that survives a test suite: every single-stream
 test passes, and only reuse exposes it.
+
+## `punycode`
+
+Complete, from node v24.20.0 `lib/punycode.js`: `encode`, `decode`, `toASCII`,
+`toUnicode`, `ucs2.decode`, `ucs2.encode`, `version`. Its one test file passes.
+
+The algorithm is RFC 3492's, variable for variable — `bias`, `delta`, `damp`
+and `skew` are the RFC's names, and renaming them would only make the reference
+harder to follow.
+
+Including the deprecation warning, which node's own test asserts on. Node
+suppresses it when the caller is inside `node_modules`, on the grounds that a
+dependency's use of a deprecated module is not something the application can
+fix; a compiled program has no `node_modules` to be inside, so ours always
+warns.
 
 ## `fs`
 

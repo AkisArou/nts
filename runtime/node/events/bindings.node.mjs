@@ -5,10 +5,8 @@
 // compiled form will call whatever the runtime's warning sink turns out to be.
 import process from "node:process";
 
-globalThis.nts_process_emit_warning = (name, message, detail) => {
-  // Node's tests read `emitter`, `type` and `count` off the warning they catch,
-  // so the object the implementation built is the one that must be emitted.
-  const warning = detail instanceof Error ? detail : new Error(message);
-  warning.name = name;
-  process.emitWarning(warning);
+globalThis.nts_events_emit_max_listeners_warning = (message, warning) => {
+  // The object the implementation built, not a fresh one: node's tests read
+  // `emitter`, `type` and `count` off the warning they catch.
+  process.emitWarning(warning instanceof Error ? warning : new Error(message));
 };
