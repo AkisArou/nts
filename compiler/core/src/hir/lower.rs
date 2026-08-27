@@ -680,6 +680,15 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         if node.kind != NodeKind::Syntax(syntax::FUNCTION_DECLARATION) {
             continue;
         }
+        // `declare function f(): number` has no body because it is *external*,
+        // not because this lowering failed to understand it. Refusing it says
+        // the opposite, and -- since a caller of a refused function is refused
+        // too -- took every function that reaches the platform with it. An
+        // overload signature has the same shape and the same answer: the
+        // implementation that follows is the one to lower.
+        if !FuncBuilder::new(snapshot).has_a_body(id) {
+            continue;
+        }
         let mut builder = FuncBuilder::within(
             snapshot,
             module.clone(),
@@ -1601,6 +1610,17 @@ impl<'a> FuncBuilder<'a> {
                 _ => None,
             },
         }
+    }
+
+    /// Whether a declaration carries an implementation.
+    ///
+    /// What separates a function this program *defines* from one it only names:
+    /// an ambient `declare`, an overload signature, and a method signature on an
+    /// interface all lack one.
+    fn has_a_body(&self, id: NodeId) -> bool {
+        self.children(id)
+            .into_iter()
+            .any(|child| self.kind_of(child) == Some(syntax::BLOCK))
     }
 
     fn unsupported(&self, id: NodeId, what: &str) -> Diagnostic {
@@ -3966,7 +3986,14 @@ impl<'a> FuncBuilder<'a> {
 
         // A callee inside the compiled program becomes a static call; one outside
         // it is still typed exactly, and the definition comes from elsewhere.
-        let callee = if target.callee.is_some() {
+        //
+        // "Inside" means *defined* here, not merely declared here. A
+        // `declare function` has a declaration node and no body, and calling it
+        // directly would name a function this program never emits.
+        let defined = target
+            .callee
+            .is_some_and(|declaration| self.has_a_body(declaration));
+        let callee = if defined {
             Callee::Direct(name)
         } else {
             Callee::External(name)

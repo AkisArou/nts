@@ -166,6 +166,18 @@ pub fn emit(program: &Program) -> Emitted {
     for (signature, _, _) in &bodies {
         writer.line(&origin, format!("{signature};"));
     }
+    // And for the functions it calls and does *not* define. A
+    // `declare function` is a promise that a symbol exists at link time, and
+    // without a prototype the call is an implicit declaration -- which C99
+    // removed and clang rejects.
+    match external_prototypes(program) {
+        Ok(prototypes) => {
+            for prototype in prototypes {
+                writer.line(&origin, prototype);
+            }
+        }
+        Err(diagnostic) => diagnostics.push(diagnostic),
+    }
     writer.blank(&origin);
 
     emit_object_descriptors(&mut writer, &origin, program);
@@ -183,6 +195,90 @@ pub fn emit(program: &Program) -> Emitted {
         writer,
         diagnostics,
     }
+}
+
+/// Prototypes for every function this program calls and does not define.
+///
+/// The signature comes from the call sites, because that is the only place it
+/// exists: an external callee has no `Func` to read parameters off. Where two
+/// calls disagree the program is asking for one symbol with two signatures,
+/// which C would take and the linker would not, so it is a diagnostic here.
+///
+/// # Why the runtime's own helpers are excluded by asking rather than by name
+///
+/// They are already declared by the included header, and declaring them twice
+/// with types derived from a call site would conflict with the real
+/// declaration. The test is whether the header mentions the name, not whether
+/// the name starts with `nts_`: a program is entitled to write
+/// `declare function nts_process_cwd()`, and a naming convention would silently
+/// leave that one undeclared -- which is the bug this function exists to fix.
+fn external_prototypes(program: &Program) -> Result<Vec<String>, Diagnostic> {
+    let mut seen: rustc_hash::FxHashMap<&str, String> = rustc_hash::FxHashMap::default();
+    let mut prototypes = Vec::new();
+    for func in &program.funcs {
+        for op in &func.values {
+            let OpKind::Call {
+                callee: Callee::External(name),
+                args,
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
+            if runtime_declares(name) {
+                continue;
+            }
+            let mut parameters = Vec::new();
+            for arg in args {
+                parameters.push(c_type_of(
+                    program,
+                    &func.values[arg.0 as usize].ty,
+                    &op.origin,
+                )?);
+            }
+            if parameters.is_empty() {
+                parameters.push("void".to_owned());
+            }
+            let prototype = format!(
+                "{} {}({});",
+                c_type_of(program, &op.ty, &op.origin)?,
+                c_identifier(name),
+                parameters.join(", ")
+            );
+            match seen.get(name.as_str()) {
+                Some(existing) if *existing != prototype => {
+                    return Err(Diagnostic::error(
+                        "NTS2007",
+                        format!(
+                            "`{name}` is called with two different signatures, so there is no \
+                             one declaration to emit: `{existing}` and `{prototype}`"
+                        ),
+                        op.origin.location,
+                    ));
+                }
+                Some(_) => {}
+                None => {
+                    seen.insert(name.as_str(), prototype.clone());
+                    prototypes.push(prototype);
+                }
+            }
+        }
+    }
+    prototypes.sort();
+    Ok(prototypes)
+}
+
+/// Whether the runtime header already declares a name.
+///
+/// A whole-word search, so `nts_str_slice` does not count as a declaration of
+/// `nts_str_slice_into`.
+fn runtime_declares(name: &str) -> bool {
+    RUNTIME_HEADER.match_indices(name).any(|(at, _)| {
+        let before = RUNTIME_HEADER[..at].chars().next_back();
+        let after = RUNTIME_HEADER[at + name.len()..].chars().next();
+        let boundary = |c: Option<char>| !c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+        boundary(before) && boundary(after)
+    })
 }
 
 /// Identifiers C will not let us use for a function.
@@ -268,103 +364,146 @@ const RESERVED: &[&str] = &[
 /// A false positive costs an underscore on a name that did not need one. That is
 /// the right direction to be wrong in: the alternative is a generated file that
 /// does not compile, and the mangling is reversible by inspection either way.
-fn collides_with_a_header(name: &str) -> bool {
-    /// Every `<math.h>` function and classification macro, in its `double`
-    /// spelling.
-    const MATH: &[&str] = &[
-        "acos",
-        "acosh",
-        "asin",
-        "asinh",
-        "atan",
-        "atan2",
-        "atanh",
-        "cbrt",
-        "ceil",
-        "copysign",
-        "cos",
-        "cosh",
-        "erf",
-        "erfc",
-        "exp",
-        "exp2",
-        "expm1",
-        "fabs",
-        "fdim",
-        "floor",
-        "fma",
-        "fmax",
-        "fmin",
-        "fmod",
-        "fpclassify",
-        "frexp",
-        "hypot",
-        "ilogb",
-        "isfinite",
-        "isgreater",
-        "isgreaterequal",
-        "isinf",
-        "isless",
-        "islessequal",
-        "islessgreater",
-        "isnan",
-        "isnormal",
-        "isunordered",
-        "ldexp",
-        "lgamma",
-        "llrint",
-        "llround",
-        "log",
-        "log10",
-        "log1p",
-        "log2",
-        "logb",
-        "lrint",
-        "lround",
-        "modf",
-        "nan",
-        "nearbyint",
-        "nextafter",
-        "nexttoward",
-        "pow",
-        "remainder",
-        "remquo",
-        "rint",
-        "round",
-        "scalbln",
-        "scalbn",
-        "signbit",
-        "sin",
-        "sinh",
-        "sqrt",
-        "tan",
-        "tanh",
-        "tgamma",
-        "trunc",
-    ];
-    /// Type names from `<stdint.h>` and `<stddef.h>`. Not functions, but a
-    /// function called `size_t` is still a redeclaration.
-    const TYPES: &[&str] = &[
-        "int8_t",
-        "int16_t",
-        "int32_t",
-        "int64_t",
-        "uint8_t",
-        "uint16_t",
-        "uint32_t",
-        "uint64_t",
-        "intptr_t",
-        "uintptr_t",
-        "intmax_t",
-        "uintmax_t",
-        "size_t",
-        "ptrdiff_t",
-        "wchar_t",
-        "offsetof",
-        "NULL",
-    ];
+/// Every `<math.h>` function and classification macro, in its `double`
+/// spelling.
+const MATH: &[&str] = &[
+    "acos",
+    "acosh",
+    "asin",
+    "asinh",
+    "atan",
+    "atan2",
+    "atanh",
+    "cbrt",
+    "ceil",
+    "copysign",
+    "cos",
+    "cosh",
+    "erf",
+    "erfc",
+    "exp",
+    "exp2",
+    "expm1",
+    "fabs",
+    "fdim",
+    "floor",
+    "fma",
+    "fmax",
+    "fmin",
+    "fmod",
+    "fpclassify",
+    "frexp",
+    "hypot",
+    "ilogb",
+    "isfinite",
+    "isgreater",
+    "isgreaterequal",
+    "isinf",
+    "isless",
+    "islessequal",
+    "islessgreater",
+    "isnan",
+    "isnormal",
+    "isunordered",
+    "ldexp",
+    "lgamma",
+    "llrint",
+    "llround",
+    "log",
+    "log10",
+    "log1p",
+    "log2",
+    "logb",
+    "lrint",
+    "lround",
+    "modf",
+    "nan",
+    "nearbyint",
+    "nextafter",
+    "nexttoward",
+    "pow",
+    "remainder",
+    "remquo",
+    "rint",
+    "round",
+    "scalbln",
+    "scalbn",
+    "signbit",
+    "sin",
+    "sinh",
+    "sqrt",
+    "tan",
+    "tanh",
+    "tgamma",
+    "trunc",
+];
+/// Type names from `<stdint.h>` and `<stddef.h>`. Not functions, but a
+/// function called `size_t` is still a redeclaration.
+const TYPES: &[&str] = &[
+    "int8_t",
+    "int16_t",
+    "int32_t",
+    "int64_t",
+    "uint8_t",
+    "uint16_t",
+    "uint32_t",
+    "uint64_t",
+    "intptr_t",
+    "uintptr_t",
+    "intmax_t",
+    "uintmax_t",
+    "size_t",
+    "ptrdiff_t",
+    "wchar_t",
+    "offsetof",
+    "NULL",
+];
 
-    if MATH.contains(&name) || TYPES.contains(&name) {
+/// `<string.h>`, which the runtime includes for `memcpy`.
+///
+/// `basename` is here and `dirname` is not, and the difference is the point:
+/// glibc declares `basename` in `<string.h>` under `_GNU_SOURCE`, so it
+/// collides with a header this file actually includes. `dirname` lives in
+/// `<libgen.h>`, which it does not -- and renaming a user's exported
+/// function on account of a header nobody included is the failure mode the
+/// note above describes. Both were hit on the first real module, which is
+/// the evidence that the *general* answer is §27.1's namespaced ABI rather
+/// than a longer list.
+const STRING: &[&str] = &[
+    "memchr",
+    "memcmp",
+    "memcpy",
+    "memmove",
+    "memset",
+    "strcat",
+    "strchr",
+    "strcmp",
+    "strcoll",
+    "strcpy",
+    "strcspn",
+    "strerror",
+    "strlen",
+    "strncat",
+    "strncmp",
+    "strncpy",
+    "strpbrk",
+    "strrchr",
+    "strspn",
+    "strstr",
+    "strtok",
+    "strxfrm",
+    "strdup",
+    "strndup",
+    "strnlen",
+    "strcasecmp",
+    "strncasecmp",
+    "basename",
+    "index",
+    "rindex",
+];
+
+fn collides_with_a_header(name: &str) -> bool {
+    if MATH.contains(&name) || TYPES.contains(&name) || STRING.contains(&name) {
         return true;
     }
     // `powf` and `powl` are the same declaration in another width.

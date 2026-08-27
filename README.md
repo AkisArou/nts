@@ -60,13 +60,13 @@ Every ratio is nts divided by the other, so **lower is better and 1.00 is parity
 
 | outcome | files |
 | --- | ---: |
-| lowered completely | **56** |
-| refused a construct | 40 |
+| lowered completely | **66** |
+| refused a construct | 30 |
 | rejected by the typechecker | 86 |
 | **the frontend fell over** | **2** |
 | **invalid HIR or a panic** | **0** |
 
-Of the 96 that typecheck, **58%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
+Of the 96 that typecheck, **68%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
 
 The last two rows are the ones that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do, and so is a query this compiler makes that the typechecker cannot answer.
 
@@ -77,17 +77,17 @@ What is stopping the rest, in order:
 | refused | files |
 | --- | ---: |
 | a name declared outside this function | 10 |
-| a parameter of unrepresentable type (the type parameter `T`) | 6 |
 | a property of unrepresentable type (an object type) | 6 |
-| a parameter of unrepresentable type (any) | 5 |
-| a function without a body | 4 |
 | a module-scope variable whose initializer is not constant | 4 |
 | a module-scope variable with no initializer | 4 |
-| an object with an optional property | 4 |
+| a parameter of unrepresentable type (the type parameter `T`) | 4 |
 | this statement | 4 |
 | a class of unrepresentable type (a structured type (flags 0x100000)) | 3 |
+| a parameter of unrepresentable type (any) | 3 |
 | a parameter of unrepresentable type (a tuple) | 2 |
 | a parameter of unrepresentable type (a union of a structured type (flags 0x100000) | null | number | undefined) | 2 |
+| a parameter of unrepresentable type (a union of a structured type (flags 0x100000) | null | number) | 2 |
+| a parameter of unrepresentable type (a union of a tuple) | 2 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->
