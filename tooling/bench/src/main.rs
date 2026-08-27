@@ -120,16 +120,16 @@ fn main() -> Result<()> {
     .context("writing the runtime")?;
 
     println!(
-        "{:<14} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9}",
-        "case", "C++", "nts", "nts f64", "node", "nts/C++", "nts/node"
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9}",
+        "case", "C++", "nts", "nts f64", "node", "bun", "nts/C++", "nts/node"
     );
-    println!("{}", "-".repeat(88));
+    println!("{}", "-".repeat(102));
 
     let mut rows = Vec::new();
     for case in &cases {
         match run_case(&root, case, &out) {
             Ok(row) => rows.push(row),
-            Err(error) => println!("{:<14} failed: {error:#}", case.file_name().unwrap_or("?")),
+            Err(error) => println!("{:<16} failed: {error:#}", case.file_name().unwrap_or("?")),
         }
     }
 
@@ -155,15 +155,24 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
     const END: &str = "<!-- benchmarks:end -->";
 
     let mut table = String::new();
-    table.push_str(
+    let with_bun = rows.iter().any(|row| row.bun.is_some());
+    table.push_str(if with_bun {
+        "| case | C++ | nts | nts f64 | V8 | Bun | nts/C++ | nts/V8 |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+    } else {
         "| case | C++ | nts | nts f64 | V8 | nts/C++ | nts/V8 |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n",
-    );
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+    });
     for row in rows {
         use std::fmt::Write as _;
+        let bun = if with_bun {
+            format!(" {} |", row.bun.map_or_else(|| "--".to_owned(), human))
+        } else {
+            String::new()
+        };
         let _ = writeln!(
             table,
-            "| {} | {} | **{}** | {} | {} | {:.2}x | {:.2}x |",
+            "| {} | {} | **{}** | {} | {} |{bun} {:.2}x | {:.2}x |",
             row.case,
             human(row.cpp),
             human(row.nts),
@@ -185,8 +194,14 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         would actually write for that program; each `ref.cpp` says why in a \
         comment. Every variant returns a checksum and the runner refuses to report \
         a case whose variants disagree, so a backend cannot win by computing the \
-        wrong answer quickly. Node is timed inside its own process after 20,000 \
-        warmup iterations, so neither startup nor a cold JIT is in its column.\n";
+        wrong answer quickly.\n\n\
+        `V8` is node and `Bun` is JavaScriptCore, both running the *same* \
+        TypeScript source the compiler consumes — the harness imports the `.ts` \
+        directly, so there is no second copy of the program to drift. Both are \
+        timed inside their own process after 20,000 warmup iterations, so \
+        neither startup nor a cold JIT is in either column, and both must \
+        produce the same checksum as everything else. Bun is skipped where it \
+        is not installed.\n";
 
     let path = root.join("README.md");
     let text = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
@@ -206,6 +221,9 @@ struct Row {
     nts: f64,
     unspecialized: f64,
     node: f64,
+    /// Bun, where it is installed. `None` skips the column rather than
+    /// reporting a zero that reads like a win.
+    bun: Option<f64>,
 }
 
 fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
@@ -257,17 +275,26 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         results.push(measure(&mut std::process::Command::new(&binary))?);
     }
 
-    let node = measure(std::process::Command::new("node").arg(case.join("bench.mjs")))?;
+    let harness = case.join("bench.mjs");
+    let node = measure(std::process::Command::new("node").arg(&harness))?;
+    // The same source on the other engine. Bun runs `.ts` natively too, so it
+    // imports the identical file rather than a copy that could drift.
+    let bun = bun_binary()
+        .map(|binary| measure(std::process::Command::new(binary).arg(&harness)))
+        .transpose()?;
 
     // Every variant must agree about the answer before any of them is allowed to
     // be fast.
-    for (variant, result) in VARIANTS.iter().zip(&results) {
-        if result.checksum != node.checksum {
+    for (label, checksum) in VARIANTS
+        .iter()
+        .map(|variant| variant.label)
+        .zip(results.iter().map(|result| result.checksum.as_str()))
+        .chain(bun.iter().map(|result| ("bun", result.checksum.as_str())))
+    {
+        if checksum != node.checksum {
             bail!(
-                "{} computed {} but node computed {} — the benchmark is measuring \
-                 two different programs",
-                variant.label,
-                result.checksum,
+                "{label} computed {checksum} but node computed {} — the benchmark \
+                 is measuring two different programs",
                 node.checksum
             );
         }
@@ -279,14 +306,16 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         nts: results[0].ns_per_op,
         unspecialized: results[1].ns_per_op,
         node: node.ns_per_op,
+        bun: bun.map(|result| result.ns_per_op),
     };
     println!(
-        "{:<14} {:>11} {:>11} {:>11} {:>11}   {:>8.2}x {:>8.2}x",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>8.2}x {:>8.2}x",
         row.case,
         human(row.cpp),
         human(row.nts),
         human(row.unspecialized),
         human(row.node),
+        row.bun.map_or_else(|| "--".to_owned(), human),
         row.nts / row.cpp,
         row.nts / row.node,
     );
@@ -295,6 +324,27 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
 
 /// The compiler's own pipeline, not a shell out to the CLI — a benchmark that
 /// measured a stale generated file would be worse than no benchmark.
+/// Where bun is, if it is anywhere.
+///
+/// `NTS_BUN` first, then whatever is on `PATH`, then the directory bun's own
+/// installer uses -- which is not on a non-interactive `PATH`, so looking only
+/// at `PATH` reports "not installed" on a machine where it plainly is.
+fn bun_binary() -> Option<Utf8PathBuf> {
+    if let Ok(named) = std::env::var("NTS_BUN") {
+        return Some(Utf8PathBuf::from(named));
+    }
+    if std::process::Command::new("bun")
+        .arg("--version")
+        .output()
+        .is_ok_and(|out| out.status.success())
+    {
+        return Some(Utf8PathBuf::from("bun"));
+    }
+    let home = std::env::var("HOME").ok()?;
+    let installed = Utf8PathBuf::from(home).join(".bun/bin/bun");
+    installed.is_file().then_some(installed)
+}
+
 /// What the C harness calls, read off the harness.
 ///
 /// A benchmark is an executable and its entry points are exactly the functions

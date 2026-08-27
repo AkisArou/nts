@@ -23,31 +23,32 @@ them, so read the ratios rather than the absolute times.
 ### How fast it is
 
 <!-- benchmarks:start -->
-| case | C++ | nts | nts f64 | V8 | nts/C++ | nts/V8 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| accumulate | 1.38 us | **1.87 us** | 28.71 us | 3.69 us | 1.35x | 0.51x |
-| array-methods | 3.34 us | **2.73 us** | 3.91 us | 5.70 us | 0.82x | 0.48x |
-| arrays | 1.75 us | **1.88 us** | 5.17 us | 2.69 us | 1.07x | 0.70x |
-| awfy-bounce | 4.37 us | **8.35 us** | 12.53 us | 11.52 us | 1.91x | 0.73x |
-| awfy-list | 9.21 us | **8.49 us** | 8.55 us | 14.66 us | 0.92x | 0.58x |
-| awfy-mandelbrot | 23.12 ms | **24.27 ms** | 28.09 ms | 23.30 ms | 1.05x | 1.04x |
-| awfy-permute | 12.38 us | **19.50 us** | 27.15 us | 26.47 us | 1.58x | 0.74x |
-| awfy-queens | 6.26 us | **7.38 us** | 21.48 us | 17.40 us | 1.18x | 0.42x |
-| awfy-sieve | 4.44 us | **8.36 us** | 17.18 us | 10.36 us | 1.89x | 0.81x |
-| awfy-towers | 14.10 us | **21.41 us** | 26.36 us | 36.18 us | 1.52x | 0.59x |
-| checksum | 6.66 us | **6.44 us** | 64.67 us | 7.57 us | 0.97x | 0.85x |
-| closures | 1.25 us | **1.22 us** | 50.46 us | 3.83 us | 0.98x | 0.32x |
-| fib | 336.68 us | **621.33 us** | 640.85 us | 1.07 ms | 1.85x | 0.58x |
-| loop | 1.02 us | **928.8 ns** | 874.0 ns | 1.01 us | 0.91x | 0.92x |
-| mandelbrot | 76.39 us | **75.40 us** | 76.83 us | 79.72 us | 0.99x | 0.95x |
-| objects (rc) | 2.20 us | **2.14 us** | 2.41 us | 2.21 us | 0.97x | 0.97x |
-| strings | 557.2 ns | **1.08 us** | 28.27 us | 2.92 us | 1.94x | 0.37x |
+| case | C++ | nts | nts f64 | V8 | Bun | nts/C++ | nts/V8 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| accumulate | 1.38 us | **1.89 us** | 28.65 us | 3.71 us | 31.26 us | 1.37x | 0.51x |
+| array-methods | 3.33 us | **2.76 us** | 3.88 us | 5.68 us | 7.73 us | 0.83x | 0.49x |
+| arrays | 1.77 us | **1.89 us** | 5.26 us | 2.78 us | 1.80 us | 1.07x | 0.68x |
+| awfy-bounce | 4.29 us | **8.18 us** | 12.13 us | 11.12 us | 10.33 us | 1.91x | 0.74x |
+| awfy-list | 8.39 us | **8.42 us** | 8.51 us | 14.32 us | 12.57 us | 1.00x | 0.59x |
+| awfy-mandelbrot | 23.17 ms | **24.47 ms** | 28.56 ms | 23.39 ms | 23.25 ms | 1.06x | 1.05x |
+| awfy-permute | 11.36 us | **19.42 us** | 27.82 us | 28.22 us | 21.18 us | 1.71x | 0.69x |
+| awfy-queens | 5.98 us | **7.75 us** | 22.99 us | 19.69 us | 15.25 us | 1.29x | 0.39x |
+| awfy-sieve | 4.28 us | **7.78 us** | 17.32 us | 11.59 us | 15.09 us | 1.82x | 0.67x |
+| awfy-towers | 16.13 us | **22.29 us** | 27.46 us | 40.31 us | 28.26 us | 1.38x | 0.55x |
+| checksum | 6.38 us | **6.38 us** | 64.60 us | 8.66 us | 33.63 us | 1.00x | 0.74x |
+| closures | 1.21 us | **1.20 us** | 49.14 us | 3.47 us | 19.83 us | 1.00x | 0.35x |
+| fib | 349.29 us | **615.47 us** | 637.93 us | 1.29 ms | 867.56 us | 1.76x | 0.48x |
+| loop | 1.00 us | **920.6 ns** | 921.6 ns | 1.02 us | 1.03 us | 0.92x | 0.91x |
+| objects (rc) | 2.09 us | **2.10 us** | 2.56 us | 2.28 us | 1.79 us | 1.00x | 0.92x |
+| strings | 624.4 ns | **1.10 us** | 29.70 us | 6.13 us | 3.85 us | 1.76x | 0.18x |
 
 Both ratios are nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, `nts/V8` under 1.00 beats V8.
 
 `nts f64` is the same TypeScript with number specialization switched off. It is the column that makes a speedup a measurement rather than a claim — one program, compiled two ways, run against each other.
 
-`C++` is one hand-written reference per case, being what a C++ programmer would actually write for that program; each `ref.cpp` says why in a comment. Every variant returns a checksum and the runner refuses to report a case whose variants disagree, so a backend cannot win by computing the wrong answer quickly. Node is timed inside its own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in its column.
+`C++` is one hand-written reference per case, being what a C++ programmer would actually write for that program; each `ref.cpp` says why in a comment. Every variant returns a checksum and the runner refuses to report a case whose variants disagree, so a backend cannot win by computing the wrong answer quickly.
+
+`V8` is node and `Bun` is JavaScriptCore, both running the *same* TypeScript source the compiler consumes — the harness imports the `.ts` directly, so there is no second copy of the program to drift. Both are timed inside their own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in either column, and both must produce the same checksum as everything else. Bun is skipped where it is not installed.
 <!-- benchmarks:end -->
 
 ### What it can compile
