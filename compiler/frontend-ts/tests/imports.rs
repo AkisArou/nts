@@ -4,15 +4,12 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
 use nts_semantic_schema::SemanticSnapshot;
 
 fn snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = Utf8PathBuf::from(std::env::var("NTS_TSGO").ok()?);
-    if !tsgo.exists() {
-        return None;
-    }
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/imports/tsconfig.json")
         .canonicalize_utf8()

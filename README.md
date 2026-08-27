@@ -55,9 +55,10 @@ Every ratio is nts divided by the other, so **lower is better and 1.00 is parity
 
 ### What it can compile
 
-[`docs/features.md`](docs/features.md) is the feature-by-feature table — what
-compiles, what is refused, and what to do next. The corpus below is the
-independent measure of the same question.
+[`docs/conformance/typescript.md`](docs/conformance/typescript.md) is the
+feature-by-feature table — what compiles, what is refused, what is *neither*,
+and what to do next. The corpus below is the independent measure of the same
+question.
 
 <!-- corpus:start -->
 184 single-file cases from TypeScript's own test suite, compiled as ordinary programs.

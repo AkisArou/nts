@@ -1987,6 +1987,30 @@ impl<'a> FuncBuilder<'a> {
             .copied()
             .ok_or_else(|| self.unsupported(id, "a destructured parameter"))?;
 
+        // A parameter list that does not line up with the argument list, one
+        // way or the other. Both were *silently* lowered as ordinary
+        // parameters, which is the shape that matters: no diagnostic, and C
+        // that does not compile. A default emitted a call with too few
+        // arguments; a rest emitted a `double` cast to an array pointer
+        // followed by the remaining arguments.
+        //
+        // A default needs the initializer evaluated at every call that omits
+        // it, and a rest needs an array built there, so both are real work at
+        // the *call* rather than a note on the declaration.
+        if children
+            .iter()
+            .any(|child| self.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN))
+        {
+            return Err(self.unsupported(id, "a rest parameter"));
+        }
+        if children.iter().any(|child| {
+            *child != name_node
+                && !syntax::is_type_node(self.kind_of(*child).unwrap_or(0))
+                && self.kind_of(*child) != Some(syntax::QUESTION_TOKEN)
+        }) {
+            return Err(self.unsupported(id, "a parameter with a default"));
+        }
+
         let name = self
             .node(name_node)
             .text
@@ -4991,6 +5015,16 @@ impl<'a> FuncBuilder<'a> {
             let ty = self.type_of(id).ok_or_else(|| {
                 self.unsupported(id, "a compound assignment of unrepresentable type")
             })?;
+            // `s += t` on strings is concatenation, not addition, and the two
+            // lower to nothing alike -- `Add` on two `NtsString *` reaches the
+            // backend as pointer arithmetic. `lower_binary` resolves `+` against
+            // the result type for exactly this reason; the compound form has to
+            // ask the same question rather than assume the answer.
+            let op = if matches!(op, BinOp::Add) && ty.is_managed() {
+                BinOp::Concat
+            } else {
+                op
+            };
             let origin = self.origin(id);
             let updated = if bitwise_operator_of(op) {
                 self.push_bitwise(op, current, addend, ty, &origin)

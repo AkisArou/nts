@@ -10,7 +10,7 @@ use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
 use nts_semantic_schema::{LiteralValue, SemanticSnapshot, TypeKind};
 
 fn decomposed_types() -> Option<SemanticSnapshot> {
-    let tsgo = std::env::var("NTS_TSGO").ok()?;
+    let tsgo = nts_frontend_ts::tsgo::locate()?.to_string();
     let tsgo = Utf8PathBuf::from(tsgo);
     if !tsgo.exists() {
         return None;
@@ -159,10 +159,7 @@ fn nothing_structured_is_left_where_the_fixture_has_a_shape() {
 }
 
 fn decomposed_signatures() -> Option<SemanticSnapshot> {
-    let tsgo = Utf8PathBuf::from(std::env::var("NTS_TSGO").ok()?);
-    if !tsgo.exists() {
-        return None;
-    }
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/signatures/tsconfig.json")
         .canonicalize_utf8()
@@ -276,10 +273,7 @@ fn a_function_is_not_decomposed_as_an_object() {
 }
 
 fn classes_snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = Utf8PathBuf::from(std::env::var("NTS_TSGO").ok()?);
-    if !tsgo.exists() {
-        return None;
-    }
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/classes/tsconfig.json")
         .canonicalize_utf8()

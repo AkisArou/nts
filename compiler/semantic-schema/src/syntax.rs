@@ -49,6 +49,8 @@ pub const EXCLAMATION_TOKEN: u16 = 53;
 pub const AMPERSAND_AMPERSAND_TOKEN: u16 = 55;
 pub const BAR_BAR_TOKEN: u16 = 56;
 pub const QUESTION_TOKEN: u16 = 57;
+/// `...`, on a rest parameter or a spread element.
+pub const DOT_DOT_DOT_TOKEN: u16 = 25;
 pub const IDENTIFIER: u16 = 79;
 pub const FALSE_KEYWORD: u16 = 96;
 pub const TRUE_KEYWORD: u16 = 111;

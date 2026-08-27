@@ -10,10 +10,7 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 use nts_semantic_schema::{SemanticSnapshot, SymbolFlags};
 
 fn snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = Utf8PathBuf::from(std::env::var("NTS_TSGO").ok()?);
-    if !tsgo.exists() {
-        return None;
-    }
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/types/tsconfig.json")
         .canonicalize_utf8()
