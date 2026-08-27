@@ -92,6 +92,16 @@ struct Hierarchy {
     /// `Square*` both look up `area` at the same index, which is the whole
     /// mechanism.
     slots: rustc_hash::FxHashMap<(TypeId, String), u32>,
+    /// The one slot every closure's `call` goes in, where the program has
+    /// closures at all.
+    ///
+    /// One rather than one per function type, because there is nothing to tell
+    /// apart: a class is never also a closure, and a call through the slot
+    /// spells the signature it is making, so two closure types sharing an index
+    /// cannot be confused for each other. A slot per type would make every
+    /// dispatch table in the program as long as the number of function types in
+    /// it, for no distinction anyone can observe.
+    closure_slot: Option<u32>,
 }
 
 impl Hierarchy {
@@ -135,6 +145,11 @@ impl Hierarchy {
         found
     }
 
+    /// How many slots a dispatch table has.
+    fn table_size(&self) -> usize {
+        self.slots.len() + usize::from(self.closure_slot.is_some())
+    }
+
     /// The dispatch slot a call on `ty` would use, if it needs one.
     fn slot_for(&self, ty: TypeId, member: &str) -> Option<u32> {
         let root = self.root_declaring(ty, member)?;
@@ -174,7 +189,7 @@ impl Hierarchy {
 }
 
 /// Read every class declaration's name, base and own methods.
-fn collect_hierarchy(snapshot: &SemanticSnapshot) -> Hierarchy {
+fn collect_hierarchy(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> Hierarchy {
     let mut hierarchy = Hierarchy::default();
     let probe = FuncBuilder::new(snapshot);
 
@@ -239,7 +254,169 @@ fn collect_hierarchy(snapshot: &SemanticSnapshot) -> Hierarchy {
             .slots
             .insert(key, u32::try_from(at).unwrap_or(u32::MAX));
     }
+    // One more slot on the end, if anything in the program is a closure. A
+    // program with none carries no table at all, which is what it should carry.
+    if closures.iter().any(|closure| closure.refusal.is_none()) {
+        hierarchy.closure_slot = Some(u32::try_from(hierarchy.slots.len()).unwrap_or(u32::MAX));
+    }
     hierarchy
+}
+
+/// One arrow function, and what its body reads from the scope around it.
+///
+/// # Why a closure is an object
+///
+/// A closure is captured state plus code. So is an object. Saying so rather
+/// than inventing a second mechanism means a closure gets the object machinery
+/// exactly as written: a base-first layout, escape analysis that leaves it in
+/// the frame when it does not outlive the call, reference counting with the
+/// same rules as everything else, and dispatch through a slot. None of the four
+/// needed a line of new code.
+///
+/// The class is the compiler's own -- the checker has a type for the
+/// *signature*, which is what a value holding the closure is declared as, but
+/// nothing for the thing that carries the captures.
+#[derive(Clone, Debug)]
+struct ClosureInfo {
+    /// The arrow function node.
+    node: NodeId,
+    /// What the body reads from outside itself, in a fixed order.
+    captures: Vec<Capture>,
+    /// Why it cannot be lowered, if it cannot.
+    ///
+    /// Recorded here rather than raised here, so that a program containing one
+    /// closure this does not handle still compiles the rest -- and so the
+    /// reason is reported at the arrow rather than at whatever read it.
+    refusal: Option<&'static str>,
+}
+
+/// A name the closure body reads and the enclosing scope binds.
+#[derive(Clone, Debug)]
+struct Capture {
+    symbol: u32,
+    /// The field name, which is the source name: a dump of the layout should
+    /// read like the program.
+    name: String,
+    /// A node that reads it, for the type and for a diagnostic's location.
+    at: NodeId,
+}
+
+/// The type id of the `n`th closure class.
+///
+/// Synthetic. The checker's type for an arrow is its signature; the class that
+/// carries what it captured is this compiler's own construction and needs an
+/// identity to hang a layout on. Numbered down from the top, so it cannot
+/// collide with anything the snapshot assigned.
+fn closure_type(index: usize) -> TypeId {
+    let id = u32::MAX - u32::try_from(index).unwrap_or(0);
+    debug_assert!(
+        id >= super::SYNTHETIC_TYPE_FLOOR,
+        "more closures than the synthetic id space holds",
+    );
+    TypeId(id)
+}
+
+/// The name of the `n`th closure's class, and of its one method.
+fn closure_names(index: usize) -> (String, String) {
+    let class = format!("Closure{index}");
+    let method = format!("{class}#call");
+    (class, method)
+}
+
+/// Find every arrow function and work out what it captures.
+///
+/// This runs before any lowering because both sides have to agree: the
+/// enclosing function writes the captures into the object in this order, and
+/// the closure body reads them back from the same fields.
+fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
+    let probe = FuncBuilder::new(snapshot);
+
+    // A variable that is *ever* assigned cannot be captured, because this
+    // captures by value and JavaScript captures by reference. For a name
+    // nothing writes to the two are the same thing; for one something writes to
+    // they are observably different, and quietly picking the wrong one would
+    // make a program compute a stale answer rather than fail to compile.
+    let mut assigned = Vec::new();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind == NodeKind::Syntax(syntax::SOURCE_FILE) {
+            probe.assigned_symbols(
+                NodeId(u32::try_from(index).unwrap_or(u32::MAX)),
+                &mut assigned,
+            );
+        }
+    }
+
+    let mut closures = Vec::new();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::ARROW_FUNCTION) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let mut info = ClosureInfo {
+            node: id,
+            captures: Vec::new(),
+            refusal: None,
+        };
+
+        let mut subtree = Vec::new();
+        probe.subtree(id, &mut subtree);
+        for read in &subtree {
+            let Some(symbol) = probe.node(*read).symbol else {
+                continue;
+            };
+            if probe.kind_of(*read) != Some(syntax::IDENTIFIER) {
+                continue;
+            }
+            // The name after a dot is a property, not a binding, and so is the
+            // key of `{ x: 1 }`. Both have symbols, and both are declared
+            // outside the arrow, so without this they would look like captures.
+            if probe.names_a_member(*read) {
+                continue;
+            }
+            if info.captures.iter().any(|had| had.symbol == symbol.0) {
+                continue;
+            }
+            let Some(record) = snapshot.symbols.get(symbol.0 as usize) else {
+                continue;
+            };
+            // Nothing to capture: a name declared outside the decoded files, or
+            // one the arrow declares itself.
+            if record.declarations.is_empty()
+                || record
+                    .declarations
+                    .iter()
+                    .any(|declaration| subtree.contains(declaration))
+            {
+                continue;
+            }
+            // A function or a class is reached by name, not through a field.
+            // There is one of it for the whole program, so copying a pointer to
+            // it into every closure would be storage for nothing.
+            if record.declarations.iter().any(|declaration| {
+                matches!(
+                    probe.kind_of(*declaration),
+                    Some(syntax::FUNCTION_DECLARATION | syntax::CLASS_DECLARATION)
+                )
+            }) {
+                continue;
+            }
+            if assigned.contains(&symbol.0) {
+                info.refusal = Some(
+                    "a closure over a variable something assigns to; this captures \
+                     by value and JavaScript captures by reference, and for a name \
+                     something writes to those differ",
+                );
+                break;
+            }
+            info.captures.push(Capture {
+                symbol: symbol.0,
+                name: record.name.clone(),
+                at: *read,
+            });
+        }
+        closures.push(info);
+    }
+    closures
 }
 
 /// Collect what a module declares outside any function.
@@ -346,7 +523,8 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
     let module = collect_module_scope(snapshot);
-    let hierarchy = collect_hierarchy(snapshot);
+    let closures = collect_closures(snapshot);
+    let hierarchy = collect_hierarchy(snapshot, &closures);
     lowered.program.globals.clone_from(&module.globals);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -371,7 +549,12 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
                     .collect()
             };
             for member in members {
-                let mut builder = FuncBuilder::within(snapshot, module.clone(), hierarchy.clone());
+                let mut builder = FuncBuilder::within(
+                    snapshot,
+                    module.clone(),
+                    hierarchy.clone(),
+                    closures.clone(),
+                );
                 match builder.lower_method(id, member) {
                     Ok(func) => lowered.program.funcs.push(func),
                     Err(diagnostic) => lowered.diagnostics.push(diagnostic),
@@ -384,8 +567,30 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         if node.kind != NodeKind::Syntax(syntax::FUNCTION_DECLARATION) {
             continue;
         }
-        let mut builder = FuncBuilder::within(snapshot, module.clone(), hierarchy.clone());
+        let mut builder = FuncBuilder::within(
+            snapshot,
+            module.clone(),
+            hierarchy.clone(),
+            closures.clone(),
+        );
         match builder.lower_function(id) {
+            Ok(func) => lowered.program.funcs.push(func),
+            Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+        }
+        collect_layouts(&mut lowered.program, builder.layouts);
+    }
+
+    // Each closure last, and each as a function of its own. Nothing about it
+    // depends on the function that allocates it -- that is the point of putting
+    // the captures in an object rather than on a chain of frames.
+    for (index, closure) in closures.iter().enumerate() {
+        let mut builder = FuncBuilder::within(
+            snapshot,
+            module.clone(),
+            hierarchy.clone(),
+            closures.clone(),
+        );
+        match builder.lower_closure(index, closure) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => lowered.diagnostics.push(diagnostic),
         }
@@ -405,7 +610,7 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
         if let Some(existing) = program
             .layouts
             .iter_mut()
-            .find(|known| known.same_shape(&layout.fields))
+            .find(|known| known.same_shape(&layout.fields, &layout.methods))
         {
             for ty in layout.types {
                 if !existing.types.contains(&ty) {
@@ -569,7 +774,20 @@ pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType
             let element = representation(snapshot, *element)?;
             HirType::Managed(ManagedType::Array(Box::new(element)))
         }
-        TypeKind::Object { .. } => HirType::Managed(ManagedType::Object(ty)),
+        // A function value is an object with one method, which is why it shares
+        // this arm rather than getting one. That is not a trick to make it fit:
+        // a closure *is* captured state plus code, which is what an object is,
+        // and saying so means it gets the object machinery -- a base-first
+        // layout, escape analysis that keeps it in the frame when it does not
+        // escape, reference counting, and dispatch -- rather than a second
+        // mechanism that would need all four again.
+        //
+        // The layout for the function type itself has no fields. What varies
+        // between two closures of one type is what they captured, and that
+        // belongs to the closure's own class, which has this one as its base.
+        TypeKind::Object { .. } | TypeKind::Function(_) => {
+            HirType::Managed(ManagedType::Object(ty))
+        }
 
         // A union whose members all share one representation has that
         // representation. `0 | 1 | 2` is three literal types and one machine
@@ -646,6 +864,9 @@ struct FuncBuilder<'a> {
     /// resolves a `super` call to the base's declaration, but the *name* of the
     /// function to emit is this compiler's own construction.
     base: Option<String>,
+    /// Every arrow function in the program, so that one written here can be
+    /// matched to the class that was collected for it.
+    closures: Vec<ClosureInfo>,
 }
 
 impl<'a> FuncBuilder<'a> {
@@ -665,14 +886,21 @@ impl<'a> FuncBuilder<'a> {
             hierarchy: Hierarchy::default(),
             base: None,
             module: ModuleScope::default(),
+            closures: Vec::new(),
         }
     }
 
     /// The same, knowing what the module and its classes declare.
-    fn within(snapshot: &'a SemanticSnapshot, module: ModuleScope, hierarchy: Hierarchy) -> Self {
+    fn within(
+        snapshot: &'a SemanticSnapshot,
+        module: ModuleScope,
+        hierarchy: Hierarchy,
+        closures: Vec<ClosureInfo>,
+    ) -> Self {
         Self {
             module,
             hierarchy,
+            closures,
             ..Self::new(snapshot)
         }
     }
@@ -755,6 +983,35 @@ impl<'a> FuncBuilder<'a> {
             .collect()
     }
 
+    /// Every node at or below `id`, in source order.
+    fn subtree(&self, id: NodeId, into: &mut Vec<NodeId>) {
+        into.push(id);
+        for child in self.children(id) {
+            self.subtree(child, into);
+        }
+    }
+
+    /// Whether an identifier names a member rather than a binding.
+    ///
+    /// `p.x` and `{ x: 1 }` both put a symbol on `x`, and that symbol is
+    /// declared wherever the type is -- outside whatever is being scanned. So a
+    /// scan for free variables has to know the difference, and the difference
+    /// is entirely positional.
+    fn names_a_member(&self, id: NodeId) -> bool {
+        let Some(parent) = self.node(id).parent else {
+            return false;
+        };
+        match self.kind_of(parent) {
+            // `a.b` — the second child is the member. The first is an ordinary
+            // read of `a`, which may well be a capture.
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION) => self.children(parent).first() != Some(&id),
+            // `{ x: v }` — the first child is the key. `{ x }` is both at once,
+            // so it is not a member: it reads `x`.
+            Some(syntax::PROPERTY_ASSIGNMENT) => self.children(parent).first() == Some(&id),
+            _ => false,
+        }
+    }
+
     fn kind_of(&self, id: NodeId) -> Option<u16> {
         match self.node(id).kind {
             NodeKind::Syntax(kind) => Some(kind),
@@ -798,6 +1055,62 @@ impl<'a> FuncBuilder<'a> {
                 ) && Some(*child) != body
             })
             .find_map(|child| self.type_of(child))
+    }
+
+    /// Make sure an object type has a layout, because a signature mentions it.
+    ///
+    /// A layout is otherwise discovered by whatever *constructs* the object,
+    /// and a function that only receives or returns one constructs nothing. A
+    /// function type is the case that made this visible: no program ever
+    /// constructs a signature, only closures that have it as their base.
+    fn materialize(&mut self, at: NodeId, ty: &HirType) -> Result<(), Diagnostic> {
+        if let HirType::Managed(ManagedType::Object(object)) = ty {
+            self.layout_of(at, *object)?;
+        }
+        Ok(())
+    }
+
+    /// Whether an expression's type is a signature -- so its value is a closure.
+    fn is_function_typed(&self, id: NodeId) -> bool {
+        self.snapshot
+            .node_types
+            .get(&id)
+            .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
+            .is_some_and(|record| matches!(record.kind, TypeKind::Function(_)))
+    }
+
+    /// Whether a callee names a function or class declaration rather than a
+    /// value that happens to hold one.
+    ///
+    /// This is what separates `f(x)` the static call from `f(x)` the dispatch,
+    /// and it is a question about the *declaration*, not about the spelling. A
+    /// name with no declaration at all is one this compilation cannot see, which
+    /// means an import: a direct call to a definition the linker supplies.
+    fn names_a_declared_function(&self, id: NodeId) -> bool {
+        let Some(symbol) = self.node(id).symbol else {
+            return false;
+        };
+        // A local binding shadows nothing here -- a parameter and a function
+        // declaration never share a symbol -- but if the name is bound to a
+        // value in this frame, that value is what is being called.
+        if self.bindings.contains_key(&symbol.0) {
+            return false;
+        }
+        let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else {
+            return false;
+        };
+        record.declarations.is_empty()
+            || record.declarations.iter().any(|declaration| {
+                matches!(
+                    self.kind_of(*declaration),
+                    Some(
+                        syntax::FUNCTION_DECLARATION
+                            | syntax::CLASS_DECLARATION
+                            | syntax::METHOD_DECLARATION
+                            | syntax::METHOD_SIGNATURE
+                    )
+                )
+            })
     }
 
     fn type_of(&self, id: NodeId) -> Option<HirType> {
@@ -976,6 +1289,7 @@ impl<'a> FuncBuilder<'a> {
         } else {
             self.declared_return(member).unwrap_or(HirType::Void)
         };
+        self.materialize(member, &return_type)?;
 
         self.lower_block(body)?;
         self.terminate(Terminator::Return(None));
@@ -1021,6 +1335,7 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| self.unsupported(id, "a function without a body"))?;
 
         let return_type = self.declared_return(id).unwrap_or(HirType::Void);
+        self.materialize(id, &return_type)?;
 
         self.lower_block(body)?;
 
@@ -1034,6 +1349,106 @@ impl<'a> FuncBuilder<'a> {
             .modifiers
             .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
         Ok(self.finish(name, params, return_type, origin, exported))
+    }
+
+    /// One arrow function, as the `call` method of a class.
+    ///
+    /// The class's fields are what the body reads from the scope around it, in
+    /// the order `collect_closures` fixed -- the same order the allocating side
+    /// writes them in. `this` is the closure, so a free variable becomes a
+    /// field read on parameter zero and everything downstream sees an ordinary
+    /// object.
+    fn lower_closure(&mut self, index: usize, info: &ClosureInfo) -> Result<Func, Diagnostic> {
+        if let Some(reason) = info.refusal {
+            return Err(self.unsupported(info.node, reason));
+        }
+        let id = info.node;
+        let (_, name) = closure_names(index);
+        let receiver_ty = HirType::Managed(ManagedType::Object(closure_type(index)));
+        let origin = self.origin(id);
+
+        let receiver = self.push(OpKind::Param(0), receiver_ty.clone(), origin.clone());
+        self.this = Some(receiver);
+        let mut params = vec![Param {
+            name: "this".to_owned(),
+            ty: receiver_ty,
+            origin: origin.clone(),
+            known: Facts::TOP,
+        }];
+        for child in self.children(id) {
+            if self.kind_of(child) != Some(syntax::PARAMETER) {
+                continue;
+            }
+            let at = u32::try_from(params.len()).unwrap_or(0);
+            params.push(self.lower_param(child, at)?);
+        }
+
+        // The captures, read back and bound to the names the body writes. A
+        // field read rather than a copy into a local: the value is already
+        // there, and `FieldGet` is what every other object read is.
+        let mut fields = Vec::new();
+        for (at, capture) in info.captures.iter().enumerate() {
+            let ty = self
+                .type_of(capture.at)
+                .ok_or_else(|| self.unrepresentable(capture.at, "a captured variable"))?;
+            let field = u32::try_from(at).unwrap_or(0);
+            let value = self.push(
+                OpKind::FieldGet {
+                    object: receiver,
+                    field,
+                },
+                ty.clone(),
+                origin.clone(),
+            );
+            self.bindings.insert(capture.symbol, value);
+            // Captured by value and never written again -- that is the whole
+            // condition `collect_closures` checked before allowing the capture.
+            fields.push(Field {
+                name: capture.name.clone(),
+                ty,
+                readonly: true,
+            });
+        }
+        self.layouts.push(self.closure_layout(index, fields));
+
+        let return_type = self.declared_return(id).unwrap_or(HirType::Void);
+        self.materialize(id, &return_type)?;
+
+        // `x => x * 2` and `x => { return x * 2; }` are the same function, and
+        // the first is much the more common. The body is the last child either
+        // way: parameters and a return annotation both precede it.
+        let body = self
+            .children(id)
+            .last()
+            .copied()
+            .ok_or_else(|| self.unsupported(id, "an arrow function with no body"))?;
+        if self.kind_of(body) == Some(syntax::BLOCK) {
+            self.lower_block(body)?;
+            self.terminate(Terminator::Return(None));
+        } else {
+            let value = self.lower_expression(body)?;
+            self.terminate(Terminator::Return(Some(value)));
+        }
+
+        // Not exported: a closure has no name to import. It stays only because
+        // something dispatches through its slot, which `hir::reachable` decides
+        // the same way it decides an override's fate.
+        Ok(self.finish(name, params, return_type, origin, false))
+    }
+
+    /// The class a closure allocates, with its one method in the shared slot.
+    fn closure_layout(&self, index: usize, fields: Vec<Field>) -> Layout {
+        let (class, method) = closure_names(index);
+        let mut methods = vec![None; self.hierarchy.table_size()];
+        if let Some(slot) = self.hierarchy.closure_slot {
+            methods[slot as usize] = Some(method);
+        }
+        Layout {
+            types: vec![closure_type(index)],
+            name: class,
+            fields,
+            methods,
+        }
     }
 
     /// Assemble what has been built into a function.
@@ -1088,6 +1503,7 @@ impl<'a> FuncBuilder<'a> {
         let ty = self
             .type_of(name_node)
             .ok_or_else(|| self.unrepresentable(name_node, "a parameter"))?;
+        self.materialize(name_node, &ty)?;
 
         let origin = self.origin(name_node);
         // What the declared type says, before anything in the body is seen.
@@ -1786,6 +2202,7 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::ARRAY_LITERAL_EXPRESSION) => self.lower_array_literal(id),
             Some(syntax::OBJECT_LITERAL_EXPRESSION) => self.lower_object_literal(id),
             Some(syntax::NEW_EXPRESSION) => self.lower_new(id),
+            Some(syntax::ARROW_FUNCTION) => self.lower_arrow(id),
             // `this` is parameter zero of a method. Outside one there is no
             // receiver to name.
             Some(syntax::THIS_KEYWORD) => self
@@ -2028,6 +2445,18 @@ impl<'a> FuncBuilder<'a> {
             self.snapshot.types.get(ty.0 as usize).ok_or_else(|| {
                 self.unsupported(id, "an object type that is not in the snapshot")
             })?;
+        // A function type has no fields: two closures of one type differ by what
+        // they captured, and that is their own class's business.
+        if matches!(record.kind, TypeKind::Function(_)) {
+            let layout = Layout {
+                types: vec![ty],
+                name: format!("Fn{}", ty.0),
+                fields: Vec::new(),
+                methods: Vec::new(),
+            };
+            self.layouts.push(layout.clone());
+            return Ok(layout);
+        }
         let TypeKind::Object { properties } = &record.kind else {
             return Err(self.unsupported(id, "an object type that was not decomposed"));
         };
@@ -2094,29 +2523,9 @@ impl<'a> FuncBuilder<'a> {
             .symbol
             .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
             .map_or_else(|| format!("Type{}", ty.0), |symbol| symbol.name.clone());
-        // Structural, so a type whose shape is already laid out joins that
-        // layout rather than getting one of its own. The first name wins, which
-        // is usually the declared one -- an anonymous literal type tends to be
-        // discovered second.
-        if let Some(existing) = self
-            .layouts
-            .iter_mut()
-            .find(|layout| layout.same_shape(&fields))
-        {
-            existing.types.push(ty);
-            // A declared name beats a generated one, whichever was seen first.
-            // The anonymous type of a literal is usually discovered before the
-            // interface it is assigned to, and `NtsObj_Point` reads better than
-            // `NtsObj_Type5`.
-            if existing.name.starts_with("Type") && !name.starts_with("Type") {
-                existing.name = name;
-            }
-            return Ok(existing.clone());
-        }
-
         // What this class does for each dispatch slot. Empty where nothing in
         // the hierarchy is overridden, which is most classes.
-        let mut methods = vec![None; self.hierarchy.slots.len()];
+        let mut methods = vec![None; self.hierarchy.table_size()];
         for ((root, member), slot) in &self.hierarchy.slots {
             if !self.hierarchy.descends_from(ty, *root) {
                 continue;
@@ -2129,6 +2538,26 @@ impl<'a> FuncBuilder<'a> {
             }
         }
 
+        // Structural, so a type whose shape is already laid out joins that
+        // layout rather than getting one of its own. The first name wins, which
+        // is usually the declared one -- an anonymous literal type tends to be
+        // discovered second.
+        if let Some(existing) = self
+            .layouts
+            .iter_mut()
+            .find(|layout| layout.same_shape(&fields, &methods))
+        {
+            existing.types.push(ty);
+            // A declared name beats a generated one, whichever was seen first.
+            // The anonymous type of a literal is usually discovered before the
+            // interface it is assigned to, and `NtsObj_Point` reads better than
+            // `NtsObj_Type5`.
+            if existing.name.starts_with("Type") && !name.starts_with("Type") {
+                existing.name = name;
+            }
+            return Ok(existing.clone());
+        }
+
         let layout = Layout {
             types: vec![ty],
             name,
@@ -2137,6 +2566,63 @@ impl<'a> FuncBuilder<'a> {
         };
         self.layouts.push(layout.clone());
         Ok(layout)
+    }
+
+    /// `(x) => x * n` — allocate the closure and write what it captured.
+    ///
+    /// The same two operations `new C(...)` lowers to, for the same reason: an
+    /// allocation and the stores that fill it. Everything after this treats the
+    /// result as the object it is, so a closure that does not outlive the call
+    /// ends up in the frame and one that does gets a reference count.
+    fn lower_arrow(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let index = self
+            .closures
+            .iter()
+            .position(|closure| closure.node == id)
+            .ok_or_else(|| self.unsupported(id, "an arrow function the collector did not see"))?;
+        let info = self.closures[index].clone();
+        if let Some(reason) = info.refusal {
+            return Err(self.unsupported(id, reason));
+        }
+
+        let ty = HirType::Managed(ManagedType::Object(closure_type(index)));
+        let origin = self.origin(id);
+        let object = self.push(OpKind::ObjectNew { frame: false }, ty, origin.clone());
+
+        let mut fields = Vec::new();
+        for (at, capture) in info.captures.iter().enumerate() {
+            // The value the enclosing scope holds. It is in `bindings` because
+            // the collector only allowed a capture of something declared
+            // outside the arrow and never assigned -- so by the time the arrow
+            // is reached, the binding exists and is final.
+            let value = *self.bindings.get(&capture.symbol).ok_or_else(|| {
+                self.unsupported(
+                    capture.at,
+                    "a closure over a name from more than one scope up",
+                )
+            })?;
+            let field_ty = self.values[value.0 as usize].ty.clone();
+            self.push(
+                OpKind::FieldSet {
+                    object,
+                    field: u32::try_from(at).unwrap_or(0),
+                    value,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+            fields.push(Field {
+                name: capture.name.clone(),
+                ty: field_ty,
+                readonly: true,
+            });
+        }
+        // The same layout the body's side builds. Both are pushed, and
+        // `collect_layouts` merges them -- which is also the check that the two
+        // sides agree, because a disagreement would be two layouts for one type
+        // rather than one.
+        self.layouts.push(self.closure_layout(index, fields));
+        Ok(object)
     }
 
     /// `new C(a, b)` — allocate, then run the constructor over it.
@@ -2656,6 +3142,15 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_object_method(id, receiver, type_id, *member, &children[1..]);
         }
 
+        // `f(x)` where `f` is a parameter, a local, or `pick(1)(x)` where it is
+        // another call's result: the callee is a *value*, not a function, so
+        // there is nothing to call directly. It holds a closure, which is an
+        // object with one method, and this is a dispatch through that method's
+        // slot with the closure itself as the receiver.
+        if self.is_function_typed(callee_node) && !self.names_a_declared_function(callee_node) {
+            return self.lower_closure_call(id, callee_node, &children[1..]);
+        }
+
         let name = self
             .node(callee_node)
             .text
@@ -2680,6 +3175,51 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
         let origin = self.origin(id);
         Ok(self.push(OpKind::Call { callee, args }, ty, origin))
+    }
+
+    /// `f(x)` where `f` holds a closure.
+    ///
+    /// The receiver goes first, exactly as it does for a method, and the slot
+    /// is the one every closure's `call` occupies. What makes the single slot
+    /// safe is that the call spells its own signature: two closure types
+    /// sharing an index are never confused, because neither call site consults
+    /// the other's types.
+    fn lower_closure_call(
+        &mut self,
+        id: NodeId,
+        callee_node: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let receiver = self.lower_expression(callee_node)?;
+        if !matches!(
+            self.values[receiver.0 as usize].ty,
+            HirType::Managed(ManagedType::Object(_))
+        ) {
+            return Err(self.unsupported(callee_node, "a call of something that is not a function"));
+        }
+        let Some(slot) = self.hierarchy.closure_slot else {
+            return Err(self.unsupported(
+                id,
+                "a call of a function value in a program with no closures",
+            ));
+        };
+
+        let mut args = vec![receiver];
+        for argument in arguments {
+            args.push(self.lower_expression(*argument)?);
+        }
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::Closure { slot },
+                args,
+            },
+            ty,
+            origin,
+        ))
     }
 
     /// The `Math` member a callee names, if it names one.

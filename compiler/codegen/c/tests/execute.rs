@@ -1409,3 +1409,90 @@ int main(void) {{
         "growing past the initial capacity must not lose elements: {output}",
     );
 }
+
+#[test]
+fn a_closure_is_an_object_and_costs_what_one_costs() {
+    // The claim is that nothing here is new machinery. The layout is base-first
+    // with the signature type as the base, escape analysis decides the
+    // allocation, reference counting follows the same rules as any other
+    // object, and the call is a dispatch through a slot.
+    //
+    // So the test is the one every other object gets: right answers, and a live
+    // count that comes back to where it started. Run under RC with
+    // AddressSanitizer, because a closure whose captured array is released once
+    // too often is a use-after-free rather than a wrong number.
+    //
+    // Every expected value came from running the same `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+#include "nts_runtime.h"
+double twice(double v);
+double scaled(double by, double v);
+double useAdder(double n, double v);
+double bothWays(double v);
+double sumWith(double v);
+double tagged(double v);
+double applyToAll(double v, double times);
+int main(void) {{
+    size_t before = nts_live_count();
+
+    /* Captures nothing and never leaves the frame: no allocation at all. */
+    check("twice(3)", twice(3), 12);
+    /* Captures a parameter, handed to `apply`, which does not keep it. */
+    check("scaled(5,7)", scaled(5, 7), 35);
+    /* Escapes its function, so this one is on the heap and counted. */
+    check("useAdder(4,10)", useAdder(4, 10), 18);
+    /* Two bodies, one call site, one slot. */
+    check("bothWays(6)", bothWays(6), 56);
+    /* A closure over an array: the capture is a reference field. */
+    check("sumWith(9)", sumWith(9), 13);
+    /* A closure over a string, called four times. */
+    check("tagged(2)", tagged(2), 42);
+    check("applyToAll(3,5)", applyToAll(3, 5), 55);
+
+    /* A thousand escaping closures, each over a reference. Under RC the count
+       has to come back: a closure that is never released leaks its capture
+       with it, and one released twice is a use-after-free ASan will name. */
+    for (int i = 0; i < 1000; i++) {{
+        if (useAdder(i, 1) != (double)(2 * i + 1)) {{
+            printf("FAIL useAdder drifted at %d\n", i);
+            failures++;
+            break;
+        }}
+        if (sumWith(i) != (double)(i + 4)) {{
+            printf("FAIL sumWith drifted at %d\n", i);
+            failures++;
+            break;
+        }}
+    }}
+    if (nts_live_count() != before) {{
+        printf("FAIL %zu live after, %zu before\n", nts_live_count(), before);
+        failures++;
+    }}
+    if (nts_live_bytes() != 0) {{
+        printf("FAIL %zu bytes still held\n", nts_live_bytes());
+        failures++;
+    }}
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = build_and_run_with("closures", &harness, hir::Provider::ReferenceCounting)
+    else {
+        return;
+    };
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "closures did not balance:\n{text}{}",
+        String::from_utf8_lossy(&output.stderr),
+    );
+    assert!(
+        text.contains("ok bothWays(6) = 56"),
+        "two closure bodies must reach one call site: {text}",
+    );
+    assert!(
+        text.contains("ok sumWith(9) = 13"),
+        "a closure must read the array it captured: {text}",
+    );
+}

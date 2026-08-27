@@ -58,6 +58,8 @@ pub const EXPORT_KEYWORD: u16 = 94;
 /// Determined empirically, like everything else here: the encoder's own
 /// documentation gives a different number.
 pub const SUPER_KEYWORD: u16 = 107;
+/// Also determined empirically.
+pub const ARROW_FUNCTION: u16 = 220;
 pub const THIS_KEYWORD: u16 = 109;
 pub const PRIVATE_KEYWORD: u16 = 122;
 pub const PROTECTED_KEYWORD: u16 = 123;

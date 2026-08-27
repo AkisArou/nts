@@ -424,11 +424,18 @@ fn call_text(
     // reach. That is not the one that runs -- the table decides that -- but it
     // is what gives the call its signature, and an override has the same
     // signature by definition.
-    let (Callee::Direct(target)
-    | Callee::External(target)
-    | Callee::Virtual {
-        declared: target, ..
-    }) = callee;
+    //
+    // A *closure* call has no such declaration -- every closure of a type has
+    // its own implementation -- so its signature comes from the call site
+    // instead, which knows the argument types and the result type exactly.
+    let target = match callee {
+        Callee::Direct(target)
+        | Callee::External(target)
+        | Callee::Virtual {
+            declared: target, ..
+        } => target.as_str(),
+        Callee::Closure { .. } => "",
+    };
 
     // A derived object passed where a base is expected. The layout is base
     // first, so the two agree on every field the base has and the cast is a
@@ -442,7 +449,7 @@ fn call_text(
         .program
         .funcs
         .iter()
-        .find(|func| func.name == *target)
+        .find(|func| func.name == target)
         .map(|func| &func.params);
     let arguments: Vec<String> = args
         .iter()
@@ -462,7 +469,16 @@ fn call_text(
         })
         .collect();
 
-    let call = if let Callee::Virtual { slot, .. } = callee {
+    let call = if let Callee::Closure { slot } = callee {
+        let signature = closure_signature(func, value, args, context.program, origin)?;
+        let receiver = args
+            .first()
+            .map_or_else(|| "0".to_owned(), |value| value_name(*value));
+        format!(
+            "(({signature}){receiver}->header.descriptor->methods[{slot}])({})",
+            arguments.join(", ")
+        )
+    } else if let Callee::Virtual { slot, .. } = callee {
         // The table stores untyped pointers, so the call spells the signature it
         // is making. `args[0]` is the receiver, and its descriptor is where the
         // table lives -- one load and one indirect call, which is what dispatch
@@ -485,6 +501,76 @@ fn call_text(
         // The call still happens; only its result is unwanted.
         format!("{call};")
     })
+}
+
+/// Which layouts some `ObjectNew` in the program actually creates.
+///
+/// A descriptor is read through an object's own header, so only a layout a
+/// program allocates can ever have its read.
+fn allocated_layouts(program: &Program) -> rustc_hash::FxHashSet<usize> {
+    let mut found = rustc_hash::FxHashSet::default();
+    for func in &program.funcs {
+        for op in &func.values {
+            if !matches!(op.kind, OpKind::ObjectNew { .. }) {
+                continue;
+            }
+            let HirType::Managed(ManagedType::Object(ty)) = &op.ty else {
+                continue;
+            };
+            if let Some(at) = program
+                .layouts
+                .iter()
+                .position(|layout| layout.types.contains(ty))
+            {
+                found.insert(at);
+            }
+        }
+    }
+    found
+}
+
+/// The cast an upcast needs, or nothing where the types already agree.
+///
+/// TypeScript checked assignability before any of this ran, so a reference
+/// whose type is not the one wanted is a *subtype* of it -- and base-first
+/// layout makes the two pointers equal. The cast carries no instruction; it
+/// tells C that the two spellings mean one address.
+fn upcast(func: &Func, context: &Context<'_>, wanted: &HirType, value: ValueId) -> String {
+    let actual = &func.values[value.0 as usize].ty;
+    if !wanted.is_managed() || wanted == actual {
+        return String::new();
+    }
+    let origin = &func.values[value.0 as usize].origin;
+    c_type_of(context.program, wanted, origin)
+        .map_or_else(|_| String::new(), |ty| format!("({ty})"))
+}
+
+/// A function-pointer type for calling a closure, taken from the call itself.
+///
+/// The receiver is the closure object, whose static type is the *function*
+/// type -- an empty layout that every closure of that type has as its base. So
+/// the pointer the table entry is called with is the same address the
+/// implementation wants, and only the spelling differs.
+fn closure_signature(
+    func: &Func,
+    value: ValueId,
+    args: &[ValueId],
+    program: &Program,
+    origin: &Origin,
+) -> Result<String, Diagnostic> {
+    let mut params = Vec::new();
+    for arg in args {
+        params.push(c_type_of(program, &func.values[arg.0 as usize].ty, origin)?);
+    }
+    Ok(format!(
+        "{} (*)({})",
+        c_type_of(program, &func.values[value.0 as usize].ty, origin)?,
+        if params.is_empty() {
+            "void".to_owned()
+        } else {
+            params.join(", ")
+        }
+    ))
 }
 
 /// A function-pointer type for calling one implementation of a virtual method.
@@ -669,7 +755,15 @@ fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program
 /// come first because a declaration's parameter types need them.
 fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
     let cyclic_layouts = program.cyclic_layouts();
+    let allocated = allocated_layouts(program);
     for (index, layout) in program.layouts.iter().enumerate() {
+        // A layout nothing allocates needs no descriptor. It still needs its
+        // struct, because something is declared as a pointer to it -- a
+        // closure's signature type is exactly that: every value of it is really
+        // a closure, and the closure's own descriptor is the one at runtime.
+        if !allocated.contains(&index) {
+            continue;
+        }
         let name = object_type_name(layout);
         // RFC 8.3: where this object's references are, as byte offsets. Written
         // with `offsetof` so the compiler that laid the struct out is the one
@@ -1189,7 +1283,7 @@ fn emit_block(
     for value in &record.ops {
         emit_op(writer, func, *value, context)?;
     }
-    emit_terminator(writer, func, block, next, &origin);
+    emit_terminator(writer, func, block, next, &origin, context);
 
     writer.dedent();
     Ok(())
@@ -1689,6 +1783,7 @@ fn emit_terminator(
     block: BlockId,
     next: Option<BlockId>,
     origin: &Origin,
+    context: &Context<'_>,
 ) {
     let record = &func.blocks[block.0 as usize];
 
@@ -1697,7 +1792,12 @@ fn emit_terminator(
         let params = &func.blocks[target.0 as usize].params;
         for copy in destruct::edge_copies(params, args) {
             let text = match copy {
-                Copy::Move { to, from } => format!("{} = {};", value_name(to), value_name(from)),
+                Copy::Move { to, from } => format!(
+                    "{} = {}{};",
+                    value_name(to),
+                    upcast(func, context, &func.value(to).ty, from),
+                    value_name(from)
+                ),
                 Copy::Save { temp, from } => format!("t{temp} = {};", value_name(from)),
                 Copy::Restore { to, temp } => format!("{} = t{temp};", value_name(to)),
             };
@@ -1707,7 +1807,10 @@ fn emit_terminator(
 
     match &record.terminator {
         Terminator::Return(Some(value)) => {
-            writer.line(origin, format!("return {};", value_name(*value)));
+            // A derived reference where a base is declared. The layout is base
+            // first so the pointer is already right; C wants to be told.
+            let cast = upcast(func, context, &func.return_type, *value);
+            writer.line(origin, format!("return {cast}{};", value_name(*value)));
         }
         Terminator::Return(None) => writer.line(origin, "return;"),
         Terminator::Unreachable => {

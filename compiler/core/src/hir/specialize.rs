@@ -491,6 +491,20 @@ fn convert(
     if func.values[operand.0 as usize].ty == *wanted {
         return operand;
     }
+    // A managed reference has one representation, so between two of them there
+    // is nothing to convert: a pointer to a derived object *is* a pointer to
+    // its base, which is what base-first layout is for. Manufacturing a value
+    // for the upcast would give one object two SSA names, and every pass that
+    // follows a reference -- escape analysis, reference counting, liveness --
+    // would see two objects where there is one. Escape analysis is where that
+    // showed: a returned closure looked frame-local, because what the return
+    // read was the conversion rather than the allocation.
+    //
+    // The backend spells the cast at the point of use, which it has to do for
+    // call arguments anyway.
+    if func.values[operand.0 as usize].ty.is_managed() && wanted.is_managed() {
+        return operand;
+    }
     let origin = func.values[operand.0 as usize].origin.clone();
 
     // Converting a constant is a constant. Without this the emitted code says

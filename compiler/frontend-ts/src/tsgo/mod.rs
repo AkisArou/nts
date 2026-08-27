@@ -854,6 +854,20 @@ impl SemanticSource for TsgoApi {
     fn snapshot(&mut self, tsconfig: &Utf8Path) -> Result<SemanticSnapshot, SnapshotError> {
         let started = Instant::now();
 
+        // tsgo resolves the path it is given against *its own* working
+        // directory, which is set below to the file's own directory -- so a
+        // relative path would be joined to itself. It wants an absolute one,
+        // and here is the single place that can be made true.
+        let absolute;
+        let tsconfig = if tsconfig.is_absolute() {
+            tsconfig
+        } else {
+            absolute = Utf8PathBuf::from_path_buf(std::env::current_dir().unwrap_or_default())
+                .map(|cwd| cwd.join(tsconfig))
+                .unwrap_or_else(|_| tsconfig.to_owned());
+            &absolute
+        };
+
         let cwd = tsconfig.parent().unwrap_or(Utf8Path::new("."));
         let mut client = Client::spawn(&self.executable, cwd)?;
 

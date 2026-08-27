@@ -93,6 +93,31 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
         .map(|(index, func)| (func.name.as_str(), index))
         .collect();
 
+    // Which functions a dispatch slot can land on. Exactly the set
+    // `hir::reachable` walks: a table entry is a possible target, and there is
+    // nothing else a call through the slot can reach.
+    //
+    // Knowing the set is what keeps a closure in the frame. Treating a dispatch
+    // as opaque -- which is what an external call is -- would mean every
+    // closure ever passed anywhere is heap-allocated, and `arr.map(x => x * 2)`
+    // would pay an allocation and a reference count for a function whose whole
+    // life is one call.
+    let mut in_slot: FxHashMap<u32, Vec<usize>> = FxHashMap::default();
+    for layout in &program.layouts {
+        for (slot, method) in layout.methods.iter().enumerate() {
+            let Some(target) = method.as_deref().and_then(|name| by_name.get(name)) else {
+                continue;
+            };
+            let entry = in_slot
+                .entry(u32::try_from(slot).unwrap_or(u32::MAX))
+                .or_default();
+            if !entry.contains(target) {
+                entry.push(*target);
+            }
+        }
+    }
+    let arity: Vec<usize> = program.funcs.iter().map(|func| func.params.len()).collect();
+
     // Every parameter starts held, and is released to `escapes` by evidence.
     let mut escaping_params: Vec<FxHashSet<u32>> =
         program.funcs.iter().map(|_| FxHashSet::default()).collect();
@@ -102,7 +127,7 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
         results = program
             .funcs
             .iter()
-            .map(|func| analyze(func, &by_name, &escaping_params))
+            .map(|func| analyze(func, &by_name, &in_slot, &arity, &escaping_params))
             .collect();
 
         let mut changed = false;
@@ -126,6 +151,8 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
 fn analyze(
     func: &Func,
     by_name: &FxHashMap<&str, usize>,
+    in_slot: &FxHashMap<u32, Vec<usize>>,
+    arity: &[usize],
     escaping_params: &[FxHashSet<u32>],
 ) -> Escapes {
     let mut escapes = Escapes::default();
@@ -140,9 +167,8 @@ fn analyze(
                 }
                 OpKind::Call { callee, args } => match callee {
                     // A body that is not here could do anything with what it is
-                    // given -- and a virtual call's body is one of several, so
-                    // the same is true of it.
-                    Callee::External(_) | Callee::Virtual { .. } => {
+                    // given.
+                    Callee::External(_) => {
                         escapes.values.extend(args.iter().copied());
                     }
                     Callee::Direct(name) => {
@@ -150,12 +176,24 @@ fn analyze(
                             escapes.values.extend(args.iter().copied());
                             continue;
                         };
-                        for (slot, argument) in args.iter().enumerate() {
-                            let slot = u32::try_from(slot).unwrap_or(u32::MAX);
-                            if escaping_params[*target].contains(&slot) {
-                                escapes.values.insert(*argument);
-                            }
-                        }
+                        escape_into(
+                            &mut escapes,
+                            args,
+                            std::slice::from_ref(target),
+                            arity,
+                            escaping_params,
+                        );
+                    }
+                    // A dispatch reaches one of several bodies, and which is
+                    // decided by a receiver this cannot see -- so an argument
+                    // escapes if *any* of them lets it. That is a union rather
+                    // than a guess, because the table is the complete list.
+                    Callee::Virtual { slot, .. } | Callee::Closure { slot } => {
+                        let Some(targets) = in_slot.get(slot) else {
+                            escapes.values.extend(args.iter().copied());
+                            continue;
+                        };
+                        escape_into(&mut escapes, args, targets, arity, escaping_params);
                     }
                 },
                 _ => {}
@@ -182,6 +220,27 @@ fn analyze(
         }
     }
     escapes
+}
+
+/// Mark the arguments that any of a call's possible targets lets escape.
+fn escape_into(
+    escapes: &mut Escapes,
+    args: &[ValueId],
+    targets: &[usize],
+    arity: &[usize],
+    escaping_params: &[FxHashSet<u32>],
+) {
+    for (slot, argument) in args.iter().enumerate() {
+        let at = u32::try_from(slot).unwrap_or(u32::MAX);
+        let escaping = targets.iter().any(|target| {
+            // An argument past the end of a target's parameter list is one this
+            // does not model, and what is not modelled is assumed to escape.
+            slot >= arity[*target] || escaping_params[*target].contains(&at)
+        });
+        if escaping {
+            escapes.values.insert(*argument);
+        }
+    }
 }
 
 #[cfg(test)]

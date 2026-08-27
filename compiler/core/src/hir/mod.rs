@@ -434,6 +434,14 @@ pub enum Callee {
     /// optimization applied afterwards: a call site knows which it is, because
     /// the hierarchy is closed and the compiler has all of it.
     Virtual { slot: u32, declared: String },
+    /// A function *value* being called: `f(x)` where `f` is a parameter, a
+    /// local, or anything else that holds a closure.
+    ///
+    /// A closure is an object with one method, so this is a dispatch like any
+    /// other -- but there is no declaration to take a signature from, because
+    /// every closure of the type has its own. The signature is built from the
+    /// call itself, which knows the argument types and the result type exactly.
+    Closure { slot: u32 },
 }
 
 /// A binary operator, after the source operator has been resolved against its
@@ -570,14 +578,22 @@ impl Layout {
     /// Field names and representations, in order. Not `readonly`: a value is
     /// laid out the same whether or not anyone may write to it, and refusing to
     /// share a layout over that would split `Point` from `Readonly<Point>`.
+    ///
+    /// The dispatch table counts too. Two classes that extend the same base and
+    /// add no fields have identical field lists and different `area` methods —
+    /// merging them on fields alone would give one of them the other's
+    /// behaviour. The same is true, and much more often, of closures: their
+    /// fields are what they captured, and two closures capturing one number
+    /// each are the same shape and different code.
     #[must_use]
-    pub fn same_shape(&self, fields: &[Field]) -> bool {
+    pub fn same_shape(&self, fields: &[Field], methods: &[Option<String>]) -> bool {
         self.fields.len() == fields.len()
             && self
                 .fields
                 .iter()
                 .zip(fields)
                 .all(|(mine, theirs)| mine.name == theirs.name && mine.ty == theirs.ty)
+            && self.methods == methods
     }
 
     /// Which fields hold references, by name, in layout order.
@@ -612,6 +628,16 @@ impl Layout {
             .and_then(|at| u32::try_from(at).ok())
     }
 }
+
+/// The first type id this compiler gives to a class the checker never saw.
+///
+/// A closure's class is one: the checker has a type for the arrow's
+/// *signature*, but the thing that carries what it captured is this compiler's
+/// own construction. Those are numbered down from the top of the id space, so a
+/// program would have to declare a million types before one collided -- and a
+/// dump can tell the two apart, which matters because `obj#4294967295` reads
+/// like a bug where `closure#0` reads like what it is.
+pub const SYNTHETIC_TYPE_FLOOR: u32 = u32::MAX - (1 << 20);
 
 /// A lowered program.
 #[derive(Debug, Clone, Default)]

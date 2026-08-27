@@ -385,10 +385,36 @@ fn render(ty: &HirType) -> String {
         HirType::Int { bits, signed } => format!("{}{bits}", if *signed { 'i' } else { 'u' }),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "managed<str>".to_owned(),
+        HirType::Managed(ManagedType::Object(id))
+            if id.0 >= nts_core::hir::SYNTHETIC_TYPE_FLOOR =>
+        {
+            format!("managed<closure#{}>", u32::MAX - id.0)
+        }
         HirType::Managed(ManagedType::Object(id)) => format!("managed<obj#{}>", id.0),
         HirType::Managed(ManagedType::Array(element)) => {
             format!("managed<[{}]>", render(element))
         }
+    }
+}
+
+/// How a call names what it is calling, and what to call the operation.
+fn render_callee(
+    callee: &nts_core::hir::Callee,
+    args: &[nts_core::hir::ValueId],
+) -> (String, String) {
+    match callee {
+        nts_core::hir::Callee::Direct(name) => ("call".to_owned(), name.clone()),
+        nts_core::hir::Callee::External(name) => ("call.extern".to_owned(), name.clone()),
+        nts_core::hir::Callee::Virtual { slot, declared } => {
+            (format!("call.virtual[{slot}]"), declared.clone())
+        }
+        // The receiver *is* the name: a closure call has no declaration to point
+        // at, only the value holding the code.
+        nts_core::hir::Callee::Closure { slot } => (
+            format!("call.closure[{slot}]"),
+            args.first()
+                .map_or_else(String::new, |a| format!("%{}", a.0)),
+        ),
     }
 }
 
@@ -479,13 +505,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         }
         OpKind::Call { callee, args } => {
             let rendered: Vec<String> = args.iter().map(|a| format!("%{}", a.0)).collect();
-            let (kind, name) = match callee {
-                nts_core::hir::Callee::Direct(name) => ("call".to_owned(), name),
-                nts_core::hir::Callee::External(name) => ("call.extern".to_owned(), name),
-                nts_core::hir::Callee::Virtual { slot, declared } => {
-                    (format!("call.virtual[{slot}]"), declared)
-                }
-            };
+            let (kind, name) = render_callee(callee, args);
             format!("%{index} = {kind} {name}({}) : {ty}", rendered.join(", "))
         }
         OpKind::Return(Some(v)) => format!("ret %{}", v.0),

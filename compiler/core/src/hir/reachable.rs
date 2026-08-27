@@ -125,7 +125,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             let targets: Vec<&str> = match callee {
                 Callee::Direct(target) => vec![target.as_str()],
                 Callee::External(_) => Vec::new(),
-                Callee::Virtual { slot, .. } => program
+                Callee::Virtual { slot, .. } | Callee::Closure { slot } => program
                     .layouts
                     .iter()
                     .filter_map(|layout| layout.methods.get(*slot as usize))
@@ -145,5 +145,17 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
     let keep: FxHashSet<String> = reached.into_iter().map(str::to_owned).collect();
     let before = program.funcs.len();
     program.funcs.retain(|func| keep.contains(&func.name));
+
+    // A table entry naming a function that is gone. It is unreachable by the
+    // same argument that removed the function -- no call site dispatches
+    // through this slot -- and leaving the name would ask the linker for a
+    // definition that no longer exists.
+    for layout in &mut program.layouts {
+        for method in &mut layout.methods {
+            if method.as_ref().is_some_and(|name| !keep.contains(name)) {
+                *method = None;
+            }
+        }
+    }
     before - program.funcs.len()
 }
