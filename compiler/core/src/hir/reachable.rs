@@ -88,6 +88,12 @@ pub fn undeclared<'a>(program: &Program, declared: &'a [String]) -> Vec<&'a str>
         .collect()
 }
 
+/// The names something outside this compilation can call, as a set.
+///
+/// A named type rather than the set itself, because three passes take it and
+/// each was otherwise spelling a concrete hasher into its public signature.
+pub type RootNames = FxHashSet<String>;
+
 /// The functions something outside this compilation can call.
 ///
 /// Two passes need this and they need the *same* answer. Reachability starts

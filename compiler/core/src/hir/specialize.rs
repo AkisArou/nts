@@ -32,7 +32,7 @@ use rustc_hash::FxHashMap;
 
 use super::facts;
 use super::flow::Analysis;
-use super::{BinOp, Block, Func, HirType, Op, OpKind, UnOp, ValueId};
+use super::{BinOp, Block, Callee, Func, HirType, Op, OpKind, UnOp, ValueId};
 
 /// Bounds of the representations this pass will choose.
 const I32_MIN: f64 = -2_147_483_648.0;
@@ -86,7 +86,11 @@ impl Classes {
 }
 
 /// Rewrite a function to use integers wherever that is provable.
-pub fn specialize(func: &mut Func, analysis: &Analysis) -> Report {
+pub fn specialize(
+    func: &mut Func,
+    analysis: &Analysis,
+    expected: &super::signatures::Expected,
+) -> Report {
     let count = func.values.len();
     let mut classes = Classes::new(count);
 
@@ -227,7 +231,7 @@ pub fn specialize(func: &mut Func, analysis: &Analysis) -> Report {
         }
     }
 
-    report.conversions = insert_conversions(func, analysis);
+    report.conversions = insert_conversions(func, analysis, expected);
     report
 }
 
@@ -365,7 +369,11 @@ fn width_of(
 }
 
 /// Add the conversions the new types require, and count them.
-fn insert_conversions(func: &mut Func, analysis: &Analysis) -> usize {
+fn insert_conversions(
+    func: &mut Func,
+    analysis: &Analysis,
+    expected: &super::signatures::Expected,
+) -> usize {
     let mut blocks = std::mem::take(&mut func.blocks);
     let return_type = func.return_type.clone();
     let mut count = 0;
@@ -418,19 +426,37 @@ fn insert_conversions(func: &mut Func, analysis: &Analysis) -> usize {
                     Some(OpKind::Unary { op, operand })
                 }
                 OpKind::Call { callee, args } => {
-                    // Signatures are not specialized, so a *number* crosses as a
-                    // double however it is held here. Anything else crosses as
-                    // itself: a managed reference has one representation and
-                    // this pass never changed it — coercing it to a double
-                    // would be a cast from a pointer, which is not a conversion
-                    // but a different value.
+                    // What the callee says it takes. `hir::signatures` may have
+                    // narrowed a parameter to an integer, in which case the
+                    // argument is converted to *that* rather than widened back
+                    // to a double -- and it is sound to do so, because that
+                    // narrowing was decided from the facts at this very call.
+                    //
+                    // A callee this compilation does not define takes a
+                    // `number` as a double, because that is the ABI a
+                    // declaration promises. A managed reference crosses as
+                    // itself either way: it has one representation, and
+                    // coercing it to a double would be a cast from a pointer
+                    // rather than a conversion.
+                    let wanted = match &callee {
+                        Callee::Direct(name) => expected.get(name),
+                        _ => None,
+                    };
                     let args = args
                         .into_iter()
-                        .map(|arg| {
-                            if matches!(func.values[arg.0 as usize].ty, HirType::Int { .. }) {
-                                coerce(func, arg, &HirType::NUMBER)
-                            } else {
-                                arg
+                        .enumerate()
+                        .map(|(at, arg)| {
+                            let target = wanted.and_then(|params| params.get(at));
+                            match target {
+                                Some(ty @ HirType::Int { .. }) => coerce(func, arg, ty),
+                                _ if matches!(
+                                    func.values[arg.0 as usize].ty,
+                                    HirType::Int { .. }
+                                ) =>
+                                {
+                                    coerce(func, arg, &HirType::NUMBER)
+                                }
+                                _ => arg,
                             }
                         })
                         .collect();

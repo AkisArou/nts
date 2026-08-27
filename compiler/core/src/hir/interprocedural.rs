@@ -114,8 +114,16 @@ fn settle(
         .collect();
 
     let mut crossing = Crossing {
-        params: program.funcs.iter().map(declared_params).collect(),
-        returns: FxHashMap::default(),
+        params: seed(program, outward),
+        // BOTTOM rather than absent, for the same reason parameters start
+        // there: an absent entry reads as TOP at the use, and a function whose
+        // result depends on its own result then converges to TOP. `fib`
+        // returns `fib(n - 1) + fib(n - 2)`.
+        returns: program
+            .funcs
+            .iter()
+            .map(|func| (func.name.clone(), Facts::BOTTOM))
+            .collect(),
         slot_returns: FxHashMap::default(),
         fields: FxHashMap::default(),
     };
@@ -127,18 +135,7 @@ fn settle(
         // Rebuilt from nothing each round rather than accumulated, so that this
         // is a Kleene iteration over the whole system and not a monotone drift
         // that can never take anything back.
-        let mut params: Vec<Vec<Facts>> = program
-            .funcs
-            .iter()
-            .map(|func| {
-                if outward.contains(func.name.as_str()) {
-                    // The program's edge. Callers are outside it.
-                    declared_params(func)
-                } else {
-                    vec![Facts::BOTTOM; func.params.len()]
-                }
-            })
-            .collect();
+        let mut params: Vec<Vec<Facts>> = seed(program, outward);
 
         for (caller, func) in program.funcs.iter().enumerate() {
             // By block, because what an argument is worth is what is known
@@ -189,6 +186,32 @@ fn settle(
         };
     }
     analyses
+}
+
+/// Where the parameter fixpoint starts.
+///
+/// BOTTOM for everything the program calls itself, because this is a *least*
+/// fixpoint and a least fixpoint has to start at the bottom. Starting at the
+/// declared type instead is what a *greatest* fixpoint does, and it converges
+/// to the declared type: a recursive function analyzed with TOP parameters
+/// passes TOP to itself, joins TOP, and stays there forever. `fib` was
+/// unprovable for exactly that reason, and so was every other function that
+/// calls itself.
+///
+/// A root keeps its declared type, since its callers are outside the program
+/// and there is nothing to join.
+fn seed(program: &Program, outward: &rustc_hash::FxHashSet<&str>) -> Vec<Vec<Facts>> {
+    program
+        .funcs
+        .iter()
+        .map(|func| {
+            if outward.contains(func.name.as_str()) {
+                declared_params(func)
+            } else {
+                vec![Facts::BOTTOM; func.params.len()]
+            }
+        })
+        .collect()
 }
 
 /// Which functions a call can reach.

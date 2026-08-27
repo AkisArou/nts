@@ -31,6 +31,7 @@ pub mod facts;
 pub mod fields;
 pub mod flow;
 pub mod fold;
+pub mod guards;
 pub mod interprocedural;
 pub mod liveness;
 pub mod loops;
@@ -39,6 +40,7 @@ pub mod lower;
 pub mod monomorphize;
 pub mod rc;
 pub mod reachable;
+pub mod signatures;
 pub mod simplify;
 pub mod specialize;
 pub mod verify;
@@ -1020,9 +1022,25 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         let narrowed = fields::representations(&program, &analyses);
         fields::narrow(&mut program, &narrowed);
 
+        // Signatures before bodies. A parameter narrowed to an integer changes
+        // what its body can prove about everything derived from it, and every
+        // caller converts to the narrower type rather than widening back.
+        let outward: rustc_hash::FxHashSet<String> = reachable::root_names(&program, options.roots)
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        // A root's arguments are unknowable, but almost every one of them is a
+        // whole number. One test at the boundary makes that a fact the analysis
+        // below can use, at the cost of a copy of the body.
+        guards::install(&mut program, &outward);
+
+        let analyses = interprocedural::analyze_program(&program, options.roots);
+        signatures::specialize(&mut program, &analyses, &outward);
+        let expected = signatures::expected(&program);
+
         let analyses = interprocedural::analyze_program(&program, options.roots);
         for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
-            let report = specialize::specialize(func, analysis);
+            let report = specialize::specialize(func, analysis, &expected);
             specialized += report.specialized;
             conversions += report.conversions;
         }
