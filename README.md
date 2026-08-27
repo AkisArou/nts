@@ -82,8 +82,8 @@ What is stopping the rest, in order:
 | a module-scope variable with no initializer | 4 |
 | a parameter of unrepresentable type (the type parameter `T`) | 4 |
 | this statement | 4 |
-| a class of unrepresentable type (a structured type (flags 0x100000)) | 3 |
 | a parameter of unrepresentable type (any) | 3 |
+| a class of unrepresentable type (a structured type (flags 0x100000)) | 2 |
 | a parameter of unrepresentable type (a tuple) | 2 |
 | a parameter of unrepresentable type (a union of a structured type (flags 0x100000) | null | number | undefined) | 2 |
 | a parameter of unrepresentable type (a union of a structured type (flags 0x100000) | null | number) | 2 |

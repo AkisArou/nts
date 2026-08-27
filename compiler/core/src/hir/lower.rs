@@ -680,6 +680,28 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         if node.kind != NodeKind::Syntax(syntax::FUNCTION_DECLARATION) {
             continue;
         }
+        // An `async` function is refused rather than lowered, and the reason it
+        // needs saying is that it was neither before. `Promise<number>` has no
+        // representation, so the return type resolved to `void`, the returned
+        // value was converted away, and the verifier accepted the result -- a
+        // function that computes the right number and discards it, with no
+        // diagnostic. `await` and `new Promise` were both properly refused; it
+        // was bare `async` that was accepted and wrong.
+        //
+        // Refusing it is not the feature. A promise is a value with a
+        // representation and a suspension is a transformation of the function,
+        // and neither exists yet; until they do, saying so is the whole of what
+        // this compiler can honestly do.
+        if node
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+        {
+            lowered.diagnostics.push(
+                FuncBuilder::new(snapshot).unsupported(id, "an `async` function"),
+            );
+            continue;
+        }
+
         // `declare function f(): number` has no body because it is *external*,
         // not because this lowering failed to understand it. Refusing it says
         // the opposite, and -- since a caller of a refused function is refused
@@ -1669,6 +1691,11 @@ impl<'a> FuncBuilder<'a> {
         // a static method, because a call site names the class it is written on.
         let modifiers = self.node(member).modifiers;
         let is_static = modifiers.contains(nts_semantic_schema::DeclarationModifiers::STATIC);
+        // As for a function: `Promise<T>` has no representation, so an `async`
+        // method resolved to `-> void` and returned an `f64` from it anyway.
+        if modifiers.contains(nts_semantic_schema::DeclarationModifiers::ASYNC) {
+            return Err(self.unsupported(member, "an `async` method"));
+        }
         if modifiers.contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT) {
             return Err(self.unsupported(member, "an abstract method"));
         }
