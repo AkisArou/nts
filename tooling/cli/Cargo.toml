@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 nts-build.workspace = true
 nts-codegen-c.workspace = true
+nts-codegen-napi.workspace = true
 nts-core.workspace = true
 nts-differential.workspace = true
 nts-debug-lowering.workspace = true

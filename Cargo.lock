@@ -157,6 +157,7 @@ dependencies = [
  "camino",
  "nts-build",
  "nts-codegen-c",
+ "nts-codegen-napi",
  "nts-core",
  "nts-debug-lowering",
  "nts-diagnostics",
@@ -188,6 +189,15 @@ dependencies = [
  "nts-core",
  "nts-diagnostics",
  "nts-semantic-schema",
+ "rustc-hash",
+]
+
+[[package]]
+name = "nts-codegen-napi"
+version = "0.0.0"
+dependencies = [
+ "nts-codegen-c",
+ "nts-core",
  "rustc-hash",
 ]
 
