@@ -10,13 +10,18 @@
 // sentence, and it costs one script.
 
 import { posix as real } from "node:path";
+
+// `resolve` calls the declared `nts_process_cwd`. Compiled, that is an extern
+// satisfied by uv_cwd; on node it is this global. Same function either way.
+globalThis.nts_process_cwd = () => process.cwd();
 import {
   normalize,
   isAbsolute,
   dirname,
   basename,
   extname,
-  join2,
+  join,
+  resolve,
 } from "./src/main.ts";
 
 // Paths chosen for the places a path implementation goes wrong: empty, bare
@@ -57,7 +62,8 @@ for (const p of PATHS) {
   compare("basename", basename, real.basename, p);
   compare("extname", extname, real.extname, p);
   for (const q of PATHS) {
-    compare("join2", join2, real.join, p, q);
+    compare("join", join, real.join, p, q);
+    compare("resolve", resolve, real.resolve, p, q);
   }
 }
 

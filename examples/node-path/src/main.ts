@@ -259,13 +259,136 @@ export function basename(path: string): string {
 
 // Upstream `lib/path.js:1332-1352`, body transcribed.
 //
-// PATCH(9): the rest parameter and the array become fixed arity. Upstream
-//   collects `...args` into an array, filters the empty entries and joins with
-//   '/'. Two arguments is what a differential harness can drive, and it is the
-//   arity that covers the interesting cases.
-export function join2(a: string, b: string): string {
-  if (a.length === 0 && b.length === 0) return ".";
-  if (a.length === 0) return normalize(b);
-  if (b.length === 0) return normalize(a);
-  return normalize(a + "/" + b);
+// Upstream `lib/path.js:1332-1352`, body transcribed.
+//
+// Rest parameters lower, so this keeps upstream's variadic shape. The array
+// upstream builds does not: the runtime's arrays cannot grow, so the segments
+// are concatenated directly. Same result, one fewer allocation.
+export function join(...args: string[]): string {
+  let joined = "";
+  for (let i = 0; i < args.length; ++i) {
+    const arg = args[i];
+    if (arg.length > 0) {
+      joined = joined.length === 0 ? arg : joined + "/" + arg;
+    }
+  }
+  if (joined.length === 0) return ".";
+  return normalize(joined);
+}
+
+// Upstream `lib/path.js:1245-1288`, body transcribed.
+//
+// This is the first function in the module with a *native* dependency:
+// `process.cwd()`. Upstream reaches it through `internalBinding`
+// ('process_methods'); here it is one declared function, lowered to an extern
+// call and satisfied by `uv_cwd` — or by `deno_fs`'s `FileSystem::cwd`, which
+// is a change in the binding and not in this file.
+declare function nts_process_cwd(): string;
+
+export function resolve(...args: string[]): string {
+  let resolvedPath = "";
+  let resolvedAbsolute = false;
+
+  for (let i = args.length - 1; i >= 0 && !resolvedAbsolute; i--) {
+    const part = args[i];
+    // Upstream `continue`s over empty entries.
+    if (part.length > 0) {
+      resolvedPath = part + "/" + resolvedPath;
+      resolvedAbsolute = charCodeAt(part, 0) === CHAR_FORWARD_SLASH;
+    }
+  }
+
+  if (!resolvedAbsolute) {
+    const cwd = nts_process_cwd();
+    resolvedPath = cwd + "/" + resolvedPath;
+    resolvedAbsolute = charCodeAt(cwd, 0) === CHAR_FORWARD_SLASH;
+  }
+
+  resolvedPath = normalizeString(resolvedPath, !resolvedAbsolute, "/", (c: number): boolean =>
+    isPosixPathSeparator(c),
+  );
+
+  if (resolvedAbsolute) return "/" + resolvedPath;
+  return resolvedPath.length > 0 ? resolvedPath : ".";
+}
+
+
+// Upstream `lib/path.js:1615-1693`, body transcribed.
+//
+// The first function in this module that returns a *record* rather than a
+// scalar. Node returns a plain object, and so does this: the shape is the
+// interface, and `codegen/napi` builds the JavaScript object from these fields.
+//
+// PATCH(2): `break` becomes `stop`.
+// PATCH(3): `continue` becomes the `else` it already implied.
+export interface ParsedPath {
+  root: string;
+  dir: string;
+  base: string;
+  ext: string;
+  name: string;
+}
+
+export function parse(path: string): ParsedPath {
+  let root = "";
+  let dir = "";
+  let base = "";
+  let ext = "";
+  let name = "";
+  if (path.length === 0) return { root, dir, base, ext, name };
+
+  const isAbsolutePath = charCodeAt(path, 0) === CHAR_FORWARD_SLASH;
+  let start = 0;
+  if (isAbsolutePath) {
+    root = "/";
+    start = 1;
+  }
+  let startDot = -1;
+  let startPart = 0;
+  let end = -1;
+  let matchedSlash = true;
+  let preDotState = 0;
+  let stop = false;
+
+  for (let i = path.length - 1; i >= start && !stop; --i) {
+    const code = charCodeAt(path, i);
+    if (code === CHAR_FORWARD_SLASH) {
+      if (!matchedSlash) {
+        startPart = i + 1;
+        stop = true;
+      }
+    } else {
+      if (end === -1) {
+        matchedSlash = false;
+        end = i + 1;
+      }
+      if (code === CHAR_DOT) {
+        if (startDot === -1) startDot = i;
+        else if (preDotState !== 1) preDotState = 1;
+      } else if (startDot !== -1) {
+        preDotState = -1;
+      }
+    }
+  }
+
+  if (end !== -1) {
+    const from = startPart === 0 && isAbsolutePath ? 1 : startPart;
+    if (
+      startDot === -1 ||
+      preDotState === 0 ||
+      (preDotState === 1 && startDot === end - 1 && startDot === startPart + 1)
+    ) {
+      base = slice(path, from, end);
+      name = base;
+    } else {
+      name = slice(path, from, startDot);
+      base = slice(path, from, end);
+      ext = slice(path, startDot, end);
+    }
+  }
+
+  if (startPart > 0) dir = slice(path, 0, startPart - 1);
+  else if (isAbsolutePath) dir = "/";
+
+  return { root, dir, base, ext, name };
 }
