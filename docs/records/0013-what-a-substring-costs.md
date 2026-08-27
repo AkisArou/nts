@@ -1,4 +1,4 @@
-# 0011 — What a substring costs, and what a view would be worth
+# 0013 — What a substring costs, and what a view would be worth
 
 Every benchmark in the suite sits between 0.43x and 1.85x of hand-written C++.
 Slicing sits at 6.64x, which makes it the largest single gap in the project —

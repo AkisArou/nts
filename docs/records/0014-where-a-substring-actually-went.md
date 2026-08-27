@@ -1,6 +1,6 @@
-# 0012 — Where a substring actually went
+# 0014 — Where a substring actually went
 
-Record 0011 measured the slicing benchmark at 6.64x the C++ reference and
+Record 0013 measured the slicing benchmark at 6.64x the C++ reference and
 concluded the cost was the allocation, with a *view* as the answer. Half of that
 was right. The half that was wrong was wrong for an instructive reason: it was
 reasoning about the benchmark rather than measuring parts of it.
@@ -20,7 +20,7 @@ and time it. Three variants, each a superset of the next:
 The last row is the one that mattered. With the slicing removed the benchmark is
 *at parity with C++*, so the scan loop — which is most of the instructions
 executed — was never the problem. The gap decomposed into 53% allocation and 27%
-arithmetic, and the arithmetic was not something record 0011 had considered at
+arithmetic, and the arithmetic was not something record 0013 had considered at
 all.
 
 Getting the build flags wrong made the first attempt read 20 µs for both
@@ -85,7 +85,7 @@ fits in an `int64` needs one instruction.
 ## A string that does not outlive its frame is built in it
 
 That leaves the allocation, and it is 53%. A view does not help here and record
-0011 says why: the words are three to six characters, so the copy is nothing and
+0013 says why: the words are three to six characters, so the copy is nothing and
 the `malloc`/`free` around it is everything.
 
 The compiler already knew enough to skip both, in two facts computed for other
@@ -118,7 +118,7 @@ the copy anyway.
 
 | | ns | vs C++ | vs V8 |
 | --- | ---: | ---: | ---: |
-| record 0011 left it at | 12,040 | 5.49x | 1.67x |
+| record 0013 left it at | 12,040 | 5.49x | 1.67x |
 | a length bound | 8,000 | 3.70x | 1.12x |
 | a guarded length, and no `floor` | 7,860 | 3.70x | 1.09x |
 | built in the frame | 5,150 | 2.36x | 0.72x |

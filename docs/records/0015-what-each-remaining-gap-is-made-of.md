@@ -1,4 +1,4 @@
-# 0013 — What each remaining gap is made of
+# 0015 — What each remaining gap is made of
 
 Every benchmark now sits between 0.46x and 2.4x of hand-written C++, and ahead
 of both JavaScript engines almost everywhere. The interesting question is no
@@ -81,7 +81,7 @@ these two are its benchmark.
 
 ## What is still a defect
 
-- **`substrings` at 2.4x**, and record 0012 says what the remainder is: an
+- **`substrings` at 2.4x**, and record 0014 says what the remainder is: an
   out-of-line helper re-deriving indices the compiler already proved whole and in
   range.
 - **`accumulate` at 1.4x** and **`queens` at 1.2x**, both unexamined.
