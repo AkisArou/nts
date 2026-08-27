@@ -28,6 +28,7 @@ pub mod bounds;
 pub mod dce;
 pub mod escape;
 pub mod facts;
+pub mod fields;
 pub mod flow;
 pub mod fold;
 pub mod interprocedural;
@@ -35,6 +36,7 @@ pub mod liveness;
 pub mod loops;
 
 pub mod lower;
+pub mod monomorphize;
 pub mod rc;
 pub mod reachable;
 pub mod simplify;
@@ -693,6 +695,40 @@ impl Program {
     /// element points at, so there is nothing per-element-type to be precise
     /// with. A field whose type has no layout here is cyclic for the same
     /// reason — the answer is unknown, and unknown has to mean yes.
+    /// Which functions a dispatch slot can land on, by index into `funcs`.
+    ///
+    /// Every pass that reasons across a call needs this, because a dispatch is not
+    /// opaque: the tables *are* the complete list of what a call through a slot can
+    /// reach. Treating it as unknowable instead costs precision everywhere --
+    /// reference-counting placement, escape analysis, and the facts a parameter is
+    /// analyzed with, which is the one that turns into wrong code rather than slow
+    /// code.
+    #[must_use]
+    pub fn slot_targets(&self) -> rustc_hash::FxHashMap<u32, Vec<usize>> {
+        let by_name: rustc_hash::FxHashMap<&str, usize> = self
+            .funcs
+            .iter()
+            .enumerate()
+            .map(|(index, func)| (func.name.as_str(), index))
+            .collect();
+
+        let mut targets: rustc_hash::FxHashMap<u32, Vec<usize>> = rustc_hash::FxHashMap::default();
+        for layout in &self.layouts {
+            for (slot, method) in layout.methods.iter().enumerate() {
+                let Some(target) = method.as_deref().and_then(|name| by_name.get(name)) else {
+                    continue;
+                };
+                let entry = targets
+                    .entry(u32::try_from(slot).unwrap_or(u32::MAX))
+                    .or_default();
+                if !entry.contains(target) {
+                    entry.push(*target);
+                }
+            }
+        }
+        targets
+    }
+
     #[must_use]
     pub fn cyclic_layouts(&self) -> Vec<bool> {
         // Edges: which layouts a layout's reference fields can lead to.
@@ -824,6 +860,8 @@ pub struct Prepared {
     pub framed: usize,
     /// Operations that turned out to return one of their own operands.
     pub simplified: usize,
+    /// Functions cloned for the closure they are called with.
+    pub cloned: usize,
 }
 
 /// Lower a snapshot and make it ready to emit.
@@ -916,6 +954,17 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // analyzed interprocedurally, specialized, proven and emitted, and a
     // function nothing can call should pay for none of that.
     let pruned = reachable::prune(&mut program, options.roots);
+
+    // Before any analysis, because a clone's parameter is a different type and
+    // everything downstream should see it that way -- and because the dispatch
+    // it turns into a direct call is a call the interprocedural analysis can
+    // then follow.
+    let cloned = monomorphize::monomorphize(&mut program);
+    // Again, because a function every caller now reaches through a clone is a
+    // function nothing calls -- and one that still contains the dispatch the
+    // clone exists to avoid.
+    let pruned = pruned + reachable::prune(&mut program, options.roots);
+
     let mut specialized = 0;
     let mut conversions = 0;
     let mut checks_removed = 0;
@@ -1007,6 +1056,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         .count();
 
     Prepared {
+        cloned,
         program,
         diagnostics: lowered.diagnostics,
         specialized,

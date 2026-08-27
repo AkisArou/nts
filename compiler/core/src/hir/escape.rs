@@ -93,29 +93,12 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
         .map(|(index, func)| (func.name.as_str(), index))
         .collect();
 
-    // Which functions a dispatch slot can land on. Exactly the set
-    // `hir::reachable` walks: a table entry is a possible target, and there is
-    // nothing else a call through the slot can reach.
-    //
-    // Knowing the set is what keeps a closure in the frame. Treating a dispatch
-    // as opaque -- which is what an external call is -- would mean every
-    // closure ever passed anywhere is heap-allocated, and `arr.map(x => x * 2)`
-    // would pay an allocation and a reference count for a function whose whole
-    // life is one call.
-    let mut in_slot: FxHashMap<u32, Vec<usize>> = FxHashMap::default();
-    for layout in &program.layouts {
-        for (slot, method) in layout.methods.iter().enumerate() {
-            let Some(target) = method.as_deref().and_then(|name| by_name.get(name)) else {
-                continue;
-            };
-            let entry = in_slot
-                .entry(u32::try_from(slot).unwrap_or(u32::MAX))
-                .or_default();
-            if !entry.contains(target) {
-                entry.push(*target);
-            }
-        }
-    }
+    // Knowing what a dispatch can reach is what keeps a closure in the frame.
+    // Treating it as opaque -- which is what an external call is -- would mean
+    // every closure ever passed anywhere is heap-allocated, and
+    // `arr.map(x => x * 2)` would pay an allocation and a reference count for a
+    // function whose whole life is one call.
+    let in_slot = program.slot_targets();
     let arity: Vec<usize> = program.funcs.iter().map(|func| func.params.len()).collect();
 
     // Every parameter starts held, and is released to `escapes` by evidence.

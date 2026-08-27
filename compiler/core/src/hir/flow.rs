@@ -225,6 +225,19 @@ pub struct Context {
     pub params: Vec<Facts>,
     /// What each function returns, by name.
     pub returns: FxHashMap<String, Facts>,
+    /// What a dispatch through each slot returns: the join over every
+    /// implementation in it.
+    ///
+    /// Keyed by slot rather than by name because a dispatch has no single
+    /// callee. Without it every virtual call and every closure call is a wall,
+    /// and a wall in a loop is the difference between integer arithmetic and a
+    /// double round trip per iteration.
+    pub slot_returns: FxHashMap<u32, Facts>,
+    /// What each `(layout, field)` can hold, from every store in the program.
+    ///
+    /// A field read is otherwise TOP, and a TOP in a loop that touches an
+    /// object is a double round trip per iteration.
+    pub field_facts: super::fields::FieldFacts,
     /// Interval bounds for loop-carried values, from counting iterations.
     ///
     /// The value domain cannot derive these: it knows what one round does, not
@@ -417,6 +430,18 @@ fn parameter_facts(func: &Func, context: &Context, slot: u32) -> Facts {
         .map_or(declared, |from_callers| from_callers.narrow(declared))
 }
 
+/// What a field of an object of this type can hold.
+fn field_facts(context: &Context, object: &super::HirType, field: u32) -> Facts {
+    let super::HirType::Managed(super::ManagedType::Object(ty)) = object else {
+        return Facts::TOP;
+    };
+    context
+        .field_facts
+        .get(&(*ty, field))
+        .copied()
+        .unwrap_or(Facts::TOP)
+}
+
 fn transfer_block(
     func: &Func,
     context: &Context,
@@ -512,6 +537,20 @@ fn transfer_block(
                 callee: Callee::Direct(name),
                 ..
             } => context.returns.get(name).copied().unwrap_or(Facts::TOP),
+            // The same for a dispatch, over every body the slot can reach. The
+            // tables are the complete list, so the join is sound.
+            OpKind::Call {
+                callee: Callee::Virtual { slot, .. } | Callee::Closure { slot },
+                ..
+            } => context
+                .slot_returns
+                .get(slot)
+                .copied()
+                .unwrap_or(Facts::TOP),
+            // What was stored into this field, anywhere in the program.
+            OpKind::FieldGet { object, field } => {
+                field_facts(context, &func.values[object.0 as usize].ty, *field)
+            }
             // A bool is not a number, and a call's result needs the callee
             // analyzed — neither is a claim this pass can make.
             _ => Facts::TOP,

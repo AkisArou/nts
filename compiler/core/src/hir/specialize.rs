@@ -37,6 +37,8 @@ use super::{BinOp, Block, Func, HirType, Op, OpKind, UnOp, ValueId};
 /// Bounds of the representations this pass will choose.
 const I32_MIN: f64 = -2_147_483_648.0;
 const I32_MAX: f64 = 2_147_483_647.0;
+/// The largest `uint32`, for the same reason.
+const U32_MAX: f64 = 4_294_967_295.0;
 
 /// What one pass achieved, for the report `nts` prints and the tests assert on.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -193,7 +195,7 @@ pub fn specialize(func: &mut Func, analysis: &Analysis) -> Report {
     // `3`, which is exactly what `ToInt32(3.7)` is.
     for index in 0..count {
         let OpKind::Unary {
-            op: UnOp::ToInt32,
+            op: op @ (UnOp::ToInt32 | UnOp::ToUint32),
             operand,
         } = func.values[index].kind
         else {
@@ -201,17 +203,26 @@ pub fn specialize(func: &mut Func, analysis: &Analysis) -> Report {
         };
         // Only where specialization gave the result an int32 to be converted
         // *to*; a `Convert` to `f64` would be a different operation entirely.
-        if func.values[index].ty
-            != (HirType::Int {
-                bits: 32,
-                signed: true,
-            })
-        {
+        let HirType::Int { bits: 32, signed } = func.values[index].ty else {
             continue;
-        }
-        // Truncation must land in int32, so the operand may reach one step past
-        // each bound before truncating.
-        if analysis.is_within(operand, I32_MIN - 1.0, I32_MAX + 1.0) {
+        };
+        // Two ranges intersected: where the coercion is the identity, and what
+        // the result type holds. `ToInt32` is the identity below 2^31 and
+        // wraps above it; `ToUint32` is the identity above zero and wraps
+        // below. The result's signedness is decided by the *value* range, so
+        // `x >>> 3` on a small number lands in a signed int32 and is still a
+        // plain cast.
+        let (low, high) = match op {
+            UnOp::ToInt32 => (if signed { I32_MIN } else { 0.0 }, I32_MAX),
+            _ => (0.0, if signed { I32_MAX } else { U32_MAX }),
+        };
+        // The exact range, with no slack. C leaves a float-to-integer
+        // conversion undefined when the truncated value does not fit, so an
+        // operand allowed to reach `I32_MAX + 1` is one whose cast is undefined
+        // on the boundary -- and `ToInt32` is defined there, by wrapping. What
+        // slack would buy is a fractional value just past the bound, which is
+        // not a shape programs have.
+        if analysis.is_within(operand, low, high) {
             func.values[index].kind = OpKind::Convert(operand);
         }
     }

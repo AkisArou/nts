@@ -323,6 +323,21 @@ fn closure_names(index: usize) -> (String, String) {
     (class, method)
 }
 
+/// The class name behind a synthetic closure type id.
+///
+/// The inverse of [`closure_type`], for the passes that meet the id rather than
+/// the arrow it came from.
+#[must_use]
+pub fn closure_class(ty: TypeId) -> String {
+    closure_names((u32::MAX - ty.0) as usize).0
+}
+
+/// The one method a closure class implements.
+#[must_use]
+pub fn closure_method(ty: TypeId) -> String {
+    closure_names((u32::MAX - ty.0) as usize).1
+}
+
 /// Find every arrow function and work out what it captures.
 ///
 /// This runs before any lowering because both sides have to agree: the
@@ -3212,13 +3227,26 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         let receiver = self.lower_expression(callee_node)?;
-        if !matches!(
-            self.values[receiver.0 as usize].ty,
-            HirType::Managed(ManagedType::Object(_))
-        ) {
+        let HirType::Managed(ManagedType::Object(receiver_ty)) =
+            self.values[receiver.0 as usize].ty
+        else {
             return Err(self.unsupported(callee_node, "a call of something that is not a function"));
-        }
-        let Some(slot) = self.hierarchy.closure_slot else {
+        };
+        // A closure class is final: nothing extends it, and only the arrow it
+        // was made for fills its slot. So where the receiver's static type *is*
+        // the closure class rather than the signature, which body runs is known
+        // here, and the call is a direct one.
+        //
+        // This is not a nicety, because clang cannot recover it: to fold the
+        // table load it would have to prove the callee does not write the
+        // receiver's descriptor, and it cannot know the callee without folding
+        // the load. What is left is an indirect call per iteration where there
+        // should be an inlined multiply.
+        let callee = if receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR {
+            Callee::Direct(closure_names((u32::MAX - receiver_ty.0) as usize).1)
+        } else if let Some(slot) = self.hierarchy.closure_slot {
+            Callee::Closure { slot }
+        } else {
             return Err(self.unsupported(
                 id,
                 "a call of a function value in a program with no closures",
@@ -3233,14 +3261,7 @@ impl<'a> FuncBuilder<'a> {
             .type_of(id)
             .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
         let origin = self.origin(id);
-        Ok(self.push(
-            OpKind::Call {
-                callee: Callee::Closure { slot },
-                args,
-            },
-            ty,
-            origin,
-        ))
+        Ok(self.push(OpKind::Call { callee, args }, ty, origin))
     }
 
     /// The `Math` member a callee names, if it names one.
