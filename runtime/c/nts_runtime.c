@@ -577,14 +577,14 @@ NtsString *nts_concat(const NtsString *a, const NtsString *b) {
  * The two representations are not a detail a caller should reproduce: a slice
  * of a wide string can be entirely narrow, and storing it wide would make an
  * equality test between it and a narrow literal take the slow path forever. */
-static NtsString *nts_str_alloc(const uint16_t *units, uint32_t length) {
-  int wide = 0;
-  for (uint32_t at = 0; at < length; at++) {
-    if (units[at] > 0xFFu) {
-      wide = 1;
-      break;
-    }
-  }
+/* A string of `length` code units at the given width, with its header set and
+ * its terminator written, and its contents left to the caller.
+ *
+ * Separate from `nts_str_alloc` because most strings are made by *copying* an
+ * existing one, and a copy that knows its own width has nothing to inspect and
+ * nowhere to stage. `nts_str_alloc` is what remains: the case where the units
+ * arrive as `uint16_t` and the width is still a question. */
+static NtsString *nts_str_raw(uint32_t length, int wide) {
   size_t width = wide ? 2u : 1u;
   NtsString *out =
       (NtsString *)nts_alloc(sizeof(NtsHeader) + ((size_t)length + 1) * width);
@@ -593,6 +593,23 @@ static NtsString *nts_str_alloc(const uint16_t *units, uint32_t length) {
   nts_allocated++;
   out->flags = wide ? NTS_TWO_BYTE : 0u;
   out->length = length;
+  if (wide) {
+    NTS_ELEMENTS(out, uint16_t)[length] = 0;
+  } else {
+    NTS_ELEMENTS(out, unsigned char)[length] = 0;
+  }
+  return out;
+}
+
+static NtsString *nts_str_alloc(const uint16_t *units, uint32_t length) {
+  int wide = 0;
+  for (uint32_t at = 0; at < length; at++) {
+    if (units[at] > 0xFFu) {
+      wide = 1;
+      break;
+    }
+  }
+  NtsString *out = nts_str_raw(length, wide);
   if (wide) {
     uint16_t *into = NTS_ELEMENTS(out, uint16_t);
     for (uint32_t at = 0; at < length; at++) {
@@ -616,16 +633,44 @@ static NtsString *nts_str_range(const NtsString *s, uint32_t from,
   if (length == 0) {
     return nts_str_alloc(0, 0);
   }
-  uint16_t *units = (uint16_t *)malloc((size_t)length * sizeof(uint16_t));
-  if (!units) {
-    fprintf(stderr, "nts: out of memory\n");
-    abort();
+
+  /* A slice of a narrow string is narrow, and every code unit is one byte in
+   * both. So there is nothing to inspect, nothing to stage, and nothing to
+   * convert: one allocation and one `memcpy`.
+   *
+   * This used to allocate a `uint16_t` staging buffer, fill it a unit at a time
+   * through `nts_unit` -- which branches on the width for every character --
+   * hand that to `nts_str_alloc`, which scanned it for wide units and then
+   * narrowed it back, and free the buffer. Two allocations and three passes to
+   * copy some bytes. Slicing is what a parser does, so it is worth the special
+   * case rather than the generality. */
+  if (!(s->flags & NTS_TWO_BYTE)) {
+    NtsString *out = nts_str_raw(length, 0);
+    memcpy(NTS_ELEMENTS(out, unsigned char),
+           NTS_ELEMENTS(s, const unsigned char) + from, length);
+    return out;
   }
+
+  /* A slice of a wide string may be entirely narrow, and keeping it wide would
+   * make every later read of it pay for a width it does not use. One pass to
+   * find out, then one to copy. */
+  const uint16_t *units = NTS_ELEMENTS(s, const uint16_t) + from;
+  int wide = 0;
   for (uint32_t at = 0; at < length; at++) {
-    units[at] = nts_unit(s, from + at);
+    if (units[at] > 0xFFu) {
+      wide = 1;
+      break;
+    }
   }
-  NtsString *out = nts_str_alloc(units, length);
-  free(units);
+  NtsString *out = nts_str_raw(length, wide);
+  if (wide) {
+    memcpy(NTS_ELEMENTS(out, uint16_t), units, (size_t)length * sizeof(uint16_t));
+  } else {
+    unsigned char *into = NTS_ELEMENTS(out, unsigned char);
+    for (uint32_t at = 0; at < length; at++) {
+      into[at] = (unsigned char)units[at];
+    }
+  }
   return out;
 }
 
