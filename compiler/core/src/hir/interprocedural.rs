@@ -70,6 +70,10 @@ struct Crossing {
     slot_returns: FxHashMap<u32, Facts>,
     /// What each object field can hold, over every store in the program.
     fields: super::fields::FieldFacts,
+    /// How long the array each parameter points at can be, per function and
+    /// slot. In this fixpoint rather than beside it because it is read from the
+    /// arguments at every call, which is what this loop already walks.
+    param_lengths: Vec<Vec<Facts>>,
 }
 
 /// Analyze every function, letting facts cross between them.
@@ -126,11 +130,15 @@ fn settle(
             .collect(),
         slot_returns: FxHashMap::default(),
         fields: FxHashMap::default(),
+        param_lengths: no_lengths(program),
     };
-    let mut analyses = analyze_all(program, &crossing, caps);
+    // A property of the whole program rather than of a round: whether anything
+    // in it can change an array's length.
+    let growable = super::arrays_can_grow(program);
+    let mut analyses = analyze_all(program, &crossing, caps, growable);
 
     for _ in 0..ROUND_CAP {
-        analyses = analyze_all(program, &crossing, caps);
+        analyses = analyze_all(program, &crossing, caps, growable);
 
         // Rebuilt from nothing each round rather than accumulated, so that this
         // is a Kleene iteration over the whole system and not a monotone drift
@@ -172,10 +180,16 @@ fn settle(
         // each other: a field is written with a value a call produced, and read
         // to make an argument for the next one.
         let fields = super::fields::analyze(program, &analyses);
+        let param_lengths = if growable {
+            no_lengths(program)
+        } else {
+            super::fields::parameter_lengths(program, &analyses, outward)
+        };
         if params == crossing.params
             && returns == crossing.returns
             && slot_returns == crossing.slot_returns
             && fields == crossing.fields
+            && param_lengths == crossing.param_lengths
         {
             break;
         }
@@ -184,6 +198,7 @@ fn settle(
             returns,
             slot_returns,
             fields,
+            param_lengths,
         };
     }
     analyses
@@ -222,7 +237,7 @@ fn seed(program: &Program, outward: &rustc_hash::FxHashSet<&str>) -> Vec<Vec<Fac
 /// with no *visible* caller has parameters at BOTTOM, which folds its body to a
 /// constant — so a closure reached only through its slot compiled to
 /// `return 0`.
-fn targets_of(
+pub(super) fn targets_of(
     callee: &Callee,
     by_name: &FxHashMap<&str, usize>,
     in_slot: &FxHashMap<u32, Vec<usize>>,
@@ -241,6 +256,7 @@ fn analyze_all(
     program: &Program,
     crossing: &Crossing,
     caps: &[FxHashMap<ValueId, Facts>],
+    growable: bool,
 ) -> Vec<Analysis> {
     program
         .funcs
@@ -252,12 +268,24 @@ fn analyze_all(
                 &Context {
                     params: crossing.params[index].clone(),
                     returns: crossing.returns.clone(),
+                    growable,
+                    param_lengths: crossing.param_lengths[index].clone(),
                     slot_returns: crossing.slot_returns.clone(),
                     field_facts: crossing.fields.clone(),
                     caps: caps.get(index).cloned().unwrap_or_default(),
                 },
             )
         })
+        .collect()
+}
+
+/// No parameter's array length is known: the shape the fixpoint starts from,
+/// and the answer for a program whose arrays can grow.
+fn no_lengths(program: &Program) -> Vec<Vec<Facts>> {
+    program
+        .funcs
+        .iter()
+        .map(|func| vec![Facts::TOP; func.params.len()])
         .collect()
 }
 

@@ -849,14 +849,43 @@ pub fn operands_of(kind: &OpKind) -> Vec<ValueId> {
 /// the claim, because what a callee does with it is not visible here. An array
 /// literal that is only indexed keeps it, which is the case the claim exists for.
 #[must_use]
-pub fn allocated_length_is_exact(func: &Func, array: ValueId) -> bool {
+pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) -> bool {
     if !matches!(func.values[array.0 as usize].kind, OpKind::ArrayNew { .. }) {
         return false;
+    }
+    if !growable {
+        // Nothing in the program can change an array's length, so handing this
+        // one to a call cannot either. Worth asking, because *every* array a
+        // program does anything with is passed somewhere -- `fill` it, hand it
+        // to the method that reads it -- and the test below then refuses them
+        // all.
+        return true;
     }
     !func
         .values
         .iter()
         .any(|op| matches!(&op.kind, OpKind::Call { args, .. } if args.contains(&array)))
+}
+
+/// Whether any array in this program can change length.
+///
+/// Only two operations do, and a program that calls neither has arrays whose
+/// length is decided where they are allocated and true forever after. That is a
+/// coarse question to ask about a whole program, and it is asked that way on
+/// purpose: the precise version is a may-grow fixpoint over parameters and
+/// fields, and this answers "no" for every program that never pushes -- which
+/// is most of them, and all of Are We Fast Yet.
+#[must_use]
+pub fn arrays_can_grow(program: &Program) -> bool {
+    program.funcs.iter().any(|func| {
+        func.values.iter().any(|op| {
+            matches!(
+                &op.kind,
+                OpKind::Call { callee: Callee::External(name), .. }
+                    if name == "nts_array_push" || name == "nts_array_pop"
+            )
+        })
+    })
 }
 
 /// The values a terminator reads.
@@ -1227,6 +1256,92 @@ mod tests {
 
     fn object(id: u32) -> HirType {
         HirType::Managed(ManagedType::Object(TypeId(id)))
+    }
+
+    fn origin() -> nts_semantic_schema::Origin {
+        nts_semantic_schema::Origin::source(nts_diagnostics::Location {
+            file: nts_diagnostics::SourceId(0),
+            span: nts_diagnostics::Span::new(0, 1),
+        })
+    }
+
+    /// One `new Array(4)`, indexed, and handed to a call. Whether its length is
+    /// still four where it is read depends on nothing local — only on whether
+    /// anything in the *program* can change one.
+    fn allocating(pushes: bool) -> Program {
+        let numbers = HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)));
+        let mut values = vec![
+            Op {
+                kind: OpKind::ConstFloat(4.0),
+                ty: HirType::NUMBER,
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::ArrayNew {
+                    length: ValueId(0),
+                },
+                ty: numbers.clone(),
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::Call {
+                    callee: Callee::External("nts_array_fill".to_owned()),
+                    args: vec![ValueId(1)],
+                    frame: None,
+                },
+                ty: numbers,
+                origin: origin(),
+            },
+        ];
+        if pushes {
+            values.push(Op {
+                kind: OpKind::Call {
+                    callee: Callee::External("nts_array_push".to_owned()),
+                    args: vec![ValueId(1), ValueId(0)],
+                    frame: None,
+                },
+                ty: HirType::NUMBER,
+                origin: origin(),
+            });
+        }
+        let ops = (0..values.len())
+            .map(|index| ValueId(u32::try_from(index).unwrap_or(0)))
+            .collect();
+        Program {
+            funcs: vec![Func {
+                name: "f".to_owned(),
+                params: Vec::new(),
+                return_type: HirType::Void,
+                values,
+                blocks: vec![Block {
+                    params: Vec::new(),
+                    ops,
+                    terminator: Terminator::Return(None),
+                }],
+                origin: origin(),
+                exported: true,
+                initializes_receiver: false,
+            }],
+            globals: Vec::new(),
+            layouts: Vec::new(),
+        }
+    }
+
+    /// The condition that lets a bounds check be removed on an array the
+    /// function passed to something. Getting this wrong removes a check that
+    /// can fail, so it is pinned from both sides.
+    #[test]
+    fn an_allocated_length_is_exact_only_while_nothing_can_grow_an_array() {
+        let quiet = allocating(false);
+        assert!(!arrays_can_grow(&quiet));
+        assert!(allocated_length_is_exact(&quiet.funcs[0], ValueId(1), false));
+
+        // The same function, in a program that pushes somewhere. `fill` cannot
+        // grow it and `push` can, and this does not distinguish them — passing
+        // the array anywhere is now enough to lose the length.
+        let growing = allocating(true);
+        assert!(arrays_can_grow(&growing));
+        assert!(!allocated_length_is_exact(&growing.funcs[0], ValueId(1), true));
     }
 
     #[test]

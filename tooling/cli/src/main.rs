@@ -419,6 +419,23 @@ fn render_callee(
     }
 }
 
+/// A call, with where its result lives when that is not the heap.
+fn render_call(
+    index: usize,
+    ty: &str,
+    callee: &nts_core::hir::Callee,
+    args: &[nts_core::hir::ValueId],
+    frame: Option<u32>,
+) -> String {
+    let rendered: Vec<String> = args.iter().map(|a| format!("%{}", a.0)).collect();
+    let (kind, name) = render_callee(callee, args);
+    let at = frame.map_or_else(String::new, |units| format!(" frame[{units}]"));
+    format!(
+        "%{index} = {kind} {name}({}){at} : {ty}",
+        rendered.join(", ")
+    )
+}
+
 fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
     match &op.kind {
@@ -510,16 +527,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             callee,
             args,
             frame,
-        } => {
-            let rendered: Vec<String> = args.iter().map(|a| format!("%{}", a.0)).collect();
-            let (kind, name) = render_callee(callee, args);
-            // Where the result lives, when it is not the heap.
-            let at = frame.map_or_else(String::new, |units| format!(" frame[{units}]"));
-            format!(
-                "%{index} = {kind} {name}({}){at} : {ty}",
-                rendered.join(", ")
-            )
-        }
+        } => render_call(index, &ty, callee, args, *frame),
         OpKind::Return(Some(v)) => format!("ret %{}", v.0),
         OpKind::Return(None) => "ret".to_owned(),
     }

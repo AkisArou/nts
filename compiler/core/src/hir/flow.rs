@@ -108,9 +108,31 @@ pub struct Analysis {
     /// because the value that leaves the loop is the one that failed the test.
     /// One is enough to prove an index in bounds and the other is not.
     refined: Vec<Refinements>,
+    /// Whether any array in the program can change length. Carried here because
+    /// every consumer of an analysis already holds one, and threading a
+    /// whole-program flag beside it would mean two things to keep in step.
+    growable: bool,
+    /// How long the array each parameter points at can be, per slot.
+    param_lengths: Vec<Facts>,
 }
 
 impl Analysis {
+    /// Whether any array in the program can change length.
+    #[must_use]
+    pub fn growable(&self) -> bool {
+        self.growable
+    }
+
+    /// How long the array a parameter points at can be. `TOP` where unknown,
+    /// which proves nothing and is what an absent answer has to be.
+    #[must_use]
+    pub fn param_length(&self, slot: u32) -> Facts {
+        self.param_lengths
+            .get(slot as usize)
+            .copied()
+            .unwrap_or(Facts::TOP)
+    }
+
     /// How many values were analyzed.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -243,6 +265,19 @@ pub struct Context {
     /// The value domain cannot derive these: it knows what one round does, not
     /// how many rounds there are. See [`super::loops`].
     pub caps: FxHashMap<ValueId, Facts>,
+    /// Whether any array in the program can change length.
+    ///
+    /// A whole-program answer, because the question is about what could happen
+    /// to an array between its allocation and a read of its length -- and that
+    /// is not a local question. See [`super::arrays_can_grow`].
+    pub growable: bool,
+    /// How long the array each parameter points at can be, per slot.
+    ///
+    /// The other way a reference arrives. A method reading `this.flags` has no
+    /// allocation in front of it, and neither does one taking `flags` as an
+    /// argument -- and the second is the shape of every function that is handed
+    /// a buffer to work on.
+    pub param_lengths: Vec<Facts>,
 }
 
 /// Compute what is provable about every value in a function, alone.
@@ -345,6 +380,8 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
         values,
         less_than: relations(func, &entry),
         refined: entry.into_iter().map(Option::unwrap_or_default).collect(),
+        growable: context.growable,
+        param_lengths: context.param_lengths.clone(),
     }
 }
 
@@ -629,7 +666,7 @@ fn transfer_block(
                     // call may come back longer, and the object does not move so
                     // every reference sees the new length.
                     OpKind::ArrayNew { length }
-                        if super::allocated_length_is_exact(func, *array) =>
+                        if super::allocated_length_is_exact(func, *array, context.growable) =>
                     {
                         lookup(&refinements, values, *length).narrow(bound)
                     }

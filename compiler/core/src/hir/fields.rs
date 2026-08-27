@@ -252,6 +252,90 @@ pub fn narrow(program: &mut Program, narrowed: &FieldWidths) -> usize {
 /// The machine type of each `(type, field)`, for the reads that name one.
 type FieldTypes = FxHashMap<(super::TypeId, u32), HirType>;
 
+/// How long the array each parameter points at can be, per function and slot.
+///
+/// The mirror of [`lengths`] for the other way a reference arrives. A method
+/// reading `this.flags` has no allocation in front of it, and neither does one
+/// that takes `flags` as an argument — and the second is the shape of every
+/// function handed a buffer to work on. `Sieve#sieve(flags, size)` is the case:
+/// the array is five thousand long and the only caller says so, but inside the
+/// function nothing does, so both of its inner loops kept a bounds check.
+///
+/// # Where it stops
+///
+/// - **A root.** Its callers are outside the compiled set, so what they pass is
+///   not knowable. [`super::guards`] is how a root gets facts about a *number*
+///   parameter anyway; there is no equivalent for a length, because testing one
+///   at the boundary would mean specializing the body on it.
+/// - **A program whose arrays can grow.** An array handed on can come back
+///   longer, and the object does not move, so every reference sees the new
+///   length. See [`super::arrays_can_grow`].
+///
+/// Only what is *allocated* counts. A null contributes no length, for the same
+/// reason it contributes none to a field: reading through it faults, and so
+/// would the bounds check that read its length.
+pub(super) fn parameter_lengths(
+    program: &Program,
+    analyses: &[Analysis],
+    outward: &rustc_hash::FxHashSet<&str>,
+) -> Vec<Vec<Facts>> {
+    let mut known: Vec<Vec<Facts>> = program
+        .funcs
+        .iter()
+        .map(|func| {
+            let unseen = outward.contains(func.name.as_str());
+            func.params
+                .iter()
+                .map(|param| {
+                    if unseen || !matches!(param.ty, HirType::Managed(ManagedType::Array(_))) {
+                        Facts::TOP
+                    } else {
+                        // A least fixpoint over what the callers pass, so a
+                        // parameter no call reaches stays at BOTTOM rather than
+                        // claiming a length nobody gave it.
+                        Facts::BOTTOM
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    if super::arrays_can_grow(program) {
+        return program
+            .funcs
+            .iter()
+            .map(|func| vec![Facts::TOP; func.params.len()])
+            .collect();
+    }
+
+    let by_name: FxHashMap<&str, usize> = program
+        .funcs
+        .iter()
+        .enumerate()
+        .map(|(index, func)| (func.name.as_str(), index))
+        .collect();
+    let in_slot = program.slot_targets();
+
+    for (caller, func) in program.funcs.iter().enumerate() {
+        for op in &func.values {
+            let OpKind::Call { callee, args, .. } = &op.kind else {
+                continue;
+            };
+            for target in super::interprocedural::targets_of(callee, &by_name, &in_slot) {
+                for (slot, arg) in args.iter().enumerate() {
+                    let Some(entry) = known[target].get_mut(slot) else {
+                        continue;
+                    };
+                    if *entry == Facts::TOP {
+                        continue;
+                    }
+                    *entry = entry.join(allocated_length(func, &analyses[caller], *arg));
+                }
+            }
+        }
+    }
+    known
+}
+
 /// How long the array in each `(type, field)` is, where that is knowable.
 ///
 /// The length of an array a *field* points at is not written down where the

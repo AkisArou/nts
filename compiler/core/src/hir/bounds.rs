@@ -185,9 +185,14 @@ fn length_facts(
                 .unwrap_or(Facts::BOTTOM),
             _ => Facts::BOTTOM,
         },
-        OpKind::ArrayNew { length } if super::allocated_length_is_exact(func, array) => {
+        OpKind::ArrayNew { length }
+            if super::allocated_length_is_exact(func, array, analysis.growable()) =>
+        {
             analysis.get_at(at, *length)
         }
+        // The array a *parameter* points at, whose length the callers say. The
+        // only way to know it inside a function handed a buffer to work on.
+        OpKind::Param(slot) => analysis.param_length(*slot),
         OpKind::ConstString(text) => {
             let units = text.encode_utf16().count();
             Facts::constant(f64::from(u32::try_from(units).unwrap_or(u32::MAX)))
