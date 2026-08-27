@@ -50,12 +50,12 @@ Both ratios are nts divided by the other, so **lower is better and 1.00 is parit
 
 | outcome | files |
 | --- | ---: |
-| lowered completely | **54** |
-| refused a construct | 41 |
+| lowered completely | **55** |
+| refused a construct | 40 |
 | rejected by the typechecker | 89 |
 | **invalid HIR or a panic** | **0** |
 
-Of the 95 that typecheck, **56%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
+Of the 95 that typecheck, **57%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
 
 The last row is the one that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do.
 
@@ -63,7 +63,6 @@ What is stopping the rest, in order:
 
 | refused | files |
 | --- | ---: |
-| a parameter of unrepresentable type (a union) | 19 |
 | a name declared outside this function | 11 |
 | a parameter of unrepresentable type (the type parameter `T`) | 6 |
 | a parameter of unrepresentable type (a structured type (flags 0x100000)) | 5 |
@@ -75,6 +74,7 @@ What is stopping the rest, in order:
 | a class of unrepresentable type (a structured type (flags 0x100000)) | 3 |
 | an object with an optional property | 3 |
 | a parameter of unrepresentable type (a tuple) | 2 |
+| a parameter of unrepresentable type (a union of a structured type (flags 0x100000) | null | number | undefined) | 2 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->

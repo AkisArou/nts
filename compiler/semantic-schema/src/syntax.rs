@@ -57,6 +57,7 @@ pub const DEFAULT_KEYWORD: u16 = 89;
 pub const EXPORT_KEYWORD: u16 = 94;
 /// Determined empirically, like everything else here: the encoder's own
 /// documentation gives a different number.
+pub const NULL_KEYWORD: u16 = 105;
 pub const SUPER_KEYWORD: u16 = 107;
 /// Also determined empirically.
 pub const ARROW_FUNCTION: u16 = 220;

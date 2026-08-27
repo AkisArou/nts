@@ -381,6 +381,14 @@ pub enum OpKind {
     /// that made it does not need to be anywhere a collector can see. A frame
     /// object is not reference counted, because there is nothing to count -- it
     /// goes away when the frame does.
+    /// The absent reference: `null` and `undefined`, which are one value here.
+    ///
+    /// A reference has a value that is not an object, so `T | undefined` needs
+    /// no tag beside it -- this *is* the tag. The op's type is the managed type
+    /// the absence stands in for, because a null `NtsString *` and a null
+    /// `NtsObj_Point *` are different types to C even though they are the same
+    /// address.
+    ConstNull,
     ObjectNew {
         frame: bool,
     },

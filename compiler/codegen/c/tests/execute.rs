@@ -1496,3 +1496,94 @@ int main(void) {{
         "a closure must read the array it captured: {text}",
     );
 }
+
+#[test]
+fn an_absent_reference_is_the_null_pointer_and_costs_nothing() {
+    // `T | null` and `T | undefined` are the same machine type as `T`: a
+    // reference already has a value that is not an object, so the absence needs
+    // no tag beside it.
+    //
+    // Under reference counting the interesting part is what happens at the
+    // boundary. A null retained is a null released, both no-ops, and a list
+    // built and dropped a thousand times has to come back to the count it
+    // started at -- a chain freed by releasing its head, one link at a time,
+    // where a double release would be a use-after-free ASan names.
+    //
+    // Every expected value came from running the same `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+#include "nts_runtime.h"
+double sumChain(double n);
+double lengthOf(double n);
+double foundAt(double n, double wanted);
+double labelWidth(double pick);
+double pickLonger(double x, double y);
+int main(void) {{
+    size_t before = nts_live_count();
+
+    check("sumChain(10)", sumChain(10), 45);
+    check("sumChain(0)", sumChain(0), 0);
+    check("lengthOf(7)", lengthOf(7), 7);
+    check("lengthOf(0)", lengthOf(0), 0);
+
+    /* A search that finds, and one that does not. */
+    check("foundAt(10,3)", foundAt(10, 3), 3);
+    check("foundAt(10,99)", foundAt(10, 99), -1);
+
+    /* An empty string is falsy however present it is, which is the one place a
+       reference's truthiness is not just "is it there". */
+    check("labelWidth(1)", labelWidth(1), 7);
+    check("labelWidth(0)", labelWidth(0), -1);
+    check("labelWidth(-1)", labelWidth(-1), -1);
+
+    /* The absence crossing a call, in both directions. */
+    check("pickLonger(3,9)", pickLonger(3, 9), 9);
+    check("pickLonger(-1,4)", pickLonger(-1, 4), 4);
+    check("pickLonger(-1,-1)", pickLonger(-1, -1), -1);
+
+    /* A thousand chains of ten, built and dropped. */
+    for (int i = 0; i < 1000; i++) {{
+        if (sumChain(10) != 45) {{
+            printf("FAIL sumChain drifted at %d\n", i);
+            failures++;
+            break;
+        }}
+    }}
+    /* `Element.next` is an `Element`, so a cycle is constructible and the type
+       is a collection candidate -- which means a link whose count drops from
+       two to one is buffered, and a buffered object that later reaches zero is
+       destroyed by the collector rather than by the release. Nothing here is a
+       cycle; the memory is reclaimed on the next collection either way. Asking
+       for one is what makes the count comparable. */
+    nts_collect_cycles();
+    if (nts_live_count() != before) {{
+        printf("FAIL %zu live after, %zu before\n", nts_live_count(), before);
+        failures++;
+    }}
+    if (nts_live_bytes() != 0) {{
+        printf("FAIL %zu bytes still held\n", nts_live_bytes());
+        failures++;
+    }}
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    let Some(output) = build_and_run_with("nullable", &harness, hir::Provider::ReferenceCounting)
+    else {
+        return;
+    };
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "nullable did not balance:\n{text}{}",
+        String::from_utf8_lossy(&output.stderr),
+    );
+    assert!(
+        text.contains("ok labelWidth(0) = -1"),
+        "an empty string must be falsy: {text}",
+    );
+    assert!(
+        text.contains("ok foundAt(10,99) = -1"),
+        "a search that finds nothing must return the absence: {text}",
+    );
+}

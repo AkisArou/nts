@@ -290,7 +290,7 @@ fn report(totals: &Totals) {
     let mut reasons: Vec<(&String, &usize)> = totals.reasons.iter().collect();
     reasons.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
     println!("\ntop refusals:");
-    for (reason, count) in reasons.iter().take(15) {
+    for (reason, count) in reasons.iter().take(60) {
         println!("  {count:4}  {reason}");
     }
 }

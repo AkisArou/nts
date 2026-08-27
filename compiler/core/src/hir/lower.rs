@@ -750,6 +750,44 @@ pub fn parse_number(text: &str) -> Option<f64> {
 /// histogram by a factor of two, and it said nothing about what to build. The
 /// checker's own rendering is in the snapshot for exactly this.
 #[must_use]
+/// Whether a union member means "there is no value here".
+///
+/// All three spellings, because TypeScript uses them interchangeably at a
+/// boundary: `void` is what a function returns when it returns nothing, and it
+/// appears in a union for the same reason `undefined` does.
+fn is_absent(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    snapshot.types.get(ty.0 as usize).is_some_and(|record| {
+        matches!(
+            record.kind,
+            TypeKind::Undefined | TypeKind::Null | TypeKind::Void
+        )
+    })
+}
+
+/// A union member's name, short enough to put several on one line.
+fn short(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
+    let Some(record) = snapshot.types.get(ty.0 as usize) else {
+        return "?".to_owned();
+    };
+    match &record.kind {
+        TypeKind::Void => "void".to_owned(),
+        TypeKind::Undefined => "undefined".to_owned(),
+        TypeKind::Never => "never".to_owned(),
+        TypeKind::Boolean => "boolean".to_owned(),
+        TypeKind::Number => "number".to_owned(),
+        TypeKind::String => "string".to_owned(),
+        // A literal's *value* is not what makes a union hard; its
+        // representation is. `1 | 2 | 3` and `1 | 2 | 4` are one problem.
+        TypeKind::Literal(LiteralValue::Number(_)) => "a number literal".to_owned(),
+        TypeKind::Literal(LiteralValue::String(_)) => "a string literal".to_owned(),
+        TypeKind::Literal(LiteralValue::Boolean(_)) => "a boolean literal".to_owned(),
+        TypeKind::Object { .. } => "an object".to_owned(),
+        TypeKind::Array(_) => "an array".to_owned(),
+        _ => describe(snapshot, ty),
+    }
+}
+
+#[must_use]
 pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
     let Some(record) = snapshot.types.get(ty.0 as usize) else {
         return "an unknown type".to_owned();
@@ -760,7 +798,19 @@ pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
         TypeKind::Null => "null".to_owned(),
         TypeKind::BigInt => "bigint".to_owned(),
         TypeKind::Symbol => "symbol".to_owned(),
-        TypeKind::Union(_) => "a union".to_owned(),
+        // Named by its members, because "a union" is a category and the work
+        // queue is ordered by what is actually in the corpus. `number |
+        // undefined` and `string | number` want different representations, and
+        // one refusal message cannot tell them apart.
+        TypeKind::Union(members) => {
+            let mut named: Vec<String> = members
+                .iter()
+                .map(|member| short(snapshot, *member))
+                .collect();
+            named.sort();
+            named.dedup();
+            format!("a union of {}", named.join(" | "))
+        }
         TypeKind::Intersection(_) => "an intersection".to_owned(),
         TypeKind::Tuple(_) => "a tuple".to_owned(),
         TypeKind::Function(_) => "a function type".to_owned(),
@@ -820,19 +870,36 @@ pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType
         // type, and refusing it would reject the most useful thing TypeScript
         // can tell this compiler about a parameter.
         //
-        // A union whose members disagree — `number | undefined`, `string | number`
-        // — needs a tagged representation, which is a decision this pass does
-        // not get to make on its own.
+        // `T | undefined` and `T | null` are what real TypeScript is made of,
+        // and for a managed `T` they cost nothing: a reference already has a
+        // value that is not an object, and the null pointer is it. So the
+        // absent members are dropped and what is left has to agree.
+        //
+        // A number has no spare value. `number | undefined` needs a tag beside
+        // it or a NaN payload inside it, and both change the representation of
+        // every number that could reach the slot — so it is refused rather than
+        // guessed at, as is any union whose members genuinely disagree.
         TypeKind::Union(members) => {
             let mut shared: Option<HirType> = None;
+            let mut absent = false;
             for member in members {
+                if is_absent(snapshot, *member) {
+                    absent = true;
+                    continue;
+                }
                 let member = representation(snapshot, *member)?;
                 match &shared {
                     Some(existing) if *existing != member => return None,
                     _ => shared = Some(member),
                 }
             }
-            shared?
+            let shared = shared?;
+            // `null | undefined` on its own, or `number | undefined`: nothing
+            // left to be, or nowhere to put the absence.
+            if absent && !shared.is_managed() {
+                return None;
+            }
+            shared
         }
 
         // `any` and `unknown` fall here and are refused, which is right for one
@@ -1729,6 +1796,7 @@ impl<'a> FuncBuilder<'a> {
         match condition {
             Some(condition) => {
                 let cond = self.lower_expression(condition)?;
+                let cond = self.truthy(condition, cond);
                 self.terminate(Terminator::Branch {
                     cond,
                     then_target: body_block,
@@ -2066,6 +2134,10 @@ impl<'a> FuncBuilder<'a> {
 
         let origin = self.origin(id);
         let cond = self.lower_expression(condition)?;
+        // `if (x)` takes any value, not just a boolean, and JavaScript decides
+        // which are false. An empty string and a NaN are, which is why this
+        // cannot be left to C's own idea of a condition.
+        let cond = self.truthy(condition, cond);
         let then_block = self.new_block();
 
         // With no `else`, the false edge goes straight to the merge. Allocating an
@@ -2237,6 +2309,7 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::OBJECT_LITERAL_EXPRESSION) => self.lower_object_literal(id),
             Some(syntax::NEW_EXPRESSION) => self.lower_new(id),
             Some(syntax::ARROW_FUNCTION) => self.lower_arrow(id),
+            Some(syntax::NULL_KEYWORD) => self.lower_absent(id),
             // `this` is parameter zero of a method. Outside one there is no
             // receiver to name.
             Some(syntax::THIS_KEYWORD) => self
@@ -3624,6 +3697,11 @@ impl<'a> FuncBuilder<'a> {
             Some("NaN") => {
                 return Ok(self.push(OpKind::ConstFloat(f64::NAN), HirType::NUMBER, origin));
             }
+            // `undefined` is not a keyword in an expression -- it is an
+            // identifier bound to a non-writable property of the global object.
+            // A local of that name would shadow it, and the binding lookup
+            // above is what catches one.
+            Some("undefined") => return self.lower_absent(id),
             _ => {}
         }
 
@@ -3652,6 +3730,130 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, reason));
         }
         Err(self.unsupported(id, "a name declared outside this function"))
+    }
+
+    /// `null` and `undefined`, which are one value in a compiled program.
+    ///
+    /// A reference has a value that is not an object, so the absence needs no
+    /// tag beside it. What it does need is a *type*: C tells a null
+    /// `NtsString *` from a null `NtsObj_Point *` even though both are the same
+    /// address, and the literal itself has neither -- the checker types it
+    /// `null`. So the type comes from where the literal sits.
+    fn lower_absent(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let ty = self.contextual_type(id, 0).filter(HirType::is_managed);
+        let Some(ty) = ty else {
+            return Err(self.unsupported(
+                id,
+                "`null` or `undefined` where what it stands in for is not a reference",
+            ));
+        };
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::ConstNull, ty, origin))
+    }
+
+    /// The type an expression is expected to have, from where it sits.
+    ///
+    /// Only for the literals that have no type of their own. The checker types
+    /// `null` as `null`, which is true and useless: what a backend needs is the
+    /// reference type the absence is standing in for, and that is a property of
+    /// the position rather than of the token.
+    fn contextual_type(&self, id: NodeId, depth: u32) -> Option<HirType> {
+        if depth > 8 {
+            return None;
+        }
+        let parent = self.node(id).parent?;
+        match self.kind_of(parent) {
+            // `return null` — whatever the enclosing function promised.
+            Some(syntax::RETURN_STATEMENT) => {
+                let owner = self.enclosing_callable(parent)?;
+                self.declared_return(owner)
+            }
+            // `const x: Element | null = null`, `next: Element | null = null`,
+            // and a parameter default. The declaration names the type.
+            Some(
+                syntax::VARIABLE_DECLARATION | syntax::PROPERTY_DECLARATION | syntax::PARAMETER,
+            ) => self
+                .children(parent)
+                .into_iter()
+                // The written annotation, which is every child but the name and
+                // the initializer this came from. Not the *name's* type: the
+                // checker narrows it by the initializer, so `let head: Element
+                // | null = null` types `head` as `null` right there -- true,
+                // and not what the storage is.
+                .filter(|child| *child != id && self.kind_of(*child) != Some(syntax::IDENTIFIER))
+                .find_map(|child| self.type_of(child))
+                .or_else(|| {
+                    self.children(parent)
+                        .into_iter()
+                        .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+                        .and_then(|name| self.type_of(name))
+                }),
+            // `x = null`, `p.next = null` — what the left side holds. And
+            // `at !== null` — whatever the other side is, since a comparison
+            // against the absent value is a comparison in that side's type.
+            Some(syntax::BINARY_EXPRESSION) => {
+                let parts = self.children(parent);
+                let [left, operator, right] = parts.as_slice() else {
+                    return None;
+                };
+                match self.kind_of(*operator) {
+                    Some(syntax::EQUALS_TOKEN) => self.type_of(*left),
+                    Some(
+                        syntax::EQUALS_EQUALS_TOKEN
+                        | syntax::EQUALS_EQUALS_EQUALS_TOKEN
+                        | syntax::EXCLAMATION_EQUALS_TOKEN
+                        | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN,
+                    ) => {
+                        let other = if *left == id { *right } else { *left };
+                        self.type_of(other)
+                    }
+                    _ => None,
+                }
+            }
+            // `f(null)` and `new Element(v, null)` — the parameter it fills.
+            // The signature is the checker's answer after overload resolution,
+            // so this is exact rather than a guess at which overload.
+            Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION) => {
+                let at = self
+                    .children(parent)
+                    .iter()
+                    .position(|child| *child == id)?;
+                let target = self.snapshot.call_targets.get(&parent)?;
+                let signature = self.snapshot.signatures.get(target.signature.0 as usize)?;
+                // The callee is child zero, so argument `n` is child `n + 1`.
+                let parameter = signature.parameters.get(at.checked_sub(1)?)?;
+                representation(self.snapshot, parameter.ty)
+            }
+            // Grouping and assertions carry the context through unchanged.
+            Some(
+                syntax::PARENTHESIZED_EXPRESSION
+                | syntax::AS_EXPRESSION
+                | syntax::SATISFIES_EXPRESSION
+                | syntax::CONDITIONAL_EXPRESSION,
+            ) => self.contextual_type(parent, depth + 1),
+            _ => None,
+        }
+    }
+
+    /// The function, method or arrow a node sits inside.
+    fn enclosing_callable(&self, id: NodeId) -> Option<NodeId> {
+        let mut at = self.node(id).parent;
+        for _ in 0..64 {
+            let here = at?;
+            if matches!(
+                self.kind_of(here),
+                Some(
+                    syntax::FUNCTION_DECLARATION
+                        | syntax::METHOD_DECLARATION
+                        | syntax::ARROW_FUNCTION
+                        | syntax::CONSTRUCTOR
+                )
+            ) {
+                return Some(here);
+            }
+            at = self.node(here).parent;
+        }
+        None
     }
 
     fn lower_number(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {

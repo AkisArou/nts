@@ -529,6 +529,54 @@ fn allocated_layouts(program: &Program) -> rustc_hash::FxHashSet<usize> {
     found
 }
 
+/// `a === b` on two strings, which compares by value.
+///
+/// `"a" + "b" === "ab"` is true in JavaScript, and those are two different
+/// allocations -- so pointer equality is the wrong answer rather than an
+/// approximation of it.
+fn string_comparison(
+    func: &Func,
+    name: &str,
+    bin: BinOp,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> Option<String> {
+    if !matches!(bin, BinOp::Eq | BinOp::Ne)
+        || !matches!(
+            func.values[lhs.0 as usize].ty,
+            HirType::Managed(ManagedType::String)
+        )
+    {
+        return None;
+    }
+    let negate = if matches!(bin, BinOp::Ne) { "!" } else { "" };
+    Some(format!(
+        "{name} = {negate}nts_string_eq({}, {});",
+        value_name(lhs),
+        value_name(rhs)
+    ))
+}
+
+/// `x === null` and `x !== null`, as a comparison of addresses.
+fn null_comparison(
+    func: &Func,
+    name: &str,
+    bin: BinOp,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> Option<String> {
+    let absent = |value: ValueId| matches!(func.values[value.0 as usize].kind, OpKind::ConstNull);
+    if !matches!(bin, BinOp::Eq | BinOp::Ne) || !(absent(lhs) || absent(rhs)) {
+        return None;
+    }
+    let operator = if matches!(bin, BinOp::Ne) { "!=" } else { "==" };
+    Some(format!(
+        "{name} = {} {operator} {};",
+        value_name(lhs),
+        value_name(rhs)
+    ))
+}
+
 /// The cast an upcast needs, or nothing where the types already agree.
 ///
 /// TypeScript checked assignability before any of this ran, so a reference
@@ -1335,21 +1383,16 @@ fn binary_text(
         return Ok(wrap(format!("{helper}({}, {})", cast(lhs), cast(rhs))));
     }
 
-    // Strings compare by value: `"a" + "b" === "ab"` is true in JavaScript, and
-    // those are two different allocations, so pointer equality is the wrong
-    // answer rather than an approximation of it.
-    if matches!(bin, BinOp::Eq | BinOp::Ne)
-        && matches!(
-            func.values[lhs.0 as usize].ty,
-            HirType::Managed(ManagedType::String)
-        )
-    {
-        let negate = if matches!(bin, BinOp::Ne) { "!" } else { "" };
-        return Ok(format!(
-            "{name} = {negate}nts_string_eq({}, {});",
-            value_name(lhs),
-            value_name(rhs)
-        ));
+    // A comparison against the absent reference is a comparison of addresses,
+    // whatever the other side is. It has to come before the string rule below:
+    // `s === null` is a question about the pointer, and answering it by reading
+    // through the pointer would read through the null one.
+    if let Some(text) = null_comparison(func, name, bin, lhs, rhs) {
+        return Ok(text);
+    }
+
+    if let Some(text) = string_comparison(func, name, bin, lhs, rhs) {
+        return Ok(text);
     }
 
     let operator = match bin {
@@ -1462,10 +1505,21 @@ fn unary_text(
             // so. A double additionally has to exclude NaN, which is falsy and
             // which `!= 0` would call true — every comparison with a NaN is
             // false, including the inequality.
-            if matches!(func.values[operand.0 as usize].ty, HirType::Int { .. }) {
-                format!("{name} = {} != 0;", value_name(operand))
-            } else {
-                format!("{name} = ({0} != 0.0) && !isnan({0});", value_name(operand))
+            //
+            // A reference is truthy when it is present, except that an *empty
+            // string* is falsy in JavaScript however present it is. An array or
+            // an object is truthy whatever it holds, including an empty one:
+            // `if ([])` runs.
+            match &func.values[operand.0 as usize].ty {
+                HirType::Managed(ManagedType::String) => format!(
+                    "{name} = {0} != 0 && {0}->length != 0;",
+                    value_name(operand)
+                ),
+                // An integer and a reference are both "not the zero value".
+                HirType::Int { .. } | HirType::Managed(_) => {
+                    format!("{name} = {} != 0;", value_name(operand))
+                }
+                _ => format!("{name} = ({0} != 0.0) && !isnan({0});", value_name(operand)),
             }
         }
         UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round | UnOp::Abs => {
@@ -1703,6 +1757,13 @@ fn emit_op(
         // a return is spelled by the terminator.
         OpKind::Param(_) | OpKind::BlockParam(_) | OpKind::Return(_) => return Ok(()),
         OpKind::ConstInt(v) => format!("{name} = {v};"),
+        // The absent reference. Typed, because C distinguishes a null
+        // `NtsString *` from a null `NtsObj_Point *` even though the address is
+        // the same one.
+        OpKind::ConstNull => {
+            let ty = c_type_of(context.program, &op.ty, &op.origin)?;
+            format!("{name} = ({ty})0;")
+        }
         // Enough digits to round-trip an f64 exactly. Fewer would change the
         // program's arithmetic.
         OpKind::ConstFloat(v) => format!("{name} = {};", float_literal(*v)),

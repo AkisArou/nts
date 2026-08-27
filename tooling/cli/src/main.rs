@@ -427,6 +427,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::ConstFloat(v) => format!("%{index} = const {v} : {ty}"),
         OpKind::ConstBool(v) => format!("%{index} = const {v} : {ty}"),
         OpKind::ConstString(v) => format!("%{index} = const {v:?} : {ty}"),
+        OpKind::ConstNull => format!("%{index} = const null : {ty}"),
         OpKind::Binary { op: bin, lhs, rhs } => {
             format!(
                 "%{index} = {} %{}, %{} : {ty}",
