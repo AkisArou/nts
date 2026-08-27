@@ -347,3 +347,81 @@ NtsString *nts_fs_mkdtemp(NtsString *template_) {
     uv_fs_req_cleanup(&req);
     return out;
 }
+
+/* The whole file as bytes.
+ *
+ * `readFileSync` with no encoding answers with a `Buffer`, so the bytes have to
+ * cross without being decoded on the way. One array of doubles is not how node
+ * moves them -- it hands over a `Buffer` backed by the read buffer directly --
+ * and it is what this ABI has until a byte array can cross whole. */
+NtsArray *nts_fs_read_file_bytes(NtsString *path) {
+    PATH_OF(path, p);
+    uv_fs_t req;
+    int fd = uv_fs_open(loop(), &req, p, O_RDONLY, 0, NULL);
+    uv_fs_req_cleanup(&req);
+    if (fd < 0) {
+        nts_node_set_errno(fd);
+        return nts_array_new(&nts_desc_double, 0);
+    }
+
+    size_t cap = 65536, len = 0;
+    char *data = malloc(cap);
+    for (;;) {
+        if (len == cap) {
+            cap *= 2;
+            data = realloc(data, cap);
+        }
+        uv_buf_t buf = uv_buf_init(data + len, (unsigned)(cap - len));
+        int r = uv_fs_read(loop(), &req, fd, &buf, 1, -1, NULL);
+        uv_fs_req_cleanup(&req);
+        if (r <= 0) {
+            nts_node_set_errno(r);
+            break;
+        }
+        len += (size_t)r;
+    }
+    uv_fs_close(loop(), &req, fd, NULL);
+    uv_fs_req_cleanup(&req);
+
+    NtsArray *out = nts_array_new(&nts_desc_double, (double)len);
+    for (size_t i = 0; i < len; i++) {
+        NTS_ITEMS(out, double)[i] = (double)(unsigned char)data[i];
+    }
+    free(data);
+    return out;
+}
+
+/* Write raw bytes. `writeFileSync` takes a string or a `Buffer`, and encoding a
+ * `Buffer` into a string to pass it here would re-encode every byte above
+ * 0x7f. Two bindings, one per kind of payload. */
+double nts_fs_write_file_bytes(NtsString *path, NtsArray *bytes, double flags, double mode) {
+    PATH_OF(path, p);
+    size_t len = (size_t)bytes->header.length;
+    unsigned char *data = malloc(len > 0 ? len : 1);
+    for (size_t i = 0; i < len; i++) {
+        data[i] = (unsigned char)NTS_ITEMS(bytes, double)[i];
+    }
+
+    uv_fs_t req;
+    int fd = uv_fs_open(loop(), &req, p, (int)flags, (int)mode, NULL);
+    uv_fs_req_cleanup(&req);
+    if (fd < 0) {
+        free(data);
+        nts_node_set_errno(fd);
+        return (double)fd;
+    }
+
+    size_t written = 0;
+    int r = 0;
+    while (written < len) {
+        uv_buf_t buf = uv_buf_init((char *)data + written, (unsigned)(len - written));
+        r = uv_fs_write(loop(), &req, fd, &buf, 1, -1, NULL);
+        uv_fs_req_cleanup(&req);
+        if (r < 0) break;
+        written += (size_t)r;
+    }
+    uv_fs_close(loop(), &req, fd, NULL);
+    uv_fs_req_cleanup(&req);
+    free(data);
+    return simple(r < 0 ? r : 0);
+}

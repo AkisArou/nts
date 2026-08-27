@@ -50,8 +50,8 @@ rather than inferred by a rule, so the number can be audited.
 | `path` | **15 / 16** | 1 / 39 | complete but for `matchesGlob`; the skip is Windows-only |
 | `os` | **4 / 4** | 16 / 31 | complete |
 | `events` | **26 / 33** | 0 / 47 | complete but for domains, `EventTarget` and the promise forms |
-| `fs` | 9 / 260 | 39 / 68 | the sync surface; async, streams and `Buffer` are absent |
-| `querystring` | **3 / 4** | 0 / 17 | complete but for `unescapeBuffer`, which returns a `Buffer` |
+| `fs` | 11 / 260 | 39 / 68 | the sync surface; async, streams and watchers are absent |
+| `querystring` | **4 / 4** | 0 / 17 | complete |
 | `url` | — | — | not started |
 | `buffer` | **49 / 60** | 0 / 65 | complete enough for `fs` and `string_decoder` |
 | `events` | — | — | not started |
@@ -163,10 +163,14 @@ rather than making a second pass. Both are upstream's design and the reason
 `parse` is fast on a long query, so they are transcribed rather than replaced
 with `split`.
 
-`unescapeBuffer` is the one gap: it returns a `Buffer`, and the test reads
-`b[0]` and calls `.toString()` on it, which needs `Buffer`'s UTF-8 decoding
-rather than `Uint8Array`'s comma-joined digits. The percent-decoding itself is
-implemented and reachable through `unescape`.
+All four test files pass.
+
+One structural detail is worth naming, because it is the kind of thing a
+rewrite loses. `parse` reads `unescape` off the module object at call time, not
+from a module-local binding, so replacing `querystring.unescape` changes what
+`parse` does — and node's tests check exactly that. But it compares against the
+*original* function to decide whether a custom decoder was supplied. Both halves
+are needed: read late, compare against the original.
 
 ## `buffer`
 
@@ -223,10 +227,11 @@ that calls `cb` before returning is not the function node documents. That is a
 runtime decision — see *the runtime* in [`typescript.md`](typescript.md) — and
 `node:fs` is downstream of it.
 
-`readFileSync` without an encoding returns a `Buffer` in node. There is no
-`node:buffer`, so that call is refused with the reason rather than answered
-with a string, which would differ from node silently. The encoded form is
-complete.
+`readFileSync` returns a `Buffer` when no encoding is given and a string when
+there is one, as node does. `writeFileSync` takes either. Those are two
+bindings rather than one: encoding a `Buffer` into a string to reuse the text
+binding re-encodes every byte above 0x7f, which is a corruption rather than a
+conversion.
 
 Errors are libuv's, built from `uv_err_name` and `uv_strerror` through the
 binding, so `err.code`, `err.errno`, `err.syscall` and `err.path` carry what

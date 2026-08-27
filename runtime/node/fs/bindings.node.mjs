@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 // reports them, because the TypeScript builds the exception from that number
 // and must do it identically both ways.
 import fs from "node:fs";
+import { Buffer } from "node:buffer";
 import { constants as C } from "node:fs";
 
 let errno = 0;
@@ -58,8 +59,12 @@ globalThis.nts_fs_open = (path, flags, mode) => {
 };
 globalThis.nts_fs_close = (fd) => status(() => fs.closeSync(fd));
 globalThis.nts_fs_read_file_utf8 = (path) => attempt(() => fs.readFileSync(path, "utf8"), "");
+globalThis.nts_fs_read_file_bytes = (path) => attempt(() => Array.from(fs.readFileSync(path)), []);
+const flagName = (flags) => (flags & 0o2000 ? "a" : "w");
 globalThis.nts_fs_write_file_utf8 = (path, contents, flags) =>
-  status(() => fs.writeFileSync(path, contents, { flag: flags === 0o3001 ? "a" : "w" }));
+  status(() => fs.writeFileSync(path, contents, { flag: flagName(flags) }));
+globalThis.nts_fs_write_file_bytes = (path, bytes, flags) =>
+  status(() => fs.writeFileSync(path, Buffer.from(bytes), { flag: flagName(flags) }));
 globalThis.nts_fs_readdir = (path) => attempt(() => fs.readdirSync(path), []);
 globalThis.nts_fs_readdir_types = (path) =>
   attempt(

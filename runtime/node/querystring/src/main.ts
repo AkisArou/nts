@@ -6,6 +6,7 @@
 // query, so it is transcribed rather than replaced with `split`.
 
 import { encodeStr, hexTable, isHexTable } from "../../internal/querystring.ts";
+import { Buffer } from "../../buffer/src/main.ts";
 
 export type ParsedUrlQuery = Record<string, string | string[]>;
 
@@ -50,11 +51,11 @@ const unhexTable: number[] = (() => {
 /**
  * Percent-decoding onto bytes, node `lib/querystring.js:84`.
  *
- * Upstream fills a `Buffer` and calls `toString()` on it. There is no
- * `node:buffer` yet, so this collects the bytes and decodes them here. The
- * bytes and the decoding are the same; what differs is where they are held.
+ * Returns a `Buffer` because that is what node returns and what its callers
+ * read: the test indexes it and calls `toString()`, which has to decode UTF-8
+ * rather than join the digits with commas.
  */
-function unescapeBytes(s: string, decodeSpaces: boolean): string {
+export function unescapeBuffer(s: string, decodeSpaces = false): Buffer {
   const out: number[] = [];
   let index = 0;
   const maxLength = s.length - 2;
@@ -88,70 +89,7 @@ function unescapeBytes(s: string, decodeSpaces: boolean): string {
     index++;
   }
   void hasHex;
-  return decodeUtf8(out);
-}
-
-/**
- * UTF-8 bytes to a string, with U+FFFD for a sequence that is not valid.
- *
- * `Buffer.prototype.toString` is what upstream reaches for. Replacing a bad
- * byte rather than throwing is what every decoder that has to keep going does,
- * and it is what a query string with mangled escapes needs.
- */
-function decodeUtf8(bytes: number[]): string {
-  let out = "";
-  let i = 0;
-  while (i < bytes.length) {
-    const b0 = bytes[i]!;
-    if (b0 < 0x80) {
-      out += String.fromCharCode(b0);
-      i += 1;
-      continue;
-    }
-    let needed: number;
-    let code: number;
-    if ((b0 & 0xe0) === 0xc0) {
-      needed = 1;
-      code = b0 & 0x1f;
-    } else if ((b0 & 0xf0) === 0xe0) {
-      needed = 2;
-      code = b0 & 0x0f;
-    } else if ((b0 & 0xf8) === 0xf0) {
-      needed = 3;
-      code = b0 & 0x07;
-    } else {
-      out += "�";
-      i += 1;
-      continue;
-    }
-    if (i + needed >= bytes.length + 0 && i + needed > bytes.length - 1) {
-      out += "�";
-      i += 1;
-      continue;
-    }
-    let valid = true;
-    for (let k = 1; k <= needed; k++) {
-      const b = bytes[i + k]!;
-      if ((b & 0xc0) !== 0x80) {
-        valid = false;
-        break;
-      }
-      code = (code << 6) | (b & 0x3f);
-    }
-    if (!valid) {
-      out += "�";
-      i += 1;
-      continue;
-    }
-    i += needed + 1;
-    if (code > 0xffff) {
-      code -= 0x10000;
-      out += String.fromCharCode(0xd800 + (code >> 10), 0xdc00 + (code & 0x3ff));
-    } else {
-      out += String.fromCharCode(code);
-    }
-  }
-  return out;
+  return Buffer.from(out);
 }
 
 /** Upstream `lib/querystring.js:131`. */
@@ -159,7 +97,7 @@ export function unescape(s: string, decodeSpaces?: boolean): string {
   try {
     return decodeURIComponent(s);
   } catch {
-    return unescapeBytes(s, decodeSpaces ?? false);
+    return unescapeBuffer(s, decodeSpaces ?? false).toString();
   }
 }
 
@@ -229,10 +167,14 @@ export function stringify(
   sep ||= "&";
   eq ||= "=";
 
-  let encode: (s: string) => string = escape;
+  let encode: (s: string) => string = QueryString.escape;
   if (options && typeof options.encodeURIComponent === "function") {
     encode = options.encodeURIComponent;
   }
+  // Compared against the *original* `escape`, not `QueryString.escape`: a
+  // caller who replaced the module's `escape` gets the custom path, which is
+  // the point of replacing it. Upstream compares against `qsEscape` for the
+  // same reason.
   const convert = encode === escape ? encodeStringified : encodeStringifiedCustom;
 
   if (obj !== null && typeof obj === "object") {
@@ -338,10 +280,12 @@ export function parse(
     pairs = options.maxKeys > 0 ? options.maxKeys : -1;
   }
 
-  let decode: (s: string) => string = unescape;
+  let decode: (s: string) => string = QueryString.unescape;
   if (options && typeof options.decodeURIComponent === "function") {
     decode = options.decodeURIComponent;
   }
+  // Against the original, for the reason `stringify` compares against the
+  // original `escape`.
   const customDecode = decode !== unescape;
 
   let lastPos = 0;
@@ -469,9 +413,28 @@ function decodeStr(s: string, decoder: (v: string) => string): string {
   try {
     return decoder(s);
   } catch {
-    return unescape(s, true);
+    return QueryString.unescape(s, true);
   }
 }
+
+/**
+ * The module object, as node has one.
+ *
+ * `parse` and `stringify` read `unescape` and `escape` off *this* at call time
+ * rather than closing over the module-local bindings, because node's do:
+ * replacing `querystring.unescape` changes what `parse` does, and its own tests
+ * check that. An ESM module has no `module.exports` to read back, so the object
+ * is explicit.
+ */
+export const QueryString = {
+  escape,
+  unescape,
+  unescapeBuffer,
+  parse,
+  stringify,
+  decode: parse,
+  encode: stringify,
+};
 
 export const decode = parse;
 export const encode = stringify;

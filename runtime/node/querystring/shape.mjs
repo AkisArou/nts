@@ -1,9 +1,12 @@
 // The object node's tests see as `require('querystring')`.
 //
-// Node's module carries `escape` and `unescape` as *properties it reads back*:
-// `parse` compares its decoder against `QueryString.unescape` to decide whether
-// a custom one was passed, so a test that replaces `qs.unescape` changes what
-// `parse` does. Copying the exports into one object preserves that.
+// It is `QueryString` itself, not a copy: `parse` reads `unescape` off that
+// object at call time, so a test that replaces `querystring.unescape` must be
+// replacing the property `parse` will read. A spread would give the test one
+// object and `parse` another.
 export function shape(exports) {
-  return { ...exports };
+  const qs = exports.QueryString;
+  qs.decode = qs.parse;
+  qs.encode = qs.stringify;
+  return qs;
 }

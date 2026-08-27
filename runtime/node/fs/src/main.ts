@@ -15,6 +15,7 @@
 import { validateString } from "../../internal/validators.ts";
 import { ERR_INVALID_ARG_TYPE } from "../../internal/errors.ts";
 import { uvException } from "../../internal/uv.ts";
+import { Buffer } from "../../buffer/src/main.ts";
 import { Dirent, Stats } from "./stats.ts";
 import * as constants from "./constants.ts";
 import { getOptions, requireTextEncoding, type FileOptions } from "./options.ts";
@@ -28,8 +29,12 @@ declare function nts_fs_fstat(fd: number): number[];
 declare function nts_fs_open(path: string, flags: number, mode: number): number;
 declare function nts_fs_close(fd: number): number;
 declare function nts_fs_read_file_utf8(path: string): string;
+declare function nts_fs_read_file_bytes(path: string): number[];
 declare function nts_fs_write_file_utf8(
   path: string, contents: string, flags: number, mode: number,
+): number;
+declare function nts_fs_write_file_bytes(
+  path: string, bytes: number[], flags: number, mode: number,
 ): number;
 declare function nts_fs_readdir(path: string): string[];
 declare function nts_fs_readdir_types(path: string): number[];
@@ -113,15 +118,26 @@ export function accessSync(path: string, mode = constants.F_OK): void {
 /**
  * `readFileSync(path[, options])`, upstream `lib/fs.js`.
  *
- * Node returns a `Buffer` when no encoding is given. Without `node:buffer`
- * that request is refused with the reason rather than answered with a string,
- * which would differ from node silently.
+ * A `Buffer` when no encoding is given, a string when there is one -- node's
+ * signature, and the reason the return type is a union rather than a choice
+ * made for the caller.
  */
-export function readFileSync(path: string, options?: string | FileOptions): string {
+export function readFileSync(path: string, options?: null): Buffer;
+export function readFileSync(path: string, options: string | FileOptions): string;
+export function readFileSync(
+  path: string,
+  options?: string | FileOptions | null,
+): string | Buffer {
   validateString(path, "path");
   const settings = getOptions(options);
-  const encoding = requireTextEncoding(settings.encoding, "options.encoding");
-  void encoding;
+
+  if (settings.encoding === null || settings.encoding === undefined) {
+    const bytes = nts_fs_read_file_bytes(path);
+    checkErrno("open", path);
+    return Buffer.from(bytes);
+  }
+
+  requireTextEncoding(settings.encoding, "options.encoding");
   const contents = nts_fs_read_file_utf8(path);
   checkErrno("open", path);
   return contents;
@@ -129,15 +145,24 @@ export function readFileSync(path: string, options?: string | FileOptions): stri
 
 export function writeFileSync(
   path: string,
-  data: string,
+  data: string | Uint8Array,
   options?: string | FileOptions,
 ): void {
   validateString(path, "path");
-  validateString(data, "data");
   const settings = getOptions(options, { encoding: "utf8", mode: 0o666, flag: "w" });
+  const flags = flagsOf(settings.flag ?? "w");
+  const mode = settings.mode ?? 0o666;
+
+  // A `Buffer` goes out as bytes and a string goes out encoded. Encoding the
+  // buffer into a string to reuse one binding would re-encode every byte above
+  // 0x7f, which is the bug that made this two functions.
+  if (data instanceof Uint8Array) {
+    check(nts_fs_write_file_bytes(path, Array.from(data), flags, mode), "open", path);
+    return;
+  }
+  validateString(data, "data");
   requireTextEncoding(settings.encoding, "options.encoding");
-  check(nts_fs_write_file_utf8(path, data, flagsOf(settings.flag ?? "w"), settings.mode ?? 0o666),
-        "open", path);
+  check(nts_fs_write_file_utf8(path, data, flags, mode), "open", path);
 }
 
 export function appendFileSync(
