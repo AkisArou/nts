@@ -47,16 +47,16 @@ rather than inferred by a rule, so the number can be audited.
 
 | module | node's tests | compiles | note |
 | --- | :---: | :---: | --- |
-| `path` | **15 / 16** | 1 / 39 | complete but for `matchesGlob`; the skip is Windows-only |
-| `os` | **4 / 4** | 16 / 31 | complete |
-| `events` | **26 / 33** | 0 / 47 | complete but for domains, `EventTarget` and the promise forms |
-| `fs` | 11 / 260 | 39 / 68 | the sync surface; async, streams and watchers are absent |
-| `querystring` | **4 / 4** | 0 / 17 | complete |
-| `punycode` | **1 / 1** | 0 / 22 | complete |
+| `path` | **15 / 16** | 1 / 49 | complete but for `matchesGlob`; the skip is Windows-only |
+| `os` | **4 / 4** | 16 / 36 | complete |
+| `events` | **26 / 33** | 0 / 50 | complete but for domains, `EventTarget` and the promise forms |
+| `fs` | 11 / 260 | 12 / 141 | the sync surface; async, streams and watchers are absent |
+| `querystring` | **4 / 4** | 3 / 97 | complete |
+| `punycode` | **1 / 1** | 5 / 15 | complete |
 | `url` | — | — | not started |
-| `buffer` | **49 / 60** | 0 / 65 | complete enough for `fs` and `string_decoder` |
+| `buffer` | **49 / 60** | 2 / 85 | complete enough for `fs` and `string_decoder` |
 | `events` | — | — | not started |
-| `string_decoder` | **2 / 3** | 0 / 24 | complete; the failure is the class-vs-function difference |
+| `string_decoder` | **2 / 3** | 4 / 99 | complete; the failure is the class-vs-function difference |
 | `stream` | — | — | not started |
 | `assert` | — | — | not started |
 
@@ -290,6 +290,31 @@ node's carry and the message reads the same:
 ```
 ENOENT: no such file or directory, stat '/nope/x'
 ```
+
+## What stops all of it compiling
+
+Every module together, ranked. This is the aggregate refusal count across
+`path`, `os`, `events`, `buffer`, `querystring`, `string_decoder`, `punycode`
+and `fs` — a work queue ordered by how much of the Node surface each item
+unblocks, rather than by how often it appears in a corpus of test files.
+
+| refused | count | what it is |
+| --- | ---: | --- |
+| a property of unrepresentable type (an object type) | 236 | a record with a record in it — `CpuInfo.times`, `Stats`, every options object |
+| a parameter of unrepresentable type (`unknown`) | 60 | the validators; a JavaScript caller can pass anything |
+| an object with an optional property | 46 | `{ encoding?, flag?, mode? }`, which is every `fs` signature |
+| a name declared outside this function | 45 | module-scope tables: `hexTable`, `WINDOWS_RESERVED_NAMES`, the encodings |
+| a structured type (flags 0x100000) | 27 | interfaces used as parameter types |
+| a property of unrepresentable type (a function type) | 15 | a callback stored in a record |
+| indexing something that is not an array | 11 | `Record<string, number>` |
+| a rest parameter | 8 | `resolve(...args)`, `join(...args)` |
+| `toUpperCase` / `toLowerCase` | 8 | the win32 device comparison, encoding names |
+| a parameter with a default | 8 | `getPriority(pid = 0)` and most options |
+
+The first row is worth its own note: it is not one feature but the single
+largest thing standing between this profile and compiling. Almost every Node
+API takes or returns a record, and most of those records have a record inside
+them.
 
 ## What stops `path` compiling
 
