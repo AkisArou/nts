@@ -671,10 +671,7 @@ pub fn round_to_integer(op: super::UnOp, a: Facts) -> Facts {
         UnOp::Floor => x.floor(),
         UnOp::Ceil => x.ceil(),
         UnOp::Trunc => x.trunc(),
-        // JavaScript rounds a half toward positive infinity, which `floor(x +
-        // 0.5)` says exactly and `f64::round` does not: the latter rounds away
-        // from zero, making `Math.round(-1.5)` come out `-2` instead of `-1`.
-        _ => (x + 0.5).floor(),
+        _ => javascript_round(x),
     };
 
     // Any of these can produce `-0`: from `-0` itself, and for everything but
@@ -682,6 +679,44 @@ pub fn round_to_integer(op: super::UnOp, a: Facts) -> Facts {
     // the result cannot be a zero at all.
     let negative_zero = a.maybe_negative_zero || (!matches!(op, UnOp::Floor) && a.lo < 0.0);
     Facts::new(apply(a.lo), apply(a.hi), true, a.maybe_nan, negative_zero)
+}
+
+/// `Math.round` (ES 21.3.2.28), which is neither Rust's `round` nor
+/// `floor(x + 0.5)`.
+///
+/// Three things it has to get right, and the second is why this is a function
+/// rather than an expression:
+///
+/// - A half goes toward *positive infinity*, not away from zero. `f64::round`
+///   does the latter, making `Math.round(-1.5)` come out `-2` instead of `-1`.
+/// - A value that is already an integer comes back unchanged. `floor(x + 0.5)`
+///   fails that near 2^53, where `0.5` is below the spacing between adjacent
+///   doubles: `9007199254740991 + 0.5` rounds to an even neighbour and the
+///   answer is one too small. Differential testing against node found it there,
+///   in both this function and the runtime's, which had the same expression.
+/// - Something in `[-0.5, 0)` rounds to *negative* zero. `1 / -0` is not
+///   `1 / 0`, so the sign is observable.
+///
+/// This must agree with `nts_round` in the C runtime exactly. One folds at
+/// compile time and the other runs, and a program whose answer depends on which
+/// path it took is a program with two meanings.
+#[must_use]
+pub fn javascript_round(x: f64) -> f64 {
+    if !x.is_finite() {
+        return x;
+    }
+    let lower = x.floor();
+    if lower == x {
+        // Already an integer. Returning it rather than recomputing also keeps
+        // the sign of a negative zero.
+        return x;
+    }
+    let rounded = if x - lower >= 0.5 { lower + 1.0 } else { lower };
+    if rounded == 0.0 && x < 0.0 {
+        -0.0
+    } else {
+        rounded
+    }
 }
 
 /// `Math.abs`.
@@ -864,9 +899,14 @@ mod tests {
             (UnOp::Floor, f64::floor),
             (UnOp::Ceil, f64::ceil),
             (UnOp::Trunc, f64::trunc),
-            // JavaScript's rounding, not Rust's: half goes toward positive
-            // infinity, so `Math.round(-1.5)` is `-1`.
-            (UnOp::Round, |x| (x + 0.5).floor()),
+            // Deliberately the same function the transfer function uses. This
+            // test is about the *interval* logic -- that the abstract result
+            // contains the concrete one -- and a second hand-written spelling
+            // here would only test that two spellings agree. What checks the
+            // scalar semantics against something independent is `nts check`,
+            // which runs the same source on V8; it is what found the version
+            // this replaced.
+            (UnOp::Round, javascript_round),
         ];
         for &x in POOL {
             for (op, concrete) in cases {

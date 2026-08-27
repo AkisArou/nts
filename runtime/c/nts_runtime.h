@@ -240,13 +240,35 @@ static inline uint32_t nts_ushr(int32_t a, int32_t b) {
     return (uint32_t)a >> ((uint32_t)b & 31u);
 }
 
-/* JavaScript Math.round: a half goes toward positive infinity, not away from
- * zero. C's round(-1.5) is -2; this is -1. */
+/* JavaScript Math.round (ES 21.3.2.28), which is not C's round and is not
+ * `floor(x + 0.5)` either.
+ *
+ * Three things it has to get right:
+ *
+ *   - A half goes toward *positive infinity*, not away from zero. C's
+ *     round(-1.5) is -2; this is -1.
+ *   - A value that is already an integer comes back unchanged. `floor(x + 0.5)`
+ *     does not manage that near 2^53, where 0.5 is below the spacing between
+ *     representable doubles: 9007199254740991 + 0.5 rounds to an even neighbour
+ *     and the answer comes out one too small. Differential testing against node
+ *     found it there.
+ *   - Something in [-0.5, 0) rounds to *negative* zero, and `1 / -0` is not
+ *     `1 / 0`, so the sign is observable and cannot be dropped. */
 static inline double nts_round(double x) {
     if (!isfinite(x)) {
         return x;
     }
-    return floor(x + 0.5);
+    const double lower = floor(x);
+    if (lower == x) {
+        /* Already an integer. Returning it rather than recomputing also keeps
+         * the sign of a negative zero. */
+        return x;
+    }
+    const double rounded = (x - lower >= 0.5) ? lower + 1.0 : lower;
+    if (rounded == 0.0 && x < 0.0) {
+        return -0.0;
+    }
+    return rounded;
 }
 
 /* JavaScript Math.min: NaN wins, and -0 is below 0. C's fmin does neither. */

@@ -530,6 +530,12 @@ int main(void) {{
     check("shard(-70000)", shard(-70000), 1);
     check("shard(2^31-1)", shard(2147483647.0), 32767);
     check("shard(1e21)", shard(1e21), 8544);
+    // `Math.abs(-2147483648)` is 2147483648, which does not fit the `int32`
+    // its operand does. Negating before widening is signed overflow -- in
+    // practice `INT32_MIN` again -- and the answer came out negative. Found by
+    // `nts check`, which is the only thing that would have.
+    check("shard(-2^31)", shard(-2147483648.0), 32768);
+    check("shard(2^31)", shard(2147483648.0), 32768);
 
     check("clampIndex(-5)", clampIndex(-5, 1000), 0);
     // Math.trunc, so 3.9 becomes 3 rather than 4.
@@ -538,6 +544,12 @@ int main(void) {{
 
     // Half toward positive infinity: C's round would say -2 here.
     check("rounded(-1.5)", rounded(-1.5), -1);
+    // An integer rounds to itself. `floor(x + 0.5)` does not manage that near
+    // 2^53, where 0.5 is below the spacing between adjacent doubles: the sum
+    // rounds to an even neighbour and the answer is one too small. Also found
+    // by `nts check`.
+    check("rounded(2^53-1)", rounded(9007199254740991.0), 9007199254740991.0);
+    check("rounded(-(2^53-1))", rounded(-9007199254740991.0), -9007199254740991.0);
     check("rounded(2.5)", rounded(2.5), 3);
     check("distance(-3,8)", distance(-3, 8), 11);
 

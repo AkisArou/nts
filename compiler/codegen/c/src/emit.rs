@@ -1017,9 +1017,35 @@ fn binary_text(
 }
 
 /// The C spelling of a unary operation.
-fn unary_text(func: &Func, name: &str, un: UnOp, operand: ValueId, result: &HirType) -> String {
-    match un {
-        UnOp::Neg => format!("{name} = -{};", value_name(operand)),
+fn unary_text(
+    func: &Func,
+    name: &str,
+    un: UnOp,
+    operand: ValueId,
+    result: &HirType,
+    origin: &Origin,
+) -> Result<String, Diagnostic> {
+    // Integer arithmetic happens in the type of the *result*, not of the
+    // operand, and the two differ exactly where it matters. The analysis widens
+    // `-x` and `Math.abs(x)` on an `i32` to `i64` precisely because
+    // `-INT32_MIN` does not fit; negating first and widening after is signed
+    // overflow, which is undefined and which in practice yields `INT32_MIN`
+    // again -- the one input `Math.abs` exists to handle. Differential testing
+    // against node found it as `Math.abs(-2147483648)`.
+    let widen = |value: ValueId| -> Result<String, Diagnostic> {
+        if matches!(result, HirType::Int { .. }) {
+            Ok(format!(
+                "({}){}",
+                c_type(result, origin)?,
+                value_name(value)
+            ))
+        } else {
+            Ok(value_name(value))
+        }
+    };
+
+    Ok(match un {
+        UnOp::Neg => format!("{name} = -{};", widen(operand)?),
         UnOp::Not => format!("{name} = !{};", value_name(operand)),
         UnOp::Truthy => {
             // An integer is truthy exactly when it is non-zero, and `!= 0` says
@@ -1038,10 +1064,13 @@ fn unary_text(func: &Func, name: &str, un: UnOp, operand: ValueId, result: &HirT
             let already_integral =
                 matches!(func.values[operand.0 as usize].ty, HirType::Int { .. });
             if already_integral {
-                return match un {
-                    UnOp::Abs => format!("{name} = {0} < 0 ? -{0} : {0};", value_name(operand)),
-                    _ => format!("{name} = {};", value_name(operand)),
-                };
+                return Ok(match un {
+                    UnOp::Abs => {
+                        let wide = widen(operand)?;
+                        format!("{name} = {wide} < 0 ? -{wide} : {wide};")
+                    }
+                    _ => format!("{name} = {};", widen(operand)?),
+                });
             }
             let call = match un {
                 UnOp::Floor => "floor",
@@ -1055,8 +1084,15 @@ fn unary_text(func: &Func, name: &str, un: UnOp, operand: ValueId, result: &HirT
             };
             // Rounding in doubles and converting after, never the other way
             // round: `(int32_t)-3.7` is `-3` and `floor(-3.7)` is `-4`.
+            // The cast is to the result's own width. Hardcoding `int32_t` here
+            // truncated a `floor` whose range the analysis had already widened
+            // past 32 bits.
             if matches!(result, HirType::Int { .. }) {
-                return format!("{name} = (int32_t){call}({});", value_name(operand));
+                return Ok(format!(
+                    "{name} = ({}){call}({});",
+                    c_type(result, origin)?,
+                    value_name(operand)
+                ));
             }
             format!("{name} = {call}({});", value_name(operand))
         }
@@ -1065,7 +1101,7 @@ fn unary_text(func: &Func, name: &str, un: UnOp, operand: ValueId, result: &HirT
             // and that is the common case: integer code writing `x | 0` on
             // something already proven an integer.
             if coercion_is_free(func, un, operand) {
-                return format!("{name} = {};", value_name(operand));
+                return Ok(format!("{name} = {};", value_name(operand)));
             }
 
             // An *integer* of some other width is a truncation, which C spells
@@ -1076,12 +1112,12 @@ fn unary_text(func: &Func, name: &str, un: UnOp, operand: ValueId, result: &HirT
             // costs a conversion to double and a library call in the loop body
             // that the whole analysis existed to speed up.
             if matches!(func.values[operand.0 as usize].ty, HirType::Int { .. }) {
-                return match un {
+                return Ok(match un {
                     UnOp::ToInt32 => {
                         format!("{name} = (int32_t)(uint32_t){};", value_name(operand))
                     }
                     _ => format!("{name} = (uint32_t){};", value_name(operand)),
-                };
+                });
             }
 
             let helper = if matches!(un, UnOp::ToInt32) {
@@ -1091,7 +1127,7 @@ fn unary_text(func: &Func, name: &str, un: UnOp, operand: ValueId, result: &HirT
             };
             format!("{name} = {helper}({});", value_name(operand))
         }
-    }
+    })
 }
 
 /// Allocation and field or element access: the operations that go through a
@@ -1271,7 +1307,9 @@ fn emit_op(
                 format!("{call};")
             }
         }
-        OpKind::Unary { op: un, operand } => unary_text(func, &name, *un, *operand, &op.ty),
+        OpKind::Unary { op: un, operand } => {
+            unary_text(func, &name, *un, *operand, &op.ty, &op.origin)?
+        }
         OpKind::ObjectNew { .. }
         | OpKind::FieldGet { .. }
         | OpKind::FieldSet { .. }

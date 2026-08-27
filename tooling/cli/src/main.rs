@@ -5,6 +5,8 @@
 //! than no command: RFC §4.1 requires that unsupported reachable behavior be
 //! diagnosed precisely, and that promise starts here.
 
+mod check;
+
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir::facts;
@@ -26,6 +28,14 @@ fn main() -> Result<()> {
                 .find(|a| !a.starts_with("--"))
                 .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
             frontend(&tsconfig, decompose, calls, constants)
+        }
+        Some("check") => {
+            let rest: Vec<String> = args.collect();
+            let tsconfig = rest
+                .iter()
+                .find(|a| !a.starts_with("--"))
+                .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
+            check::check(&tsconfig)
         }
         Some("emit-c") => {
             let rest: Vec<String> = args.collect();
