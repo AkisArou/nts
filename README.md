@@ -60,18 +60,18 @@ What is stopping the rest, in order:
 
 | refused | files |
 | --- | ---: |
-| a name declared outside this function | 19 |
 | a parameter of unrepresentable type (a union) | 19 |
+| a name declared outside this function | 11 |
 | a function without a body | 6 |
 | a parameter of unrepresentable type (the type parameter `T`) | 6 |
 | a parameter of unrepresentable type (a structured type (flags 0x100000)) | 5 |
 | a parameter of unrepresentable type (any) | 5 |
+| a module-scope variable whose initializer is not constant | 4 |
+| a module-scope variable with no initializer | 4 |
 | a class of unrepresentable type (a structured type (flags 0x100000)) | 3 |
 | this statement | 3 |
 | a parameter of unrepresentable type (a tuple) | 2 |
 | a parameter of unrepresentable type (an array type) | 2 |
-| a parameter of unrepresentable type (unknown) | 2 |
-| a property of unrepresentable type (an object type) | 2 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->

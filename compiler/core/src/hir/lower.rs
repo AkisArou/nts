@@ -56,6 +56,16 @@ struct ModuleScope {
     variables: rustc_hash::FxHashMap<u32, u32>,
     /// The type of each global, by the same index.
     types: Vec<HirType>,
+    /// The globals themselves, handed to the program once collection is done.
+    globals: Vec<super::Global>,
+    /// Symbols this declares but cannot represent, and why.
+    ///
+    /// Kept rather than refused on sight. A module-scope variable no function
+    /// reads costs nothing and should be refused by nothing -- and a corpus of
+    /// real files is mostly declarations that the file under test never touches.
+    /// Reporting them eagerly took the share of TypeScript's own test cases that
+    /// lower completely from 54 files to 25.
+    unsupported: rustc_hash::FxHashMap<u32, String>,
 }
 
 /// Collect what a module declares outside any function.
@@ -69,7 +79,7 @@ struct ModuleScope {
 /// running it needs a module initializer, which is a real thing to design (what
 /// order, and what happens when one throws) rather than something to improvise
 /// here.
-fn collect_module_scope(snapshot: &SemanticSnapshot, lowered: &mut Lowered) -> ModuleScope {
+fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
     let mut scope = ModuleScope::default();
     let probe = FuncBuilder::new(snapshot);
 
@@ -96,38 +106,39 @@ fn collect_module_scope(snapshot: &SemanticSnapshot, lowered: &mut Lowered) -> M
         let Some(initializer) = children.iter().rev().find(|child| {
             **child != *name_node && probe.kind_of(**child) != Some(syntax::IDENTIFIER)
         }) else {
-            lowered
-                .diagnostics
-                .push(probe.unsupported(id, "a module-scope variable with no initializer"));
+            scope.unsupported.insert(
+                symbol.0,
+                "a module-scope variable with no initializer".to_owned(),
+            );
             continue;
         };
 
         let Some(value) = probe.constant_value(*initializer) else {
-            lowered.diagnostics.push(probe.unsupported(
-                id,
-                "a module-scope variable whose initializer is not constant",
-            ));
+            scope.unsupported.insert(
+                symbol.0,
+                "a module-scope variable whose initializer is not constant".to_owned(),
+            );
             continue;
         };
         let Some(ty) = probe.type_of(*name_node) else {
-            lowered
-                .diagnostics
-                .push(probe.unrepresentable(*name_node, "a module-scope variable"));
+            scope.unsupported.insert(
+                symbol.0,
+                "a module-scope variable of unrepresentable type".to_owned(),
+            );
             continue;
         };
         if !ty.is_scalar() {
-            lowered
-                .diagnostics
-                .push(probe.unsupported(id, "a module-scope variable holding a reference"));
+            scope.unsupported.insert(
+                symbol.0,
+                "a module-scope variable holding a reference".to_owned(),
+            );
             continue;
         }
 
         // `const` is a value, not storage. The kind lives on the enclosing
-        // `VariableDeclarationList`, not on the declaration itself.
-        // The kind lives on the enclosing `VariableDeclarationList`, which is
-        // the declaration's parent -- except when the encoder wraps the list in
-        // a `VariableStatement`, so the flags are taken from whichever ancestor
-        // is the list.
+        // `VariableDeclarationList`, which is the declaration's parent -- except
+        // when the encoder wraps the list in a `VariableStatement`, so the flags
+        // are taken from whichever ancestor is the list.
         let kind = probe
             .ancestor(id, syntax::VARIABLE_DECLARATION_LIST)
             .map_or(nts_semantic_schema::VariableKind::Var, |list| {
@@ -138,8 +149,8 @@ fn collect_module_scope(snapshot: &SemanticSnapshot, lowered: &mut Lowered) -> M
             continue;
         }
 
-        let global = u32::try_from(lowered.program.globals.len()).unwrap_or(u32::MAX);
-        lowered.program.globals.push(super::Global {
+        let global = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
+        scope.globals.push(super::Global {
             name: probe
                 .node(*name_node)
                 .text
@@ -160,7 +171,8 @@ fn collect_module_scope(snapshot: &SemanticSnapshot, lowered: &mut Lowered) -> M
 #[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
-    let module = collect_module_scope(snapshot, &mut lowered);
+    let module = collect_module_scope(snapshot);
+    lowered.program.globals.clone_from(&module.globals);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
@@ -2509,6 +2521,12 @@ impl<'a> FuncBuilder<'a> {
         if let Some(global) = self.module.variables.get(&symbol.0) {
             let ty = self.module.types[*global as usize].clone();
             return Ok(self.push(OpKind::GlobalGet(*global), ty, origin));
+        }
+        // Declared at module scope and not representable. Saying which is worth
+        // more than "a name declared outside this function", and it is only said
+        // for a name something actually reads.
+        if let Some(reason) = self.module.unsupported.get(&symbol.0) {
+            return Err(self.unsupported(id, reason));
         }
         Err(self.unsupported(id, "a name declared outside this function"))
     }
