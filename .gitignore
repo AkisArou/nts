@@ -9,12 +9,16 @@ node_modules/
 /out
 /.nts
 
-# test262, cloned sparsely for the numeric suites. Not vendored: it is 64MB of
-# somebody else's repository and `nts-suite` skips gracefully without it.
-#   git clone --depth 1 --filter=blob:none --sparse \
+# test262, cloned whole. Not vendored: it is somebody else's repository and
+# `nts-suite` skips gracefully without it.
+#   git clone --depth 1 --filter=blob:none \
 #     https://github.com/tc39/test262.git third_party/test262
-#   cd third_party/test262 && git sparse-checkout set \
-#     test/built-ins/Math test/built-ins/Number test/language/expressions
+#
+# It used to be a sparse checkout of three directories, and that was the wrong
+# saving: 280MB against an answer to "can we test this?" that was too often
+# "the files are not here". `harness/` and `INTERPRETING.md` matter as much as
+# the tests -- the frontmatter is what makes the suite filterable at all. See
+# `docs/conformance/test262.md`.
 /third_party/test262
 
 # Are We Fast Yet, cloned sparsely. Not vendored, for the same reason: it is

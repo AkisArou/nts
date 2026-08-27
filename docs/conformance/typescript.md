@@ -249,7 +249,7 @@ expression over literals?**
 | tier | features | why |
 | --- | --- | --- |
 | **testable today** — the files are checked out and only the filter is too narrow | every numeric operator (`**`, `>>>`, `<<`, `>>`, `%`, `/`, `*`, `+`, `-`, comparisons, `===`), all of `Math`, all of `Number` | the checkout has 327 `Math` files, 340 `Number` files and 11,164 under `language/expressions` |
-| **testable after widening the sparse checkout** | `String` and `Array` methods, `Object`, `Map`, `Set`, `JSON`, `Date`, `RegExp`, typed arrays, `parseInt`/`isNaN`, and `language/statements` | those directories are not in the checkout at all |
+| **testable, files now present** | `String` and `Array` methods, `Object`, `Map`, `Set`, `JSON`, `RegExp`, typed arrays, `parseInt`/`isNaN`, and `language/statements` | the checkout was widened from three directories to the whole repository |
 | **test262 says nothing** | generics, interfaces, type annotations, `keyof`, tagged unions, `readonly`, parameter properties, abstract classes | test262 is JavaScript; none of this exists in it. The oracle for these is `nts check` against node, plus the tsgo corpus |
 | **test262 says little** | statements and control flow, classes, closures, `async`, exceptions | a statement has no value to compare, so using these tests means *running* them, which means the harness above. Hand-written differential cases are the better oracle |
 | **not observable** | memory providers, escape analysis, specialization | behaviourally invisible by design — that is what makes them safe |
@@ -273,6 +273,10 @@ Two things are wrong with that ratio, and neither is the compiler:
   against node — which is worth having, and is not a test of the runtime helper
   beside it. Substituting one operand with a parameter would exercise both paths
   from the same harvested expression.
+
+See [`test262.md`](test262.md) for the full survey: what is in the repository,
+how much of it needs no engine machinery (10,484 of 53,872), and the three
+levels of leverage.
 
 ### The honest summary
 
