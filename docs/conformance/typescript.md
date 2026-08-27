@@ -214,6 +214,73 @@ suspension, so building promises first means building unwinding twice.
 
 ---
 
+---
+
+## What test262 can and cannot check
+
+Worth stating per feature, because the answer is "a narrow band of the table, and
+none of the interesting rows".
+
+### Why it cannot be run as a suite
+
+Every test262 file expects a JavaScript runtime: `assert.js` and `sta.js` loaded,
+an `Object.prototype` to hang things off, and often `eval`. The first test in
+`language/expressions/compound-assignment` is
+
+```js
+assert.throws(ReferenceError, function() { eval("_11_13_2_1 *= 1;"); });
+```
+
+A harness that ran that would be a small JavaScript engine, which is the thing
+this project exists not to ship.
+
+### What is taken instead
+
+The *arguments*, with the expected values discarded and node as the oracle —
+`tooling/suite/src/test262.rs`. `Math.round(-0.5)`, `Math.max(-0, 0)`,
+`(-2147483648 | 0) >>> 0`: thousands of expressions written by people trying to
+break implementations, and every one a case nobody here would have thought to
+write. That is how `Math.round` near 2^53 was found wrong in the folder and the
+runtime both.
+
+So the discriminator is: **can the feature's behaviour be written as a closed
+expression over literals?**
+
+| tier | features | why |
+| --- | --- | --- |
+| **testable today** — the files are checked out and only the filter is too narrow | every numeric operator (`**`, `>>>`, `<<`, `>>`, `%`, `/`, `*`, `+`, `-`, comparisons, `===`), all of `Math`, all of `Number` | the checkout has 327 `Math` files, 340 `Number` files and 11,164 under `language/expressions` |
+| **testable after widening the sparse checkout** | `String` and `Array` methods, `Object`, `Map`, `Set`, `JSON`, `Date`, `RegExp`, typed arrays, `parseInt`/`isNaN`, and `language/statements` | those directories are not in the checkout at all |
+| **test262 says nothing** | generics, interfaces, type annotations, `keyof`, tagged unions, `readonly`, parameter properties, abstract classes | test262 is JavaScript; none of this exists in it. The oracle for these is `nts check` against node, plus the tsgo corpus |
+| **test262 says little** | statements and control flow, classes, closures, `async`, exceptions | a statement has no value to compare, so using these tests means *running* them, which means the harness above. Hand-written differential cases are the better oracle |
+| **not observable** | memory providers, escape analysis, specialization | behaviourally invisible by design — that is what makes them safe |
+
+### The filter takes 0.6% of what it scans
+
+| | |
+| --- | ---: |
+| files scanned | 11,831 |
+| expressions taken | 121 |
+| skipped as not yet expressible | 18,599 |
+| disagreements with node | **0** |
+
+Two things are wrong with that ratio, and neither is the compiler:
+
+- **The filter is narrower than the compiler.** It allows seven `Math` members;
+  the compiler supports eight. `Math.sqrt` has ten test262 files and every one is
+  skipped for no reason at all.
+- **Closed expressions fold.** An expression made entirely of literals is
+  computed by `hir::fold` at compile time, so what is compared is the *folder*
+  against node — which is worth having, and is not a test of the runtime helper
+  beside it. Substituting one operand with a parameter would exercise both paths
+  from the same harvested expression.
+
+### The honest summary
+
+test262 is a source of adversarial *arguments* for the value semantics of
+primitives and their built-in methods, and that is a real and under-used asset —
+maybe twenty-five rows of the tables above. It has nothing to say about the
+structural half, which is most of what is not done yet.
+
 ## Known defects
 
 Distinct from "not done". These either produce a wrong answer or produce C that
