@@ -537,6 +537,14 @@ pub enum UnOp {
     Round,
     Abs,
 
+    /// `Math.sqrt`.
+    ///
+    /// The one transcendental-looking function that is not one: IEEE-754
+    /// requires a correctly rounded square root, so C's `sqrt` and JavaScript's
+    /// `Math.sqrt` are the same value on every input, including the negatives
+    /// where both are NaN. `Math.sin` is not, which is why it is not here.
+    Sqrt,
+
     /// JavaScript truthiness.
     ///
     /// Not a comparison against zero: `NaN` is falsy and is not equal to

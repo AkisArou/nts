@@ -272,6 +272,20 @@ const STRINGS: &[&str] = &["", "hello world", "abcabc", "héllo wörld", "a\u{1F
 
 /// The file to hand to node.
 fn entry_module(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<Utf8PathBuf> {
+    // The functions being compared have to be *importable*, and node imports one
+    // module. In a program of several, `main.ts` is where the exported surface
+    // is by convention -- and taking whichever module happened to be decoded
+    // first meant a multi-module program tested nothing while looking as though
+    // it had.
+    let named_main = snapshot.sources.iter().find(|source| {
+        Utf8Path::new(&source.display_path)
+            .file_name()
+            .is_some_and(|name| name == "main.ts" || name == "main.tsx")
+    });
+    if let Some(source) = named_main {
+        return Ok(source.display_path.clone());
+    }
+
     let module = snapshot
         .modules
         .first()

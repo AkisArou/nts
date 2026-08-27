@@ -92,6 +92,13 @@ struct Hierarchy {
     /// `Square*` both look up `area` at the same index, which is the whole
     /// mechanism.
     slots: rustc_hash::FxHashMap<(TypeId, String), u32>,
+    /// The classes that declare a constructor.
+    ///
+    /// A class without one has nothing to run at `new`: the allocation is
+    /// zeroed and that is the whole of it. Calling a constructor that was never
+    /// declared is a link error, and an implicit one that forwards to a base's
+    /// is a call to *the base's* rather than to a function of its own.
+    constructs: rustc_hash::FxHashSet<TypeId>,
     /// The one slot every closure's `call` goes in, where the program has
     /// closures at all.
     ///
@@ -148,6 +155,19 @@ impl Hierarchy {
     /// How many slots a dispatch table has.
     fn table_size(&self) -> usize {
         self.slots.len() + usize::from(self.closure_slot.is_some())
+    }
+
+    /// The nearest class at or above `ty` that declares a constructor.
+    fn constructor(&self, ty: TypeId) -> Option<TypeId> {
+        let mut at = Some(ty);
+        for _ in 0..64 {
+            let here = at?;
+            if self.constructs.contains(&here) {
+                return Some(here);
+            }
+            at = self.base.get(&here).copied();
+        }
+        None
     }
 
     /// The dispatch slot a call on `ty` would use, if it needs one.
@@ -229,6 +249,13 @@ fn collect_hierarchy(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> H
                     .and_then(|part| probe.node(part).text.clone())
             })
             .collect();
+        if probe
+            .children(id)
+            .into_iter()
+            .any(|child| probe.kind_of(child) == Some(syntax::CONSTRUCTOR))
+        {
+            hierarchy.constructs.insert(ty);
+        }
         hierarchy.declares.insert(ty, declared);
     }
 
@@ -960,6 +987,14 @@ struct FuncBuilder<'a> {
     /// Every arrow function in the program, so that one written here can be
     /// matched to the class that was collected for it.
     closures: Vec<ClosureInfo>,
+    /// The type a bare `null` should take, where the caller knows it.
+    ///
+    /// `contextual_type` recovers this from the tree for the shapes the tree
+    /// describes. What it cannot reach is a call whose signature the checker
+    /// resolved into `lib.d.ts` -- `piles.fill(null)` is an array method, and
+    /// the parameter type is the element type this compiler decided rather
+    /// than one any node carries.
+    expecting: Option<HirType>,
     /// How many names this lowering has invented.
     ///
     /// A `for...of` needs an index the source does not name, and the loop
@@ -993,6 +1028,7 @@ impl<'a> FuncBuilder<'a> {
             base: None,
             module: ModuleScope::default(),
             closures: Vec::new(),
+            expecting: None,
             synthetic: 0,
             used_closures: Vec::new(),
         }
@@ -1360,6 +1396,10 @@ impl<'a> FuncBuilder<'a> {
         let instance = self
             .type_of(class)
             .ok_or_else(|| self.unrepresentable(class, "a class"))?;
+        // `this` is a parameter like any other and needs its layout to exist.
+        // Nothing else builds it for a class nothing constructs -- an abstract
+        // base whose only role is to be extended is exactly that.
+        self.materialize(class, &instance)?;
         let origin = self.origin(member);
         let receiver = self.push(OpKind::Param(0), instance.clone(), origin.clone());
         self.this = Some(receiver);
@@ -2046,6 +2086,76 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// `throw new Error("...")`.
+    ///
+    /// # A throw is a termination, for now
+    ///
+    /// There is no `try`/`catch`, so every throw in a compiled program is
+    /// uncaught by construction -- and an uncaught throw *is* a termination.
+    /// So this reports the message and stops, which is what the program means
+    /// and what node does with the same code. RFC §17 has the real thing;
+    /// when handlers arrive this becomes the last resort rather than the only
+    /// one, and no program that compiles today changes behaviour.
+    ///
+    /// What it will not do is guess at a value it cannot print. `throw x` where
+    /// `x` is an object would need the object's `message`, which means knowing
+    /// it has one.
+    fn lower_throw(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let thrown = *self
+            .children(id)
+            .first()
+            .ok_or_else(|| self.unsupported(id, "a `throw` with nothing to throw"))?;
+
+        // `new Error(m)` is the shape every one of these has. The class is not
+        // one this compiler can construct -- it is `lib.d.ts`'s -- so what is
+        // taken from it is the argument.
+        let message = if self.kind_of(thrown) == Some(syntax::NEW_EXPRESSION) {
+            self.children(thrown).get(1).copied()
+        } else {
+            Some(thrown)
+        };
+        let origin = self.origin(id);
+        let message = match message {
+            Some(node) => {
+                let value = self.lower_expression(node)?;
+                if !matches!(
+                    self.values[value.0 as usize].ty,
+                    HirType::Managed(ManagedType::String)
+                ) {
+                    return Err(self.unsupported(node, "a `throw` of something that is not text"));
+                }
+                value
+            }
+            // `throw new Error()`. Nothing to say, and saying nothing is right.
+            None => self.push(
+                OpKind::ConstString(String::new()),
+                HirType::Managed(ManagedType::String),
+                origin.clone(),
+            ),
+        };
+
+        self.push(
+            OpKind::Call {
+                callee: Callee::External("nts_thrown".to_owned()),
+                args: vec![message],
+            },
+            HirType::Void,
+            origin,
+        );
+        // Control does not continue. Saying so is what lets the C compiler
+        // treat the code after a throw as unreachable, which it is.
+        self.terminate(Terminator::Unreachable);
+        Ok(())
+    }
+
+    /// Lower an expression knowing what type a bare `null` in it should take.
+    fn lower_expecting(&mut self, id: NodeId, ty: &HirType) -> Result<ValueId, Diagnostic> {
+        let saved = self.expecting.replace(ty.clone());
+        let value = self.lower_expression(id);
+        self.expecting = saved;
+        value
+    }
+
     /// A name no source can have, for a value only the lowering knows about.
     fn synthetic_symbol(&mut self) -> u32 {
         self.synthetic += 1;
@@ -2082,8 +2192,7 @@ impl<'a> FuncBuilder<'a> {
         } else {
             BinOp::Add
         };
-        let before = self.lower_expression(*operand)?;
-        self.step(id, *operand, op, before)?;
+        let (before, _) = self.step(id, *operand, op)?;
         Ok(before)
     }
 
@@ -2099,94 +2208,144 @@ impl<'a> FuncBuilder<'a> {
         target: NodeId,
         source: NodeId,
     ) -> Result<ValueId, Diagnostic> {
-        let lhs_node = &target;
-        let rhs_node = &source;
+        // The place first, then the value: `xs[i()] = v()` evaluates the array,
+        // then the index, then the value, and JavaScript says so.
+        let place = self.place_of(target)?;
+        let value = self.lower_expression(source)?;
+        self.write_place(id, &place, value);
+        Ok(value)
+    }
 
-        // `xs[i] = v` writes through a reference; there is no name to
-        // rebind, and the store is the whole of the effect.
-        if self.kind_of(*lhs_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
-            let children = self.children(*lhs_node);
-            let [target, member] = children.as_slice() else {
-                return Err(self.unsupported(*lhs_node, "a property of unexpected shape"));
+    /// Work out *where* an assignment writes, evaluating the parts that decide
+    /// it exactly once.
+    ///
+    /// Once is the whole point. `xs[next()] += 1` calls `next` a single time in
+    /// JavaScript, so the index cannot be lowered again for the store -- and a
+    /// compound assignment that re-lowered its target would call it twice.
+    fn place_of(&mut self, target: NodeId) -> Result<Place, Diagnostic> {
+        if self.kind_of(target) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            let children = self.children(target);
+            let [object_node, member] = children.as_slice() else {
+                return Err(self.unsupported(target, "a property of unexpected shape"));
             };
-            let object = self.lower_expression(*target)?;
+            let object = self.lower_expression(*object_node)?;
             let HirType::Managed(ManagedType::Object(type_id)) =
                 self.values[object.0 as usize].ty.clone()
             else {
-                return Err(self.unsupported(*lhs_node, "assigning to this property"));
+                return Err(self.unsupported(target, "assigning to this property"));
             };
-            let layout = self.layout_of(*lhs_node, type_id)?;
+            let layout = self.layout_of(target, type_id)?;
             let name = self
                 .node(*member)
                 .text
                 .clone()
                 .ok_or_else(|| self.unsupported(*member, "a computed property name"))?;
-            let field = layout.index_of(&name).ok_or_else(|| {
-                self.unsupported(*lhs_node, "a property the type does not declare")
-            })?;
+            let field = layout
+                .index_of(&name)
+                .ok_or_else(|| self.unsupported(target, "a property the type does not declare"))?;
             if layout.fields[field as usize].readonly {
-                return Err(self.unsupported(*lhs_node, "assigning to a readonly property"));
+                return Err(self.unsupported(target, "assigning to a readonly property"));
             }
-            let value = self.lower_expression(*rhs_node)?;
-            let origin = self.origin(id);
-            self.push(
-                OpKind::FieldSet {
-                    object,
-                    field,
-                    value,
-                },
-                HirType::Void,
-                origin,
-            );
-            return Ok(value);
+            return Ok(Place::Field { object, field });
         }
 
-        if self.kind_of(*lhs_node) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
-            let (array, index) = self.element_access_parts(*lhs_node)?;
-            let value = self.lower_expression(*rhs_node)?;
-            let origin = self.origin(id);
-            self.push(
-                OpKind::ArraySet {
-                    array,
-                    index,
-                    value,
-                    checked: true,
-                },
-                HirType::Void,
-                origin,
-            );
-            return Ok(value);
+        if self.kind_of(target) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
+            let (array, index) = self.element_access_parts(target)?;
+            return Ok(Place::Element { array, index });
         }
 
-        let value = self.lower_expression(*rhs_node)?;
         let symbol = self
-            .node(*lhs_node)
+            .node(target)
             .symbol
-            .ok_or_else(|| self.unsupported(*lhs_node, "assignment to a computed target"))?;
-
+            .ok_or_else(|| self.unsupported(target, "assignment to a computed target"))?;
         // A module-scope variable is a store, not a rebinding: every function
         // sees the same one, so there is nothing to shadow.
         if !self.bindings.contains_key(&symbol.0)
             && let Some(global) = self.module.variables.get(&symbol.0).copied()
         {
-            let origin = self.origin(id);
-            self.push(OpKind::GlobalSet { global, value }, HirType::Void, origin);
-            return Ok(value);
+            return Ok(Place::Global(global));
         }
         if self.module.constants.contains_key(&symbol.0) {
-            return Err(self.unsupported(*lhs_node, "assigning to a `const`"));
+            return Err(self.unsupported(target, "assigning to a `const`"));
         }
-
-        self.bindings.insert(symbol.0, value);
-        Ok(value)
+        Ok(Place::Binding(symbol.0))
     }
 
-    /// A bitwise operation, with the coercions the language requires.
-    ///
-    /// `a & b` is `ToInt32(a) & ToInt32(b)` reinterpreted as a number, and the
-    /// coercions are emitted as their own operations so the analysis can see
-    /// that their results are integers. `>>>` coerces its left operand unsigned;
-    /// the shift count is masked either way.
+    /// What a place currently holds. Only a compound assignment and a step ask.
+    fn read_place(&mut self, id: NodeId, place: &Place) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        Ok(match *place {
+            Place::Field { object, field } => {
+                let layout = match self.values[object.0 as usize].ty.clone() {
+                    HirType::Managed(ManagedType::Object(ty)) => self.layout_of(id, ty)?,
+                    _ => return Err(self.unsupported(id, "reading a field of something else")),
+                };
+                let ty = layout.fields[field as usize].ty.clone();
+                self.push(OpKind::FieldGet { object, field }, ty, origin)
+            }
+            Place::Element { array, index } => {
+                let HirType::Managed(ManagedType::Array(element)) =
+                    self.values[array.0 as usize].ty.clone()
+                else {
+                    return Err(self.unsupported(id, "indexing something that is not an array"));
+                };
+                self.push(
+                    OpKind::ArrayGet {
+                        array,
+                        index,
+                        checked: true,
+                    },
+                    *element,
+                    origin,
+                )
+            }
+            Place::Global(global) => {
+                let ty = self.module.types[global as usize].clone();
+                self.push(OpKind::GlobalGet(global), ty, origin)
+            }
+            Place::Binding(symbol) => *self
+                .bindings
+                .get(&symbol)
+                .ok_or_else(|| self.unsupported(id, "reading a name before it is bound"))?,
+        })
+    }
+
+    /// Put a value into a place.
+    fn write_place(&mut self, id: NodeId, place: &Place, value: ValueId) {
+        let origin = self.origin(id);
+        match *place {
+            Place::Field { object, field } => {
+                self.push(
+                    OpKind::FieldSet {
+                        object,
+                        field,
+                        value,
+                    },
+                    HirType::Void,
+                    origin,
+                );
+            }
+            Place::Element { array, index } => {
+                self.push(
+                    OpKind::ArraySet {
+                        array,
+                        index,
+                        value,
+                        checked: true,
+                    },
+                    HirType::Void,
+                    origin,
+                );
+            }
+            Place::Global(global) => {
+                self.push(OpKind::GlobalSet { global, value }, HirType::Void, origin);
+            }
+            Place::Binding(symbol) => {
+                self.bindings.insert(symbol, value);
+            }
+        }
+    }
+
     fn push_bitwise(
         &mut self,
         op: BinOp,
@@ -2228,13 +2387,19 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The shared half of `++`/`--`: add or subtract one and rebind the name.
+    /// `x++`, `++x`, and their decrementing halves.
+    ///
+    /// Returns the value before the step and the value after it, because the
+    /// prefix and postfix forms differ in exactly which one they evaluate to.
+    /// The place is read and written *once*, which is what a step is.
     fn step(
         &mut self,
         id: NodeId,
         target: NodeId,
         op: BinOp,
-        current: ValueId,
-    ) -> Result<ValueId, Diagnostic> {
+    ) -> Result<(ValueId, ValueId), Diagnostic> {
+        let place = self.place_of(target)?;
+        let current = self.read_place(target, &place)?;
         let origin = self.origin(id);
         let ty = self
             .type_of(id)
@@ -2249,12 +2414,8 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         );
-        let symbol = self
-            .node(target)
-            .symbol
-            .ok_or_else(|| self.unsupported(target, "a step of something that is not a name"))?;
-        self.bindings.insert(symbol.0, stepped);
-        Ok(stepped)
+        self.write_place(id, &place, stepped);
+        Ok((current, stepped))
     }
 
     /// `if (c) { .. } else { .. }`.
@@ -2424,6 +2585,7 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::WHILE_STATEMENT) => self.lower_while(id),
             Some(syntax::FOR_STATEMENT) => self.lower_for(id),
             Some(syntax::FOR_OF_STATEMENT) => self.lower_for_of(id),
+            Some(syntax::THROW_STATEMENT) => self.lower_throw(id),
             Some(syntax::EXPRESSION_STATEMENT) => {
                 let Some(expression) = self.children(id).first().copied() else {
                     return Ok(());
@@ -2944,13 +3106,31 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
 
+        // The nearest declared constructor, which may be a base's: a class
+        // that declares none has an implicit one that forwards, and forwarding
+        // to it directly is the same call with one frame fewer. A class with no
+        // constructor anywhere in its chain has nothing to run at all -- the
+        // allocation is zeroed and that is the whole of `new C()`.
+        let Some(declaring) = self.hierarchy.constructor(type_id) else {
+            if children.len() > 1 {
+                return Err(self.unsupported(id, "a `new` with arguments and no constructor"));
+            }
+            return Ok(object);
+        };
+        let owner = self
+            .hierarchy
+            .name
+            .get(&declaring)
+            .cloned()
+            .unwrap_or(class);
+
         let mut args = vec![object];
         for argument in children.iter().skip(1) {
             args.push(self.lower_expression(*argument)?);
         }
         self.push(
             OpKind::Call {
-                callee: Callee::Direct(format!("{class}#constructor")),
+                callee: Callee::Direct(format!("{owner}#constructor")),
                 args,
             },
             HirType::Void,
@@ -3242,8 +3422,8 @@ impl<'a> FuncBuilder<'a> {
                 } else {
                     BinOp::Add
                 };
-            let current = self.lower_expression(*operand)?;
-            return self.step(id, *operand, op, current);
+            let (_, after) = self.step(id, *operand, op)?;
+            return Ok(after);
         }
 
         // `~x` is `ToInt32(x) ^ -1`, which is what the specification says it is
@@ -3544,6 +3724,7 @@ impl<'a> FuncBuilder<'a> {
             "trunc" => Some(MathIntrinsic::Unary(UnOp::Trunc)),
             "round" => Some(MathIntrinsic::Unary(UnOp::Round)),
             "abs" => Some(MathIntrinsic::Unary(UnOp::Abs)),
+            "sqrt" => Some(MathIntrinsic::Unary(UnOp::Sqrt)),
             "min" => Some(MathIntrinsic::Binary(BinOp::Min)),
             "max" => Some(MathIntrinsic::Binary(BinOp::Max)),
             _ => None,
@@ -3700,6 +3881,14 @@ impl<'a> FuncBuilder<'a> {
             .clone()
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
 
+        // `fill` is the one method whose element type does not have to be a
+        // number: it writes a value it was given rather than comparing or
+        // arithmetic-ing one, so the only thing that changes is how wide the
+        // write is. `new Array(n).fill(true)` is how three of the Are We Fast
+        // Yet benchmarks make their working set.
+        if name == "fill" && !matches!(element, HirType::Float { .. } | HirType::Int { .. }) {
+            return self.lower_wide_fill(id, receiver, element, arguments);
+        }
         if !matches!(element, HirType::Float { .. } | HirType::Int { .. }) {
             return Err(self.unsupported(member, "an array method on a non-numeric array"));
         }
@@ -3760,6 +3949,40 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// So a call on a `Square` is static even where the same method on a `Shape`
     /// dispatches: nothing below `Square` overrides anything.
+    /// `xs.fill(v)` where the elements are not numbers.
+    ///
+    /// A boolean is a byte and a reference is a pointer, so each has its own
+    /// entry point rather than one taking a width -- the compiler knows the
+    /// element type, and a runtime that had to be told it would be told it
+    /// wrongly one day. The reference one counts what it stores.
+    fn lower_wide_fill(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        element: &HirType,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let helper = match element {
+            HirType::Bool => "nts_array_fill_bool",
+            HirType::Managed(_) => "nts_array_fill_ref",
+            _ => return Err(self.unsupported(id, "a `fill` on an array of this element type")),
+        };
+        let [value] = arguments else {
+            return Err(self.unsupported(id, "a `fill` with a range on this array"));
+        };
+        let value = self.lower_expecting(*value, element)?;
+        let origin = self.origin(id);
+        let ty = HirType::Managed(ManagedType::Array(Box::new(element.clone())));
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::External(helper.to_owned()),
+                args: vec![receiver, value],
+            },
+            ty,
+            origin,
+        ))
+    }
+
     fn lower_object_method(
         &mut self,
         id: NodeId,
@@ -3819,6 +4042,31 @@ impl<'a> FuncBuilder<'a> {
         let receiver = self
             .this
             .ok_or_else(|| self.unsupported(id, "`super` outside a method"))?;
+
+        // Which class above this one actually has the thing being called. Not
+        // necessarily the immediate base: a method declared on a grandparent
+        // and inherited through the parent is the grandparent's function, and a
+        // constructor a base does not declare is one further up still.
+        let above = match self.values[receiver.0 as usize].ty {
+            HirType::Managed(ManagedType::Object(ty)) => self.hierarchy.base.get(&ty).copied(),
+            _ => None,
+        };
+        let declaring = above.and_then(|base| {
+            if member == "constructor" {
+                self.hierarchy.constructor(base)
+            } else {
+                self.hierarchy.declaring(base, member)
+            }
+        });
+        let base = match declaring.and_then(|ty| self.hierarchy.name.get(&ty)) {
+            Some(name) => name.clone(),
+            // Nothing above declares it. For a constructor that is ordinary --
+            // a base class with only methods has none, and `super()` in a
+            // derived one has nothing to run. The receiver stands in as the
+            // expression's value, which no `super()` statement looks at.
+            None if member == "constructor" => return Ok(receiver),
+            None => base,
+        };
 
         let mut args = vec![receiver];
         for argument in arguments {
@@ -3916,7 +4164,10 @@ impl<'a> FuncBuilder<'a> {
     /// address, and the literal itself has neither -- the checker types it
     /// `null`. So the type comes from where the literal sits.
     fn lower_absent(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
-        let ty = self.contextual_type(id, 0).filter(HirType::is_managed);
+        let ty = self
+            .contextual_type(id, 0)
+            .or_else(|| self.expecting.clone())
+            .filter(HirType::is_managed);
         let Some(ty) = ty else {
             return Err(self.unsupported(
                 id,
@@ -3994,11 +4245,25 @@ impl<'a> FuncBuilder<'a> {
                     .children(parent)
                     .iter()
                     .position(|child| *child == id)?;
+                // The callee rather than an argument: `new Array(6).fill(0)`
+                // reaches here from the `new`, and what the whole call is
+                // expected to be is what its receiver is expected to be. A
+                // fallback only -- a caller that asked for something specific
+                // rejects an answer that is not it.
+                let Some(argument) = at.checked_sub(1) else {
+                    return self.contextual_type(parent, depth + 1);
+                };
                 let target = self.snapshot.call_targets.get(&parent)?;
                 let signature = self.snapshot.signatures.get(target.signature.0 as usize)?;
-                // The callee is child zero, so argument `n` is child `n + 1`.
-                let parameter = signature.parameters.get(at.checked_sub(1)?)?;
+                let parameter = signature.parameters.get(argument)?;
                 representation(self.snapshot, parameter.ty)
+            }
+            // The receiver of `x.m()`, for the same reason.
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION) => {
+                if self.children(parent).first() != Some(&id) {
+                    return None;
+                }
+                self.contextual_type(parent, depth + 1)
             }
             // Grouping and assertions carry the context through unchanged.
             Some(
@@ -4099,7 +4364,8 @@ impl<'a> FuncBuilder<'a> {
         // Spelling it out here rather than in a desugaring keeps one place that
         // knows a bitwise operator needs its coercions.
         if let Some(op) = compound_operator(self.kind_of(*operator).unwrap_or(0)) {
-            let current = self.lower_expression(*lhs_node)?;
+            let place = self.place_of(*lhs_node)?;
+            let current = self.read_place(*lhs_node, &place)?;
             let addend = self.lower_expression(*rhs_node)?;
             let ty = self.type_of(id).ok_or_else(|| {
                 self.unsupported(id, "a compound assignment of unrepresentable type")
@@ -4118,10 +4384,7 @@ impl<'a> FuncBuilder<'a> {
                     origin,
                 )
             };
-            let symbol = self.node(*lhs_node).symbol.ok_or_else(|| {
-                self.unsupported(*lhs_node, "compound assignment to a computed target")
-            })?;
-            self.bindings.insert(symbol.0, updated);
+            self.write_place(id, &place, updated);
             return Ok(updated);
         }
 
@@ -4241,6 +4504,19 @@ fn known_values(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> Facts {
 enum MathIntrinsic {
     Unary(UnOp),
     Binary(BinOp),
+}
+
+/// Where an assignment writes.
+///
+/// Named rather than re-derived, because a compound assignment reads and writes
+/// *the same* place: `xs[next()] += 1` calls `next` once in JavaScript, and
+/// lowering the target twice would call it twice.
+#[derive(Debug, Clone, Copy)]
+enum Place {
+    Field { object: ValueId, field: u32 },
+    Element { array: ValueId, index: ValueId },
+    Global(u32),
+    Binding(u32),
 }
 
 /// One side of a branching expression.

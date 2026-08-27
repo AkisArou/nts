@@ -160,7 +160,15 @@ fn carries_sign(kind: &OpKind) -> Vec<ValueId> {
             // `Math.abs(-0)` is `+0`, so `Abs` destroys the sign rather than
             // carrying it. It is listed anyway: being conservative here costs a
             // specialization and being wrong costs an answer.
-            op: UnOp::Neg | UnOp::Abs | UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round,
+            op:
+                UnOp::Neg
+                | UnOp::Abs
+                | UnOp::Floor
+                | UnOp::Ceil
+                | UnOp::Trunc
+                | UnOp::Round
+                // `Math.sqrt(-0)` is `-0`, so a sign that reaches here survives.
+                | UnOp::Sqrt,
             operand,
         }
         | OpKind::Convert(operand) => vec![*operand],

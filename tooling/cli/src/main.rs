@@ -498,6 +498,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
                 nts_core::hir::UnOp::Floor => "floor",
                 nts_core::hir::UnOp::Ceil => "ceil",
                 nts_core::hir::UnOp::Trunc => "trunc",
+                nts_core::hir::UnOp::Sqrt => "sqrt",
                 nts_core::hir::UnOp::Round => "round",
                 nts_core::hir::UnOp::Abs => "abs",
                 nts_core::hir::UnOp::Truthy => "truthy",

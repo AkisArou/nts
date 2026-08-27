@@ -1499,6 +1499,10 @@ fn unary_text(
 
     Ok(match un {
         UnOp::Neg => format!("{name} = -{};", widen(operand)?),
+        // IEEE-754 requires a correctly rounded square root, so C's is
+        // JavaScript's -- on every input, including the negatives where both
+        // are NaN and the negative zero both return unchanged.
+        UnOp::Sqrt => format!("{name} = sqrt({});", value_name(operand)),
         UnOp::Not => format!("{name} = !{};", value_name(operand)),
         UnOp::Truthy => {
             // An integer is truthy exactly when it is non-zero, and `!= 0` says

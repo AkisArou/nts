@@ -256,7 +256,23 @@ double nts_array_index_of(const NtsArray *a, double needle);
 double nts_array_last_index_of(const NtsArray *a, double needle);
 bool nts_array_includes(const NtsArray *a, double needle);
 double nts_array_at(const NtsArray *a, double at);
+/* Report an uncaught throw and stop.
+ *
+ * There is no `try`/`catch` yet, so every throw is uncaught by construction and
+ * a throw is a *termination* -- which is what it is for a program with no
+ * handler, and what these programs mean by it. When handlers arrive this
+ * becomes the last resort rather than the only one. */
+void nts_thrown(const NtsString *message);
 NtsArray *nts_array_fill(NtsArray *a, double value);
+/* The same for an array of booleans, which is a byte per element rather than
+ * eight. A separate entry point rather than a generic one taking a width: the
+ * compiler knows the element type, and a runtime that had to be told it would
+ * be told it wrongly one day. */
+NtsArray *nts_array_fill_bool(NtsArray *a, bool value);
+/* And for an array of references, which additionally has to count them: one
+ * retain per slot, and one release for whatever the slot held. The caller's own
+ * reference is untouched, so this is a store rather than a hand-over. */
+NtsArray *nts_array_fill_ref(NtsArray *a, void *value);
 NtsArray *nts_array_reverse(NtsArray *a);
 NtsArray *nts_array_slice(const NtsArray *a, double from, double to);
 

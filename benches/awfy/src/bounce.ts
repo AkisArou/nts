@@ -1,6 +1,7 @@
 // Ported from `benchmarks/JavaScript/bounce.js`.
 
-import { Random } from "./som";
+import { Benchmark } from "./benchmark.ts";
+import { Random } from "./som.ts";
 
 class Ball {
   x: number;
@@ -43,23 +44,29 @@ class Ball {
   }
 }
 
-export function bounce(): number {
-  const random = new Random();
-  const ballCount = 100;
-  let bounces = 0;
-  const balls: Ball[] = new Array(ballCount);
-  let i = 0;
+export class Bounce extends Benchmark {
+  override benchmark(): number {
+    const random = new Random();
+    const ballCount = 100;
+    let bounces = 0;
+    const balls: Ball[] = new Array(ballCount);
+    let i = 0;
 
-  for (i = 0; i < ballCount; i += 1) {
-    balls[i] = new Ball(random);
-  }
+    for (i = 0; i < ballCount; i += 1) {
+      balls[i] = new Ball(random);
+    }
 
-  for (i = 0; i < 50; i += 1) {
-    for (const ball of balls) {
-      if (ball.bounce()) {
-        bounces += 1;
+    for (i = 0; i < 50; i += 1) {
+      for (const ball of balls) {
+        if (ball.bounce()) {
+          bounces += 1;
+        }
       }
     }
+    return bounces;
   }
-  return bounces;
+
+  override verifyResult(result: number): boolean {
+    return result === 1331;
+  }
 }

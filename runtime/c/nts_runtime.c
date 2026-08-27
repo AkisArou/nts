@@ -450,6 +450,20 @@ void nts_collect_cycles(void) {
 
 size_t nts_cycle_candidates(void) { return nts_candidates; }
 
+void nts_thrown(const NtsString *message) {
+  fputs("nts: uncaught ", stderr);
+  if (message) {
+    /* Narrow strings are the common case and the only one worth spelling
+     * carefully; a wide one is dumped as its code units rather than not at
+     * all. */
+    for (uint32_t at = 0; at < message->length; at++) {
+      fputc((int)nts_unit(message, at), stderr);
+    }
+  }
+  fputc('\n', stderr);
+  abort();
+}
+
 void nts_bounds(double index, uint32_t length) {
   fprintf(stderr, "nts: index %g is outside [0, %u)\n", index, length);
   abort();
@@ -861,6 +875,26 @@ NtsArray *nts_array_fill(NtsArray *a, double value) {
   }
   /* In place, returning what it was given -- which is what makes
    * `xs.fill(0).length` mean something. */
+  return a;
+}
+
+NtsArray *nts_array_fill_bool(NtsArray *a, bool value) {
+  bool *items = NTS_ITEMS(a, bool);
+  for (uint32_t at = 0; at < a->header.length; at++) {
+    items[at] = value;
+  }
+  return a;
+}
+
+NtsArray *nts_array_fill_ref(NtsArray *a, void *value) {
+  void **items = NTS_ITEMS(a, void *);
+  for (uint32_t at = 0; at < a->header.length; at++) {
+    /* Retain before release, so filling an array with something it already
+     * holds cannot free the value between the two. */
+    nts_retain((NtsHeader *)value);
+    nts_release((NtsHeader *)items[at]);
+    items[at] = value;
+  }
   return a;
 }
 
