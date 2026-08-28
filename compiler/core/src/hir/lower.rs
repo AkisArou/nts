@@ -1639,11 +1639,28 @@ impl<'a> FuncBuilder<'a> {
     /// The symbol says which. `declarations` is empty exactly when the symbol
     /// was declared outside the decoded file set, which is what separates
     /// `console` from a name the program itself wrote.
-    fn describe_name(&self, symbol: SymbolId) -> String {
+    fn describe_name(&self, id: NodeId, symbol: SymbolId) -> String {
         let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else {
             return "an unresolved name".to_owned();
         };
         let is = |flag: SymbolFlags| record.flags.contains(flag);
+        // A class this compiler provides, reached as a *value*. `Error` is a
+        // class here and not a constructor object, so `Error.captureStackTrace`
+        // fails on the name -- and reporting the name as unprovided is wrong
+        // twice over, since `Error` is provided and the member is what is not.
+        // Reported by the Node session, who had just written `class MyError
+        // extends Error` and seen it work.
+        if super::builtin::is_error(&record.name)
+            || super::builtin::typed_array_element(&record.name).is_some()
+        {
+            let name = &record.name;
+            return match self.member_read_from(id) {
+                Some(member) => {
+                    format!("`{name}.{member}`, not a member of this compiler's `{name}`")
+                }
+                None => format!("`{name}` used as a value rather than as a type"),
+            };
+        }
         if is(SymbolFlags::MODULE) {
             return format!("`{}`, a namespace", record.name);
         }
@@ -1654,7 +1671,7 @@ impl<'a> FuncBuilder<'a> {
             // Nothing in the compiled set declares it, so it is a global the
             // host is expected to have. Which one matters: `Math` is a table of
             // functions this compiler could provide, and `document` is not.
-            return format!("`{}`, a global this compiler does not provide", record.name);
+            return format!("`{}`, a global with no definition here", record.name);
         }
         if is(SymbolFlags::FUNCTION) {
             return format!("`{}`, a function used as a value", record.name);
@@ -1664,6 +1681,19 @@ impl<'a> FuncBuilder<'a> {
         }
         // Declared in this program, in a scope between here and module scope.
         format!("`{}`, a name from an enclosing scope", record.name)
+    }
+
+    /// The member being read, when this name is the target of a property access.
+    fn member_read_from(&self, id: NodeId) -> Option<String> {
+        let parent = self.node(id).parent?;
+        if self.kind_of(parent) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return None;
+        }
+        let parts = self.children(parent);
+        let [target, member] = parts.as_slice() else {
+            return None;
+        };
+        (*target == id).then(|| self.node(*member).text.clone()).flatten()
     }
 
     /// The nearest ancestor of a given kind.
@@ -1780,6 +1810,12 @@ impl<'a> FuncBuilder<'a> {
             .any(|child| self.kind_of(child) == Some(syntax::BLOCK))
     }
 
+    /// `what` is interpolated into a sentence, so it has to end in a noun.
+    ///
+    /// "a global this compiler does not provide" became "…does not provide is
+    /// not supported by this lowering yet", which reads as a missing word
+    /// rather than as a diagnostic. Every message here is a noun phrase, and a
+    /// relative clause in one ends on its object.
     fn unsupported(&self, id: NodeId, what: &str) -> Diagnostic {
         Diagnostic::error(
             "NTS1001",
@@ -5636,7 +5672,7 @@ impl<'a> FuncBuilder<'a> {
         let Some(declaring) = self.hierarchy.declaring(type_id, &member_name) else {
             return Err(self.unsupported(
                 id,
-                &format!("a method `{member_name}` that no class in the hierarchy declares"),
+                &format!("a method `{member_name}` with no declaration in the hierarchy"),
             ));
         };
         let owner = match self.hierarchy.name.get(&declaring) {
@@ -5810,7 +5846,7 @@ impl<'a> FuncBuilder<'a> {
         if let Some(reason) = self.module.unsupported.get(&symbol.0) {
             return Err(self.unsupported(id, reason));
         }
-        Err(self.unsupported(id, &self.describe_name(symbol)))
+        Err(self.unsupported(id, &self.describe_name(id, symbol)))
     }
 
     /// `null` and `undefined`, which are one value in a compiled program.

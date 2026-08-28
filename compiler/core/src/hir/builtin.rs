@@ -42,10 +42,7 @@ pub(super) const ERRORS: &[&str] = &["Error", "TypeError", "RangeError", "URIErr
 /// Named, rather than left to fail as "a property the type does not declare",
 /// so that reading one says *why* it is absent.
 pub(super) const OMITTED: &[(&str, &str)] = &[
-    (
-        "stack",
-        "a compiled binary keeps no record of the frames it came through",
-    ),
+    ("stack", "a compiled binary keeps no record of its frames"),
     (
         "cause",
         "the chained error would have to be a reference to any error type",

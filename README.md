@@ -83,7 +83,7 @@ What is stopping the rest, in order:
 | refused | files |
 | --- | ---: |
 | `MyEnum`, an enum | 4 |
-| `console`, a global this compiler does not provide | 4 |
+| `console`, a global with no definition here | 4 |
 | a module-scope variable whose initializer is not constant | 4 |
 | a module-scope variable with no initializer | 4 |
 | a parameter of unrepresentable type (the type parameter `T`) | 4 |
