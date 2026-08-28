@@ -297,13 +297,22 @@ fn collect_hierarchy(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> H
             let declared_methods: Vec<String> = probe
                 .children(id)
                 .into_iter()
-                .filter(|child| probe.kind_of(*child) == Some(syntax::METHOD_DECLARATION))
                 .filter_map(|child| {
-                    probe
+                    // An accessor is a member like a method, under a name that
+                    // says which it is -- a class may declare `get x` and `set
+                    // x` together, and a method `x` is a third thing.
+                    let prefix = match probe.kind_of(child) {
+                        Some(syntax::METHOD_DECLARATION) => "",
+                        Some(syntax::GET_ACCESSOR) => "get ",
+                        Some(syntax::SET_ACCESSOR) => "set ",
+                        _ => return None,
+                    };
+                    let name = probe
                         .children(child)
                         .into_iter()
                         .find(|part| probe.kind_of(*part) == Some(syntax::IDENTIFIER))
-                        .and_then(|part| probe.node(part).text.clone())
+                        .and_then(|part| probe.node(part).text.clone())?;
+                    Some(format!("{prefix}{name}"))
                 })
                 .collect();
             if probe
@@ -760,7 +769,12 @@ fn members_of(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
         .filter(|child| {
             matches!(
                 probe.kind_of(*child),
-                Some(syntax::METHOD_DECLARATION | syntax::CONSTRUCTOR)
+                Some(
+                    syntax::METHOD_DECLARATION
+                        | syntax::CONSTRUCTOR
+                        | syntax::GET_ACCESSOR
+                        | syntax::SET_ACCESSOR
+                )
             )
         })
         .collect()
@@ -2127,6 +2141,16 @@ impl<'a> FuncBuilder<'a> {
 
         let is_constructor = self.kind_of(member) == Some(syntax::CONSTRUCTOR);
         self.in_constructor = is_constructor;
+        // An accessor shares its *name* with the property it presents, so the
+        // emitted name has to say which it is: a class may declare `get x` and
+        // `set x` together, and both are functions taking the receiver. The
+        // space is punctuation no TypeScript identifier may contain, like the
+        // `#` beside it.
+        let accessor = match self.kind_of(member) {
+            Some(syntax::GET_ACCESSOR) => "get ",
+            Some(syntax::SET_ACCESSOR) => "set ",
+            _ => "",
+        };
         let member_name = if is_constructor {
             "constructor".to_owned()
         } else {
@@ -2142,9 +2166,9 @@ impl<'a> FuncBuilder<'a> {
         // spellings keep `static foo()` and `foo()` apart, which one class is
         // allowed to declare together.
         let name = if is_static {
-            format!("{class_name}.{member_name}")
+            format!("{class_name}.{accessor}{member_name}")
         } else {
-            format!("{class_name}#{member_name}")
+            format!("{class_name}#{accessor}{member_name}")
         };
 
         let origin = self.origin(member);
@@ -3578,9 +3602,13 @@ impl<'a> FuncBuilder<'a> {
                 .text
                 .clone()
                 .ok_or_else(|| self.unsupported(*member, "a computed property name"))?;
-            let field = layout
-                .index_of(&name)
-                .ok_or_else(|| self.unsupported(target, "a property the type does not declare"))?;
+            let Some(field) = layout.index_of(&name) else {
+                // A setter, for the same reason.
+                if let Some(callee) = self.accessor_callee(type_id, &name, "set ") {
+                    return Ok(Place::Setter { object, callee });
+                }
+                return Err(self.absent_member(target, type_id, &name));
+            };
             // A `readonly` field may be written by the constructor of the
             // object it belongs to, which is what TypeScript permits and what
             // makes the modifier usable at all -- a field nothing may ever
@@ -3631,6 +3659,13 @@ impl<'a> FuncBuilder<'a> {
                 };
                 let ty = layout.fields[field as usize].ty.clone();
                 self.push(OpKind::FieldGet { object, field }, ty, origin)
+            }
+            // `o.x += 1` where `x` is an accessor reads through the *getter*
+            // and writes through the setter, and this place knows only the
+            // setter. Refused rather than guessed at, which is a narrower gap
+            // than it looks: a plain `o.x = v` does not come here.
+            Place::Setter { .. } => {
+                return Err(self.unsupported(id, "a compound assignment through an accessor"));
             }
             Place::Element { array, index } => {
                 let HirType::Managed(ManagedType::Array(element)) =
@@ -3735,6 +3770,17 @@ impl<'a> FuncBuilder<'a> {
                         object,
                         field,
                         value,
+                    },
+                    HirType::Void,
+                    origin,
+                );
+            }
+            Place::Setter { object, ref callee } => {
+                self.push(
+                    OpKind::Call {
+                        callee: Callee::Direct(callee.clone()),
+                        args: vec![object, value],
+                        frame: None,
                     },
                     HirType::Void,
                     origin,
@@ -4290,6 +4336,19 @@ impl<'a> FuncBuilder<'a> {
         Some(layout)
     }
 
+    /// The function an accessor of `member` on `ty` is emitted as.
+    ///
+    /// `Owner#get x`, where the owner is the class that *declares* it — which
+    /// may be a base, exactly as for a method. `None` where the type has no
+    /// such accessor, which is the ordinary case and means the caller should go
+    /// on to say the property does not exist.
+    fn accessor_callee(&self, ty: TypeId, member: &str, kind: &str) -> Option<String> {
+        let key = format!("{kind}{member}");
+        let declaring = self.hierarchy.declaring(ty, &key)?;
+        let owner = self.hierarchy.name.get(&declaring)?;
+        Some(format!("{owner}#{key}"))
+    }
+
     /// Why a property is not on a layout.
     ///
     /// Usually because the type does not have it. On an error it can instead be
@@ -4469,8 +4528,11 @@ impl<'a> FuncBuilder<'a> {
             if provided.is_some() && !property.own {
                 continue;
             }
+            // An accessor looks like a property and *is* a call: `o.x` where
+            // `x` is a getter runs code. It has no storage, so it is not a
+            // field -- the same reason a method is not one.
             if property.accessor.is_some() {
-                return Err(self.unsupported(id, "an object with an accessor"));
+                continue;
             }
             if matches!(
                 self.snapshot
@@ -4881,6 +4943,24 @@ impl<'a> FuncBuilder<'a> {
         {
             let layout = self.layout_of(id, type_id)?;
             let Some(field) = layout.index_of(&member_name) else {
+                // A getter. `o.x` looks like a field read and runs code, which
+                // is why an accessor may not be laid out as a field: emitting
+                // the load would read whatever sits at that offset.
+                if let Some(callee) = self.accessor_callee(type_id, &member_name, "get ") {
+                    let ty = self
+                        .type_of(id)
+                        .ok_or_else(|| self.unrepresentable(id, "a getter"))?;
+                    let origin = self.origin(id);
+                    return Ok(self.push(
+                        OpKind::Call {
+                            callee: Callee::Direct(callee),
+                            args: vec![value],
+                            frame: None,
+                        },
+                        ty,
+                        origin,
+                    ));
+                }
                 return Err(self.absent_member(id, type_id, &member_name));
             };
             let ty = layout.fields[field as usize].ty.clone();
@@ -6576,10 +6656,22 @@ enum MathIntrinsic {
 /// Named rather than re-derived, because a compound assignment reads and writes
 /// *the same* place: `xs[next()] += 1` calls `next` once in JavaScript, and
 /// lowering the target twice would call it twice.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Place {
-    Field { object: ValueId, field: u32 },
-    Element { array: ValueId, index: ValueId },
+    Field {
+        object: ValueId,
+        field: u32,
+    },
+    /// A setter. `o.x = v` where `x` is one runs code, so this is a call with
+    /// the receiver and the value as its two arguments.
+    Setter {
+        object: ValueId,
+        callee: String,
+    },
+    Element {
+        array: ValueId,
+        index: ValueId,
+    },
     Global(u32),
     Binding(u32),
 }

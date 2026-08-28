@@ -980,7 +980,11 @@ pub fn unaccounted(
         };
         if !matches!(
             kind,
-            syntax::FUNCTION_DECLARATION | syntax::METHOD_DECLARATION | syntax::CONSTRUCTOR
+            syntax::FUNCTION_DECLARATION
+                | syntax::METHOD_DECLARATION
+                | syntax::CONSTRUCTOR
+                | syntax::GET_ACCESSOR
+                | syntax::SET_ACCESSOR
         ) {
             continue;
         }

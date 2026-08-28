@@ -90,6 +90,11 @@ pub const PARAMETER: u16 = 170;
 pub const PROPERTY_DECLARATION: u16 = 173;
 pub const METHOD_DECLARATION: u16 = 175;
 pub const CONSTRUCTOR: u16 = 177;
+/// `get x() { … }`. Immediately after [`CONSTRUCTOR`] in tsgo's enumeration,
+/// which is where TypeScript's own `SyntaxKind` puts it.
+pub const GET_ACCESSOR: u16 = 178;
+/// `set x(v) { … }`.
+pub const SET_ACCESSOR: u16 = 179;
 pub const NEW_EXPRESSION: u16 = 215;
 pub const CLASS_DECLARATION: u16 = 264;
 pub const PROPERTY_ASSIGNMENT: u16 = 303;

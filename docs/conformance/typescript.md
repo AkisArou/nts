@@ -122,7 +122,7 @@ diagnostic.
 | `static` methods | done | a namespaced function: no receiver, no slot |
 | `implements` | done | erased |
 | `readonly` fields | done | written once, by the constructor of the object they belong to. A write through a mutable alias is still refused: the fact is what lets a field load be commoned up |
-| getters and setters | **not done** | `x.y` would be a call; Node's API surface needs these |
+| getters and setters | done | an accessor has no storage — it is a member like a method, emitted as `Class#get x` / `Class#set x`, and `o.x` is a call. A class may declare `get x`, `set x` and a method `x`, which are three different functions. `o.x += 1` is refused: it reads through the getter and writes through the setter, and the place the assignment builds knows only the setter |
 | `static` properties | **not done** | |
 | parameter properties (`constructor(public x: number)`) | **not done** | refused by name since it is not a default, which it was counted as. Also rejected by node's type stripping under `erasableSyntaxOnly`, so the differential side cannot run one either |
 | `abstract` classes and methods | **not done** | |
@@ -395,21 +395,19 @@ In order, with the reason rather than the ranking:
    it has two reasons rather than one. Worth asking first whether `unknown` ever
    reaches more than a `typeof` test and an error message: if not, the
    closed-union case covers it and the general erased value is not needed.
-3. **Getters and setters** — the blocker under every `Object.defineProperty(o,
-   k, { get() {…} })`, of which the Node profile has twelve.
-4. **Enums** — four corpus files, and a `const enum` is a table of constants,
+3. **Enums** — four corpus files, and a `const enum` is a table of constants,
    which this compiler already has everywhere else. Note the differential
    problem first: node's type stripping rejects an `enum` outright.
-5. **`Map` and `Set`** — no real program does without them.
-6. **Template literals and destructuring** — the two most common things in
+4. **`Map` and `Set`** — no real program does without them.
+5. **Template literals and destructuring** — the two most common things in
    modern TypeScript that this compiler cannot read at all. Interpolation needs
    `ToString` on a number, which is Ryū or Grisu and not a missing arm.
-7. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
+6. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
    for promises rather than an alternative to them.
-8. **Tagged unions** — `number | undefined` and unions of unrelated objects.
+7. **Tagged unions** — `number | undefined` and unions of unrelated objects.
    RFC-level: it changes the representation of every value that can reach the
    slot.
-9. **Promises and `async`/`await`**, on top of 7.
+8. **Promises and `async`/`await`**, on top of 6.
 
 **Read the refusal histogram in the README as breadth, not as this list.** A
 refusal count and the lowered count are different currencies: a file refused for
