@@ -553,19 +553,39 @@ impl FuncBuilder<'_> {
     }
 }
 
-/// Function names this program declares more than once.
+/// What each function declaration is emitted as, and which cannot be.
+#[derive(Default)]
+struct Naming {
+    /// The emitted name, for a declaration whose plain name is taken.
+    qualified: rustc_hash::FxHashMap<NodeId, String>,
+    /// Declarations that cannot be told apart by anything this compiler has.
+    ambiguous: rustc_hash::FxHashSet<NodeId>,
+}
+
+/// Decide what every function declaration is called in the emitted program.
 ///
-/// A namespace is how this happens in practice. Its members are lowered under
-/// their *unqualified* names, so `Rect.area` and `Tri.area` both emit `area` —
-/// and the failure was a C redefinition error with no source location, while
-/// this compiler said "nothing refused".
+/// Two C functions may not share a name, and two TypeScript functions may.
+/// There are two ways it happens and they want opposite answers:
+///
+/// - **Different modules.** `path/posix.ts` and `path/win32.ts` both declare
+///   `basename`, because `path` genuinely has two implementations of one
+///   interface and Node ships both. These are ordinary module-private helpers
+///   and refusing them refuses the module. They are *qualified* by the file
+///   they come from: `basename@posix`. `@` cannot appear in a TypeScript
+///   identifier, so the qualified name cannot collide with a plain one.
+/// - **The same module.** Two namespaces in one file each exporting `area`.
+///   Nothing here distinguishes them — a namespace's members are lowered under
+///   their unqualified names — so both are refused. Both, rather than the
+///   second: emitting the first and dropping the second is a program that
+///   compiles and calls the wrong one.
 ///
 /// Overload signatures share a name legitimately and only the implementation
 /// has a body, so a declaration without one does not count. Methods are spelled
 /// `Class#method` and cannot collide with a plain function.
-fn colliding_function_names(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashSet<String> {
+fn naming(snapshot: &SemanticSnapshot) -> Naming {
     let probe = FuncBuilder::new(snapshot);
-    let mut seen: rustc_hash::FxHashMap<String, usize> = rustc_hash::FxHashMap::default();
+    let mut declarations: rustc_hash::FxHashMap<String, Vec<NodeId>> =
+        rustc_hash::FxHashMap::default();
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::FUNCTION_DECLARATION) {
             continue;
@@ -575,13 +595,35 @@ fn colliding_function_names(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashSe
             continue;
         }
         if let Some(name) = probe.declared_name(id) {
-            *seen.entry(name).or_default() += 1;
+            declarations.entry(name).or_default().push(id);
         }
     }
-    seen.into_iter()
-        .filter(|(_, count)| *count > 1)
-        .map(|(name, _)| name)
-        .collect()
+
+    let mut naming = Naming::default();
+    for (name, ids) in declarations {
+        if ids.len() < 2 {
+            continue;
+        }
+        for id in &ids {
+            let file = probe.node(*id).origin.location.file;
+            // Another declaration of this name in the same file: nothing here
+            // tells them apart.
+            if ids
+                .iter()
+                .any(|other| other != id && probe.node(*other).origin.location.file == file)
+            {
+                naming.ambiguous.insert(*id);
+                continue;
+            }
+            let module = snapshot
+                .sources
+                .get(file.0 as usize)
+                .and_then(|source| source.display_path.file_stem())
+                .unwrap_or("module");
+            naming.qualified.insert(*id, format!("{name}@{module}"));
+        }
+    }
+    naming
 }
 
 fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
@@ -682,6 +724,33 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
 
 /// Lower every function declaration in a snapshot.
 #[must_use]
+/// The copies of a function to lower.
+///
+/// A generic function is lowered once per instantiation and not at all as
+/// itself: a parameter of type `T` has no width. The instantiations come from
+/// the *calls*, because that is where the checker puts them — see
+/// [`super::generics::function_instantiations`]. One that nothing calls is
+/// dead, and lowering it would report a refusal for a program nobody wrote.
+fn function_copies(
+    snapshot: &SemanticSnapshot,
+    generic: &super::generics::GenericFunctions,
+    id: NodeId,
+) -> Vec<(Substitution, String)> {
+    match generic.copies.get(&id) {
+        Some(instances) => instances
+            .iter()
+            .map(|instance| (instance.substitution.clone(), instance.suffix.clone()))
+            .collect(),
+        None if is_generic_function(snapshot, id) => Vec::new(),
+        None => vec![(Substitution::default(), String::new())],
+    }
+}
+
+/// Whether a function declaration has type parameters of its own.
+fn is_generic_function(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
+    super::generics::declared_type_parameters(snapshot, id) > 0
+}
+
 /// The methods and constructors a class declares.
 fn members_of(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
     let probe = FuncBuilder::new(snapshot);
@@ -719,6 +788,41 @@ fn copies_of(
     )
 }
 
+/// What every function's lowering needs from the program around it.
+///
+/// Bundled because each of these is decided once for the whole program and read
+/// by every copy: the module scope, the hierarchy, the closures, what each
+/// function is *called*, and which copies of a generic to make.
+struct Shared {
+    module: ModuleScope,
+    hierarchy: Hierarchy,
+    closures: Vec<ClosureInfo>,
+    naming: Naming,
+    generics: super::generics::GenericFunctions,
+}
+
+impl Shared {
+    /// A builder for one copy, wired to the program-wide naming.
+    fn builder<'a>(
+        &self,
+        snapshot: &'a SemanticSnapshot,
+        substitution: Substitution,
+        suffix: String,
+    ) -> FuncBuilder<'a> {
+        let mut builder = FuncBuilder::instantiating(
+            snapshot,
+            self.module.clone(),
+            self.hierarchy.clone(),
+            self.closures.clone(),
+            substitution,
+            suffix,
+        );
+        builder.generic_calls.clone_from(&self.generics.at_call);
+        builder.qualified.clone_from(&self.naming.qualified);
+        builder
+    }
+}
+
 #[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
@@ -730,7 +834,13 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
     let generic = generic_classes(snapshot);
-    let ambiguous = colliding_function_names(snapshot);
+    let shared = Shared {
+        module: module.clone(),
+        hierarchy: hierarchy.clone(),
+        closures: closures.clone(),
+        naming: naming(snapshot),
+        generics: super::generics::function_instantiations(snapshot),
+    };
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
@@ -751,13 +861,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
 
             for (instance, substitution) in copies {
                 for &member in &members {
-                    let mut builder = FuncBuilder::instantiating(
-                        snapshot,
-                        module.clone(),
-                        hierarchy.clone(),
-                        closures.clone(),
-                        substitution.clone(),
-                    );
+                    let mut builder = shared.builder(snapshot, substitution.clone(), String::new());
                     match builder.lower_method_of(id, member, instance) {
                         Ok(func) => lowered.program.funcs.push(func),
                         Err(diagnostic) => lowered.diagnostics.push(diagnostic),
@@ -804,32 +908,33 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
             continue;
         }
         // Two functions cannot share a name: the emitted C would define one
-        // twice. Both are refused rather than the second, because emitting the
+        // twice. Where they come from different modules `naming` qualifies
+        // them; where they come from the same one there is nothing to qualify
+        // with, and both are refused rather than the second -- emitting the
         // first and dropping the second is a program that compiles and calls
         // the wrong one.
-        if let Some(name) = FuncBuilder::new(snapshot).declared_name(id)
-            && ambiguous.contains(&name)
-        {
+        if shared.naming.ambiguous.contains(&id) {
+            let name = FuncBuilder::new(snapshot)
+                .declared_name(id)
+                .unwrap_or_else(|| "?".to_owned());
             lowered
                 .diagnostics
                 .push(FuncBuilder::new(snapshot).unsupported(
                     id,
-                    &format!("a second function named `{name}` in this program"),
+                    &format!("a second function named `{name}` in the same file"),
                 ));
             continue;
         }
-        let mut builder = FuncBuilder::within(
-            snapshot,
-            module.clone(),
-            hierarchy.clone(),
-            closures.clone(),
-        );
-        match builder.lower_function(id) {
-            Ok(func) => lowered.program.funcs.push(func),
-            Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+        let copies = function_copies(snapshot, &shared.generics, id);
+        for (substitution, suffix) in copies {
+            let mut builder = shared.builder(snapshot, substitution, suffix);
+            match builder.lower_function(id) {
+                Ok(func) => lowered.program.funcs.push(func),
+                Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+            }
+            wanted.extend(builder.used_closures.iter().copied());
+            collect_layouts(&mut lowered.program, builder.layouts);
         }
-        wanted.extend(builder.used_closures.iter().copied());
-        collect_layouts(&mut lowered.program, builder.layouts);
     }
 
     // Each closure something allocated, and each as a function of its own.
@@ -1399,6 +1504,17 @@ struct FuncBuilder<'a> {
     layouts: Vec<Layout>,
     /// The receiver, in a method.
     this: Option<ValueId>,
+    /// What this copy's name carries, for one instantiation of a generic
+    /// function. Empty for everything else.
+    suffix: String,
+    /// What each function declaration is emitted as, where its plain name is
+    /// taken by another module's.
+    qualified: rustc_hash::FxHashMap<NodeId, String>,
+    /// What each *call* to a generic function names, by call node.
+    ///
+    /// A call has to reach the copy made for its own instantiation, and the
+    /// copy's name is the only thing that distinguishes one from another.
+    generic_calls: rustc_hash::FxHashMap<NodeId, String>,
     /// Whether this function is a constructor.
     ///
     /// The one place a `readonly` field may be written: TypeScript permits it
@@ -1464,6 +1580,9 @@ impl<'a> FuncBuilder<'a> {
             bindings: rustc_hash::FxHashMap::default(),
             layouts: Vec::new(),
             this: None,
+            suffix: String::new(),
+            qualified: rustc_hash::FxHashMap::default(),
+            generic_calls: rustc_hash::FxHashMap::default(),
             in_constructor: false,
             hierarchy: Hierarchy::default(),
             base: None,
@@ -1499,8 +1618,10 @@ impl<'a> FuncBuilder<'a> {
         hierarchy: Hierarchy,
         closures: Vec<ClosureInfo>,
         substitution: Substitution,
+        suffix: String,
     ) -> Self {
         Self {
+            suffix,
             substitution,
             ..Self::within(snapshot, module, hierarchy, closures)
         }
@@ -2118,6 +2239,11 @@ impl<'a> FuncBuilder<'a> {
             .find(|child| self.kind_of(**child) == Some(syntax::IDENTIFIER))
             .and_then(|child| self.node(*child).text.clone())
             .ok_or_else(|| self.unsupported(id, "an anonymous function"))?;
+        // Qualified where another module declares the same name, and suffixed
+        // where this is one copy of a generic. Neither `@` nor `<>` can appear
+        // in a TypeScript identifier, so neither can collide with a plain name.
+        let name = self.qualified.get(&id).cloned().unwrap_or(name);
+        let name = format!("{name}{}", self.suffix);
 
         let mut params = Vec::new();
         for child in &children {
@@ -5228,9 +5354,21 @@ impl<'a> FuncBuilder<'a> {
         // declaration. `import { scale as by }` puts `by` at the call site and
         // `scale` on the function, and a call has to name the function.
         let name = declaration
-            .and_then(|declaration| self.declared_name(declaration))
+            .and_then(|declaration| {
+                self.qualified
+                    .get(&declaration)
+                    .cloned()
+                    .or_else(|| self.declared_name(declaration))
+            })
             .or_else(|| self.node(callee_node).text.clone())
             .ok_or_else(|| self.unsupported(callee_node, "a computed callee"))?;
+        // And the copy made for *this* call's instantiation, where the callee
+        // is generic. There is one copy per distinct substitution and the
+        // suffix is what tells them apart.
+        let name = format!(
+            "{name}{}",
+            self.generic_calls.get(&id).map_or("", String::as_str)
+        );
 
         // A callee inside the compiled program becomes a static call; one outside
         // it is still typed exactly, and the definition comes from elsewhere.

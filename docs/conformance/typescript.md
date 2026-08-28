@@ -98,7 +98,7 @@ diagnostic.
 | `T \| null`, `T \| undefined` for a reference | done | the null pointer is the tag |
 | **generic classes** | done | one copy per instantiation, like a C++ template |
 | type aliases | done | erased |
-| **generic functions** | **not done** | only classes are monomorphized |
+| generic functions | done | one copy per instantiation, found at the *calls* — the checker hands back an instantiated signature per call site, and only the body still says `T`. The substitution is recovered by matching the declaration's parameter types against the call's, which is structural and shallow: a type parameter and an array of one. Anything else leaves it unbound and refuses the call |
 | a generic class extending another | **not done** | untested and certainly incomplete |
 | `number \| undefined` | **not done** | no spare value in a double; needs a tag or a NaN payload |
 | unions of unrelated object types | **not done** | needs a discriminant read at run time |
@@ -182,7 +182,7 @@ diagnostic.
 | reference counting | done | RFC §9.2, with Bacon–Rajan cycle collection |
 | escape analysis | done | an object that does not outlive its frame stays in it |
 | frame-allocated strings | done | a slice that does not escape costs no allocation |
-| modules within one program | done | including a call to an imported function, and an aliased import — the call names the function's *declaration*, so `import { scale as by }` still emits a call to `scale` |
+| modules within one program | done | including a call to an imported function, and an aliased import — the call names the function's *declaration*, so `import { scale as by }` still emits a call to `scale`. Two modules may declare the same function name: `path/posix.ts` and `path/win32.ts` both have `basename`, and each is qualified by its file — `basename@posix`. Two declarations in the *same* file cannot be told apart and are refused |
 | FFI to C | done | `declare function` plus an emitted prototype |
 | a nursery / generational GC | **not done** | RFC §9.3 — what closes the last gap to V8 on allocation-heavy code |
 | **exceptions** | **not done** | `throw` terminates; no unwinding, no handler |

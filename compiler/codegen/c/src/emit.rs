@@ -523,18 +523,20 @@ fn collides_with_a_header(name: &str) -> bool {
 #[must_use]
 pub fn c_identifier(name: &str) -> String {
     // A qualified name carries punctuation no C identifier may: `Class#method`
-    // for a method, `Class.method` for a static one, and `Class<id>` for one
-    // instantiation of a generic class. None of the three can appear in a
-    // TypeScript identifier, which is why they were chosen, and each gets its
-    // own spelling here so that two different qualified names cannot become one
-    // C name -- one class may declare `static foo()` and `foo()` together.
+    // for a method, `Class.method` for a static one, `Class<id>` for one
+    // instantiation of a generic class, and `name@module` for a function whose
+    // plain name another module also declares. None can appear in a TypeScript
+    // identifier, which is why they were chosen, and each gets its *own*
+    // spelling here so that two different qualified names cannot become one C
+    // name -- one class may declare `static foo()` and `foo()` together.
     //
     // `<` and `>` map the way `object_type_name` maps them, because the struct
     // and its methods have to agree.
-    if name.contains(['#', '.', '<', '>']) {
+    if name.contains(['#', '.', '<', '>', '@']) {
         return name
             .replace('#', "__")
             .replace('.', "___")
+            .replace('@', "____")
             .replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
     }
     let generated = matches!(name.as_bytes().first(), Some(b'v' | b't' | b'b'))
