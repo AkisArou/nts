@@ -657,6 +657,25 @@ static inline double nts_max(double a, double b) {
     return a > b ? a : b;
 }
 
+/* Two kinds of abort, and the difference is not cosmetic.
+ *
+ * A *refusal* is the program correctly declining something the language does
+ * not permit for the input it was given: an index outside an array, a string
+ * longer than a string can be, an array length that is not one. JavaScript
+ * throws there, and a compiled program that has no exceptions yet stops
+ * instead. Neither side produces a value, so a differential has nothing to
+ * compare and the case is skipped.
+ *
+ * Everything else is a *defect*: an invariant this runtime maintains that has
+ * been broken. Reading a number from a promise holding a reference, an
+ * unbalanced checkpoint, a task posted before a host exists.
+ *
+ * The prefix is how a harness tells them apart. It used to match on the text of
+ * one message, which meant two other perfectly good refusals read as defects
+ * the first time anything checked. Saying which kind it is belongs here, where
+ * the answer is known. */
+#define NTS_REFUSED "nts: refused: "
+
 /* --- Tasks, the host seam, and the checkpoint (RFC 12.1, 26; docs/async.md) -
  *
  * The runtime owns language behavior; the host owns execution environment
@@ -809,5 +828,14 @@ void nts_promise_reject(NtsPromise *promise, NtsHeader *reason);
  * Already-settled does *not* run inline: that would change the tick count,
  * which is observable through interleaving. */
 void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction);
+
+/* What a settled promise holds, for the resumed frame that has to read it.
+ *
+ * The compiler knows which one to call, because the payload's representation is
+ * in the type. A number read out of a promise that settled with a reference
+ * would be a pointer reinterpreted as a double, so these assert rather than
+ * guess. */
+double nts_promise_number(const NtsPromise *promise);
+NtsHeader *nts_promise_reference(const NtsPromise *promise);
 
 #endif /* NTS_RUNTIME_H */

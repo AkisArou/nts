@@ -69,6 +69,7 @@ mod tests {
             origin: origin(),
             exported: false,
             initializes_receiver: false,
+            async_result: None,
         }
     }
 

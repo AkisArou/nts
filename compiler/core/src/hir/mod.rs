@@ -38,6 +38,7 @@ pub mod guards;
 pub mod interprocedural;
 pub mod liveness;
 pub mod loops;
+pub mod suspend;
 
 pub mod lower;
 pub mod monomorphize;
@@ -196,6 +197,13 @@ pub struct Func {
     /// slot held, because the slot held nothing. Without this a class costs a
     /// load, a null test and a call per reference field per construction.
     pub initializes_receiver: bool,
+    /// The promise an `async` function settles, where this is one.
+    ///
+    /// Recorded by the lowering rather than rediscovered: [`super::suspend`]
+    /// has to know which value is the result so it can put it in the frame, and
+    /// looking for "the `nts_promise_new` in the entry block" would be a
+    /// pattern match on the shape of code the lowering happens to emit.
+    pub async_result: Option<ValueId>,
 }
 
 impl Func {
@@ -452,6 +460,36 @@ pub enum OpKind {
         object: ValueId,
         field: u32,
         value: ValueId,
+    },
+    /// `await p`: suspend until `p` settles, and produce what it settled with.
+    ///
+    /// An operation rather than a call, because it is neither. A call returns to
+    /// its caller; this one *returns to the event loop* and comes back later, in
+    /// a different C function, with the locals it needs restored from a heap
+    /// frame. No runtime helper can do that on a function's behalf -- the
+    /// transformation is of the function itself.
+    ///
+    /// It survives only as far as [`super::suspend`], which splits the block
+    /// here and rewrites the function into a state machine. Nothing downstream
+    /// sees one.
+    Await {
+        promise: ValueId,
+    },
+    /// Suspend: subscribe `frame` to `promise`, to be resumed by `resume`.
+    ///
+    /// One operation rather than a function-pointer *value* plus a call. A
+    /// function address has no type in this IR -- it is not managed, and
+    /// spelling it as a pointer-sized integer would be a lie the backend has to
+    /// undo. Naming the callee here also keeps the edge visible: a function
+    /// reached only through a pointer inside a runtime structure is one
+    /// `hir::reachable` would prune, and the failure would be a link error
+    /// rather than a diagnostic.
+    ///
+    /// Produces nothing. The suspension itself is the `Return` that follows.
+    Suspend {
+        promise: ValueId,
+        frame: ValueId,
+        resume: String,
     },
     /// `array[index] = value`. Produces nothing.
     ArraySet {
@@ -1177,6 +1215,14 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // Before anything looks at the program: a function that calls a refused one
     // has a call to nothing in it.
     drop_callers_of_refused(&mut lowered);
+    // Before anything looks at the shape of a function: a suspension rewrites
+    // one function into two and moves its locals into a frame, and every
+    // analysis after this should see the result rather than the source.
+    lowered
+        .diagnostics
+        .extend(suspend::transform(&mut lowered.program));
+    drop_callers_of_refused(&mut lowered);
+
     let mut program = lowered.program;
 
     // First, before anything expensive. Everything that survives here gets
@@ -1504,6 +1550,7 @@ mod tests {
                 origin: origin(),
                 exported: true,
                 initializes_receiver: false,
+                async_result: None,
             }],
             globals: Vec::new(),
             layouts: Vec::new(),

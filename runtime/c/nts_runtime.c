@@ -541,7 +541,7 @@ void nts_thrown(const NtsString *message) {
 }
 
 void nts_bounds(double index, uint32_t length) {
-  fprintf(stderr, "nts: index %g is outside [0, %u)\n", index, length);
+  fprintf(stderr, NTS_REFUSED "index %g is outside [0, %u)\n", index, length);
   abort();
 }
 
@@ -549,7 +549,7 @@ void nts_bounds(double index, uint32_t length) {
 static NtsArray *nts_array_allocate(const NtsDescriptor *descriptor, double length) {
   if (!(length >= 0.0 && length <= 4294967295.0 &&
         length == (double)(uint32_t)length)) {
-    fprintf(stderr, "nts: %g is not a valid array length\n", length);
+    fprintf(stderr, NTS_REFUSED "%g is not a valid array length\n", length);
     abort();
   }
   uint32_t count = (uint32_t)length;
@@ -986,7 +986,7 @@ NtsString *nts_str_repeat(const NtsString *s, double times) {
   /* A repeat that cannot fit in a string's length is an allocation that would
    * fail anyway; refusing loudly beats a truncated answer. */
   if (times * (double)s->length > 4294967295.0) {
-    fprintf(stderr, "nts: repeat produces a string longer than 2^32-1\n");
+    fprintf(stderr, NTS_REFUSED "repeat produces a string longer than 2^32-1\n");
     abort();
   }
   uint32_t total = (uint32_t)(times * (double)s->length);
@@ -1722,4 +1722,23 @@ void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction) {
   entry->state = (NtsHeader *)reaction.state;
   entry->next = promise->reactions;
   promise->reactions = entry;
+}
+
+double nts_promise_number(const NtsPromise *promise) {
+  if (promise->state != NTS_PROMISE_FULFILLED ||
+      promise->payload != NTS_PAYLOAD_NUMBER) {
+    fprintf(stderr, "nts: read a number from a promise holding something else\n");
+    abort();
+  }
+  return promise->number;
+}
+
+NtsHeader *nts_promise_reference(const NtsPromise *promise) {
+  if (promise->state != NTS_PROMISE_FULFILLED ||
+      promise->payload != NTS_PAYLOAD_REFERENCE) {
+    fprintf(stderr,
+            "nts: read a reference from a promise holding something else\n");
+    abort();
+  }
+  return promise->reference;
 }

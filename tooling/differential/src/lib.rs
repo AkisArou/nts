@@ -228,6 +228,22 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
 
     let entry = entry_module(&snapshot)?;
     let importable = exports_of(&snapshot, &entry);
+    // A module that exports `then` *is a thenable*. `await import(m)` sees the
+    // property, decides the namespace object is a promise, and calls it with a
+    // resolve function that the export -- being an ordinary function -- never
+    // invokes. The import never settles, and node reports it as an unsettled
+    // top-level await pointing at the driver rather than at the cause.
+    //
+    // Nothing to do with this compiler: a hand-written module exporting `then`
+    // behaves the same. But the differential cannot check one, and saying so
+    // beats letting the run hang and blaming the harness.
+    if importable.contains("then") {
+        bail!(
+            "the entry module exports `then`, which makes its namespace object a \
+             thenable -- `await import()` on it never resolves, so no differential \
+             can run against node"
+        );
+    }
     let testable: Vec<Testable> = prepared
         .program
         .funcs
@@ -263,10 +279,19 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {dir}"))?;
 
     let mut refused = Vec::new();
-    let native = run_native(&dir, &prepared.program, &testable, &mut refused)?;
+    let mut aborts = Vec::new();
+    let native = run_native(
+        &dir,
+        &prepared.program,
+        &testable,
+        &mut refused,
+        &mut aborts,
+    )?;
     let engine = run_node(&dir, &entry, &testable)?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
-    Ok(report(&native, &engine, &testable, &refused, &approximate))
+    let mut report = report(&native, &engine, &testable, &refused, &approximate);
+    report.aborts = aborts;
+    Ok(report)
 }
 
 /// How far apart two doubles may be and still be the same answer.
@@ -743,11 +768,32 @@ pub fn compiles(program: &hir::Program, dir: &Utf8Path) -> Result<(), String> {
         .to_owned())
 }
 
+/// How the runtime says "the program correctly declined", as opposed to
+/// "something here is broken".
+///
+/// A refusal is the program stopping on input the language does not permit --
+/// an index outside an array, a string longer than a string can be. JavaScript
+/// throws there and a compiled program without exceptions stops, so neither
+/// side produces a value and the case is skipped. Anything else that aborts is
+/// a defect and fails the run.
+///
+/// The distinction matters because a decline does not fail a run. Putting an
+/// async frame back on the C stack -- a use-after-free -- showed up as
+/// seventeen declines and a report that said "agreed on every case", which is
+/// the hole this closes.
+///
+/// Matching a *prefix the runtime chooses*, not the text of one message. The
+/// first version matched `"is outside ["`, and the first full run over the
+/// examples reported `String.repeat` overflowing as a defect -- a refusal as
+/// legitimate as the index one, and one of three rather than one of one.
+const REFUSED: &str = "nts: refused: ";
+
 fn run_native(
     dir: &Utf8Path,
     program: &hir::Program,
     testable: &[Testable],
     refused: &mut Vec<usize>,
+    aborts: &mut Vec<String>,
 ) -> Result<Vec<String>> {
     let emitted = nts_codegen_c::emit(program);
     let generated = dir.join("program.c");
@@ -820,6 +866,13 @@ fn run_native(
         collected.extend(produced);
         if reached == total - from {
             break;
+        }
+        let complaint = String::from_utf8_lossy(&run.stderr);
+        if let Some(line) = complaint
+            .lines()
+            .find(|line| line.starts_with("nts:") && !line.starts_with(REFUSED))
+        {
+            aborts.push(line.trim().to_owned());
         }
         // The case after the last one that printed. A refusal leaves a gap on
         // this side, and the node side is trimmed to match by index below.
@@ -974,13 +1027,16 @@ pub struct Report {
     pub approximated: usize,
     /// Every disagreement, as the two lines that differ.
     pub disagreements: Vec<(String, String)>,
+    /// Aborts the compiled program ended a case on that were *not* the one a
+    /// program is allowed to make. See [`EXPECTED_ABORT`].
+    pub aborts: Vec<String>,
 }
 
 impl Report {
     /// Whether the two sides agreed on everything they both reached.
     #[must_use]
     pub fn agreed(&self) -> bool {
-        self.disagreements.is_empty()
+        self.disagreements.is_empty() && self.aborts.is_empty()
     }
 }
 
@@ -1025,5 +1081,6 @@ fn report(
         refused: refused.len(),
         approximated,
         disagreements,
+        aborts: Vec::new(),
     }
 }

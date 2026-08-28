@@ -263,6 +263,32 @@ that catches a capability adapter resolving straight from its completion thread
 
 ---
 
+## 5b. What the transform found
+
+Three defects, and all three were the same shape: an operation added to the IR
+falling into a `_` arm that was right for its neighbours.
+
+**Escape analysis put the frame on the C stack.** The one object in the program
+whose entire purpose is to outlive its caller. `Suspend` hands the frame to the
+runtime, which stores it in a promise's reaction list and calls back after the
+function has returned -- the definition of escaping -- and it reached a `_ =>
+{}`. Nothing failed loudly: the promise stayed pending, because the resumption
+was writing through a dangling pointer.
+
+**Dead-code elimination deleted the suspension.** Its effect test was an
+*allow-list*, so "pure" was the default for anything new, and a pure operation
+with no users is removed. The function set its state, never subscribed, and left
+its promise pending forever. It is an exhaustive match now: a list of what has
+effects has to be added to; a list of what does not has to be *decided* about.
+
+**`await` of a `Promise<void>` aborted.** Both payload readers assert, and a
+promise that settled with nothing has neither slot filled. Three cases, not two.
+
+The first two are the interesting pair, because they produce a program that
+*runs and never finishes* rather than one that crashes or answers wrongly.
+
+---
+
 ## 6. How this gets tested
 
 The seam exists for portability, but its **first** value is that it makes the
@@ -280,6 +306,14 @@ A fake clock that only ticks when told would strand every `setTimeout`, and
 `setTimeout(fn, 0)` and `setImmediate(fn)` both have to run — after a complete
 checkpoint, in either order, since node does not promise their relative order
 either.
+
+A case may end in an abort, and only one abort is legitimate: an out-of-range
+index is the program keeping the promise its `!` made, and node answers
+`undefined` for the same input. Every other message the runtime prints is a
+defect. Until that distinction existed a declined case did not fail a run, so
+putting the async frame back on the C stack -- a use-after-free -- reported
+seventeen declines and then "agreed on every case". `nts check` classifies the
+abort now and fails on anything that is not the index one.
 
 The oracle for ordering is node, and the harness is a **trace comparison**: a
 program prints markers, is run to loop quiescence, and the sequence must match
@@ -368,13 +402,25 @@ wrong for the newcomer: `Convert` returning `TOP` in the facts analysis,
    named refusals — `for await`, async generators, and a `finally` spanning an
    `await` — are live and checked *ahead* of the `await` rule, so they are
    testable now rather than the day suspension lands.
-6. Async frame layout and descriptor.
-7. Lowering `await`: the state machine. The piece that makes a function
-   resumable, and the reason `await` cannot be a runtime call.
-8. `Promise.resolve`, `reject`, `all`, `race` as the profile needs them.
-9. `new Promise(executor)`, whose hard half is that `resolve` is a closure over
-   the promise, so settling reaches back through a function the constructor
-   supplied.
+6. ~~Async frame layout and descriptor.~~ **Done.** The frame is a synthetic
+   object type, exactly as a closure is, so it inherits the layout, the
+   descriptor, precise tracing, escape analysis and reference counting rather
+   than needing a second mechanism for each.
+7. ~~Lowering `await`: the state machine.~~ **Done for one suspension point in
+   a straight-line body**, which is `return await f(x)` and everything shaped
+   like it. `hir::suspend` splits the function into a thin entry that allocates
+   the frame and hands back a promise, and a resume function the microtask queue
+   calls. Parameters live in the frame, because a C local cannot survive the
+   resumption.
+8. Spilling, and the general shape. A value live across an `await` that is
+   neither a parameter nor the result promise needs a slot and every use
+   rewritten to a load; more than one suspension point needs the state dispatch
+   to be a chain; an `await` inside a branch or a loop needs the block graph
+   split and renumbered rather than cut in two. All three are refused by name.
+9. `Promise.resolve`, `reject`, `all`, `race` as the profile needs them.
+10. `new Promise(executor)`, whose hard half is that `resolve` is a closure over
+    the promise, so settling reaches back through a function the constructor
+    supplied.
 
 **C. The libuv host.**
 

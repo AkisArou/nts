@@ -405,6 +405,7 @@ mod tests {
                 origin: origin(),
                 exported: true,
                 initializes_receiver: false,
+                async_result: None,
             }],
             layouts: Vec::new(),
             globals: Vec::new(),

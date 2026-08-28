@@ -239,6 +239,7 @@ mod tests {
             origin: origin(),
             exported: true,
             initializes_receiver: false,
+            async_result: None,
         }
     }
 
@@ -360,6 +361,7 @@ mod rounding_tests {
                 origin: origin(),
                 exported: true,
                 initializes_receiver: false,
+                async_result: None,
             };
             let seen = observed(&func);
             assert!(

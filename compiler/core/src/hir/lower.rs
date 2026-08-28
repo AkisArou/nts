@@ -930,22 +930,6 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
             continue;
         }
 
-        // An `async` function with no `await` in it is an ordinary function
-        // whose returns settle a promise, and that much lowers. Suspension is
-        // the part that needs a state machine and a frame, so it is what is
-        // still refused -- named for the `await`, not for the `async`, because
-        // that is the construct that is missing.
-        if node
-            .modifiers
-            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
-            && contains_kind(snapshot, id, syntax::AWAIT_EXPRESSION)
-        {
-            lowered
-                .diagnostics
-                .push(FuncBuilder::new(snapshot).unsupported(id, "an `await`"));
-            continue;
-        }
-
         // `declare function f(): number` has no body because it is *external*,
         // not because this lowering failed to understand it. Refusing it says
         // the opposite, and -- since a caller of a refused function is refused
@@ -2511,7 +2495,6 @@ impl<'a> FuncBuilder<'a> {
             if !self.is_terminated() {
                 self.settle_and_return(id, &result, None)?;
             }
-            self.async_result = None;
         } else {
             self.close_body(&return_type);
         }
@@ -2690,6 +2673,10 @@ impl<'a> FuncBuilder<'a> {
             // and a seventh positional bool next to `exported` would be a
             // parameter waiting to be passed in the wrong order.
             initializes_receiver: false,
+            // Not the caller's, because this one is not a property of what is
+            // being assembled but of what the body did -- and the body has just
+            // finished saying so.
+            async_result: self.async_result.as_ref().map(|result| result.promise),
         }
     }
 
@@ -3548,6 +3535,38 @@ impl<'a> FuncBuilder<'a> {
             args,
         });
         Ok(())
+    }
+
+    /// `await e`.
+    ///
+    /// Lowered to [`OpKind::Await`] and left there. Turning it into a
+    /// suspension needs the frame layout, and the frame layout needs to know
+    /// which values are live across *every* await in the function -- which is a
+    /// whole-function question this walk is in no position to answer. See
+    /// [`super::suspend`].
+    ///
+    /// `await` outside an `async` function is top-level await, which is a
+    /// different thing again: the module becomes the suspending body and its
+    /// exports settle when it finishes.
+    fn lower_await(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        if self.async_result.is_none() {
+            return Err(self.unsupported(id, "a top-level `await`"));
+        }
+        let operand = *self
+            .children(id)
+            .first()
+            .ok_or_else(|| self.unsupported(id, "an `await` of nothing"))?;
+        let promise = self.lower_expression(operand)?;
+        let HirType::Managed(ManagedType::Promise(payload)) =
+            self.values[promise.0 as usize].ty.clone()
+        else {
+            // `await 1` is legal and means `Promise.resolve(1)`, which is a
+            // suspension of one tick rather than none. Refused rather than
+            // treated as the identity, because the tick is observable.
+            return Err(self.unsupported(id, "an `await` of something that is not a promise"));
+        };
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::Await { promise }, *payload, origin))
     }
 
     /// Settle an `async` function's promise and hand it back.
@@ -4667,6 +4686,7 @@ impl<'a> FuncBuilder<'a> {
                 .this
                 .ok_or_else(|| self.unsupported(id, "`this` outside a method")),
             Some(syntax::ELEMENT_ACCESS_EXPRESSION) => self.lower_element_access(id),
+            Some(syntax::AWAIT_EXPRESSION) => self.lower_await(id),
             Some(syntax::PROPERTY_ACCESS_EXPRESSION) => self.lower_property_access(id),
             // `x!`, `x as T` and `x satisfies T` are claims about types. The
             // first two narrow what the checker believes; the third asserts

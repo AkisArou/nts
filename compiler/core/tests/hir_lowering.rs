@@ -175,18 +175,26 @@ fn an_async_function_is_refused_rather_than_emptied() {
     let Some(lowered) = lowered("async-unsupported") else {
         return;
     };
-    // `await` and `new Promise` are already refused. `async` on its own is not:
-    // `Promise<number>` becomes `void`, the return value is converted away, and
-    // the verifier accepts the result. A caller then reads `undefined` where it
-    // asked for a number, with nothing said at compile time.
+    // The failure this guards against: `Promise<number>` had no representation,
+    // so an `async` function's return type resolved to `void`, the returned
+    // value was converted away, and the verifier accepted it. A caller read
+    // `undefined` where it asked for a number, with nothing said at compile
+    // time.
     //
     // Which is the failure `an_unsupported_construct_is_refused_rather_than_skipped`
     // guards against — and cannot catch, because one refusal among many
     // satisfies it while the silent case sits in the same file.
-    assert!(
-        !lowered.program.funcs.iter().any(|f| f.name == "twice"),
-        "an async function should be refused, not lowered to one that returns nothing",
-    );
+    //
+    // Stated as the invariant rather than as one function's name, so it keeps
+    // holding as the fixture changes: an `async` function either is refused, or
+    // hands back a promise. Never `void`, and never the payload bare.
+    for func in &lowered.program.funcs {
+        assert!(
+            !matches!(func.return_type, HirType::Void),
+            "`{}` is async and lowered to a function returning nothing",
+            func.name,
+        );
+    }
 }
 
 #[test]

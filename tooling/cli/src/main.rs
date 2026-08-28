@@ -22,6 +22,70 @@ fn project(rest: &[String]) -> Utf8PathBuf {
         .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from)
 }
 
+/// `nts check`: run a compiled program and node side by side.
+fn check(rest: &[String]) -> Result<()> {
+    let tsconfig = project(rest);
+    let report = nts_differential::check(&tsconfig)?;
+    if report.functions == 0 {
+        println!(
+            "nothing to check: no exported function has scalar arguments \
+             and a scalar result"
+        );
+        return Ok(());
+    }
+    if report.refused > 0 {
+        println!(
+            "{} case(s) the compiled program declined -- an index its `!` \
+             promised was in range and was not, most often; node answers \
+             `undefined` there and the two have nothing to compare",
+            report.refused
+        );
+    }
+    if report.checked < report.expected {
+        println!(
+            "checked {} of {} cases; the rest were not reached (a pool \
+             value in a loop bound will do that)",
+            report.checked, report.expected
+        );
+    } else {
+        println!(
+            "checked {} cases across {} function(s)",
+            report.checked, report.functions
+        );
+    }
+    if report.approximated > 0 {
+        println!(
+            "{} case(s) matched only to within {} ULP, in functions whose \
+             result the specification leaves implementation-approximated \
+             -- glibc and V8 are both right there",
+            report.approximated,
+            nts_differential::TOLERANCE
+        );
+    }
+    for abort in report.aborts.iter().take(5) {
+        println!("  the compiled program aborted: {abort}");
+    }
+    for (native, engine) in report.disagreements.iter().take(20) {
+        println!("  nts  {native}");
+        println!("  node {engine}");
+    }
+    if report.agreed() {
+        println!("agreed on every case");
+        return Ok(());
+    }
+    if !report.aborts.is_empty() {
+        bail!(
+            "the compiled program aborted {} time(s) for a reason that is \
+             not the program correctly declining its input",
+            report.aborts.len()
+        )
+    }
+    bail!(
+        "{} case(s) disagree between the compiled program and node",
+        report.disagreements.len()
+    )
+}
+
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
@@ -33,59 +97,7 @@ fn main() -> Result<()> {
             let tsconfig = project(&rest);
             frontend(&tsconfig, decompose, calls, constants)
         }
-        Some("check") => {
-            let rest: Vec<String> = args.collect();
-            let tsconfig = project(&rest);
-            let report = nts_differential::check(&tsconfig)?;
-            if report.functions == 0 {
-                println!(
-                    "nothing to check: no exported function has scalar arguments \
-                     and a scalar result"
-                );
-                return Ok(());
-            }
-            if report.refused > 0 {
-                println!(
-                    "{} case(s) the compiled program declined -- an index its `!` \
-                     promised was in range and was not, most often; node answers \
-                     `undefined` there and the two have nothing to compare",
-                    report.refused
-                );
-            }
-            if report.checked < report.expected {
-                println!(
-                    "checked {} of {} cases; the rest were not reached (a pool \
-                     value in a loop bound will do that)",
-                    report.checked, report.expected
-                );
-            } else {
-                println!(
-                    "checked {} cases across {} function(s)",
-                    report.checked, report.functions
-                );
-            }
-            if report.approximated > 0 {
-                println!(
-                    "{} case(s) matched only to within {} ULP, in functions whose \
-                     result the specification leaves implementation-approximated \
-                     -- glibc and V8 are both right there",
-                    report.approximated,
-                    nts_differential::TOLERANCE
-                );
-            }
-            for (native, engine) in report.disagreements.iter().take(20) {
-                println!("  nts  {native}");
-                println!("  node {engine}");
-            }
-            if report.agreed() {
-                println!("agreed on every case");
-                return Ok(());
-            }
-            bail!(
-                "{} case(s) disagree between the compiled program and node",
-                report.disagreements.len()
-            )
-        }
+        Some("check") => check(&args.collect::<Vec<String>>()),
         Some("emit-c") => {
             let rest: Vec<String> = args.collect();
             let mut positional = rest.iter().filter(|a| !a.starts_with("--"));
@@ -460,6 +472,24 @@ fn render_call(
     )
 }
 
+/// The two operations an `async` function is made of, printed.
+///
+/// `await` is what the lowering emits and `suspend` is what `hir::suspend`
+/// turns it into, so seeing which one a dump contains says which side of that
+/// pass you are looking at.
+fn suspension(index: usize, op: &nts_core::hir::Op) -> String {
+    let ty = render(&op.ty);
+    match &op.kind {
+        OpKind::Await { promise } => format!("%{index} = await %{} : {ty}", promise.0),
+        OpKind::Suspend {
+            promise,
+            frame,
+            resume,
+        } => format!("suspend %{} -> {resume}(%{})", promise.0, frame.0),
+        _ => unreachable!("only reached for the suspension pair"),
+    }
+}
+
 fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
     match &op.kind {
@@ -536,6 +566,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             at.0,
             value.0
         ),
+        OpKind::Await { .. } | OpKind::Suspend { .. } => suspension(index, op),
         OpKind::Unary { op: un, operand } => {
             let operator = match un {
                 nts_core::hir::UnOp::Neg => "neg",

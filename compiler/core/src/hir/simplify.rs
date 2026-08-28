@@ -120,6 +120,11 @@ fn constant(func: &Func, value: ValueId) -> Option<i64> {
 /// instruction set grows.
 pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
     match kind {
+        OpKind::Await { promise } => *promise = of(*promise),
+        OpKind::Suspend { promise, frame, .. } => {
+            *promise = of(*promise);
+            *frame = of(*frame);
+        }
         OpKind::Param(_)
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
@@ -247,6 +252,7 @@ mod tests {
             origin: origin(),
             exported: true,
             initializes_receiver: false,
+            async_result: None,
         }
     }
 

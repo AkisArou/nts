@@ -1861,6 +1861,35 @@ fn start_frame_object(
     }
 }
 
+/// The two operations `hir::suspend` deals in.
+///
+/// `Await` never reaches here: the pass rewrites every one away, so arriving
+/// with one means an `async` function was transformed by nobody, and there is
+/// no C for "stop here and come back later".
+fn suspension(op: &nts_core::hir::Op) -> Result<String, Diagnostic> {
+    match &op.kind {
+        // `drop` is null: the frame is released by the resumption that runs it,
+        // and a task the queue discards instead is one the runtime never had --
+        // `nts_promise_subscribe` is the only path in, and it either keeps the
+        // task or hands it to the microtask queue.
+        OpKind::Suspend {
+            promise,
+            frame,
+            resume,
+        } => Ok(format!(
+            "nts_promise_subscribe({}, (NtsTask){{ (void (*)(void *))&{}, 0, {} }});",
+            value_name(*promise),
+            crate::c_identifier(resume),
+            value_name(*frame)
+        )),
+        _ => Err(Diagnostic::error(
+            "NTS2007",
+            "an `await` reached code generation",
+            op.origin.location,
+        )),
+    }
+}
+
 fn managed_op(
     writer: &mut CodeWriter,
     func: &Func,
@@ -1889,6 +1918,7 @@ fn managed_op(
             field,
             value: stored,
         } => field_store(func, op, *object, *field, *stored, context)?,
+        OpKind::Await { .. } | OpKind::Suspend { .. } => suspension(op)?,
         OpKind::ArrayNew { length, zeroed } => {
             // Two entry points rather than a flag argument, so the branch is
             // taken here rather than once per allocation at run time.
@@ -2032,7 +2062,9 @@ fn emit_op(
         | OpKind::ArrayNew { .. }
         | OpKind::Length(_)
         | OpKind::ArrayGet { .. }
-        | OpKind::ArraySet { .. } => {
+        | OpKind::ArraySet { .. }
+        | OpKind::Await { .. }
+        | OpKind::Suspend { .. } => {
             return managed_op(writer, func, value, context);
         }
         OpKind::Retain(object) => {

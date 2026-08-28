@@ -179,6 +179,22 @@ fn analyze(
                         escape_into(&mut escapes, args, targets, arity, escaping_params);
                     }
                 },
+                // A suspension hands the frame to the runtime, which stores it
+                // in a promise's reaction list and calls back into it after
+                // this function has returned. That is the *definition* of
+                // escaping, and it is the one object in the program that must
+                // not be on the C stack -- outliving its caller is the entire
+                // reason it exists.
+                //
+                // It reached this match's catch-all when the operation was
+                // added, and the emitted C put the frame in a `NtsObj_..._frame`
+                // local. Nothing failed loudly: the promise stayed pending,
+                // because the resumption was writing through a dangling
+                // pointer.
+                OpKind::Suspend { promise, frame, .. } => {
+                    escapes.values.insert(*promise);
+                    escapes.values.insert(*frame);
+                }
                 _ => {}
             }
         }
@@ -269,6 +285,7 @@ mod tests {
             origin: origin(),
             exported: true,
             initializes_receiver: false,
+            async_result: None,
         }
     }
 

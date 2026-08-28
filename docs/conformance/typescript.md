@@ -117,8 +117,8 @@ worse.
 | recursive array types (`type T = T[]`) | **not done** | refused with the cycle named; no finite `HirType` |
 | `keyof`, `typeof` type operator | **not done** | |
 | mapped, conditional, indexed-access, template-literal types | **not done** | |
-| `any` | **not done** | refused by design for application code |
-| `unknown` | **not done** | should *not* be refused — needs erased-representation analysis |
+| `any` | **not done** | checker-accepted `any` is frontend-only `NeedsRepresentation`: evidence must select a representation and legalize every operation before HIR. TypeScript errors such as `noImplicitAny` remain errors; no `Any` reaches HIR/MIR |
+| `unknown` | **not done** | a safe source top type using the same whole-program representation planner; unlike `any`, concrete operations require narrowing or an assertion |
 
 ## Classes and objects
 
@@ -199,7 +199,8 @@ worse.
 | a nursery / generational GC | **not done** | RFC §9.3 — what closes the last gap to V8 on allocation-heavy code |
 | **exceptions** | **not done** | `throw` terminates; no unwinding, no handler |
 | `async` functions without `await` | done | the promise is allocated on entry and every `return` settles it and hands it back, so falling off the end and a bare `return` are one path. Driven by `nts check`, which runs the loop to quiescence and compares what settled against node's `await` |
-| `await`, and suspension | **not done** | refused by name. See below |
+| `await`, for one suspension in a straight-line body | done | the function becomes a state machine over a heap frame: a thin entry that allocates it and hands back a promise, and a resume function the microtask queue calls when the awaited promise settles. Parameters live in the frame, because a C local cannot survive the resumption. The frame is a synthetic class, exactly as a closure is, so it gets the layout, the descriptor, precise tracing and reference counting for free |
+| a second `await`, or one inside a branch or a loop | **not done** | refused by name. A value live across a suspension that is neither a parameter nor the result promise needs a frame slot and every use rewritten to a load; a second suspension point needs the state dispatch to be a chain rather than one test |
 | async generators, `for await`, a `finally` spanning an `await` | **not done** | each refused *by name*, and checked ahead of the `await` rule so they are live rather than hidden behind it |
 | an event loop | partial | the host seam, the two queues and the checkpoint are built and tested against node; a deterministic host with virtual time exists. libuv is phase C of [`../async.md`](../async.md) |
 | an event loop | **not done** | |
@@ -245,21 +246,20 @@ unwinding twice. Fulfilment does not, which is why this slice exists.
 
 ## What test262 can check
 
-**All of it, in principle** — see [`test262.md`](test262.md).
+Every ECMAScript behavior NativeTS claims, in principle — see
+[`test262.md`](test262.md). Test262 cases and metadata are the oracle; Node may
+be a diagnostic control but agreement with Node is not the verdict. Default
+tests run as separate sloppy and strict global-script variants, harness and
+includes retain their source-unit order, and negative tests require an exact
+phase and exception constructor.
 
-A test262 case is *self-checking*: silent on success, `throw` on failure. So the
-signal is the exit code, not a compared value, and the technique is to assemble
-each case the way TC39's runner does — `sta.js` + `assert.js` + a small host
-preamble + any `includes:` + the test — compile the whole thing, and compare the
-exit code against node running the identical script. Nothing is harvested,
-nothing is substituted, no test is edited.
-
-What stands in the way is that test262 is *untyped JavaScript* and this compiler
-requires types. `function f(value)` is `any`, and `any` is refused — so every
-case fails for one reason before any question of `switch` or `assert.js` arises.
-Running it today would report one bug fifty thousand times. The technique is
-settled and costs nothing to hold; what unlocks it is representation inference
-for untyped code, which is the `unknown` work rather than a test-harness task.
+The runner is not implemented. Its first compiler prerequisite is the general
+[`NeedsRepresentation` analysis](../any-unknown.md): an unannotated
+JavaScript parameter may arrive from the checker as `any`, but representation
+evidence and operation requirements must eliminate that state before HIR. That
+does not make `any` a runtime type and does not rewrite Test262 with JSDoc. A
+real top-level script initializer, typed host identities, and structured
+exceptions are separate prerequisites.
 
 The two things test262 still says nothing about: **TypeScript types** (it is a
 JavaScript suite) and **anything the compiler does rather than computes** —
@@ -434,13 +434,13 @@ In order, with the reason rather than the ranking:
    between them, written up rather than guessed at. It gates `som`'s
    collections, which gate the five Are We Fast Yet macro benchmarks, which are
    the only real programs in reach.
-2. **A representation for `unknown`**, which `docs/any-unknown.md` describes:
-   chosen by whole-program analysis rather than by an annotation. It is 51 of
-   `node:path`'s 131 refusals — all validators taking an argument that came from
-   JavaScript — and it is the same feature that would make test262 runnable, so
-   it has two reasons rather than one. Worth asking first whether `unknown` ever
-   reaches more than a `typeof` test and an error message: if not, the
-   closed-union case covers it and the general erased value is not needed.
+2. **Representation recovery for checker-accepted `any` and `unknown`**, which
+   [`docs/any-unknown.md`](../any-unknown.md) specifies as one whole-program
+   planner with different source semantics. It is 51 of `node:path`'s 131 refusals — all validators
+   taking an argument that came from JavaScript — and is also the first compiler
+   prerequisite for test262. Evidence and operation requirements must be
+   measured separately; carried values may need only a closed union or handle,
+   while a renderer can require the general erased representation.
 3. **Enums** — four corpus files, and a `const enum` is a table of constants,
    which this compiler already has everywhere else. Note the differential
    problem first: node's type stripping rejects an `enum` outright.

@@ -28,17 +28,7 @@ pub fn eliminate(func: &mut Func) -> usize {
             live.insert(operand);
         }
         for value in &block.ops {
-            // A call may have effects and a store certainly does, so both stay
-            // whatever reads their results.
-            if matches!(
-                func.values[value.0 as usize].kind,
-                OpKind::Call { .. }
-                    | OpKind::ArraySet { .. }
-                    | OpKind::FieldSet { .. }
-                    | OpKind::GlobalSet { .. }
-                    | OpKind::Retain(_)
-                    | OpKind::Release(_)
-            ) {
+            if has_effects(&func.values[value.0 as usize].kind) {
                 live.insert(*value);
             }
         }
@@ -88,6 +78,53 @@ pub fn eliminate(func: &mut Func) -> usize {
 ///
 /// # The index moves with the parameter
 ///
+/// Whether an operation has to run even when nothing reads its result.
+///
+/// Exhaustive, and inverted on purpose. This was an allow-list of the effectful
+/// kinds, which makes *pure* the default for anything new -- and a pure
+/// operation with no users is deleted. `Suspend` was added and silently
+/// removed, so an `async` function set its state, never subscribed, and left
+/// its promise pending forever. The program still ran; it just never finished.
+///
+/// A list of what has effects has to be added to. A list of what does not has
+/// to be *decided* about, which is the difference.
+fn has_effects(kind: &OpKind) -> bool {
+    match kind {
+        // A call may do anything. A store certainly does. A suspension hands
+        // the frame to the runtime, which is both.
+        OpKind::Call { .. }
+        | OpKind::ArraySet { .. }
+        | OpKind::FieldSet { .. }
+        | OpKind::GlobalSet { .. }
+        | OpKind::Retain(_)
+        | OpKind::Release(_)
+        | OpKind::Suspend { .. } => true,
+        // Everything else computes a value and does nothing else, so it is
+        // worth exactly what reads it. `Await` is here because it does not
+        // survive `super::suspend` -- if one reaches this pass the program is
+        // already wrong, and deleting it would only hide that.
+        OpKind::Await { .. }
+        | OpKind::Param(_)
+        | OpKind::BlockParam(_)
+        | OpKind::Return(_)
+        | OpKind::ConstInt(_)
+        | OpKind::ConstFloat(_)
+        | OpKind::ConstBool(_)
+        | OpKind::ConstString(_)
+        | OpKind::ConstNull
+        | OpKind::Binary { .. }
+        | OpKind::Unary { .. }
+        | OpKind::Convert(_)
+        | OpKind::GlobalGet(_)
+        | OpKind::ObjectNew { .. }
+        | OpKind::FieldGet { .. }
+        | OpKind::ArrayNew { .. }
+        | OpKind::Length(_)
+        | OpKind::ArrayGet { .. }
+        | OpKind::StringUnitAt { .. } => false,
+    }
+}
+
 /// `OpKind::BlockParam(n)` carries its own position, and [`super::loops`] reads
 /// it to find the matching argument on each incoming edge. Removing the
 /// parameter before it without renumbering would make that read the wrong one,

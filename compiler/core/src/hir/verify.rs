@@ -384,6 +384,8 @@ fn check_dominance(func: &Func, reachable: &FxHashSet<BlockId>, problems: &mut V
 
 pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
     match kind {
+        OpKind::Await { promise } => vec![*promise],
+        OpKind::Suspend { promise, frame, .. } => vec![*promise, *frame],
         OpKind::Param(_)
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
@@ -477,6 +479,7 @@ mod tests {
                 origin: origin(),
                 exported: true,
                 initializes_receiver: false,
+                async_result: None,
             }],
         }
     }
@@ -699,6 +702,7 @@ mod tests {
             origin: origin(),
             exported: false,
             initializes_receiver: false,
+            async_result: None,
         };
         let passes_one = Func {
             name: "g".to_owned(),
@@ -720,6 +724,7 @@ mod tests {
             origin: origin(),
             exported: true,
             initializes_receiver: false,
+            async_result: None,
         };
         let program = Program {
             funcs: vec![takes_two, passes_one],

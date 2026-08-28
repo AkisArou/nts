@@ -20,12 +20,9 @@
 // for a number, with nothing said at compile time. It lowers correctly now and
 // lives in `examples/async`.
 
-// `inner` has no `await`, so it lowers; `outer` has one and is refused as
-// ``an `await` ``. Named for the `await` rather than for the `async`, because
-// suspension is the construct that is missing -- `async` on its own is done.
-//
-// Kept as a pair so that a change which makes `outer` lower without
-// implementing suspension fails here rather than somewhere quieter.
+// Both of these lower now -- one `await` in a straight-line body is compiled.
+// They are kept because the *shapes* below are not, and a file of refusals
+// wants the neighbouring case that works beside it.
 async function inner(n: number): Promise<number> {
   return n + 1;
 }
@@ -82,4 +79,32 @@ export async function guarded(p: Promise<number>): Promise<number> {
   } finally {
     // Nothing here: it is spanning the `await` that is refused, not the body.
   }
+}
+
+// A second suspension point. The state dispatch is one comparison, so two
+// states would need a chain -- and the second `await`'s resume block has to be
+// reachable from it, which is the block renumbering this does not do yet.
+export async function twiceAwaited(n: number): Promise<number> {
+  const a = await inner(n);
+  const b = await inner(a);
+  return b;
+}
+
+// An `await` inside a branch. The function has more than one block, so the
+// split is a graph rewrite rather than cutting one block in two.
+export async function guardedAwait(n: number): Promise<number> {
+  if (n > 0) {
+    return await inner(n);
+  }
+  return 0;
+}
+
+// A value that outlives the suspension and is neither a parameter nor the
+// result promise. It needs a frame slot of its own and every use rewritten to a
+// load -- the general spilling. Dropping it instead would resume with whatever
+// the register held, which is the kind of wrong that runs.
+export async function carried(n: number): Promise<number> {
+  const doubled = n * 2;
+  const awaited = await inner(n);
+  return awaited + doubled;
 }
