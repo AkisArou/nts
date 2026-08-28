@@ -941,13 +941,23 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
             // print as NaN -- so it takes the same spelling the native side
             // gives it, and the two compare.
             let call = format!("m.{exported}({})", args.join(", "));
+            // A rejected promise makes `await` throw, and an uncaught throw
+            // ends the driver -- so one rejecting case cost every case after
+            // it. Caught, "rejected" is an answer, and it is the same answer
+            // the native side prints, so the two compare.
             let _ = match payload {
                 Some(HirType::Void) => writeln!(
                     driver,
-                    "await {call}; process.stdout.write(`{} {at} undefined\n`);",
-                    one.name
+                    "try {{ await {call}; process.stdout.write(`{} {at} undefined\n`); }} \
+                     catch {{ process.stdout.write(`{} {at} rejected\n`); }}",
+                    one.name, one.name
                 ),
-                Some(_) => writeln!(driver, "{show}({:?}, {at}, await {call});", one.name),
+                Some(_) => writeln!(
+                    driver,
+                    "try {{ {show}({:?}, {at}, await {call}); }} \
+                     catch {{ process.stdout.write(`{} {at} rejected\n`); }}",
+                    one.name, one.name
+                ),
                 None => writeln!(driver, "{show}({:?}, {at}, {call});", one.name),
             };
         }

@@ -188,3 +188,38 @@ export async function mixedPayloads(n: number): Promise<number> {
 export async function nestedAwaits(n: number): Promise<number> {
   return (await increment(await increment(n))) * 2;
 }
+
+// --- `Promise.resolve` and `Promise.reject` --------------------------------
+//
+// Constructors rather than operations: each allocates a promise and settles it
+// before anyone can subscribe. Already settled is not the same as synchronous
+// -- a reaction on one of these still runs on the microtask queue, one tick
+// later, because running it inline would be a different observable order.
+
+export function alreadySettled(n: number): Promise<number> {
+  return Promise.resolve(n + 1);
+}
+
+export async function throughResolve(n: number): Promise<number> {
+  return await Promise.resolve(n * 3);
+}
+
+// Two settled promises awaited in sequence, so the state machine runs its
+// dispatch twice over promises that never actually suspend anything.
+export async function twoSettled(n: number): Promise<number> {
+  const a = await Promise.resolve(n);
+  const b = await Promise.resolve(a + 1);
+  return b;
+}
+
+// A rejection. The reason is an object, and the runtime stores it in the same
+// slot a reference payload uses -- which is spelled `NtsHeader *`, so an
+// `Error` needs the cast that a string did not. That is why this case exists:
+// `Promise<string>` worked and `Promise<number>` rejecting with an `Error` did
+// not, which reads as one payload type failing while the rest pass.
+export function refused(n: number): Promise<number> {
+  if (n > 0) {
+    return Promise.resolve(n);
+  }
+  return Promise.reject(new Error("not positive"));
+}

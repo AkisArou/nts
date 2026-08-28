@@ -560,6 +560,20 @@ fn literal_name(literals: &[String], text: &str) -> String {
     format!("nts_str_{index}")
 }
 
+/// Whether a runtime helper takes a managed reference of any class here.
+///
+/// The header spells that `NtsHeader *`, which C will not accept a
+/// `NtsObj_Error *` for without being told -- and every managed object in a
+/// program is one of those. A *string* is a `NtsHeader` by typedef, so a
+/// `Promise<string>` worked and a `Promise<SomeClass>` did not, which is the
+/// kind of gap that shows up as one payload type failing and the rest passing.
+fn erases_class(callee: &str, at: usize) -> bool {
+    matches!(
+        (callee, at),
+        ("nts_promise_fulfill_reference" | "nts_promise_reject", 1)
+    )
+}
+
 /// A call: static, external, or through the receiver's dispatch table.
 fn call_text(
     func: &Func,
@@ -605,6 +619,14 @@ fn call_text(
         .iter()
         .enumerate()
         .map(|(at, argument)| {
+            // A runtime helper that takes a managed reference of *any* class
+            // is declared in the header as `NtsHeader *`, and the emitter has
+            // no signature for it -- `declared` only covers functions the
+            // program itself defines. A string is already an `NtsHeader`, so
+            // this went unnoticed until an object payload reached one.
+            if erases_class(target, at) {
+                return format!("(NtsHeader *){}", value_name(*argument));
+            }
             let wanted = declared.and_then(|params| params.get(at)).map(|p| &p.ty);
             let actual = &func.values[argument.0 as usize].ty;
             match wanted {

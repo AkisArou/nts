@@ -3579,6 +3579,84 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::Await { promise }, *payload, origin))
     }
 
+    /// `Promise.resolve(v)` and `Promise.reject(e)`.
+    ///
+    /// `None` when the callee is not one of them, which is a different answer
+    /// from `Some(Err(..))`: the second is one of these given something it
+    /// cannot take, and it says so rather than falling through to a diagnostic
+    /// about a member of `Promise` that does not exist.
+    ///
+    /// Already settled, which is not the same as synchronous. A reaction
+    /// subscribed to one of these still runs on the microtask queue, one tick
+    /// later, because running it inline would be a different observable order.
+    /// That is the runtime's rule and this does not have to restate it.
+    fn lower_promise_static(
+        &mut self,
+        id: NodeId,
+        callee: NodeId,
+        arguments: &[NodeId],
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return None;
+        }
+        let parts = self.children(callee);
+        let object = *parts.first()?;
+        let member = *parts.last()?;
+        if self.kind_of(object) != Some(syntax::IDENTIFIER)
+            || self.node(object).text.as_deref() != Some("Promise")
+        {
+            return None;
+        }
+        let rejecting = match self.node(member).text.as_deref()? {
+            "resolve" => false,
+            "reject" => true,
+            _ => return None,
+        };
+        Some(self.settled_promise(id, arguments, rejecting))
+    }
+
+    /// The body of [`Self::lower_promise_static`], once the shape is known.
+    fn settled_promise(
+        &mut self,
+        id: NodeId,
+        arguments: &[NodeId],
+        rejecting: bool,
+    ) -> Result<ValueId, Diagnostic> {
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a `Promise` this compiler can settle"))?;
+        let HirType::Managed(ManagedType::Promise(payload)) = ty.clone() else {
+            return Err(self.unrepresentable(id, "a `Promise.resolve` result"));
+        };
+        let value = match arguments {
+            [] => None,
+            [only] => Some(self.lower_expression(*only)?),
+            // `Promise.resolve(v, extra)` is not a thing the signature admits,
+            // so reaching here means the shape is not what this reads.
+            _ => return Err(self.unsupported(id, "a `Promise` call with this many arguments")),
+        };
+        let origin = self.origin(id);
+        let promise = self.runtime_call("nts_promise_new", Vec::new(), ty, origin);
+        if rejecting {
+            let reason =
+                value.ok_or_else(|| self.unsupported(id, "a `Promise.reject` with no reason"))?;
+            let origin = self.origin(id);
+            self.runtime_call(
+                "nts_promise_reject",
+                vec![promise, reason],
+                HirType::Void,
+                origin,
+            );
+            return Ok(promise);
+        }
+        let result = AsyncResult {
+            promise,
+            payload: *payload,
+        };
+        self.settle(id, &result, value)?;
+        Ok(promise)
+    }
+
     /// Settle an `async` function's promise and hand it back.
     ///
     /// The function's HIR return type is the promise, not the payload, so every
@@ -3590,6 +3668,23 @@ impl<'a> FuncBuilder<'a> {
     /// tagged union and the tag has to be right: a number written into the
     /// reference slot is a pointer the collector would follow.
     fn settle_and_return(
+        &mut self,
+        id: NodeId,
+        result: &AsyncResult,
+        value: Option<ValueId>,
+    ) -> Result<(), Diagnostic> {
+        self.settle(id, result, value)?;
+        self.terminate(Terminator::Return(Some(result.promise)));
+        Ok(())
+    }
+
+    /// Write a value into a promise, through the helper its payload needs.
+    ///
+    /// Which one depends on the payload's representation, which is the whole
+    /// reason [`ManagedType::Promise`] carries one. The runtime stores a tagged
+    /// union and the tag has to be right: a number written into the reference
+    /// slot is a pointer the collector would follow.
+    fn settle(
         &mut self,
         id: NodeId,
         result: &AsyncResult,
@@ -3609,7 +3704,6 @@ impl<'a> FuncBuilder<'a> {
             }
         };
         self.runtime_call(helper, args, HirType::Void, origin);
-        self.terminate(Terminator::Return(Some(result.promise)));
         Ok(())
     }
 
@@ -6210,6 +6304,13 @@ impl<'a> FuncBuilder<'a> {
         // rather than a division.
         if let Some(intrinsic) = self.intrinsic_of(callee_node) {
             return self.lower_intrinsic(id, intrinsic, &arguments);
+        }
+
+        // `Promise.resolve(v)` and `Promise.reject(e)`, which are constructors
+        // rather than operations: each allocates a promise and settles it
+        // before anyone can subscribe.
+        if let Some(settled) = self.lower_promise_static(id, callee_node, &arguments) {
+            return settled;
         }
 
         // `Body.jupiter()` — a *static* method. It looks like a method call and
