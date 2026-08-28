@@ -990,6 +990,30 @@ fn module_statements(
         ));
     }
     if refused_a_cycle {
+        // The consequence, said out loud. A refused initializer does not stop
+        // the build: the program is emitted, runs, and answers from static
+        // initializers alone, so every module-scope value it computed is
+        // simply absent. That is a wrong answer with exit status 0, and it is
+        // worth a sentence of its own because the refusal above names a *cycle*
+        // while the thing the caller will notice is a number.
+        //
+        // Whether it should stop the build is a policy question about what a
+        // refusal means -- `Severity::Error` is documented as "the build cannot
+        // produce an artifact" and today does not -- and that is a decision
+        // about every refusal, not this one.
+        let ran: usize = per_module.iter().filter(|m| !m.is_empty()).count();
+        let anchor = snapshot
+            .modules
+            .first()
+            .map_or(NodeId(0), |module| module.root);
+        refusals.push(probe.unsupported(
+            anchor,
+            &format!(
+                "module evaluation for {ran} module(s), which is refused above and so will not run; \
+                 the program still builds, and every module-scope value it would have computed \
+                 stays at its static initializer"
+            ),
+        ));
         return (None, refusals);
     }
 
