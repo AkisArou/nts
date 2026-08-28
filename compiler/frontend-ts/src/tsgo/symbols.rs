@@ -38,6 +38,11 @@ mod bits {
     pub const METHOD: u32 = 1 << 13;
     pub const TYPE_ALIAS: u32 = 1 << 19;
     pub const MODULE: u32 = 1 << 10 | 1 << 11; // ValueModule | NamespaceModule
+    /// `ast.SymbolFlagsAlias`, `symbolflags.go:30`. Not mapped into the schema
+    /// -- it is asked here and answered here -- but load-bearing: tsgo's
+    /// `getAliasedSymbol` *panics* on a symbol that is not one ("Should only
+    /// get alias here"), so this is the test that has to happen first.
+    pub const ALIAS: u32 = 1 << 21;
 }
 
 fn schema_flags(raw: u32) -> SymbolFlags {
@@ -148,7 +153,26 @@ pub fn resolve(
             .exports_of_module(handle, project, symbol)?
             .iter()
             .map(|export| {
-                let id = intern(snapshot, interned, export, root, path, base, file);
+                // A re-export yields an *alias* symbol declared at the
+                // re-export site, which says nothing about where the thing came
+                // from. `export { two } from "./base.js"` has to resolve to
+                // `base.ts`'s `two` or the export list names a symbol with no
+                // declaration anyone can use -- and `node:path` is nothing but
+                // `export *` and `export * as`, so this is the flagship module
+                // rather than an edge case.
+                //
+                // The exported *name* is unchanged: `export { two as pair }`
+                // publishes `pair` and resolves to `two`.
+                let declaring = if export.flags & bits::ALIAS == 0 {
+                    None
+                } else {
+                    client
+                        .aliased_symbol(handle, project, export.id)
+                        .ok()
+                        .flatten()
+                };
+                let target = declaring.as_ref().unwrap_or(export);
+                let id = intern(snapshot, interned, target, root, path, base, file);
                 (export.name.clone(), id)
             })
             .collect(),

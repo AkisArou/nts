@@ -150,6 +150,43 @@ fn main() -> Result<()> {
     }
 }
 
+/// Print a snapshot's warnings, then fail if it does not typecheck.
+///
+/// Warnings go out whether or not it typechecks: a partial type graph
+/// (NTS0002) or an unanswered type (NTS0003) makes every refusal below it
+/// suspect, so a consumer that showed diagnostics only on error would hide the
+/// one diagnostic that explains the others.
+fn report_snapshot_diagnostics(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<()> {
+    for diagnostic in &snapshot.diagnostics {
+        if diagnostic.severity == nts_diagnostics::Severity::Warning {
+            eprintln!("warning: {} {}", diagnostic.code, diagnostic.message);
+        }
+    }
+    if snapshot.has_errors() {
+        for diagnostic in &snapshot.diagnostics {
+            eprintln!("{} {}", diagnostic.code, diagnostic.message);
+        }
+        bail!("the program does not typecheck");
+    }
+    Ok(())
+}
+
+/// Whether the type graph is whole, and if not why.
+///
+/// Both of these mean the same thing downstream: a placeholder the lowering
+/// will refuse while naming the construct rather than the cause.
+fn report_graph_health(stats: &nts_frontend_ts::FrontendStats) {
+    if stats.types_unanswered > 0 {
+        println!(
+            "  UNANSWERED     {} type(s) the checker could not answer for",
+            stats.types_unanswered
+        );
+    }
+    if stats.decomposition_exhausted {
+        println!("  NOTE           budget exhausted; the type graph is partial");
+    }
+}
+
 /// Show what the number analysis proves, value by value.
 ///
 /// Exists so that a specialization strategy is chosen against evidence rather
@@ -262,15 +299,7 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) 
     }
     if decompose {
         println!("  decomposed     {}", stats.decomposed);
-        if stats.types_unanswered > 0 {
-            println!(
-                "  UNANSWERED     {} type(s) the checker could not answer for",
-                stats.types_unanswered
-            );
-        }
-        if stats.decomposition_exhausted {
-            println!("  NOTE           budget exhausted; the type graph is partial");
-        }
+        report_graph_health(&stats);
     }
     println!("round trips      {}", stats.round_trips);
     println!("  per file       {:.2}", stats.round_trips_per_file());
@@ -908,21 +937,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
-    // Warnings are printed whether or not the program typechecks. A partial
-    // type graph (NTS0002) makes every refusal below it suspect, so a consumer
-    // that showed diagnostics only on error would hide the one diagnostic that
-    // explains the others.
-    for diagnostic in &snapshot.diagnostics {
-        if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            eprintln!("warning: {} {}", diagnostic.code, diagnostic.message);
-        }
-    }
-    if snapshot.has_errors() {
-        for diagnostic in &snapshot.diagnostics {
-            eprintln!("{} {}", diagnostic.code, diagnostic.message);
-        }
-        bail!("the program does not typecheck");
-    }
+    report_snapshot_diagnostics(&snapshot)?;
 
     // `--rc` selects reference counting (RFC 9.2). NoGC stays the default: it
     // is what 9.1 says it is, and choosing a provider silently is exactly what

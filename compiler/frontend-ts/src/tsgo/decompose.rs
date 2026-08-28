@@ -1034,13 +1034,11 @@ impl<'a> Decomposer<'a> {
     /// truncated graph does -- the lowering refuses a construct and names the
     /// construct.
     fn types_of(&mut self, ty: u32, walk: &mut Walk<'_>) -> Option<Vec<TypeResponse>> {
-        match self.client.types_of_type(self.handle, &self.project, ty) {
-            Ok(members) => Some(members),
-            Err(_) => {
-                walk.stats.unanswered += 1;
-                None
-            }
+        if let Ok(members) = self.client.types_of_type(self.handle, &self.project, ty) {
+            return Some(members);
         }
+        walk.stats.unanswered += 1;
+        None
     }
 
     fn intern_all(
@@ -1131,24 +1129,6 @@ fn declaration_node(handle: &NodeHandle, file_bases: &[(String, u32)]) -> Option
         .map(|(_, base)| *base)?;
     index.checked_sub(1).map(|i| NodeId(i + base))
 }
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Finite matters more than the number: an unbounded walk over a cyclic type
-    // graph with a bug in `done` would hang a build rather than fail it. Enforced
-    // at compile time, since both sides are constants.
-    const _: () = assert!(Budget::DEFAULT.max_types > 1000);
-    const _: () = assert!(Budget::DEFAULT.max_types < usize::MAX);
-
-    #[test]
-    fn stats_default_to_nothing_done() {
-        let stats = DecomposeStats::default();
-        assert_eq!(stats.decomposed, 0);
-        assert!(!stats.exhausted, "an empty run is complete, not exhausted");
-    }
-}
-
 /// Whether a type is, or is built from, a type parameter.
 ///
 /// A union is the case that matters: `PromiseLike<TResult1 | TResult2>`'s
@@ -1169,5 +1149,23 @@ fn mentions_a_type_parameter(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32
             .iter()
             .any(|member| mentions_a_type_parameter(snapshot, *member, depth + 1)),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Finite matters more than the number: an unbounded walk over a cyclic type
+    // graph with a bug in `done` would hang a build rather than fail it. Enforced
+    // at compile time, since both sides are constants.
+    const _: () = assert!(Budget::DEFAULT.max_types > 1000);
+    const _: () = assert!(Budget::DEFAULT.max_types < usize::MAX);
+
+    #[test]
+    fn stats_default_to_nothing_done() {
+        let stats = DecomposeStats::default();
+        assert_eq!(stats.decomposed, 0);
+        assert!(!stats.exhausted, "an empty run is complete, not exhausted");
     }
 }

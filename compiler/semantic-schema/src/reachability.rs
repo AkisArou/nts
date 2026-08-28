@@ -175,11 +175,11 @@ pub fn from_roots(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nts_diagnostics::{Location, SourceId, Span};
-    use nts_semantic_schema::{
+    use crate::{
         DeclarationModifiers, ModuleRecord, NodeData, NodeKind, NodeRecord, Origin, SymbolFlags,
         SymbolRecord, TypeKind, TypeRecord,
     };
+    use nts_diagnostics::{Location, SourceId, Span};
 
     fn node(children: Vec<NodeId>, symbol: Option<SymbolId>) -> NodeRecord {
         NodeRecord {
@@ -214,7 +214,7 @@ mod tests {
     /// (private helper). Node 3 is unreferenced by anything.
     fn snapshot() -> SemanticSnapshot {
         let mut snapshot = SemanticSnapshot {
-            schema_version: nts_semantic_schema::SCHEMA_VERSION,
+            schema_version: crate::SCHEMA_VERSION,
             nodes: vec![
                 node(vec![NodeId(1)], None),
                 node(vec![], Some(SymbolId(1))),

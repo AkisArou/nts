@@ -374,6 +374,27 @@ impl Client {
         )
     }
 
+    /// What an alias symbol refers to, following the whole chain.
+    ///
+    /// `None` when the symbol is not an alias, which is the common case and not
+    /// a failure: `getAliasedSymbol` on a plain declaration has nothing to
+    /// return.
+    pub fn aliased_symbol(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        symbol: u32,
+    ) -> Result<Option<SymbolResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_ALIASED_SYMBOL,
+            &CheckerSymbolParams {
+                snapshot,
+                project: project.clone(),
+                symbol,
+            },
+        )
+    }
+
     /// Call signatures of a type.
     pub fn signatures_of_type(
         &mut self,

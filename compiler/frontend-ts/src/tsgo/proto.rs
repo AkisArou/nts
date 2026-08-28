@@ -45,6 +45,13 @@ pub mod method {
     pub const GET_CONSTANT_VALUE: &str = "getConstantValue";
     pub const GET_PARAMETERS_OF_SIGNATURE: &str = "getParametersOfSignature";
     pub const GET_EXPORTS_OF_MODULE: &str = "getExportsOfModule";
+    /// What an import or re-export alias actually refers to.
+    ///
+    /// `export { two } from "./base.js"` gives the module an *alias* symbol
+    /// declared at the re-export, which says nothing about where `two` came
+    /// from. Following it is the only way to reach the declaring symbol, and
+    /// `node:path` is nothing but `export *`, so this is not an edge case.
+    pub const GET_ALIASED_SYMBOL: &str = "getAliasedSymbol";
     pub const GET_SYNTACTIC_DIAGNOSTICS: &str = "getSyntacticDiagnostics";
     pub const GET_RETURN_TYPE_OF_SIGNATURE: &str = "getReturnTypeOfSignature";
     pub const GET_SIGNATURES_OF_TYPE: &str = "getSignaturesOfType";
