@@ -209,11 +209,19 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
         eprintln!("  refused: {} {}", diagnostic.code, diagnostic.message);
     }
 
+    let entry = entry_module(&snapshot)?;
+    let importable = exports_of(&snapshot, &entry);
     let testable: Vec<Testable> = prepared
         .program
         .funcs
         .iter()
         .filter(|func| func.exported)
+        // Exported by the *entry* module, not merely by some module. `exported`
+        // marks a root of the whole program, and node imports one file: a
+        // function another module exports is a root here and `undefined` there,
+        // so driving it threw `m.f is not a function` and the run died before
+        // it compared anything. `examples/nested` had never been checked.
+        .filter(|func| importable.contains(func.name.as_str()))
         .filter(|func| {
             drivable(&func.return_type) && func.params.iter().all(|param| drivable(&param.ty))
         })
@@ -232,7 +240,6 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
         return Ok(Report::default());
     }
 
-    let entry = entry_module(&snapshot)?;
     let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
         .map_err(|path| anyhow::anyhow!("temp dir is not utf-8: {}", path.display()))?
         .join(format!("nts-check-{}", std::process::id()));
@@ -295,6 +302,34 @@ fn entry_module(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<Utf8
         .get(module.file.0 as usize)
         .context("the entry module has no source file")?;
     Ok(file.display_path.clone())
+}
+
+/// The names the entry module exports.
+///
+/// Empty when the entry has no module record, which leaves nothing testable and
+/// reports "nothing to check" -- the honest answer, and better than driving
+/// functions node cannot see.
+fn exports_of(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+    entry: &Utf8Path,
+) -> std::collections::HashSet<String> {
+    snapshot
+        .modules
+        .iter()
+        .find(|module| {
+            snapshot
+                .sources
+                .get(module.file.0 as usize)
+                .is_some_and(|source| source.display_path == entry)
+        })
+        .map(|module| {
+            module
+                .exports
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Every case, one per function in turn rather than one function at a time.
@@ -644,10 +679,14 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
     }
     let path = dir.join("check_driver.mjs");
     std::fs::write(&path, driver)?;
+    let hook = dir.join("resolve_ts.mjs");
+    std::fs::write(&hook, RESOLVE_TS)?;
 
     let run = std::process::Command::new("timeout")
         .arg(TIMEOUT)
         .arg("node")
+        .arg("--import")
+        .arg(format!("file://{hook}"))
         .arg(&path)
         .output()
         .context("running node")?;
@@ -656,6 +695,35 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
     }
     Ok(lines(&run.stdout))
 }
+
+/// A resolve hook that follows TypeScript's `.js` specifiers to the `.ts` files
+/// they mean.
+///
+/// TypeScript writes `import { d } from "./geometry.js"` for a file named
+/// `geometry.ts` -- the specifier names the *output*, which is the rule under
+/// `NodeNext` and the convention everywhere else. Node's type stripping does not
+/// apply that rule, so it looked for a `.js` that does not exist and the run
+/// died before comparing anything.
+///
+/// Only for a relative specifier whose `.ts` sibling exists, so a real `.js`
+/// dependency still resolves as itself.
+const RESOLVE_TS: &str = r#"import { registerHooks } from "node:module";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier.startsWith(".") && specifier.endsWith(".js") && context.parentURL) {
+      const sibling = new URL(specifier, context.parentURL);
+      sibling.pathname = sibling.pathname.slice(0, -3) + ".ts";
+      if (existsSync(fileURLToPath(sibling))) {
+        return { url: sibling.href, format: "module-typescript", shortCircuit: true };
+      }
+    }
+    return nextResolve(specifier, context);
+  },
+});
+"#;
 
 fn lines(bytes: &[u8]) -> Vec<String> {
     String::from_utf8_lossy(bytes)
