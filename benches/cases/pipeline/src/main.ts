@@ -17,6 +17,13 @@
 // would be measuring the analysis against a C++ reference that pays no such
 // price. The reference indexes for the same reason.
 //
+// The `provider` file beside this one says `rc`, and it has to: `map`
+// allocates an array every round, and under NoGC nothing is ever freed, so the
+// run measures page faults instead of the code. Without it this case read as
+// 7.03x the C++ reference; with it, 1.06x. The trap is written down in
+// `tooling/bench`, in a comment saying exactly this, which is worth more than
+// the hour it took to rediscover.
+//
 // It depends on `seed`, so none of it folds away at compile time.
 export function work(seed: number): number {
   const length = 1024;
