@@ -1041,6 +1041,13 @@ Two consequences of the shape worth stating, because both are asserted by tests:
 - A tick enqueued *by a microtask* is run before the checkpoint ends, in a second pass. It is not deferred to the next macrotask.
 - The drain invokes the callback **directly**, with its arguments held beside it in the queue entry. A queue that stored a closure and called it would insert a frame between the drain and the callback, which is visible in a stack trace and is checked.
 
+Module initialization is itself one of these jobs. Under ESM — which is what
+this compiler consumes and what its differential oracle runs — evaluation
+happens *inside* a microtask drain, so a top-level `.then` runs before a
+top-level tick. A program that evaluated its modules as an ordinary host task
+would produce CommonJS ordering instead. Program start therefore enqueues
+module evaluation as a microtask and then checkpoints.
+
 Rules:
 
 - Every host entry into compiled TypeScript is wrapped in enter/leave.

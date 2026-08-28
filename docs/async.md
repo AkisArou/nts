@@ -125,6 +125,43 @@ Two details that tests already depend on:
   the queue entry. Storing a closure and calling that would put an extra frame
   between the drain and the callback, and a stack trace shows it.
 
+### Verified, and one trap in verifying it
+
+The algorithm is not reasoned-to; it is what node does. Queue a timer, an
+immediate, a tick, and a microtask that enqueues a second tick:
+
+```text
+tick -> microtask -> tick-from-microtask -> immediate -> timer
+```
+
+Ticks first, then microtasks, then a second pass for the tick the microtask
+enqueued — before either macrotask.
+
+But that is the trace from **CommonJS**, and from inside an I/O callback. The
+same program as an ES module gives:
+
+```text
+microtask -> tick -> tick-from-microtask -> immediate -> timer
+```
+
+The first two are swapped, and nothing about the checkpoint changed. ESM
+*evaluation is itself a microtask job*, so top-level code runs with the
+microtask queue already draining: a top-level `.then` is picked up by the drain
+in progress, and the tick queue is not reached until it empties.
+
+Two things follow, and both are requirements rather than observations.
+
+**Module initialization has to be an ESM evaluation job.** This project's
+`tsconfig` is `"module": "ESNext"` and every differential harness imports the
+`.ts` directly, so node is the ESM oracle. A compiled program that ran its
+module initialization as a plain host task and then checkpointed would produce
+CommonJS ordering and differ from node in the first two entries of every trace.
+So program start **enqueues module evaluation as a microtask and then runs the
+checkpoint**, rather than running it directly.
+
+**The trace harness must fix the module system**, or ordering comparisons drift
+for a reason that has nothing to do with the compiler.
+
 **Hosts never see any of this.** The runtime hands the host a task that already
 carries its own enter/leave, and the host calls `nts_task_run(task)` rather
 than `task.run`. A host cannot omit a checkpoint, because there is nothing for
@@ -198,6 +235,13 @@ reproducible: no wall clock, no scheduler jitter, no flakes. Every promise
 ordering question can then be asked as a unit test rather than inferred from a
 passing integration run.
 
+The clock must **advance**. When nothing is runnable and a timer is pending,
+the deterministic host jumps virtual time to the earliest deadline and fires it.
+A fake clock that only ticks when told would strand every `setTimeout`, and
+`setTimeout(fn, 0)` and `setImmediate(fn)` both have to run — after a complete
+checkpoint, in either order, since node does not promise their relative order
+either.
+
 The oracle for ordering is node, and the harness is a **trace comparison**: a
 program prints markers, is run to loop quiescence, and the sequence must match
 node's exactly. Ordering is precisely the class of bug that a differential over
@@ -260,6 +304,12 @@ Nothing in A is reachable from TypeScript. It is all testable from C.
 9. `setTimeout` / `setInterval` / `clearTimeout` as the `timers` capability;
    `setImmediate` on `post_task`.
 10. The standalone runner: run until quiescent, then shut down cleanly.
+
+The first consumer of A, agreed with the parallel session, is `node:timers` —
+59 files and almost pure scheduling. It is a smaller and more honest first
+client than `stream`, whose 5,500-line state machine would hide contract
+problems rather than surface them. `stream` follows: 230 of its 245 test files
+need no I/O at all, so phase A is most of it, and it gates `net` and `http`.
 
 **D. Node specifics**, with the parallel session.
 
