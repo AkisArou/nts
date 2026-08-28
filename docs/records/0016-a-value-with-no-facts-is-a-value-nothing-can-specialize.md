@@ -213,3 +213,44 @@ all and nothing compiles fine. Coverage is the union, not the maximum — which 
 the same shape as the differential harness and the cross-variant checksum, one
 of which proves the fast path matches the slow path and the other that the slow
 path was right to begin with.
+
+## The wrong subject can be in the reasoning rather than in the message
+
+The conservation law surfaced twelve sites in the Node profile, all of the shape
+
+```js
+Object.defineProperty(proto, "constructor", { get() { … } });
+```
+
+— a method in an object literal in *argument position*. The Node session
+reported them as "the object literal is incidental and the getter is the
+blocker". I agreed, wrote it into a commit message as fact, and declined to
+widen the object-literal rule on the grounds that doing so would only change
+which message they got.
+
+**Getters landed and the twelve did not move.** They were never blocked on the
+accessor. Nothing walks an object literal in argument position *at all*, so the
+`get()` inside is not reached to be blocked on anything. The decision was right
+and the reason given for it was wrong, which is the least useful way to be
+right.
+
+Two things worth keeping.
+
+The first is that this is the wrong-subject bug with no message involved. A
+diagnostic that describes the wrong subject is a claim in text; this was a claim
+in two people's heads, held confidently, surviving being stated, agreed with,
+committed, and acted on. The failure mode does not need a message to live in.
+
+The second is what caught it: **the law was right while both of us were wrong,
+by counting rather than by explaining.** It never claimed to know why the twelve
+were unaccounted — only that they were. An instrument that refuses to explain
+cannot be argued into the wrong explanation, which is most of its value and is
+easy to mistake for a limitation.
+
+For scale, since it also settles what the feature was worth: getters moved the
+Node profile from 121 lowered functions to 151, across ten of thirteen modules.
+Module-qualified names, three commits earlier, cleared twenty-five refusals and
+moved it by two. The different-currencies rule predicts exactly that asymmetry —
+an accessor was the *last* blocker on many functions where a name collision was
+one of several — and neither of us could have said in advance which feature was
+which.
