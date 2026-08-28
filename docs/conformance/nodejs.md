@@ -710,6 +710,28 @@ What the profile asks of it, counted across `runtime/node`:
 here: it is what a key walk is made of, and every comparison, every inspection
 and every option-object read is a key walk.
 
+**Two rows in that table are features rather than builtins, and counting them
+beside the others overstates how cheap the list is.**
+
+`Object.keys` needs a shape at run time, which is the machinery `for...in`
+needs. It is not `Object.is`, which is three comparisons and a `-0` check.
+
+`String(x)` is the one I had wrong. Twenty-two of the forty-seven are
+`String(value)` where `value` is typed `unknown` — they are validators and
+error constructors, and the point of the call is that the argument arrived from
+JavaScript and could be anything. `String(symbol)` must answer `"Symbol(x)"`
+where `` `${symbol}` `` must throw, `String(null)` is `"null"`, and `String({})`
+runs `toString` off the prototype chain. So it is `ToString` on `unknown`,
+which is the same dynamic dispatch as the blocker it appears to be cheaper
+than. The statically-typed subset is about eight sites and is not worth a
+feature on its own.
+
+The genuinely separable one is elsewhere in the same shape: **144 template
+literal interpolations**, and a large majority of those do have statically
+known operands, because they are message construction — `${label}: ${count}`,
+`${scheme}:`. Interpolating a `string | number` is a different problem from
+interpolating an `unknown`.
+
 Since the counts below were taken, one other item has moved to the top of the
 list and is not in the table. **`class X extends Error`** now underlies every module in the
 profile: `internal/errors.ts` is four abstract bases -- over `Error`,
