@@ -760,6 +760,32 @@ void nts_enqueue_tick(NtsTask task);
 void nts_enter(void);
 void nts_leave(void);
 
+/* Run a complete checkpoint now -- ticks, then microtasks, to a fixpoint --
+ * from *inside* a task.
+ *
+ * For a capability that runs several callbacks in one task and whose profile
+ * puts a checkpoint between them. Node's timers are exactly that: a batch is
+ * decided at wakeup and runs to completion, and `runNextTicks` goes between
+ * each callback, so a `nextTick` queued by the first runs before the second.
+ * Transcribed from node v24:
+ *
+ *   setTimeout(() => { push("A"); nextTick(() => push("tick-A"));
+ *                                 queueMicrotask(() => push("micro-A")); }, 5);
+ *   setTimeout(() => push("B"), 5);
+ *   setTimeout(() => push("C"), 6);
+ *   -> A -> tick-A -> micro-A -> B -> C
+ *
+ * It is the *whole* checkpoint and not a tick drain: `micro-A` lands before
+ * `B`. And the batch is one wakeup -- blocking A for 50ms does not let an
+ * immediate run between A and B -- so this cannot be had by ending the task
+ * and letting `nts_leave` do it.
+ *
+ * `nts_enter`/`nts_leave` cannot serve: nested, only the outermost leave
+ * checkpoints, which is deliberate and is what keeps a capability that
+ * re-enters compiled code from checkpointing halfway through its own work.
+ * This is the explicit form, for a caller that means it. */
+void nts_checkpoint(void);
+
 /* Whether either queue has anything left. For an embedder driving its own
  * loop, and for a test asserting quiescence. */
 bool nts_has_pending_work(void);

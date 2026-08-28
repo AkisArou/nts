@@ -1548,6 +1548,16 @@ void nts_leave(void) {
   nts_process_ticks_and_rejections();
 }
 
+void nts_checkpoint(void) {
+  /* The same opt-out `nts_leave` makes, for the same reason: a host that
+   * supplied `enqueue_microtask` owns checkpointing, and draining here would
+   * be a second ordering beside its one. */
+  if (nts_host_installed && nts_host.enqueue_microtask) {
+    return;
+  }
+  nts_process_ticks_and_rejections();
+}
+
 void nts_task_run(NtsTask task) {
   nts_enter();
   task.run(task.state);

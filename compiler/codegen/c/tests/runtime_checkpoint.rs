@@ -89,8 +89,8 @@ fn checks(report: &str) -> usize {
 fn the_checkpoint_orders_ticks_microtasks_and_macrotasks_as_node_does() {
     let report = run_suite("checkpoint", &[]);
     assert!(
-        checks(&report) >= 8,
-        "expected at least 8 ordering checks, saw {}:\n{report}",
+        checks(&report) >= 10,
+        "expected at least 10 ordering checks, saw {}:\n{report}",
         checks(&report)
     );
 }
@@ -152,7 +152,7 @@ fn timers_behave_as_the_capability_says() {
     // released, so the bug it catches could not happen.
     let report = run_suite("timers", &["-DNTS_PROVIDER_RC"]);
     assert!(
-        checks(&report) >= 8,
+        checks(&report) >= 10,
         "expected at least 8 timer checks, saw {}:\n{report}",
         checks(&report)
     );

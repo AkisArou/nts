@@ -163,8 +163,56 @@ static void cancel_returns_the_task(void) {
     }
 }
 
+/* One task running two callbacks, with a checkpoint between them: node's timer
+ * batch. `nts_checkpoint` is what a capability calls to get that ordering. */
+static void batch_with_a_checkpoint(void *state) {
+    (void)state;
+    note("A");
+    nts_enqueue_tick(task_of(say, (void *)"tick-A"));
+    nts_enqueue_microtask(task_of(say, (void *)"micro-A"));
+    nts_checkpoint();
+    note("B");
+}
+
+/* The same batch without it, which is what the runtime did before: the
+ * checkpoint waits for the task to end, so both callbacks run first. */
+static void batch_without_a_checkpoint(void *state) {
+    (void)state;
+    note("A");
+    nts_enqueue_tick(task_of(say, (void *)"tick-A"));
+    nts_enqueue_microtask(task_of(say, (void *)"micro-A"));
+    note("B");
+}
+
+/* Transcribed from node v24, and it is the *whole* checkpoint rather than a
+ * tick drain -- `micro-A` lands before `B`:
+ *
+ *   setTimeout(() => { push("A"); nextTick(() => push("tick-A"));
+ *                                 queueMicrotask(() => push("micro-A")); }, 5);
+ *   setTimeout(() => push("B"), 5);
+ *   -> A -> tick-A -> micro-A -> B
+ *
+ * Node decides a batch at wakeup and runs it to completion, calling
+ * `runNextTicks` between callbacks, so this cannot be had by ending the task
+ * and letting the drain do it. The pair is the assertion: the same batch
+ * without the call gives the other order. */
+static void a_checkpoint_runs_between_two_callbacks_of_one_task(void) {
+    reset();
+    nts_post_task(task_of(batch_with_a_checkpoint, 0));
+    nts_test_host_run(64);
+    expect("a checkpoint inside a task runs ticks and microtasks before the next callback",
+           "A -> tick-A -> micro-A -> B");
+
+    reset();
+    nts_post_task(task_of(batch_without_a_checkpoint, 0));
+    nts_test_host_run(64);
+    expect("without it, both callbacks run before either queue drains",
+           "A -> B -> tick-A -> micro-A");
+}
+
 int main(void) {
     ordering();
+    a_checkpoint_runs_between_two_callbacks_of_one_task();
     ticks_are_a_fixpoint();
     microtasks_are_a_fixpoint();
     every_task_checkpoints();
