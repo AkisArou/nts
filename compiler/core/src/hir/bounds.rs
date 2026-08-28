@@ -121,9 +121,36 @@ fn provably_in_bounds(
     // Otherwise the index must be guarded by this array's own length. The
     // interval domain cannot see that -- both are unknown numbers -- but the
     // comparison that guards the block relates them.
+    let growable = analysis.growable();
     analysis.guarded_by(at, index, |candidate| {
-        matches!(func.values[candidate.0 as usize].kind, OpKind::Length(of) if of == array)
+        names_the_length_of(func, growable, array, candidate)
     })
+}
+
+/// Whether a value *is* this array's length, however it is spelled.
+///
+/// `Length(a)` is the obvious spelling. The other one is the value `a` was
+/// allocated with, which is the same number and is the one actually compared
+/// against in the shape `xs.map(f)` lowers to:
+///
+/// ```text
+/// n = Length(xs); ys = ArrayNew(n); for (i = 0; i < n; i++) { ys[i] = ... }
+/// ```
+///
+/// The guard names `n`, and `n` is `Length(xs)` rather than `Length(ys)`, so
+/// asking only the obvious question left a bounds check on every store into an
+/// array that cannot be too small by construction.
+///
+/// Only where the allocated length is exact: a growable array's length is what
+/// `push` has made it, not what it was asked for.
+fn names_the_length_of(func: &Func, growable: bool, array: ValueId, candidate: ValueId) -> bool {
+    if matches!(func.values[candidate.0 as usize].kind, OpKind::Length(of) if of == array) {
+        return true;
+    }
+    matches!(
+        func.values[array.0 as usize].kind,
+        OpKind::ArrayNew { length } if length == candidate
+    ) && super::allocated_length_is_exact(func, array, growable)
 }
 
 /// A length the program computed for itself, refined by whatever guarded this

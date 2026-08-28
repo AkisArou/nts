@@ -1477,6 +1477,97 @@ struct PartialBlock {
 /// A loop is one and so is a `switch`, and the difference between them is
 /// exactly `continue`: a loop has a latch to restart, a switch has none, and a
 /// `continue` written inside a switch belongs to the loop around it.
+/// The array method a name spells, for the three compiled as a loop.
+///
+/// `xs.forEach(f)` where `f` is a *variable* is a genuine dispatch and is not
+/// one of these -- the caller checks that the argument is an arrow written at
+/// the call site before taking this path.
+fn iteration_method(name: &str) -> Option<Iteration> {
+    Some(match name {
+        "forEach" => Iteration::ForEach,
+        "map" => Iteration::Map,
+        "reduce" => Iteration::Reduce,
+        _ => return None,
+    })
+}
+
+/// What a loop does between one iteration and the next.
+///
+/// Three shapes rather than an `Option<NodeId>`, because an array method
+/// compiled as a loop steps an index the source never wrote, and there is no
+/// node to point at. It used to step at the end of the *body* instead, which
+/// works right up until something jumps to the latch -- a `return` inside the
+/// callback did, and the loop never finished.
+#[derive(Clone, Copy)]
+enum Step {
+    /// Nothing between iterations; the header is the latch.
+    None,
+    /// A source expression, as `for (;; i++)` writes it.
+    Expression(NodeId),
+    /// One added to a carried name, for a loop this compiler synthesized.
+    Increment(u32),
+}
+
+/// An array method that is a loop with the callback's body inlined.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Iteration {
+    ForEach,
+    Map,
+    Reduce,
+}
+
+impl Iteration {
+    /// What the source calls it, for a diagnostic that names the method the
+    /// author wrote rather than the shape this compiler turned it into.
+    const fn name(self) -> &'static str {
+        match self {
+            Self::ForEach => "forEach",
+            Self::Map => "map",
+            Self::Reduce => "reduce",
+        }
+    }
+
+    /// How many callback parameters this lowering binds.
+    ///
+    /// The index and the array are the ones every callback of these *may*
+    /// take, and neither is bound: the index would need the loop counter's
+    /// identity to survive into the body, and this has no test for that yet.
+    const fn parameters(self) -> usize {
+        match self {
+            Self::ForEach | Self::Map => 1,
+            Self::Reduce => 2,
+        }
+    }
+}
+
+/// What becomes of the value an inlined callback body produces.
+///
+/// The whole difference between the three methods, which is why it is one type
+/// rather than a branch in three places -- and why a `return` inside a block
+/// body works the same in all three: it delivers through this before it jumps.
+#[derive(Clone, Copy)]
+enum CallbackResult {
+    /// `forEach`, whose callback returns `void`. TypeScript still allows
+    /// `return e` there, contextually typed as void, so the value is lowered
+    /// for its effects and then dropped rather than refused.
+    Discard,
+    /// `reduce`: it becomes the accumulator, which the loop carries.
+    Accumulate(u32),
+    /// `map`: it is stored at the current index of the array allocated before
+    /// the loop.
+    Store { array: ValueId, index: u32 },
+}
+
+/// Where a `return` inside an inlined callback body goes.
+#[derive(Clone, Copy)]
+struct CallbackReturn {
+    /// The synthesized loop, as a depth into `breakables`. A `return` leaves
+    /// the *iteration*, which is what `continue` does, so it goes to the latch.
+    depth: usize,
+    /// What the method does with the value.
+    result: CallbackResult,
+}
+
 #[derive(Debug, Clone)]
 struct Breakable {
     /// The block after the construct, and its parameters — **created on first
@@ -1591,6 +1682,18 @@ struct FuncBuilder<'a> {
     /// `break` and `continue` name no target in the source, so the target is
     /// wherever they are — which is a stack rather than a value.
     breakables: Vec<Breakable>,
+    /// Where a `return` goes when the body being lowered is an *inlined*
+    /// callback, innermost last.
+    ///
+    /// An array method compiled as a loop puts the callback's body inside the
+    /// caller, and a `return` there means "this element is done", not "this
+    /// function is done". Lowering it as an ordinary return emitted `return;`
+    /// in the middle of a function with a result -- C that clang rejects, from
+    /// a lowering that reported nothing refused.
+    ///
+    /// Empty everywhere else, so `return` keeps its ordinary meaning outside
+    /// one of these bodies.
+    callback_returns: Vec<CallbackReturn>,
     /// Which of them this function allocated.
     ///
     /// A closure nobody creates is not lowered at all. That is the rule
@@ -1625,6 +1728,7 @@ impl<'a> FuncBuilder<'a> {
             expecting: None,
             synthetic: 0,
             breakables: Vec::new(),
+            callback_returns: Vec::new(),
             used_closures: Vec::new(),
             substitution: Substitution::default(),
         }
@@ -2817,7 +2921,7 @@ impl<'a> FuncBuilder<'a> {
         self.enter_loop(&record, Some(*condition))?;
 
         self.lower_statement(*body)?;
-        self.end_loop(&record, None)
+        self.end_loop(&record, Step::None)
     }
 
     /// `switch (x) { case a: .. }`.
@@ -3218,7 +3322,7 @@ impl<'a> FuncBuilder<'a> {
     /// Close the iteration, run the update where there is one, and leave the
     /// loop with its names bound to the exit's parameters — which is where
     /// every way out of it agrees.
-    fn end_loop(&mut self, record: &Loop, update: Option<NodeId>) -> Result<(), Diagnostic> {
+    fn end_loop(&mut self, record: &Loop, step: Step) -> Result<(), Diagnostic> {
         // The body falls into the latch, which is the header unless the loop
         // steps.
         if !self.is_terminated() {
@@ -3234,8 +3338,26 @@ impl<'a> FuncBuilder<'a> {
             for (symbol, param) in record.carried.iter().zip(&record.latch_params) {
                 self.bindings.insert(*symbol, *param);
             }
-            if let Some(update) = update {
-                self.lower_expression(update)?;
+            match step {
+                Step::None => {}
+                Step::Expression(update) => {
+                    self.lower_expression(update)?;
+                }
+                Step::Increment(symbol) => {
+                    let origin = self.breakables[record.depth].origin.clone();
+                    let at = self.bindings[&symbol];
+                    let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+                    let next = self.push(
+                        OpKind::Binary {
+                            op: BinOp::Add,
+                            lhs: at,
+                            rhs: one,
+                        },
+                        HirType::NUMBER,
+                        origin,
+                    );
+                    self.bindings.insert(symbol, next);
+                }
             }
             let stepped = self.carried_now(&record.carried);
             self.terminate(Terminator::Jump {
@@ -3301,6 +3423,32 @@ impl<'a> FuncBuilder<'a> {
         let it = self.breakables[depth].clone();
         let args = self.carried_now(&it.carried);
         let latch = it.latch.expect("the predicate above admits only loops");
+        self.terminate(Terminator::Jump {
+            target: latch,
+            args,
+        });
+        Ok(())
+    }
+
+    /// `return` inside an inlined callback: end this iteration, not the
+    /// function.
+    ///
+    /// The same jump `continue` makes, plus the binding of the value where the
+    /// method reads one. Binding before taking the carried arguments is what
+    /// makes the value arrive: the result name is one of the loop's carried
+    /// symbols, so `carried_now` picks up what was just written.
+    fn return_from_callback(
+        &mut self,
+        id: NodeId,
+        target: CallbackReturn,
+        value: Option<ValueId>,
+    ) -> Result<(), Diagnostic> {
+        self.deliver(id, &target.result, value)?;
+        let it = self.breakables[target.depth].clone();
+        let args = self.carried_now(&it.carried);
+        let latch = it
+            .latch
+            .expect("an inlined callback body is always inside a loop");
         self.terminate(Terminator::Jump {
             target: latch,
             args,
@@ -3374,7 +3522,7 @@ impl<'a> FuncBuilder<'a> {
         self.enter_loop(&record, condition)?;
 
         self.lower_statement(body)?;
-        self.end_loop(&record, update)
+        self.end_loop(&record, update.map_or(Step::None, Step::Expression))
     }
 
     /// A node's children assigned to their declared property slots.
@@ -3493,7 +3641,7 @@ impl<'a> FuncBuilder<'a> {
             );
             self.bindings.insert(index, next);
         }
-        self.end_loop(&record, None)
+        self.end_loop(&record, Step::None)
     }
 
     /// `throw new Error("...")`.
@@ -4301,6 +4449,9 @@ impl<'a> FuncBuilder<'a> {
                     Some(expression) => Some(self.lower_expression(expression)?),
                     None => None,
                 };
+                if let Some(target) = self.callback_returns.last().copied() {
+                    return self.return_from_callback(id, target, value);
+                }
                 self.terminate(Terminator::Return(value));
                 Ok(())
             }
@@ -6488,13 +6639,37 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, &format!("`{name}` on a typed array")));
         }
 
-        // `xs.forEach(v => ...)` is a loop written as a call, and it is
-        // compiled as the loop. See [`Self::lower_for_each`].
-        if name == "forEach"
-            && let [callback] = arguments
-            && self.kind_of(*callback) == Some(syntax::ARROW_FUNCTION)
-        {
-            return self.lower_for_each(id, receiver, element, *callback);
+        // `xs.forEach(v => ...)` is a loop written as a call, and so are `map`
+        // and `reduce`. All three are compiled as the loop. See
+        // [`Self::lower_iteration`].
+        if let Some(kind) = iteration_method(&name) {
+            let (callback, seed) = match (kind, arguments) {
+                (Iteration::Reduce, [callback, seed]) => (*callback, Some(*seed)),
+                (Iteration::ForEach | Iteration::Map, [callback]) => (*callback, None),
+                // `reduce` with no initial value starts from the first element
+                // and throws on an empty array, which is a different lowering
+                // and a different failure. Refused rather than assumed.
+                _ => {
+                    return Err(
+                        self.unsupported(id, &format!("a `{name}` call with this many arguments"))
+                    );
+                }
+            };
+            if self.kind_of(callback) != Some(syntax::ARROW_FUNCTION) {
+                // `xs.map(f)` where `f` is a name is a genuine dispatch: which
+                // body runs is not written at the call. Monomorphization is the
+                // answer to that one, and it is a different lowering rather
+                // than a harder version of this one -- so it says which.
+                return Err(self.unsupported(
+                    id,
+                    &format!("a `{name}` whose callback is not an arrow written at the call"),
+                ));
+            }
+            let seed = match seed {
+                Some(seed) => Some(self.lower_expression(seed)?),
+                None => None,
+            };
+            return self.lower_iteration(id, receiver, element, callback, kind, seed);
         }
 
         // `fill` is the one method whose element type does not have to be a
@@ -6601,7 +6776,7 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
-    /// `xs.forEach(v => ...)` over an array, with the arrow written at the call.
+    /// An array method whose callback is an arrow written at the call site.
     ///
     /// # Why a desugaring rather than a call
     ///
@@ -6632,59 +6807,76 @@ impl<'a> FuncBuilder<'a> {
     /// Only for an arrow written at the call site. `xs.forEach(f)` where `f` is
     /// a variable is a genuine dispatch, and monomorphization is the answer to
     /// that one.
-    fn lower_for_each(
+    ///
+    /// # What the three have in common
+    ///
+    /// All of it except what happens to the value the body produces, which is
+    /// [`CallbackResult`]: dropped, stored at the same index of a new array, or
+    /// carried to the next iteration. That difference is the whole of `forEach`
+    /// against `map` against `reduce`, and putting it in one place is what
+    /// makes a `return` inside the body work the same in all three -- it has to
+    /// deliver the value before it jumps, and there is one function that knows
+    /// how.
+    fn lower_iteration(
         &mut self,
         id: NodeId,
         receiver: ValueId,
         element_ty: &HirType,
         callback: NodeId,
+        kind: Iteration,
+        seed: Option<ValueId>,
     ) -> Result<ValueId, Diagnostic> {
-        let parts = self.children(callback);
-        let element_name = parts
-            .iter()
-            .find(|child| self.kind_of(**child) == Some(syntax::PARAMETER))
-            .map(|parameter| self.children(*parameter))
-            .and_then(|fields| {
-                fields
-                    .into_iter()
-                    .find(|field| self.kind_of(*field) == Some(syntax::IDENTIFIER))
-            })
-            .ok_or_else(|| self.unsupported(callback, "a `forEach` callback of this shape"))?;
-        let element_symbol = self
-            .node(element_name)
-            .symbol
-            .ok_or_else(|| self.unsupported(element_name, "a `forEach` name with no symbol"))?
-            .0;
-        // The index parameter every `forEach` callback may take. Refused rather
-        // than bound, because binding it would need the loop counter's identity
-        // to survive into the body and this has no test for that yet.
-        if parts
-            .iter()
-            .filter(|child| self.kind_of(**child) == Some(syntax::PARAMETER))
-            .count()
-            > 1
-        {
-            return Err(self.unsupported(callback, "a `forEach` callback taking the index"));
-        }
-        let body = *parts
-            .last()
-            .ok_or_else(|| self.unsupported(callback, "a `forEach` callback with no body"))?;
+        let method = kind.name();
+        let (parameters, body) = self.callback_shape(callback, kind)?;
+        let names = parameters.as_slice();
+        let element_symbol = *names.last().ok_or_else(|| {
+            self.unsupported(callback, &format!("a `{method}` callback of this shape"))
+        })?;
 
         let origin = self.origin(id);
         let index = self.synthetic_symbol();
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         self.bindings.insert(index, zero);
+        let length = self.push(OpKind::Length(receiver), HirType::NUMBER, origin.clone());
 
-        let mut carried = vec![index];
-        self.assigned_symbols(body, &mut carried);
-        let mut declared = vec![element_symbol];
-        self.declared_symbols(body, &mut declared);
-        carried.retain(|symbol| *symbol == index || !declared.contains(symbol));
+        // What the loop carries: the index always, the accumulator when there
+        // is one, and every name the body assigns that it did not declare.
+        //
+        // The accumulator is a loop-carried name like any other, which is what
+        // keeps `reduce` free of an allocation: nothing about it escapes.
+        let accumulator = match kind {
+            Iteration::Reduce => {
+                let symbol = self.synthetic_symbol();
+                let seed =
+                    seed.ok_or_else(|| self.unsupported(id, "a `reduce` with no initial value"))?;
+                self.bindings.insert(symbol, seed);
+                Some(symbol)
+            }
+            Iteration::ForEach | Iteration::Map => None,
+        };
+        let mut synthetic = vec![index];
+        synthetic.extend(accumulator);
+        let carried = self.carried_across(body, &synthetic, names);
 
-        let record = self.begin_loop(id, &carried, false, &origin)?;
+        // `map`'s result exists before the loop and is never rebound, so it is
+        // not carried: it is one allocation the body writes into.
+        let produced = match kind {
+            Iteration::Map => {
+                let ty = self
+                    .type_of(id)
+                    .ok_or_else(|| self.unrepresentable(id, "a `map` result"))?;
+                Some(self.push(OpKind::ArrayNew { length }, ty, origin.clone()))
+            }
+            Iteration::ForEach | Iteration::Reduce => None,
+        };
+
+        // `steps: true`, so the index moves in a latch block of its own. A
+        // `return` inside the callback jumps there, the way `continue` does,
+        // and a step written at the end of the body would be skipped by it --
+        // which is a loop that never finishes.
+        let record = self.begin_loop(id, &carried, true, &origin)?;
 
         let at = self.bindings[&index];
-        let length = self.push(OpKind::Length(receiver), HirType::NUMBER, origin.clone());
         let cond = self.push(
             OpKind::Binary {
                 op: BinOp::Lt,
@@ -6708,34 +6900,181 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         self.bindings.insert(element_symbol, value);
+        if let (Iteration::Reduce, Some(accumulator), Some(name)) =
+            (kind, accumulator, names.first())
+        {
+            self.bindings.insert(*name, self.bindings[&accumulator]);
+        }
 
-        // A concise body is an expression rather than a block, and its value is
-        // discarded -- `forEach` returns nothing whatever the callback does.
-        if self.kind_of(body) == Some(syntax::BLOCK) {
-            self.lower_statement(body)?;
+        let result = match (kind, produced, accumulator) {
+            (Iteration::ForEach, _, _) => CallbackResult::Discard,
+            (Iteration::Map, Some(array), _) => CallbackResult::Store { array, index },
+            (Iteration::Reduce, _, Some(symbol)) => CallbackResult::Accumulate(symbol),
+            _ => unreachable!("the result of a kind is decided with the kind"),
+        };
+        self.callback_returns.push(CallbackReturn {
+            depth: record.depth,
+            result,
+        });
+        let concise = self.kind_of(body) != Some(syntax::BLOCK);
+        let lowered = if concise {
+            self.lower_expression(body).map(Some)
         } else {
-            self.lower_expression(body)?;
-        }
-        if !self.is_terminated() {
-            let at = self.bindings[&index];
-            let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
-            let next = self.push(
-                OpKind::Binary {
-                    op: BinOp::Add,
-                    lhs: at,
-                    rhs: one,
-                },
-                HirType::NUMBER,
-                origin.clone(),
-            );
-            self.bindings.insert(index, next);
-        }
-        self.end_loop(&record, None)?;
+            self.lower_statement(body).map(|()| None)
+        };
+        self.callback_returns.pop();
+        let produced_value = lowered?;
 
-        // `forEach` evaluates to `undefined`, which is `void` here. Nothing
-        // reads it -- an expression statement is the only place this appears --
-        // but the caller wants a value.
-        Ok(self.push(OpKind::ConstFloat(0.0), HirType::Void, origin))
+        // A concise body *is* its value, so it is delivered here rather than by
+        // a `return` that cannot appear in one.
+        if let Some(value) = produced_value {
+            self.deliver(id, &result, Some(value))?;
+        } else if !self.is_terminated() && !matches!(kind, Iteration::ForEach) {
+            // A block body that can reach its end without returning has no
+            // value for this iteration. TypeScript rejects it before this,
+            // because the callback's inferred return type would include
+            // `undefined`; refusing rather than trusting that keeps the
+            // failure a diagnostic instead of a silently unchanged
+            // accumulator.
+            return Err(self.unsupported(
+                body,
+                &format!("a `{method}` callback that can finish without returning a value"),
+            ));
+        }
+        self.end_loop(&record, Step::Increment(index))?;
+
+        match (kind, produced, accumulator) {
+            // `forEach` evaluates to `undefined`, which is `void` here. Nothing
+            // reads it -- an expression statement is the only place this
+            // appears -- but the caller wants a value.
+            (Iteration::ForEach, _, _) => {
+                Ok(self.push(OpKind::ConstFloat(0.0), HirType::Void, origin))
+            }
+            (Iteration::Map, Some(array), _) => Ok(array),
+            // The accumulator's binding after the loop is the exit block's
+            // parameter for it, which `end_loop` has just installed.
+            (Iteration::Reduce, _, Some(symbol)) => Ok(self.bindings[&symbol]),
+            _ => unreachable!("the result of a kind is decided with the kind"),
+        }
+    }
+
+    /// The names an inlined callback's loop has to carry.
+    ///
+    /// The ones this lowering invented -- the index, and the accumulator where
+    /// there is one -- and every name the body *assigns* that it did not also
+    /// declare. A name declared inside the body is new on each iteration, and
+    /// carrying it would be wrong as well as wasteful.
+    fn carried_across(&mut self, body: NodeId, synthetic: &[u32], names: &[u32]) -> Vec<u32> {
+        let mut carried = synthetic.to_vec();
+        self.assigned_symbols(body, &mut carried);
+        let mut declared = names.to_vec();
+        self.declared_symbols(body, &mut declared);
+        carried.retain(|symbol| synthetic.contains(symbol) || !declared.contains(symbol));
+        carried
+    }
+
+    /// What the callback produces, put where this method wants it.
+    ///
+    /// Called from two places that must agree: the end of a concise body, and
+    /// a `return` in a block body, which has to do this *before* it jumps.
+    fn deliver(
+        &mut self,
+        id: NodeId,
+        result: &CallbackResult,
+        value: Option<ValueId>,
+    ) -> Result<(), Diagnostic> {
+        match result {
+            CallbackResult::Discard => Ok(()),
+            CallbackResult::Accumulate(symbol) => {
+                let value = value.ok_or_else(|| {
+                    self.unsupported(
+                        id,
+                        "a bare `return` in a callback that must produce a value",
+                    )
+                })?;
+                self.bindings.insert(*symbol, value);
+                Ok(())
+            }
+            CallbackResult::Store { array, index } => {
+                let value = value.ok_or_else(|| {
+                    self.unsupported(
+                        id,
+                        "a bare `return` in a callback that must produce a value",
+                    )
+                })?;
+                let origin = self.origin(id);
+                let at = self.bindings[index];
+                self.push(
+                    OpKind::ArraySet {
+                        array: *array,
+                        index: at,
+                        value,
+                        checked: true,
+                    },
+                    HirType::Void,
+                    origin,
+                );
+                Ok(())
+            }
+        }
+    }
+
+    /// The names a callback binds and the body it runs, checked against what
+    /// this method needs of them.
+    ///
+    /// The index and the array are the parameters every callback of these
+    /// *may* take, and a callback taking one is refused rather than bound: the
+    /// index would need the loop counter's identity to survive into the body,
+    /// and this has no test for that yet.
+    fn callback_shape(
+        &mut self,
+        callback: NodeId,
+        kind: Iteration,
+    ) -> Result<(Vec<u32>, NodeId), Diagnostic> {
+        let method = kind.name();
+        let parameters = self.callback_parameters(callback, method)?;
+        if parameters.len() != kind.parameters() {
+            return Err(self.unsupported(
+                callback,
+                &format!("a `{method}` callback taking this many parameters"),
+            ));
+        }
+        let body = *self.children(callback).last().ok_or_else(|| {
+            self.unsupported(callback, &format!("a `{method}` callback with no body"))
+        })?;
+        Ok((parameters, body))
+    }
+
+    /// The symbols an arrow's parameters bind, in order.
+    fn callback_parameters(
+        &mut self,
+        callback: NodeId,
+        method: &str,
+    ) -> Result<Vec<u32>, Diagnostic> {
+        let parameters: Vec<NodeId> = self
+            .children(callback)
+            .into_iter()
+            .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+            .collect();
+        let mut symbols = Vec::new();
+        for parameter in parameters {
+            let name = self
+                .children(parameter)
+                .into_iter()
+                .find(|field| self.kind_of(*field) == Some(syntax::IDENTIFIER))
+                .ok_or_else(|| {
+                    self.unsupported(parameter, &format!("a `{method}` parameter of this shape"))
+                })?;
+            let symbol = self
+                .node(name)
+                .symbol
+                .ok_or_else(|| {
+                    self.unsupported(name, &format!("a `{method}` name with no symbol"))
+                })?
+                .0;
+            symbols.push(symbol);
+        }
+        Ok(symbols)
     }
 
     fn lower_object_method(

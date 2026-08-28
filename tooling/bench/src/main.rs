@@ -200,6 +200,11 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         comment. Every variant returns a checksum and the runner refuses to report \
         a case whose variants disagree, so a backend cannot win by computing the \
         wrong answer quickly.\n\n\
+        **The table keeps the cases this compiler loses.** A benchmark suite that \
+        held only its wins would be an advertisement rather than an instrument, and \
+        the rows above 1.50x are the work queue: each is a shape where the emitted \
+        code costs more than the C++ a person would write, and the reason is worth \
+        finding rather than hiding.\n\n\
         `V8` is node and `Bun` is JavaScriptCore, both running the *same* \
         TypeScript source the compiler consumes — the harness imports the `.ts` \
         directly, so there is no second copy of the program to drift. Both are \

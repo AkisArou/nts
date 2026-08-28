@@ -147,7 +147,7 @@ worse.
 | declarations, methods, arrows | done | |
 | closures | done | a closure is an object with one method, so it gets the object machinery |
 | higher-order calls | done | monomorphized — one copy per closure class |
-| `forEach` with an inline arrow | done | desugared to a loop: no allocation, no dispatch |
+| `forEach` with an inline arrow | done | desugared to a loop: no allocation, no dispatch, and the body inlined into the caller. A `return` in that body means "this element is done", so it lowers to the loop's `continue` — and the index steps in a latch block rather than at the end of the body, because a jump to the latch would otherwise skip it. `return e` against a `void` callback is allowed by TypeScript and the value is dropped. `xs.forEach(f)` where `f` is a *name* is a genuine dispatch and refuses saying so. Exercised by `examples/callbacks` |
 | `declare function` (FFI) | done | lowered as external and declared in the emitted C |
 | overload signatures | done | skipped; the implementation is lowered |
 | nested function declarations | **not done** | |
@@ -167,7 +167,8 @@ worse.
 | `Array`: `push`, `pop`, `at`, `fill`, `reverse`, `slice`, `length` | done | |
 | an array of small whole numbers stored as `int32_t` | done | decided from every store in the program, and only where reading one does not go straight back into floating point |
 | `Array`: `indexOf`, `lastIndexOf`, `includes` | done | `includes` uses SameValueZero and finds `NaN`; `indexOf` does not |
-| `Array`: `map`, `filter`, `reduce`, `sort`, `splice`, `join`, `find`, `some`, `every` | **not done** | |
+| `Array`: `map`, `reduce` with an inline arrow | done | the same desugaring `forEach` gets, differing in one thing: what happens to the value the body produces. `map` stores it at the same index of an array allocated once before the loop — no growth — and `reduce` carries it as a loop-carried name, so the accumulator never escapes and never allocates. A store into a `map`'s result needs no bounds check: the array was allocated with the very length the loop is guarded against |
+| `Array`: `filter`, `sort`, `splice`, `join`, `find`, `some`, `every` | **not done** | `filter` needs a growable result; `find`, `some` and `every` need an early exit out of the synthesized loop |
 | assigning `array.length` | **not done** | needed by `som`'s `Vector` |
 | `Math`: `abs`, `ceil`, `floor`, `round`, `trunc`, `sqrt`, `min`, `max` | done | `Math.round` is not C's `round`, and this one is JavaScript's |
 | `Math`: `pow`, `sign`, `fround`, `cbrt`, the log, exponential, trigonometric and hyperbolic families, `atan2`, `hypot` | done | Runtime calls rather than IR operations, because a logarithm of an integer is not an integer: no pass had to learn an opcode. `sign` and `pow` are not their libm namesakes; the rest are |
@@ -282,6 +283,28 @@ must stay at zero beside invalid HIR.
 most of what compiling costs. It reports nothing today. That is not a vacuous
 zero: if clang were absent the process would fail to start and *every* file
 would be counted, so a zero means clang ran and accepted each one.
+
+### The one that got away from the instrument
+
+A `return` inside a `forEach` callback lowered to a return from the *enclosing*
+function, which emitted `return;` in the middle of a function with a result —
+uncompilable C, from a lowering that reported "1 function, nothing refused". It
+is the same failure mode as `"" + n`, and the instrument built to catch that one
+did not catch this one, for a reason worth stating plainly: **no corpus file and
+no example used `forEach` with a `return` in it.** The instrument works. There
+was nothing for it to look at.
+
+`forEach` was documented as done, in this table, with *no example driving it at
+all*. Not one differential case had ever executed the path. That is the same
+lesson as record 0017 — a rule with no case reaching it is untested — one level
+up: a whole feature can be marked done and never once be run.
+
+The instrument that would have found it does not exist yet, and is the next one
+worth building: **which lowering paths does the example corpus actually
+execute?** A count per `unsupported` site and per method-name arm would say, in
+one number per feature, whether the differential has ever seen it. Every
+instrument here was built after the failure it would have caught; this note is
+so that this one is built before the next.
 
 **Every defect recorded here has been fixed**, and there are now two machines
 looking for the next one — one asking whether anything vanished, one asking

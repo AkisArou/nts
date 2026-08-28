@@ -59,8 +59,9 @@ export function readAt(i: number): number {
 //
 // `push`, `pop` and `splice` change the length, and the elements live inline
 // after the header, so growing would move the object and every reference to it.
-// `map`, `filter` and `forEach` take a function. Both are real extensions, and
-// refusing beats guessing.
+// `map` and `filter` take a function *and* allocate. `forEach` takes one and
+// does not, which is why it is the one that landed: it desugars to a loop with
+// the body inlined. See `examples/callbacks`.
 function digits(): number[] {
   return [3, 1, 4, 1, 5, 9, 2, 6];
 }

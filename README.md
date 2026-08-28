@@ -25,32 +25,35 @@ them, so read the ratios rather than the absolute times.
 <!-- benchmarks:start -->
 | case | C++ | nts | nts f64 | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| accumulate | 1.36 us | **2.08 us** | 28.56 us | 3.69 us | 30.91 us | 1.53x | 0.56x | 0.07x |
-| array-methods | 3.33 us | **1.52 us** | 3.87 us | 5.79 us | 7.52 us | 0.46x | 0.26x | 0.20x |
-| arrays | 1.75 us | **1.87 us** | 5.20 us | 2.67 us | 1.80 us | 1.07x | 0.70x | 1.04x |
-| awfy-bounce | 4.29 us | **7.81 us** | 12.13 us | 10.98 us | 10.91 us | 1.82x | 0.71x | 0.72x |
-| awfy-list | 8.48 us | **8.34 us** | 8.42 us | 14.54 us | 12.73 us | 0.98x | 0.57x | 0.66x |
-| awfy-mandelbrot | 23.12 ms | **24.22 ms** | 28.08 ms | 23.25 ms | 23.22 ms | 1.05x | 1.04x | 1.04x |
-| awfy-nbody | 9.11 ms | **10.95 ms** | 11.15 ms | 87.06 ms | 16.92 ms | 1.20x | 0.13x | 0.65x |
-| awfy-permute | 11.81 us | **19.37 us** | 28.13 us | 28.46 us | 21.37 us | 1.64x | 0.68x | 0.91x |
-| awfy-queens | 5.88 us | **7.69 us** | 22.63 us | 17.69 us | 13.74 us | 1.31x | 0.43x | 0.56x |
-| awfy-sieve | 4.25 us | **7.47 us** | 16.68 us | 9.66 us | 14.81 us | 1.76x | 0.77x | 0.50x |
-| awfy-towers | 13.62 us | **22.37 us** | 26.11 us | 36.18 us | 25.06 us | 1.64x | 0.62x | 0.89x |
-| bytes | 581.14 us | **583.29 us** | 2.02 ms | 650.21 us | 880.33 us | 1.00x | 0.90x | 0.66x |
-| checksum | 6.37 us | **6.38 us** | 64.58 us | 7.30 us | 33.69 us | 1.00x | 0.87x | 0.19x |
-| closures | 1.20 us | **1.20 us** | 49.11 us | 3.45 us | 18.18 us | 1.00x | 0.35x | 0.07x |
-| dispatch | 10.67 us | **11.21 us** | 159.47 us | 55.31 us | 17.36 us | 1.05x | 0.20x | 0.65x |
-| fib | 333.64 us | **605.54 us** | 613.18 us | 1.01 ms | 731.61 us | 1.81x | 0.60x | 0.83x |
-| loop | 994.4 ns | **906.5 ns** | 859.0 ns | 1.01 us | 984.1 ns | 0.91x | 0.90x | 0.92x |
-| objects (rc) | 2.08 us | **2.09 us** | 2.34 us | 2.21 us | 1.77 us | 1.01x | 0.95x | 1.18x |
-| strings | 556.2 ns | **407.8 ns** | 28.38 us | 2.93 us | 3.04 us | 0.73x | 0.14x | 0.13x |
-| substrings (rc) | 2.17 us | **4.35 us** | 11.88 us | 7.24 us | 38.76 us | 2.00x | 0.60x | 0.11x |
+| accumulate | 1.36 us | **2.08 us** | 28.59 us | 3.69 us | 30.74 us | 1.53x | 0.56x | 0.07x |
+| array-methods | 3.34 us | **1.52 us** | 3.87 us | 5.60 us | 6.26 us | 0.46x | 0.27x | 0.24x |
+| arrays | 1.75 us | **1.87 us** | 5.20 us | 2.69 us | 1.80 us | 1.07x | 0.70x | 1.04x |
+| awfy-bounce | 4.27 us | **7.80 us** | 12.02 us | 10.98 us | 10.12 us | 1.83x | 0.71x | 0.77x |
+| awfy-list | 8.36 us | **8.33 us** | 8.40 us | 13.60 us | 11.99 us | 1.00x | 0.61x | 0.69x |
+| awfy-mandelbrot | 23.12 ms | **24.24 ms** | 28.09 ms | 23.26 ms | 23.22 ms | 1.05x | 1.04x | 1.04x |
+| awfy-nbody | 9.11 ms | **10.95 ms** | 11.24 ms | 84.10 ms | 14.63 ms | 1.20x | 0.13x | 0.75x |
+| awfy-permute | 11.07 us | **19.38 us** | 27.68 us | 24.57 us | 18.82 us | 1.75x | 0.79x | 1.03x |
+| awfy-queens | 5.42 us | **7.18 us** | 21.36 us | 16.12 us | 13.32 us | 1.32x | 0.44x | 0.54x |
+| awfy-sieve | 4.26 us | **7.35 us** | 16.51 us | 10.16 us | 11.53 us | 1.73x | 0.72x | 0.64x |
+| awfy-towers | 12.41 us | **21.58 us** | 24.17 us | 35.36 us | 22.99 us | 1.74x | 0.61x | 0.94x |
+| bytes | 581.10 us | **583.42 us** | 2.02 ms | 650.34 us | 879.75 us | 1.00x | 0.90x | 0.66x |
+| checksum | 6.38 us | **6.38 us** | 64.58 us | 7.32 us | 33.94 us | 1.00x | 0.87x | 0.19x |
+| closures | 1.20 us | **1.20 us** | 49.29 us | 3.45 us | 17.03 us | 1.00x | 0.35x | 0.07x |
+| dispatch | 10.66 us | **11.32 us** | 160.04 us | 56.49 us | 17.18 us | 1.06x | 0.20x | 0.66x |
+| fib | 333.35 us | **606.17 us** | 614.14 us | 1.04 ms | 673.31 us | 1.82x | 0.59x | 0.90x |
+| loop | 1.00 us | **907.4 ns** | 859.0 ns | 1.01 us | 997.6 ns | 0.91x | 0.90x | 0.91x |
+| objects (rc) | 2.08 us | **2.09 us** | 2.34 us | 2.26 us | 1.77 us | 1.01x | 0.92x | 1.18x |
+| pipeline | 37.03 us | **260.31 us** | 366.54 us | 146.34 us | 140.33 us | 7.03x | 1.78x | 1.85x |
+| strings | 558.8 ns | **408.1 ns** | 28.79 us | 2.93 us | 3.09 us | 0.73x | 0.14x | 0.13x |
+| substrings (rc) | 1.93 us | **4.25 us** | 11.89 us | 7.20 us | 33.90 us | 2.20x | 0.59x | 0.13x |
 
 Every ratio is nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and `nts/Bun` under 1.00 beat those engines.
 
 `nts f64` is the same TypeScript with number specialization switched off. It is the column that makes a speedup a measurement rather than a claim — one program, compiled two ways, run against each other.
 
 `C++` is one hand-written reference per case, being what a C++ programmer would actually write for that program; each `ref.cpp` says why in a comment. Every variant returns a checksum and the runner refuses to report a case whose variants disagree, so a backend cannot win by computing the wrong answer quickly.
+
+**The table keeps the cases this compiler loses.** A benchmark suite that held only its wins would be an advertisement rather than an instrument, and the rows above 1.50x are the work queue: each is a shape where the emitted code costs more than the C++ a person would write, and the reason is worth finding rather than hiding.
 
 `V8` is node and `Bun` is JavaScriptCore, both running the *same* TypeScript source the compiler consumes — the harness imports the `.ts` directly, so there is no second copy of the program to drift. Both are timed inside their own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in either column, and both must produce the same checksum as everything else. Bun is skipped where it is not installed.
 <!-- benchmarks:end -->
