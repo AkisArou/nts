@@ -14,7 +14,7 @@
 
 use rustc_hash::FxHashSet;
 
-use super::{Block, BlockId, Func, OpKind, Program, Terminator, ValueId};
+use super::{Block, BlockId, Callee, Func, OpKind, Program, Terminator, ValueId};
 
 /// A way the IR was malformed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,6 +46,20 @@ pub enum Invalid {
     EntryHasParams { func: String },
     /// A block cannot be reached from the entry.
     Unreachable { func: String, block: BlockId },
+    /// A direct call passed a different number of arguments than the function
+    /// it names takes.
+    ///
+    /// A static call is the one place a callee's shape is known exactly, so a
+    /// mismatch is a lowering bug rather than a language feature. Without this
+    /// check it reaches the backend as a C call of the wrong arity: caught, but
+    /// by the C compiler, a long way from the pass that caused it -- and only
+    /// where a C compiler runs at all.
+    CallArgumentCount {
+        func: String,
+        callee: String,
+        expected: usize,
+        found: usize,
+    },
 }
 
 /// Check a whole program.
@@ -59,10 +73,52 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
     for func in &program.funcs {
         verify_func(func, &mut problems);
     }
+    check_calls(program, &mut problems);
     if problems.is_empty() {
         Ok(())
     } else {
         Err(problems)
+    }
+}
+
+/// Direct calls, against the functions they name.
+///
+/// Program-wide rather than per-function, because the thing a call has to agree
+/// with is another function. A name with no function behind it is not checked
+/// here: a call whose callee was refused is a different problem, reported where
+/// the refusal is.
+///
+/// Dispatched calls are left alone. Which implementation runs is decided by the
+/// receiver, and every override of a method has the signature the base declares,
+/// so the question this asks is answered by the typechecker rather than here.
+fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
+    let arity: rustc_hash::FxHashMap<&str, usize> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.as_str(), func.params.len()))
+        .collect();
+    for func in &program.funcs {
+        for op in &func.values {
+            let OpKind::Call {
+                callee: Callee::Direct(name),
+                args,
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
+            let Some(&expected) = arity.get(name.as_str()) else {
+                continue;
+            };
+            if args.len() != expected {
+                problems.push(Invalid::CallArgumentCount {
+                    func: func.name.clone(),
+                    callee: name.clone(),
+                    expected,
+                    found: args.len(),
+                });
+            }
+        }
     }
 }
 
@@ -591,6 +647,67 @@ mod tests {
             problems
                 .iter()
                 .any(|p| matches!(p, Invalid::Unreachable { .. })),
+        );
+    }
+
+    /// `g(x)` calling `f(a, b)`. The backend would emit a C call of the wrong
+    /// arity and the C compiler would reject it; this says so in terms of the
+    /// pass that produced it, and says it whether or not a C compiler runs.
+    #[test]
+    fn a_direct_call_must_agree_with_the_function_it_names() {
+        let param = |name: &str| Param {
+            name: name.to_owned(),
+            ty: HirType::Float { bits: 64 },
+            origin: origin(),
+            known: crate::hir::facts::Facts::TOP,
+        };
+        let takes_two = Func {
+            name: "f".to_owned(),
+            params: vec![param("a"), param("b")],
+            return_type: HirType::Float { bits: 64 },
+            values: vec![op(OpKind::Param(0))],
+            blocks: vec![block(
+                Vec::new(),
+                vec![ValueId(0)],
+                Terminator::Return(Some(ValueId(0))),
+            )],
+            origin: origin(),
+            exported: false,
+            initializes_receiver: false,
+        };
+        let passes_one = Func {
+            name: "g".to_owned(),
+            params: vec![param("x")],
+            return_type: HirType::Float { bits: 64 },
+            values: vec![
+                op(OpKind::Param(0)),
+                op(OpKind::Call {
+                    callee: Callee::Direct("f".to_owned()),
+                    args: vec![ValueId(0)],
+                    frame: None,
+                }),
+            ],
+            blocks: vec![block(
+                Vec::new(),
+                vec![ValueId(0), ValueId(1)],
+                Terminator::Return(Some(ValueId(1))),
+            )],
+            origin: origin(),
+            exported: true,
+            initializes_receiver: false,
+        };
+        let program = Program {
+            funcs: vec![takes_two, passes_one],
+            layouts: Vec::new(),
+            globals: Vec::new(),
+        };
+        let problems = verify(&program).expect_err("one argument for two parameters");
+        assert!(
+            problems.iter().any(|problem| matches!(
+                problem,
+                Invalid::CallArgumentCount { expected: 2, found: 1, .. }
+            )),
+            "{problems:?}"
         );
     }
 }
