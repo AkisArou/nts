@@ -1328,3 +1328,62 @@ cancel and no thread affinity to release, which is what the *H* predicate
 means. A product that wants deterministic teardown is asking for shape B and
 should say so; §8's manifest gains `lifecycle: "explicit"` to force it,
 defaulting to inferred.
+
+## A5. The predicate is not "uses a host", it is "does work outlive a call"
+
+A4 split on whether module evaluation or an export reaches a host operation.
+That is too coarse, and it forces ceremony onto a library that does not need
+it.
+
+**Shape A' -- async inside, nothing outlives.** An export that schedules work
+and drains it before returning needs no embedder at all. The library installs
+a private host for the duration of the call, runs the body, runs the loop to
+quiescence, and returns. `tooling/differential/src/lib.rs` already does exactly
+this and is the existence proof: it installs the deterministic host, calls the
+function, steps until the promise settles, and reads the answer.
+
+So a library whose exports use `await` and `setTimeout` internally, and whose
+work is finished when the call returns, is still zero-ceremony:
+
+```c
+double counter_reading(void);        /* awaits internally; you never know */
+```
+
+**Shape B -- work outlives the call.** A timer that fires later, a promise the
+caller still holds, a subscription. Here the embedder *must* participate, and
+no API shape removes that: a callback needs CPU, and a passive shared library
+only has the CPU while a call is inside it. Either the embedder gives us its
+loop (RFC 6.5's four operations) or nothing ever runs. This is arithmetic
+rather than a design choice, and the honest thing is to make the requirement
+visible in the header rather than to hide it behind something that appears to
+work.
+
+For B the ceremony shrinks to one call rather than three:
+
+```c
+NtsStatus counter_set_host(const NtsHost *);   /* before any export that schedules */
+```
+
+No handle, because §A1 established there is nothing for it to identify; no
+`create`, because evaluation is already lazy; no `shutdown` unless the manifest
+asks for `lifecycle: "explicit"`.
+
+### What is not settled
+
+Whether A' and B are separable *statically*. "Every task this export schedules
+is drained before it returns" is decidable in the easy cases -- an export that
+reaches no host operation at all, or one whose only scheduling is an `await`
+it also completes -- and undecidable in general, because a delay can be
+computed and a callback can reschedule itself.
+
+The fallback is a runtime check at the boundary and a named abort, not a
+silent difference: on returning from an export in a shape-A' product, if either
+queue is non-empty or a timer is pending, the work would never run, so the
+program is told so. That is the same discipline as everywhere else here --
+where the compiler cannot prove it, the runtime says it rather than the program
+quietly producing a wrong answer.
+
+Draining to quiescence has one honest cost worth stating: `setTimeout(f, 5000)`
+inside a synchronous export blocks that call for five seconds. Defined, and
+almost certainly not what the author meant -- which is an argument for the
+diagnostic naming the delay, not for pretending the callback ran.
