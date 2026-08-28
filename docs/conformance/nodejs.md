@@ -1042,10 +1042,33 @@ what had been vanishing across this profile is twenty-three statements:
 | `util` | the colour aliases |
 | `os` | the `Symbol.toPrimitive` that makes `` `${os.hostname}` `` the hostname |
 
-Only `punycode`'s lowers today — its deprecation warning, which is now a real
-`module#init`. The rest refuse, mostly on `Object` and on module-scope
-initializers that are not constant. That is the honest state and it is visible;
-before, it was neither.
+Only `punycode`'s lowers today. **Twenty-three of the twenty-four are blocked
+by one refusal**, and it is not the one the histogram suggested:
+
+```
+top-level statements in a second module, whose evaluation order
+this compiler cannot see
+```
+
+filed against eleven files at `1:1`. `Object` and the non-constant module-scope
+initializer are real and are *behind* it — what those statements would refuse
+on next, not what they refuse on now — so moving either would unblock nothing.
+
+And it explains `punycode`: it is the only module here that imports nothing
+from another profile module, which is the same rule seen from the other side.
+
+**The join that found this is the point.** A histogram of refusal causes named
+`Object`; joining refusal *locations* to statement locations named evaluation
+order. The first would have sent someone to the wrong work. It nearly did —
+matching on line numbers found nothing, because this refusal is filed against
+the file rather than the statement, and only widening the join to the file
+surfaced it.
+
+There is a sharper version of the question, too. Because one refused statement
+loses the *whole* initializer, the useful question is not "which cause appears
+most often" but "which cause, removed, lets a module have **any**
+initialization". Those give the same answer here and come apart as soon as two
+causes are live in one file.
 
 **Worth naming as a gap in this document's own measurement.** The `compiles`
 column counts lowered *functions*. These are statements, so a module could
