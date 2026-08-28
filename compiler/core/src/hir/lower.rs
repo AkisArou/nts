@@ -1392,10 +1392,20 @@ fn representation_of(
         TypeKind::Object { .. } | TypeKind::Structured { .. }
             if named(snapshot, ty) == Some("Promise") =>
         {
-            let payload = match snapshot.type_arguments.get(&ty).and_then(|a| a.first()) {
-                Some(argument) => representation_within(snapshot, *argument, path, subst)?,
-                None => HirType::Void,
-            };
+            // No recorded argument is *not* `Promise<void>`. `Promise<void>`
+            // has one argument and it is `void`; none at all means the
+            // frontend did not get them -- it stops at the library boundary,
+            // and a file large enough to exhaust its type budget stops
+            // earlier still.
+            //
+            // Defaulting to `void` was a guess that reads as an answer: every
+            // payload became nothing, the settle discarded the value, and the
+            // resumption read a slot that was never filled. Refusing says so.
+            let argument = *snapshot
+                .type_arguments
+                .get(&ty)
+                .and_then(|arguments| arguments.first())?;
+            let payload = representation_within(snapshot, argument, path, subst)?;
             HirType::Managed(ManagedType::Promise(Box::new(payload)))
         }
         TypeKind::Object { .. } | TypeKind::Function(_) => {

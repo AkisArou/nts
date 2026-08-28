@@ -77,6 +77,47 @@ fn frame_names(function: &str) -> (String, String) {
     (format!("{function}#frame"), format!("{function}__resume"))
 }
 
+/// Every value that is still needed on the far side of a suspension.
+///
+/// These are the ones that cannot be C locals: the function returns at each
+/// `await`, so the C frame holding them is gone by the time the resumption
+/// runs. They go in the managed frame, and every use of one becomes a load.
+///
+/// Computed on the *original* function rather than on the split one, which is
+/// what avoids building the body twice. At an `await` in block `b` at position
+/// `p`, what is live is whatever leaves `b` plus whatever the rest of `b`
+/// reads, minus whatever `b` defines at or after `p` -- that last part being
+/// the values that do not exist yet when the suspension happens.
+fn crossing(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
+    let live = super::liveness::analyze(func);
+    let mut crossing = rustc_hash::FxHashSet::default();
+    for (index, block) in func.blocks.iter().enumerate() {
+        for (at, value) in block.ops.iter().enumerate() {
+            if !matches!(func.values[value.0 as usize].kind, OpKind::Await { .. }) {
+                continue;
+            }
+            let later: rustc_hash::FxHashSet<ValueId> = block.ops[at..].iter().copied().collect();
+            let mut consider = |operand: ValueId| {
+                if !later.contains(&operand) {
+                    crossing.insert(operand);
+                }
+            };
+            for operand in live.live_out(super::BlockId(u32::try_from(index).unwrap_or(0))) {
+                consider(*operand);
+            }
+            for op in &block.ops[at + 1..] {
+                for operand in super::operands_of(&func.values[op.0 as usize].kind) {
+                    consider(operand);
+                }
+            }
+            for operand in super::operands_of_terminator(&block.terminator) {
+                consider(operand);
+            }
+        }
+    }
+    crossing
+}
+
 /// Whether a function has anything to suspend at.
 fn suspends(func: &Func) -> bool {
     func.values
@@ -141,81 +182,54 @@ fn refuse(func: &Func, what: &str) -> Diagnostic {
     )
 }
 
-/// Where the one suspension is: the block it is in, and its index among that
-/// block's operations.
+/// Where each suspension is, in the order the state numbers run.
 ///
-/// One, in one block, for now. A second suspension point needs the state
-/// dispatch to be a chain rather than a single test, and an `await` inside a
-/// branch or a loop needs the block graph split and renumbered -- both of which
-/// are the general case that follows this one. Refusing them by name beats
-/// transforming them nearly right.
-fn sole_await(func: &Func) -> Result<(usize, usize, ValueId), Diagnostic> {
-    let mut found = None;
+/// State 0 is the function's start, so the first `await` resumes into state 1.
+fn suspensions(func: &Func) -> Vec<(usize, usize, ValueId)> {
+    let mut found = Vec::new();
     for (block, body) in func.blocks.iter().enumerate() {
         for (at, value) in body.ops.iter().enumerate() {
-            if !matches!(func.values[value.0 as usize].kind, OpKind::Await { .. }) {
-                continue;
+            if matches!(func.values[value.0 as usize].kind, OpKind::Await { .. }) {
+                found.push((block, at, *value));
             }
-            if found.is_some() {
-                return Err(refuse(func, "more than one `await` in a function"));
-            }
-            found = Some((block, at, *value));
         }
     }
-    let (block, at, value) = found.ok_or_else(|| refuse(func, "an `await`"))?;
-    if block != 0 {
-        return Err(refuse(func, "an `await` inside a branch or a loop"));
-    }
-    if func.blocks.len() != 1 {
-        return Err(refuse(func, "an `await` in a function that branches"));
-    }
-    Ok((block, at, value))
+    found
 }
 
 fn rewrite(func: &Func, index: usize) -> Result<Rewritten, Diagnostic> {
-    let (_, at, awaited) = sole_await(func)?;
+    let points = suspensions(func);
+    if points.is_empty() {
+        return Err(refuse(func, "an `await`"));
+    }
     let result = func
         .async_result
         .ok_or_else(|| refuse(func, "an `await` outside an `async` function"))?;
-    let OpKind::Await { promise } = func.values[awaited.0 as usize].kind else {
-        unreachable!("sole_await returns an await");
-    };
 
-    // What lives in the frame: the fixed three, then the parameters. Every use
-    // of one becomes a load, so the value survives the suspension without the
-    // C stack having to.
+    // What goes in the frame. Order is fixed rather than incidental: the fixed
+    // three, then the parameters in declaration order, then everything that has
+    // to survive a suspension -- sorted, so two compilations of one program
+    // produce the same layout.
     let mut slot_of: rustc_hash::FxHashMap<ValueId, u32> = rustc_hash::FxHashMap::default();
     slot_of.insert(result, FIELD_RESULT);
+    let mut next = FIXED_FIELDS;
     for (value, op) in func.values.iter().enumerate() {
         if let OpKind::Param(slot) = op.kind {
             slot_of.insert(
                 ValueId(u32::try_from(value).unwrap_or(0)),
                 FIXED_FIELDS + slot,
             );
+            next = next.max(FIXED_FIELDS + slot + 1);
         }
     }
-
-    // Nothing else may cross the suspension. A value defined before the
-    // `await` and read after it needs a frame slot of its own and every use
-    // rewritten to a load -- which is the general spilling this does not do
-    // yet. Dropping it instead would resume with whatever the register held.
-    let body = &func.blocks[0];
-    let before: rustc_hash::FxHashSet<ValueId> = body.ops[..at].iter().copied().collect();
-    let mut crossing = Vec::new();
-    for value in &body.ops[at + 1..] {
-        for operand in super::operands_of(&func.values[value.0 as usize].kind) {
-            if before.contains(&operand) && !slot_of.contains_key(&operand) {
-                crossing.push(operand);
-            }
-        }
-    }
-    for operand in super::operands_of_terminator(&body.terminator) {
-        if before.contains(&operand) && !slot_of.contains_key(&operand) {
-            crossing.push(operand);
-        }
-    }
-    if !crossing.is_empty() {
-        return Err(refuse(func, "an `await` with a value that outlives it"));
+    let mut spilled: Vec<ValueId> = crossing(func)
+        .into_iter()
+        .filter(|value| !slot_of.contains_key(value))
+        .collect();
+    spilled.sort_unstable_by_key(|value| value.0);
+    for value in &spilled {
+        slot_of.insert(*value, next);
+        next += 1;
     }
 
     let frame_ty = HirType::Managed(ManagedType::Object(frame_type(index)));
@@ -223,59 +237,16 @@ fn rewrite(func: &Func, index: usize) -> Result<Rewritten, Diagnostic> {
     let layout = Layout {
         types: vec![frame_type(index)],
         name: frame_name,
-        fields: frame_fields(func),
+        fields: frame_fields(func, &spilled),
         methods: Vec::new(),
     };
     let entry = entry_function(func, &frame_ty, &resume_name, &slot_of);
-    let resume = resume_function(
-        func,
-        &frame_ty,
-        &resume_name,
-        &slot_of,
-        at,
-        awaited,
-        promise,
-    );
+    let resume = resume_function(func, &frame_ty, &resume_name, &slot_of, &points);
     Ok(Rewritten {
         entry,
         resume,
         layout,
     })
-}
-
-/// The frame's fields: the fixed three, then one per parameter.
-fn frame_fields(func: &Func) -> Vec<Field> {
-    let mut fields = vec![
-        Field {
-            name: "state".to_owned(),
-            ty: HirType::Int {
-                bits: 32,
-                signed: true,
-            },
-            readonly: false,
-        },
-        Field {
-            name: "result".to_owned(),
-            ty: func.return_type.clone(),
-            readonly: false,
-        },
-        Field {
-            name: "awaited".to_owned(),
-            // Whatever was most recently awaited. The payload varies between
-            // suspension points, and the *reader* knows which it is because the
-            // resume block was generated beside the `await` that set it.
-            ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
-            readonly: false,
-        },
-    ];
-    for param in &func.params {
-        fields.push(Field {
-            name: param.name.clone(),
-            ty: param.ty.clone(),
-            readonly: false,
-        });
-    }
-    fields
 }
 
 /// A small arena builder, so the two generated functions can append values
@@ -445,6 +416,13 @@ fn carry(
     super::simplify::substitute(&mut kind, |v| loaded.get(&v).copied().unwrap_or(v));
     build.values[original.0 as usize].kind = kind;
     build.ops.push(original);
+    // And if this value itself has to survive a suspension, it is written to
+    // the frame the moment it exists. Without this the loads on the far side
+    // read whatever the field was left holding, which is a plausible-looking
+    // number rather than an obvious one.
+    if let Some(slot) = slot_of.get(&original).copied() {
+        build.set(frame, slot, original);
+    }
 }
 
 /// The parameter value for a name, in the original body.
@@ -462,47 +440,80 @@ fn find_param(func: &Func, name: &str) -> ValueId {
     ValueId(0)
 }
 
+/// The frame's fields: the fixed three, then one per parameter, then one for
+/// every value that has to survive a suspension.
+///
+/// Parameters are unconditional even when nothing reads them after a
+/// suspension. In the resume function they are not parameters at all -- its one
+/// argument is the frame -- so code *before* the first suspension has nowhere
+/// else to read them from.
+fn frame_fields(func: &Func, spilled: &[ValueId]) -> Vec<Field> {
+    let mut fields = vec![
+        Field {
+            name: "state".to_owned(),
+            ty: HirType::Int {
+                bits: 32,
+                signed: true,
+            },
+            readonly: false,
+        },
+        Field {
+            name: "result".to_owned(),
+            ty: func.return_type.clone(),
+            readonly: false,
+        },
+        Field {
+            name: "awaited".to_owned(),
+            // Whatever was most recently awaited. The payload varies between
+            // suspension points, and the *reader* knows which it is because the
+            // resume block was generated beside the `await` that set it.
+            ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
+            readonly: false,
+        },
+    ];
+    for param in &func.params {
+        fields.push(Field {
+            name: param.name.clone(),
+            ty: param.ty.clone(),
+            readonly: false,
+        });
+    }
+    for (at, value) in spilled.iter().enumerate() {
+        fields.push(Field {
+            // Named by position rather than by anything in the source: these
+            // are SSA values, and most were never a name anyone wrote.
+            name: format!("held{at}"),
+            ty: func.values[value.0 as usize].ty.clone(),
+            readonly: false,
+        });
+    }
+    fields
+}
+
 /// `f__resume(frame)`: the body, entered at whichever state it left off in.
 ///
 /// It returns nothing. What the original body returned was the promise, and the
 /// promise is in the frame — a resumption has no caller to hand anything to,
 /// because the caller left long ago.
+///
+/// Each original block is cut into segments at its `await`s. Segment zero keeps
+/// the block's parameters and is reached the ordinary way; every later segment
+/// is reached only from the dispatch, which is why everything live at one has
+/// to be in the frame rather than in a block parameter.
 fn resume_function(
     func: &Func,
     frame_ty: &HirType,
     name: &str,
     slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
-    at: usize,
-    awaited: ValueId,
-    promise: ValueId,
+    points: &[(usize, usize, ValueId)],
 ) -> Func {
-    let body = &func.blocks[0];
-
-    // The frame has to be value zero, because the C parameter for `params[i]`
-    // is named after `ValueId(i)` -- a parameter is not a computed value, it is
-    // the signature. So every original value shifts up by one.
     let shift = |value: ValueId| ValueId(value.0 + 1);
-    let mut values = vec![Op {
-        kind: OpKind::Param(0),
-        ty: frame_ty.clone(),
-        origin: func.origin.clone(),
-    }];
-    for op in &func.values {
-        let mut kind = op.kind.clone();
-        super::simplify::substitute(&mut kind, shift);
-        values.push(Op {
-            kind,
-            ty: op.ty.clone(),
-            origin: op.origin.clone(),
-        });
-    }
-    let slot_of: rustc_hash::FxHashMap<ValueId, u32> = slot_of
+    let values = shifted_arena(func, frame_ty);
+    let moved: rustc_hash::FxHashMap<ValueId, u32> = slot_of
         .iter()
         .map(|(value, slot)| (shift(*value), *slot))
         .collect();
-    let slot_of = &slot_of;
-    let awaited = shift(awaited);
-    let promise = shift(promise);
+    let slot_of = &moved;
     let frame = ValueId(0);
     let mut build = Build {
         values,
@@ -510,35 +521,84 @@ fn resume_function(
         origin: func.origin.clone(),
     };
 
-    let (dispatch, fresh) = dispatch_block(&mut build, frame);
+    let (base, starts) = segment_layout(func, points);
 
-    // --- before the suspension -----------------------------------------
-    for original in &body.ops[..at] {
-        let original = shift(*original);
-        // The operations that *define* a spilled value are gone: the entry
-        // function computes them and stores them, and running them again here
-        // would allocate a second promise on every resumption.
-        if slot_of.contains_key(&original) {
-            continue;
+    let mut body: Vec<super::Block> = Vec::new();
+    let mut resume_at: Vec<super::BlockId> = vec![super::BlockId(starts[0])];
+
+    for (index, block) in func.blocks.iter().enumerate() {
+        let mut params: Vec<ValueId> = block.params.iter().map(|value| shift(*value)).collect();
+        // A block parameter that has to survive a suspension is stored the
+        // moment the block is entered: it has no defining operation to put a
+        // store after.
+        for value in &params {
+            if let Some(slot) = slot_of.get(value).copied() {
+                build.set(frame, slot, *value);
+            }
         }
-        carry(&mut build, frame, slot_of, original);
+        let mut from = 0usize;
+        loop {
+            let next = points
+                .iter()
+                .find(|(at, op, _)| *at == index && *op >= from)
+                .map(|(_, op, value)| (*op, shift(*value)));
+            let stop = next.map_or(block.ops.len(), |(op, _)| op);
+            for original in &block.ops[from..stop] {
+                let original = shift(*original);
+                // A parameter and the result promise are computed once, in the
+                // entry function, and stored. Replaying their definitions here
+                // allocated a fresh promise on every resumption.
+                if entry_owned(func, slot_of, original) {
+                    continue;
+                }
+                carry(&mut build, frame, slot_of, original);
+            }
+            let Some((op, awaited)) = next else {
+                let terminator = retarget(&block.terminator, &starts, shift);
+                // A terminator reads values too, and a jump's arguments are the
+                // easiest to forget: a loop's counter is a block parameter of
+                // the header, and a segment reached only from the dispatch is
+                // dominated by nothing that defines it. The verifier caught
+                // exactly that -- `jump b7(%15, %7)` where `%7` was the header's
+                // parameter -- which is the argument for having a verifier.
+                let terminator = reload_terminator(&mut build, frame, slot_of, terminator);
+                body.push(super::Block {
+                    params: std::mem::take(&mut params),
+                    ops: std::mem::take(&mut build.ops),
+                    terminator,
+                });
+                break;
+            };
+            let OpKind::Await { promise } = build.values[awaited.0 as usize].kind else {
+                unreachable!("`suspensions` returns awaits");
+            };
+            let promise = reload(&mut build, frame, slot_of, promise);
+            build.set(frame, FIELD_AWAITED, promise);
+            let marker = build.constant(i64::try_from(resume_at.len()).unwrap_or(0));
+            build.set(frame, FIELD_STATE, marker);
+            build.push(
+                OpKind::Suspend {
+                    promise,
+                    frame,
+                    resume: name.to_owned(),
+                },
+                HirType::Void,
+            );
+            body.push(super::Block {
+                params: std::mem::take(&mut params),
+                ops: std::mem::take(&mut build.ops),
+                terminator: Terminator::Return(None),
+            });
+            resume_at.push(super::BlockId(
+                base + u32::try_from(body.len()).unwrap_or(0),
+            ));
+            read_settled(&mut build, frame, awaited, slot_of);
+            from = op + 1;
+        }
     }
-    let subscribed = reload(&mut build, frame, slot_of, promise);
-    build.set(frame, FIELD_AWAITED, subscribed);
-    let one = build.constant(1);
-    build.set(frame, FIELD_STATE, one);
-    build.push(
-        OpKind::Suspend {
-            promise: subscribed,
-            frame,
-            resume: name.to_owned(),
-        },
-        HirType::Void,
-    );
-    let suspending = std::mem::take(&mut build.ops);
 
-    let resumed = resumed_block(&mut build, body, at, awaited, frame, slot_of);
-
+    let mut blocks = dispatch_chain(&mut build, frame, &resume_at);
+    blocks.extend(body);
     Func {
         name: name.to_owned(),
         params: vec![super::Param {
@@ -549,29 +609,7 @@ fn resume_function(
         }],
         return_type: HirType::Void,
         values: build.values,
-        blocks: vec![
-            super::Block {
-                params: Vec::new(),
-                ops: dispatch,
-                terminator: Terminator::Branch {
-                    cond: fresh,
-                    then_target: super::BlockId(1),
-                    then_args: Vec::new(),
-                    else_target: super::BlockId(2),
-                    else_args: Vec::new(),
-                },
-            },
-            super::Block {
-                params: Vec::new(),
-                ops: suspending,
-                terminator: Terminator::Return(None),
-            },
-            super::Block {
-                params: Vec::new(),
-                ops: resumed,
-                terminator: Terminator::Return(None),
-            },
-        ],
+        blocks,
         origin: func.origin.clone(),
         exported: false,
         initializes_receiver: false,
@@ -579,17 +617,72 @@ fn resume_function(
     }
 }
 
-/// The block a resumption lands in: read what the promise settled with, then
-/// carry on with the rest of the original body.
-fn resumed_block(
+/// Where each original block's first segment lands, and where the body starts.
+///
+/// The dispatch takes the front of the block list: one block per state, plus
+/// one nothing reaches so the last test has somewhere to send a state that
+/// cannot happen. Everything after that is the body, a block per segment.
+fn segment_layout(func: &Func, points: &[(usize, usize, ValueId)]) -> (u32, Vec<u32>) {
+    let base = u32::try_from(points.len() + 2).unwrap_or(0);
+    let mut starts = Vec::new();
+    let mut count = 0u32;
+    for index in 0..func.blocks.len() {
+        starts.push(base + count);
+        let cuts = points
+            .iter()
+            .filter(|(block, _, _)| *block == index)
+            .count();
+        count += u32::try_from(cuts + 1).unwrap_or(1);
+    }
+    (base, starts)
+}
+
+/// The original values, with the frame inserted in front of them.
+///
+/// The frame has to be value zero, because the C parameter for `params[i]` is
+/// named after `ValueId(i)` -- a parameter is not a computed value, it is the
+/// signature. So every original value shifts up by one, operands included.
+fn shifted_arena(func: &Func, frame_ty: &HirType) -> Vec<Op> {
+    let mut values = vec![Op {
+        kind: OpKind::Param(0),
+        ty: frame_ty.clone(),
+        origin: func.origin.clone(),
+    }];
+    for op in &func.values {
+        let mut kind = op.kind.clone();
+        super::simplify::substitute(&mut kind, |value| ValueId(value.0 + 1));
+        values.push(Op {
+            kind,
+            ty: op.ty.clone(),
+            origin: op.origin.clone(),
+        });
+    }
+    values
+}
+
+/// Whether the entry function owns this value's definition.
+///
+/// The parameters and the result promise are computed before the machine starts
+/// and stored, so their defining operations are not part of the body any more.
+/// Everything else that is spilled is computed *by* the body and stored right
+/// after.
+fn entry_owned(func: &Func, slot_of: &rustc_hash::FxHashMap<ValueId, u32>, value: ValueId) -> bool {
+    slot_of.get(&value).is_some_and(|slot| {
+        *slot == FIELD_RESULT
+            || *slot < FIXED_FIELDS + u32::try_from(func.params.len()).unwrap_or(0)
+    })
+}
+
+/// Read what the promise a suspension waited on settled with.
+///
+/// The `await` operation itself becomes that read, so every later reference to
+/// it finds the settled value with none of them rewritten.
+fn read_settled(
     build: &mut Build,
-    body: &super::Block,
-    at: usize,
-    awaited: ValueId,
     frame: ValueId,
+    awaited: ValueId,
     slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
-) -> Vec<ValueId> {
-    let shift = |value: ValueId| ValueId(value.0 + 1);
+) {
     let held = build.get(
         frame,
         FIELD_AWAITED,
@@ -597,47 +690,121 @@ fn resumed_block(
     );
     let payload = build.values[awaited.0 as usize].ty.clone();
     // Three cases, not two. A promise that settled with *nothing* has neither
-    // slot filled, and both readers assert -- so `await` of a `Promise<void>`
-    // aborted at run time until this had its own arm. There is no value to
-    // read, and nothing can reference one: `void` has no value to reference.
-    let value = match &payload {
-        HirType::Void => held,
-        payload => {
-            let reader = if matches!(payload, HirType::Managed(_)) {
-                "nts_promise_reference"
-            } else {
-                "nts_promise_number"
-            };
-            build.push(
-                OpKind::Call {
-                    callee: super::Callee::External(reader.to_owned()),
-                    args: vec![held],
-                    frame: None,
-                },
-                payload.clone(),
-            )
-        }
+    // slot filled and both readers assert, so `await` of a `Promise<void>`
+    // aborted at run time until this had an arm of its own.
+    let payload = match &payload {
+        // Settled with nothing. There is no value to read and nothing that can
+        // reference one, so the `await` leaves no operation behind at all --
+        // emitting a `void`-typed assignment gave the backend a variable it
+        // never declared.
+        HirType::Void => return,
+        payload => payload,
     };
-    for original in &body.ops[at + 1..] {
-        // The `await`'s own value is what the promise settled with, which was
-        // just read out of the frame -- so it substitutes like a spilled one.
-        let original = shift(*original);
-        let mut kind = build.values[original.0 as usize].kind.clone();
-        super::simplify::substitute(&mut kind, |v| if v == awaited { value } else { v });
-        build.values[original.0 as usize].kind = kind;
-        carry(build, frame, slot_of, original);
+    let reader = if matches!(payload, HirType::Managed(_)) {
+        "nts_promise_reference"
+    } else {
+        "nts_promise_number"
+    };
+    let value = build.push(
+        OpKind::Call {
+            callee: super::Callee::External(reader.to_owned()),
+            args: vec![held],
+            frame: None,
+        },
+        payload.clone(),
+    );
+    build.values[awaited.0 as usize].kind = OpKind::Convert(value);
+    build.ops.push(awaited);
+    if let Some(slot) = slot_of.get(&awaited).copied() {
+        build.set(frame, slot, awaited);
     }
-    std::mem::take(&mut build.ops)
 }
 
-/// The block a resumption enters first: which state is this, and where does it
+/// A terminator with every spilled operand read back out of the frame.
+///
+/// The loads land in the block the terminator ends, so they are ordinary
+/// operations that dominate their use the way any other does.
+fn reload_terminator(
+    build: &mut Build,
+    frame: ValueId,
+    slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
+    terminator: Terminator,
+) -> Terminator {
+    let mut loaded: rustc_hash::FxHashMap<ValueId, ValueId> = rustc_hash::FxHashMap::default();
+    for operand in super::operands_of_terminator(&terminator) {
+        if slot_of.contains_key(&operand) && !loaded.contains_key(&operand) {
+            let value = reload(build, frame, slot_of, operand);
+            loaded.insert(operand, value);
+        }
+    }
+    let swap = |value: ValueId| loaded.get(&value).copied().unwrap_or(value);
+    match terminator {
+        Terminator::Return(value) => Terminator::Return(value.map(swap)),
+        Terminator::Jump { target, args } => Terminator::Jump {
+            target,
+            args: args.into_iter().map(swap).collect(),
+        },
+        Terminator::Branch {
+            cond,
+            then_target,
+            then_args,
+            else_target,
+            else_args,
+        } => Terminator::Branch {
+            cond: swap(cond),
+            then_target,
+            then_args: then_args.into_iter().map(swap).collect(),
+            else_target,
+            else_args: else_args.into_iter().map(swap).collect(),
+        },
+        Terminator::Unreachable => Terminator::Unreachable,
+    }
+}
+
+/// A terminator with its targets moved to the segment each block begins at, and
+/// its operands shifted.
+fn retarget(
+    terminator: &Terminator,
+    starts: &[u32],
+    shift: impl Fn(ValueId) -> ValueId,
+) -> Terminator {
+    let target = |block: super::BlockId| super::BlockId(starts[block.0 as usize]);
+    match terminator {
+        // The resume function returns nothing: what the original handed back is
+        // in the frame, and there is nobody left to hand it to.
+        Terminator::Return(_) => Terminator::Return(None),
+        Terminator::Jump { target: to, args } => Terminator::Jump {
+            target: target(*to),
+            args: args.iter().map(|value| shift(*value)).collect(),
+        },
+        Terminator::Branch {
+            cond,
+            then_target,
+            then_args,
+            else_target,
+            else_args,
+        } => Terminator::Branch {
+            cond: shift(*cond),
+            then_target: target(*then_target),
+            then_args: then_args.iter().map(|value| shift(*value)).collect(),
+            else_target: target(*else_target),
+            else_args: else_args.iter().map(|value| shift(*value)).collect(),
+        },
+        Terminator::Unreachable => Terminator::Unreachable,
+    }
+}
+
+/// The blocks a resumption enters first: which state is this, and where does it
 /// go?
 ///
-/// A comparison rather than a jump table, because the IR's terminators are a
-/// two-way branch and nothing else. With one suspension point that is one test;
-/// a second would make it a chain, which is part of why more than one `await`
-/// is still refused.
-fn dispatch_block(build: &mut Build, frame: ValueId) -> (Vec<ValueId>, ValueId) {
+/// A chain of comparisons, because the IR's only multi-way terminator is a
+/// two-way branch. One test per state, then a block nothing reaches so the last
+/// test has somewhere to send a state that cannot happen.
+fn dispatch_chain(
+    build: &mut Build,
+    frame: ValueId,
+    resume_at: &[super::BlockId],
+) -> Vec<super::Block> {
     let state = build.get(
         frame,
         FIELD_STATE,
@@ -646,14 +813,33 @@ fn dispatch_block(build: &mut Build, frame: ValueId) -> (Vec<ValueId>, ValueId) 
             signed: true,
         },
     );
-    let zero = build.constant(0);
-    let fresh = build.push(
-        OpKind::Binary {
-            op: super::BinOp::Eq,
-            lhs: state,
-            rhs: zero,
-        },
-        HirType::Bool,
-    );
-    (std::mem::take(&mut build.ops), fresh)
+    let mut blocks = Vec::new();
+    for (which, target) in resume_at.iter().enumerate() {
+        let marker = build.constant(i64::try_from(which).unwrap_or(0));
+        let same = build.push(
+            OpKind::Binary {
+                op: super::BinOp::Eq,
+                lhs: state,
+                rhs: marker,
+            },
+            HirType::Bool,
+        );
+        blocks.push(super::Block {
+            params: Vec::new(),
+            ops: std::mem::take(&mut build.ops),
+            terminator: Terminator::Branch {
+                cond: same,
+                then_target: *target,
+                then_args: Vec::new(),
+                else_target: super::BlockId(u32::try_from(which + 1).unwrap_or(0)),
+                else_args: Vec::new(),
+            },
+        });
+    }
+    blocks.push(super::Block {
+        params: Vec::new(),
+        ops: Vec::new(),
+        terminator: Terminator::Unreachable,
+    });
+    blocks
 }

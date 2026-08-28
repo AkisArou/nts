@@ -289,6 +289,26 @@ The first two are the interesting pair, because they produce a program that
 
 ---
 
+### What the general case cost
+
+Two more, on top of the three above.
+
+**A jump carried an argument its block could not name.** A loop's counter is a
+block parameter of the header, and a segment reached only from the dispatch is
+dominated by nothing that defines it -- so `jump b7(%15, %7)` named `%7`, which
+was not in scope there. `carry` reloaded spilled values for *operations* and
+nothing did the same for terminators. The verifier caught it, which is the
+argument for having one: the emitted C would have compiled and read a stale
+local.
+
+**A spilled value was loaded but never stored.** The loads were emitted and the
+stores were not, so the far side read whatever the frame was left holding.
+Under an allocator that hands back zeroed pages that is a plausible-looking
+number rather than an obvious one -- the same shape as the `map` zero-fill,
+where "wrong" and "zero" are indistinguishable.
+
+---
+
 ## 6. How this gets tested
 
 The seam exists for portability, but its **first** value is that it makes the
@@ -406,17 +426,15 @@ wrong for the newcomer: `Convert` returning `TOP` in the facts analysis,
    object type, exactly as a closure is, so it inherits the layout, the
    descriptor, precise tracing, escape analysis and reference counting rather
    than needing a second mechanism for each.
-7. ~~Lowering `await`: the state machine.~~ **Done for one suspension point in
-   a straight-line body**, which is `return await f(x)` and everything shaped
-   like it. `hir::suspend` splits the function into a thin entry that allocates
-   the frame and hands back a promise, and a resume function the microtask queue
-   calls. Parameters live in the frame, because a C local cannot survive the
-   resumption.
-8. Spilling, and the general shape. A value live across an `await` that is
-   neither a parameter nor the result promise needs a slot and every use
-   rewritten to a load; more than one suspension point needs the state dispatch
-   to be a chain; an `await` inside a branch or a loop needs the block graph
-   split and renumbered rather than cut in two. All three are refused by name.
+7. ~~Lowering `await`: the state machine.~~ **Done, in general.** `hir::suspend`
+   cuts each block into segments at its `await`s, spills everything still needed
+   on the far side into the frame, and dispatches on the state through a chain
+   of comparisons. Several suspension points, `await` in a branch or a loop, and
+   values that outlive a suspension all work.
+8. ~~Spilling.~~ Done. Which values need a slot is `liveness::analyze` asked at
+   each suspension point, on the *original* function -- what leaves the block,
+   plus what the rest of the block reads, minus what does not exist yet. That
+   avoids building the body twice.
 9. `Promise.resolve`, `reject`, `all`, `race` as the profile needs them.
 10. `new Promise(executor)`, whose hard half is that `resolve` is a closure over
     the promise, so settling reaches back through a function the constructor

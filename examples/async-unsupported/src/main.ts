@@ -31,20 +31,6 @@ export async function outer(n: number): Promise<number> {
   return await inner(n);
 }
 
-// Refused today as ``a `new` that does not produce an object``, which is a
-// better diagnostic than the one it used to give. `Promise<number>` was
-// unrepresentable, so this failed on the *type*; now it has a representation
-// and fails on the constructor, which is the part that is actually missing.
-//
-// The executor is the hard half: `new Promise((resolve) => ...)` calls a
-// function the constructor supplies, so `resolve` is a closure over the
-// promise, and settling it has to reach back through that.
-export function later(n: number): Promise<number> {
-  return new Promise<number>((resolve) => {
-    resolve(n);
-  });
-}
-
 // The three shapes refused *by name*, ahead of the blanket `async` rule.
 //
 // They are here rather than waiting for async to land because of the ordering:
@@ -79,32 +65,4 @@ export async function guarded(p: Promise<number>): Promise<number> {
   } finally {
     // Nothing here: it is spanning the `await` that is refused, not the body.
   }
-}
-
-// A second suspension point. The state dispatch is one comparison, so two
-// states would need a chain -- and the second `await`'s resume block has to be
-// reachable from it, which is the block renumbering this does not do yet.
-export async function twiceAwaited(n: number): Promise<number> {
-  const a = await inner(n);
-  const b = await inner(a);
-  return b;
-}
-
-// An `await` inside a branch. The function has more than one block, so the
-// split is a graph rewrite rather than cutting one block in two.
-export async function guardedAwait(n: number): Promise<number> {
-  if (n > 0) {
-    return await inner(n);
-  }
-  return 0;
-}
-
-// A value that outlives the suspension and is neither a parameter nor the
-// result promise. It needs a frame slot of its own and every use rewritten to a
-// load -- the general spilling. Dropping it instead would resume with whatever
-// the register held, which is the kind of wrong that runs.
-export async function carried(n: number): Promise<number> {
-  const doubled = n * 2;
-  const awaited = await inner(n);
-  return awaited + doubled;
 }

@@ -6,12 +6,11 @@
 // entry, every `return` settles it and hands it back, and the function's type
 // is `Promise<T>` rather than `T`.
 //
-// Suspension is here too, for one `await` in a straight-line body: the
-// function becomes a state machine over a heap frame, and the resumption runs
-// from the microtask queue. What is still refused, by name, is a second
-// suspension point and an `await` inside a branch or a loop -- both need the
-// block graph split and renumbered rather than cut in two. See
-// `examples/async-unsupported`.
+// Suspension is here too, in general: several `await`s, `await` inside a branch
+// or a loop, and values that outlive a suspension. The function becomes a state
+// machine over a heap frame and the resumption runs from the microtask queue.
+// What is still refused, by name, is an async generator, a `for await` loop and
+// a `finally` spanning an `await` -- see `examples/async-unsupported`.
 //
 // These are driven by `nts check`, which calls the function, runs the loop to
 // quiescence on the deterministic host, and compares what the promise settled
@@ -119,4 +118,73 @@ export async function named(n: number): Promise<string> {
 // Awaiting something that settles with nothing.
 export async function awaitedNothing(n: number): Promise<void> {
   await ignore(n);
+}
+
+// --- suspension, in general -------------------------------------------------
+//
+// Each block is cut into segments at its `await`s. Segment zero keeps the
+// block's parameters and is reached the ordinary way; every later segment is
+// reached only from the state dispatch, so *nothing* dominates it -- which is
+// why every value still needed on the far side lives in the frame, and every
+// use of one is a load.
+
+// Two suspension points. The dispatch is a chain of comparisons rather than one
+// test, because the IR's only multi-way terminator is a two-way branch.
+export async function twiceAwaited(n: number): Promise<number> {
+  const a = await increment(n);
+  const b = await increment(a);
+  return b;
+}
+
+// A suspension inside a branch: more than one block, so the split is a graph
+// rewrite rather than cutting a block in two.
+export async function guardedAwait(n: number): Promise<number> {
+  if (n > 0) {
+    return await increment(n);
+  }
+  return 0;
+}
+
+// A value that outlives the suspension and is neither a parameter nor the
+// result promise. It gets a frame slot of its own, a store where it is defined
+// and a load at every use. Dropping it would resume with whatever the register
+// held, which is the kind of wrong that runs.
+export async function carried(n: number): Promise<number> {
+  const doubled = n * 2;
+  const got = await increment(n);
+  return got + doubled;
+}
+
+// A suspension inside a loop, so the block it is in has a back edge. The loop
+// counter is a block parameter of the header, and the segment after the
+// suspension is dominated by nothing that defines it -- which the verifier
+// caught as a jump carrying an argument the block could not name.
+export async function looped(n: number): Promise<number> {
+  let total = 0;
+  for (let i = 0; i < 3; i++) {
+    total = total + (await increment(i));
+  }
+  return total + n;
+}
+
+// A loop-carried value that also crosses the suspension.
+export async function carriedLoop(n: number): Promise<number> {
+  let acc = n;
+  for (let i = 0; i < 2; i++) {
+    acc = acc + (await increment(acc));
+  }
+  return acc;
+}
+
+// Suspensions with different payloads in one function, so the frame's single
+// `awaited` slot is read back through a different accessor each time.
+export async function mixedPayloads(n: number): Promise<number> {
+  const text = await name(n);
+  const num = await increment(n);
+  return text.length + num;
+}
+
+// One `await` as the argument of another.
+export async function nestedAwaits(n: number): Promise<number> {
+  return (await increment(await increment(n))) * 2;
 }
