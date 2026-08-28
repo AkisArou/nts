@@ -14,7 +14,8 @@
 
 use nts_diagnostics::{Diagnostic, Location};
 use nts_semantic_schema::{
-    LiteralValue, NodeData, NodeId, NodeKind, Origin, SemanticSnapshot, TypeId, TypeKind, syntax,
+    LiteralValue, NodeData, NodeId, NodeKind, Origin, SemanticSnapshot, SymbolFlags, SymbolId,
+    TypeId, TypeKind, syntax,
 };
 
 use super::facts::Facts;
@@ -1602,6 +1603,46 @@ impl<'a> FuncBuilder<'a> {
             id,
             &format!("{what} `{name}` of unrepresentable type ({named})"),
         )
+    }
+
+    /// What kind of name the lowering ran out of places to look for.
+    ///
+    /// This used to be one message — `a name declared outside this function` —
+    /// for every name that was not a local, not a module constant and not a
+    /// module variable. It was the largest single refusal in the corpus at 12
+    /// files, which made it look like the most valuable thing to implement, and
+    /// it is not a thing at all: a namespace, a global this runtime does not
+    /// provide, and a variable captured from an enclosing function are three
+    /// features, and counting them together ranks none of them.
+    ///
+    /// The symbol says which. `declarations` is empty exactly when the symbol
+    /// was declared outside the decoded file set, which is what separates
+    /// `console` from a name the program itself wrote.
+    fn describe_name(&self, symbol: SymbolId) -> String {
+        let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else {
+            return "an unresolved name".to_owned();
+        };
+        let is = |flag: SymbolFlags| record.flags.contains(flag);
+        if is(SymbolFlags::MODULE) {
+            return format!("`{}`, a namespace", record.name);
+        }
+        if is(SymbolFlags::ENUM) {
+            return format!("`{}`, an enum", record.name);
+        }
+        if record.declarations.is_empty() {
+            // Nothing in the compiled set declares it, so it is a global the
+            // host is expected to have. Which one matters: `Math` is a table of
+            // functions this compiler could provide, and `document` is not.
+            return format!("`{}`, a global this compiler does not provide", record.name);
+        }
+        if is(SymbolFlags::FUNCTION) {
+            return format!("`{}`, a function used as a value", record.name);
+        }
+        if is(SymbolFlags::CLASS) {
+            return format!("`{}`, a class used as a value", record.name);
+        }
+        // Declared in this program, in a scope between here and module scope.
+        format!("`{}`, a name from an enclosing scope", record.name)
     }
 
     /// The nearest ancestor of a given kind.
@@ -5310,7 +5351,7 @@ impl<'a> FuncBuilder<'a> {
         if let Some(reason) = self.module.unsupported.get(&symbol.0) {
             return Err(self.unsupported(id, reason));
         }
-        Err(self.unsupported(id, "a name declared outside this function"))
+        Err(self.unsupported(id, &self.describe_name(symbol)))
     }
 
     /// `null` and `undefined`, which are one value in a compiled program.

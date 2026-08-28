@@ -25,24 +25,25 @@ them, so read the ratios rather than the absolute times.
 <!-- benchmarks:start -->
 | case | C++ | nts | nts f64 | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| accumulate | 1.37 us | **1.88 us** | 28.74 us | 3.71 us | 31.10 us | 1.38x | 0.51x | 0.06x |
-| array-methods | 3.51 us | **1.54 us** | 3.91 us | 5.67 us | 7.43 us | 0.44x | 0.27x | 0.21x |
-| arrays | 1.75 us | **1.87 us** | 5.20 us | 2.69 us | 1.80 us | 1.07x | 0.69x | 1.04x |
-| awfy-bounce | 4.28 us | **8.07 us** | 12.36 us | 10.99 us | 10.85 us | 1.88x | 0.73x | 0.74x |
-| awfy-list | 8.34 us | **8.37 us** | 8.43 us | 13.62 us | 11.99 us | 1.00x | 0.61x | 0.70x |
-| awfy-mandelbrot | 23.13 ms | **24.23 ms** | 28.11 ms | 23.30 ms | 23.24 ms | 1.05x | 1.04x | 1.04x |
-| awfy-nbody | 9.10 ms | **11.00 ms** | 11.15 ms | 83.75 ms | 16.45 ms | 1.21x | 0.13x | 0.67x |
-| awfy-permute | 11.22 us | **19.38 us** | 27.61 us | 24.56 us | 18.77 us | 1.73x | 0.79x | 1.03x |
-| awfy-queens | 5.65 us | **7.31 us** | 21.50 us | 16.13 us | 13.75 us | 1.29x | 0.45x | 0.53x |
-| awfy-sieve | 4.26 us | **7.67 us** | 16.86 us | 9.84 us | 14.53 us | 1.80x | 0.78x | 0.53x |
-| awfy-towers | 13.07 us | **20.46 us** | 24.18 us | 35.95 us | 22.10 us | 1.57x | 0.57x | 0.93x |
-| checksum | 6.38 us | **6.38 us** | 64.60 us | 7.30 us | 33.82 us | 1.00x | 0.87x | 0.19x |
-| closures | 1.20 us | **1.20 us** | 49.12 us | 3.45 us | 17.04 us | 1.00x | 0.35x | 0.07x |
-| fib | 308.96 us | **605.81 us** | 613.90 us | 995.32 us | 659.26 us | 1.96x | 0.61x | 0.92x |
-| loop | 995.3 ns | **921.0 ns** | 875.7 ns | 1.01 us | 997.4 ns | 0.93x | 0.91x | 0.92x |
-| objects (rc) | 2.08 us | **2.10 us** | 2.35 us | 2.34 us | 1.77 us | 1.01x | 0.90x | 1.18x |
-| strings | 557.5 ns | **409.0 ns** | 28.83 us | 2.93 us | 2.96 us | 0.73x | 0.14x | 0.14x |
-| substrings (rc) | 2.19 us | **4.21 us** | 11.92 us | 7.20 us | 38.70 us | 1.92x | 0.59x | 0.11x |
+| accumulate | 1.40 us | **2.21 us** | 29.13 us | 3.71 us | 32.34 us | 1.58x | 0.59x | 0.07x |
+| array-methods | 3.45 us | **1.62 us** | 3.96 us | 6.61 us | 8.62 us | 0.47x | 0.24x | 0.19x |
+| arrays | 1.81 us | **1.93 us** | 5.77 us | 2.98 us | 2.05 us | 1.07x | 0.65x | 0.94x |
+| awfy-bounce | 4.84 us | **8.70 us** | 13.11 us | 12.56 us | 12.39 us | 1.80x | 0.69x | 0.70x |
+| awfy-list | 9.70 us | **9.31 us** | 9.59 us | 15.71 us | 13.63 us | 0.96x | 0.59x | 0.68x |
+| awfy-mandelbrot | 23.63 ms | **24.88 ms** | 28.64 ms | 24.40 ms | 24.17 ms | 1.05x | 1.02x | 1.03x |
+| awfy-nbody | 9.88 ms | **11.60 ms** | 12.26 ms | 92.74 ms | 17.81 ms | 1.17x | 0.13x | 0.65x |
+| awfy-permute | 11.93 us | **21.14 us** | 29.89 us | 28.62 us | 21.79 us | 1.77x | 0.74x | 0.97x |
+| awfy-queens | 6.37 us | **8.06 us** | 23.90 us | 18.49 us | 15.71 us | 1.27x | 0.44x | 0.51x |
+| awfy-sieve | 4.69 us | **7.96 us** | 17.50 us | 11.02 us | 14.66 us | 1.70x | 0.72x | 0.54x |
+| awfy-towers | 15.15 us | **23.73 us** | 27.68 us | 40.91 us | 28.13 us | 1.57x | 0.58x | 0.84x |
+| checksum | 6.59 us | **6.71 us** | 67.52 us | 7.50 us | 35.16 us | 1.02x | 0.89x | 0.19x |
+| closures | 1.25 us | **1.29 us** | 51.16 us | 3.58 us | 21.42 us | 1.03x | 0.36x | 0.06x |
+| dispatch | 12.04 us | **12.80 us** | 166.27 us | 62.34 us | 19.58 us | 1.06x | 0.21x | 0.65x |
+| fib | 357.02 us | **683.84 us** | 683.12 us | 1.27 ms | 804.42 us | 1.92x | 0.54x | 0.85x |
+| loop | 1.05 us | **926.0 ns** | 876.2 ns | 1.04 us | 1.03 us | 0.88x | 0.89x | 0.90x |
+| objects (rc) | 2.18 us | **2.20 us** | 2.46 us | 2.49 us | 1.92 us | 1.01x | 0.88x | 1.14x |
+| strings | 598.3 ns | **424.2 ns** | 28.99 us | 3.30 us | 3.47 us | 0.71x | 0.13x | 0.12x |
+| substrings (rc) | 2.27 us | **4.93 us** | 12.65 us | 8.36 us | 40.39 us | 2.17x | 0.59x | 0.12x |
 
 Every ratio is nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and `nts/Bun` under 1.00 beat those engines.
 
@@ -81,18 +82,18 @@ What is stopping the rest, in order:
 
 | refused | files |
 | --- | ---: |
-| a name declared outside this function | 12 |
 | a parameter with a default | 7 |
+| `MyEnum`, an enum | 4 |
+| `console`, a global this compiler does not provide | 4 |
 | a module-scope variable whose initializer is not constant | 4 |
 | a module-scope variable with no initializer | 4 |
 | a parameter of unrepresentable type (the type parameter `T`) | 4 |
 | a property `timestamp` of unrepresentable type (a structured type (flags 0x100000)) | 4 |
 | a rest parameter | 4 |
 | a parameter of unrepresentable type (any) | 3 |
+| `x`, a name from an enclosing scope | 2 |
 | a class of unrepresentable type (a structured type (flags 0x100000)) | 2 |
 | a parameter of unrepresentable type (unknown) | 2 |
-| an object with an optional property | 2 |
-| `null` or `undefined` where what it stands in for is not a reference | 1 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->
