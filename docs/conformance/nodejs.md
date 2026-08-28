@@ -56,6 +56,29 @@ the compiled artifact. That is the gate. `--ts` is the interim gate for a module
 that does not compile yet, and the two together tell a compiler bug from an
 implementation bug: fails compiled, passes on node, is a compiler bug.
 
+**A module system is a hidden parameter of every ordering assertion.** Node
+runs `test/parallel` as CommonJS, where a test body is a plain host task and
+the checkpoint starts empty: `process.nextTick` first, then microtasks. An ES
+module's evaluation *is* a microtask job, so a body that starts mid-drain sees
+its own top-level microtasks resolve before its own top-level ticks — the
+reverse order, for correct code.
+
+This harness was supplying the wrong one. Everything before the test body is
+`await`ed, so the body ran inside a microtask continuation:
+
+```
+node, CommonJS      tick -> microtask -> tick-from-microtask -> immediate -> timer
+here, before this   microtask -> tick -> tick-from-microtask -> immediate -> timer
+```
+
+The body now runs from a fresh macrotask and the two traces are identical. It
+moved one file, and the file it moved was a second finding: `punycode` warns
+about its own deprecation *at load time*, and this harness must import before
+the test body because imports are asynchronous — so the warning fired before
+the test could listen for it. Node loads a module when the test calls
+`require`, so load-time warnings are now held and re-emitted at that call,
+which puts the observable event back where node has it.
+
 A third command, and the one to run before believing any of the numbers below:
 
 ```sh

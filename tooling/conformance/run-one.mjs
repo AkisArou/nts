@@ -76,6 +76,30 @@ let internals = null;
  */
 const sabotaged = process.env["NTS_CONFORMANCE_SABOTAGE"] === "1";
 
+/**
+ * Warnings the module emitted while it was being loaded.
+ *
+ * Node loads a module when the test calls `require`, and a module that warns on
+ * load -- `punycode` deprecating itself -- emits *after* the test has installed
+ * its listener. This harness must import before the test body runs, because
+ * imports are asynchronous, so that warning would fire into an empty room.
+ *
+ * They are held here and re-emitted when the test first requires the module,
+ * which is where node would have emitted them. Replaying is faithful rather
+ * than compensatory: the observable event moves back to the point the test
+ * actually asks for the module.
+ */
+const loadTimeWarnings = [];
+let capturingLoadWarnings = true;
+const realEmitWarning = process.emitWarning.bind(process);
+process.emitWarning = (...args) => {
+  if (capturingLoadWarnings) {
+    loadTimeWarnings.push(args);
+    return;
+  }
+  return realEmitWarning(...args);
+};
+
 let underTest;
 try {
   let exports;
@@ -160,7 +184,12 @@ function countingTestRunner() {
 
 function shimmedRequire(id) {
   const bare = id.replace(/^node:/, "");
-  if (bare === moduleName) return underTest;
+  if (bare === moduleName) {
+    for (const args of loadTimeWarnings.splice(0)) {
+      realEmitWarning(...args);
+    }
+    return underTest;
+  }
   if (bare.startsWith(`${moduleName}/`)) {
     const half = bare.slice(moduleName.length + 1);
     if (half in underTest && underTest[half]) return underTest[half];
@@ -216,8 +245,30 @@ try {
     "process", "global", "globalThis",
     src,
   );
-  run(shimmedRequire, module, module.exports, file, dirname(file),
-      process, globalThis, globalThis);
+  // From a fresh macrotask, not from here.
+  //
+  // Everything above this point is `await`ed, so calling `run` directly would
+  // execute the test body inside a microtask continuation -- and a body that
+  // starts mid-drain sees its own top-level microtasks resolve *before* its
+  // top-level `process.nextTick`, which is the reverse of what node does. Node
+  // runs `test/parallel` as CommonJS, where the body is a plain host task and
+  // the checkpoint starts empty: ticks first, then microtasks.
+  //
+  // Measured rather than reasoned: the same file gives
+  //   node, CommonJS      tick -> microtask -> tick-from-microtask
+  //   here, before this   microtask -> tick -> tick-from-microtask
+  // A module system is a hidden parameter of every ordering assertion, and
+  // this harness was silently supplying the wrong one.
+  capturingLoadWarnings = false;
+  await new Promise((resolve, reject) => setImmediate(() => {
+    try {
+      run(shimmedRequire, module, module.exports, file, dirname(file),
+          process, globalThis, globalThis);
+      resolve();
+    } catch (e) {
+      reject(e);
+    }
+  }));
   await settle();
   const missed = checkPending();
   if (missed.length > 0) {
