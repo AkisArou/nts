@@ -1033,6 +1033,12 @@ pub fn representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType
 /// into the machine type for the copy being lowered.
 pub type Substitution = rustc_hash::FxHashMap<TypeId, HirType>;
 
+/// The declared name of a type, where it has one.
+fn named(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
+    let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
+    Some(snapshot.symbols.get(symbol.0 as usize)?.name.as_str())
+}
+
 /// [`representation`], resolving type parameters through a substitution.
 #[must_use]
 pub fn representation_with(
@@ -1157,6 +1163,13 @@ fn representation_of(
         // makes it one. It has the representation of whatever this instantiation
         // put there, and outside an instantiation there is nothing to say.
         TypeKind::TypeParameter { .. } => subst.get(&ty)?.clone(),
+
+        // A class this compiler provides. `Error` is never decomposed -- see
+        // `super::builtin` for why it cannot be -- so it arrives as a structured
+        // type and would otherwise have no representation at all.
+        TypeKind::Structured { .. } if named(snapshot, ty).is_some_and(super::builtin::is_error) => {
+            HirType::Managed(ManagedType::Object(ty))
+        }
 
         // `any` and `unknown` fall here and are refused, which is right for one
         // of them and wrong for the other.
@@ -3874,6 +3887,125 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// The layout of a class this compiler provides, if `ty` names one.
+    fn provided_layout(&mut self, ty: TypeId) -> Option<Layout> {
+        let name = named(self.snapshot, ty)
+            .filter(|name| super::builtin::is_error(name))?
+            .to_owned();
+        let layout = Layout {
+            types: vec![ty],
+            name,
+            fields: super::builtin::error_fields(),
+            methods: vec![None; self.hierarchy.table_size()],
+        };
+        self.layouts.push(layout.clone());
+        Some(layout)
+    }
+
+    /// Why a property is not on a layout.
+    ///
+    /// Usually because the type does not have it. On an error it can instead be
+    /// a member of the *declared* `Error` that this compiler chose not to
+    /// provide, and saying which is the difference between "you misspelled it"
+    /// and "a compiled binary keeps no record of the frames it came through".
+    fn absent_member(&self, id: NodeId, ty: TypeId, member: &str) -> Diagnostic {
+        let on_an_error = named(self.snapshot, ty).is_some_and(super::builtin::is_error)
+            || self.provided_error_base(ty).is_some();
+        match super::builtin::omitted(member).filter(|_| on_an_error) {
+            Some(reason) => self.unsupported(
+                id,
+                &format!("`{member}`, which this compiler's `Error` does not have — {reason}"),
+            ),
+            None => self.unsupported(id, "a property the type does not declare"),
+        }
+    }
+
+    /// `Error`'s constructor, inline.
+    ///
+    /// This compiler provides the class, so there is no function to call and
+    /// nothing to link against: the two field stores *are* the constructor.
+    /// Both sites that would otherwise call one come here — `new Error(m)`,
+    /// which has no constructor to find, and `super(m)` in a subclass, whose
+    /// base declares none. Without this the `super(m)` was a *no-op*: the base
+    /// is not in the hierarchy, so the call resolved to nothing and the message
+    /// was never stored. That is the silent kind of wrong.
+    ///
+    /// `name` is the provided class's own name rather than the subclass's,
+    /// which is what JavaScript does — `Error.prototype.name` is inherited, so
+    /// `new MyError("x").name` is `"Error"` until a constructor assigns it.
+    fn initialize_error(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        provided: &str,
+        arguments: &[NodeId],
+    ) -> Result<(), Diagnostic> {
+        // `new Error(message, { cause })`. The second argument is an options
+        // object whose only member is `cause`, which this compiler does not
+        // provide -- see `super::builtin`.
+        if arguments.len() > 1 {
+            return Err(self.unsupported(id, "an `Error` with options"));
+        }
+        let HirType::Managed(ManagedType::Object(type_id)) =
+            self.values[receiver.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(id, "an `Error` that is not an object"));
+        };
+        let layout = self.layout_of(id, type_id)?;
+        let origin = self.origin(id);
+        let text = HirType::Managed(ManagedType::String);
+        let message = match arguments.first() {
+            Some(argument) => self.lower_expression(*argument)?,
+            // `new Error()` has an empty message, not an absent one.
+            None => self.push(OpKind::ConstString(String::new()), text.clone(), origin.clone()),
+        };
+        let name = self.push(
+            OpKind::ConstString(provided.to_owned()),
+            text,
+            origin.clone(),
+        );
+        for (field, value) in [("message", message), ("name", name)] {
+            let Some(field) = layout.index_of(field) else {
+                continue;
+            };
+            self.push(
+                OpKind::FieldSet {
+                    object: receiver,
+                    field,
+                    value,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        Ok(())
+    }
+
+    /// The provided error class this type descends from, if any.
+    ///
+    /// Transitive, because the chains are: `ERR_INVALID_ARG_TYPE` extends
+    /// `NodeTypeError` extends `TypeError`, and only the last of those is
+    /// provided here.
+    fn provided_error_base(&self, ty: TypeId) -> Option<String> {
+        let mut stack = vec![(ty, 0u32)];
+        while let Some((at, depth)) = stack.pop() {
+            // A type that reaches itself through its bases is not a hierarchy.
+            if depth > 32 {
+                continue;
+            }
+            if at != ty
+                && let Some(name) = named(self.snapshot, at)
+                && super::builtin::is_error(name)
+            {
+                return Some(name.to_owned());
+            }
+            for base in self.snapshot.base_types.get(&at).into_iter().flatten() {
+                stack.push((*base, depth + 1));
+            }
+        }
+        None
+    }
+
     /// Every base in the chain has to be a type this compiler lays out itself.
     ///
     /// The checker's property list is *flattened*: a class that extends
@@ -3918,44 +4050,36 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
-    fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {
-        if let Some(known) = self
-            .layouts
-            .iter()
-            .find(|layout| layout.types.contains(&ty))
-        {
-            return Ok(known.clone());
-        }
-        let record =
-            self.snapshot.types.get(ty.0 as usize).ok_or_else(|| {
-                self.unsupported(id, "an object type that is not in the snapshot")
-            })?;
-        // A function type has no fields: two closures of one type differ by what
-        // they captured, and that is their own class's business.
-        if matches!(record.kind, TypeKind::Function(_)) {
-            let layout = Layout {
-                types: vec![ty],
-                name: format!("Fn{}", ty.0),
-                fields: Vec::new(),
-                methods: Vec::new(),
-            };
-            self.layouts.push(layout.clone());
-            return Ok(layout);
-        }
-        let TypeKind::Object { properties } = &record.kind else {
-            return Err(self.unsupported(id, "an object type that was not decomposed"));
+    /// The fields of a class, from the checker's flattened property list.
+    ///
+    /// A method is a member of the type but not a field of the object: it has
+    /// no storage, because the checker resolved every call site, so it is a
+    /// function the call names directly rather than a slot to load from. This
+    /// is where a vtable would go if dispatch needed one.
+    fn fields_of(
+        &self,
+        id: NodeId,
+        ty: TypeId,
+        properties: &[nts_semantic_schema::PropertyRecord],
+    ) -> Result<Vec<Field>, Diagnostic> {
+        // A class descending from a provided one takes *that* class's fields
+        // rather than the checker's flattened view of them, because the view
+        // includes members this compiler does not provide -- `stack?` and
+        // `cause?` are in the list and are not fields here. What the class
+        // declares itself is marked `own`, which is exactly the remainder.
+        let provided = self.provided_error_base(ty);
+        let mut fields = if provided.is_some() {
+            super::builtin::error_fields()
+        } else {
+            Vec::new()
         };
-        self.representable_bases(id, ty, 0)?;
-
-        let mut fields = Vec::new();
         for property in properties {
+            if provided.is_some() && !property.own {
+                continue;
+            }
             if property.accessor.is_some() {
                 return Err(self.unsupported(id, "an object with an accessor"));
             }
-            // A method is a member of the type but not a field of the object.
-            // It has no storage: the checker resolved every call site, so it is
-            // a function the call names directly rather than a slot to load
-            // from. This is where a vtable would go if dispatch needed one.
             if matches!(
                 self.snapshot
                     .types
@@ -3984,6 +4108,45 @@ impl<'a> FuncBuilder<'a> {
                 readonly: property.readonly,
             });
         }
+        Ok(fields)
+    }
+
+    fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {
+        if let Some(known) = self
+            .layouts
+            .iter()
+            .find(|layout| layout.types.contains(&ty))
+        {
+            return Ok(known.clone());
+        }
+        let record =
+            self.snapshot.types.get(ty.0 as usize).ok_or_else(|| {
+                self.unsupported(id, "an object type that is not in the snapshot")
+            })?;
+        // A function type has no fields: two closures of one type differ by what
+        // they captured, and that is their own class's business.
+        if matches!(record.kind, TypeKind::Function(_)) {
+            let layout = Layout {
+                types: vec![ty],
+                name: format!("Fn{}", ty.0),
+                fields: Vec::new(),
+                methods: Vec::new(),
+            };
+            self.layouts.push(layout.clone());
+            return Ok(layout);
+        }
+        // A class this compiler provides rather than decomposes. It never
+        // reaches the arm below, because it is never an `Object`: `Error`
+        // arrives as a structured type and stays one.
+        if let Some(layout) = self.provided_layout(ty) {
+            return Ok(layout);
+        }
+        let TypeKind::Object { properties } = &record.kind else {
+            return Err(self.unsupported(id, "an object type that was not decomposed"));
+        };
+        self.representable_bases(id, ty, 0)?;
+
+        let mut fields = self.fields_of(id, ty, properties)?;
 
         // Base first, so a derived object's fields start with exactly the base's
         // and a pointer to one is a pointer to the other. That is what makes an
@@ -4201,6 +4364,17 @@ impl<'a> FuncBuilder<'a> {
         // allocation is zeroed and that is the whole of `new C()`.
         let arguments = self.arguments_of(id);
         let Some(declaring) = self.hierarchy.constructor(type_id) else {
+            // A provided error class, or one descending from one and declaring
+            // no constructor of its own. There is no function to call: this
+            // compiler is the constructor, and it is emitted inline.
+            let provided = named(self.snapshot, type_id)
+                .filter(|name| super::builtin::is_error(name))
+                .map(str::to_owned)
+                .or_else(|| self.provided_error_base(type_id));
+            if let Some(provided) = provided {
+                self.initialize_error(id, object, &provided, &arguments)?;
+                return Ok(object);
+            }
             if !arguments.is_empty() {
                 return Err(self.unsupported(id, "a `new` with arguments and no constructor"));
             }
@@ -4288,9 +4462,9 @@ impl<'a> FuncBuilder<'a> {
             self.values[value.0 as usize].ty.clone()
         {
             let layout = self.layout_of(id, type_id)?;
-            let field = layout
-                .index_of(&member_name)
-                .ok_or_else(|| self.unsupported(id, "a property the type does not declare"))?;
+            let Some(field) = layout.index_of(&member_name) else {
+                return Err(self.absent_member(id, type_id, &member_name));
+            };
             let ty = layout.fields[field as usize].ty.clone();
             let origin = self.origin(id);
             return Ok(self.push(
@@ -4720,14 +4894,25 @@ impl<'a> FuncBuilder<'a> {
         // there is nothing to call directly. It holds a closure, which is an
         // object with one method, and this is a dispatch through that method's
         // slot with the closure itself as the receiver.
-        if self.is_function_typed(callee_node) && !self.names_a_declared_function(callee_node) {
+        // The checker resolved this call, so ask it rather than the name. An
+        // imported `scale` is bound to an *import specifier*, not to the
+        // function declaration, so asking the name gave "not a declared
+        // function" and sent every cross-module call down the closure path --
+        // where it was refused for reading a name from an enclosing scope.
+        let declaration = self.direct_callee(target.callee, callee_node);
+        if declaration.is_none()
+            && self.is_function_typed(callee_node)
+            && !self.names_a_declared_function(callee_node)
+        {
             return self.lower_closure_call(id, callee_node, &arguments);
         }
 
-        let name = self
-            .node(callee_node)
-            .text
-            .clone()
+        // The name the function is *emitted* under, which is the one on its
+        // declaration. `import { scale as by }` puts `by` at the call site and
+        // `scale` on the function, and a call has to name the function.
+        let name = declaration
+            .and_then(|declaration| self.declared_name(declaration))
+            .or_else(|| self.node(callee_node).text.clone())
             .ok_or_else(|| self.unsupported(callee_node, "a computed callee"))?;
 
         // A callee inside the compiled program becomes a static call; one outside
@@ -4760,6 +4945,31 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         ))
+    }
+
+    /// The declaration a call resolves to, when it is a plain function.
+    ///
+    /// Not ahead of a local binding, which is the guard
+    /// `names_a_declared_function` makes and this must not lose: a name bound to
+    /// a value in this frame *is* that value, whatever the checker resolved the
+    /// name to elsewhere, and calling it is a dispatch rather than a static
+    /// call.
+    fn direct_callee(&self, resolved: Option<NodeId>, callee_node: NodeId) -> Option<NodeId> {
+        let locally_bound = self
+            .node(callee_node)
+            .symbol
+            .is_some_and(|symbol| self.bindings.contains_key(&symbol.0));
+        resolved.filter(|declaration| {
+            !locally_bound && self.kind_of(*declaration) == Some(syntax::FUNCTION_DECLARATION)
+        })
+    }
+
+    /// The name a declaration declares.
+    fn declared_name(&self, declaration: NodeId) -> Option<String> {
+        self.children(declaration)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .and_then(|child| self.node(child).text.clone())
     }
 
     /// The name of the class a member is declared on.
@@ -5318,10 +5528,19 @@ impl<'a> FuncBuilder<'a> {
             .clone()
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
 
-        let declaring = self
-            .hierarchy
-            .declaring(type_id, &member_name)
-            .unwrap_or(type_id);
+        // A method nothing in the hierarchy declares. Falling back to the
+        // receiver's own type named a function this program never emits: on a
+        // class extending the provided `Error`, `e.toString()` became `call
+        // E#toString`, and the failure was a missing symbol at link time rather
+        // than a diagnostic here. `toString` is a real member of the declared
+        // `Error` and is not one this compiler provides, which is the same
+        // shape as reading `.stack`.
+        let Some(declaring) = self.hierarchy.declaring(type_id, &member_name) else {
+            return Err(self.unsupported(
+                id,
+                &format!("a method `{member_name}` that no class in the hierarchy declares"),
+            ));
+        };
         let owner = match self.hierarchy.name.get(&declaring) {
             Some(name) => name.clone(),
             None => self.layout_of(id, declaring)?.name,
@@ -5391,7 +5610,21 @@ impl<'a> FuncBuilder<'a> {
             // a base class with only methods has none, and `super()` in a
             // derived one has nothing to run. The receiver stands in as the
             // expression's value, which no `super()` statement looks at.
-            None if member == "constructor" => return Ok(receiver),
+            //
+            // Except when the base is a class this compiler *provides*: there
+            // the constructor exists and is emitted inline. Before that it fell
+            // through here and did nothing, so the message a subclass passed up
+            // was silently dropped.
+            None if member == "constructor" => {
+                let provided = match self.values[receiver.0 as usize].ty {
+                    HirType::Managed(ManagedType::Object(ty)) => self.provided_error_base(ty),
+                    _ => None,
+                };
+                if let Some(provided) = provided {
+                    self.initialize_error(id, receiver, &provided, arguments)?;
+                }
+                return Ok(receiver);
+            }
             None => base,
         };
 

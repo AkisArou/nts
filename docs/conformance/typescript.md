@@ -105,7 +105,7 @@ diagnostic.
 | optional properties (`x?: T`) | **not done** | needs a presence bit, which changes the layout |
 | index signatures (`[k: string]: T`) | **not done** | keys are not known at compile time, so not a flat struct |
 | tuples | **not done** | |
-| `enum` / `const enum` | **not done** | |
+| `enum` / `const enum` | **not done** | four corpus files. Note for whoever implements it: node's type stripping rejects an `enum` outright (*not supported in strip-only mode*), so `nts check` cannot compare one against node — the differential has to go through emitted JavaScript, or the enum has to be tested through a function that does not mention it |
 | recursive array types (`type T = T[]`) | **not done** | refused with the cycle named; no finite `HirType` |
 | `keyof`, `typeof` type operator | **not done** | |
 | mapped, conditional, indexed-access, template-literal types | **not done** | |
@@ -124,7 +124,7 @@ diagnostic.
 | `readonly` fields | partial | refused when a *constructor* assigns them, which TypeScript allows |
 | getters and setters | **not done** | `x.y` would be a call; Node's API surface needs these |
 | `static` properties | **not done** | |
-| parameter properties (`constructor(public x: number)`) | **not done** | |
+| parameter properties (`constructor(public x: number)`) | **not done** | refused by name since it is not a default, which it was counted as. Also rejected by node's type stripping under `erasableSyntaxOnly`, so the differential side cannot run one either |
 | `abstract` classes and methods | **not done** | |
 | class expressions | **not done** | |
 | `private` / `#private` | **not done** | erasable, not erased yet |
@@ -165,7 +165,7 @@ diagnostic.
 | `Math`: `pow`, `log`, `exp`, `sin`, `cos`, `atan2`, `random`, `hypot` | **not done** | |
 | `Object`: `keys`, `values`, `entries`, `assign`, `freeze` | **not done** | |
 | `Map`, `Set`, `WeakMap`, `WeakSet` | **not done** | every real program needs the first two |
-| `Error` and its subclasses | **not done** | `throw new Error(m)` is recognised as a *shape*, not as a class |
+| `Error` and its subclasses | partial | `Error`, `TypeError`, `RangeError` and `URIError` are classes this compiler *provides* — a `message` and a `name` — because the declared interface has `stack?` and `cause?` and an optional property is refused. A subclass adds its own fields after those. `.stack`, `.cause`, `toString()` and `new Error(m, { cause })` refuse, each saying which |
 | `JSON`, `Date`, `RegExp` | **not done** | |
 | typed arrays, `ArrayBuffer`, `DataView` | **not done** | |
 | `Promise` | **not done** | see below |
@@ -180,7 +180,7 @@ diagnostic.
 | reference counting | done | RFC §9.2, with Bacon–Rajan cycle collection |
 | escape analysis | done | an object that does not outlive its frame stays in it |
 | frame-allocated strings | done | a slice that does not escape costs no allocation |
-| modules within one program | done | |
+| modules within one program | done | including a call to an imported function, and an aliased import — the call names the function's *declaration*, so `import { scale as by }` still emits a call to `scale` |
 | FFI to C | done | `declare function` plus an emitted prototype |
 | a nursery / generational GC | **not done** | RFC §9.3 — what closes the last gap to V8 on allocation-heavy code |
 | **exceptions** | **not done** | `throw` terminates; no unwinding, no handler |
@@ -264,6 +264,13 @@ A fourth, found by the Node session: a class extending a type this compiler
 cannot represent was laid out as though the inherited members were its own
 fields. `class Bytes extends Uint8Array {}` became five `int32_t` and no bytes.
 Every base in the chain is now required to be a type laid out here.
+
+A fifth, found while implementing `Error`: a method *no class in the hierarchy
+declares* still emitted a call, because the lowering fell back to the receiver's
+own type for the owner. `e.toString()` became `call E#toString`, which links
+against nothing — a missing symbol rather than a diagnostic. The verifier now
+rejects a direct call to a function the program does not contain, so the whole
+class of guessed names is caught rather than this one instance.
 
 The verifier now also checks that a direct call passes as many arguments as the
 function it names takes. It found nothing when it was added, which is the point:

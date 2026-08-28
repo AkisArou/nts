@@ -25,6 +25,7 @@
 //!   symbol resolution had to land before this.
 
 pub mod bounds;
+pub mod builtin;
 pub mod dce;
 pub mod elements;
 pub mod escape;

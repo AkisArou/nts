@@ -52,3 +52,17 @@ export function hasADefaultReadingAParameter(a: number, b: number = a * 2): numb
 export class HasAParameterProperty {
   constructor(private readonly seed: number) {}
 }
+
+// `Error` here is a message and a name (`hir::builtin`). `stack` is a record of
+// frames a compiled binary does not keep and `toString` is a method no class in
+// the hierarchy declares -- both refuse, and each says which it is rather than
+// "a property the type does not declare".
+class Coded extends Error {}
+
+export function readsAStack(): number {
+  return new Coded("x").stack!.length;
+}
+
+export function callsErrorToString(): number {
+  return new Coded("x").toString().length;
+}

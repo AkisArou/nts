@@ -60,6 +60,14 @@ pub enum Invalid {
         expected: usize,
         found: usize,
     },
+    /// A direct call names a function this program does not contain.
+    ///
+    /// It reaches the linker as an undefined symbol, which is a failure with no
+    /// source location and no explanation. Every one of these has been a
+    /// lowering that guessed a name: `e.toString()` on a class extending the
+    /// provided `Error` emitted `E#toString` because nothing declared the
+    /// method and the receiver's own type was used as a fallback.
+    MissingCallee { func: String, callee: String },
 }
 
 /// Check a whole program.
@@ -84,9 +92,7 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
 /// Direct calls, against the functions they name.
 ///
 /// Program-wide rather than per-function, because the thing a call has to agree
-/// with is another function. A name with no function behind it is not checked
-/// here: a call whose callee was refused is a different problem, reported where
-/// the refusal is.
+/// with is another function.
 ///
 /// Dispatched calls are left alone. Which implementation runs is decided by the
 /// receiver, and every override of a method has the signature the base declares,
@@ -108,6 +114,10 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
                 continue;
             };
             let Some(&expected) = arity.get(name.as_str()) else {
+                problems.push(Invalid::MissingCallee {
+                    func: func.name.clone(),
+                    callee: name.clone(),
+                });
                 continue;
             };
             if args.len() != expected {
