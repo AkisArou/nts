@@ -45,7 +45,7 @@ real `node` child — those assert on node's binary, which our module is not in.
 Each exclusion is listed with a reason in the module's `not-applicable` file
 rather than inferred by a rule, so the number can be audited.
 
-**180 of node's own test files pass** across twelve modules. The per-module
+**206 of node's own test files pass** across thirteen modules. The per-module
 counts below are `passed / applicable`; `compiles` is `functions lowered /
 constructs refused`, from `nts hir`.
 
@@ -63,7 +63,7 @@ constructs refused`, from `nts hir`.
 | `assert` | 11 / 19 | 3 / 209 | complete, including `CallTracker` and node's Myers diff |
 | `util` | 8 / 18 | 7 / 180 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `fs` | 11 / 212 | 28 / 191 | the sync surface; async, streams and watchers are absent |
-| `url` | — | — | not started |
+| `url` | 26 / 36 | 28 / 317 | complete; exact on the Web Platform Tests corpus |
 | `stream` | — | — | not started |
 | `process` | — | — | not started |
 | `timers` | — | — | not started |
@@ -485,6 +485,69 @@ stack positions and a bundled JavaScript tokenizer; neither is reachable from
 here, so the generated message is the ordinary diff — true, but it says less.
 And one file spawns a real `node` to check what an uncaught assertion prints,
 which is a statement about node's binary.
+
+## `url`
+
+Two APIs, and the older one is deprecated. Both are implemented.
+
+| | |
+| --- | --- |
+| WHATWG | `URL`, `URLSearchParams`, `URL.parse`, `URL.canParse` |
+| legacy | `Url`, `parse`, `format`, `resolve`, `resolveObject` |
+| paths | `fileURLToPath`, `pathToFileURL`, `urlToHttpOptions` |
+| domains | `domainToASCII`, `domainToUnicode` |
+
+26 of 36 applicable test files pass. **The number that matters more is the Web
+Platform Tests corpus, which this passes in full: 891 of 891 parses and 278 of
+278 setter cases.** That is the same `urltestdata.json` and `setters_tests.json`
+node checks `ada` against, and it grades the algorithm where node's own tests
+grade the module's surface.
+
+```sh
+node tooling/conformance/wpt-url.mjs          # the parse corpus
+node tooling/conformance/wpt-url-setters.mjs  # the setter corpus
+```
+
+**Written from the standard, not transcribed.** There is nothing to transcribe:
+node hands `URL` to the C++ `ada` parser, so its JavaScript is a shell over a
+binding. What both implement is https://url.spec.whatwg.org/, and the corpus is
+common to both.
+
+Five corrections took it from 840 to 891, and every one is a case where the
+obvious implementation is quietly wrong rather than obviously wrong:
+
+| the rule | what goes wrong without it |
+| --- | --- |
+| a host ending in a number is *parsed* as IPv4, and failing is a failure | `http://foo.2.3.4` becomes a domain that will not resolve rather than the error it is |
+| an opaque host forbids only the forbidden-host set | a non-special scheme's host is an arbitrary string, and rejecting controls rejects valid URLs |
+| a space before `?` or `#` in an opaque path is encoded | the URL does not survive its own serialisation |
+| a `file:` URL against a `file:` base keeps host *and* drive letter | `/x` against `file://h/C:/a` loses the host |
+| `^` is in the path percent-encode set | one character short of node's output, everywhere |
+
+**IDNA is reduced, and the reduction is stated where the code is.** UTS-46's
+mapping is a table over every code point in Unicode; node reaches it through
+ICU. Ours is three rules that cover what a domain actually contains: NFKC and
+case folding for the table's "mapped" entries, an explicit set for its
+"ignored" ones, and rejection of what no domain may contain. Nothing in the
+corpus needs more, which bounds the gap without closing it.
+
+The legacy half is transcribed from node and lives in its own file, so that
+node's rules -- which are specified nowhere -- and the standard's cannot be
+confused for one another by a reader or by a later edit.
+
+Two details worth recording:
+
+- **`URLSearchParams` coerces with a template literal, not `String()`.**
+  `String(symbol)` answers where `` `${symbol}` `` throws, and the interface
+  says it throws. One character of difference, and node's tests check it.
+- **Its iterator is a class rather than a generator.** A detached `next` then
+  reports which receiver it wanted; a generator reports its own internals,
+  which is a message about our implementation rather than about the reader's
+  code.
+
+Not implemented: `URLPattern`, and `URL.createObjectURL`/`revokeObjectURL`,
+which need a blob registry that belongs to the runtime rather than to this
+module.
 
 ## `fs`
 
