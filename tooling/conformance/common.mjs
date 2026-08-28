@@ -64,9 +64,14 @@ function expect(fn, count, atLeast) {
   };
 }
 
-export function checkPending() {
-  const missed = pending.filter((p) =>
+/** Expectations not yet satisfied, without clearing them. */
+export function peekPending() {
+  return pending.filter((p) =>
     p.atLeast ? p.actual < p.expected : p.actual !== p.expected);
+}
+
+export function checkPending() {
+  const missed = peekPending();
   pending.length = 0;
   return missed;
 }

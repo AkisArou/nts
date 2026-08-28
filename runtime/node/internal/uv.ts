@@ -58,3 +58,28 @@ export function uvException(
   }
   return error;
 }
+
+/**
+ * The other error shape node uses for a failed system call.
+ *
+ *   EPERM, Operation not permitted
+ *
+ * Node has two, and which one a call throws depends on which C++ helper it
+ * went through rather than on anything a caller can see. The `fs` family gets
+ * `uvException` above -- code, description, syscall and path. The credential
+ * calls (`setuid`, `setgid`, `setgroups` and their effective forms) get this
+ * one, which names no syscall and no path.
+ *
+ * Reproduced rather than unified because node's own tests match on the text:
+ * `process.setegid` is asserted to fail with something *ending* in
+ * `EPERM, ...`, which the other shape does not, since it puts the syscall
+ * last.
+ */
+export function errnoException(code: number, syscall: string): UVError {
+  const name = nts_uv_err_name(code);
+  const error = new Error(`${name}, ${nts_uv_err_message(code)}`) as UVError;
+  error.code = name;
+  error.errno = code;
+  error.syscall = syscall;
+  return error;
+}

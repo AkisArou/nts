@@ -93,21 +93,6 @@ globalThis.nts_fs_readlink = (path) => attempt(() => fs.readlinkSync(path), "");
 globalThis.nts_fs_realpath = (path) => attempt(() => fs.realpathSync(path), "");
 globalThis.nts_fs_mkdtemp = (template) => attempt(() => fs.mkdtempSync(template.replace(/X{6}$/, "")), "");
 
-globalThis.nts_uv_err_name = (code) => {
-  // Node exposes libuv's table through `util.getSystemErrorName`.
-  try {
-    return require("node:util").getSystemErrorName(code);
-  } catch {
-    return "UNKNOWN";
-  }
-};
-globalThis.nts_uv_err_message = (code) => {
-  try {
-    return require("node:util").getSystemErrorMessage?.(code) ?? messageFor(code);
-  } catch {
-    return messageFor(code);
-  }
-};
 
 // libuv's wording, for the codes `fs` actually raises. `getSystemErrorMessage`
 // is newer than the node this targets, so this is the fallback.

@@ -93,8 +93,22 @@ turns.** This runner used to give each file three turns of the loop and then
 check its `mustCall` tallies. Node checks its own from `process.on('exit')` --
 that is, once there is nothing left to run -- and three turns is not the same
 thing. `setTimeout(common.mustCall(), 10)` had about a millisecond to fire and
-was reported as a callback that never ran. It waits for `beforeExit` now, with
-a cap for a test that leaves an interval running on purpose.
+was reported as a callback that never ran.
+
+It waits for `beforeExit` now, and for the *right* `beforeExit`: the event can
+fire more than once, because a listener is allowed to schedule more work and
+node re-emits each time the loop drains again. `test-process-beforeexit.js`
+chains four rounds through an immediate, a timer and a socket. So the runner
+leaves on the first round where nothing is outstanding, and waits for another
+if an expectation is unmet.
+
+Which needed two more things. The wait cannot be an `await` in the main flow:
+if the loop ends while that promise is pending, node exits with its "unsettled
+top-level await" status and the parent reads an exit code instead of the report
+the runner wrote. And a test can leave the wait pending forever -- unmet
+expectation, no further round -- so there is a `process.on('exit')` handler
+that reports if nothing else has. Node judges from an exit handler for exactly
+that reason: it is the one moment that always arrives.
 
 That fix immediately needed a second one. Draining afterwards with
 `setImmediate` *turns the loop*, and a turn after the loop has gone quiet runs
@@ -103,6 +117,14 @@ exactly the work that was supposed to have been abandoned:
 afterwards is ticks and microtasks only, which deliver a pending warning
 without giving the loop another turn. Both of these were the runner
 manufacturing the behaviour it was measuring, in opposite directions.
+
+**A module that owns uncaught-exception dispatch gets first refusal.** Node's
+runtime hands an escaped exception to `process`, which runs a capture callback
+or emits `uncaughtException`, and a program with either carries on. A runner
+that caught it and reported a failure would fail every such test for the one
+reason the test is about. Only a module whose `shape.mjs` declares the hook can
+claim an exception; for everything else an escaped exception is exactly the
+failure it looks like.
 
 **Two differential fuzzers, for the two places reading the source was not
 enough.**
@@ -131,33 +153,42 @@ caught on two seeds in six rather than on all of them. Run several.
 
 ## Modules
 
-Counts are `passed / applicable`, where applicable excludes tests that spawn a
-real `node` child — those assert on node's binary, which our module is not in.
-Each exclusion is listed with a reason in the module's `not-applicable` file
-rather than inferred by a rule, so the number can be audited.
+Counts are `passed / applicable`. Two kinds of file are outside that.
 
-**237 of node's own test files pass** across fourteen modules, of which 11 are hollow. The per-module
+A test that spawns a real `node` child asserts on node's binary, which our
+module is not in; there is no way to install ourselves into a process we did
+not start. Each of those is listed with a reason in the module's
+`not-applicable` file rather than inferred by a rule, so the number can be
+audited.
+
+A test that *skips* is one that asked for something we do not have — an
+internal module, a helper, a platform feature — and said so. The runner prints
+the reason for every skip, so they can be read rather than assumed. Neither is
+counted as a pass or a failure, which is what `sweep.mjs` reports and what the
+rows below are.
+
+**280 of node's own test files pass** across fifteen modules, of which 13 are hollow. The per-module
 counts below are `passed / applicable`; `compiles` is `functions lowered /
 constructs refused`, from `nts hir`.
 
 | module | node's tests | hollow | compiles | note |
 | --- | :---: | :---: | :---: | --- |
-| `console` | **22 / 22** | 2 | 32 / 261 | complete |
-| `os` | **4 / 4** | 1 | 40 / 85 | complete |
+| `console` | **22 / 22** | 2 | 18 / 281 | complete |
+| `os` | **4 / 4** | 1 | 44 / 86 | complete |
 | `punycode` | **1 / 1** | 0 | 7 / 9 | complete |
-| `querystring` | **4 / 4** | 0 | 30 / 182 | complete |
-| `timers` | 52 / 62 | 2 | 12 / 170 | complete but for `async_hooks` and the `domain` integration built on it |
-| `path` | **15 / 16** | 0 | 24 / 118 | complete but for `matchesGlob`; the skip is Windows-only |
-| `events` | **28 / 33** | 1 | 25 / 128 | complete but for domains, `EventTarget` and the promise forms |
-| `url` | 26 / 36 | 1 | 51 / 356 | complete; exact on the Web Platform Tests corpus |
-| `string_decoder` | **2 / 3** | 0 | 27 / 187 | complete; the failure is the class-vs-function difference |
-| `buffer` | 33 / 60 | 1 | 10 / 190 | the read/write surface is complete and validated |
-| `diagnostics_channel` | 23 / 45 | 0 | 22 / 120 | complete; the failures need node's own publishers |
-| `assert` | 9 / 19 | 0 | 27 / 217 | complete, including `CallTracker` and node's Myers diff |
-| `util` | 7 / 19 | 1 | 19 / 195 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `fs` | 11 / 212 | 2 | 43 / 218 | the sync surface; async, streams and watchers are absent |
+| `querystring` | **4 / 4** | 0 | 18 / 199 | complete |
+| `timers` | 52 / 54 | 2 | 14 / 174 | complete but for `async_hooks` and the `domain` integration built on it |
+| `path` | **15 / 16** | 0 | 28 / 120 | complete but for `matchesGlob`; the skip is Windows-only |
+| `events` | **28 / 33** | 1 | 13 / 146 | complete but for domains, `EventTarget` and the promise forms |
+| `process` | 43 / 63 | 2 | 51 / 225 | complete but for `process.binding`, `stdin` and workers |
+| `url` | 26 / 36 | 1 | 35 / 378 | complete; exact on the Web Platform Tests corpus |
+| `string_decoder` | **2 / 3** | 0 | 12 / 207 | complete; the failure is the class-vs-function difference |
+| `buffer` | 33 / 60 | 1 | 10 / 195 | the read/write surface is complete and validated |
+| `diagnostics_channel` | 23 / 45 | 0 | 7 / 141 | complete; the failures need node's own publishers |
+| `assert` | 9 / 19 | 0 | 14 / 236 | complete, including `CallTracker` and node's Myers diff |
+| `util` | 7 / 19 | 1 | 23 / 197 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `fs` | 11 / 212 | 2 | 31 / 236 | the sync surface; async, streams and watchers are absent |
 | `stream` | — | — | — | not started |
-| `process` | — | — | — | not started |
 
 The first two columns are what
 
@@ -778,7 +809,8 @@ Complete from node v24.20.0: `setTimeout`, `setInterval`, `setImmediate` and
 the three that cancel them, the `Timeout` and `Immediate` handles with
 `ref`/`unref`/`hasRef`/`refresh`/`close`, `Symbol.toPrimitive` and
 `Symbol.dispose`, and all of `timers/promises` including the async-iterator
-`setInterval` and the WICG `scheduler`. 52 of 62 files pass, 2 of them hollow.
+`setInterval` and the WICG `scheduler`. 52 of 54 applicable files pass, 2 of
+them hollow; 8 more skip.
 
 The architecture is node's, and the obvious alternative is worse. Giving every
 timeout its own host timer makes `setTimeout` a syscall and puts ten thousand
@@ -831,6 +863,78 @@ pass when `async_hooks` exists, not before.
 Eight files skip. Three want `NodeEventTarget` to count listeners on a
 non-`AbortSignal` event target, which is `events`' to provide; three want
 `internal/test/binding`; two want child-process helpers.
+
+## `process`
+
+The object every other module reaches for, and node's only global that is also
+a module. Node has no `lib/process.js` worth the name -- the real file is four
+lines re-exporting the global -- so this is assembled from
+`lib/internal/process/*` and `lib/internal/bootstrap/node.js` the way node
+assembles it at startup.
+
+It is an `EventEmitter`, which is not decoration: `exit`, `beforeExit`,
+`uncaughtException` and every signal are delivered as events, and a program's
+only way to react to its own shutdown is to listen. So `node:events` is its one
+sibling dependency, and `node:os` is the other -- the signal table `kill` needs
+is read from `<signal.h>` at build time, because `SIGUSR1` is 10 on Linux and
+30 on macOS and hard-coding it would be right on exactly one platform.
+
+`process.env` is a `Proxy`. Node implements it with V8 property interceptors on
+an exotic object, and interceptors are what a `Proxy` is; a plain object with
+the environment copied into it would be a different thing, because `getenv` in
+a linked C library has to see what JavaScript just assigned. The type
+discipline is deliberate and worth knowing: the environment maps strings to
+strings and can represent nothing else, so a symbol key or an accessor
+descriptor is refused rather than coerced, while everything else is coerced --
+including `undefined`, which becomes the four characters `undefined`. It also
+inherits from `Object.prototype`, so `process.env.hasOwnProperty` is the
+function until a variable of that name shadows it.
+
+Three seams cross from the runtime into this module, and all three are places
+where nothing above the seam can see the event:
+
+- **The lifecycle.** `beforeExit` fires when the loop has drained but the
+  process has not ended, and a listener may schedule more work and be asked
+  again; `exit` fires once. Only the loop knows its queues are empty.
+- **Uncaught exceptions.** By the time an exception is loose the frame that
+  could have caught it is gone, so the runtime hands it to `process`, which
+  runs a capture callback or emits `uncaughtException`. A capture callback wins
+  over the event, because a program that installed one asked to be the last
+  word.
+- **Exceptions from a tick callback.** Same reason, one level down: the stack
+  above a tick callback is the runtime's, so a throw there has to be caught by
+  whoever is draining the queue.
+
+**A cast swallowed an operator.** `signalNumber` began as
+`if (signal === (signal as number | 0))`, transcribed from node's
+`sig === (sig | 0)`. In TypeScript `signal as number | 0` parses as a *type* --
+the union of `number` and the literal `0`, which is just `number` -- so the
+bitwise or is not there at all and the test reads `signal === signal`. It was
+true for everything, so `process.kill(0, "test")` passed the string
+`"test"` to the system call instead of raising `ERR_UNKNOWN_SIGNAL`. The fix is
+one pair of parentheses. Nothing about the line looks wrong, which is the
+point: a cast and an operator that share a token are a hazard specific to
+transcribing C-shaped code into TypeScript.
+
+**A rule with two implementations had two behaviours.** `nts_uv_err_name` and
+`nts_uv_err_message` were defined in both `fs` and `util`'s native halves,
+having been added to each when that module needed them. They had already
+diverged -- one asked `getSystemErrorMessage` and fell back to a hand-written
+table, the other read `getSystemErrorMap` and answered `unknown error` -- so
+which behaviour a module got depended on which bindings file it happened to
+load. They are in `internal/` now, whose own header had already written down
+why: *a binding defined twice with two slightly different bodies is a bug that
+only shows up in whichever module is tested second.*
+
+43 of 63 applicable files pass, 2 of them hollow; 7 skip and 24 are not
+applicable.
+
+Absent: `process.binding` (node's deprecated internal escape hatch),
+`process.stdin` (a readable stream, which is `node:stream`'s to provide), and
+anything worker-related. Seventeen files spawn a real `node` and assert on what
+the child printed, and seven call `execve` successfully -- which does not fail
+the runner, it *ends* it, because the kernel loads another program over this
+one. Both sets are listed with reasons in `not-applicable`.
 
 ## `fs`
 

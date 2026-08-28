@@ -14,7 +14,7 @@ import { join, dirname, resolve as resolvePath } from "node:path";
 import { createRequire } from "node:module";
 import assert from "node:assert";
 import process from "node:process";
-import { makeCommon, checkPending, Skip } from "./common.mjs";
+import { makeCommon, checkPending, peekPending, Skip } from "./common.mjs";
 import tmpdir from "./tmpdir.mjs";
 import fixtures from "./fixtures.mjs";
 import * as hijackstdio from "./hijackstdio.mjs";
@@ -29,6 +29,14 @@ const [, , moduleName, file, addon] = process.argv;
 // `setImmediate` would report every file as failing for reasons that have
 // nothing to do with the file. The same rule as substituting node's `util`
 // into a differential test.
+// Node's own `process`, held separately from the global.
+//
+// `node:process` installs itself over `globalThis.process`, and after that a
+// bare `process` in this file would be the module under test. The runner's own
+// scheduling, its `beforeExit` wait and its exit have to keep working while
+// the subject is being measured -- and have to keep working when the subject
+// is broken, which is the whole point of running it.
+const hostProcess = globalThis.process;
 const hostSetImmediate = globalThis.setImmediate;
 const hostSetTimeout = globalThis.setTimeout;
 const hostClearTimeout = globalThis.clearTimeout;
@@ -47,11 +55,53 @@ const moduleDir = join(ROOT, "runtime/node", moduleName);
  */
 const reportTo = process.stdout.write.bind(process.stdout);
 
+let reported = false;
+
+/**
+ * Lets `settle` give up when the loop ends underneath it.
+ *
+ * Without this the runner exits with node's "unsettled top-level await" status
+ * rather than the status its own report implies, and the parent reads the exit
+ * code rather than the report.
+ */
+let releaseSettle = null;
+
 function report(result) {
+  if (reported) return;
+  reported = true;
   // Bound at load: node's console tests replace `process.stdout.write`, and
   // the report must reach the parent whatever the test did to the stream.
   reportTo(`${JSON.stringify(result)}\n`);
 }
+
+/**
+ * The last word, if the loop ended before the runner had one.
+ *
+ * A test can leave `settle` waiting forever: it has an unmet expectation, so
+ * the runner waits for another `beforeExit` round to meet it, and no round
+ * comes because the loop has drained. The process then exits with nothing
+ * written and the parent sees silence, which is a failure with no reason
+ * attached.
+ *
+ * Node judges its own tests from an `exit` handler for the same reason -- it
+ * is the one moment that always arrives. This is that handler, and it only
+ * speaks if nothing else has.
+ */
+hostProcess.on("exit", () => {
+  releaseSettle?.();
+  if (reported) return;
+  const missed = checkPending();
+  if (missed.length > 0) {
+    const m = missed[0];
+    report({
+      kind: "fail",
+      why: `${m.name} was called ${m.actual} times, expected ${m.expected}`,
+      detail: "the loop ended with the expectation unmet",
+    });
+  } else {
+    report({ kind: "pass" });
+  }
+});
 
 /**
  * A cap on waiting for the loop to drain, for a test that leaves something
@@ -60,49 +110,89 @@ function report(result) {
 const SETTLE_CAP_MS = 2000;
 
 /**
- * Wait for the loop to run out of work before deciding whether a `mustCall`
- * was called.
+ * How many `beforeExit` rounds to wait through.
  *
- * Node checks its own `mustCall` tallies from a `process.on('exit')` handler,
- * so a test is judged only once there is nothing left to run. Turning the loop
- * a fixed number of times is not the same thing and quietly fails any test
- * that waits on a real delay: `setTimeout(common.mustCall(), 10)` had three
- * turns to fire, took ten milliseconds, and was reported as a callback that
- * never ran.
- *
- * `beforeExit` is that signal -- it fires when the loop has nothing pending --
- * and the cap keeps a test that leaves an interval running from hanging the
- * runner. The cap timer is unrefed, or it would itself be pending work and
- * `beforeExit` would never arrive before it.
+ * A bound rather than a belief that tests are well behaved: a listener that
+ * schedules work from every `beforeExit` would keep the loop alive forever,
+ * and the runner would hang instead of failing.
  */
-async function settle() {
-  await new Promise((resolve) => {
-    let cap;
-    const finish = () => {
-      hostClearTimeout(cap);
-      process.off("beforeExit", finish);
-      resolve();
-    };
-    cap = hostSetTimeout(() => {
-      process.off("beforeExit", finish);
-      resolve();
-    }, SETTLE_CAP_MS);
-    cap.unref();
-    process.on("beforeExit", finish);
+const SETTLE_ROUNDS = 16;
+
+/**
+ * Decide the verdict once the loop has run out of work.
+ *
+ * Node checks its own `mustCall` tallies from a `process.on('exit')` handler --
+ * that is, once there is nothing left to run. Turning the loop a fixed number
+ * of times is not the same thing: `setTimeout(common.mustCall(), 10)` had
+ * about a millisecond to fire and was reported as a callback that never ran.
+ *
+ * `beforeExit` is the signal, and it can arrive more than once. A listener is
+ * allowed to schedule more work -- that is what the event is *for*, and node
+ * re-emits it each time the loop drains again. So this leaves on the first
+ * round where nothing is outstanding; if an expectation is unmet, another
+ * round is where it would be met.
+ *
+ * Not written as an `await` in the main flow, though it reads better that way.
+ * If the loop ends while that promise is pending, node exits with its
+ * "unsettled top-level await" status and the parent reads an exit code instead
+ * of the report this file wrote. Handlers cannot be left pending; a promise
+ * can.
+ */
+function judgeWhenQuiet() {
+  let rounds = 0;
+  let finished = false;
+
+  const cap = hostSetTimeout(() => finish(), SETTLE_CAP_MS);
+  // Unrefed, or the cap would itself be pending work and `beforeExit` would
+  // never arrive before it.
+  cap.unref();
+
+  const onBeforeExit = () => {
+    rounds++;
+    if (peekPending().length > 0 && rounds < SETTLE_ROUNDS) return;
+    finish();
+  };
+  hostProcess.on("beforeExit", onBeforeExit);
+
+  function finish() {
+    if (finished) return;
+    finished = true;
+    hostClearTimeout(cap);
+    hostProcess.off("beforeExit", onBeforeExit);
+    // Let ticks and microtasks finish, because `process.emitWarning` delivers
+    // on a tick. Ticks and microtasks only -- deliberately not `setImmediate`
+    // or a zero timer. Those turn the loop, and a turn after the loop has gone
+    // quiet runs exactly the work that was supposed to have been abandoned:
+    // `setImmediate(common.mustNotCall()).unref()` called its callback.
+    drain(3, judge);
+  }
+}
+
+/** `times` rounds of "every tick, then every microtask", then `then`. */
+function drain(times, then) {
+  if (times === 0) {
+    then();
+    return;
+  }
+  hostProcess.nextTick(() => {
+    Promise.resolve().then(() => drain(times - 1, then));
   });
-  // Then let ticks and microtasks finish, because `process.emitWarning`
-  // delivers on a tick.
-  //
-  // Ticks and microtasks only -- deliberately not `setImmediate` or a zero
-  // timer. Those turn the loop, and a turn after the loop has gone quiet runs
-  // exactly the work that was supposed to have been abandoned: an unrefed
-  // immediate does not *keep* the loop alive but does run if something else
-  // turns it. Draining with a `setImmediate` here made
-  // `setImmediate(common.mustNotCall()).unref()` call its callback, which is
-  // the runner manufacturing the behaviour it was measuring.
-  for (let i = 0; i < 3; i++) {
-    await new Promise((resolve) => process.nextTick(resolve));
-    await Promise.resolve();
+}
+
+function judge() {
+  try {
+    const missed = checkPending();
+    if (missed.length > 0) {
+      const m = missed[0];
+      throw new Error(`${m.name} was called ${m.actual} times, expected ${m.expected}`);
+    }
+    if (testCases.registered > 0 && testCases.skipped === testCases.registered) {
+      report({ kind: "skip", why: `all ${testCases.registered} node:test case(s) skipped` });
+    } else {
+      report({ kind: "pass" });
+    }
+  } catch (e) {
+    reportFailure(e);
   }
 }
 
@@ -116,6 +206,9 @@ const siblings = new Map();
 
 /** Node-internal module ids the module under test answers for, from its shape. */
 let internals = null;
+
+/** The module's own uncaught-exception dispatch, when it has one. */
+let uncaughtHandler = null;
 
 /**
  * `--sabotage`, via the environment so the child sees it.
@@ -176,6 +269,7 @@ try {
   }
   shapeModule?.installGlobals?.(underTest);
   internals = sabotaged ? {} : (shapeModule?.internals?.({ ...exports }) ?? null);
+  uncaughtHandler = sabotaged ? null : (shapeModule?.dispatchUncaught ?? null);
 
   const usesPath = join(moduleDir, "uses");
   if (existsSync(usesPath)) {
@@ -198,7 +292,7 @@ try {
   // Nothing to run against, so stop here rather than letting the test fail
   // later for a reason that only restates this one.
   report({ kind: "fail", why: `loading the module: ${e?.message ?? e}` });
-  process.exit(0);
+  hostProcess.exit(0);
 }
 
 const common = makeCommon();
@@ -349,28 +443,34 @@ try {
   capturingLoadWarnings = false;
   await new Promise((resolve, reject) => hostSetImmediate(() => {
     try {
+      // `globalThis.process`, not the captured one: node hands the CJS wrapper
+      // the real global, so when `node:process` has installed itself the test
+      // must see the installed object under both names.
       run(shimmedRequire, module, module.exports, file, dirname(file),
-          process, globalThis, globalThis);
+          globalThis.process, globalThis, globalThis);
       resolve();
     } catch (e) {
-      reject(e);
+      // A module that owns uncaught-exception dispatch gets first refusal.
+      //
+      // Node's runtime hands an escaped exception to `process`, which runs a
+      // capture callback or emits `uncaughtException`; a program with either
+      // of those carries on. Catching it here and reporting a failure would
+      // make every such test fail for the one reason the test is about. Only
+      // a module that declares the hook can claim one -- for everything else
+      // an escaped exception is exactly the failure it looks like.
+      if (uncaughtHandler?.(underTest, e)) resolve();
+      else reject(e);
     }
   }));
-  await settle();
-  const missed = checkPending();
-  if (missed.length > 0) {
-    const m = missed[0];
-    throw new Error(`${m.name} was called ${m.actual} times, expected ${m.expected}`);
-  }
-  if (testCases.registered > 0 && testCases.skipped === testCases.registered) {
-    report({ kind: "skip", why: `all ${testCases.registered} node:test case(s) skipped` });
-  } else {
-    report({ kind: "pass" });
-  }
+  judgeWhenQuiet();
 } catch (e) {
+  reportFailure(e);
+}
+
+function reportFailure(e) {
   if (e instanceof Skip || e?.name === "Skip") {
     report({ kind: "skip", why: e.message });
-    process.exit(0);
+    hostProcess.exit(0);
   }
   report({
     kind: "fail",

@@ -113,3 +113,27 @@ export function validateAbortSignal(signal: unknown, name: string): void {
     throw new ERR_INVALID_ARG_TYPE(name, "AbortSignal", signal);
   }
 }
+
+/** An octal string, and nothing else that `parseInt` would half-accept. */
+const OCTAL = /^[0-7]+$/;
+
+/**
+ * A file mode, given as a number or an octal string.
+ *
+ * The regular expression is the point. `parseInt("123x", 8)` is 83 and
+ * `parseInt("999", 8)` is `NaN`, so parsing first and checking after would
+ * accept the first and produce a confusing error for the second. A mode is
+ * either entirely octal digits or it is a mistake.
+ */
+export function parseFileMode(value: unknown, name: string, byDefault?: number): number {
+  const given = value ?? byDefault;
+  let mode = given;
+  if (typeof mode === "string") {
+    if (!OCTAL.test(mode)) {
+      throw new ERR_INVALID_ARG_VALUE(name, mode, "must be a 32-bit unsigned integer or an octal string");
+    }
+    mode = Number.parseInt(mode, 8);
+  }
+  validateUint32(mode, name);
+  return mode as number;
+}

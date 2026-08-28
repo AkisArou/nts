@@ -6,14 +6,6 @@ const require = createRequire(import.meta.url);
 // `util.getSystemErrorName` and the error messages are built from.
 import "../internal/bindings.node.mjs";
 
-globalThis.nts_uv_err_name = (code) => {
-  try { return require("node:util").getSystemErrorName(code); } catch { return "UNKNOWN"; }
-};
-
-globalThis.nts_uv_err_message = (code) => {
-  const entry = require("node:util").getSystemErrorMap().get(code);
-  return entry ? entry[1] : "unknown error";
-};
 globalThis.nts_uv_error_codes = () => [...require("node:util").getSystemErrorMap().keys()];
 globalThis.nts_uv_error_names = () =>
   [...require("node:util").getSystemErrorMap().values()].map((v) => v[0]);

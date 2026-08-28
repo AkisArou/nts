@@ -585,6 +585,70 @@ export class ERR_ILLEGAL_CONSTRUCTOR extends NodeTypeError {
   }
 }
 
+/**
+ * A `defineProperty` an exotic object will not accept.
+ *
+ * `process.env` is the only user of this: it is backed by the real
+ * environment, where a value is a string and nothing else. An accessor has
+ * nowhere to live, and a non-writable or non-configurable property would be a
+ * promise the environment cannot keep -- another process can change it.
+ */
+export class ERR_INVALID_OBJECT_DEFINE_PROPERTY extends NodeTypeError {
+  override readonly code = "ERR_INVALID_OBJECT_DEFINE_PROPERTY";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "TypeError";
+  }
+}
+
+/** `Unknown signal: SIGBANANA`. */
+export class ERR_UNKNOWN_SIGNAL extends NodeTypeError {
+  override readonly code = "ERR_UNKNOWN_SIGNAL";
+
+  constructor(signal: string) {
+    super(`Unknown signal: ${signal}`);
+    this.name = "TypeError";
+  }
+}
+
+/** Only one capture callback may be installed at a time. */
+export class ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET extends NodeError {
+  override readonly code = "ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET";
+
+  constructor() {
+    super("`process.setUncaughtExceptionCaptureCallback()` was called while a capture callback was already active");
+    this.name = "Error";
+  }
+}
+
+/** The host cannot do this at all, as opposed to refusing this request. */
+export class ERR_FEATURE_UNAVAILABLE_ON_PLATFORM extends NodeTypeError {
+  override readonly code = "ERR_FEATURE_UNAVAILABLE_ON_PLATFORM";
+
+  constructor(feature: string) {
+    super(`The feature ${feature} is unavailable on this platform, which is being used to run Node.js`);
+    this.name = "TypeError";
+  }
+}
+
+/**
+ * The `RangeError` twin of `ERR_INVALID_ARG_VALUE`.
+ *
+ * Same code, different base. Node uses it where the argument is the right
+ * type but outside the range the call can act on -- a negative previous CPU
+ * reading, say -- because `catch (e) { if (e instanceof RangeError) }` should
+ * work for that and not for a type mistake.
+ */
+export class ERR_INVALID_ARG_VALUE_RANGE extends NodeRangeError {
+  override readonly code = "ERR_INVALID_ARG_VALUE";
+
+  constructor(name: string, value: unknown, reason = "is invalid") {
+    super(`The property '${name}' ${reason}. Received ${inspectValue(value)}`);
+    this.name = "RangeError";
+  }
+}
+
 export class ERR_INVALID_THIS extends NodeTypeError {
   override readonly code = "ERR_INVALID_THIS";
 

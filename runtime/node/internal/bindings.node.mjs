@@ -9,6 +9,9 @@
 //
 // Each module's own `bindings.node.mjs` imports this and adds what is its own.
 import process from "node:process";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 // Read at call time, not captured: node's tests replace `process.stdout.write`
 // to see what was printed, and a captured reference would miss the
@@ -40,3 +43,31 @@ globalThis.nts_process_cwd = () => process.cwd();
 // `node_modules` to be inside, so the compiled answer is always false; on node
 // the stack is what says.
 globalThis.nts_is_inside_node_modules = () => false;
+
+// libuv's error table, for `internal/uv.ts`.
+//
+// Here rather than in `fs` and `util`, which each had their own copy. The two
+// had already drifted: one asked `getSystemErrorMessage` and fell back to a
+// hand-written table, the other read `getSystemErrorMap` and answered "unknown
+// error". A rule with two implementations has two behaviours, and which one a
+// module got depended on which bindings file it happened to load.
+globalThis.nts_uv_err_name = (code) => {
+  try {
+    return require("node:util").getSystemErrorName(code);
+  } catch {
+    return "UNKNOWN";
+  }
+};
+
+globalThis.nts_uv_err_message = (code) => {
+  const util = require("node:util");
+  if (typeof util.getSystemErrorMessage === "function") {
+    try {
+      return util.getSystemErrorMessage(code);
+    } catch {
+      // Fall through to the map.
+    }
+  }
+  const entry = util.getSystemErrorMap().get(code);
+  return entry ? entry[1] : "unknown error";
+};
