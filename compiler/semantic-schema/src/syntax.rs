@@ -156,6 +156,14 @@ pub const EXPRESSION_WITH_TYPE_ARGUMENTS: u16 = 234;
 pub const HERITAGE_CLAUSE: u16 = 299;
 pub const ENUM_MEMBER: u16 = 306;
 pub const SOURCE_FILE: u16 = 307;
+/// `import ... from "..."`. Read off real output: a file with exactly two
+/// imports has exactly two children of this kind.
+pub const IMPORT_DECLARATION: u16 = 273;
+/// `export { x } from "..."` and `export * from "..."`, and also a plain
+/// `export { x }` with no specifier. Only the forms *with* a specifier name
+/// another module; the rest resolve to nothing, which is what distinguishes
+/// them without needing a second kind.
+pub const EXPORT_DECLARATION: u16 = 279;
 /// The token every source file ends with. Read off real output: it is the last
 /// child of a `SourceFile`, and it is neither a statement nor a declaration.
 pub const END_OF_FILE_TOKEN: u16 = 1;

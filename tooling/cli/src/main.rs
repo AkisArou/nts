@@ -132,6 +132,14 @@ fn main() -> Result<()> {
             let tsconfig = project(&rest);
             dump_facts(&tsconfig)
         }
+        // The module graph, and the order it implies. The instrument comes
+        // before anything depends on the order: evaluation order is one of the
+        // few places where a wrong answer looks exactly like a right one, so it
+        // has to be visible.
+        Some("modules") => {
+            let rest: Vec<String> = args.collect();
+            dump_modules(&project(&rest))
+        }
         Some("version") | None => {
             println!("nts {}", env!("CARGO_PKG_VERSION"));
             println!("snapshot schema v{SCHEMA_VERSION}");
@@ -316,6 +324,113 @@ fn hex(bytes: &[u8]) -> String {
 ///
 /// A readable dump rather than a debug format: RFC §4.1 asks that every stage be
 /// inspectable, and the point of this layer is that its decisions are visible.
+/// Every module, what it imports, and what its file has at top level.
+///
+/// The kinds are printed as numbers on purpose: tsgo's `SyntaxKind` numbering is
+/// not TypeScript's, and every constant in `syntax.rs` was read off real output
+/// rather than taken from a table. This is the tool that reads them off.
+fn dump_modules(tsconfig: &Utf8Path) -> Result<()> {
+    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let snapshot = source.snapshot(tsconfig)?;
+
+    let mut roots: Vec<(u32, usize)> = snapshot
+        .modules
+        .iter()
+        .enumerate()
+        .map(|(at, module)| (module.root.0, at))
+        .collect();
+    roots.sort_unstable();
+
+    for (at, module) in snapshot.modules.iter().enumerate() {
+        let name = snapshot
+            .sources
+            .get(module.file.0 as usize)
+            .map_or("?", |file| file.display_path.as_str());
+        println!("module {at} {name}  root=n{}", module.root.0);
+        let end = roots
+            .iter()
+            .find(|(root, _)| *root > module.root.0)
+            .map_or(u32::MAX, |(root, _)| *root);
+        for child in &snapshot.nodes[module.root.0 as usize].children {
+            let Some(record) = snapshot.nodes.get(child.0 as usize) else {
+                continue;
+            };
+            if child.0 >= end {
+                continue;
+            }
+            let kinds: Vec<String> = if record.kind == nts_semantic_schema::NodeKind::List {
+                record
+                    .children
+                    .iter()
+                    .filter_map(|inner| snapshot.nodes.get(inner.0 as usize))
+                    .map(describe_node)
+                    .collect()
+            } else {
+                vec![describe_node(record)]
+            };
+            for kind in kinds {
+                println!("  {kind}");
+            }
+        }
+        // How an import resolves, which is the question the graph turns on: does
+        // an imported identifier's symbol name the *import site* or the
+        // declaration it refers to? Printed rather than assumed.
+        for child in module.root.0..end.min(u32::try_from(snapshot.nodes.len()).unwrap_or(0)) {
+            let node = &snapshot.nodes[child as usize];
+            if node.kind != nts_semantic_schema::NodeKind::Syntax(273) {
+                continue;
+            }
+            println!("  import at n{child}:");
+            let mut stack = vec![nts_semantic_schema::NodeId(child)];
+            while let Some(id) = stack.pop() {
+                let Some(record) = snapshot.nodes.get(id.0 as usize) else {
+                    continue;
+                };
+                stack.extend(record.children.iter().copied());
+                let Some(symbol) = record.symbol else {
+                    continue;
+                };
+                let Some(declared) = snapshot.symbols.get(symbol.0 as usize) else {
+                    continue;
+                };
+                let homes: Vec<String> = declared
+                    .declarations
+                    .iter()
+                    .map(|node| {
+                        let owner = roots
+                            .iter()
+                            .rev()
+                            .find(|(root, _)| *root <= node.0)
+                            .map_or(usize::MAX, |(_, at)| *at);
+                        format!("n{}=module{owner}", node.0)
+                    })
+                    .collect();
+                println!(
+                    "    {:?} symbol {} declared at {:?}",
+                    record.text.as_deref().unwrap_or(""),
+                    symbol.0,
+                    homes
+                );
+            }
+        }
+        println!("  imports: {:?}", module.imports);
+    }
+    Ok(())
+}
+
+/// One node, as `kind <number> "text"`.
+fn describe_node(record: &nts_semantic_schema::NodeRecord) -> String {
+    let kind = match record.kind {
+        nts_semantic_schema::NodeKind::Syntax(kind) => kind.to_string(),
+        nts_semantic_schema::NodeKind::List => "list".to_owned(),
+    };
+    match &record.text {
+        Some(text) => format!("kind {kind} {text:?}"),
+        None => format!("kind {kind}"),
+    }
+}
+
 fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     // Call resolution is not optional here: without it a call site has no known
