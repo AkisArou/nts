@@ -1365,6 +1365,26 @@ fn representation_of(
             HirType::Managed(ManagedType::Object(ty))
         }
 
+        // A tuple whose elements share a representation *is* an array of that
+        // representation. `[number, number]` is two doubles in a row, which is
+        // what `number[]` is -- what the tuple adds is a length, and a length is
+        // not part of a representation.
+        //
+        // A heterogeneous tuple is a struct with positional fields, which is a
+        // different thing: it needs a layout rather than an element type, and
+        // it is refused rather than approximated by the widest member.
+        TypeKind::Tuple(elements) => {
+            let mut shared: Option<HirType> = None;
+            for element in elements {
+                let element = representation_within(snapshot, *element, path, subst)?;
+                match &shared {
+                    Some(existing) if *existing != element => return None,
+                    _ => shared = Some(element),
+                }
+            }
+            HirType::Managed(ManagedType::Array(Box::new(shared?)))
+        }
+
         // A union whose members all share one representation has that
         // representation. `0 | 1 | 2` is three literal types and one machine
         // type, and refusing it would reject the most useful thing TypeScript
@@ -3588,12 +3608,124 @@ impl<'a> FuncBuilder<'a> {
         target: NodeId,
         source: NodeId,
     ) -> Result<ValueId, Diagnostic> {
+        // `[a, b] = [b, a]` and `({ x, y } = p)`. A pattern on the left is not
+        // one place, so it cannot go through `place_of` at all: the value is
+        // lowered *once* and each target is assigned a read of it, which is
+        // what makes the swap idiom a swap rather than two copies of `b`.
+        if matches!(
+            self.kind_of(target),
+            Some(syntax::ARRAY_LITERAL_EXPRESSION | syntax::OBJECT_LITERAL_EXPRESSION)
+        ) {
+            let value = self.lower_expression(source)?;
+            self.assign_pattern(target, value)?;
+            return Ok(value);
+        }
+
         // The place first, then the value: `xs[i()] = v()` evaluates the array,
         // then the index, then the value, and JavaScript says so.
         let place = self.place_of(target)?;
         let value = self.lower_expression(source)?;
         self.write_place(id, &place, value);
         Ok(value)
+    }
+
+    /// Assign through a pattern written as a literal.
+    ///
+    /// The mirror of [`Self::bind_pattern`], and a separate function because
+    /// the targets are *existing places* rather than new names: `[a, b] = …`
+    /// writes to two locals, and `[o.x, xs[i]] = …` writes to a field and an
+    /// element. So each target goes through `place_of` exactly as it would have
+    /// on its own.
+    ///
+    /// The same shapes refuse, for the same reasons, and by the same names.
+    fn assign_pattern(&mut self, target: NodeId, value: ValueId) -> Result<(), Diagnostic> {
+        let object = self.kind_of(target) == Some(syntax::OBJECT_LITERAL_EXPRESSION);
+        for (position, element) in self.children(target).into_iter().enumerate() {
+            let origin = self.origin(element);
+            let (property, destination) = if object {
+                let parts = self.children(element);
+                match (self.kind_of(element), parts.as_slice()) {
+                    // `{ x: o.y } = p`: the property, then where it goes.
+                    (Some(syntax::PROPERTY_ASSIGNMENT), [from, to]) => (*from, *to),
+                    // `({ x } = p)`: one identifier standing for both the
+                    // property *and* the variable it writes to -- and the
+                    // symbol on it is the **property's**, not the variable's.
+                    // Assigning through it wrote to a symbol nothing reads, so
+                    // `x` kept its old value and the compiler said nothing.
+                    //
+                    // Resolving it needs the checker's
+                    // `getShorthandAssignmentValueSymbol`, which this frontend
+                    // does not ask for. Until it does, the explicit form
+                    // `({ x: x } = p)` is the one that works, and this is
+                    // refused rather than guessed at by name -- a guess would
+                    // be wrong exactly where a local shadows an outer one.
+                    (Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT), _) => {
+                        return Err(self.unsupported(
+                            element,
+                            "a shorthand in an assignment pattern, whose name resolves to the property",
+                        ));
+                    }
+                    _ => {
+                        return Err(self.unsupported(
+                            element,
+                            "an assignment pattern with a default or a rest",
+                        ));
+                    }
+                }
+            } else {
+                (element, element)
+            };
+
+            let read = if object {
+                let HirType::Managed(ManagedType::Object(type_id)) =
+                    self.values[value.0 as usize].ty.clone()
+                else {
+                    return Err(self.unsupported(element, "destructuring something with no fields"));
+                };
+                let layout = self.layout_of(element, type_id)?;
+                let name = self
+                    .node(property)
+                    .text
+                    .clone()
+                    .ok_or_else(|| self.unsupported(element, "a computed property name"))?;
+                let Some(field) = layout.index_of(&name) else {
+                    return Err(self.absent_member(element, type_id, &name));
+                };
+                let ty = layout.fields[field as usize].ty.clone();
+                self.push(
+                    OpKind::FieldGet {
+                        object: value,
+                        field,
+                    },
+                    ty,
+                    origin,
+                )
+            } else {
+                let HirType::Managed(ManagedType::Array(element_ty)) =
+                    self.values[value.0 as usize].ty.clone()
+                else {
+                    return Err(
+                        self.unsupported(element, "destructuring something that is not an array")
+                    );
+                };
+                #[allow(clippy::cast_precision_loss)]
+                let at = position as f64;
+                let index = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
+                self.push(
+                    OpKind::ArrayGet {
+                        array: value,
+                        index,
+                        checked: true,
+                    },
+                    *element_ty,
+                    origin,
+                )
+            };
+
+            let place = self.place_of(destination)?;
+            self.write_place(destination, &place, read);
+        }
+        Ok(())
     }
 
     /// Work out *where* an assignment writes, evaluating the parts that decide

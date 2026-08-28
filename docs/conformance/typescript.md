@@ -85,7 +85,7 @@ diagnostic.
 | `?.` and `??` | **not done** | |
 | template literals | done | a head and one span per substitution, walked left to right — which is the evaluation order and is observable. Each substitution goes through the same conversion `String(n)` does. Tagged templates are not done |
 | spread and rest in calls or literals | **not done** | |
-| destructuring | partial | declarations and parameters: both patterns, nested to any depth, and a rest element in an array pattern. The initializer is lowered *once*, which is what the pattern means. What refuses, each by name: a **default** (`{ a = 1 }`, which needs `undefined` and so waits on tagged unions), an **object rest** (`{ a, ...others }`, which would have to build an object), a computed property name, and destructuring **assignment** (`[a, b] = [b, a]`) |
+| destructuring | partial | declarations, parameters **and assignment**: both patterns, nested to any depth, a rest element in an array pattern, and targets that are fields or elements rather than names. The right-hand side is lowered *once*, which is what makes `[a, b] = [b, a]` a swap. What refuses, each by name: a **default** (`{ a = 1 }` — needs `undefined`, so it waits on tagged unions), an **object rest**, a computed property name, and a **shorthand in an assignment pattern** (`({ x } = p)`, where the symbol on `x` is the *property's*; the explicit `({ x: x } = p)` works) |
 | `delete`, `in`, `instanceof` | **not done** | |
 | regular expression literals | **not done** | |
 
@@ -105,7 +105,7 @@ diagnostic.
 | unions of unrelated object types | **not done** | needs a discriminant read at run time |
 | optional properties (`x?: T`) | **not done** | needs a presence bit, which changes the layout |
 | index signatures (`[k: string]: T`) | **not done** | keys are not known at compile time, so not a flat struct |
-| tuples | **not done** | |
+| tuples | partial | a tuple whose elements share a representation **is** an array of it: `[number, number]` is two doubles in a row, which is what `number[]` is — what the tuple adds is a length, and a length is not part of a representation. A heterogeneous tuple is a struct with positional fields and is refused |
 | `enum` / `const enum` | **not done** | four corpus files. Note for whoever implements it: node's type stripping rejects an `enum` outright (*not supported in strip-only mode*), so `nts check` cannot compare one against node — the differential has to go through emitted JavaScript, or the enum has to be tested through a function that does not mention it |
 | recursive array types (`type T = T[]`) | **not done** | refused with the cycle named; no finite `HirType` |
 | `keyof`, `typeof` type operator | **not done** | |
@@ -400,9 +400,11 @@ In order, with the reason rather than the ranking:
    which this compiler already has everywhere else. Note the differential
    problem first: node's type stripping rejects an `enum` outright.
 4. **`Map` and `Set`** — no real program does without them.
-5. **The rest of destructuring** — destructuring *assignment*, and an object
-   rest. A default in a pattern is not on this list: it needs `undefined` in a
-   slot, so it waits on tagged unions rather than on more pattern work.
+5. **`getShorthandAssignmentValueSymbol`** in the frontend — one query. Without
+   it `({ x } = p)` cannot be lowered, because the symbol on `x` is the
+   property's rather than the variable's, and writing through it goes where
+   nothing reads. It is the only thing standing between the explicit form, which
+   works, and the form people write.
 6. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
    for promises rather than an alternative to them.
 7. **Tagged unions** — `number | undefined` and unions of unrelated objects.

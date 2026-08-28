@@ -94,3 +94,46 @@ export function emptyRest(n: number): number {
   const [only, ...none] = xs;
   return only * 10 + none.length;
 }
+
+// Destructuring *assignment*, where the targets are places that already exist
+// rather than names being introduced. The right-hand side is lowered once and
+// each target is assigned a read of it, which is what makes the swap idiom a
+// swap rather than two copies of `b`.
+export function swap(n: number): number {
+  let a = n;
+  let b = n * 7;
+  [a, b] = [b, a];
+  return a * 1000 + b;
+}
+
+export function assignFromArray(n: number): number {
+  let a = 0;
+  let b = 0;
+  const xs: number[] = [n, n * 7];
+  [a, b] = xs;
+  return a * 1000 + b;
+}
+
+// The targets need not be locals: a field and an element are places too.
+export function assignIntoFields(n: number): number {
+  const p: Point = { x: 0, y: 0 };
+  [p.x, p.y] = [n, n * 7];
+  return p.x * 1000 + p.y;
+}
+
+// An object pattern, written the long way. `({ x, y } = p)` is refused: the
+// symbol on a shorthand is the *property's*, so assigning through it writes
+// where nothing reads.
+export function assignByName(n: number): number {
+  let a = 0;
+  let b = 0;
+  ({ x: a, y: b } = { x: n, y: n * 7 } as Point);
+  return a * 1000 + b;
+}
+
+// A tuple whose elements share a representation is an array of it, which is
+// what makes the swap above expressible at all.
+export function tupleValue(n: number): number {
+  const pair: [number, number] = [n, n * 7];
+  return pair[0]! * 1000 + pair[1]!;
+}
