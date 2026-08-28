@@ -16,7 +16,10 @@
 // whose contents it was editing -- which is its own reminder that a sabotage
 // has to be checked as carefully as the code it is testing.
 
-  "/home/akisarou/Projects/nts/runtime/node/http/src/parser.ts");
+
+const { HTTPParser, REQUEST, RESPONSE } = await import(
+  new URL("../../runtime/node/http/src/parser.ts", import.meta.url).pathname,
+);
 
 function drive(type, text, { split = 0, skipBody = false } = {}) {
   const p = new HTTPParser();
