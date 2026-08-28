@@ -657,7 +657,7 @@ const HARNESS_PRELUDE: &str =
          \x20   fflush(stdout);\n\
          }\n\n";
 
-fn native_harness(testable: &[Testable]) -> String {
+fn native_harness(testable: &[Testable], initializes: bool) -> String {
     let mut main = String::from(HARNESS_PRELUDE);
     for one in testable {
         let params: Vec<String> = one
@@ -695,6 +695,21 @@ fn native_harness(testable: &[Testable]) -> String {
          \x20    * reproducible here in a way it is not against a real loop. */\n\
          \x20   nts_test_host_install();\n",
     );
+    if initializes {
+        // Before any case, and before the first checkpoint: module evaluation
+        // is itself a job, so what it queues is drained after it rather than
+        // interleaved with it. Node's `await import()` does the same thing on
+        // the other side, which is what makes the two comparable.
+        main.push_str(
+            "    void module__init(void);\n\
+             \x20   module__init();\n\
+             \x20   /* Module evaluation is itself a job, so what it queued is\n\
+             \x20    * drained here rather than interleaved with the first\n\
+             \x20    * case. */\n\
+             \x20   nts_enter();\n\
+             \x20   nts_leave();\n",
+        );
+    }
     for (one, at, tuple) in interleaved(testable) {
         {
             let args: Vec<String> = tuple
@@ -825,7 +840,14 @@ fn run_native(
     let host = dir.join("nts_test_host.c");
     std::fs::write(&host, TEST_HOST_SOURCE)?;
 
-    let main = native_harness(testable);
+    // Module evaluation, which node does at `import` and this side has to be
+    // told to do. Only when the program has one: a program with no top-level
+    // statements emits no such function, and calling it would be a link error.
+    let initializes = program
+        .funcs
+        .iter()
+        .any(|func| func.name == hir::lower::MODULE_INIT);
+    let main = native_harness(testable, initializes);
     let main_path = dir.join("check_main.c");
     std::fs::write(&main_path, main)?;
 

@@ -411,6 +411,78 @@ fn closure_type(index: usize) -> TypeId {
 }
 
 /// The name of the `n`th closure's class, and of its one method.
+/// The function holding a module's top-level statements.
+///
+/// `#` cannot appear in a TypeScript identifier, which is why the qualified
+/// names use it: no program can declare something that collides with this.
+pub const MODULE_INIT: &str = "module#init";
+
+/// Whether a node at module scope is a statement rather than a declaration.
+///
+/// An allow-list, and deliberately not the complement of one. A kind that is
+/// neither is *refused* below rather than skipped, because skipping silently
+/// is the defect this exists to fix: a `total = bump(41)` at module scope was
+/// dropped, and the program compiled, ran, and answered as though the line
+/// were not there.
+///
+/// `return`, `break` and `continue` are absent because they are illegal at
+/// module scope, and `VariableStatement` because a module-scope declaration is
+/// a global with a static initializer, which needs no code to run.
+fn is_module_statement(kind: u16) -> bool {
+    matches!(
+        kind,
+        syntax::BLOCK
+            | syntax::IF_STATEMENT
+            | syntax::WHILE_STATEMENT
+            | syntax::DO_STATEMENT
+            | syntax::SWITCH_STATEMENT
+            | syntax::FOR_STATEMENT
+            | syntax::FOR_OF_STATEMENT
+            | syntax::EMPTY_STATEMENT
+            | syntax::THROW_STATEMENT
+            | syntax::EXPRESSION_STATEMENT
+    )
+}
+
+/// Whether a node is a declaration the rest of the lowering already walks.
+///
+/// Its body is its own business, which is why [`carries_code`] stops at one: a
+/// function inside a namespace is lowered by the loop in [`lower`], and the
+/// namespace has nothing to run because of it.
+fn is_module_declaration(kind: u16) -> bool {
+    matches!(
+        kind,
+        syntax::FUNCTION_DECLARATION
+            | syntax::CLASS_DECLARATION
+            | syntax::INTERFACE_DECLARATION
+            | syntax::ENUM_DECLARATION
+            | syntax::VARIABLE_STATEMENT
+            | syntax::END_OF_FILE_TOKEN
+    )
+}
+
+/// Whether a module-scope node has anything for module evaluation to run.
+///
+/// The alternative was a list of kinds to skip -- type alias, import, export
+/// clause, ambient namespace -- read off real output and extended whenever a
+/// program used something new. This asks the question directly instead, so a
+/// construct nobody has seen yet is classified correctly the first time: it
+/// carries a statement or it does not.
+fn carries_code(probe: &FuncBuilder, id: NodeId) -> bool {
+    probe.children(id).iter().any(|child| {
+        let Some(kind) = probe.kind_of(*child) else {
+            return false;
+        };
+        if is_module_statement(kind) {
+            return true;
+        }
+        if is_module_declaration(kind) {
+            return false;
+        }
+        carries_code(probe, *child)
+    })
+}
+
 fn closure_names(index: usize) -> (String, String) {
     let class = format!("Closure{index}");
     let method = format!("{class}#call");
@@ -856,6 +928,61 @@ impl Shared {
 }
 
 #[must_use]
+/// Every top-level statement in the program, in the order they must run.
+///
+/// Within a file that is source order. *Across* files it is the module graph,
+/// which the snapshot does not carry -- so a program with top-level statements
+/// in more than one file is refused rather than run in an order this guessed
+/// at. One file's statements are the common case and the whole of what can be
+/// ordered honestly today.
+fn module_statements(
+    snapshot: &SemanticSnapshot,
+) -> (Option<(NodeId, Vec<NodeId>)>, Vec<Diagnostic>) {
+    let probe = FuncBuilder::new(snapshot);
+    let mut refusals = Vec::new();
+    let mut files: Vec<(NodeId, Vec<NodeId>)> = Vec::new();
+
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::SOURCE_FILE) {
+            continue;
+        }
+        let file = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let mut statements = Vec::new();
+        for child in probe.children(file) {
+            let Some(kind) = probe.kind_of(child) else {
+                continue;
+            };
+            if is_module_statement(kind) {
+                statements.push(child);
+            } else if !is_module_declaration(kind) && carries_code(&probe, child) {
+                // Something with code in it that module evaluation does not
+                // run -- a `namespace` with a statement in its body is the
+                // shape. Refused rather than dropped, which is the whole point
+                // of this pass.
+                refusals.push(probe.unsupported(
+                    child,
+                    &format!("a module-scope construct of kind {kind}, which has code in it"),
+                ));
+            }
+        }
+        if !statements.is_empty() {
+            files.push((file, statements));
+        }
+    }
+
+    if files.len() > 1 {
+        for (file, _) in files.iter().skip(1) {
+            refusals.push(probe.unsupported(
+                *file,
+                "top-level statements in a second module, whose evaluation order \
+                 this compiler cannot see",
+            ));
+        }
+        return (None, refusals);
+    }
+    (files.into_iter().next(), refusals)
+}
+
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
     let module = collect_module_scope(snapshot);
@@ -967,6 +1094,23 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
             wanted.extend(builder.used_closures.iter().copied());
             collect_layouts(&mut lowered.program, builder.layouts);
         }
+    }
+
+    // Module-level statements. Nothing above walks them: the loop finds
+    // declarations, and `total = bump(41)` is not one -- so it was dropped, and
+    // the program compiled, ran, and answered as though the line were not
+    // there. Lowered *after* the declarations so that a closure it allocates
+    // joins the worklist below rather than missing it.
+    let (initializer, refusals) = module_statements(snapshot);
+    lowered.diagnostics.extend(refusals);
+    if let Some((file, statements)) = initializer {
+        let mut builder = shared.builder(snapshot, Substitution::default(), String::new());
+        match builder.lower_module_init(file, &statements) {
+            Ok(func) => lowered.program.funcs.push(func),
+            Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+        }
+        wanted.extend(builder.used_closures.iter().copied());
+        collect_layouts(&mut lowered.program, builder.layouts);
     }
 
     // Each closure something allocated, and each as a function of its own.
@@ -2454,6 +2598,31 @@ impl<'a> FuncBuilder<'a> {
         // every field it writes is writing over a zero.
         func.initializes_receiver = is_constructor;
         Ok(func)
+    }
+
+    /// A module's top-level statements, as one function.
+    ///
+    /// Module evaluation is itself a job (`docs/async.md` §3), so what this
+    /// function queues is drained at the checkpoint after it rather than
+    /// interleaved with it -- which is why it is an ordinary function the
+    /// embedder calls, and not something the runtime runs implicitly.
+    fn lower_module_init(
+        &mut self,
+        file: NodeId,
+        statements: &[NodeId],
+    ) -> Result<Func, Diagnostic> {
+        let origin = self.origin(file);
+        for statement in statements {
+            self.lower_statement(*statement)?;
+        }
+        self.terminate(Terminator::Return(None));
+        Ok(self.finish(
+            MODULE_INIT.to_owned(),
+            Vec::new(),
+            HirType::Void,
+            origin,
+            true,
+        ))
     }
 
     fn lower_function(&mut self, id: NodeId) -> Result<Func, Diagnostic> {

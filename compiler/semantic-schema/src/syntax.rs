@@ -156,6 +156,9 @@ pub const EXPRESSION_WITH_TYPE_ARGUMENTS: u16 = 234;
 pub const HERITAGE_CLAUSE: u16 = 299;
 pub const ENUM_MEMBER: u16 = 306;
 pub const SOURCE_FILE: u16 = 307;
+/// The token every source file ends with. Read off real output: it is the last
+/// child of a `SourceFile`, and it is neither a statement nor a declaration.
+pub const END_OF_FILE_TOKEN: u16 = 1;
 
 /// The operator of a prefix unary expression, as the encoder actually writes it.
 ///
