@@ -139,8 +139,8 @@ fn the_libuv_host_keeps_the_same_contract_as_the_deterministic_one() {
         &["-luv"],
     );
     assert!(
-        checks(&report) >= 12,
-        "expected at least 12 host checks, saw {}:\n{report}",
+        checks(&report) >= 13,
+        "expected at least 13 host checks, saw {}:\n{report}",
         checks(&report)
     );
 }
@@ -152,8 +152,8 @@ fn timers_behave_as_the_capability_says() {
     // released, so the bug it catches could not happen.
     let report = run_suite("timers", &["-DNTS_PROVIDER_RC"]);
     assert!(
-        checks(&report) >= 6,
-        "expected at least 6 timer checks, saw {}:\n{report}",
+        checks(&report) >= 8,
+        "expected at least 8 timer checks, saw {}:\n{report}",
         checks(&report)
     );
 }

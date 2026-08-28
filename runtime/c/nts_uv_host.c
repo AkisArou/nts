@@ -267,11 +267,9 @@ static NtsTimerId nts_uv_post_delayed(void *state, NtsTask task, double delay_ms
     timer->repeating = repeating;
     timer->slot = nts_uv_slot_claim(timer);
 
-    /* Negative and NaN delays are zero, which is what `setTimeout` specifies
-     * and what every platform does. The comparison is written so that NaN
-     * takes the zero branch rather than the other way about. */
-    double delay = (delay_ms > 0.0) ? delay_ms : 0.0;
-    uint64_t ms = (uint64_t)delay;
+    /* Already whole, non-negative and bounded: `nts_delay` is the one place
+     * that decides, so a host cannot decide differently. */
+    uint64_t ms = (uint64_t)delay_ms;
     if (uv_timer_start(&timer->handle, nts_uv_timer_fired, ms, repeating ? ms : 0) != 0) {
         nts_uv_fail("could not start a timer");
     }

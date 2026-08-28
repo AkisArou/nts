@@ -218,8 +218,49 @@ static void clearing_an_unknown_id_is_a_no_op(void) {
     nts_release((NtsHeader *)after);
 }
 
+/* A delay is whole milliseconds, and the runtime is what says so.
+ *
+ * The expected sequence here is the same one `uv_host.c` asserts, which is the
+ * point of it: a host is a configuration, not a fork. Leaving the conversion
+ * to each host gave two hosts that ordered this program *oppositely* -- the
+ * deterministic one by delay, because its clock is a `double`, and libuv by
+ * creation order, because both delays became one millisecond there. `nts_delay`
+ * is the one place that decides now.
+ *
+ * `a` is asked for with the longer delay and posted first, so an
+ * implementation that kept the fraction runs `b` first. */
+static void a_fractional_delay_truncates(void) {
+    reset();
+    Closure *a = closure("a@1.5");
+    Closure *b = closure("b@1.0");
+    nts_set_timeout((NtsHeader *)a, 0, 1.5, false);
+    nts_set_timeout((NtsHeader *)b, 0, 1.0, false);
+    nts_test_host_run(64);
+    expect("a fractional delay truncates to whole milliseconds",
+           "a@1.5 -> b@1.0");
+    nts_release((NtsHeader *)a);
+    nts_release((NtsHeader *)b);
+}
+
+/* `nts_callback_task` with `nts_post_task`, which is the shape a profile's
+ * `setImmediate` takes. Exported for exactly that, so the rule has a case on
+ * this side rather than only in a profile. */
+static void a_callback_can_be_posted_as_a_task(void) {
+    reset();
+    Closure *soon = closure("soon");
+    nts_post_task(nts_callback_task((NtsHeader *)soon, 0, false));
+    Closure *later = closure("later");
+    nts_set_timeout((NtsHeader *)later, 0, 1.0, false);
+    nts_test_host_run(64);
+    expect("a callback posted as a task runs before a timer", "soon -> later");
+    nts_release((NtsHeader *)soon);
+    nts_release((NtsHeader *)later);
+}
+
 int main(void) {
     timers_fire_in_delay_order();
+    a_fractional_delay_truncates();
+    a_callback_can_be_posted_as_a_task();
     clearing_an_unknown_id_is_a_no_op();
     a_cleared_timer_does_not_fire();
     an_interval_repeats_until_cleared();

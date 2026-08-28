@@ -281,8 +281,26 @@ static void an_id_this_host_never_issued_is_a_no_op(void) {
     finish();
 }
 
+/* The same expected sequence `timers.c` asserts on the deterministic host.
+ *
+ * That it is the same sequence is the assertion. These two hosts used to order
+ * this program oppositely, because each converted the delay itself -- one kept
+ * the fraction in a `double` clock, the other truncated to libuv's whole
+ * milliseconds. `nts_delay` decides once now, and both are handed the same
+ * thing. */
+static void a_fractional_delay_truncates(void) {
+    start();
+    nts_post_delayed(reaction("a@1.5"), 1.5, false);
+    nts_post_delayed(reaction("b@1.0"), 1.0, false);
+    nts_uv_host_run();
+    expect("a fractional delay truncates to whole milliseconds",
+           "a@1.5 -> b@1.0");
+    finish();
+}
+
 int main(void) {
     a_microtask_runs_before_the_next_task();
+    a_fractional_delay_truncates();
     an_id_this_host_never_issued_is_a_no_op();
     tasks_run_in_the_order_they_were_posted();
     timers_fire_in_delay_order();

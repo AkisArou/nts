@@ -1566,9 +1566,41 @@ void nts_post_task(NtsTask task) {
   nts_host.post_task(nts_host.state, task);
 }
 
+/* The delay every host is given: whole milliseconds, not negative, and small
+ * enough to convert.
+ *
+ * Here rather than in each host, because it is the *contract* and not a host's
+ * business -- and because leaving it to each host produced two hosts that
+ * ordered the same program differently. `setTimeout(a, 1.5)` before
+ * `setTimeout(b, 1.0)` ran `b` then `a` on the deterministic host, whose clock
+ * is a `double`, and `a` then `b` on libuv, where both became one millisecond
+ * and the tie broke by creation order. Opposite answers to the same program,
+ * which is the shape of a contract bug rather than a host quirk: milliseconds
+ * are the unit every platform can schedule in, so the runtime says so once.
+ *
+ * Truncated rather than rounded, because that is what a millisecond timer does
+ * everywhere -- node included, at its own libuv boundary.
+ *
+ * A negative or NaN delay is zero: you cannot ask for less than "as soon as
+ * possible", and the comparison is written so NaN takes that branch rather
+ * than reaching a host's integer conversion, where it is undefined behaviour.
+ * The ceiling is there for the same reason, and 2^53 is where a `double` stops
+ * counting whole numbers. Anything a *profile* wants -- node's one-millisecond
+ * floor, its 2^31 ceiling, its three warnings -- sits on top of this. */
+double nts_delay(double delay_ms) {
+  if (!(delay_ms > 0.0)) {
+    return 0.0;
+  }
+  if (delay_ms > 9007199254740991.0) {
+    return 9007199254740991.0;
+  }
+  return trunc(delay_ms);
+}
+
 NtsTimerId nts_post_delayed(NtsTask task, double delay_ms, bool repeating) {
   nts_require_host("nts_post_delayed");
-  return nts_host.post_delayed(nts_host.state, task, delay_ms, repeating);
+  return nts_host.post_delayed(nts_host.state, task, nts_delay(delay_ms),
+                               repeating);
 }
 
 void nts_cancel_delayed(NtsTimerId id) {
@@ -1992,8 +2024,7 @@ static void nts_callback_drop(void *state) {
     nts_release((NtsHeader *)state);
 }
 
-static NtsTask nts_callback_task(NtsHeader *callback, double slot,
-                                 bool repeating) {
+NtsTask nts_callback_task(NtsHeader *callback, double slot, bool repeating) {
     NtsCallback *entry = (NtsCallback *)nts_object_new(&nts_desc_callback);
     entry->callback = callback;
     nts_retain(callback);

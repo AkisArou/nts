@@ -37,9 +37,9 @@ static void nts_test_post(void *state, NtsTask task) {
 static NtsTimerId nts_test_post_delayed(void *state, NtsTask task,
                                         double delay_ms, bool repeating) {
     (void)state;
-    /* Negative and NaN delays are zero, which is what every platform does and
-     * what `setTimeout` specifies. */
-    double delay = (delay_ms > 0.0) ? delay_ms : 0.0;
+    /* Already whole, non-negative and bounded: `nts_delay` is the one place
+     * that decides, so a host cannot decide differently. */
+    double delay = delay_ms;
     NtsTimerId id = ++nts_test_next_id;
     NtsTestSlot slot = {task, nts_test_clock + delay,
                         repeating ? delay : 0.0, id, true};

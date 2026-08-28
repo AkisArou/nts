@@ -741,6 +741,11 @@ void nts_task_run(NtsTask task);
 /* Post to the host. Thin, but they are where the ownership contract is
  * documented, and where the owner-thread assertion lives. */
 void nts_post_task(NtsTask task);
+/* The delay a host is given: whole milliseconds, not negative, bounded. The
+ * contract rather than a host's business -- leaving it to each host gave two
+ * hosts that ordered the same program differently. Exposed because a host's
+ * own tests want to say what it will be handed. */
+double nts_delay(double delay_ms);
 NtsTimerId nts_post_delayed(NtsTask task, double delay_ms, bool repeating);
 void nts_cancel_delayed(NtsTimerId id);
 void nts_post_from_any_thread(NtsTask task);
@@ -871,6 +876,23 @@ NtsPromise *nts_promise_race(NtsArray *promises);
  * The id is a `double` because that is what `setTimeout` returns to a program.
  * A host's `NtsTimerId` is wider, so a host must not hand out an id that
  * cannot survive the round trip -- 2^53, not 2^64. */
+/* A task from a callback object and the slot its call occupies.
+ *
+ * Exported because a profile that wants its own scheduling surface -- node's
+ * `setImmediate` is `nts_post_task` with one of these -- would otherwise have
+ * to duplicate the descriptor, the retain and the drop. That is
+ * ownership-critical code, and a second copy of it that has to stay in step is
+ * worse than a function.
+ *
+ * `repeating` selects the reference discipline, and is the part not to get
+ * wrong. A task run *once* gives its reference back by running. One the host
+ * runs again and again from the same task cannot: it gives it back at `drop`,
+ * when it is finally cancelled. Releasing on every round frees the callback
+ * under the timer that is about to call it, which is a use-after-free that
+ * leaves the trace right, the totals balanced, and AddressSanitizer silent. So
+ * anything posted with `nts_post_task` wants `false`. */
+NtsTask nts_callback_task(NtsHeader *callback, double slot, bool repeating);
+
 double nts_set_timeout(NtsHeader *callback, double slot, double delay_ms,
                        bool repeating);
 void nts_clear_timeout(double id);

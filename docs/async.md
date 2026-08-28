@@ -410,6 +410,25 @@ host quirk, and the fix belongs in the runtime. The one time it nearly happened
 was shutdown identifying its timers by walking the loop, which is only correct
 when the loop is ours -- and an embedder passes its own.
 
+The one time it *did* happen is worth writing down, because it is what the rule
+is for. Each host converted the delay itself, so "milliseconds" meant two
+things:
+
+    setTimeout(a, 1.5); setTimeout(b, 1.0);
+    deterministic:  b -> a     (its clock is a double, so ordered by delay)
+    libuv:          a -> b     (both became 1ms; the tie broke by creation order)
+
+Opposite answers to the same program. The fix was not to make either host
+cleverer: `nts_delay` truncates to whole milliseconds, floors at zero and caps
+at 2^53, and every host is handed the result. Milliseconds are the unit every
+platform can schedule in, so the runtime says so once. Both suites assert the
+same expected sequence now, and *that they are the same sequence* is the
+assertion.
+
+It was found from the outside -- the Node session was checking node's clamping
+rules against ours -- which is the other half of why the seam is worth having:
+a contract two parties can compare is one a second party can falsify.
+
 
 A C struct of function pointers, installed on the runtime at startup.
 
