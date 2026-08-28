@@ -30,7 +30,10 @@
 //! serialized into HMR generations.
 
 pub mod hir;
-pub mod reachability;
+/// Declaration reachability, which now lives in the schema crate: it is a pure
+/// query over a snapshot, and the *frontend* needs it to seed its deep passes.
+/// Re-exported here so nothing that already used it has to move.
+pub use nts_semantic_schema::reachability;
 
 pub use hir::{Func, HirType, OpKind, Program};
-pub use reachability::Reachability;
+pub use nts_semantic_schema::reachability::Reachability;

@@ -262,6 +262,12 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) 
     }
     if decompose {
         println!("  decomposed     {}", stats.decomposed);
+        if stats.types_unanswered > 0 {
+            println!(
+                "  UNANSWERED     {} type(s) the checker could not answer for",
+                stats.types_unanswered
+            );
+        }
         if stats.decomposition_exhausted {
             println!("  NOTE           budget exhausted; the type graph is partial");
         }

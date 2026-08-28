@@ -78,6 +78,20 @@ pub struct DecomposeStats {
     ///
     /// A partial type graph is legitimate; presenting it as complete is not.
     pub exhausted: bool,
+    /// Types the checker could not answer for, and which therefore stay
+    /// placeholders.
+    ///
+    /// tsgo can *panic* on a well-formed question -- `newTypeResponse` calls
+    /// `AsTupleType` on anything carrying the tuple object flag, and a
+    /// reference *to* a tuple carries it while its data is a `TypeReference`,
+    /// so `[number, string]` inside a union takes down the request. It recovers
+    /// and returns the panic as an error, so the session survives; treating
+    /// that as fatal would let one checker bug fail a whole compilation.
+    ///
+    /// Counted rather than swallowed. The consequence is the same as a
+    /// truncated graph -- a placeholder the lowering will refuse while naming
+    /// the construct rather than the cause -- so it is reported the same way.
+    pub unanswered: u32,
 }
 
 /// Walks a type graph, replacing placeholders with structure.
@@ -241,12 +255,16 @@ impl<'a> Decomposer<'a> {
         walk: &mut Walk<'_>,
     ) -> Result<TypeKind, TsgoError> {
         if bits & flags::UNION != 0 {
-            let members = self.client.types_of_type(self.handle, &self.project, ty)?;
+            let Some(members) = self.types_of(ty, walk) else {
+                return Ok(TypeKind::Structured { flags: bits });
+            };
             return Ok(TypeKind::Union(self.intern_all(snapshot, &members, walk)));
         }
 
         if bits & flags::INTERSECTION != 0 {
-            let members = self.client.types_of_type(self.handle, &self.project, ty)?;
+            let Some(members) = self.types_of(ty, walk) else {
+                return Ok(TypeKind::Structured { flags: bits });
+            };
             return Ok(TypeKind::Intersection(
                 self.intern_all(snapshot, &members, walk),
             ));
@@ -266,7 +284,9 @@ impl<'a> Decomposer<'a> {
         }
 
         if bits & flags::TEMPLATE_LITERAL != 0 {
-            let parts = self.client.types_of_type(self.handle, &self.project, ty)?;
+            let Some(parts) = self.types_of(ty, walk) else {
+                return Ok(TypeKind::Structured { flags: bits });
+            };
             return Ok(TypeKind::TemplateLiteral {
                 texts: texts.to_vec(),
                 types: self.intern_all(snapshot, &parts, walk),
@@ -383,7 +403,7 @@ impl<'a> Decomposer<'a> {
             return Ok(TypeKind::Function(id));
         }
 
-        self.resolve_members(snapshot, ty, walk)
+        self.resolve_members(snapshot, ty, bits, walk)
     }
 
     /// The members and index signatures of a record-like object type.
@@ -391,6 +411,9 @@ impl<'a> Decomposer<'a> {
         &mut self,
         snapshot: &mut SemanticSnapshot,
         ty: u32,
+        // The placeholder's own flags, so that declining to decompose can
+        // return the type unchanged rather than inventing a kind for it.
+        bits: u32,
         walk: &mut Walk<'_>,
     ) -> Result<TypeKind, TsgoError> {
         // Bases before members: the member list is flattened, so `own` can only be
@@ -434,7 +457,29 @@ impl<'a> Decomposer<'a> {
         if !arguments.is_empty() {
             let ids = self.intern_all(snapshot, &arguments, walk);
             if let Some(&slot) = self.interned.get(&ty) {
-                snapshot.type_arguments.insert(slot, ids);
+                snapshot.type_arguments.insert(slot, ids.clone());
+            }
+            // A generic *form* rather than an instantiation, and the reason the
+            // budget was never enough.
+            //
+            // `PromiseLike<T>` has a `then` returning `PromiseLike<TResult1 |
+            // TResult2>`, whose `then` returns another with two fresh type
+            // parameters, without end. It is not a cycle -- every step is a
+            // genuinely new type -- so nothing stops it but the budget, and one
+            // module reached 2,022 type parameters and 1,011 instantiations
+            // before the cutoff.
+            //
+            // This compiler monomorphizes: only instantiations are ever
+            // lowered, and a type parameter has no representation at all. So
+            // the members of a form parameterised by one are members nothing
+            // can use, and leaving it a placeholder loses nothing. Its
+            // *arguments* are still recorded above, which is what
+            // `ManagedType::Promise` needs.
+            if ids
+                .iter()
+                .any(|argument| mentions_a_type_parameter(snapshot, *argument, 0))
+            {
+                return Ok(TypeKind::Structured { flags: bits });
             }
         }
 
@@ -825,14 +870,36 @@ impl<'a> Decomposer<'a> {
         )?;
         let parameter_ids = self.intern_all(snapshot, &parameter_types, walk);
 
+        // Asked *before* the return type is interned, because it decides
+        // whether the return type is worth decomposing at all.
+        let type_parameter_responses =
+            self.client
+                .type_parameters_of_signature(self.handle, &self.project, signature.id)?;
+        let type_parameters = self.intern_all(snapshot, &type_parameter_responses, walk);
+
         let returned =
             self.client
                 .return_type_of_signature(self.handle, &self.project, signature.id)?;
-        let return_type = self
-            .intern_all(snapshot, std::slice::from_ref(&returned), walk)
-            .first()
-            .copied()
-            .unwrap_or(TypeId(0));
+        // A generic signature returns a *form*, and decomposing one does not
+        // terminate. `PromiseLike<T>.then` returns
+        // `PromiseLike<TResult1 | TResult2>`, whose `then` returns another with
+        // two fresh parameters, for ever -- not a cycle, because every step is
+        // a genuinely new type, so nothing stopped it but the budget. One
+        // module reached 2,030 type parameters and 1,016 instantiations before
+        // the cutoff, and ten of eighteen exhausted it.
+        //
+        // This compiler monomorphizes: only instantiations are lowered, and a
+        // type parameter has no representation, so the members of a form
+        // parameterised by one are members nothing can use. The type still gets
+        // an id -- the signature has to name it -- it is simply never opened.
+        let return_type = if type_parameters.is_empty() {
+            self.intern_all(snapshot, std::slice::from_ref(&returned), walk)
+                .first()
+                .copied()
+                .unwrap_or(TypeId(0))
+        } else {
+            self.intern_shallow(snapshot, &returned)
+        };
 
         // Optionality and rest-ness come from each parameter's own check flags,
         // not from the signature-level rest bit: that only says *some* parameter
@@ -893,11 +960,6 @@ impl<'a> Decomposer<'a> {
                 }
             });
 
-        let type_parameter_responses =
-            self.client
-                .type_parameters_of_signature(self.handle, &self.project, signature.id)?;
-        let type_parameters = self.intern_all(snapshot, &type_parameter_responses, walk);
-
         let id = SignatureId(u32::try_from(snapshot.signatures.len()).unwrap_or(u32::MAX));
         snapshot.signatures.push(SignatureRecord {
             parameters,
@@ -941,6 +1003,46 @@ impl<'a> Decomposer<'a> {
     }
 
     /// Intern responses into the arena and queue any that need decomposing.
+    /// Give a type an id without scheduling it for decomposition.
+    ///
+    /// For a place where the *identity* of a type is needed but its members can
+    /// never be used. The schema stays complete -- every reference resolves --
+    /// and the type keeps the flags it arrived with, which is exactly what a
+    /// placeholder is.
+    fn intern_shallow(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        response: &TypeResponse,
+    ) -> TypeId {
+        if !response.texts.is_empty() {
+            self.texts.insert(response.id, response.texts.clone());
+        }
+        *self.interned.entry(response.id).or_insert_with(|| {
+            let id = TypeId(u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX));
+            snapshot
+                .types
+                .push(types::classify(response, &self.symbols));
+            id
+        })
+    }
+
+    /// A type's constituent types, or `None` when the checker could not say.
+    ///
+    /// Not `?`: one type the checker cannot answer for should cost that type
+    /// its structure, not cost the program its compilation. The count is
+    /// reported, because a placeholder here has exactly the consequence a
+    /// truncated graph does -- the lowering refuses a construct and names the
+    /// construct.
+    fn types_of(&mut self, ty: u32, walk: &mut Walk<'_>) -> Option<Vec<TypeResponse>> {
+        match self.client.types_of_type(self.handle, &self.project, ty) {
+            Ok(members) => Some(members),
+            Err(_) => {
+                walk.stats.unanswered += 1;
+                None
+            }
+        }
+    }
+
     fn intern_all(
         &mut self,
         snapshot: &mut SemanticSnapshot,
@@ -1044,5 +1146,28 @@ mod tests {
         let stats = DecomposeStats::default();
         assert_eq!(stats.decomposed, 0);
         assert!(!stats.exhausted, "an empty run is complete, not exhausted");
+    }
+}
+
+/// Whether a type is, or is built from, a type parameter.
+///
+/// A union is the case that matters: `PromiseLike<TResult1 | TResult2>`'s
+/// argument is a union of two parameters, not a parameter, so testing the
+/// argument's own kind is not enough.
+///
+/// Depth-bounded rather than visited-tracked. A type argument nested eight
+/// deep in unions is not a shape this needs to be exact about, and the bound
+/// is what makes it terminate on a self-referential union without carrying a
+/// set through every call.
+fn mentions_a_type_parameter(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> bool {
+    if depth > 8 {
+        return false;
+    }
+    match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+        Some(TypeKind::TypeParameter { .. }) => true,
+        Some(TypeKind::Union(members)) => members
+            .iter()
+            .any(|member| mentions_a_type_parameter(snapshot, *member, depth + 1)),
+        _ => false,
     }
 }

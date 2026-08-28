@@ -16,6 +16,13 @@
 //!
 //! Reachability is what gives that walk an edge to stop at.
 //!
+//! # Why it lives in the schema crate
+//!
+//! It is a pure query over a [`SemanticSnapshot`] and nothing else, and its
+//! caller is the *frontend* — which produces the snapshot and must not depend
+//! on the IR crate. It was written in `nts-core` and re-exported from there, so
+//! nothing that used it has to change.
+//!
 //! # This is not the RFC §7 reachability
 //!
 //! RFC §7 places reachability in the HIR analysis block, over *operations*, for
@@ -24,7 +31,7 @@
 //! the frontend bother resolving — has to be answered before there is an IR.
 //! The two are complementary; this one does not replace it.
 
-use nts_semantic_schema::{NodeId, SemanticSnapshot, SymbolId, TypeId};
+use crate::{NodeId, SemanticSnapshot, SymbolId, TypeId};
 use rustc_hash::FxHashSet;
 
 /// What a walk from a set of roots reached.
@@ -70,14 +77,55 @@ pub fn from_exports(snapshot: &SemanticSnapshot) -> Reachability {
     from_symbols(snapshot, roots)
 }
 
+/// The roots the *frontend* must use: every export, plus every module's
+/// top-level statements.
+///
+/// [`from_exports`] alone is the right answer for a library's public surface
+/// and the wrong one for seeding the frontend, because module evaluation is
+/// reachable from nothing. A program whose entry module exports nothing at all
+/// is legal — an executable is exactly that — and seeding from its exports
+/// would decompose no types, leaving every construct in it unrepresentable.
+///
+/// Statements only. Seeding the module's *root* would reach every node in the
+/// file including the declarations already covered, which is the "seed with
+/// everything" this exists to replace.
+#[must_use]
+pub fn for_frontend(snapshot: &SemanticSnapshot) -> Reachability {
+    let exports = snapshot
+        .modules
+        .iter()
+        .flat_map(|module| module.exports.iter().map(|(_, symbol)| *symbol));
+    let statements = snapshot.modules.iter().flat_map(|module| {
+        snapshot
+            .nodes
+            .get(module.root.0 as usize)
+            .into_iter()
+            .flat_map(|root| root.children.iter().copied())
+    });
+    from_roots(snapshot, exports, statements)
+}
+
 /// Walk outward from a given set of root symbols.
 #[must_use]
 pub fn from_symbols(
     snapshot: &SemanticSnapshot,
     roots: impl IntoIterator<Item = SymbolId>,
 ) -> Reachability {
+    from_roots(snapshot, roots, std::iter::empty())
+}
+
+/// Walk outward from root symbols *and* root nodes.
+///
+/// Nodes as well as symbols because not everything worth reaching is named:
+/// a module's top-level statements have no symbol to start from.
+#[must_use]
+pub fn from_roots(
+    snapshot: &SemanticSnapshot,
+    roots: impl IntoIterator<Item = SymbolId>,
+    nodes: impl IntoIterator<Item = NodeId>,
+) -> Reachability {
     let mut result = Reachability::default();
-    let mut worklist: Vec<NodeId> = Vec::new();
+    let mut worklist: Vec<NodeId> = nodes.into_iter().collect();
 
     for symbol in roots {
         if result.symbols.insert(symbol)

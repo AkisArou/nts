@@ -22,6 +22,7 @@
 //! it, the mapping back to source is gone.
 
 pub mod origin;
+pub mod reachability;
 pub mod schema;
 pub mod syntax;
 

@@ -969,9 +969,30 @@ impl TsgoApi {
         {
             return Ok(DeepStats::default());
         }
-        let seeds: Vec<u32> = interned
-            .keys()
-            .copied()
+        // Seeded with the types the build can actually *reach*, not with every
+        // type the checker happened to mention.
+        //
+        // `decompose.rs` has described this since it was written -- "the seam is
+        // the seed set" -- and `reachability` was built for it, documented as
+        // "the seed set for the frontend's deep passes", tested, and never
+        // called by anything but a statistic. Seeding with everything meant
+        // spending a 4,096-type budget on the standard library's graph and then
+        // truncating the program's own: measured on
+        // `runtime/node/diagnostics_channel`, 917 types were reachable of 5,918
+        // decomposed, and fifteen of eighteen profile modules exhausted it.
+        //
+        // A truncated graph is not a partial answer. Every type past the cutoff
+        // stays a placeholder, so the lowering refuses a construct and names
+        // *the construct*, and which types fall on which side depends on
+        // worklist order -- so an unrelated edit reorders it. One module gave
+        // 12, 21, 27 and 7 functions across four combinations of two files.
+        let reached = nts_semantic_schema::reachability::for_frontend(snapshot);
+        let by_slot: FxHashMap<TypeId, u32> =
+            interned.iter().map(|(tsgo, slot)| (*slot, *tsgo)).collect();
+        let seeds: Vec<u32> = reached
+            .seeds()
+            .into_iter()
+            .filter_map(|slot| by_slot.get(&slot).copied())
             .filter(|id| !natively_implemented.contains(id))
             .collect();
         let project = opened
@@ -1009,6 +1030,24 @@ impl TsgoApi {
             // so that every consumer sees it: `nts hir`, `nts check` and
             // `emit-c` all print the snapshot's diagnostics and none of them
             // reads `FrontendStats`.
+            if run.unanswered > 0 {
+                // The same consequence as a truncated graph, so the same
+                // treatment: a placeholder the lowering will refuse while
+                // naming the construct rather than the cause.
+                snapshot.diagnostics.push(nts_diagnostics::Diagnostic {
+                    severity: nts_diagnostics::Severity::Warning,
+                    code: "NTS0003".to_owned(),
+                    message: format!(
+                        "the typechecker could not answer for {} type(s), which stay unresolved; a refusal below may be a consequence of that rather than of the construct it names",
+                        run.unanswered,
+                    ),
+                    primary: nts_diagnostics::Location {
+                        file: nts_diagnostics::SourceId(0),
+                        span: nts_diagnostics::Span { start: 0, end: 0 },
+                    },
+                    labels: Vec::new(),
+                });
+            }
             if run.exhausted {
                 snapshot.diagnostics.push(nts_diagnostics::Diagnostic {
                     severity: nts_diagnostics::Severity::Warning,
@@ -1164,6 +1203,7 @@ impl SemanticSource for TsgoApi {
             constants_folded: folded.map_or(0, |f| f.decomposed),
             decomposed: decomposed.map_or(0, |d| d.decomposed),
             decomposition_exhausted: decomposed.is_some_and(|d| d.exhausted),
+            types_unanswered: decomposed.map_or(0, |d| d.unanswered),
         };
 
         snapshot.validate()?;

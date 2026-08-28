@@ -76,6 +76,8 @@ pub struct FrontendStats {
     /// Surfaced rather than swallowed: a partial type graph is a legitimate
     /// result, and presenting it as a complete one is not.
     pub decomposition_exhausted: bool,
+    /// Types the checker could not answer for, which stay placeholders.
+    pub types_unanswered: u32,
 }
 
 impl FrontendStats {
