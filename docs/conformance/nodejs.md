@@ -45,7 +45,7 @@ real `node` child — those assert on node's binary, which our module is not in.
 Each exclusion is listed with a reason in the module's `not-applicable` file
 rather than inferred by a rule, so the number can be audited.
 
-**175 of node's own test files pass** across twelve modules. The per-module
+**180 of node's own test files pass** across twelve modules. The per-module
 counts below are `passed / applicable`; `compiles` is `functions lowered /
 constructs refused`, from `nts hir`.
 
@@ -56,10 +56,10 @@ constructs refused`, from `nts hir`.
 | `querystring` | **4 / 4** | 6 / 165 | complete |
 | `os` | **4 / 4** | 19 / 91 | complete |
 | `path` | **15 / 16** | 3 / 124 | complete but for `matchesGlob`; the skip is Windows-only |
-| `buffer` | **49 / 60** | 5 / 154 | complete enough for `fs` and `string_decoder` |
-| `events` | **26 / 33** | 2 / 126 | complete but for domains, `EventTarget` and the promise forms |
+| `buffer` | **51 / 60** | 5 / 154 | complete enough for `fs` and `string_decoder` |
+| `events` | **28 / 33** | 2 / 126 | complete but for domains, `EventTarget` and the promise forms |
 | `string_decoder` | **2 / 3** | 3 / 170 | complete; the failure is the class-vs-function difference |
-| `diagnostics_channel` | 22 / 35 | 2 / 123 | complete; the failures need node's own publishers |
+| `diagnostics_channel` | 23 / 35 | 2 / 123 | complete; the failures need node's own publishers |
 | `assert` | 11 / 19 | 3 / 209 | complete, including `CallTracker` and node's Myers diff |
 | `util` | 8 / 18 | 7 / 180 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `fs` | 11 / 212 | 28 / 191 | the sync surface; async, streams and watchers are absent |
@@ -140,17 +140,31 @@ the same objects. The result is identical and the declarations stay typed.
 module-level `once`, `getEventListeners`, `getMaxListeners`, `listenerCount`
 and `setMaxListeners`.
 
-26 of 33 applicable files pass. What is left:
+28 of 33 applicable files pass. What is left:
 
 | failing | needs |
 | --- | --- |
 | `test-event-emitter-subclass.js` | `EventEmitter.call(this)` — see below |
 | `test-event-emitter-no-error-provided-to-error-event.js` | `node:domain` integration |
 | `test-events-getmaxlisteners.js` | `EventTarget` |
-| `test-events-once.js`, `test-event-capture-rejections.js` | promises |
+| `test-events-once.js` | `events.once` and `events.on`, the promise forms |
 | `test-events-uncaught-exception-stack.js` | stack rewriting for a rethrown `error` |
 
 Three more skip on `internal/event_target`.
+
+`captureRejections` is implemented rather than refused. A listener declared
+`async` that throws would otherwise produce an unhandled rejection reported far
+from the emitter and carrying no hint of which event it came from; with
+capture, the rejection becomes an `error` event on the emitter, which is where
+a handler for it already is. The switch exists per emitter, per prototype and
+process-wide, because the emitters that most need it — streams, which want a
+rejected handler to destroy them — are constructed by libraries rather than by
+the application that wants the behaviour.
+
+An `error` emitted with a value that cannot be inspected — one whose custom
+inspection throws — falls back to string coercion. The error being reported is
+the emitter's, and letting the value's own bug replace it loses the one that
+matters.
 
 **The one deliberate difference.** Node's `EventEmitter` is a *function*, so
 ES5-era subclassing writes `EventEmitter.call(this)`. Ours is a `class`, which
@@ -202,9 +216,21 @@ accepted anywhere bytes are, and it is what node does.
 | searching | `indexOf`, `lastIndexOf`, `includes` |
 | other | `copy`, `slice`, `subarray`, `fill`, `swap16`/`32`/`64`, `byteLength`, `isBuffer`, `isEncoding`, `isUtf8`, `isAscii`, `atob`, `btoa`, `constants` |
 
-49 of 60 applicable files pass. Two are not applicable: they need
+51 of 60 applicable files pass. Two are not applicable: they need
 `--allow-natives-syntax` to drive V8's optimiser, which is a question about V8
 rather than about `node:buffer`.
+
+Several of the remaining failures are the harness rather than the module, and
+the reason is worth recording because it is a limit on this whole approach.
+`Buffer` is a *global* as well as an export, and node's tests write
+`Buffer.concat(...)` unqualified far more often than they write the export --
+so the assertion compares node's `Buffer` against our `kMaxLength`, which is a
+statement about neither. Installing ours as the global is the obvious fix and
+it is wrong: `fs`, `util.inspect` and the harness itself all reach for the
+global, none of them accepts ours, and it took the module from 51 passing to
+15. `console` can be installed globally because nothing in node consumes it;
+`Buffer` cannot, because everything does. Those failures are left standing
+rather than papered over.
 
 The UTF-8 decoder is the WHATWG Encoding standard's, state variable for state
 variable. That is not pedantry about which spec to cite: the standard defines
@@ -314,7 +340,7 @@ Complete, from node v24.20.0 `lib/diagnostics_channel.js`: `channel`,
 `subscribe`, `unsubscribe`, `hasSubscribers`, `tracingChannel`, `Channel` and
 `TracingChannel` with `traceSync`, `tracePromise` and `traceCallback`.
 
-22 of 35 applicable files pass. The remaining 13 are one cause: they assert
+23 of 35 applicable files pass. The remaining 12 are one cause: they assert
 that *node's own* `http`, `net`, `udp`, `worker_threads`, `child_process` or
 module loader publish to a well-known channel. Those subsystems publish into
 node's registry, not ours, and no substitution can bridge that — the tests pass

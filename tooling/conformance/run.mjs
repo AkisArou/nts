@@ -106,6 +106,30 @@ const files = [
   .filter((f) => !only || f === only)
   .sort();
 
+/**
+ * The `node` flags a test asks for in its `// Flags:` line.
+ *
+ * Node's own harness reads that line and passes the flags to the child; a test
+ * that says `--expose-gc` and does not get it fails on `global.gc is not a
+ * function`, which is a statement about how it was run rather than about the
+ * module. Only the flags that are ours to give are passed on: `--expose-gc`
+ * and `--no-warnings` change node's behaviour, while `--expose-internals`
+ * exposes node's *own* internals, which we substitute for by hand and would
+ * otherwise let a test reach node's implementation instead of ours.
+ */
+const PASSED_THROUGH_FLAGS = new Set([
+  "--expose-gc",
+  "--no-warnings",
+  "--pending-deprecation",
+  "--allow-natives-syntax",
+]);
+
+function nodeFlags(path) {
+  const first = readFileSync(path, "utf8").split("\n", 20).find((l) => l.startsWith("// Flags:"));
+  if (!first) return [];
+  return first.slice("// Flags:".length).trim().split(/\s+/).filter((f) => PASSED_THROUGH_FLAGS.has(f));
+}
+
 const rows = [];
 for (const name of files) {
   let result;
@@ -116,7 +140,7 @@ for (const name of files) {
   try {
     const out = execFileSync(
       process.execPath,
-      [join(HERE, "run-one.mjs"), moduleName, join(SUITE, name), addon ?? "-"],
+      [...nodeFlags(join(SUITE, name)), join(HERE, "run-one.mjs"), moduleName, join(SUITE, name), addon ?? "-"],
       { encoding: "utf8", timeout: 60_000, stdio: ["ignore", "pipe", "pipe"] },
     );
     const line = out.trim().split("\n").filter((l) => l.startsWith("{")).pop();

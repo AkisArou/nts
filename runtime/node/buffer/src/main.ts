@@ -13,6 +13,7 @@
 
 import {
   ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_STATE,
   ERR_OUT_OF_RANGE,
 } from "../../internal/errors.ts";
 import {
@@ -686,6 +687,12 @@ export function isUtf8(input: Uint8Array | ArrayBuffer): boolean {
 /** The bytes of a buffer or an `ArrayBuffer`, or an error naming both. */
 function asBytes(input: unknown, name: string): Uint8Array {
   if (input instanceof ArrayBuffer || input instanceof SharedArrayBuffer) {
+    // A transferred buffer still answers `instanceof` and has no bytes behind
+    // it; reading one is a mistake about lifetime rather than about type, and
+    // node says so with a different code.
+    if (input instanceof ArrayBuffer && input.detached) {
+      throw new ERR_INVALID_STATE("Cannot validate on a detached ArrayBuffer");
+    }
     return new Uint8Array(input);
   }
   if (ArrayBuffer.isView(input)) {

@@ -494,3 +494,13 @@ export class ERR_UNAVAILABLE_DURING_EXIT extends NodeError {
     this.name = "Error";
   }
 }
+
+/** An operation on something that is no longer in a state to allow it. */
+export class ERR_INVALID_STATE extends NodeError {
+  override readonly code = "ERR_INVALID_STATE";
+
+  constructor(reason: string) {
+    super(`Invalid state: ${reason}`);
+    this.name = "Error";
+  }
+}

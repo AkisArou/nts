@@ -439,7 +439,8 @@ function partialEqual(actual: unknown, expected: unknown, seen: Cycles): boolean
   seen.set(actual, (known ?? new Set()).add(expected));
 
   if (isURL(expected)) {
-    return isURL(actual) && (actual as URL).href === (expected as URL).href;
+    return isURL(actual) &&
+      (actual as { href: string }).href === (expected as { href: string }).href;
   }
 
   if (Array.isArray(expected)) {
@@ -574,9 +575,15 @@ function presentValues(array: readonly unknown[]): unknown[] {
 /** Pairs already on the stack, so a structure that points at itself terminates. */
 type Cycles = Map<object, Set<object>>;
 
-/** A `URL` compares by its serialisation; its internals are derived from it. */
+/**
+ * A `URL` compares by its serialisation; its internals are derived from it.
+ *
+ * By tag rather than by `instanceof`, so that a `URL` from another realm is
+ * still one -- and so that this file does not have to name a global the
+ * language does not define.
+ */
 function isURL(value: unknown): boolean {
-  return typeof URL === "function" && value instanceof URL;
+  return Object.prototype.toString.call(value) === "[object URL]";
 }
 
 /**

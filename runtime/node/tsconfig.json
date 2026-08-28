@@ -2,6 +2,7 @@
   "//": "Typechecks the whole Node profile at once. The per-module tsconfigs are what `nts emit-c` compiles; this is what CI runs `tsc --noEmit` against.",
   "compilerOptions": {
     "target": "ES2022",
+    "lib": ["ESNext"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,

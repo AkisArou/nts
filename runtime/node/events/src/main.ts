@@ -19,9 +19,12 @@
 import {
   ERR_INVALID_ARG_TYPE,
   ERR_UNHANDLED_ERROR,
-  inspectValue,
 } from "../../internal/errors.ts";
-import { validateFunction, validateNumberRange } from "../../internal/validators.ts";
+import {
+  validateBoolean, validateFunction, validateNumberRange,
+} from "../../internal/validators.ts";
+import { nextTick } from "../../internal/tick.ts";
+import { inspect } from "../../util/src/inspect.ts";
 
 export type Listener = (...args: unknown[]) => unknown;
 
@@ -41,6 +44,24 @@ interface ListenerArray extends Array<OnceWrapper> {
 let defaultMaxListeners = 10;
 
 /**
+ * Whether this emitter turns a listener's rejected promise into an `error`
+ * event. A symbol on the instance, as node has it, because the default lives
+ * on the prototype and an instance may override it.
+ */
+const kCapture: unique symbol = Symbol("kCapture") as never;
+
+/**
+ * `events.captureRejectionSymbol`. An emitter that defines a method under this
+ * key handles its own rejections instead of having them turned into `error`.
+ */
+export const captureRejectionSymbol: unique symbol =
+  Symbol.for("nodejs.rejection") as never;
+const kRejection = captureRejectionSymbol;
+
+/** The value a new emitter takes when its options say nothing. */
+let captureRejectionsDefault = false;
+
+/**
  * The listener store, with no prototype.
  *
  * Upstream writes `{ __proto__: null }`, and the null prototype is not
@@ -57,6 +78,8 @@ function checkListener(listener: unknown): asserts listener is Listener {
 }
 
 export class EventEmitter {
+  declare [kCapture]: boolean;
+
   // Upstream keeps these on the prototype so that an emitter that never
   // registers anything allocates nothing. A class field would allocate per
   // instance; `undefined` until first use is the same observable state.
@@ -68,14 +91,35 @@ export class EventEmitter {
     this._events = emptyStore();
     this._eventsCount = 0;
     this._maxListeners = this._maxListeners || undefined;
-    if (options?.captureRejections !== undefined) {
-      // Rejection capture turns a rejected promise returned by a listener into
-      // an `error` event. It needs promises, so it is refused rather than
-      // ignored: a program that asked for it and did not get it would lose
-      // errors silently.
-      throw new ERR_INVALID_ARG_TYPE("options.captureRejections", "undefined", options.captureRejections);
+    if (options?.captureRejections) {
+      validateBoolean(options.captureRejections, "options.captureRejections");
+      this[kCapture] = Boolean(options.captureRejections);
+    } else {
+      this[kCapture] = captureRejectionsDefault;
     }
   }
+
+  /**
+   * The default every new emitter takes for rejection capture.
+   *
+   * A process-wide switch, because the emitters that most need it -- streams,
+   * which want a rejected handler to destroy them -- are constructed by
+   * libraries rather than by the application that wants the behaviour.
+   */
+  static get captureRejections(): boolean {
+    return captureRejectionsDefault;
+  }
+
+  static set captureRejections(value: boolean) {
+    validateBoolean(value, "EventEmitter.captureRejections");
+    captureRejectionsDefault = value;
+    // Instances that never chose for themselves follow the default, which is
+    // what putting it on the prototype achieves.
+    (EventEmitter.prototype as unknown as Record<symbol, unknown>)[kCapture] = value;
+  }
+
+  /** `events.captureRejectionSymbol`, on the class as node has it. */
+  static readonly captureRejectionSymbol: typeof captureRejectionSymbol = captureRejectionSymbol;
 
   /** The limit before `emit` warns about a suspected leak. */
   static get defaultMaxListeners(): number {
@@ -334,14 +378,20 @@ export class EventEmitter {
     }
 
     if (typeof handler === "function") {
-      handler.apply(this, args);
+      const result = handler.apply(this, args);
+      if (result !== undefined && result !== null) {
+        addCatch(this, result, type, args);
+      }
     } else {
       // A copy, because a listener may add or remove listeners while running
       // and upstream's contract is that `emit` calls the set present when it
       // started.
       const copy = handler.slice();
       for (const listener of copy) {
-        listener.apply(this, args);
+        const result = listener.apply(this, args);
+        if (result !== undefined && result !== null) {
+          addCatch(this, result, type, args);
+        }
       }
     }
     return true;
@@ -350,7 +400,6 @@ export class EventEmitter {
   /** The symbol whose listeners see an `error` before it is thrown. */
   static readonly errorMonitor: unique symbol = Symbol("events.errorMonitor");
 
-  static readonly captureRejectionSymbol: unique symbol = Symbol.for("nodejs.rejection");
 }
 
 /**
@@ -451,6 +500,71 @@ function collect(target: EventEmitter, type: string | symbol, unwrap: boolean): 
   return unwrap ? registered.map((l) => l.listener || l) : registered.slice();
 }
 
+/**
+ * A listener that returned a promise, watched for rejection.
+ *
+ * Without this an `async` listener that throws produces an unhandled
+ * rejection, which is reported somewhere far from the emitter and carries no
+ * hint of which event it came from. With `captureRejections` the rejection
+ * becomes an `error` event on the emitter, which is where a handler for it
+ * already is.
+ */
+function addCatch(that: EventEmitter, promise: unknown, type: string | symbol, args: unknown[]): void {
+  if (!that[kCapture]) {
+    return;
+  }
+  try {
+    const then = (promise as { then?: unknown }).then;
+    if (typeof then === "function") {
+      (then as (this: unknown, onOk: undefined, onErr: (e: unknown) => void) => void)
+        .call(promise, undefined, (err: unknown) => {
+          // On a later tick, so that a throw from the `error` handler is an
+          // uncaught exception rather than another rejection.
+          nextTick(emitUnhandledRejectionOrErr, that, err, type, args);
+        });
+    }
+  } catch (err) {
+    that.emit("error", err);
+  }
+}
+
+function emitUnhandledRejectionOrErr(
+  ee: EventEmitter,
+  err: unknown,
+  type: string | symbol,
+  args: unknown[],
+): void {
+  const handler = (ee as unknown as Record<symbol, unknown>)[kRejection];
+  if (typeof handler === "function") {
+    (handler as (...a: unknown[]) => void).call(ee, err, type, ...args);
+    return;
+  }
+  // Capture is turned off around the emit: an `error` handler that itself
+  // returns a rejected promise would otherwise loop.
+  const prev = ee[kCapture];
+  try {
+    ee[kCapture] = false;
+    ee.emit("error", err);
+  } finally {
+    ee[kCapture] = prev;
+  }
+}
+
+/**
+ * What the unhandled value looked like.
+ *
+ * `inspect` can throw -- the value may define a custom inspection that does --
+ * and the error being reported is the emitter's, not that one's. Coercion is
+ * the fallback because it is what remains that cannot fail.
+ */
+function describeUndeliverable(value: unknown): string {
+  try {
+    return inspect(value);
+  } catch {
+    return `${value}`;
+  }
+}
+
 /** Upstream `lib/events.js:449`. */
 function unhandledErrorException(args: unknown[]): Error {
   const first = args.length > 0 ? args[0] : undefined;
@@ -462,7 +576,7 @@ function unhandledErrorException(args: unknown[]): Error {
   // stringified `undefined`.
   // Node inspects rather than stringifies, so a string argument is quoted:
   // `Unhandled error. ('Accepts a string')`.
-  const error = new ERR_UNHANDLED_ERROR(first === undefined ? undefined : inspectValue(first));
+  const error = new ERR_UNHANDLED_ERROR(first === undefined ? undefined : describeUndeliverable(first));
   error.context = first;
   return error;
 }
@@ -571,3 +685,7 @@ export function once(
 }
 
 export default EventEmitter;
+
+// The default lives on the prototype, so an emitter that did not choose for
+// itself follows `EventEmitter.captureRejections` as it changes.
+(EventEmitter.prototype as unknown as Record<symbol, unknown>)[kCapture] = false;

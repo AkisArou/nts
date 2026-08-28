@@ -8,6 +8,7 @@
 
 import { ERR_INVALID_ARG_VALUE, ERR_INVALID_CURSOR_POS } from "./errors.ts";
 import { validateFunction } from "./validators.ts";
+import { nextTick } from "./tick.ts";
 import type { WritableLike } from "./stdio.ts";
 
 /** Control Sequence Introducer: ESC followed by `[`. */
@@ -27,11 +28,9 @@ type Callback = (err?: Error | null) => void;
 /**
  * Node defers a stream callback rather than running it synchronously, so a
  * caller never sees its callback run before its own next statement.
- * `process.nextTick` is what does that in node; we have no tick queue yet, and
- * a microtask is the nearest thing that keeps the ordering guarantee.
  */
 function defer(callback: Callback): void {
-  queueMicrotask(() => callback(null));
+  nextTick(callback, null);
 }
 
 /** Absolute cursor placement. Column only, when `y` is omitted. */
