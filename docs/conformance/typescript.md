@@ -121,7 +121,7 @@ diagnostic.
 | virtual dispatch | done | one table, and only for classes that need one |
 | `static` methods | done | a namespaced function: no receiver, no slot |
 | `implements` | done | erased |
-| `readonly` fields | partial | refused when a *constructor* assigns them, which TypeScript allows |
+| `readonly` fields | done | written once, by the constructor of the object they belong to. A write through a mutable alias is still refused: the fact is what lets a field load be commoned up |
 | getters and setters | **not done** | `x.y` would be a call; Node's API surface needs these |
 | `static` properties | **not done** | |
 | parameter properties (`constructor(public x: number)`) | **not done** | refused by name since it is not a default, which it was counted as. Also rejected by node's type stripping under `erasableSyntaxOnly`, so the differential side cannot run one either |
@@ -249,11 +249,22 @@ does not compile, and in every case **the compiler reports success**. A construc
 that fails quietly never enters the refusal histogram, so it never enters the
 work queue either — which is how each of these survived.
 
-| defect | what happens | found by |
-| --- | --- | --- |
-| `readonly` assigned in a constructor | refused, though TypeScript permits it | the Node session |
+**The table is empty.** Every defect recorded here has been fixed; the section
+stays because the *class* of failure has not gone away, and the next one will go
+here. What they had in common is worth keeping: each was a construct that
+compiled to nothing, or to a link error, while this compiler reported success —
+so none of them ever entered the refusal histogram, and none entered the work
+queue.
 
-Three more were found the same way and are **fixed**: bare `async` returning
+`readonly` assigned in a constructor was the odd one out — a refusal of valid
+code rather than a silent success. TypeScript permits exactly that write, and a
+field nothing may ever write has no value. It is allowed now on `this`, inside a
+constructor, and refused everywhere else including through a mutable alias:
+`readonly` is load-bearing for the optimizer, which commons up a field load that
+cannot change, and it is deliberately *not* a C `const` — see the note in the C
+backend for why the qualifier was dropped.
+
+Three were found by cross-checking and are **fixed**: bare `async` returning
 `void` and discarding the value; `s += t` on strings lowering to pointer
 arithmetic; and default and rest parameters lowering as ordinary ones, which
 emitted a call with the wrong number of arguments. Defaults have since been

@@ -24,3 +24,20 @@ export const bag: Bag = {};
 export const rbag: ReadonlyBag = {};
 
 export function optionals(a: number, b?: string, ...rest: number[]): void {}
+
+// A `readonly` field is written exactly once, by the constructor of the object
+// it belongs to. TypeScript permits that and this compiler refused it, which
+// made the modifier unusable: a field nothing may ever write has no value.
+class Point {
+  readonly x: number;
+  readonly y: number;
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+}
+
+export function distanceSquared(a: number, b: number): number {
+  const p = new Point(a, b);
+  return p.x * p.x + p.y * p.y;
+}

@@ -1381,6 +1381,12 @@ struct FuncBuilder<'a> {
     layouts: Vec<Layout>,
     /// The receiver, in a method.
     this: Option<ValueId>,
+    /// Whether this function is a constructor.
+    ///
+    /// The one place a `readonly` field may be written: TypeScript permits it
+    /// and this compiler was refusing it, which is a refusal of valid code
+    /// rather than a construct it does not understand.
+    in_constructor: bool,
     /// What the module declares outside any function.
     module: ModuleScope,
     /// What every class in the program declares, and what it extends.
@@ -1440,6 +1446,7 @@ impl<'a> FuncBuilder<'a> {
             bindings: rustc_hash::FxHashMap::default(),
             layouts: Vec::new(),
             this: None,
+            in_constructor: false,
             hierarchy: Hierarchy::default(),
             base: None,
             module: ModuleScope::default(),
@@ -1980,6 +1987,7 @@ impl<'a> FuncBuilder<'a> {
         }
 
         let is_constructor = self.kind_of(member) == Some(syntax::CONSTRUCTOR);
+        self.in_constructor = is_constructor;
         let member_name = if is_constructor {
             "constructor".to_owned()
         } else {
@@ -3423,7 +3431,18 @@ impl<'a> FuncBuilder<'a> {
             let field = layout
                 .index_of(&name)
                 .ok_or_else(|| self.unsupported(target, "a property the type does not declare"))?;
-            if layout.fields[field as usize].readonly {
+            // A `readonly` field may be written by the constructor of the
+            // object it belongs to, which is what TypeScript permits and what
+            // makes the modifier usable at all -- a field nothing may ever
+            // write is a field with no value. `readonly` is not emitted as a C
+            // `const`, so there is nothing to write through: see the note in
+            // the C backend for why the qualifier was dropped.
+            //
+            // On `this` specifically. A constructor assigning another object's
+            // readonly field is refused, as TypeScript refuses it.
+            if layout.fields[field as usize].readonly
+                && !(self.in_constructor && Some(object) == self.this)
+            {
                 return Err(self.unsupported(target, "assigning to a readonly property"));
             }
             return Ok(Place::Field { object, field });
