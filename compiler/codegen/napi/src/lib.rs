@@ -127,7 +127,13 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
                 |l| format!("NtsObj_{} *", c_identifier(&l.name)),
             )
         }
-        _ => "double".to_owned(),
+        // Every numeric width is a `double` across this boundary: JavaScript
+        // has one number type, so a wrapper that received an `i32` would have
+        // to widen it anyway.
+        HirType::Int { .. } | HirType::Float { .. } => "double".to_owned(),
+        // A function that does not return cannot have its return marshalled,
+        // and `void` is what the wrapper's signature needs.
+        HirType::Never => "void".to_owned(),
     }
 }
 
