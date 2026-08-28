@@ -174,6 +174,35 @@ export function makeCommon() {
       return Object.freeze(original);
     },
 
+    /**
+     * The same bytes, seen through every typed-array view that fits.
+     *
+     * Node's, verbatim in effect. Tests use it to check that a function
+     * accepting "a buffer" really accepts any `ArrayBufferView` -- a
+     * `Float64Array` over the same memory is the same bytes, and a function
+     * that only handles `Uint8Array` will quietly read the wrong length.
+     */
+    getArrayBufferViews(buf) {
+      const { buffer, byteOffset, byteLength } = buf;
+      const views = [
+        Int8Array, Uint8Array, Uint8ClampedArray, Int16Array, Uint16Array,
+        Int32Array, Uint32Array, Float32Array, Float64Array, DataView,
+      ];
+      const out = [];
+      for (const View of views) {
+        const perElement = View.BYTES_PER_ELEMENT ?? 1;
+        if (byteLength % perElement === 0) {
+          out.push(new View(buffer, byteOffset, byteLength / perElement));
+        }
+      }
+      return out;
+    },
+
+    /** Every view, plus the raw `ArrayBuffer`. */
+    getBufferSources(buf) {
+      return [...this.getArrayBufferViews(buf), new Uint8Array(buf).buffer];
+    },
+
     /** Node quotes for `sh -c`; the tests use it to build a shell command. */
     escapePOSIXShell(strings, ...args) {
       let command = strings[0];

@@ -167,7 +167,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**487 of node's own test files pass** across sixteen modules, of which 15 are hollow.
+**517 of node's own test files pass** across seventeen modules, of which 15 are hollow.
 
 > **The `compiles` column is currently unverified.** The frontend decomposes
 > types under a fixed budget, and **thirteen of the sixteen modules here
@@ -204,6 +204,7 @@ constructs refused`, from `nts hir`.
 | `assert` | 9 / 19 | 0 | 14 / 236 | complete, including `CallTracker` and node's Myers diff |
 | `util` | 7 / 19 | 1 | 23 / 197 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `fs` | 72 / 214 | 2 | ? | sync, callback and promise surfaces, the file streams and the watchers |
+| `zlib` | 30 / 64 | 0 | ? | the streams, the one-shots, brotli and zstd |
 | `stream` | 151 / 195 | 2 | ? | the core is complete; `web`, `iter`, `consumers`, `compose` and `duplexify` are absent |
 
 The first two columns are what
@@ -951,6 +952,51 @@ anything worker-related. Seventeen files spawn a real `node` and assert on what
 the child printed, and seven call `execve` successfully -- which does not fail
 the runner, it *ends* it, because the kernel loads another program over this
 one. Both sets are listed with reasons in `not-applicable`.
+
+## `zlib`
+
+Compression is a C library — zlib, brotli, zstd — and this module is everything
+around it: the option validation, the flush semantics, the stream integration,
+the error codes and the one-shot forms. The same division as `node:fs`, where
+the system call is the kernel's. 30 of 64 applicable files pass, none hollow.
+
+**The flush flag is the thing to understand.** A compressor is allowed to hold
+input back — that is how it finds matches — so nothing is guaranteed to come
+out until it is told to flush. `Z_NO_FLUSH` compresses best and may emit
+nothing at all for a small chunk. `Z_SYNC_FLUSH` ends the current block so the
+reader can see everything so far, at the cost of a few bytes of framing.
+`Z_FINISH` ends the stream. A caller who wants a compressed stream to be usable
+incrementally — a live log, a protocol — has to ask, and getting it wrong looks
+like a stream that never delivers.
+
+`flush` also names two different things and node gets away with it. The
+`Transform` option `flush` is the hook called at the end of a stream; zlib's is
+a numeric mode. Node passes its whole options object to `Transform`, which
+ignores the number because it tests `typeof flush === "function"` — benign, and
+only because JavaScript let the collision happen unnoticed. Here the stream
+options are built explicitly rather than spread, so the two cannot be confused.
+
+`windowBits` is special twice over, and both are transcribed rather than
+simplified. Zero is invalid when compressing and *meaningful* when
+decompressing, where it tells zlib to take the window size from the header of
+the stream being read — the only correct choice for a stream that came from
+somewhere else. And the floor differs by format: `windowBits: 8` makes a valid
+deflate stream but not a valid gzip one, so gzip's minimum is one higher.
+
+The constants are hard-coded rather than read from a binding, which is the
+opposite of what `node:os` does for signals — and the difference is the point.
+A signal number is a property of the operating system, so `SIGUSR1` is 10 on
+Linux and 30 on macOS and reading it at build time is the only way to be right
+on the second platform. These are properties of a *file format*: `Z_FINISH` is
+4 in every zlib everywhere, because a stream written on one machine has to be
+readable on another.
+
+The seam is an incremental engine — create, feed with a flush mode, take what
+comes out, close — which is what `zlib.h` offers and what a compiled build will
+call directly. Node does not expose an incremental engine synchronously, so
+each handle on the node side is one of node's own streams with its output
+collected. That is asynchronous, and it fits, because `Transform._transform`
+takes a callback anyway.
 
 ## `fs`, the asynchronous half
 

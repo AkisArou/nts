@@ -31,7 +31,7 @@ export class Transform extends Duplex {
   /** The held write callback, released when the readable side is read. */
   #pendingWrite: WriteCallback | null = null;
 
-  _flush?: (callback: TransformCallback) => void;
+  _flush?(callback: TransformCallback): void;
 
   constructor(options?: TransformOptions) {
     // A high water mark of zero means "buffer nothing", and a duplex would

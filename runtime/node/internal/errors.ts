@@ -792,6 +792,16 @@ export class ERR_STREAM_UNABLE_TO_PIPE extends NodeError {
   }
 }
 
+/** A brotli parameter key the library does not have. */
+export class ERR_BROTLI_INVALID_PARAM extends NodeRangeError {
+  override readonly code = "ERR_BROTLI_INVALID_PARAM";
+
+  constructor(parameter: unknown) {
+    super(`${parameter} is not a valid Brotli parameter`);
+    this.name = "RangeError";
+  }
+}
+
 export class ERR_INVALID_THIS extends NodeTypeError {
   override readonly code = "ERR_INVALID_THIS";
 
