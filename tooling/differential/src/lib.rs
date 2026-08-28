@@ -552,6 +552,57 @@ fn native_harness(testable: &[Testable]) -> String {
     main
 }
 
+/// Whether the C backend's output for a program is well-formed C.
+///
+/// The corpus harness checks `hir::prepare` and stops there, so a lowering that
+/// emits *invalid C* reads as a clean run over every file. That is how `"" + n`
+/// survived: it emitted `(NtsString *)v0`, a cast from a `double` to a pointer,
+/// while the compiler reported "1 function, nothing refused" and clang reported
+/// an error nobody was listening for.
+///
+/// `-fsyntax-only` asks exactly the question -- is this C well formed -- and
+/// skips code generation, which is most of what compiling costs. Over the whole
+/// corpus that is the difference between a check worth running every time and
+/// one nobody runs.
+///
+/// # Errors
+///
+/// The backend's own refusal, or clang's first line.
+pub fn compiles(program: &hir::Program, dir: &Utf8Path) -> Result<(), String> {
+    let emitted = nts_codegen_c::emit(program);
+    if !emitted.diagnostics.is_empty() {
+        return Err(emitted
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.message.clone())
+            .collect::<Vec<_>>()
+            .join("; "));
+    }
+    let generated = dir.join("program.c");
+    std::fs::write(&generated, emitted.writer.text()).map_err(|error| error.to_string())?;
+    std::fs::write(
+        dir.join(nts_codegen_c::RUNTIME_HEADER_NAME),
+        nts_codegen_c::RUNTIME_HEADER,
+    )
+    .map_err(|error| error.to_string())?;
+    let build = std::process::Command::new("clang")
+        .args(["-std=c11", "-fsyntax-only", "-w"])
+        .arg("-I")
+        .arg(dir)
+        .arg(&generated)
+        .output()
+        .map_err(|error| error.to_string())?;
+    if build.status.success() {
+        return Ok(());
+    }
+    Err(String::from_utf8_lossy(&build.stderr)
+        .lines()
+        .find(|line| line.contains("error"))
+        .unwrap_or("clang rejected the generated C")
+        .trim()
+        .to_owned())
+}
+
 fn run_native(
     dir: &Utf8Path,
     program: &hir::Program,

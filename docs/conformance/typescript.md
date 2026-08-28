@@ -249,13 +249,9 @@ does not compile, and in every case **the compiler reports success**. A construc
 that fails quietly never enters the refusal histogram, so it never enters the
 work queue either — which is how each of these survived.
 
-| defect | what happens | found by |
-| --- | --- | --- |
-| the corpus never compiles the C it produces | `hir::prepare` is checked and the backend's output is not, so a lowering that emits invalid C reads as a clean run. That is how `"" + n` survived — see below. Compiling 184 files is not free, but neither is the class of bug it hides. | this cross-check |
-
-The table was empty for about an hour, and the entry above is the reason it did
-not stay that way — found by looking for something else, which is the point of
-the section.
+**The table is empty.** It was empty for about an hour, then `"" + n` put an
+entry in it, and the entry has been closed by building the instrument rather
+than by fixing the one instance.
 
 `"" + n` emitted `(NtsString *)v0`, a cast from a `double` to a pointer. Not
 merely wrong: **C that does not compile**, from a lowering that reported "1
@@ -265,12 +261,20 @@ naming the operand; what it needs is `ToString` on a number, and there is no
 cheap version of that — the shortest decimal that round-trips through a `double`
 is Ryū or Grisu, and `%.17g` is not it.
 
-The conservation law did not catch it, and could not have: the function *was*
-lowered. It is a different failure mode, and the instrument for it is the one in
-the table — compile what the backend produces.
+The conservation law did not catch it and could not have: the function *was*
+lowered, and nothing vanished. It is a different failure mode with a different
+instrument, and that instrument now exists — the corpus hands every program it
+lowers to `clang -fsyntax-only`, and `UNCOMPILABLE C` is a second count that
+must stay at zero beside invalid HIR.
 
-**Every other defect recorded here has been fixed**, and there is now a machine
-that looks for the next one.
+`-fsyntax-only` asks exactly the question and skips code generation, which is
+most of what compiling costs. It reports nothing today. That is not a vacuous
+zero: if clang were absent the process would fail to start and *every* file
+would be counted, so a zero means clang ran and accepted each one.
+
+**Every defect recorded here has been fixed**, and there are now two machines
+looking for the next one — one asking whether anything vanished, one asking
+whether what came out is C.
 
 Every defect here had the same shape — a construct that compiled to nothing, or
 to a link error, while the compiler reported success — and each was found by a

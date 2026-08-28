@@ -67,6 +67,13 @@ struct Totals {
     rejected: usize,
     failed: usize,
     invalid: usize,
+    /// Programs whose generated C does not compile.
+    ///
+    /// A second thing that must stay at zero, and a different failure from
+    /// invalid HIR: the IR can be well formed and the C still not be. `"" + n`
+    /// emitted a cast from a `double` to a pointer, and the corpus called it a
+    /// clean run because it never asked clang.
+    uncompilable: usize,
     reasons: FxHashMap<String, usize>,
 }
 
@@ -201,6 +208,9 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
     let work = root.join("target/suite");
     let src = work.join("src");
     std::fs::create_dir_all(&src)?;
+    // Where the generated C goes, to be handed to clang for a syntax check.
+    let built = work.join("c");
+    std::fs::create_dir_all(&built)?;
     let tsconfig = work.join("tsconfig.json");
     std::fs::write(
         &tsconfig,
@@ -214,6 +224,7 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         rejected: 0,
         failed: 0,
         invalid: 0,
+        uncompilable: 0,
         reasons: FxHashMap::default(),
     };
 
@@ -253,14 +264,26 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
             Ok(snapshot) if snapshot.has_errors() => Outcome::Rejected,
             Ok(snapshot) => match hir::prepare(&snapshot) {
                 Err(_) => Outcome::Invalid,
-                Ok(prepared) if prepared.diagnostics.is_empty() => Outcome::Lowered,
-                Ok(prepared) => Outcome::Refused(
-                    prepared
-                        .diagnostics
-                        .iter()
-                        .map(|diagnostic| shorten(&diagnostic.message))
-                        .collect(),
-                ),
+                Ok(prepared) => {
+                    // Ask clang whether what the backend produced is C. The IR
+                    // being well formed does not make the output well formed,
+                    // and nothing else here would notice.
+                    if let Err(error) = nts_differential::compiles(&prepared.program, &built) {
+                        totals.uncompilable += 1;
+                        println!("UNCOMPILABLE C: {file}: {error}");
+                    }
+                    if prepared.diagnostics.is_empty() {
+                        Outcome::Lowered
+                    } else {
+                        Outcome::Refused(
+                            prepared
+                                .diagnostics
+                                .iter()
+                                .map(|diagnostic| shorten(&diagnostic.message))
+                                .collect(),
+                        )
+                    }
+                }
             },
         };
 
