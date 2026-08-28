@@ -43,7 +43,7 @@ fn build_and_run_with(
     harness: &str,
     provider: hir::Provider,
 ) -> Option<std::process::Output> {
-    build_and_run_hosted(example, harness, provider, false)
+    build_and_run_hosted(example, harness, provider, Host::None)
 }
 
 /// The deterministic host, for a harness that has to run the loop.
@@ -53,11 +53,60 @@ fn build_and_run_with(
 const TEST_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_test_host.h");
 const TEST_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_test_host.c");
 
+/// Where one test builds.
+///
+/// Keyed by the harness as well as the example: two tests exercising one
+/// example otherwise share a directory, and cargo runs them concurrently.
+fn work_dir(example: &str, harness: &str, provider: hir::Provider) -> std::path::PathBuf {
+    let mut hasher = std::hash::DefaultHasher::new();
+    std::hash::Hash::hash(harness, &mut hasher);
+    std::hash::Hash::hash(&format!("{provider:?}"), &mut hasher);
+    let key = std::hash::Hasher::finish(&hasher);
+    let dir = std::env::temp_dir().join(format!("nts-e2e-{example}-{key:016x}"));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    dir
+}
+
+/// Write whichever host a harness asked for, and say where its source landed.
+fn write_host(dir: &std::path::Path, host_kind: Host) -> std::path::PathBuf {
+    match host_kind {
+        Host::None => dir.join("nts_test_host.c"),
+        Host::Deterministic => {
+            std::fs::write(dir.join("nts_test_host.h"), TEST_HOST_HEADER)
+                .expect("write host header");
+            let path = dir.join("nts_test_host.c");
+            std::fs::write(&path, TEST_HOST_SOURCE).expect("write host");
+            path
+        }
+        Host::Libuv => {
+            std::fs::write(
+                dir.join(nts_codegen_c::UV_HOST_HEADER_NAME),
+                nts_codegen_c::UV_HOST_HEADER,
+            )
+            .expect("write host header");
+            let path = dir.join(nts_codegen_c::UV_HOST_SOURCE_NAME);
+            std::fs::write(&path, nts_codegen_c::UV_HOST_SOURCE).expect("write host");
+            path
+        }
+    }
+}
+
+/// Which host a harness links, if any.
+#[derive(Clone, Copy, PartialEq)]
+enum Host {
+    /// Nothing: the harness calls exported functions and never runs a loop.
+    None,
+    /// Virtual time, one thread, no I/O.
+    Deterministic,
+    /// A real loop, which is what a standalone program gets.
+    Libuv,
+}
+
 fn build_and_run_hosted(
     example: &str,
     harness: &str,
     provider: hir::Provider,
-    hosted: bool,
+    host_kind: Host,
 ) -> Option<std::process::Output> {
     let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
         // Announced, because a skip that prints nothing is indistinguishable
@@ -99,14 +148,7 @@ fn build_and_run_hosted(
     .expect("prepared HIR should verify");
     let emitted = nts_codegen_c::emit(&prepared.program);
 
-    // Keyed by the harness as well as the example: two tests exercising one
-    // example otherwise share a directory, and cargo runs them concurrently.
-    let mut hasher = std::hash::DefaultHasher::new();
-    std::hash::Hash::hash(harness, &mut hasher);
-    std::hash::Hash::hash(&format!("{provider:?}"), &mut hasher);
-    let key = std::hash::Hasher::finish(&hasher);
-    let dir = std::env::temp_dir().join(format!("nts-e2e-{example}-{key:016x}"));
-    std::fs::create_dir_all(&dir).expect("temp dir");
+    let dir = work_dir(example, harness, provider);
     let generated = dir.join("generated.c");
     let main = dir.join("main.c");
     let binary = dir.join("run");
@@ -121,11 +163,7 @@ fn build_and_run_hosted(
     )
     .expect("write runtime header");
     std::fs::write(&runtime, nts_codegen_c::RUNTIME_SOURCE).expect("write runtime");
-    let host = dir.join("nts_test_host.c");
-    if hosted {
-        std::fs::write(dir.join("nts_test_host.h"), TEST_HOST_HEADER).expect("write host header");
-        std::fs::write(&host, TEST_HOST_SOURCE).expect("write host");
-    }
+    let host = write_host(&dir, host_kind);
 
     // The provider is a property of the runtime as much as of the HIR: RC needs
     // each object to be its own allocation so the last release can give it back,
@@ -170,8 +208,13 @@ fn build_and_run_hosted(
         .arg(&generated)
         .arg(&main)
         .arg(&runtime)
-        .args(if hosted {
+        .args(if host_kind == Host::None {
+            Vec::new()
+        } else {
             vec![host.as_path()]
+        })
+        .args(if host_kind == Host::Libuv {
+            vec!["-luv"]
         } else {
             Vec::new()
         })
@@ -1638,7 +1681,9 @@ fn a_timer_callback_runs_and_its_effect_is_visible() {
          \x20   printf(\"after %g\\n\", observed(0));\n\
          \x20   return 0;\n\
          }\n";
-    let Some(output) = build_and_run_hosted("timers", harness, hir::Provider::NoGc, true) else {
+    let Some(output) =
+        build_and_run_hosted("timers", harness, hir::Provider::NoGc, Host::Deterministic)
+    else {
         return;
     };
     assert!(
@@ -1651,5 +1696,33 @@ fn a_timer_callback_runs_and_its_effect_is_visible() {
     assert_eq!(
         printed, "before 0\npending 0\nafter 7\n",
         "a timer callback did not run, or ran early"
+    );
+}
+
+/// A standalone program: evaluate the module, run the loop, shut down.
+///
+/// The assertion is termination and exit zero, because a compiled program has
+/// nothing to print with. It is not a weak one: `examples/standalone` still has
+/// two timers pending when evaluation finishes, so a loop that gave up early
+/// exits before they run, and one with an idle handle it forgot to stop or a
+/// referenced handle nothing closes never exits at all.
+#[test]
+fn a_standalone_program_runs_its_loop_and_exits() {
+    if !std::path::Path::new("/usr/include/uv.h").exists()
+        && !std::path::Path::new("/usr/local/include/uv.h").exists()
+    {
+        eprintln!("SKIP standalone: libuv headers are not installed");
+        return;
+    }
+    let main = nts_codegen_c::standalone_main(true);
+    let Some(output) = build_and_run_hosted("standalone", &main, hir::Provider::NoGc, Host::Libuv)
+    else {
+        return;
+    };
+    assert!(
+        output.status.success(),
+        "a standalone program did not exit cleanly:\n{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
 }

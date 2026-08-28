@@ -735,6 +735,44 @@ fn where_it_is(snapshot: &nts_semantic_schema::SemanticSnapshot, at: &Location) 
     format!("{path}:{line}:{}", column + 1)
 }
 
+/// The entry point of a standalone program, and the host it needs.
+///
+/// Both are a *choice* rather than part of the runtime: an embedder with its
+/// own loop supplies its own host and links none of this, and a library product
+/// has no loop at all (RFC §26.1).
+fn write_standalone(program: &hir::Program, out: &Utf8Path) -> Result<()> {
+    // A program that is only declarations has nothing to evaluate, and calling
+    // a function that was never emitted is a link error.
+    let initializes = program
+        .funcs
+        .iter()
+        .any(|func| func.name == hir::lower::MODULE_INIT);
+    std::fs::write(
+        out.join(nts_codegen_c::UV_HOST_HEADER_NAME),
+        nts_codegen_c::UV_HOST_HEADER,
+    )?;
+    std::fs::write(
+        out.join(nts_codegen_c::UV_HOST_SOURCE_NAME),
+        nts_codegen_c::UV_HOST_SOURCE,
+    )?;
+    let main_path = out.join("main.c");
+    std::fs::write(&main_path, nts_codegen_c::standalone_main(initializes))
+        .with_context(|| format!("writing {main_path}"))?;
+    println!(
+        "wrote program.c, main.c, {}, {}, {}, {} to {out}",
+        nts_codegen_c::RUNTIME_HEADER_NAME,
+        nts_codegen_c::RUNTIME_SOURCE_NAME,
+        nts_codegen_c::UV_HOST_HEADER_NAME,
+        nts_codegen_c::UV_HOST_SOURCE_NAME,
+    );
+    println!(
+        "  cc -std=c11 -I. main.c program.c {} {} -luv -lm -o program",
+        nts_codegen_c::RUNTIME_SOURCE_NAME,
+        nts_codegen_c::UV_HOST_SOURCE_NAME
+    );
+    Ok(())
+}
+
 /// Lower a project and print the C it becomes.
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
@@ -755,10 +793,23 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     } else {
         hir::Provider::NoGc
     };
+    // `--main` says the product is an executable, which is a claim about
+    // reachability as much as about output: a module's exports are not roots
+    // for one, because nothing outside the program can call them. The entry is
+    // module evaluation, because that is what an executable *is* -- the same
+    // thing `node main.js` runs.
+    let standalone = std::env::args().any(|arg| arg == "--main");
+    let entry = [hir::lower::MODULE_INIT.to_owned()];
+    let roots = if standalone {
+        hir::reachable::Roots::Entry(&entry)
+    } else {
+        hir::reachable::Roots::EveryExport
+    };
     let prepared = match hir::prepare_with(
         &snapshot,
         &hir::Options {
             provider,
+            roots,
             ..hir::Options::default()
         },
     ) {
@@ -809,6 +860,14 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
         out.join(nts_codegen_c::RUNTIME_SOURCE_NAME),
         nts_codegen_c::RUNTIME_SOURCE,
     )?;
+    // `--main` adds the entry point of a standalone program: evaluate the
+    // module, run the loop until nothing is left, shut down. The libuv host
+    // comes with it, because a program needs a loop and an embedder with its
+    // own supplies a different one.
+    if standalone {
+        return write_standalone(&program, out);
+    }
+
     // `--napi` adds the Node-API wrapper, which is what makes the compiled
     // program callable from JavaScript -- and therefore what lets node's own
     // test suite run against it. Node is a harness here, not a runtime: nothing

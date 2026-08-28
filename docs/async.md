@@ -397,6 +397,20 @@ a right one.
 
 ## 7. Why a vtable
 
+The claim the seam makes, first, because everything else in this section is a
+consequence of it: **a host is a configuration, not a fork.** The deterministic
+host and the libuv host pass the *same* ordering assertions -- a checkpoint
+between tasks, timers in delay order, equal deadlines in creation order, an id
+that was never issued disturbing nothing -- and those assertions are about the
+runtime rather than about either host. That equivalence is what makes this a
+contract instead of two implementations that happen to agree today.
+
+So if a host ever needs a second code path, that is a contract bug and not a
+host quirk, and the fix belongs in the runtime. The one time it nearly happened
+was shutdown identifying its timers by walking the loop, which is only correct
+when the loop is ours -- and an embedder passes its own.
+
+
 A C struct of function pointers, installed on the runtime at startup.
 
 - It is what makes the deterministic test host possible at all (§6). That is
@@ -558,7 +572,23 @@ wrong for the newcomer: `Convert` returning `TOP` in the facts analysis,
    nothing, because the allocator pools. What says something is that the live
    set shrank while the timer still held the callback, so that is what the
    suite asserts.
-10. The standalone runner: run until quiescent, then shut down cleanly.
+10. ~~The standalone runner.~~ **Done.** `nts emit-c --main` writes a `main.c`
+    beside the program: install the libuv host, evaluate the module, run until
+    nothing is left, shut down. That is what an executable *is* here -- the
+    module's top-level code is the program, which is what `node main.js` runs
+    -- and it is why `--main` also makes module evaluation the *reachability*
+    root rather than the exports. Nothing outside an executable can call them.
+
+    `examples/standalone` still has two timers pending when evaluation
+    finishes, and the assertion is that the binary terminates and exits zero.
+    That is not weak: a loop that gave up early exits before they run, and one
+    with an idle handle it forgot to stop, or a referenced handle nothing ever
+    closes, never exits at all. A compiled program has nothing to print with,
+    so termination is the observable.
+
+    It needed module evaluation to exist first, which it did not -- see the
+    conformance table. Top-level statements were dropped silently, so there was
+    nothing for a runner to call.
 
 The first consumer of A, agreed with the parallel session, is `node:timers` —
 59 files and almost pure scheduling. It is a smaller and more honest first

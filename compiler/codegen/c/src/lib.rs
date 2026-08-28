@@ -29,5 +29,6 @@ pub mod emit;
 
 pub use emit::{
     Emitted, RUNTIME_HEADER, RUNTIME_HEADER_NAME, RUNTIME_SOURCE, RUNTIME_SOURCE_NAME,
-    c_identifier, emit,
+    UV_HOST_HEADER, UV_HOST_HEADER_NAME, UV_HOST_SOURCE, UV_HOST_SOURCE_NAME, c_identifier, emit,
+    standalone_main,
 };

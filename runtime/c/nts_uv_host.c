@@ -1,11 +1,3 @@
-/* libuv's Unix header names `pthread_rwlock_t`, which a strict `-std=c11`
- * translation unit cannot see: the POSIX names sit behind a feature-test
- * macro. Set here rather than in the build, so this file compiles the same
- * however it is driven. */
-#if defined(__linux__) && !defined(_GNU_SOURCE)
-#define _GNU_SOURCE
-#endif
-
 #include "nts_uv_host.h"
 
 #include <stdio.h>

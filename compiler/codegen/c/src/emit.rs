@@ -32,6 +32,66 @@ pub const RUNTIME_HEADER: &str = include_str!("../../../../runtime/c/nts_runtime
 pub const RUNTIME_SOURCE_NAME: &str = "nts_runtime.c";
 pub const RUNTIME_SOURCE: &str = include_str!("../../../../runtime/c/nts_runtime.c");
 
+/// The libuv host, for a standalone program.
+///
+/// Separate from the runtime because it is a *choice*: an embedder with its
+/// own loop supplies its own host and links none of this, and a library
+/// product has no loop at all (RFC §26.1). Written beside the program only
+/// when one is asked for.
+pub const UV_HOST_HEADER_NAME: &str = "nts_uv_host.h";
+pub const UV_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_uv_host.h");
+pub const UV_HOST_SOURCE_NAME: &str = "nts_uv_host.c";
+pub const UV_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_uv_host.c");
+
+/// The `main` of a standalone program.
+///
+/// What an executable *is*, in one function: evaluate the module, then run the
+/// loop until nothing is left, then shut down. That is what node does with
+/// `node main.js`, and it is why the module's top-level code is the program
+/// rather than some exported entry point being one.
+///
+/// `initializes` is whether the program has any top-level code. A program that
+/// is only declarations has nothing to evaluate, and calling a function that
+/// was never emitted is a link error.
+#[must_use]
+pub fn standalone_main(initializes: bool) -> String {
+    let declare = if initializes {
+        "/* Emitted only when the program has top-level code to evaluate. */\nvoid module__init(void);\n\n"
+    } else {
+        ""
+    };
+    let evaluate = if initializes {
+        "    module__init();\n    /* Module evaluation is itself a job, so what it queued is drained\n     * here rather than at the first thing the loop runs. */\n    nts_enter();\n    nts_leave();\n"
+    } else {
+        "    /* No top-level code, so nothing to evaluate. */\n"
+    };
+    format!(
+        "/* Before any header: libuv's Unix header names POSIX types that a\n\
+         \x20* strict `-std=c11` translation unit cannot see, and a feature-test\n\
+         \x20* macro set after the first system header has no effect. */\n\
+         #if defined(__linux__) && !defined(_GNU_SOURCE)\n\
+         #define _GNU_SOURCE\n\
+         #endif\n\
+         \n\
+         #include \"nts_runtime.h\"\n\
+         #include \"nts_uv_host.h\"\n\
+         \n\
+         {declare}\
+         int main(void) {{\n\
+         \x20   nts_uv_host_install(uv_default_loop());\n\
+         {evaluate}\
+         \x20   /* Until nothing is runnable, no timer is pending, and no\n\
+         \x20    * foreign completion is in flight. */\n\
+         \x20   nts_uv_host_run();\n\
+         \x20   /* Closes every handle and drops whatever is still queued: a\n\
+         \x20    * task owns a reference, and the contract is that whoever\n\
+         \x20    * holds it either runs it or gives it back. */\n\
+         \x20   nts_uv_host_shutdown();\n\
+         \x20   return 0;\n\
+         }}\n"
+    )
+}
+
 /// Every value some operation or terminator in a function reads.
 fn values_read(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
     let mut read = rustc_hash::FxHashSet::default();

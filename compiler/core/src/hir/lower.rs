@@ -983,6 +983,7 @@ fn module_statements(
     (files.into_iter().next(), refusals)
 }
 
+#[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
     let module = collect_module_scope(snapshot);

@@ -23,6 +23,14 @@
 #ifndef NTS_UV_HOST_H
 #define NTS_UV_HOST_H
 
+/* libuv's Unix header names `pthread_rwlock_t`, which a strict `-std=c11`
+ * translation unit cannot see: the POSIX names sit behind a feature-test
+ * macro. Set here rather than in each includer, so anything that includes this
+ * compiles however it is driven. */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
+
 #include <uv.h>
 
 #include "nts_runtime.h"

@@ -267,8 +267,23 @@ static void shutdown_drops_what_is_left(void) {
     uv_loop_close(&loop);
 }
 
+/* An id this host never issued. The slot table is what knows -- an index past
+ * its end, or one whose generation does not match -- so a program that clears a
+ * timer it is unsure about needs no guard of its own. */
+static void an_id_this_host_never_issued_is_a_no_op(void) {
+    start();
+    nts_post_delayed(reaction("kept"), 1.0, false);
+    nts_cancel_delayed(0);
+    nts_cancel_delayed(999999);
+    nts_cancel_delayed(0xFFFFFFFFFFFFFFFFull);
+    nts_uv_host_run();
+    expect("an id this host never issued disturbs nothing", "kept");
+    finish();
+}
+
 int main(void) {
     a_microtask_runs_before_the_next_task();
+    an_id_this_host_never_issued_is_a_no_op();
     tasks_run_in_the_order_they_were_posted();
     timers_fire_in_delay_order();
     equal_delays_fire_in_creation_order();

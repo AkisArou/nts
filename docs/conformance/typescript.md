@@ -210,7 +210,8 @@ worse.
 | `setImmediate` | **not done** | it is `post_task` with the same callback object, and absent from the default library, so no program this compiler accepts can call one. It belongs with the profile that declares it |
 | `new Promise(executor)` | **not done** | `resolve` is a closure over the promise, so settling reaches back through a function the constructor supplied |
 | async generators, `for await`, a `finally` spanning an `await` | **not done** | each refused *by name*, and checked ahead of the `await` rule so they are live rather than hidden behind it |
-| an event loop | partial | the host seam, the two queues and the checkpoint are built and tested against node; a deterministic host with virtual time exists. libuv is phase C of [`../async.md`](../async.md) |
+| a standalone program | done | `nts emit-c --main` writes the entry point: install the libuv host, evaluate the module, run the loop to quiescence, shut down. An executable's reachability root is module evaluation rather than the exports, because nothing outside it can call them |
+| an event loop | partial | the host seam, the two queues and the checkpoint are built and tested against node; a deterministic host with virtual time exists, and the libuv host is built and tested against the same contract |
 | an event loop | **not done** | |
 | a native library ABI | **not done** | RFC §27.1 — everything emitted is `static` |
 | separate compilation | **not done** | one program at a time |

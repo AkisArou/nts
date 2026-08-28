@@ -189,8 +189,38 @@ static void a_negative_delay_is_zero(void) {
     nts_release((NtsHeader *)later);
 }
 
+/* An id that was never issued, one that was already cleared, and one that
+ * already fired. All three are no-ops -- node's `clearTimeout` is -- and none
+ * may disturb a live timer.
+ *
+ * Asked for by the Node profile rather than invented here: a program that
+ * clears a timer it is not sure about is ordinary, and "undefined behaviour,
+ * guard on your side" would be a worse contract than a lookup that already
+ * knows the answer. */
+static void clearing_an_unknown_id_is_a_no_op(void) {
+    reset();
+    Closure *kept = closure("kept");
+    double live = nts_set_timeout((NtsHeader *)kept, 0, 5.0, false);
+
+    nts_clear_timeout(0);          /* never a live id */
+    nts_clear_timeout(999999.0);   /* never issued */
+    nts_clear_timeout(-1.0);       /* not even a plausible one */
+    nts_clear_timeout(live);
+    nts_clear_timeout(live);       /* the same one twice */
+
+    Closure *after = closure("after");
+    nts_set_timeout((NtsHeader *)after, 0, 5.0, false);
+    nts_clear_timeout(live);       /* stale, and the slot has been reused */
+
+    nts_test_host_run(64);
+    expect("clearing an unknown or stale id disturbs nothing", "after");
+    nts_release((NtsHeader *)kept);
+    nts_release((NtsHeader *)after);
+}
+
 int main(void) {
     timers_fire_in_delay_order();
+    clearing_an_unknown_id_is_a_no_op();
     a_cleared_timer_does_not_fire();
     an_interval_repeats_until_cleared();
     a_negative_delay_is_zero();
