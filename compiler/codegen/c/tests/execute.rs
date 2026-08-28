@@ -43,6 +43,22 @@ fn build_and_run_with(
     harness: &str,
     provider: hir::Provider,
 ) -> Option<std::process::Output> {
+    build_and_run_hosted(example, harness, provider, false)
+}
+
+/// The deterministic host, for a harness that has to run the loop.
+///
+/// Not part of the emitted runtime -- nothing here is linked into a compiled
+/// program -- so it is written beside it only when a harness asks.
+const TEST_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_test_host.h");
+const TEST_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_test_host.c");
+
+fn build_and_run_hosted(
+    example: &str,
+    harness: &str,
+    provider: hir::Provider,
+    hosted: bool,
+) -> Option<std::process::Output> {
     let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
         // Announced, because a skip that prints nothing is indistinguishable
         // from a pass — and this is the test whose passing means the most.
@@ -105,6 +121,11 @@ fn build_and_run_with(
     )
     .expect("write runtime header");
     std::fs::write(&runtime, nts_codegen_c::RUNTIME_SOURCE).expect("write runtime");
+    let host = dir.join("nts_test_host.c");
+    if hosted {
+        std::fs::write(dir.join("nts_test_host.h"), TEST_HOST_HEADER).expect("write host header");
+        std::fs::write(&host, TEST_HOST_SOURCE).expect("write host");
+    }
 
     // The provider is a property of the runtime as much as of the HIR: RC needs
     // each object to be its own allocation so the last release can give it back,
@@ -149,6 +170,11 @@ fn build_and_run_with(
         .arg(&generated)
         .arg(&main)
         .arg(&runtime)
+        .args(if hosted {
+            vec![host.as_path()]
+        } else {
+            Vec::new()
+        })
         .arg("-I")
         .arg(&dir)
         // The generated prelude uses fmod and trunc for JavaScript's integer
@@ -1585,5 +1611,45 @@ int main(void) {{
     assert!(
         text.contains("ok foundAt(10,99) = -1"),
         "a search that finds nothing must return the absence: {text}",
+    );
+}
+
+/// A timer callback, actually called.
+///
+/// The case that was missing. A closure's method table is populated only where
+/// something dispatches through its slot, and a callback handed to
+/// `setTimeout` is dispatched through it by the *runtime* -- which reachability
+/// could not see, so the body was pruned and the table emitted as a null
+/// pointer. Every other timer in `examples/timers` is cleared before it can
+/// fire, so nothing called through the null and everything passed.
+#[test]
+fn a_timer_callback_runs_and_its_effect_is_visible() {
+    let harness = "#include <stdio.h>\n\
+         #include \"nts_runtime.h\"\n\
+         #include \"nts_test_host.h\"\n\
+         double scheduleWithoutClearing(double n);\n\
+         double observed(double n);\n\
+         int main(void) {\n\
+         \x20   nts_test_host_install();\n\
+         \x20   printf(\"before %g\\n\", observed(0));\n\
+         \x20   scheduleWithoutClearing(7);\n\
+         \x20   printf(\"pending %g\\n\", observed(0));\n\
+         \x20   nts_test_host_run(64);\n\
+         \x20   printf(\"after %g\\n\", observed(0));\n\
+         \x20   return 0;\n\
+         }\n";
+    let Some(output) = build_and_run_hosted("timers", harness, hir::Provider::NoGc, true) else {
+        return;
+    };
+    assert!(
+        output.status.success(),
+        "binary failed:\n{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let printed = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        printed, "before 0\npending 0\nafter 7\n",
+        "a timer callback did not run, or ran early"
     );
 }

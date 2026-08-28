@@ -623,7 +623,20 @@ const HARNESS_PRELUDE: &str =
           * bound rather than a guess: a program that starves the loop fails\n\
           * here instead of hanging the run. */\n\
          static void show_settled(const char *name, int at, NtsPromise *p) {\n\
-         \x20   nts_test_host_run(1000000);\n\
+         \x20   /* Until it settles, not until the loop falls quiet. `await` on\n\
+         \x20    * node returns when its promise does, and the two differ as\n\
+         \x20    * soon as timers exist: a program that left another timer\n\
+         \x20    * pending would have it fire on this side and not on node's. */\n\
+         \x20   uint32_t budget = 1000000;\n\
+         \x20   while (p->state == NTS_PROMISE_PENDING && budget > 0) {\n\
+         \x20       if (!nts_test_host_step()) { break; }\n\
+         \x20       budget--;\n\
+         \x20   }\n\
+         \x20   if (budget == 0) {\n\
+         \x20       printf(\"%s %d starved\\n\", name, at);\n\
+         \x20       fflush(stdout);\n\
+         \x20       return;\n\
+         \x20   }\n\
          \x20   if (p->state == NTS_PROMISE_FULFILLED\n\
          \x20       && p->payload == NTS_PAYLOAD_NUMBER) {\n\
          \x20       show(name, at, p->number);\n\

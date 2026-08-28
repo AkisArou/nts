@@ -516,8 +516,48 @@ wrong for the newcomer: `Convert` returning `TOP` in the facts analysis,
    embedder passes its own — so it reads whatever else is there as an
    `NtsUvTimer`. It walks the slot table now. The suite's own watchdog was the
    foreign handle that found it.
-9. `setTimeout` / `setInterval` / `clearTimeout` as the `timers` capability;
-   `setImmediate` on `post_task`.
+9. ~~`setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` as the
+   `timers` capability.~~ **Done**, and in the *runtime* rather than in a host:
+   a host provides `post_delayed`, and the capability is built on it, so both
+   hosts have it and neither implements it. The callback is a closure, which is
+   an object with a method table, so the runtime is handed the object and the
+   slot its call occupies -- one slot serves every closure, and what makes that
+   safe is that the caller spells the signature.
+
+   `setImmediate` is `post_task` with the same callback object and is *not*
+   here, because nothing can reach it: it is a Node global, absent from the
+   default library, so no program this compiler accepts can call one. It
+   belongs with the profile that declares it.
+
+   Timers are not observable from TypeScript yet. A timer's effect reaches a
+   program only through a promise its callback settles, and `new Promise` is
+   not implemented -- so `examples/timers` checks that the lowering compiles,
+   links and runs, and `runtime/c/tests/timers.c` checks what it does, against
+   a closure built by hand in the shape the compiler emits.
+
+   Handing a closure to the runtime also found a hole in reachability. A
+   closure's method table is filled only where something dispatches through its
+   slot, and `setTimeout`'s callback is dispatched through it by the *runtime*
+   -- an external callee, which reachability read as "not in this program, so
+   nothing to keep". The body was pruned, the layout's entry went with it, and
+   the table was emitted as a null pointer. Nothing failed, because every timer
+   in `examples/timers` is cancelled before it can fire, so the call through the
+   null was never made. That is what a rule with no case that executes it looks
+   like from the outside: a passing suite.
+
+   The case is `a_timer_callback_runs_and_its_effect_is_visible`, which
+   schedules a timer nothing cancels and then runs the loop. Reverting the fix
+   fails it, and emits the null table.
+
+   The interesting rule there is that an interval and a one-shot give their
+   references back differently: a one-shot is run once, so running is what
+   gives it back; an interval is run again and again from the same task, so it
+   is given back once, by `drop`, at cancel. Running an interval through the
+   one-shot path frees its callback and then calls through it -- and the trace
+   still comes out right, the totals still balance, and AddressSanitizer says
+   nothing, because the allocator pools. What says something is that the live
+   set shrank while the timer still held the callback, so that is what the
+   suite asserts.
 10. The standalone runner: run until quiescent, then shut down cleanly.
 
 The first consumer of A, agreed with the parallel session, is `node:timers` —

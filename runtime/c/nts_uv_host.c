@@ -164,18 +164,25 @@ static void nts_uv_slot_release(uint32_t index) {
 }
 
 static NtsTimerId nts_uv_slot_id(uint32_t index) {
-    /* One-based, so that zero is never a live id. */
-    return ((NtsTimerId)nts_uv_slots[index].generation << 32) | (NtsTimerId)(index + 1);
+    /* One-based, so that zero is never a live id.
+     *
+     * The generation is masked to twenty-one bits so the whole id fits in the
+     * fifty-three a `double` holds exactly: `setTimeout` hands its id to a
+     * program, where it is a number, and an id that did not survive that round
+     * trip would cancel the wrong timer. Two million reuses of one slot before
+     * a stale id could alias, against four billion unmasked. */
+    NtsTimerId generation = nts_uv_slots[index].generation & 0x1FFFFFu;
+    return (generation << 32) | (NtsTimerId)(index + 1);
 }
 
 static NtsUvTimer *nts_uv_slot_find(NtsTimerId id) {
     uint32_t index = (uint32_t)(id & 0xFFFFFFFFu);
-    uint32_t generation = (uint32_t)(id >> 32);
+    uint32_t generation = (uint32_t)(id >> 32) & 0x1FFFFFu;
     if (index == 0 || index > nts_uv_slots_len) {
         return 0;
     }
     index--;
-    if (nts_uv_slots[index].generation != generation) {
+    if ((nts_uv_slots[index].generation & 0x1FFFFFu) != generation) {
         /* Already fired, or already cancelled. `clearTimeout` of a timer that
          * has run is a no-op, not an error. */
         return 0;

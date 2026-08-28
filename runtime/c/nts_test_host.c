@@ -128,24 +128,29 @@ static int nts_test_next(void) {
     return chosen;
 }
 
-uint32_t nts_test_host_run(uint32_t budget) {
-    uint32_t ran = 0;
-    /* A checkpoint before the first task, because module evaluation is itself
-     * a job and anything it queued is due before any macrotask. */
+bool nts_test_host_step(void) {
+    /* A checkpoint first, because module evaluation is itself a job and
+     * anything it queued is due before any macrotask. Harmless when there is
+     * nothing to drain, which is why it can be per-step rather than per-run. */
     nts_enter();
     nts_leave();
-    while (ran < budget) {
-        int at = nts_test_next();
-        if (at < 0) {
-            break;
-        }
-        NtsTestSlot slot = nts_test_slots[at];
-        if (slot.interval > 0.0) {
-            nts_test_slots[at].due = nts_test_clock + slot.interval;
-        } else {
-            nts_test_slots[at].live = false;
-        }
-        nts_task_run(slot.task);
+    int at = nts_test_next();
+    if (at < 0) {
+        return false;
+    }
+    NtsTestSlot slot = nts_test_slots[at];
+    if (slot.interval > 0.0) {
+        nts_test_slots[at].due = nts_test_clock + slot.interval;
+    } else {
+        nts_test_slots[at].live = false;
+    }
+    nts_task_run(slot.task);
+    return true;
+}
+
+uint32_t nts_test_host_run(uint32_t budget) {
+    uint32_t ran = 0;
+    while (ran < budget && nts_test_host_step()) {
         ran++;
     }
     if (ran == budget) {

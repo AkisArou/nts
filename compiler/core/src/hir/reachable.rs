@@ -134,9 +134,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             continue;
         };
         for op in &func.values {
-            // An external callee is not in this program, so there is nothing to
-            // keep — the linker supplies it.
-            let OpKind::Call { callee, .. } = &op.kind else {
+            let OpKind::Call { callee, args, .. } = &op.kind else {
                 continue;
             };
             // A virtual call reaches *every* implementation of its slot, because
@@ -146,7 +144,32 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             // is a link error at best.
             let targets: Vec<&str> = match callee {
                 Callee::Direct(target) => vec![target.as_str()],
-                Callee::External(_) => Vec::new(),
+                // An external callee is not in this program and the linker
+                // supplies it -- but a *closure* handed to one is called back
+                // through its method table, which is what `setTimeout` does
+                // with its callback. So the methods of whatever object was
+                // passed are reachable.
+                //
+                // Without this the body was pruned, and because the layout's
+                // entry went with it the table was emitted as a null pointer.
+                // Nothing failed: `examples/timers` cancels every timer before
+                // it can fire, so the call through the null was never made --
+                // which is what a rule with no case that executes it looks
+                // like from the outside.
+                Callee::External(_) => args
+                    .iter()
+                    .filter_map(|arg| match &func.values[arg.0 as usize].ty {
+                        super::HirType::Managed(super::ManagedType::Object(ty)) => Some(*ty),
+                        _ => None,
+                    })
+                    .filter_map(|ty| {
+                        program
+                            .layouts
+                            .iter()
+                            .find(|layout| layout.types.contains(&ty))
+                    })
+                    .flat_map(|layout| layout.methods.iter().filter_map(Option::as_deref))
+                    .collect(),
                 Callee::Virtual { slot, .. } | Callee::Closure { slot } => program
                     .layouts
                     .iter()

@@ -570,7 +570,7 @@ fn literal_name(literals: &[String], text: &str) -> String {
 fn erases_class(callee: &str, at: usize) -> bool {
     matches!(
         (callee, at),
-        ("nts_promise_fulfill_reference" | "nts_promise_reject", 1)
+        ("nts_promise_fulfill_reference" | "nts_promise_reject", 1) | ("nts_set_timeout", 0)
     )
 }
 

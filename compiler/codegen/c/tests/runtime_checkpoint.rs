@@ -144,3 +144,16 @@ fn the_libuv_host_keeps_the_same_contract_as_the_deterministic_one() {
         checks(&report)
     );
 }
+
+#[test]
+fn timers_behave_as_the_capability_says() {
+    // Reference counting, because the check that matters is that an interval
+    // keeps its callback alive between rounds — under NoGC nothing is ever
+    // released, so the bug it catches could not happen.
+    let report = run_suite("timers", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 5,
+        "expected at least 5 timer checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}

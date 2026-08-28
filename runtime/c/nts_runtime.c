@@ -1934,3 +1934,86 @@ NtsPromise *nts_promise_all(NtsArray *promises, NtsArray *values) {
 NtsPromise *nts_promise_race(NtsArray *promises) {
   return nts_combinator_new(promises, 0);
 }
+
+/* --- Timers, as a program calls them (docs/async.md 8, phase C) -------------
+ *
+ * `setTimeout` and its family are a *capability*, not part of the host
+ * contract: a host provides `post_delayed`, and this is the surface built on
+ * it. That is why they live here rather than in a host -- both hosts get them
+ * unchanged, which is what makes `setTimeout` ordering testable against node
+ * on the deterministic one.
+ *
+ * The callback is a closure, which in this compiler is an object with a
+ * method table, so calling it needs the object and a slot. `NtsTask` has room
+ * for one state pointer, so the pair becomes a small managed object -- the
+ * same shape a promise reaction uses, and traced the same way.
+ */
+
+typedef struct {
+    NtsHeader header;
+    NtsHeader *callback;
+    uint32_t slot;
+} NtsCallback;
+
+static const uint32_t nts_callback_offsets[] = {
+    (uint32_t)offsetof(NtsCallback, callback),
+};
+
+static const NtsDescriptor nts_desc_callback = {
+    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsCallback), 1u, 1u,
+    nts_callback_offsets, 0, "Callback",
+};
+
+static void nts_callback_call(NtsCallback *entry) {
+    NtsHeader *callback = entry->callback;
+    /* The same cast the emitter makes at every closure call site: the table
+     * stores untyped pointers and the caller spells the signature. A timer
+     * callback takes nothing and returns nothing, so there is one signature
+     * here rather than a family. */
+    ((void (*)(NtsHeader *))callback->descriptor->methods[entry->slot])(callback);
+}
+
+/* A one-shot: running it is the last thing that happens to it, so running is
+ * also what gives the reference back. */
+static void nts_callback_run_once(void *state) {
+    NtsCallback *entry = (NtsCallback *)state;
+    nts_callback_call(entry);
+    nts_release((NtsHeader *)entry);
+}
+
+/* An interval: the host runs the same task again and again, so the reference
+ * is given back once, by `drop`, when it is finally cancelled. Releasing here
+ * would free it under the timer that is still holding it. */
+static void nts_callback_run_repeating(void *state) {
+    nts_callback_call((NtsCallback *)state);
+}
+
+static void nts_callback_drop(void *state) {
+    nts_release((NtsHeader *)state);
+}
+
+static NtsTask nts_callback_task(NtsHeader *callback, double slot,
+                                 bool repeating) {
+    NtsCallback *entry = (NtsCallback *)nts_object_new(&nts_desc_callback);
+    entry->callback = callback;
+    nts_retain(callback);
+    entry->slot = (uint32_t)slot;
+    NtsTask task;
+    task.run = repeating ? nts_callback_run_repeating : nts_callback_run_once;
+    task.drop = nts_callback_drop;
+    task.state = entry;
+    return task;
+}
+
+double nts_set_timeout(NtsHeader *callback, double slot, double delay_ms,
+                       bool repeating) {
+    return (double)nts_post_delayed(nts_callback_task(callback, slot, repeating),
+                                    delay_ms, repeating);
+}
+
+void nts_clear_timeout(double id) {
+    /* A timer that already fired, or an id from another turn: the host's slot
+     * table says so and this is a no-op, which is what `clearTimeout`
+     * specifies. */
+    nts_cancel_delayed((NtsTimerId)id);
+}

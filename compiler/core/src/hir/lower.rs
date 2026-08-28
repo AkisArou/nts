@@ -6709,6 +6709,90 @@ impl<'a> FuncBuilder<'a> {
     /// from `Some(Err(..))`: the second is a builtin that is provided and was
     /// given something it cannot take, and it says so rather than falling
     /// through to "a builtin this compiler does not provide".
+    /// `setTimeout(fn, ms)` and `setInterval(fn, ms)`.
+    ///
+    /// A *capability* over the host's `post_delayed` rather than part of the
+    /// host contract, so both hosts have it and neither implements it -- which
+    /// is what makes a `setTimeout` ordering testable against node, because the
+    /// deterministic host runs the same code the libuv one does.
+    ///
+    /// The callback is a closure, and a closure in this compiler is an object
+    /// with a method table, so the runtime is handed the object *and* the slot
+    /// its call occupies. One slot serves every closure: what makes that safe
+    /// is that the caller spells the signature, and a timer callback has one.
+    fn lower_set_timer(
+        &mut self,
+        id: NodeId,
+        arguments: &[NodeId],
+        repeating: bool,
+    ) -> Result<ValueId, Diagnostic> {
+        let (callback, delay) = match arguments {
+            [callback] => (*callback, None),
+            [callback, delay] => (*callback, Some(*delay)),
+            // `setTimeout(fn, ms, a, b)` forwards the extra arguments to the
+            // callback. That is a different shape rather than a longer one:
+            // the callback's signature stops being "takes nothing", and the
+            // arguments have to outlive the call in something.
+            _ => return Err(self.unsupported(id, "a timer that forwards arguments")),
+        };
+        // `@types/node` types this `NodeJS.Timeout`, an object with `unref`.
+        // The default library says `number`, which is what the runtime returns,
+        // and guessing across that difference would hand a program an object it
+        // could not use.
+        let returns = self.type_of(id).unwrap_or(HirType::Void);
+        if !matches!(returns, HirType::Float { .. } | HirType::Int { .. }) {
+            return Err(self.unsupported(id, "a timer whose id is not a number"));
+        }
+        let closure = self.lower_expression(callback)?;
+        if !matches!(
+            self.values[closure.0 as usize].ty,
+            HirType::Managed(ManagedType::Object(_))
+        ) {
+            return Err(self.unsupported(id, "a timer callback that is not a function"));
+        }
+        let Some(slot) = self.hierarchy.closure_slot else {
+            return Err(self.unsupported(id, "a timer in a program with no closures"));
+        };
+        let origin = self.origin(id);
+        let slot = self.push(
+            OpKind::ConstFloat(f64::from(slot)),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let delay = match delay {
+            Some(node) => self.lower_expression(node)?,
+            // `setTimeout(fn)` is `setTimeout(fn, 0)`.
+            None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
+        };
+        let repeating = self.push(OpKind::ConstBool(repeating), HirType::Bool, origin.clone());
+        Ok(self.runtime_call(
+            "nts_set_timeout",
+            vec![closure, slot, delay, repeating],
+            returns,
+            origin,
+        ))
+    }
+
+    /// `clearTimeout(id)` and `clearInterval(id)`, which are one operation.
+    ///
+    /// Clearing a timer that already fired is legal and does nothing, so this
+    /// needs no test for whether the id is live -- the host's table knows, and
+    /// it is the only thing that can.
+    fn lower_clear_timer(
+        &mut self,
+        id: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let [timer] = arguments else {
+            // `clearTimeout()` with no argument is legal and does nothing, but
+            // it is also never what a program means.
+            return Err(self.unsupported(id, "a `clearTimeout` with no timer"));
+        };
+        let timer = self.lower_expression(*timer)?;
+        let origin = self.origin(id);
+        Ok(self.runtime_call("nts_clear_timeout", vec![timer], HirType::Void, origin))
+    }
+
     fn lower_provided_builtin(
         &mut self,
         id: NodeId,
@@ -6720,6 +6804,16 @@ impl<'a> FuncBuilder<'a> {
         // they do to a value that is not a number, and one cannot reach here.
         if let Some(intrinsic) = global_predicate(name) {
             return Some(self.lower_intrinsic(id, intrinsic, arguments));
+        }
+        // The `timers` capability, which takes two arguments and so has to be
+        // read before the single-argument builtins below.
+        match name {
+            "setTimeout" => return Some(self.lower_set_timer(id, arguments, false)),
+            "setInterval" => return Some(self.lower_set_timer(id, arguments, true)),
+            "clearTimeout" | "clearInterval" => {
+                return Some(self.lower_clear_timer(id, arguments));
+            }
+            _ => {}
         }
         let [argument] = arguments else {
             return None;

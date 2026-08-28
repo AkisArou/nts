@@ -861,4 +861,22 @@ void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source);
 NtsPromise *nts_promise_all(NtsArray *promises, NtsArray *values);
 NtsPromise *nts_promise_race(NtsArray *promises);
 
+/* --- Timers (docs/async.md 8) ----------------------------------------------
+ *
+ * A capability over the host's `post_delayed`, so both hosts have it and
+ * neither implements it. `callback` is a closure and `slot` is its method
+ * index, because a closure is an object with a method table and calling one
+ * needs both.
+ *
+ * The id is a `double` because that is what `setTimeout` returns to a program.
+ * A host's `NtsTimerId` is wider, so a host must not hand out an id that
+ * cannot survive the round trip -- 2^53, not 2^64. */
+double nts_set_timeout(NtsHeader *callback, double slot, double delay_ms,
+                       bool repeating);
+void nts_clear_timeout(double id);
+/* `setImmediate` is `nts_post_task` with the same callback object, and is not
+ * here because nothing can reach it: it is a Node global, absent from the
+ * default library, so no program this compiler accepts today can call it. It
+ * belongs with the profile that declares it. */
+
 #endif /* NTS_RUNTIME_H */

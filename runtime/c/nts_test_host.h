@@ -27,6 +27,14 @@ void nts_test_host_install(void);
  * fails the test rather than hanging it. Returns the number run. */
 uint32_t nts_test_host_run(uint32_t budget);
 
+/* Run a single task, and return whether there was one.
+ *
+ * `await` on node returns when its promise settles, not when the loop falls
+ * quiet, and once timers exist the two differ: a program that leaves another
+ * timer pending would have it fire on this side and not on node's. A caller
+ * that wants "until this settles" steps. */
+bool nts_test_host_step(void);
+
 /* Virtual milliseconds since the host was installed. */
 double nts_test_host_now(void);
 
