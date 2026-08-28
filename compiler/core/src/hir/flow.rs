@@ -524,6 +524,33 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
 ///
 /// Only the *upper* bound is claimed. A slice can be empty whatever it was cut
 /// from, which is why every case here starts at zero.
+/// What a machine type says about every value in it.
+///
+/// An `i8` holds -128 to 127, and no fraction and no NaN. That is stronger than
+/// anything a flow analysis can derive, it costs nothing to know, and for a
+/// declared typed array it is the *only* fact there is — no pass narrowed the
+/// storage, so no pass recorded what it holds.
+fn held_by(ty: &super::HirType) -> Option<Facts> {
+    let super::HirType::Int { bits, signed } = ty else {
+        return None;
+    };
+    let (lo, hi) = match (bits, signed) {
+        (8, true) => (-128.0, 127.0),
+        (8, false) => (0.0, 255.0),
+        (16, true) => (-32768.0, 32767.0),
+        (16, false) => (0.0, 65535.0),
+        (32, true) => (facts::I32_MIN, facts::I32_MAX),
+        (32, false) => (0.0, facts::U32_MAX),
+        // A 64-bit slot holds more than a `double` can tell apart. Every one
+        // this compiler makes holds a value already proved inside the safe
+        // range -- that proof is what `specialize` requires before it uses the
+        // width at all -- but *this* function is about what the type says on its
+        // own, and a 64-bit integer type says nothing a double can act on.
+        _ => return None,
+    };
+    Some(Facts::new(lo, hi, true, false, false))
+}
+
 pub(super) fn string_span(func: &Func, value: ValueId, depth: u32) -> Option<Facts> {
     /// A slice of a slice of a slice is worth following; an unbounded chain is
     /// not, and a cheap cap means this needs no reasoning about cycles.
@@ -601,59 +628,52 @@ fn field_facts(context: &Context, object: &super::HirType, field: u32) -> Facts 
         .unwrap_or(Facts::TOP)
 }
 
-fn transfer_block(
+/// What one operation says about its result.
+///
+/// An operation with no arm here does not fail -- it returns `TOP`, which is
+/// indistinguishable from an honest unknown at every use downstream. That
+/// degrades silently and at a distance: a missing `Convert` arm cost the
+/// `bytes` benchmark 2.4x, in a specializer that was working correctly. Adding
+/// a producer of values to the HIR means adding an arm here. See record 0016.
+fn transfer_op(
     func: &Func,
     context: &Context,
-    block: BlockId,
-    mut refinements: Refinements,
-    values: &mut [Facts],
-    entry: &mut [Option<Refinements>],
-) -> bool {
-    let record = &func.blocks[block.0 as usize];
-    let mut changed = false;
-
-    // A block parameter's fact is whatever its predecessors passed, which the
-    // edges recorded here.
-    for param in &record.params {
-        if let Some(passed) = refinements.get(param) {
-            changed |= widen_into(&mut values[param.0 as usize], *passed);
-        }
-    }
-
-    for &value in &record.ops {
-        let op = &func.values[value.0 as usize];
-        let computed = match &op.kind {
+    op: &super::Op,
+    refinements: &Refinements,
+    values: &[Facts],
+) -> Facts {
+    match &op.kind {
             OpKind::ConstFloat(v) => Facts::constant(*v),
             #[allow(clippy::cast_precision_loss)]
             OpKind::ConstInt(v) => Facts::constant(*v as f64),
             OpKind::Binary { op: bin, lhs, rhs } => facts::transfer_binary(
                 *bin,
-                lookup(&refinements, values, *lhs),
-                lookup(&refinements, values, *rhs),
+                lookup(refinements, values, *lhs),
+                lookup(refinements, values, *rhs),
             )
             .unwrap_or(Facts::TOP),
             OpKind::Unary {
                 op: UnOp::Neg,
                 operand,
-            } => facts::neg(lookup(&refinements, values, *operand)),
+            } => facts::neg(lookup(refinements, values, *operand)),
             // The coercions are where an unconstrained value becomes a known
             // integer. Everything about `x | 0` depends on this arm.
             OpKind::Unary {
                 op: UnOp::ToInt32,
                 operand,
-            } => facts::to_int32(lookup(&refinements, values, *operand)),
+            } => facts::to_int32(lookup(refinements, values, *operand)),
             OpKind::Unary {
                 op: UnOp::ToUint32,
                 operand,
-            } => facts::to_uint32(lookup(&refinements, values, *operand)),
+            } => facts::to_uint32(lookup(refinements, values, *operand)),
             OpKind::Unary {
                 op: rounding @ (UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round),
                 operand,
-            } => facts::round_to_integer(*rounding, lookup(&refinements, values, *operand)),
+            } => facts::round_to_integer(*rounding, lookup(refinements, values, *operand)),
             OpKind::Unary {
                 op: UnOp::Abs,
                 operand,
-            } => facts::abs(lookup(&refinements, values, *operand)),
+            } => facts::abs(lookup(refinements, values, *operand)),
             // A length is a `uint32`, always. Where the array was allocated
             // here with a known size, it is that size exactly — which is what
             // lets an index into an array literal be proven in bounds by the
@@ -672,7 +692,7 @@ fn transfer_block(
                     OpKind::ArrayNew { length }
                         if super::allocated_length_is_exact(func, *array, context.growable) =>
                     {
-                        lookup(&refinements, values, *length).narrow(bound)
+                        lookup(refinements, values, *length).narrow(bound)
                     }
                     // A string's length is bounded by the string it was made
                     // from, however many slices back that is.
@@ -708,18 +728,64 @@ fn transfer_block(
                 super::HirType::Managed(super::ManagedType::Array(element))
                     if matches!(**element, super::HirType::Int { .. }) =>
                 {
-                    context
+                    // The width *is* a range, whatever the stores say. A
+                    // `Uint8Array`'s element is 0 to 255 by construction, and
+                    // for a declared typed array that is the only fact there
+                    // is: nothing narrowed it, so nothing recorded it.
+                    let stored = context
                         .element_facts
                         .get(element.as_ref())
                         .copied()
-                        .unwrap_or(Facts::TOP)
+                        .unwrap_or(Facts::TOP);
+                    match held_by(element) {
+                        Some(width) => stored.narrow(width),
+                        None => stored,
+                    }
                 }
                 _ => Facts::TOP,
             },
+            // A conversion keeps the value it was given, as far as it fits.
+            //
+            // Without this every typed array read was TOP: the read is narrow
+            // and the expression around it is `number`, so lowering converts —
+            // and an operand with no facts is an operand nothing can specialize.
+            // `bytes` compiled its two `% 65521` to `fmod`, a library call, two
+            // per byte, and ran at 2.36x the C++ reference.
+            OpKind::Convert(operand) => {
+                let incoming = lookup(refinements, values, *operand);
+                match held_by(&op.ty) {
+                    Some(width) => incoming.narrow(width),
+                    None => incoming,
+                }
+            }
             // A bool is not a number, and a call's result needs the callee
             // analyzed — neither is a claim this pass can make.
             _ => Facts::TOP,
-        };
+        }
+}
+
+fn transfer_block(
+    func: &Func,
+    context: &Context,
+    block: BlockId,
+    mut refinements: Refinements,
+    values: &mut [Facts],
+    entry: &mut [Option<Refinements>],
+) -> bool {
+    let record = &func.blocks[block.0 as usize];
+    let mut changed = false;
+
+    // A block parameter's fact is whatever its predecessors passed, which the
+    // edges recorded here.
+    for param in &record.params {
+        if let Some(passed) = refinements.get(param) {
+            changed |= widen_into(&mut values[param.0 as usize], *passed);
+        }
+    }
+
+    for &value in &record.ops {
+        let op = &func.values[value.0 as usize];
+        let computed = transfer_op(func, context, op, &refinements, values);
         // Monotone: a value's fact only grows as more paths reach it, so joining
         // rather than assigning keeps the iteration from oscillating.
         let slot = &mut values[value.0 as usize];
