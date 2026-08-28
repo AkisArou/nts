@@ -714,4 +714,32 @@ export function btoa(data: string): string {
   return Buffer.from(data, "latin1").toString("base64");
 }
 
+/** How many bytes `inspect` shows before it says how many are left. */
+export const INSPECT_MAX_BYTES = 50;
+
+/**
+ * `<Buffer 78 79 7a>` rather than a list of byte values, upstream
+ * `lib/buffer.js`.
+ *
+ * Defined on the prototype through the symbol `util.inspect` looks for, which
+ * is how a value gets to render itself without `inspect` knowing what it is.
+ */
+Object.defineProperty(Buffer.prototype, Symbol.for("nodejs.util.inspect.custom"), {
+  value: function inspectBuffer(this: Buffer): string {
+    const shown = Math.min(INSPECT_MAX_BYTES, this.length);
+    const remaining = this.length - shown;
+    let hex = "";
+    for (let i = 0; i < shown; i++) {
+      hex += `${i > 0 ? " " : ""}${this[i]!.toString(16).padStart(2, "0")}`;
+    }
+    if (remaining > 0) {
+      hex += ` ... ${remaining} more byte${remaining > 1 ? "s" : ""}`;
+    }
+    return `<${this.constructor.name} ${hex}>`;
+  },
+  writable: true,
+  configurable: true,
+  enumerable: false,
+});
+
 export default Buffer;

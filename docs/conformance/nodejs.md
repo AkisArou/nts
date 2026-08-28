@@ -59,7 +59,7 @@ rather than inferred by a rule, so the number can be audited.
 | `string_decoder` | **2 / 3** | 4 / 99 | complete; the failure is the class-vs-function difference |
 | `util` | 4 / 19 | 3 / 106 | `inspect`, `format`, `types`, `isDeepStrictEqual` and the helpers |
 | `stream` | — | — | not started |
-| `assert` | — | — | not started |
+| `assert` | 2 / 18 | 0 / 110 | the comparisons are right; the messages are not yet exact |
 
 ## `path`
 
@@ -282,6 +282,35 @@ or every parent breaks onto multiple lines.
 
 Not implemented: `getCallSites` (needs `Error.prepareStackTrace`), `MIMEType`,
 `TextEncoder`/`TextDecoder`, `parseArgs`, `diff`, and the `AbortSignal` helpers.
+
+## `assert`
+
+Every function: `ok`, `equal`/`notEqual`, `strictEqual`/`notStrictEqual`,
+`deepEqual`/`notDeepEqual`, `deepStrictEqual`/`notDeepStrictEqual`,
+`partialDeepStrictEqual`, `throws`/`doesNotThrow`, `rejects`/`doesNotReject`,
+`ifError`, `match`/`doesNotMatch`, `fail`, `AssertionError`, and the `strict`
+variant.
+
+2 of 18 files pass, and the number is misleading in the usual direction:
+`assert`'s tests check the *message text* of every failure, so a module whose
+comparisons are all correct still fails a file over a line of diff formatting.
+The comparisons themselves are right — `deepStrictEqual` is the same
+`isDeepStrictEqual` that agrees with node on 30,000 random structures.
+
+Two details in the loose comparison are worth recording, because both were
+wrong in the obvious implementation:
+
+- **`==` applies only when both sides are primitives.** `'a' == ['a']` is true
+  in JavaScript, because the array coerces through `toString`. Node does not
+  call those deep-equal, and a top-level `==` makes it say they are.
+- **A type check is a guard, not an answer.** Two regexps with the same source
+  can still differ in their own properties, so the type comparison has to fall
+  through to the key walk rather than returning `true`.
+
+`AssertionError`'s diff inspects with `compact: false`, which puts every entry
+on its own line. That is what lets the diff mark the single line that changed;
+a compact rendering would put a whole object on one line and the diff would
+report that the line changed, which is the output the diff exists to avoid.
 
 ## `fs`
 

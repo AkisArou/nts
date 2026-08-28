@@ -281,3 +281,18 @@ export class ERR_UNKNOWN_ENCODING extends TypeError {
     this.name = "TypeError";
   }
 }
+
+/** `The "actual" and "expected" arguments must be specified`. */
+export class ERR_MISSING_ARGS extends TypeError {
+  readonly code = "ERR_MISSING_ARGS";
+
+  constructor(...names: string[]) {
+    const quoted = names.map((n) => `"${n}"`);
+    const list =
+      quoted.length === 1 ? quoted[0]
+      : quoted.length === 2 ? `${quoted[0]} and ${quoted[1]}`
+      : `${quoted.slice(0, -1).join(", ")}, and ${quoted[quoted.length - 1]}`;
+    super(`The ${list} argument${names.length > 1 ? "s" : ""} must be specified`);
+    this.name = "TypeError";
+  }
+}

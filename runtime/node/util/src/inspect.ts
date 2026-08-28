@@ -15,6 +15,16 @@ import {
   isRegExp, isSet, isTypedArray,
 } from "./types.ts";
 
+/**
+ * The symbol an object defines to render itself, upstream
+ * `lib/internal/util/inspect.js`.
+ *
+ * `Buffer` uses it to print `<Buffer 78 79 7a>` rather than a list of byte
+ * values, which is the difference between a readable log line and forty
+ * numbers.
+ */
+export const customInspectSymbol: unique symbol = Symbol.for("nodejs.util.inspect.custom") as never;
+
 export interface InspectOptions {
   depth?: number | null;
   colors?: boolean;
@@ -26,6 +36,7 @@ export interface InspectOptions {
   maxStringLength?: number | null;
   numericSeparator?: boolean;
   getters?: boolean | "get" | "set";
+  customInspect?: boolean;
 }
 
 interface Context extends Required<Omit<InspectOptions, "depth" | "maxArrayLength" | "maxStringLength">> {
@@ -57,6 +68,7 @@ export const inspectDefaultOptions: InspectOptions = {
   maxStringLength: 10000,
   numericSeparator: false,
   getters: false,
+  customInspect: true,
 };
 
 export function inspect(value: unknown, options?: InspectOptions | boolean): string {
@@ -193,6 +205,17 @@ function constructorName(value: object): string | undefined {
 }
 
 function formatObject(ctx: Context, value: object, recurseTimes: number): string {
+  // An object that knows how to render itself is asked first, before any of
+  // the shape detection below.
+  if (ctx.customInspect) {
+    const custom = (value as Record<symbol, unknown>)[customInspectSymbol];
+    if (typeof custom === "function" && custom !== inspect) {
+      const rendered = (custom as (d: number, o: InspectOptions, i: typeof inspect) => unknown)
+        .call(value, ctx.depth === null ? null as never : ctx.depth - recurseTimes, ctx, inspect);
+      return typeof rendered === "string" ? rendered : formatValue(ctx, rendered, recurseTimes);
+    }
+  }
+
   // A cycle: mark it and stop. Node numbers the reference so a reader can see
   // which object it points back to.
   if (ctx.seen.includes(value)) {
