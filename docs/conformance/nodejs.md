@@ -1051,6 +1051,36 @@ each handle on the node side is one of node's own streams with its output
 collected. That is asynchronous, and it fits, because `Transform._transform`
 takes a callback anyway.
 
+## When a refusal was right about the code
+
+The compiler refuses constructs it cannot lower, and the usual reading of a
+refusal is "a feature is missing". Once so far it has been the other way, and
+the case is worth keeping because it is the outcome that justifies the whole
+arrangement.
+
+`node:fs` had four cycles in its module graph, all of them running through
+`main.ts`, and the compiler refused the module's initialization rather than
+guess at the evaluation order. Node tolerates such a cycle because a hoisted
+`function` is callable before its module has finished evaluating; a compiler
+with no temporal dead zone cannot make that promise, so a module-scope `let`
+read across the cycle would answer `0` rather than throwing.
+
+Every edge back into `main.ts` turned out to be one function: `flagsOf`, which
+turns `"w+"` into open flags. A pure function over a string, depending on
+nothing but the constants, sitting in `main.ts` only because that is where it
+was first written — and two other files had to reach back into the module's
+public surface to get it. Moving it to `flags.ts` dissolved all four cycles at
+once.
+
+That is not a rewrite to please the compiler, which would have been the wrong
+trade. It was a real defect: the function was in the wrong place, and the
+refusal is what found it.
+
+The cost had also been larger than one diagnostic suggested. A refused
+initializer leaves a program that builds and *runs* without its module code, so
+`fs` was compiling with none of its top-level statements executed and nothing
+in the numbers said so. The compiler now says that outright when it happens.
+
 ## `fs`, the asynchronous half
 
 The callback surface, `fs/promises` with `FileHandle`, and
