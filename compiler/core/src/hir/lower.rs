@@ -940,20 +940,15 @@ fn module_statements(
 ) -> (Option<(NodeId, Vec<NodeId>)>, Vec<Diagnostic>) {
     let probe = FuncBuilder::new(snapshot);
     let mut refusals = Vec::new();
-    let mut files: Vec<(NodeId, Vec<NodeId>)> = Vec::new();
 
-    for (index, node) in snapshot.nodes.iter().enumerate() {
-        if node.kind != NodeKind::Syntax(syntax::SOURCE_FILE) {
-            continue;
-        }
-        let file = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        let mut statements = Vec::new();
-        for child in probe.children(file) {
+    let mut per_module: Vec<Vec<NodeId>> = vec![Vec::new(); snapshot.modules.len()];
+    for (at, module) in snapshot.modules.iter().enumerate() {
+        for child in probe.children(module.root) {
             let Some(kind) = probe.kind_of(child) else {
                 continue;
             };
             if is_module_statement(kind) {
-                statements.push(child);
+                per_module[at].push(child);
             } else if !is_module_declaration(kind) && carries_code(&probe, child) {
                 // Something with code in it that module evaluation does not
                 // run -- a `namespace` with a statement in its body is the
@@ -965,22 +960,121 @@ fn module_statements(
                 ));
             }
         }
-        if !statements.is_empty() {
-            files.push((file, statements));
-        }
     }
 
-    if files.len() > 1 {
-        for (file, _) in files.iter().skip(1) {
-            refusals.push(probe.unsupported(
-                *file,
-                "top-level statements in a second module, whose evaluation order \
-                 this compiler cannot see",
-            ));
+    let (order, cycles) = evaluation_order(snapshot);
+
+    // A cycle only matters if something on it has code to run. `a.ts` and
+    // `b.ts` importing each other's *functions* is ordinary and lowers; it is a
+    // cycle whose modules initialise that has no answer here.
+    let mut refused_a_cycle = false;
+    for cycle in cycles {
+        if !cycle.iter().any(|at| !per_module[*at].is_empty()) {
+            continue;
         }
+        refused_a_cycle = true;
+        let path: Vec<&str> = cycle
+            .iter()
+            .chain(cycle.first())
+            .filter_map(|at| snapshot.modules.get(*at))
+            .filter_map(|module| snapshot.sources.get(module.file.0 as usize))
+            .map(|source| source.display_path.as_str())
+            .collect();
+        let anchor = snapshot.modules[cycle[0]].root;
+        refusals.push(probe.unsupported(
+            anchor,
+            &format!(
+                "a cycle in the module graph ({}) whose modules have top-level code; ES modules resolve this with a temporal dead zone on the not-yet-initialized binding, and this compiler has no representation for one, so it would read the binding's static initializer instead of throwing",
+                path.join(" -> ")
+            ),
+        ));
+    }
+    if refused_a_cycle {
         return (None, refusals);
     }
-    (files.into_iter().next(), refusals)
+
+    // Concatenated in evaluation order rather than emitted per module: with
+    // cycles refused and top-level `await` refused, what a program can observe
+    // is the order of the statements, and one function says exactly that.
+    let mut statements = Vec::new();
+    let mut anchor = None;
+    for at in order {
+        if per_module[at].is_empty() {
+            continue;
+        }
+        if anchor.is_none() {
+            anchor = Some(snapshot.modules[at].root);
+        }
+        statements.extend(per_module[at].iter().copied());
+    }
+    (anchor.map(|file| (file, statements)), refusals)
+}
+
+/// Evaluation order, and any cycles found on the way.
+///
+/// Post-order over each module's imports in source order, which is what
+/// `InnerModuleEvaluation` specifies: a module's dependencies evaluate before
+/// it, each exactly once. Verified against node with a diamond -- `d, a, b,
+/// main`, and `d, b, a, main` when the entry's two import lines are swapped, so
+/// the *order* of a module's imports is observable and the graph stores them
+/// ordered.
+///
+/// Every module is a root, in index order, rather than only the entry. The
+/// frontend does not know the product: a library's surface is its exports and
+/// an executable's is its entry, and that choice is made after lowering. The
+/// cost is that an executable may evaluate a module nothing imports, which node
+/// would not; the alternative is not evaluating a library's modules at all.
+#[must_use]
+fn evaluation_order(snapshot: &SemanticSnapshot) -> (Vec<usize>, Vec<Vec<usize>>) {
+    #[derive(Clone, Copy, PartialEq)]
+    enum Mark {
+        Unseen,
+        OnStack,
+        Done,
+    }
+    let mut marks = vec![Mark::Unseen; snapshot.modules.len()];
+    let mut order = Vec::new();
+    let mut cycles = Vec::new();
+    let mut path: Vec<usize> = Vec::new();
+
+    // An explicit stack rather than recursion: a module graph is program input,
+    // and a deep one must not decide how much C stack this compiler has.
+    let mut work: Vec<(usize, usize)> = Vec::new();
+    for root in 0..snapshot.modules.len() {
+        if marks[root] != Mark::Unseen {
+            continue;
+        }
+        work.push((root, 0));
+        marks[root] = Mark::OnStack;
+        path.push(root);
+        while let Some((at, next)) = work.pop() {
+            let imports = &snapshot.modules[at].imports;
+            if next < imports.len() {
+                work.push((at, next + 1));
+                let target = imports[next].0 as usize;
+                match marks.get(target) {
+                    Some(Mark::Unseen) => {
+                        marks[target] = Mark::OnStack;
+                        path.push(target);
+                        work.push((target, 0));
+                    }
+                    // A back edge: the target is still being visited, so the
+                    // path from it to here closes a loop.
+                    Some(Mark::OnStack) => {
+                        if let Some(from) = path.iter().position(|on| *on == target) {
+                            cycles.push(path[from..].to_vec());
+                        }
+                    }
+                    _ => {}
+                }
+                continue;
+            }
+            marks[at] = Mark::Done;
+            path.pop();
+            order.push(at);
+        }
+    }
+    (order, cycles)
 }
 
 #[must_use]
