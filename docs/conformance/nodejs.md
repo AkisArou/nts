@@ -726,11 +726,51 @@ which is the same dynamic dispatch as the blocker it appears to be cheaper
 than. The statically-typed subset is about eight sites and is not worth a
 feature on its own.
 
-The genuinely separable one is elsewhere in the same shape: **144 template
-literal interpolations**, and a large majority of those do have statically
-known operands, because they are message construction — `${label}: ${count}`,
-`${scheme}:`. Interpolating a `string | number` is a different problem from
-interpolating an `unknown`.
+I also proposed **144 template literal interpolations** as the separable case,
+on the grounds that most have statically known operands. That was wrong for a
+third time and in the same way. `${count}` needs `ToString(number)` — the
+shortest decimal that round-trips through a double, which is Ryu or Grisu and a
+real algorithm. Only the interpolations taking a *string* are concatenation,
+and I have not counted those: `typescript` in this repo is `tsgo`, which
+exposes no JavaScript API, and asking the checker properly means going through
+the compiler's own transport rather than adding a second TypeScript to the tree
+to grep with.
+
+**Three wrong answers in a row, all from counting syntax.** `String(x)` looked
+like 47 conversions and is 22 dynamic dispatches. `Object.keys` looked like a
+builtin and needs a run-time shape. `${x}` looks like concatenation and is
+float formatting. A shape does not say what is underneath it, and a ranked
+table built by grepping is a work queue that sends someone to the wrong item.
+Where a number here is a count of syntax rather than of the thing it stands
+for, it says so.
+
+**Two refusal classes arrived from compiler changes aimed elsewhere, and both
+are worth naming because neither is in the compiler's own corpus.**
+
+*Twenty-five refusals from duplicate function names.* `format` collides seven
+ways, `parse` six, `resolve` five, and `basename`, `dirname`, `join`,
+`normalize`, `relative`, `extname`, `isAbsolute` and `toNamespacedPath` four
+each. Those last are `path/src/posix.ts` and `path/src/win32.ts`, which
+genuinely define one interface twice because node ships both. Two C functions
+may not share a name, so the refusal is correct; the resolution is mangling
+rather than refusal, since these are ordinary module-private helpers rather
+than two namespaces fighting over one name.
+
+*Twelve functions the compiler reached by neither walk.* All of them methods in
+an object literal in argument position:
+
+```ts
+Object.defineProperty(prototype, "constructor", { get() { return Base; } });
+new Proxy(target, { apply(fn, thisArg, args) { … } });
+```
+
+They were compiling to nothing while the compiler reported success, which is
+the class of failure that never enters a refusal histogram and so never enters
+a work queue. Found by the compiler's conservation law — every declaration is
+either lowered or refused, never neither — which is the one instrument here
+that can see a thing that is *absent*. Every gate on this side was green while
+they sat in the tree: they are unreachable from behaviour, because the
+behaviour is node's.
 
 Since the counts below were taken, one other item has moved to the top of the
 list and is not in the table. **`class X extends Error`** now underlies every module in the
