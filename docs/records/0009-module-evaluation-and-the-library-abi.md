@@ -1260,3 +1260,71 @@ mistake, a manifest naming something the program does not export.
 This also matches how a JavaScript package works: the entry's exports are its
 API. It removes the manifest from the common case entirely -- a library with
 one entry module and no narrowing needs no `exports` key at all.
+
+## A4. A self-contained library initialises itself; only a host-needing one has a lifecycle
+
+**Was:** §3.1, every library product exposes `nts_runtime_create` /
+`nts_runtime_shutdown`, and the consumer calls create before any export.
+
+**Now:** two product shapes, chosen by the compiler from a computed predicate,
+not by the author and not by a flag.
+
+Let *H* be: module evaluation, or any exported function, transitively reaches a
+host operation -- `nts_post_task`, `nts_post_delayed`, `nts_cancel_delayed`,
+`nts_post_from_any_thread`, or anything that allocates a promise. This is
+reachability over the HIR call graph from the same roots §6 already computes;
+`compiler/core/src/hir/reachable.rs` is the pass.
+
+**Shape A, not H -- self-contained.** No lifecycle in the header at all:
+
+```c
+double counter_reading(void);
+```
+
+Module evaluation happens on the first crossing of the ABI, guarded:
+
+```c
+static _Atomic(unsigned) nts_evaluated = 0;
+#define NTS_ENSURE_EVALUATED() \
+    do { if (__builtin_expect(!atomic_load_explicit(&nts_evaluated, memory_order_acquire), 0)) \
+             nts_evaluate_once(); } while (0)
+
+double counter_reading(void) { NTS_ENSURE_EVALUATED(); return src___main__started; }
+```
+
+**Shape B, H -- the embedder supplies a host.** `create` takes the host, so it
+cannot be lazy; the §27.1 lifecycle appears and the consumer calls it. This is
+also the shape that needs RFC §6.5's inverted surface -- the embedder drives
+the loop -- so a program that must call `create` is exactly a program that must
+also drive something.
+
+### Why lazy and not a constructor
+
+A constructor was the obvious answer and is the wrong one, for a reason SQLite
+already found: `sqlite3_open` calls `sqlite3_initialize` itself rather than
+relying on `__attribute__((constructor))`, because initialisation order between
+translation units is unspecified. A consumer whose *own* constructor calls
+`counter_reading()` would get an unevaluated library, and nothing would say so
+-- `started` would read its static initialiser, which is the exact silent-zero
+this record exists to eliminate. A guard at the boundary has no such window.
+
+One thing that makes the guard cheap here and would not in a smaller design:
+internal calls do not cross it. `bump` calling into the module is a direct
+call; only the *declared exports* carry `NTS_ENSURE_EVALUATED`, and a boundary
+crossing is already a non-inlined call. The cost is one relaxed load and a
+correctly-predicted branch, paid per crossing and never per element.
+
+The single-translation-unit decision of §2 also pays for itself here. In a
+per-module `.c` scheme a constructor could live in an object the linker never
+extracts from a static archive; with one `program.c`, the guard and the exports
+it protects are in the same object by construction.
+
+### What shape A gives up
+
+Explicit teardown. Shape A has no `shutdown`, so a `bundled-private` shared
+library's heap lives until the image unloads. That is correct for a library
+whose evaluation touches no host -- there are no tasks to drop, no timers to
+cancel and no thread affinity to release, which is what the *H* predicate
+means. A product that wants deterministic teardown is asking for shape B and
+should say so; §8's manifest gains `lifecycle: "explicit"` to force it,
+defaulting to inferred.
