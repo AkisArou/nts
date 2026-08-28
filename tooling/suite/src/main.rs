@@ -393,7 +393,22 @@ fn write_readme(root: &Utf8Path, totals: &Totals) -> Result<()> {
 
     let mut reasons: Vec<(&String, &usize)> = totals.reasons.iter().collect();
     reasons.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-    out.push_str("What is stopping the rest, in order:\n\n");
+    // The caveat belongs *in the generator*, not in the README: this section is
+    // rewritten on every corpus run, and a note added by hand between the
+    // markers survives until the next one. It was, and it did not.
+    out.push_str(
+        "What is stopping the rest, in order — and **read this table as breadth \
+         rather than as a work queue.** A refusal count and the lowered count are \
+         different currencies and do not convert: a file refused for three reasons \
+         does not lower when one of them is fixed. Default parameters cleared seven \
+         files out of this table in one commit and moved *lowered completely* by \
+         zero. The Node session watched the same thing at a larger scale — \
+         twenty-five name collisions cleared, two functions gained, and thirty-five \
+         *new* refusals, as functions that had stopped at the collision were walked \
+         further and refused for their real reasons.\n\nSo a tall row means a \
+         construct many files use, which is worth knowing. It does not mean that \
+         fixing it moves the number above it.\n\n",
+    );
     out.push_str("| refused | files |\n| --- | ---: |\n");
     for (reason, count) in reasons.iter().take(12) {
         let _ = writeln!(out, "| {reason} | {count} |");
