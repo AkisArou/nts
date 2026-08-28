@@ -66,7 +66,7 @@ constructs refused`, from `nts hir`.
 | `os` | **4 / 4** | 1 | 19 / 91 | complete |
 | `path` | **15 / 16** | 0 | 3 / 124 | complete but for `matchesGlob`; the skip is Windows-only |
 | `events` | **28 / 33** | 1 | 2 / 126 | complete but for domains, `EventTarget` and the promise forms |
-| `url` | 26 / 38 | 1 | 28 / 317 | complete; exact on the Web Platform Tests corpus |
+| `url` | 26 / 36 | 1 | 28 / 317 | complete; exact on the Web Platform Tests corpus |
 | `diagnostics_channel` | 23 / 45 | 0 | 2 / 123 | complete; the failures need node's own publishers |
 | `buffer` | 15 / 60 | 1 | 5 / 154 | the surface is there; the argument validation largely is not |
 | `assert` | 9 / 19 | 0 | 3 / 209 | complete, including `CallTracker` and node's Myers diff |
@@ -76,6 +76,17 @@ constructs refused`, from `nts hir`.
 | `stream` | — | — | — | not started |
 | `process` | — | — | — | not started |
 | `timers` | — | — | — | not started |
+
+The first two columns are what
+
+```sh
+node tooling/conformance/sweep.mjs
+```
+
+prints — every module, both modes, about three minutes. They are copied here
+rather than generated into the file, so the sweep is the check on this table
+and not the other way round. It has already earned that: the `url` row read
+`26 / 38` when it was written by hand and the applicable count is 36.
 
 **`hollow` is how many of those passes survive the module being removed.**
 
@@ -575,7 +586,7 @@ Two APIs, and the older one is deprecated. Both are implemented.
 | paths | `fileURLToPath`, `pathToFileURL`, `urlToHttpOptions` |
 | domains | `domainToASCII`, `domainToUnicode` |
 
-26 of 38 applicable test files pass. **The number that matters more is the Web
+26 of 36 applicable test files pass. **The number that matters more is the Web
 Platform Tests corpus, which this passes in full: 891 of 891 parses and 278 of
 278 setter cases.** That is the same `urltestdata.json` and `setters_tests.json`
 node checks `ada` against, and it grades the algorithm where node's own tests
