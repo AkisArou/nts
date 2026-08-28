@@ -77,6 +77,48 @@ function checkRange(value: number, name: string, length: number): number {
 }
 
 /** A `Buffer` or a plain `Uint8Array`; the methods do not distinguish them. */
+/**
+ * `fromObject`, upstream `lib/buffer.js`.
+ *
+ * Two shapes, and `undefined` for anything else so the caller can keep trying.
+ *
+ * The first is array-like, and the test is deliberately loose: *either* a
+ * `length` or a `.buffer` that is an array buffer. That second clause is why
+ * `Buffer.from(new DataView(...))` is empty rather than an error -- a view has
+ * a `buffer` and no `length`, so it qualifies and then contributes nothing.
+ * Surprising, and node's.
+ *
+ * The second is `{ type: "Buffer", data: [...] }`, which is what `toJSON`
+ * produces, so a buffer survives `JSON.parse(JSON.stringify(buf))`.
+ */
+function objectToBuffer(value: object): Buffer | undefined {
+  const candidate = value as { length?: unknown; buffer?: unknown; type?: unknown; data?: unknown };
+  if (candidate.length !== undefined || isAnyArrayBufferValue(candidate.buffer)) {
+    if (typeof candidate.length !== "number") {
+      return new Buffer(0);
+    }
+    return fromArrayLike(value as ArrayLike<number>);
+  }
+  if (candidate.type === "Buffer" && Array.isArray(candidate.data)) {
+    return fromArrayLike(candidate.data as ArrayLike<number>);
+  }
+  return undefined;
+}
+
+function isAnyArrayBufferValue(value: unknown): boolean {
+  return value instanceof ArrayBuffer || value instanceof SharedArrayBuffer;
+}
+
+/** One byte per element, truncating each. Not the memory a view sits on. */
+function fromArrayLike(source: ArrayLike<number>): Buffer {
+  const size = source.length;
+  const buf = new Buffer(size >= 0 ? size : 0);
+  for (let i = 0; i < buf.length; i++) {
+    buf[i] = source[i]! & 0xff;
+  }
+  return buf;
+}
+
 function checkBytes(value: unknown, name: string): asserts value is Uint8Array {
   if (!(value instanceof Uint8Array)) {
     throw new ERR_INVALID_ARG_TYPE(name, ["Buffer", "Uint8Array"], value);
@@ -185,27 +227,43 @@ export class Buffer extends Uint8Array {
       return buf;
     }
 
-    if (value instanceof ArrayBuffer) {
-      // A view onto the same memory, not a copy: upstream shares the buffer so
-      // that a `Buffer` over an `ArrayBuffer` sees later writes to it.
-      const offset = typeof encodingOrOffset === "number" ? encodingOrOffset : 0;
-      const count = (length as number | undefined) ?? value.byteLength - offset;
-      return new Buffer(value, offset, count);
-    }
-
-    if (value instanceof Uint8Array) {
-      const buf = new Buffer(value.length);
-      buf.set(value);
-      return buf;
-    }
-
-    if (value !== null && typeof value === "object" && "length" in value) {
-      const source = value as ArrayLike<number>;
-      const buf = new Buffer(source.length);
-      for (let i = 0; i < source.length; i++) {
-        buf[i] = source[i]! & 0xff;
+    if (value !== null && typeof value === "object") {
+      if (value instanceof ArrayBuffer || value instanceof SharedArrayBuffer) {
+        // A view onto the same memory, not a copy: upstream shares the buffer
+        // so that a `Buffer` over one sees later writes to it. Shared memory
+        // is where that matters most, and the reason this takes a
+        // `SharedArrayBuffer` rather than copying it.
+        const backing = value as ArrayBuffer;
+        const offset = typeof encodingOrOffset === "number" ? encodingOrOffset : 0;
+        const count = (length as number | undefined) ?? backing.byteLength - offset;
+        return new Buffer(backing, offset, count);
       }
-      return buf;
+
+      // An object that can turn into something already handled -- a boxed
+      // string, a `{ valueOf }` -- is converted and retried. Before the
+      // array-like path, so `new String("ab")` is its two characters rather
+      // than its two indices.
+      const valueOf = (value as { valueOf?: () => unknown }).valueOf?.();
+      if (
+        valueOf != null && valueOf !== value &&
+        (typeof valueOf === "string" || typeof valueOf === "object")
+      ) {
+        return Buffer.from(valueOf as never, encodingOrOffset as never, length as never);
+      }
+
+      const fromObject = objectToBuffer(value);
+      if (fromObject !== undefined) {
+        return fromObject;
+      }
+
+      // Last resort: an object that says how to become a string.
+      const toPrimitive = (value as Record<symbol, unknown>)[Symbol.toPrimitive];
+      if (typeof toPrimitive === "function") {
+        const primitive = (toPrimitive as (hint: string) => unknown).call(value, "string");
+        if (typeof primitive === "string") {
+          return Buffer.from(primitive, encodingOrOffset as string | undefined);
+        }
+      }
     }
 
     throw new ERR_INVALID_ARG_TYPE(

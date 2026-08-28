@@ -95,7 +95,7 @@ real `node` child — those assert on node's binary, which our module is not in.
 Each exclusion is listed with a reason in the module's `not-applicable` file
 rather than inferred by a rule, so the number can be audited.
 
-**178 of node's own test files pass** across thirteen modules, of which 9 are hollow. The per-module
+**185 of node's own test files pass** across thirteen modules, of which 9 are hollow. The per-module
 counts below are `passed / applicable`; `compiles` is `functions lowered /
 constructs refused`, from `nts hir`.
 
@@ -109,7 +109,7 @@ constructs refused`, from `nts hir`.
 | `events` | **28 / 33** | 1 | 11 / 137 | complete but for domains, `EventTarget` and the promise forms |
 | `url` | 26 / 36 | 1 | 33 / 362 | complete; exact on the Web Platform Tests corpus |
 | `diagnostics_channel` | 23 / 45 | 0 | 8 / 130 | complete; the failures need node's own publishers |
-| `buffer` | 26 / 60 | 1 | 11 / 182 | the read/write surface is complete and validated |
+| `buffer` | 33 / 60 | 1 | 11 / 182 | the read/write surface is complete and validated |
 | `assert` | 9 / 19 | 0 | 12 / 225 | complete, including `CallTracker` and node's Myers diff |
 | `fs` | 11 / 212 | 2 | 24 / 229 | the sync surface; async, streams and watchers are absent |
 | `util` | 7 / 18 | 1 | 17 / 191 | `inspect`, `format`, `types`, the comparisons and the helpers |
@@ -313,7 +313,7 @@ accepted anywhere bytes are, and it is what node does.
 | searching | `indexOf`, `lastIndexOf`, `includes` |
 | other | `copy`, `slice`, `subarray`, `fill`, `swap16`/`32`/`64`, `byteLength`, `isBuffer`, `isEncoding`, `isUtf8`, `isAscii`, `atob`, `btoa`, `constants` |
 
-26 of 60 applicable files pass. Two are not applicable: they need
+33 of 60 applicable files pass. Two are not applicable: they need
 `--allow-natives-syntax` to drive V8's optimiser, which is a question about V8
 rather than about `node:buffer`.
 
@@ -359,6 +359,25 @@ than the width, so its `> 3` is my `> 4`.
 each type's minimum and maximum and one past each: the boundary values are the
 whole point, since a write that is right in the middle of its range is right in
 any implementation.
+
+**`Buffer.from` accepts what node accepts, and the differential is why.** I
+widened it by reasoning — a `SharedArrayBuffer` is memory, an iterable is a
+sequence, a `DataView` is bytes — and every one of those inferences was wrong.
+Node rejects a `Set`, reads a `Uint16Array` as one byte per *element* rather
+than as its memory, and answers an *empty* buffer for a `DataView`. That last
+is not a special case: `fromObject` accepts anything with a `length` **or** a
+`.buffer` that is an array buffer, so a view qualifies on its buffer and then
+contributes nothing, because its `length` is not a number.
+
+Transcribed rather than inferred, it agrees with node on all twelve shapes
+including the `{ type: "Buffer", data: [...] }` that `toJSON` produces — which
+is how a buffer survives `JSON.parse(JSON.stringify(buf))`.
+
+`Buffer` is callable without `new`, which is three test files: `Buffer(10)` is
+`alloc` and `Buffer("ab")` is `from`, both deprecated and both used. It lives
+in `shape.mjs` rather than in the TypeScript, because a module cannot export a
+callable class and because the deprecated spelling is a compatibility surface
+rather than something a compiled program should carry.
 
 `kMaxLength` was wrong: 2**32 - 1 where node reports 2**53 - 1 on a 64-bit
 build. It is not an amount of memory anyone has; it is the largest integer a
