@@ -33,6 +33,24 @@ nts hir runtime/node/path/tsconfig.json   # what the compiler refuses
 tsc -p runtime/node/tsconfig.json         # types, across the whole profile
 ```
 
+**And the two axes can pull against each other, which took until now to
+measure.** Adding node's argument validation to `node:buffer` -- the work that
+took its test count from 18 to 26 -- cost `node:fs` **ten lowered functions**,
+because node's validators take `unknown` and `unknown` does not lower. `fs`
+imports `buffer`, so a signature changed in one module removed functions from
+another that was not touched.
+
+It was found by accident: a compiler change prompted a re-measure, `fs` moved
+the wrong way while twelve modules moved the right way, and isolating it needed
+the old source compiled by the new compiler. Attributing a compiler change
+across a source change measures neither, which is a mistake this file has made
+before under a different name.
+
+`sweep.mjs --compiles` reports both axes per module for that reason. It is off
+by default because it is slow, and it is the only thing here that can see a
+conformance change costing lowered functions -- node's tests do not care
+whether a function lowered.
+
 `check.sh` without `--ts` builds a Node-API addon and runs node's tests against
 the compiled artifact. That is the gate. `--ts` is the interim gate for a module
 that does not compile yet, and the two together tell a compiler bug from an
@@ -60,19 +78,19 @@ constructs refused`, from `nts hir`.
 
 | module | node's tests | hollow | compiles | note |
 | --- | :---: | :---: | :---: | --- |
-| `console` | **22 / 22** | 2 | 12 / 274 | complete |
-| `punycode` | **1 / 1** | 0 | 5 / 10 | complete |
-| `querystring` | **4 / 4** | 0 | 8 / 196 | complete |
-| `os` | **4 / 4** | 1 | 18 / 103 | complete |
-| `path` | **15 / 16** | 0 | 7 / 131 | complete but for `matchesGlob`; the skip is Windows-only |
-| `events` | **28 / 33** | 1 | 6 / 142 | complete but for domains, `EventTarget` and the promise forms |
-| `url` | 26 / 36 | 1 | 30 / 364 | complete; exact on the Web Platform Tests corpus |
-| `diagnostics_channel` | 23 / 45 | 0 | 3 / 135 | complete; the failures need node's own publishers |
-| `buffer` | 26 / 60 | 1 | 6 / 186 | the read/write surface is complete and validated |
-| `assert` | 9 / 19 | 0 | 7 / 230 | complete, including `CallTracker` and node's Myers diff |
-| `fs` | 11 / 212 | 2 | 30 / 222 | the sync surface; async, streams and watchers are absent |
-| `util` | 7 / 18 | 1 | 12 / 196 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `string_decoder` | **2 / 3** | 0 | 7 / 199 | complete; the failure is the class-vs-function difference |
+| `console` | **22 / 22** | 2 | 17 / 269 | complete |
+| `punycode` | **1 / 1** | 0 | 6 / 9 | complete |
+| `querystring` | **4 / 4** | 0 | 11 / 194 | complete |
+| `os` | **4 / 4** | 1 | 22 / 99 | complete |
+| `path` | **15 / 16** | 0 | 23 / 115 | complete but for `matchesGlob`; the skip is Windows-only |
+| `events` | **28 / 33** | 1 | 11 / 137 | complete but for domains, `EventTarget` and the promise forms |
+| `url` | 26 / 36 | 1 | 33 / 362 | complete; exact on the Web Platform Tests corpus |
+| `diagnostics_channel` | 23 / 45 | 0 | 8 / 130 | complete; the failures need node's own publishers |
+| `buffer` | 26 / 60 | 1 | 11 / 182 | the read/write surface is complete and validated |
+| `assert` | 9 / 19 | 0 | 12 / 225 | complete, including `CallTracker` and node's Myers diff |
+| `fs` | 11 / 212 | 2 | 24 / 229 | the sync surface; async, streams and watchers are absent |
+| `util` | 7 / 18 | 1 | 17 / 191 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `string_decoder` | **2 / 3** | 0 | 11 / 196 | complete; the failure is the class-vs-function difference |
 | `stream` | — | — | — | not started |
 | `process` | — | — | — | not started |
 | `timers` | — | — | — | not started |
@@ -791,6 +809,11 @@ refuse it.
 **What clearing that class actually bought is the most useful number in this
 file.** Twenty-five refusals went away and the profile gained *two* lowered
 functions: `path` 5 to 6, `url` 28 to 29.
+
+Template literals and `ToString(number)` then took it from **151 to 206**, and
+`path` alone from 7 to 23 -- the largest single move so far, because message
+construction is everywhere and every interpolation of a number needed a float
+formatter.
 
 For contrast, and it is the other half of the same lesson: accessors landing
 took the profile from **121 lowered to 151**, across ten of thirteen modules --

@@ -1,6 +1,7 @@
 // Every module, both modes, as the table the conformance doc carries.
 //
 //   node tooling/conformance/sweep.mjs [--modules a,b,c] [--no-sabotage]
+//                                     [--compiles]
 //
 // Two reasons this exists rather than thirteen invocations typed by hand.
 //
@@ -8,6 +9,14 @@
 // hand-copied, and a hand-copied number is a claim nobody can check -- which is
 // the same failure as a measurement that cannot go red, one level up. The rows
 // this prints are the rows that belong in the document.
+//
+// `--compiles` adds the other axis: `nts hir` per module, lowered and refused.
+// It is off by default because it is slow, and it exists because a change to
+// this profile's *source* can cost lowered functions in a module it did not
+// touch. Adding argument validation to `node:buffer` cost `node:fs` ten,
+// measured only because a compiler change happened to prompt a re-run. A
+// behaviour sweep cannot see that: node's tests do not care whether a function
+// lowered.
 //
 // The second is that a change to shared code costs its passes somewhere other
 // than where it was aimed. `internal/errors.ts`, `util/src/inspect.ts` and
@@ -29,6 +38,7 @@ const arg = (name) => {
   return at === -1 ? null : argv[at + 1];
 };
 const withSabotage = !argv.includes("--no-sabotage");
+const withCompiles = argv.includes("--compiles");
 
 const requested = arg("--modules");
 const modules = requested
@@ -37,6 +47,30 @@ const modules = requested
       .filter((e) => e.isDirectory() && existsSync(join(PROFILE, e.name, "src/main.ts")))
       .map((e) => e.name)
       .sort();
+
+/**
+ * `nts hir` for one module: how many functions lowered, how many constructs
+ * refused. `null` when the compiler is not built, which is not a failure --
+ * this axis is optional.
+ */
+function compiles(module) {
+  try {
+    const out = execFileSync(
+      join(ROOT, "target/release/nts"),
+      ["hir", join(PROFILE, module, "tsconfig.json")],
+      {
+        encoding: "utf8",
+        maxBuffer: 256 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") },
+      },
+    );
+    const match = /(\d+) function\(s\), (\d+) construct\(s\) refused/.exec(out);
+    return match ? { lowered: Number(match[1]), refused: Number(match[2]) } : null;
+  } catch {
+    return null;
+  }
+}
 
 /** One module, one mode. Returns the tally the runner reported. */
 function run(module, sabotage) {
@@ -71,10 +105,11 @@ for (const module of modules) {
     continue;
   }
   const hollow = withSabotage ? run(module, true)?.pass ?? null : null;
+  const lowering = withCompiles ? compiles(module) : null;
   const applicable = real.pass + real.fail;
   totalPass += real.pass;
   if (hollow !== null) totalHollow += hollow;
-  rows.push({ module, pass: real.pass, applicable, hollow, seconds: (Date.now() - started) / 1000 });
+  rows.push({ module, pass: real.pass, applicable, hollow, lowering });
   process.stderr.write(
     `  ${module.padEnd(22)} ${String(real.pass).padStart(3)} / ${String(applicable).padEnd(4)}` +
       `${hollow === null ? "" : ` hollow ${hollow}`}` +
@@ -86,14 +121,22 @@ for (const module of modules) {
 // at the top and the ones with the most left to do at the bottom.
 rows.sort((a, b) => (b.pass / (b.applicable || 1)) - (a.pass / (a.applicable || 1)));
 
-console.log(`\n| module | node's tests | hollow |`);
-console.log(`| --- | :---: | :---: |`);
-for (const { module, pass, applicable, hollow } of rows) {
+console.log(`\n| module | node's tests | hollow |${withCompiles ? " compiles |" : ""}`);
+console.log(`| --- | :---: | :---: |${withCompiles ? " :---: |" : ""}`);
+let totalLowered = 0;
+for (const { module, pass, applicable, hollow, lowering } of rows) {
   const complete = applicable > 0 && pass === applicable;
   const count = complete ? `**${pass} / ${applicable}**` : `${pass} / ${applicable}`;
-  console.log(`| \`${module}\` | ${count} | ${hollow ?? "—"} |`);
+  const compiled = lowering ? `${lowering.lowered} / ${lowering.refused}` : "—";
+  if (lowering) totalLowered += lowering.lowered;
+  console.log(
+    `| \`${module}\` | ${count} | ${hollow ?? "—"} |${withCompiles ? ` ${compiled} |` : ""}`,
+  );
 }
 console.log(
   `\n${totalPass} of node's own test files pass across ${rows.length} modules` +
     (withSabotage ? `, of which ${totalHollow} are hollow.` : "."),
 );
+if (withCompiles) {
+  console.log(`${totalLowered} functions lower.`);
+}
