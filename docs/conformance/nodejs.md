@@ -191,6 +191,13 @@ nobody can check — applies to the headline as much as to the table.
 > checker could not answer for, reported as `NTS0003`; two rather than
 > thousands.
 >
+> **The ceiling has not gone away.** The budget is still 4,096 types and `zlib`
+> was at 3,190 before `net` was written. What changed is that the mechanism
+> which made truncation *arbitrary* is gone and that the condition now
+> announces itself. So the absence of `NTS0002` below means the check ran and
+> found nothing, not that this cannot come back — and a module that starts
+> emitting it again invalidates its own row, not the whole table.
+>
 > The lesson worth keeping is not about budgets. A number that is quietly
 > arbitrary and never contradicts itself is the hardest kind to catch: it took
 > a decrease nobody expected, a bisect run because the *shape* looked wrong
@@ -1234,6 +1241,21 @@ are about 200 across the two modules.
 `Buffer extends Uint8Array` is 76 in `stream` alone and will be in `fs`, `net`
 and `zlib` too, since everything that moves bytes touches it.
 
+Two entries do not mean what they look like. **"A function declaration outside
+every walk" is not dead code** — it is a conservation check, that every
+function the checker knows about is either lowered or refused and never
+silently absent. All of ours are `get`/`set` accessors inside an object literal
+passed to `Object.defineProperty`, which nothing in the lowering walks yet.
+They are correctly refused rather than wrongly written, and deleting them would
+be deleting working code to make a counter smaller.
+
+**The `base Set` entry is deliberately left alone.** It is
+`allowedNodeEnvironmentFlags`, which subclasses `Set` because node's does and
+because the subclass is what makes the object immutable from outside. Ten
+refusals is not worth replacing it with a delegation layer that would then be a
+divergence from node to maintain and explain. A refusal naming the real
+construct is more useful than a workaround that hides it.
+
 Every module together, ranked — a work queue ordered by how much of the Node
 surface each item unblocks, rather than by how often it appears in a corpus of
 test files. The counts below were taken across eight modules and have not been
@@ -1460,6 +1482,21 @@ are about 200 across the two modules.
 `Buffer extends Uint8Array` is 76 in `stream` alone and will be in `fs`, `net`
 and `zlib` too, since everything that moves bytes touches it.
 
+Two entries do not mean what they look like. **"A function declaration outside
+every walk" is not dead code** — it is a conservation check, that every
+function the checker knows about is either lowered or refused and never
+silently absent. All of ours are `get`/`set` accessors inside an object literal
+passed to `Object.defineProperty`, which nothing in the lowering walks yet.
+They are correctly refused rather than wrongly written, and deleting them would
+be deleting working code to make a counter smaller.
+
+**The `base Set` entry is deliberately left alone.** It is
+`allowedNodeEnvironmentFlags`, which subclasses `Set` because node's does and
+because the subclass is what makes the object immutable from outside. Ten
+refusals is not worth replacing it with a delegation layer that would then be a
+divergence from node to maintain and explain. A refusal naming the real
+construct is more useful than a workaround that hides it.
+
 `nts hir` refuses 38 constructs and lowers 1 function. Ranked, and every one of
 them is in [`typescript.md`](typescript.md) as a language feature rather than
 anything specific to Node:
@@ -1508,6 +1545,21 @@ are about 200 across the two modules.
 
 `Buffer extends Uint8Array` is 76 in `stream` alone and will be in `fs`, `net`
 and `zlib` too, since everything that moves bytes touches it.
+
+Two entries do not mean what they look like. **"A function declaration outside
+every walk" is not dead code** — it is a conservation check, that every
+function the checker knows about is either lowered or refused and never
+silently absent. All of ours are `get`/`set` accessors inside an object literal
+passed to `Object.defineProperty`, which nothing in the lowering walks yet.
+They are correctly refused rather than wrongly written, and deleting them would
+be deleting working code to make a counter smaller.
+
+**The `base Set` entry is deliberately left alone.** It is
+`allowedNodeEnvironmentFlags`, which subclasses `Set` because node's does and
+because the subclass is what makes the object immutable from outside. Ten
+refusals is not worth replacing it with a delegation layer that would then be a
+divergence from node to maintain and explain. A refusal naming the real
+construct is more useful than a workaround that hides it.
 
 16 of 31 functions lower. The rest:
 
