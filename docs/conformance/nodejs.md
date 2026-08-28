@@ -38,6 +38,15 @@ the compiled artifact. That is the gate. `--ts` is the interim gate for a module
 that does not compile yet, and the two together tell a compiler bug from an
 implementation bug: fails compiled, passes on node, is a compiler bug.
 
+A third command, and the one to run before believing any of the numbers below:
+
+```sh
+node tooling/conformance/run.mjs --module <name> --sabotage
+```
+
+It hands every test an empty object instead of our module. Whatever still
+passes was never measuring us. See *hollow* in the table.
+
 ## Modules
 
 Counts are `passed / applicable`, where applicable excludes tests that spawn a
@@ -45,28 +54,51 @@ real `node` child — those assert on node's binary, which our module is not in.
 Each exclusion is listed with a reason in the module's `not-applicable` file
 rather than inferred by a rule, so the number can be audited.
 
-**206 of node's own test files pass** across thirteen modules. The per-module
+**170 of node's own test files pass** across thirteen modules. The per-module
 counts below are `passed / applicable`; `compiles` is `functions lowered /
 constructs refused`, from `nts hir`.
 
-| module | node's tests | compiles | note |
-| --- | :---: | :---: | --- |
-| `console` | **22 / 22** | 8 / 255 | complete |
-| `punycode` | **1 / 1** | 5 / 10 | complete |
-| `querystring` | **4 / 4** | 6 / 165 | complete |
-| `os` | **4 / 4** | 19 / 91 | complete |
-| `path` | **15 / 16** | 3 / 124 | complete but for `matchesGlob`; the skip is Windows-only |
-| `buffer` | **51 / 60** | 5 / 154 | complete enough for `fs` and `string_decoder` |
-| `events` | **28 / 33** | 2 / 126 | complete but for domains, `EventTarget` and the promise forms |
-| `string_decoder` | **2 / 3** | 3 / 170 | complete; the failure is the class-vs-function difference |
-| `diagnostics_channel` | 23 / 35 | 2 / 123 | complete; the failures need node's own publishers |
-| `assert` | 11 / 19 | 3 / 209 | complete, including `CallTracker` and node's Myers diff |
-| `util` | 8 / 18 | 7 / 180 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `fs` | 11 / 212 | 28 / 191 | the sync surface; async, streams and watchers are absent |
-| `url` | 26 / 36 | 28 / 317 | complete; exact on the Web Platform Tests corpus |
-| `stream` | — | — | not started |
-| `process` | — | — | not started |
-| `timers` | — | — | not started |
+| module | node's tests | hollow | compiles | note |
+| --- | :---: | :---: | :---: | --- |
+| `console` | **22 / 22** | 2 | 8 / 255 | complete |
+| `punycode` | **1 / 1** | 0 | 5 / 10 | complete |
+| `querystring` | **4 / 4** | 0 | 6 / 165 | complete |
+| `os` | **4 / 4** | 1 | 19 / 91 | complete |
+| `path` | **15 / 16** | 0 | 3 / 124 | complete but for `matchesGlob`; the skip is Windows-only |
+| `events` | **28 / 33** | 1 | 2 / 126 | complete but for domains, `EventTarget` and the promise forms |
+| `url` | 26 / 36 | 4 | 28 / 317 | complete; exact on the Web Platform Tests corpus |
+| `diagnostics_channel` | 23 / 35 | 0 | 2 / 123 | complete; the failures need node's own publishers |
+| `buffer` | 15 / 60 | 1 | 5 / 154 | the surface is there; the argument validation largely is not |
+| `assert` | 11 / 19 | 1 | 3 / 209 | complete, including `CallTracker` and node's Myers diff |
+| `fs` | 11 / 212 | 2 | 28 / 191 | the sync surface; async, streams and watchers are absent |
+| `util` | 8 / 18 | 1 | 7 / 180 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `string_decoder` | **2 / 3** | 0 | 3 / 170 | complete; the failure is the class-vs-function difference |
+| `stream` | — | — | — | not started |
+| `process` | — | — | — | not started |
+| `timers` | — | — | — | not started |
+
+**`hollow` is how many of those passes survive the module being removed.**
+
+```sh
+node tooling/conformance/run.mjs --module buffer --sabotage
+```
+
+hands every test an empty object instead of our module. Whatever still passes
+was never measuring us — it reached node's own implementation through a global,
+or asserted something true of any module at all. Thirteen of the 170 are
+hollow, and each is a specific reason rather than a rounding error.
+
+This column exists because the number above it was wrong. `node:buffer` read
+**51 of 60** until the check was run, and 15 afterwards. Node's tests write
+`Buffer.concat(...)` unqualified far more often than they write the export, so
+they were grading node's `Buffer` against itself; 46 of the 51 passed with our
+module gone. Installing ours as the global is what the other 45 failures are
+now measuring, and they are real: missing `readBigInt64BE`, missing argument
+validation, and the like.
+
+The general form, which is worth more than the correction: *ask of any
+measurement what input would make it fail, and check that the input is in it.*
+A pass count that cannot go red is not evidence.
 
 Read the two columns as measuring different things. `console` passes every one
 of node's tests and lowers eight functions; `os` lowers nineteen and passes
@@ -216,21 +248,29 @@ accepted anywhere bytes are, and it is what node does.
 | searching | `indexOf`, `lastIndexOf`, `includes` |
 | other | `copy`, `slice`, `subarray`, `fill`, `swap16`/`32`/`64`, `byteLength`, `isBuffer`, `isEncoding`, `isUtf8`, `isAscii`, `atob`, `btoa`, `constants` |
 
-51 of 60 applicable files pass. Two are not applicable: they need
+15 of 60 applicable files pass. Two are not applicable: they need
 `--allow-natives-syntax` to drive V8's optimiser, which is a question about V8
 rather than about `node:buffer`.
 
-Several of the remaining failures are the harness rather than the module, and
-the reason is worth recording because it is a limit on this whole approach.
-`Buffer` is a *global* as well as an export, and node's tests write
-`Buffer.concat(...)` unqualified far more often than they write the export --
-so the assertion compares node's `Buffer` against our `kMaxLength`, which is a
-statement about neither. Installing ours as the global is the obvious fix and
-it is wrong: `fs`, `util.inspect` and the harness itself all reach for the
-global, none of them accepts ours, and it took the module from 51 passing to
-15. `console` can be installed globally because nothing in node consumes it;
-`Buffer` cannot, because everything does. Those failures are left standing
-rather than papered over.
+**This number was 51 and the 51 was not real.** `Buffer` is a global as well as
+an export, and node's tests write `Buffer.concat(...)` unqualified far more
+often than they write the export -- so for as long as we did not install ours
+as the global, they were grading node's `Buffer` against itself. Running the
+suite with our module replaced by an empty object left **46 of the 51 still
+passing**, which is what a number that cannot go red looks like.
+
+Ours is installed as the global now and the suite measures it. The 45 failures
+are real and are mostly one thing: argument validation. Node throws
+`ERR_INVALID_ARG_TYPE` from almost every method for almost every wrong
+argument, and a module reached from JavaScript has to, because JavaScript has
+no types to have stopped the caller. After that come the missing
+`readBigInt64*`/`writeBigInt64*` family and a handful of `ERR_OUT_OF_RANGE`
+bounds.
+
+I had recorded the opposite conclusion here -- that installing the global broke
+node's own modules -- on the strength of watching the count fall from 51 to 15
+and not reading the failures. It did not break anything. The count fell because
+the measurement started working.
 
 The UTF-8 decoder is the WHATWG Encoding standard's, state variable for state
 variable. That is not pedantry about which spec to cite: the standard defines

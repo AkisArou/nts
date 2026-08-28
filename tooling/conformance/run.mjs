@@ -46,10 +46,23 @@ const moduleName = arg("--module");
 const addon = arg("--addon");
 const only = arg("--only");
 const verbose = argv.includes("--verbose");
+/**
+ * Hand every test an empty module instead of ours.
+ *
+ * A pass count nobody has tried to make fail is not a measurement. Whatever
+ * still passes under this was never measuring us: it reached for node's own
+ * implementation through a global, or asserted something true of any module at
+ * all. `node:buffer` read 51 of 60 until this was run and 15 afterwards --
+ * node's tests use the global `Buffer`, which was node's own.
+ */
+const sabotage = argv.includes("--sabotage");
 const asJson = argv.includes("--json");
 
 if (!moduleName) {
-  console.error("usage: run.mjs --module <name> [--addon <path.node>] [--only <file>] [--verbose] [--json]");
+  console.error(
+    "usage: run.mjs --module <name> [--addon <path.node>] [--only <file>] " +
+      "[--verbose] [--json] [--sabotage]",
+  );
   process.exit(2);
 }
 if (!existsSync(SUITE)) {
@@ -141,7 +154,12 @@ for (const name of files) {
     const out = execFileSync(
       process.execPath,
       [...nodeFlags(join(SUITE, name)), join(HERE, "run-one.mjs"), moduleName, join(SUITE, name), addon ?? "-"],
-      { encoding: "utf8", timeout: 60_000, stdio: ["ignore", "pipe", "pipe"] },
+      {
+        encoding: "utf8",
+        timeout: 60_000,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, NTS_CONFORMANCE_SABOTAGE: sabotage ? "1" : "" },
+      },
     );
     const line = out.trim().split("\n").filter((l) => l.startsWith("{")).pop();
     result = line ? JSON.parse(line) : { kind: "fail", why: "no result from the child" };

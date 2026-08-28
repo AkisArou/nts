@@ -67,6 +67,15 @@ const siblings = new Map();
 /** Node-internal module ids the module under test answers for, from its shape. */
 let internals = null;
 
+/**
+ * `--sabotage`, via the environment so the child sees it.
+ *
+ * Everything the module under test would have supplied is blanked: the module
+ * itself, the node-internal ids it answers for, and the siblings it shares
+ * state with. Whatever still passes was never measuring us.
+ */
+const sabotaged = process.env["NTS_CONFORMANCE_SABOTAGE"] === "1";
+
 let underTest;
 try {
   let exports;
@@ -84,8 +93,15 @@ try {
   // or a test comparing `require('console')` with `globalThis.console` sees
   // node's on one side and ours on the other. Declared per module rather than
   // guessed, so the substitution stays auditable.
+  // `--sabotage`: hand the test an empty module instead of ours. Every file
+  // that still passes is a file that was never measuring us -- it reached for
+  // node's own implementation, or asserted something true of any module at
+  // all. A pass count nobody has tried to make fail is not a measurement.
+  if (sabotaged) {
+    underTest = {};
+  }
   shapeModule?.installGlobals?.(underTest);
-  internals = shapeModule?.internals?.({ ...exports }) ?? null;
+  internals = sabotaged ? {} : (shapeModule?.internals?.({ ...exports }) ?? null);
 
   const usesPath = join(moduleDir, "uses");
   if (existsSync(usesPath)) {
@@ -98,9 +114,9 @@ try {
       const siblingShape = join(dir, "shape.mjs");
       siblings.set(
         name,
-        existsSync(siblingShape)
+        sabotaged ? {} : (existsSync(siblingShape)
           ? (await import(siblingShape)).shape(siblingExports)
-          : siblingExports,
+          : siblingExports),
       );
     }
   }

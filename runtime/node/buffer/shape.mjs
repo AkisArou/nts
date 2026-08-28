@@ -15,3 +15,7 @@ export function shape(exports) {
 // is that a test writing `Buffer.concat(...)` unqualified measures node's
 // Buffer against our `kMaxLength`, which is a statement about neither; those
 // are listed as failures rather than papered over.
+
+export function installGlobals(underTest) {
+  globalThis.Buffer = underTest.Buffer;
+}
