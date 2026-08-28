@@ -76,7 +76,41 @@ function checkHeaderValue(name: string, value: unknown): void {
 }
 
 export class OutgoingMessage extends EventEmitter {
-  socket: OutgoingSocket | null = null;
+  #socket: OutgoingSocket | null = null;
+
+  /**
+   * Output written before there was a socket to write it to.
+   *
+   * A client builds its request and calls `end()` immediately, but the
+   * connection is not open yet -- it arrives a tick later, or much later if
+   * the agent is at its limit and the request had to queue. Without this the
+   * head is written to nothing and the request never leaves.
+   */
+  #pending: (Buffer | string)[] = [];
+
+  get socket(): OutgoingSocket | null {
+    return this.#socket;
+  }
+
+  set socket(value: OutgoingSocket | null) {
+    this.#socket = value;
+    if (value && this.#pending.length > 0) {
+      const queued = this.#pending;
+      this.#pending = [];
+      for (const chunk of queued) {
+        value.write(chunk, typeof chunk === "string" ? "latin1" : undefined);
+      }
+    }
+  }
+
+  /** Write, or hold it until there is somewhere to write it. */
+  #send(chunk: Buffer | string, encoding?: string): boolean {
+    if (this.#socket === null) {
+      this.#pending.push(chunk);
+      return true;
+    }
+    return this.#socket.write(chunk, encoding) !== false;
+  }
 
   /** Whether the head has gone out and the headers are therefore fixed. */
   headersSent = false;
@@ -97,6 +131,17 @@ export class OutgoingMessage extends EventEmitter {
 
   /** Filled in by a subclass: the status line or the request line. */
   protected statusLine = "";
+
+  /**
+   * Whether this message can carry a body at all.
+   *
+   * A `GET` cannot, and neither can a `204` or the reply to a `HEAD`. The
+   * distinction matters for framing: "no `Content-Length` and no chunking"
+   * means "read until the connection closes" only for a message that *may*
+   * have a body. For one that cannot, it means the body is empty, and closing
+   * the connection over it would end keep-alive for every bodiless request.
+   */
+  protected hasBody = true;
 
   #ended = false;
 
@@ -197,9 +242,9 @@ export class OutgoingMessage extends EventEmitter {
     } else if (this.useChunkedEncodingByDefault) {
       this.chunkedEncoding = true;
       this.headersMap.set("transfer-encoding", ["Transfer-Encoding", "chunked"]);
-    } else {
-      // No length and no chunking: the body ends when the connection does, so
-      // the connection cannot be reused and must say so.
+    } else if (this.hasBody) {
+      // No length and no chunking on a message that may have a body: it ends
+      // when the connection does, so the connection cannot be reused.
       this.shouldKeepAlive = false;
     }
 
@@ -229,7 +274,7 @@ export class OutgoingMessage extends EventEmitter {
     head += "\r\n";
 
     this.headersSent = true;
-    this.socket?.write(head, "latin1");
+    this.#send(head, "latin1");
   }
 
   write(chunk: string | Buffer, encoding?: string | (() => void), callback?: () => void): boolean {
@@ -259,11 +304,11 @@ export class OutgoingMessage extends EventEmitter {
 
     let ok: boolean;
     if (this.chunkedEncoding) {
-      this.socket?.write(`${buffer.length.toString(16)}\r\n`, "latin1");
-      ok = this.socket?.write(buffer) !== false;
-      this.socket?.write("\r\n", "latin1");
+      this.#send(`${buffer.length.toString(16)}\r\n`, "latin1");
+      ok = this.#send(buffer);
+      this.#send("\r\n", "latin1");
     } else {
-      ok = this.socket?.write(buffer) !== false;
+      ok = this.#send(buffer);
     }
 
     if (callback) nextTick(callback);
@@ -299,7 +344,7 @@ export class OutgoingMessage extends EventEmitter {
         tail += `${entry[0]}: ${entry[1]}\r\n`;
       }
       tail += "\r\n";
-      this.socket?.write(tail, "latin1");
+      this.#send(tail, "latin1");
     }
 
     this.#ended = true;

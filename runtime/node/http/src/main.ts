@@ -9,9 +9,13 @@ import { HTTPParser, methods } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { OutgoingMessage, ServerResponse } from "./outgoing.ts";
 import { Server, createServer } from "./server.ts";
+import { Agent, globalAgent } from "./agent.ts";
+import { ClientRequest, get, request } from "./client.ts";
 import { STATUS_CODES } from "./status.ts";
 
 export {
+  Agent,
+  ClientRequest,
   HTTPParser,
   IncomingMessage,
   OutgoingMessage,
@@ -19,7 +23,10 @@ export {
   ServerResponse,
   STATUS_CODES,
   createServer,
+  get,
+  globalAgent,
   methods,
+  request,
 };
 
 /** The maximum size of a request head, in bytes, unless a server overrides it. */

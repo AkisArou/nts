@@ -295,7 +295,15 @@ export class Socket extends Duplex {
   }
 
   override _read(): void {
-    if (this.connecting || this._handle === null) return;
+    // Deferred rather than dropped. Returning here would leave the readable's
+    // `reading` flag set with nothing on the way to clear it, so the *next*
+    // `read` would decline as redundant and the socket would never start --
+    // which is what happens to any consumer that attaches a `data` listener
+    // before the connection is established, as an HTTP client does.
+    if (this.connecting || this._handle === null) {
+      this.once("connect", (() => this._read()) as never);
+      return;
+    }
     this.#maybeStartReading();
   }
 
