@@ -180,3 +180,36 @@ what the C++ programmer knew.
 **What would have hidden this: measuring the case being optimized.** `bytes`
 alone said the change was a win. Only the full suite said what it cost, and it
 cost it somewhere with no remainder in it, which is not where anyone would look.
+
+
+## Two instruments, and neither is the other's weaker form
+
+The night ended with two checks that did not exist when it started, and the
+useful thing is that they are not ordered.
+
+**The conservation law.** *Every function the checker knows about is either
+lowered or refused, and never neither.* `hir::unaccounted` asks it and
+`hir::lower` enforces it. It says nothing about whether the answer is right,
+only whether anything vanished.
+
+Attribution is **per node, by span containment**, and that is the property to
+preserve rather than an implementation detail. Counting per *file* would have
+been simpler and blind to the thing it actually caught: nine of its first
+fourteen findings were a diagnostic filed against the wrong node — a method
+whose receiver layout failed was reported at the *class*, so from outside the
+method "refused elsewhere" and "not refused" were the same observation. A law
+sensitive to *where* a refusal landed catches the wrong-subject bug that this
+record's other sections are about. A law that only counts does not.
+
+**The compile check.** Every corpus program goes to `clang -fsyntax-only`, and
+`UNCOMPILABLE C` must stay at zero beside invalid HIR. It reports nothing today,
+which is not vacuous: if clang were absent the process would fail to start and
+*every* file would count, so a zero means clang ran and accepted each one.
+
+Neither subsumes the other. The conservation law cannot see `"" + n` emitting
+`(NtsString *)someDouble`, because that function *was* lowered. The compile
+check cannot see an object-literal method, because that came out as nothing at
+all and nothing compiles fine. Coverage is the union, not the maximum — which is
+the same shape as the differential harness and the cross-variant checksum, one
+of which proves the fast path matches the slow path and the other that the slow
+path was right to begin with.
