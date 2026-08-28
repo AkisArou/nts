@@ -802,6 +802,16 @@ export class ERR_BROTLI_INVALID_PARAM extends NodeRangeError {
   }
 }
 
+/** An operation on a socket that has already been closed. */
+export class ERR_SOCKET_CLOSED extends NodeError {
+  override readonly code = "ERR_SOCKET_CLOSED";
+
+  constructor() {
+    super("Socket is closed");
+    this.name = "Error";
+  }
+}
+
 export class ERR_INVALID_THIS extends NodeTypeError {
   override readonly code = "ERR_INVALID_THIS";
 
