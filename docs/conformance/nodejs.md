@@ -45,24 +45,33 @@ real `node` child — those assert on node's binary, which our module is not in.
 Each exclusion is listed with a reason in the module's `not-applicable` file
 rather than inferred by a rule, so the number can be audited.
 
-**118 of node's own test files pass** across ten modules. The per-module counts
-below are `passed / applicable`.
+**175 of node's own test files pass** across twelve modules. The per-module
+counts below are `passed / applicable`; `compiles` is `functions lowered /
+constructs refused`, from `nts hir`.
 
 | module | node's tests | compiles | note |
 | --- | :---: | :---: | --- |
-| `path` | **15 / 16** | 1 / 49 | complete but for `matchesGlob`; the skip is Windows-only |
-| `os` | **4 / 4** | 16 / 36 | complete |
-| `events` | **26 / 33** | 0 / 50 | complete but for domains, `EventTarget` and the promise forms |
-| `fs` | 11 / 260 | 12 / 141 | the sync surface; async, streams and watchers are absent |
-| `querystring` | **4 / 4** | 3 / 97 | complete |
-| `punycode` | **1 / 1** | 5 / 15 | complete |
+| `console` | **22 / 22** | 8 / 255 | complete |
+| `punycode` | **1 / 1** | 5 / 10 | complete |
+| `querystring` | **4 / 4** | 6 / 165 | complete |
+| `os` | **4 / 4** | 19 / 91 | complete |
+| `path` | **15 / 16** | 3 / 124 | complete but for `matchesGlob`; the skip is Windows-only |
+| `buffer` | **49 / 60** | 5 / 154 | complete enough for `fs` and `string_decoder` |
+| `events` | **26 / 33** | 2 / 126 | complete but for domains, `EventTarget` and the promise forms |
+| `string_decoder` | **2 / 3** | 3 / 170 | complete; the failure is the class-vs-function difference |
+| `diagnostics_channel` | 22 / 35 | 2 / 123 | complete; the failures need node's own publishers |
+| `assert` | 11 / 19 | 3 / 209 | complete, including `CallTracker` and node's Myers diff |
+| `util` | 8 / 18 | 7 / 180 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `fs` | 11 / 212 | 28 / 191 | the sync surface; async, streams and watchers are absent |
 | `url` | — | — | not started |
-| `buffer` | **49 / 60** | 2 / 85 | complete enough for `fs` and `string_decoder` |
-| `events` | — | — | not started |
-| `string_decoder` | **2 / 3** | 4 / 99 | complete; the failure is the class-vs-function difference |
-| `util` | 4 / 19 | 3 / 106 | `inspect`, `format`, `types`, `isDeepStrictEqual` and the helpers |
 | `stream` | — | — | not started |
-| `assert` | 2 / 18 | 1 / 103 | the comparisons are right; the messages are not yet exact |
+| `process` | — | — | not started |
+| `timers` | — | — | not started |
+
+Read the two columns as measuring different things. `console` passes every one
+of node's tests and lowers eight functions; `os` lowers nineteen and passes
+four. Neither number predicts the other, which is the point of keeping them
+apart.
 
 ## `path`
 
@@ -254,16 +263,95 @@ dependency's use of a deprecated module is not something the application can
 fix; a compiled program has no `node_modules` to be inside, so ours always
 warns.
 
+## `console`
+
+Complete, from node v24.20.0 `lib/internal/console/constructor.js` and
+`lib/internal/console/global.js`. **All 22 of node's test files pass.**
+
+| | |
+| --- | --- |
+| output | `log`, `info`, `debug`, `dirxml`, `warn`, `error`, `dir`, `trace`, `assert` |
+| counting | `count`, `countReset` |
+| timing | `time`, `timeEnd`, `timeLog` |
+| grouping | `group`, `groupCollapsed`, `groupEnd` |
+| other | `clear`, `table`, `profile`, `profileEnd`, `timeStamp`, `Console` |
+
+Almost all of it is `util.format` and a stream write. What is left is the state
+the API implies — a timer table, a counter table, an indentation level — and
+the care taken not to let a failed write take the program down, since a
+debugging aid that crashes the thing being debugged is worse than useless. A
+stream can fail synchronously (a file, a TTY) or asynchronously (a pipe), so
+both are handled; a stack overflow is rethrown, because swallowing that hides
+the actual bug.
+
+**Two decisions are ours and worth recording.**
+
+`Console` takes streams, as node's does. `node:stream` does not exist yet, and
+the two streams the global console needs have to come from somewhere, so
+`runtime/node/internal/stdio.ts` provides them: an `EventEmitter` over two write
+bindings, with the small surface `console` actually asks of a stream — write a
+string, say whether you are a terminal, accept an error listener. It becomes
+`process.stdout` when `node:process` and `node:stream` land. The *interface* is
+the part that survives, because it is what `console` was written against.
+
+The global `console` is a real `Console` instance where node builds a bare
+namespace object with the methods bound onto it. The methods are own bound
+properties either way — `const { log } = console` works, `Reflect.ownKeys`
+agrees — so the only observable difference is what `Object.getPrototypeOf`
+returns, and nothing observes it. In exchange the class keeps private fields
+instead of the symbol-keyed properties a non-instance would force, which is
+also the shape a compiler can lay out.
+
+`console.table` and `console.clear` pulled in two pieces of shared code that
+belong outside this module and are now in `internal/`: the box-drawing table
+(`cli-table.ts`, which measures columns in terminal *columns* rather than code
+units, so a CJK ideograph counts as two) and the cursor sequences
+(`readline-callbacks.ts`, which `node:readline` will want).
+
+## `diagnostics_channel`
+
+Complete, from node v24.20.0 `lib/diagnostics_channel.js`: `channel`,
+`subscribe`, `unsubscribe`, `hasSubscribers`, `tracingChannel`, `Channel` and
+`TracingChannel` with `traceSync`, `tracePromise` and `traceCallback`.
+
+22 of 35 applicable files pass. The remaining 13 are one cause: they assert
+that *node's own* `http`, `net`, `udp`, `worker_threads`, `child_process` or
+module loader publish to a well-known channel. Those subsystems publish into
+node's registry, not ours, and no substitution can bridge that — the tests pass
+when the subsystem is ours, and not before. They are left failing rather than
+marked not-applicable, because they are applicable; they are just blocked. 22
+more skip on `--expose-gc` or on node internals.
+
+`node:console` is the first caller: `console.log` publishes its raw arguments
+before formatting them, so a subscriber sees the objects that were logged
+rather than their printed form — and a subscriber that mutates one changes what
+gets printed, which node's test checks.
+
+**One deliberate difference.** Node has two classes here, `Channel` and
+`ActiveChannel`, and swaps an instance's prototype between them as its first
+subscriber arrives and its last leaves, so that publishing to a channel nobody
+listens to reaches a `publish` that is an empty function. That is a V8
+inline-cache trick with no semantic content, and it is the reason node also has
+to define `Symbol.hasInstance`. One class with a subscriber array that is empty
+until someone subscribes says the same thing; the branch in `publish` costs a
+length check.
+
+The registry holds channels weakly, as node's does. A channel that nobody
+references and nobody subscribes to is dead weight, and a process that names
+channels dynamically would otherwise leak one per name. The finalizer clears
+the entry only if nothing has taken the name in the meantime, since
+finalization is not synchronous with collection.
+
 ## `util`
 
-`inspect`, `format`/`formatWithOptions`, `types` (43 predicates),
-`isDeepStrictEqual`, `inherits`, `deprecate`, `debuglog`, `promisify`,
-`callbackify`, `styleText`, `parseEnv`, `stripVTControlCharacters`,
-`toUSVString`, and the `getSystemError*` family.
+`inspect`, `format`/`formatWithOptions`, `types` (43 predicates), the three
+comparisons, `inherits`, `deprecate`, `debuglog`, `promisify`, `callbackify`,
+`styleText`, `parseEnv`, `stripVTControlCharacters`, `toUSVString`, and the
+`getSystemError*` family.
 
-4 of 19 applicable files pass, which understates it: `util`'s tests compare
-`inspect` output character for character, so a single spacing difference fails a
-file that is otherwise entirely correct. The measures that say more:
+8 of 18 applicable files pass, which understates it: `util`'s tests compare
+`inspect` output character for character, so a single spacing difference fails
+a file that is otherwise entirely correct. The measures that say more:
 
 - **`isDeepStrictEqual` agrees with node on 30,000 random structures** —
   primitives by `Object.is`, prototypes, symbol keys, `Map`/`Set` matched
@@ -274,34 +362,77 @@ file that is otherwise entirely correct. The measures that say more:
 - **`inspect` agrees with node on 88.5% of 5,000 random nested structures.**
   What is left is line-breaking of deeply nested values, not content.
 
-Two things about `inspect` are worth recording because they look arbitrary and
-are not. `groupArrayElements` lays short array entries out as a padded grid with
-numbers right-aligned — thirty numbers one per line is unreadable and thirty on
-one line is too wide — and its column arithmetic is a fitted heuristic, so
-changing the constants changes the output. And `compact: 3` means "combine a
-subtree less than three levels deep", which requires tracking the deepest
-recursion reached; a child truncated to `[Object]` must *not* count towards it,
-or every parent breaks onto multiple lines.
+Three things about `inspect` are worth recording because they look arbitrary
+and are not. `groupArrayElements` lays short array entries out as a padded grid
+with numbers right-aligned — thirty numbers one per line is unreadable and
+thirty on one line is too wide — and its column arithmetic is a fitted
+heuristic, so changing the constants changes the output. `compact: 3` means
+"combine a subtree less than three levels deep", which requires tracking the
+deepest recursion reached; a child truncated to `[Object]` must *not* count
+towards it, or every parent breaks onto multiple lines. And a symbol key prints
+as `Symbol(x)` with no brackets — the brackets mark a *non-enumerable*
+property, and `__proto__` is quoted as `['__proto__']` so that the printed
+output could be pasted back without meaning something else.
 
-Not implemented: `getCallSites` (needs `Error.prepareStackTrace`), `MIMEType`,
-`TextEncoder`/`TextDecoder`, `parseArgs`, `diff`, and the `AbortSignal` helpers.
+Colours go through one `stylize` function chosen once per `inspect` call, so a
+nested value cannot end up coloured differently from the one containing it.
+`util.inspect.colors` and `util.inspect.styles` are two tables rather than one
+because both are public and mutable, and the aliases (`grey`, `faint`,
+`blackBright`) are non-enumerable getters onto their targets, so changing
+`gray` changes `grey` with it.
+
+Not implemented: `getCallSites` (needs V8's structured stack), `MIMEType`,
+`TextEncoder`/`TextDecoder`, `parseArgs`, `diff`, and the `AbortSignal`
+helpers. `parseEnv` is a paraphrase rather than a transcription — node's is
+C++ in `node_dotenv.cc` — and it differs on inline comments inside quotes.
+
+**One thing is unreachable from here and reachable in the compiled world.**
+`util.format('%s', obj)` where `obj` had its prototype set to `null` prints
+`[Object: null prototype]` for us and `[Foo: null prototype]` for node. V8
+records the constructor name in the object's map at allocation and does not
+expose it to JavaScript; node reads it through a binding. On node we cannot get
+it. Compiled, we own the object model, so we can — an instance knows what
+constructed it whatever happens to its prototype afterwards. It is the first
+case where the compiled artifact can beat the oracle it is measured against
+rather than only match it, and worth remembering when the two disagree.
 
 ## `assert`
 
 Every function: `ok`, `equal`/`notEqual`, `strictEqual`/`notStrictEqual`,
 `deepEqual`/`notDeepEqual`, `deepStrictEqual`/`notDeepStrictEqual`,
 `partialDeepStrictEqual`, `throws`/`doesNotThrow`, `rejects`/`doesNotReject`,
-`ifError`, `match`/`doesNotMatch`, `fail`, `AssertionError`, and the `strict`
-variant.
+`ifError`, `match`/`doesNotMatch`, `fail`, `AssertionError`, `CallTracker`, the
+`Assert` class, and the `strict` variant.
 
-2 of 18 files pass, and the number is misleading in the usual direction:
-`assert`'s tests check the *message text* of every failure, so a module whose
-comparisons are all correct still fails a file over a line of diff formatting.
-The comparisons themselves are right — `deepStrictEqual` is the same
-`isDeepStrictEqual` that agrees with node on 30,000 random structures.
+11 of 19 files pass. `assert`'s tests check the *message text* of every
+failure, and rightly so: that text is what a developer reads when a test fails,
+and it is most of what this module produces.
 
-Two details in the loose comparison are worth recording, because both were
-wrong in the obvious implementation:
+**The message is the product.** `AssertionError` picks between four renderings
+depending on what differs:
+
+| what differs | rendering |
+| --- | --- |
+| two short primitives | `1 !== 2`, inline |
+| two long strings | a character diff, with a caret under the first character that differs |
+| two structures | a line diff, unchanged runs collapsed to `...` |
+| structurally equal | one copy, and a heading saying they are different objects |
+
+The line diff is Myers' algorithm — the shortest edit script between the two
+inspected values. That is not an optimisation. A line-by-line comparison of two
+objects differing by one inserted key reports every line after it as changed,
+and the reader has to find the one that matters. The diff also knows that an
+inspected object puts a comma after every entry but the last, so inserting a
+key at the end changes the line before it too; telling it so keeps one change
+from reading as two.
+
+The diff inspects with `compact: false`, which puts every entry on its own
+line. That is what lets it mark the single line that changed.
+
+**One algorithm, three relations.** `deepStrictEqual`, `deepEqual` and
+`partialDeepStrictEqual` all live in `util/src/deep-equal.ts`, because a rule
+learned in one is otherwise missed by the others — and it had been. Details
+that were wrong in the obvious implementation:
 
 - **`==` applies only when both sides are primitives.** `'a' == ['a']` is true
   in JavaScript, because the array coerces through `toString`. Node does not
@@ -309,11 +440,25 @@ wrong in the obvious implementation:
 - **A type check is a guard, not an answer.** Two regexps with the same source
   can still differ in their own properties, so the type comparison has to fall
   through to the key walk rather than returning `true`.
+- **Partial comparison is containment, and containment differs by kind.** An
+  array must appear as a *subsequence*, not at the same indices. A set or map
+  needs every entry matched by a distinct one, and matched structurally rather
+  than by lookup, since an object key in the expectation is a different object
+  from the equal one in the value. A `WeakMap` is never equal to another,
+  because there is no way to look inside one. `Reflect.ownKeys` sees none of
+  this, and using it made two different `Map`s compare equal.
+- **Holes are not values.** Node has a partial-comparison test over a sparse
+  array with a length in the hundreds of millions. Materialising it took
+  fourteen seconds and gave the wrong answer; walking `Object.keys` is instant
+  and right.
 
-`AssertionError`'s diff inspects with `compact: false`, which puts every entry
-on its own line. That is what lets the diff mark the single line that changed;
-a compact rendering would put a whole object on one line and the diff would
-report that the line changed, which is the output the diff exists to avoid.
+**Two things are absent rather than wrong.** `assert.ok(x)` with no message
+should read the failing expression out of the source and report `The expression
+evaluated to a falsy value: assert.ok(x)`. Node does that with V8's structured
+stack positions and a bundled JavaScript tokenizer; neither is reachable from
+here, so the generated message is the ordinary diff — true, but it says less.
+And one file spawns a real `node` to check what an uncaught assertion prints,
+which is a statement about node's binary.
 
 ## `fs`
 
@@ -358,10 +503,20 @@ ENOENT: no such file or directory, stat '/nope/x'
 
 ## What stops all of it compiling
 
-Every module together, ranked. This is the aggregate refusal count across
-`path`, `os`, `events`, `buffer`, `querystring`, `string_decoder`, `punycode`
-and `fs` — a work queue ordered by how much of the Node surface each item
-unblocks, rather than by how often it appears in a corpus of test files.
+Every module together, ranked — a work queue ordered by how much of the Node
+surface each item unblocks, rather than by how often it appears in a corpus of
+test files. The counts below were taken across eight modules and have not been
+retaken since `console`, `diagnostics_channel` and the `assert` rewrite landed;
+the ranking has not changed, but the absolute numbers are now low.
+
+Since they were taken, one item has moved to the top of the list and is not in
+the table. **`class X extends Error`** now underlies every module in the
+profile: `internal/errors.ts` is four abstract bases -- over `Error`,
+`TypeError`, `RangeError` and `URIError` -- with twenty-one codes subclassing
+them, and `path`, `fs`, `buffer`, `util`, `assert`, `console` and
+`diagnostics_channel` all throw them. Each subclass needs one field beyond
+`message` and `name`: a `string` `code`, which is what node's tests and
+application code both branch on.
 
 | refused | count | what it is |
 | --- | ---: | --- |
