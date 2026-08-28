@@ -99,6 +99,15 @@ declare function nts_fs_utimes_async(
 ): void;
 declare function nts_fs_fsync_async(fd: number, callback: (errno: number) => void): void;
 declare function nts_fs_fdatasync_async(fd: number, callback: (errno: number) => void): void;
+declare function nts_fs_fchmod_async(
+  fd: number, mode: number, callback: (errno: number) => void,
+): void;
+declare function nts_fs_fchown_async(
+  fd: number, uid: number, gid: number, callback: (errno: number) => void,
+): void;
+declare function nts_fs_futimes_async(
+  fd: number, atime: number, mtime: number, callback: (errno: number) => void,
+): void;
 declare function nts_fs_mkdtemp_async(
   template: string, callback: (errno: number, path: string) => void,
 ): void;
@@ -564,4 +573,26 @@ export function mkdtemp(
     if (errno < 0) (callback as Callback<string>)(uvException(errno, "mkdtemp", prefix));
     else (callback as Callback<string>)(null, created);
   });
+}
+
+export function fchmod(fd: number, mode: number, callback?: Callback): void {
+  requireCallback(callback);
+  nts_fs_fchmod_async(fd, mode, settle(callback as Callback, "fchmod"));
+}
+
+export function fchown(fd: number, uid: number, gid: number, callback?: Callback): void {
+  requireCallback(callback);
+  nts_fs_fchown_async(fd, uid, gid, settle(callback as Callback, "fchown"));
+}
+
+export function futimes(
+  fd: number,
+  atime: number | Date,
+  mtime: number | Date,
+  callback?: Callback,
+): void {
+  requireCallback(callback);
+  const toSeconds = (t: number | Date): number =>
+    t instanceof Date ? t.getTime() / 1000 : t;
+  nts_fs_futimes_async(fd, toSeconds(atime), toSeconds(mtime), settle(callback as Callback, "futime"));
 }

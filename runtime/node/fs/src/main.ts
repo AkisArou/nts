@@ -29,13 +29,22 @@ export {
   access, appendFile, chmod, chown, close, copyFile, exists, fdatasync, fstat,
   fsync, ftruncate, link, lstat, mkdir, mkdtemp, open, read, readFile, readdir,
   readlink, realpath, rename, rm, rmdir, stat, symlink, truncate, unlink,
-  utimes, write, writeFile,
+  utimes, write, writeFile, fchmod, fchown, futimes,
 } from "./async.ts";
 
 // `fs.promises` and `node:fs/promises` are the same object.
 export * as promises from "./promises.ts";
 
 export { ReadStream, WriteStream, createReadStream, createWriteStream } from "./streams.ts";
+export { FSWatcher, StatWatcher, watch, watchFile, unwatchFile } from "./watchers.ts";
+
+import { createReadStream as makeReadStream, createWriteStream as makeWriteStream } from "./streams.ts";
+import { setStreamFactories } from "./promises.ts";
+
+// `FileHandle.createReadStream` calls through this, which `promises.ts` cannot
+// import: `streams.ts` already imports `promises.ts` for the operations it
+// drives.
+setStreamFactories(makeReadStream as never, makeWriteStream as never);
 
 // -------------------------------------------------------------- the bindings
 
@@ -68,6 +77,15 @@ declare function nts_fs_symlink(target: string, at: string, flags: number): numb
 declare function nts_fs_readlink(path: string): string;
 declare function nts_fs_realpath(path: string): string;
 declare function nts_fs_mkdtemp(template: string): string;
+declare function nts_fs_read(
+  fd: number, length: number, position: number,
+): number[];
+declare function nts_fs_write(
+  fd: number, bytes: number[], position: number,
+): number;
+declare function nts_fs_fsync(fd: number): number;
+declare function nts_fs_fdatasync(fd: number): number;
+declare function nts_fs_ftruncate(fd: number, length: number): number;
 declare function nts_errno(): number;
 
 /** Raise whatever the last binding call failed with. */
@@ -82,6 +100,75 @@ function checkErrno(syscall: string, path?: string, dest?: string): void {
   if (code !== 0) {
     throw uvException(-code, syscall, path, dest);
   }
+}
+
+// ------------------------------------------------------------ descriptor I/O
+
+/**
+ * Read into `buffer`, returning how many bytes arrived.
+ *
+ * A short read is not an error and not the end: a pipe, a terminal or a slow
+ * disk may all give back less than was asked for, and a caller that treats
+ * fewer bytes as end-of-file truncates its own input.
+ */
+export function readSync(
+  fd: number,
+  buffer: Buffer,
+  offset = 0,
+  length = buffer.length - offset,
+  position: number | null = null,
+): number {
+  const bytes = nts_fs_read(fd, length, position ?? -1);
+  checkErrno("read");
+  for (let i = 0; i < bytes.length; i++) {
+    buffer[offset + i] = bytes[i] as number;
+  }
+  return bytes.length;
+}
+
+/** Write from `buffer`, returning how many bytes were taken. */
+export function writeSync(
+  fd: number,
+  data: Buffer | string,
+  offsetOrPosition: number | null = null,
+  lengthOrEncoding?: number | string,
+  position: number | null = null,
+): number {
+  // `write(fd, string, position, encoding)` and
+  // `write(fd, buffer, offset, length, position)` are told apart by the type
+  // of the second argument, as node tells them apart.
+  const buffer = typeof data === "string"
+    ? Buffer.from(data, typeof lengthOrEncoding === "string" ? lengthOrEncoding : "utf8")
+    : data;
+  const at = typeof data === "string" ? offsetOrPosition : position;
+  const start = typeof data === "string" ? 0 : (offsetOrPosition ?? 0);
+  const count = typeof data === "string"
+    ? buffer.length
+    : ((lengthOrEncoding as number | undefined) ?? buffer.length - start);
+
+  const slice = Array.from(buffer.subarray(start, start + count)) as number[];
+  const written = nts_fs_write(fd, slice, at ?? -1);
+  check(written, "write");
+  return written;
+}
+
+/** Flush the file's contents *and* its metadata to the storage device. */
+export function fsyncSync(fd: number): void {
+  check(nts_fs_fsync(fd), "fsync");
+}
+
+/**
+ * Flush the contents but not necessarily the metadata.
+ *
+ * Cheaper than `fsync` and enough when the size and times can be recovered or
+ * do not matter -- a database writing into a preallocated file, say.
+ */
+export function fdatasyncSync(fd: number): void {
+  check(nts_fs_fdatasync(fd), "fdatasync");
+}
+
+export function ftruncateSync(fd: number, length = 0): void {
+  check(nts_fs_ftruncate(fd, length), "ftruncate");
 }
 
 // ----------------------------------------------------------------- metadata

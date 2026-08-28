@@ -167,7 +167,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**469 of node's own test files pass** across sixteen modules, of which 15 are hollow.
+**487 of node's own test files pass** across sixteen modules, of which 15 are hollow.
 
 > **The `compiles` column is currently unverified.** The frontend decomposes
 > types under a fixed budget, and **thirteen of the sixteen modules here
@@ -203,7 +203,7 @@ constructs refused`, from `nts hir`.
 | `diagnostics_channel` | 23 / 45 | 0 | 7 / 141 | complete; the failures need node's own publishers |
 | `assert` | 9 / 19 | 0 | 14 / 236 | complete, including `CallTracker` and node's Myers diff |
 | `util` | 7 / 19 | 1 | 23 / 197 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `fs` | 54 / 214 | 2 | ? | sync, callback and promise surfaces plus the file streams; watchers absent |
+| `fs` | 72 / 214 | 2 | ? | sync, callback and promise surfaces, the file streams and the watchers |
 | `stream` | 151 / 195 | 2 | ? | the core is complete; `web`, `iter`, `consumers`, `compose` and `duplexify` are absent |
 
 The first two columns are what
@@ -990,8 +990,17 @@ pending read can be reused by the operating system before that read runs, and
 the read then succeeds against a different file. A destroyed stream waits for
 `kIoDone` before closing.
 
-Absent: `fs.watch` and `fs.watchFile`, which need the loop's file-watching
-handles; `opendir`; `cp`; and `glob`.
+**The two watchers are different tools, not two spellings.** `fs.watch` asks
+the operating system — inotify, FSEvents, `ReadDirectoryChangesW` — which is
+cheap and prompt and not uniform: whether a rename is one event or two, whether
+a filename is reported at all, and whether a directory watch sees into
+subdirectories are platform answers rather than node's. `fs.watchFile` polls
+`stat` and compares, which is uniform and portable and costs a system call per
+file per interval forever. Watchers on one path are shared, so a library and
+its caller watching the same file poll once rather than twice, and polling
+stops when the last listener leaves.
+
+Absent: `opendir`, `cp` and `glob`.
 
 ## `stream`
 

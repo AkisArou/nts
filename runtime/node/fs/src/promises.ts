@@ -18,6 +18,29 @@ import * as callbacks from "./async.ts";
 import type { Dirent, Stats } from "./stats.ts";
 import type { FileOptions } from "./options.ts";
 
+/**
+ * The file streams, filled in by `main.ts`.
+ *
+ * A hole rather than an import: `streams.ts` imports this file for the
+ * operations it drives, so importing it back would be a cycle.
+ */
+let createReadStreamImpl: (path: string | null, options: Record<string, unknown>) => unknown =
+  () => {
+    throw new Error("fs/streams has not been loaded");
+  };
+let createWriteStreamImpl: (path: string | null, options: Record<string, unknown>) => unknown =
+  () => {
+    throw new Error("fs/streams has not been loaded");
+  };
+
+export function setStreamFactories(
+  read: (path: string | null, options: Record<string, unknown>) => unknown,
+  write: (path: string | null, options: Record<string, unknown>) => unknown,
+): void {
+  createReadStreamImpl = read;
+  createWriteStreamImpl = write;
+}
+
 /** A callback-taking function as a promise-returning one. */
 function promisify<A extends unknown[], T>(
   fn: (...args: [...A, (error: unknown, value?: T) => void]) => void,
@@ -112,6 +135,33 @@ export class FileHandle {
     await this.write(buffer, 0, buffer.length, null);
   }
 
+  async chmod(mode: number): Promise<void> {
+    await promisify(callbacks.fchmod)(this.#fd, mode);
+  }
+
+  async chown(uid: number, gid: number): Promise<void> {
+    await promisify(callbacks.fchown)(this.#fd, uid, gid);
+  }
+
+  async utimes(atime: number | Date, mtime: number | Date): Promise<void> {
+    await promisify(callbacks.futimes)(this.#fd, atime, mtime);
+  }
+
+  /**
+   * A stream over this handle, which does *not* own the descriptor.
+   *
+   * `autoClose: false` because the handle owns it: a stream that closed the
+   * descriptor would leave the handle holding a number that now refers to
+   * whatever the operating system next handed out.
+   */
+  createReadStream(options: Record<string, unknown> = {}): unknown {
+    return createReadStreamImpl(null, { ...options, fd: this.#fd, autoClose: false });
+  }
+
+  createWriteStream(options: Record<string, unknown> = {}): unknown {
+    return createWriteStreamImpl(null, { ...options, fd: this.#fd, autoClose: false });
+  }
+
   async stat(): Promise<Stats> {
     return promisify(callbacks.fstat)(this.#fd);
   }
@@ -176,6 +226,8 @@ export const symlink = promisify(callbacks.symlink);
 export const truncate = promisify(callbacks.truncate);
 export const unlink = promisify(callbacks.unlink);
 export const utimes = promisify(callbacks.utimes);
+export const lchmod = promisify(callbacks.chmod);
+export const lchown = promisify(callbacks.chown);
 export const writeFile = promisify(callbacks.writeFile);
 
 // The promise API deliberately has no `exists`. `access` with a `catch` says

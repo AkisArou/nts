@@ -210,3 +210,64 @@ globalThis.nts_fs_fsync_async = (fd, cb) => fs.fsync(fd, relay(cb));
 globalThis.nts_fs_fdatasync_async = (fd, cb) => fs.fdatasync(fd, relay(cb));
 globalThis.nts_fs_mkdtemp_async = (template, cb) =>
   fs.mkdtemp(template.replace(/X{6}$/, ""), relay(cb));
+
+// The synchronous descriptor operations. `read` returns just the bytes it got
+// rather than filling a buffer across the seam: a short read is normal, and
+// the length of what comes back is the answer.
+globalThis.nts_fs_read = (fd, length, position) => {
+  const buffer = Buffer.alloc(length);
+  const read = attempt(
+    () => fs.readSync(fd, buffer, 0, length, position < 0 ? null : position),
+    -1,
+  );
+  return read < 0 ? [] : Array.from(buffer.subarray(0, read));
+};
+
+globalThis.nts_fs_write = (fd, bytes, position) =>
+  attempt(
+    () => fs.writeSync(fd, Buffer.from(bytes), 0, bytes.length, position < 0 ? null : position),
+    -1,
+  );
+
+globalThis.nts_fs_fsync = (fd) => status(() => fs.fsyncSync(fd));
+globalThis.nts_fs_fdatasync = (fd) => status(() => fs.fdatasyncSync(fd));
+globalThis.nts_fs_ftruncate = (fd, length) => status(() => fs.ftruncateSync(fd, length));
+
+globalThis.nts_fs_fchmod_async = (fd, mode, cb) => fs.fchmod(fd, mode, relay(cb));
+globalThis.nts_fs_fchown_async = (fd, uid, gid, cb) => fs.fchown(fd, uid, gid, relay(cb));
+globalThis.nts_fs_futimes_async = (fd, atime, mtime, cb) =>
+  fs.futimes(fd, atime, mtime, relay(cb));
+
+// The watchers. Node's own `fs.watch` and `fs.watchFile` are the loop's
+// file-watching handles here; the handle is a number across the seam because
+// that is what the C side has.
+let nextWatchHandle = 1;
+const watchers = new Map();
+
+globalThis.nts_fs_watch_start = (path, recursive, cb) => {
+  try {
+    const w = fs.watch(path, { recursive }, (event, filename) => cb(event, filename ?? ""));
+    const handle = nextWatchHandle++;
+    watchers.set(handle, w);
+    return handle;
+  } catch (e) {
+    return codeOf(e);
+  }
+};
+globalThis.nts_fs_watch_stop = (handle) => {
+  watchers.get(handle)?.close();
+  watchers.delete(handle);
+};
+
+globalThis.nts_fs_watchfile_start = (path, interval, cb) => {
+  const listener = (current, previous) => cb(statColumns(current), statColumns(previous));
+  const handle = nextWatchHandle++;
+  watchers.set(handle, { path, listener });
+  fs.watchFile(path, { interval }, listener);
+  return handle;
+};
+globalThis.nts_fs_watchfile_stop = (handle) => {
+  const entry = watchers.get(handle);
+  if (entry) fs.unwatchFile(entry.path, entry.listener);
+  watchers.delete(handle);
+};
