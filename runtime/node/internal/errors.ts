@@ -812,6 +812,32 @@ export class ERR_SOCKET_CLOSED extends NodeError {
   }
 }
 
+/** A header changed after the head was already on the wire. */
+export class ERR_HTTP_HEADERS_SENT extends NodeError {
+  override readonly code = "ERR_HTTP_HEADERS_SENT";
+
+  constructor(action: string) {
+    super(`Cannot ${action} headers after they are sent to the client`);
+    this.name = "Error";
+  }
+}
+
+/**
+ * A header name or value containing something a header may not contain.
+ *
+ * The value case is the important one: a newline in a header value is response
+ * splitting, and this is the check that stops a program which echoes user
+ * input into a header from becoming exploitable.
+ */
+export class ERR_INVALID_HTTP_TOKEN extends NodeTypeError {
+  override readonly code = "ERR_INVALID_HTTP_TOKEN";
+
+  constructor(what: string, token: string) {
+    super(`${what} must be a valid HTTP token ["${token}"]`);
+    this.name = "TypeError";
+  }
+}
+
 export class ERR_INVALID_THIS extends NodeTypeError {
   override readonly code = "ERR_INVALID_THIS";
 

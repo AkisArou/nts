@@ -15,8 +15,8 @@
 //     process alive, which is what `unref` means and cannot be expressed by
 //     not arming,
 //   - `install` hands over the drains,
-//   - `runTicks` drains the tick queue between callbacks, which node does
-//     between every timer in a batch and is observable from user code.
+//   - `checkpoint` runs ticks and microtasks between callbacks, which node
+//     does between every timer in a batch and is observable from user code.
 
 import { now as monotonicNanoseconds } from "../../internal/time.ts";
 
@@ -61,15 +61,19 @@ declare function nts_timers_toggle_ref(hasRefs: boolean): void;
 declare function nts_timers_toggle_immediate_ref(hasRefs: boolean): void;
 
 /**
- * Run the tick queue to exhaustion, here, synchronously.
+ * Run a complete checkpoint here: ticks, then microtasks, to a fixpoint.
  *
- * Node does this between every two callbacks in a batch, so a `nextTick`
- * queued by one timer runs before the next timer rather than after all of
- * them. Draining between them is the whole of the difference and it is
- * directly observable, so it is a primitive rather than something to leave
- * out.
+ * Node does this between every two callbacks of one batch, so a `nextTick`
+ * queued by the first timer runs before the second rather than after all of
+ * them. It is the *full* checkpoint and not a tick drain -- measured against
+ * node, three timers at one deadline give
+ * `A -> tick-A -> micro-A -> B -> tick-B -> C`, so the microtasks run there
+ * too.
+ *
+ * A host that supplied `enqueue_microtask` owns checkpointing, and this
+ * declines rather than draining beside it.
  */
-declare function nts_timers_run_ticks(): void;
+declare function nts_checkpoint(): void;
 
 export const install = nts_timers_install;
 export const schedule = nts_timers_schedule;
@@ -77,7 +81,7 @@ export const cancel = nts_timers_cancel;
 export const scheduleImmediate = nts_timers_schedule_immediate;
 export const toggleRef = nts_timers_toggle_ref;
 export const toggleImmediateRef = nts_timers_toggle_immediate_ref;
-export const runTicks = nts_timers_run_ticks;
+export const checkpoint = nts_checkpoint;
 
 const NANOSECONDS_PER_MILLISECOND = 1_000_000n;
 

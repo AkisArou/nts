@@ -79,9 +79,14 @@ globalThis.nts_timers_toggle_immediate_ref = (hasRefs) => {
   else armedImmediate.unref();
 };
 
-// Node's tick queue, drained where node drains its own: between two callbacks
-// of one batch, so that a `nextTick` queued by the first runs before the
-// second rather than after the whole batch.
-globalThis.nts_timers_run_ticks = () => {
+// A complete checkpoint, where node runs its own: between two callbacks of one
+// batch, so a `nextTick` queued by the first runs before the second rather
+// than after the whole batch.
+//
+// `process._tickCallback` gives both halves here. Node drains its microtask
+// queue at the end of each tick callback, so running the tick queue to
+// exhaustion runs the microtasks with it -- which is what the measured
+// ordering `A -> tick-A -> micro-A -> B` requires.
+globalThis.nts_checkpoint = () => {
   process._tickCallback();
 };

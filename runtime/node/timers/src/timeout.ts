@@ -486,7 +486,7 @@ export function processTimers(now: number): void {
       if (list === undefined || list.expiry > now) break;
       // Between lists, not before the first: entering `processTimers` already
       // followed a drain, and draining an empty queue twice is only waste.
-      if (ranAtLeastOneList) host.runTicks();
+      if (ranAtLeastOneList) host.checkpoint();
       else ranAtLeastOneList = true;
       listOnTimeout(list, now);
     }
@@ -543,7 +543,7 @@ function listOnTimeout(list: TimersList, now: number): void {
       return;
     }
 
-    if (ranAtLeastOneTimer) host.runTicks();
+    if (ranAtLeastOneTimer) host.checkpoint();
     else ranAtLeastOneTimer = true;
 
     L.remove(timer);

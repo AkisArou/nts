@@ -182,7 +182,7 @@ export function processImmediate(): void {
     while (immediate !== null) {
       // Between callbacks, not before the first, for the same reason as in the
       // timer batch: getting here already followed a drain.
-      if (ranAtLeastOne) host.runTicks();
+      if (ranAtLeastOne) host.checkpoint();
       else ranAtLeastOne = true;
 
       // A tick that ran just above may have cleared this one. Its `_idleNext`
