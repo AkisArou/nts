@@ -19,9 +19,11 @@ import { uvException } from "../../internal/uv.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 import { Dirent, Stats } from "./stats.ts";
 import * as constants from "./constants.ts";
+import { flagsOf } from "./flags.ts";
 import { getOptions, requireTextEncoding, type FileOptions } from "./options.ts";
 
 export { Stats, Dirent, constants };
+export { flagsOf } from "./flags.ts";
 
 // The callback surface, which shares this module's argument handling and its
 // errors: the work is the same system call and only the route back differs.
@@ -278,36 +280,6 @@ export function appendFileSync(
   requireTextEncoding(settings.encoding, "options.encoding");
   check(nts_fs_write_file_utf8(path, data, flagsOf(settings.flag ?? "a"), settings.mode ?? 0o666),
         "open", path);
-}
-
-/**
- * `stringToFlags`, upstream `lib/internal/fs/utils.js`. The `O_*` values are
- * POSIX's, so the arithmetic is the same everywhere `node:fs` runs.
- */
-export function flagsOf(flags: string | number): number {
-  if (typeof flags === "number") {
-    return flags;
-  }
-  const O_CREAT = 0o100;
-  const O_EXCL = 0o200;
-  const O_TRUNC = 0o1000;
-  const O_APPEND = 0o2000;
-  switch (flags) {
-    case "r": return constants.O_RDONLY;
-    case "rs": case "sr": return constants.O_RDONLY;
-    case "r+": return constants.O_RDWR;
-    case "rs+": case "sr+": return constants.O_RDWR;
-    case "w": return O_TRUNC | O_CREAT | constants.O_WRONLY;
-    case "wx": case "xw": return O_TRUNC | O_CREAT | constants.O_WRONLY | O_EXCL;
-    case "w+": return O_TRUNC | O_CREAT | constants.O_RDWR;
-    case "wx+": case "xw+": return O_TRUNC | O_CREAT | constants.O_RDWR | O_EXCL;
-    case "a": return O_APPEND | O_CREAT | constants.O_WRONLY;
-    case "ax": case "xa": return O_APPEND | O_CREAT | constants.O_WRONLY | O_EXCL;
-    case "a+": return O_APPEND | O_CREAT | constants.O_RDWR;
-    case "ax+": case "xa+": return O_APPEND | O_CREAT | constants.O_RDWR | O_EXCL;
-    default:
-      throw new ERR_INVALID_ARG_TYPE("flags", "string", flags);
-  }
 }
 
 // ------------------------------------------------------------- descriptors

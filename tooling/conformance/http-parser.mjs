@@ -15,6 +15,14 @@
 // third was a sabotage that turned out to be a no-op -- it disabled the branch
 // whose contents it was editing -- which is its own reminder that a sabotage
 // has to be checked as carefully as the code it is testing.
+//
+// It was then checked against *absence* rather than only against breakage,
+// which is a different and stronger question: not "does this notice when the
+// code is wrong" but "does it notice when the code is not there". A parser
+// whose `execute` returns the length and does nothing else leaves 3 of 26
+// passing; one that never reports a body, 21; one that never reports a
+// completed message, 19; one that never reports headers, 18. A suite that a
+// no-op implementation can satisfy is measuring the harness.
 
 
 const { HTTPParser, REQUEST, RESPONSE } = await import(

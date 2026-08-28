@@ -19,7 +19,7 @@ import { finished } from "../../stream/src/main.ts";
 import { validateString } from "../../internal/validators.ts";
 import { ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
 import * as callbacks from "./async.ts";
-import { flagsOf } from "./main.ts";
+import { flagsOf } from "./flags.ts";
 
 /** Emitted internally when an outstanding read or write has reported. */
 const kIoDone = Symbol("kIoDone");

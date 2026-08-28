@@ -21,7 +21,7 @@ import { uvException } from "../../internal/uv.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 import { Dirent, Stats } from "./stats.ts";
 import { getOptions, type FileOptions } from "./options.ts";
-import { flagsOf } from "./main.ts";
+import { flagsOf } from "./flags.ts";
 
 declare function nts_fs_open_async(
   path: string, flags: number, mode: number, callback: (errno: number, fd: number) => void,
