@@ -1693,7 +1693,9 @@ impl<'a> FuncBuilder<'a> {
         let [target, member] = parts.as_slice() else {
             return None;
         };
-        (*target == id).then(|| self.node(*member).text.clone()).flatten()
+        (*target == id)
+            .then(|| self.node(*member).text.clone())
+            .flatten()
     }
 
     /// The nearest ancestor of a given kind.
@@ -4040,7 +4042,11 @@ impl<'a> FuncBuilder<'a> {
         let message = match arguments.first() {
             Some(argument) => self.lower_expression(*argument)?,
             // `new Error()` has an empty message, not an absent one.
-            None => self.push(OpKind::ConstString(String::new()), text.clone(), origin.clone()),
+            None => self.push(
+                OpKind::ConstString(String::new()),
+                text.clone(),
+                origin.clone(),
+            ),
         };
         let name = self.push(
             OpKind::ConstString(provided.to_owned()),
@@ -4914,6 +4920,45 @@ impl<'a> FuncBuilder<'a> {
     /// spelling would pick the wrong overload silently. Refusing is the honest
     /// answer, and the diagnostic says what is missing rather than what is
     /// unsupported.
+    /// `c.advance()` — a call whose receiver is the thing before the dot.
+    ///
+    /// Which method runs depends on what the receiver *is*: a string's methods
+    /// are the runtime's, an array's are the runtime's with the element type
+    /// deciding which, and an object's are the program's own.
+    fn lower_method_call(
+        &mut self,
+        id: NodeId,
+        callee_node: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let parts = self.children(callee_node);
+        let [receiver_node, member] = parts.as_slice() else {
+            return Err(self.unsupported(callee_node, "a method call of unexpected shape"));
+        };
+        let receiver = self.lower_expression(*receiver_node)?;
+
+        // A string's methods are the runtime's, not the program's: there is
+        // no `String` class here to resolve a call against.
+        if matches!(
+            self.values[receiver.0 as usize].ty,
+            HirType::Managed(ManagedType::String)
+        ) {
+            return self.lower_string_method(id, receiver, *member, arguments);
+        }
+        if let HirType::Managed(ManagedType::Array(element)) =
+            self.values[receiver.0 as usize].ty.clone()
+        {
+            return self.lower_array_method(id, receiver, &element, *member, arguments);
+        }
+
+        let HirType::Managed(ManagedType::Object(type_id)) =
+            self.values[receiver.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(id, "a method call on something without methods"));
+        };
+        self.lower_object_method(id, receiver, type_id, *member, arguments)
+    }
+
     fn lower_call(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let Some(target) = self.snapshot.call_targets.get(&id) else {
             return Err(Diagnostic::error(
@@ -4981,32 +5026,7 @@ impl<'a> FuncBuilder<'a> {
         // `c.advance()` — a method call. The receiver becomes the first
         // argument, which is what a method is once it is explicit.
         if self.kind_of(callee_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
-            let parts = self.children(callee_node);
-            let [receiver_node, member] = parts.as_slice() else {
-                return Err(self.unsupported(callee_node, "a method call of unexpected shape"));
-            };
-            let receiver = self.lower_expression(*receiver_node)?;
-
-            // A string's methods are the runtime's, not the program's: there is
-            // no `String` class here to resolve a call against.
-            if matches!(
-                self.values[receiver.0 as usize].ty,
-                HirType::Managed(ManagedType::String)
-            ) {
-                return self.lower_string_method(id, receiver, *member, &arguments);
-            }
-            if let HirType::Managed(ManagedType::Array(element)) =
-                self.values[receiver.0 as usize].ty.clone()
-            {
-                return self.lower_array_method(id, receiver, &element, *member, &arguments);
-            }
-
-            let HirType::Managed(ManagedType::Object(type_id)) =
-                self.values[receiver.0 as usize].ty.clone()
-            else {
-                return Err(self.unsupported(id, "a method call on something without methods"));
-            };
-            return self.lower_object_method(id, receiver, type_id, *member, &arguments);
+            return self.lower_method_call(id, callee_node, &arguments);
         }
 
         // `f(x)` where `f` is a parameter, a local, or `pick(1)(x)` where it is
@@ -5044,6 +5064,26 @@ impl<'a> FuncBuilder<'a> {
         let defined = target
             .callee
             .is_some_and(|declaration| self.has_a_body(declaration));
+
+        // A callee with no declaration in the compiled set at all. A `declare
+        // function` the *program* wrote is an FFI import and stays external --
+        // the linker or the platform supplies it, which is the whole point of
+        // writing one. A name declared only by `lib.d.ts` is not that: it is a
+        // builtin this compiler has not implemented, and emitting a call to it
+        // produced a prototype, a link error, and no diagnostic at all.
+        //
+        // `isNaN(x)` compiled to `call.extern isNaN` and failed at link time
+        // with no source location. It was my own regression from making
+        // `declare function` external, and the two are told apart by whether
+        // the checker resolved the call to a declaration node: the decoded file
+        // set is the program's own sources, so a `lib.d.ts` declaration has
+        // none.
+        if target.callee.is_none() {
+            return Err(self.unsupported(
+                id,
+                &format!("`{name}`, a builtin this compiler does not provide"),
+            ));
+        }
         let callee = if defined {
             Callee::Direct(name)
         } else {
@@ -5394,7 +5434,10 @@ impl<'a> FuncBuilder<'a> {
         // for exactly this reason, having been caught by a benchmark that
         // returned -512 for 4864. This is the same rule from the other side:
         // an array that arrived narrow does not reach one.
-        if !matches!(element, HirType::Float { bits: 64 } | HirType::Managed(_) | HirType::Bool) {
+        if !matches!(
+            element,
+            HirType::Float { bits: 64 } | HirType::Managed(_) | HirType::Bool
+        ) {
             return Err(self.unsupported(id, &format!("`{name}` on a typed array")));
         }
 

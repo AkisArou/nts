@@ -251,7 +251,6 @@ work queue either — which is how each of these survived.
 
 | defect | what happens | found by |
 | --- | --- | --- |
-| `isNaN`, `parseInt`, and other `lib.d.ts` builtins | lowered as *FFI imports*, so a prototype is emitted and the program fails at link time instead of being refused. A regression from making `declare function` external — an ambient declaration in the user's own source is an import, but one in `lib.d.ts` is a builtin this compiler has not implemented, and the two are not distinguished yet. | this cross-check |
 | an object-literal method | `export const bag = { f() {…} }` produces no HIR and no diagnostic — "0 functions, nothing refused". `collect_module_scope` finds a module-scope name by looking for an `IDENTIFIER` child, and a binding pattern has none, so the symbol is neither registered nor refused. | the Node session |
 | a `namespace` | the declaration is silently skipped; only a *use* of it is refused. Same cause as the row above. | this cross-check |
 | `readonly` assigned in a constructor | refused, though TypeScript permits it | the Node session |
@@ -261,6 +260,15 @@ Three more were found the same way and are **fixed**: bare `async` returning
 arithmetic; and default and rest parameters lowering as ordinary ones, which
 emitted a call with the wrong number of arguments. Defaults have since been
 implemented rather than merely refused; a rest parameter is still refused.
+
+`isNaN`, `parseInt` and the rest of `lib.d.ts` are fixed too, and the fix is one
+line because the distinction was already in the snapshot. A `declare function`
+the *program* wrote is an FFI import and stays external — the linker supplies
+it, which is the point of writing one. A name declared only by `lib.d.ts` is a
+builtin this compiler has not implemented, and it was emitting a prototype, a
+link error and no diagnostic. The checker resolves a call to a declaration node
+only when that node is in the decoded file set, which is the program's own
+sources: so `target.callee` being absent *is* the test.
 
 A fourth, found by the Node session: a class extending a type this compiler
 cannot represent was laid out as though the inherited members were its own
