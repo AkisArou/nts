@@ -469,6 +469,39 @@ static inline uint32_t nts_to_uint32(double x) {
     return (uint32_t)m;
 }
 
+/* What a typed array stores. `u8[i] = v` is not a cast: ECMAScript truncates
+ * toward zero and takes the result modulo the width, sending every non-finite
+ * value to zero, so `u8[i] = 300` stores 44, `u8[i] = 1.7` stores 1, and
+ * `u8[i] = NaN` stores 0. C's `(uint8_t)someDouble` is *undefined behaviour*
+ * for all three, which is why the compiler emits a named conversion rather
+ * than letting the backend cast.
+ *
+ * Each is ToUint32 and then a truncation, which is the same value: 2^32 is a
+ * multiple of 2^8 and of 2^16, so reducing modulo the larger first changes
+ * nothing. That reuses the fast path above -- one comparison and a hardware
+ * conversion for a value already in range -- instead of a second `fmod`.
+ *
+ * The signed forms subtract rather than casting a too-large unsigned value,
+ * whose result is implementation-defined before C23. The subtraction lands in
+ * range, so the cast that follows it is not. */
+static inline uint8_t nts_to_uint8(double x) {
+    return (uint8_t)nts_to_uint32(x);
+}
+
+static inline int8_t nts_to_int8(double x) {
+    const uint8_t u = (uint8_t)nts_to_uint32(x);
+    return u < 128u ? (int8_t)u : (int8_t)((int)u - 256);
+}
+
+static inline uint16_t nts_to_uint16(double x) {
+    return (uint16_t)nts_to_uint32(x);
+}
+
+static inline int16_t nts_to_int16(double x) {
+    const uint16_t u = (uint16_t)nts_to_uint32(x);
+    return u < 32768u ? (int16_t)u : (int16_t)((int)u - 65536);
+}
+
 /* JavaScript `<<`: the count masks to five bits, and shifting a negative value
  * left is defined rather than undefined. */
 static inline int32_t nts_shl(int32_t a, int32_t b) {
