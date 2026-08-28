@@ -143,7 +143,7 @@ diagnostic.
 | `declare function` (FFI) | done | lowered as external and declared in the emitted C |
 | overload signatures | done | skipped; the implementation is lowered |
 | nested function declarations | **not done** | |
-| default parameters | **not done** | needs the initializer evaluated at every call that omits it |
+| default parameters | done | filled in at the calls that omit it, which is where JavaScript evaluates it — so no test in the callee and no cost at run time. Refused when the default reads another parameter, which the call site cannot evaluate |
 | rest parameters | **not done** | needs an array built at the call |
 | generators (`function*`, `yield`) | **not done** | |
 | `new.target`, `arguments` | **not done** | |
@@ -257,7 +257,18 @@ work queue either — which is how each of these survived.
 Three more were found the same way and are **fixed**: bare `async` returning
 `void` and discarding the value; `s += t` on strings lowering to pointer
 arithmetic; and default and rest parameters lowering as ordinary ones, which
-emitted a call with the wrong number of arguments.
+emitted a call with the wrong number of arguments. Defaults have since been
+implemented rather than merely refused; a rest parameter is still refused.
+
+A fourth, found by the Node session: a class extending a type this compiler
+cannot represent was laid out as though the inherited members were its own
+fields. `class Bytes extends Uint8Array {}` became five `int32_t` and no bytes.
+Every base in the chain is now required to be a type laid out here.
+
+The verifier now also checks that a direct call passes as many arguments as the
+function it names takes. It found nothing when it was added, which is the point:
+default parameters are filled in at five different call paths, and a missed one
+would otherwise have been silent.
 
 ## What to do next
 
@@ -267,17 +278,24 @@ In order, with the reason rather than the ranking:
    another. Both gate `som`'s collections, which gate the five Are We Fast Yet
    macro benchmarks, which are the only real programs in reach. Everything below
    is easier to judge against a program bigger than thirty lines.
-2. **The known defects above** — each is a case where this compiler says yes and
+2. **Typed arrays** — `Uint8Array` and the rest. Three reasons at once: they are
+   what `Buffer` is, so they block the Node profile's largest module; they are
+   the *declared* form of the element width `hir::elements` already infers, so
+   the machinery exists; and a byte array is the one storage a `number[]` cannot
+   express at all.
+3. **The known defects above** — each is a case where this compiler says yes and
    means no, which is worse than any absent feature.
-4. **`Map` and `Set`** — no real program does without them.
-5. **Template literals and destructuring** — the two most common things in modern
+4. **Enums** — four corpus files, and a `const enum` is a table of constants,
+   which this compiler already has everywhere else.
+5. **`Map` and `Set`** — no real program does without them.
+6. **Template literals and destructuring** — the two most common things in modern
    TypeScript that this compiler cannot read at all.
-6. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
+7. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
    for promises rather than an alternative to them.
-7. **Tagged unions** — `number | undefined` and unions of unrelated objects.
+8. **Tagged unions** — `number | undefined` and unions of unrelated objects.
    RFC-level: it changes the representation of every value that can reach the
    slot.
-8. **Promises and `async`/`await`**, on top of 6.
+9. **Promises and `async`/`await`**, on top of 7.
 
 Getters and `readonly`-in-a-constructor are small and can be taken whenever
 convenient; both are known defects rather than absent features.

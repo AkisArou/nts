@@ -38,3 +38,17 @@ export function hasForIn(xs: number[]): number {
 export function hasTemplateLiteral(n: number): string {
   return `value ${n}`;
 }
+
+// A default is filled in at the call, which is where JavaScript evaluates it.
+// This one reads `a`, which at the call site is the caller's argument
+// expression rather than the callee's binding -- so filling it would evaluate
+// `a` twice, and twice is a different program whenever it has an effect.
+export function hasADefaultReadingAParameter(a: number, b: number = a * 2): number {
+  return a + b;
+}
+
+// Declares a field and assigns it, which is a class feature wearing a
+// parameter's syntax. Counted as a default until the two were told apart.
+export class HasAParameterProperty {
+  constructor(private readonly seed: number) {}
+}

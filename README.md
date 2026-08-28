@@ -82,7 +82,6 @@ What is stopping the rest, in order:
 
 | refused | files |
 | --- | ---: |
-| a parameter with a default | 7 |
 | `MyEnum`, an enum | 4 |
 | `console`, a global this compiler does not provide | 4 |
 | a module-scope variable whose initializer is not constant | 4 |
@@ -93,7 +92,8 @@ What is stopping the rest, in order:
 | a parameter of unrepresentable type (any) | 3 |
 | `x`, a name from an enclosing scope | 2 |
 | a class of unrepresentable type (a structured type (flags 0x100000)) | 2 |
-| a parameter of unrepresentable type (unknown) | 2 |
+| a parameter of unrepresentable type (a union of a structured type (flags 0x100000) | null | number | undefined) | 2 |
+| a parameter of unrepresentable type (a union of a structured type (flags 0x100000) | null | number) | 2 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->

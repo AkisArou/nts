@@ -14,8 +14,8 @@
 
 use nts_diagnostics::{Diagnostic, Location};
 use nts_semantic_schema::{
-    LiteralValue, NodeData, NodeId, NodeKind, Origin, SemanticSnapshot, SymbolFlags, SymbolId,
-    TypeId, TypeKind, syntax,
+    DeclarationModifiers, LiteralValue, NodeData, NodeId, NodeKind, Origin, SemanticSnapshot,
+    SymbolFlags, SymbolId, TypeId, TypeKind, syntax,
 };
 
 use super::facts::Facts;
@@ -2091,6 +2091,124 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// A parameter's default, as the expression node that produces it.
+    ///
+    /// The grammar puts it last -- `modifiers name ? : type = initializer` --
+    /// so the last child is the initializer whenever it is not the name, the
+    /// type annotation, or the `?`. A modifier cannot be last and neither can
+    /// the `...` of a rest, which is what makes reading the end precise rather
+    /// than a guess at which child is which.
+    fn default_of(&self, param: NodeId) -> Option<NodeId> {
+        let children = self.children(param);
+        let last = *children.last()?;
+        let name = *children
+            .iter()
+            .find(|child| self.kind_of(**child) == Some(syntax::IDENTIFIER))?;
+        (last != name
+            && !syntax::is_type_node(self.kind_of(last).unwrap_or(0))
+            && self.kind_of(last) != Some(syntax::QUESTION_TOKEN))
+        .then_some(last)
+    }
+
+    /// Whether an expression reads one of the parameters `declaration` declares.
+    ///
+    /// `f(a: number, b: number = a * 2)` is legal and this compiler cannot fill
+    /// it: the default is lowered at the *call*, where `a` is the caller's
+    /// argument expression rather than the callee's binding, and evaluating it
+    /// twice is a different program whenever it has an effect. Naming the
+    /// parameter it reads is worth more than saying it is complicated.
+    fn reads_a_parameter(&self, expr: NodeId, declaration: NodeId) -> Option<String> {
+        let params: rustc_hash::FxHashSet<u32> = self
+            .children(declaration)
+            .into_iter()
+            .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+            .filter_map(|param| {
+                self.children(param)
+                    .into_iter()
+                    .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+            })
+            .filter_map(|name| self.node(name).symbol)
+            .map(|symbol| symbol.0)
+            .collect();
+        let mut stack = vec![expr];
+        while let Some(at) = stack.pop() {
+            if self.kind_of(at) == Some(syntax::IDENTIFIER)
+                && self
+                    .node(at)
+                    .symbol
+                    .is_some_and(|symbol| params.contains(&symbol.0))
+            {
+                return self.node(at).text.clone();
+            }
+            stack.extend(self.children(at));
+        }
+        None
+    }
+
+    /// The arguments a call passes, with the defaults it leaves to the callee.
+    ///
+    /// JavaScript evaluates a default at the call, in the callee's scope, after
+    /// every argument that *was* provided. Lowering it here, in that order, is
+    /// the same program — and it costs nothing at run time, because the value
+    /// arrives as an ordinary argument rather than as a test the callee makes
+    /// on every call.
+    ///
+    /// Which parameters were omitted is read from the callee's declaration,
+    /// which the checker resolved: `call_targets` answers for a method and a
+    /// constructor as well as a plain function, so one helper covers every path
+    /// that builds an argument list.
+    fn lower_arguments(
+        &mut self,
+        call: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<Vec<ValueId>, Diagnostic> {
+        let mut args = Vec::new();
+        for argument in arguments {
+            args.push(self.lower_expression(*argument)?);
+        }
+        for default in self.defaults_after(call, arguments.len())? {
+            args.push(self.lower_expression(default)?);
+        }
+        Ok(args)
+    }
+
+    /// The default expressions for the parameters a call did not supply.
+    ///
+    /// Refuses the same default `lower_param` refuses, in the same words. The
+    /// declaration is not always lowered before the call -- and when it is, the
+    /// call would otherwise fail here on the *parameter name*, reporting `a` as
+    /// a name from an enclosing scope, which is true of the expression as this
+    /// site sees it and says nothing about the cause.
+    fn defaults_after(&self, call: NodeId, provided: usize) -> Result<Vec<NodeId>, Diagnostic> {
+        let Some(callee) = self
+            .snapshot
+            .call_targets
+            .get(&call)
+            .and_then(|target| target.callee)
+        else {
+            return Ok(Vec::new());
+        };
+        let mut defaults = Vec::new();
+        for param in self
+            .children(callee)
+            .into_iter()
+            .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+            .skip(provided)
+        {
+            let Some(default) = self.default_of(param) else {
+                continue;
+            };
+            if let Some(read) = self.reads_a_parameter(default, callee) {
+                return Err(self.unsupported(
+                    call,
+                    &format!("a parameter default that reads `{read}`, another parameter"),
+                ));
+            }
+            defaults.push(default);
+        }
+        Ok(defaults)
+    }
+
     fn lower_param(&mut self, id: NodeId, index: u32) -> Result<Param, Diagnostic> {
         let children = self.children(id);
         let name_node = children
@@ -2115,12 +2233,36 @@ impl<'a> FuncBuilder<'a> {
         {
             return Err(self.unsupported(id, "a rest parameter"));
         }
-        if children.iter().any(|child| {
-            *child != name_node
-                && !syntax::is_type_node(self.kind_of(*child).unwrap_or(0))
-                && self.kind_of(*child) != Some(syntax::QUESTION_TOKEN)
-        }) {
-            return Err(self.unsupported(id, "a parameter with a default"));
+        // `constructor(private x: number)` declares a field and assigns it, and
+        // is not a default at all. It was counted as one until the two were
+        // told apart, which is the same mistake in miniature: one message over
+        // two features ranks neither.
+        let modifiers = self.node(id).modifiers;
+        for (flag, spelling) in [
+            (DeclarationModifiers::PRIVATE, "private"),
+            (DeclarationModifiers::PROTECTED, "protected"),
+            (DeclarationModifiers::PUBLIC, "public"),
+            (DeclarationModifiers::READONLY, "readonly"),
+        ] {
+            if modifiers.contains(flag) {
+                return Err(self.unsupported(
+                    id,
+                    &format!("a `{spelling}` parameter property, which declares a field"),
+                ));
+            }
+        }
+        // A default is supplied by the calls that omit it, which is where
+        // JavaScript evaluates it. What that cannot reach is the callee's own
+        // scope, so a default that reads another parameter is refused here
+        // rather than mis-lowered there.
+        if let Some(default) = self.default_of(id)
+            && let Some(parent) = self.node(id).parent
+            && let Some(read) = self.reads_a_parameter(default, parent)
+        {
+            return Err(self.unsupported(
+                id,
+                &format!("a parameter default that reads `{read}`, another parameter"),
+            ));
         }
 
         let name = self
@@ -4072,9 +4214,7 @@ impl<'a> FuncBuilder<'a> {
             .unwrap_or(class);
 
         let mut args = vec![object];
-        for argument in &arguments {
-            args.push(self.lower_expression(*argument)?);
-        }
+        args.extend(self.lower_arguments(id, &arguments)?);
         self.push(
             OpKind::Call {
                 callee: Callee::Direct(format!("{owner}#constructor")),
@@ -4605,10 +4745,7 @@ impl<'a> FuncBuilder<'a> {
             Callee::External(name)
         };
 
-        let mut args = Vec::new();
-        for argument in &arguments {
-            args.push(self.lower_expression(*argument)?);
-        }
+        let args = self.lower_arguments(id, &arguments)?;
 
         let ty = self
             .type_of(id)
@@ -4654,10 +4791,7 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|child| self.node(child).text.clone())
             .ok_or_else(|| self.unsupported(member, "a static method with a computed name"))?;
 
-        let mut args = Vec::new();
-        for argument in arguments {
-            args.push(self.lower_expression(*argument)?);
-        }
+        let args = self.lower_arguments(id, arguments)?;
         let ty = self
             .type_of(id)
             .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
@@ -4715,9 +4849,7 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = vec![receiver];
-        for argument in arguments {
-            args.push(self.lower_expression(*argument)?);
-        }
+        args.extend(self.lower_arguments(id, arguments)?);
         let ty = self
             .type_of(id)
             .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
@@ -5207,9 +5339,7 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = vec![receiver];
-        for argument in arguments {
-            args.push(self.lower_expression(*argument)?);
-        }
+        args.extend(self.lower_arguments(id, arguments)?);
         let ty = self
             .type_of(id)
             .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
@@ -5266,9 +5396,7 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = vec![receiver];
-        for argument in arguments {
-            args.push(self.lower_expression(*argument)?);
-        }
+        args.extend(self.lower_arguments(id, arguments)?);
         let origin = self.origin(id);
         // A `super(...)` produces nothing; `super.m()` produces whatever `m`
         // does, and the checker typed the call node accordingly.
