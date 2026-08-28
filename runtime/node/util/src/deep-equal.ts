@@ -32,10 +32,26 @@ interface Context {
    * detail -- comparing a `Buffer` with the `Uint8Array` it wraps, say.
    */
   skipPrototype: boolean;
+  /**
+   * Which relation is running.
+   *
+   * The helpers below -- matching a `Set`'s members, matching a `Map`'s
+   * entries -- are the same work for both, and were written twice before this.
+   * The second copy matched object members by identity where the first matched
+   * them structurally, so `assert.deepEqual` reported two sets of equal errors
+   * as different. One flag is cheaper than two walks that have to be kept in
+   * step by hand.
+   */
+  loose: boolean;
+}
+
+/** The comparison this context is for. */
+function compare(a: unknown, b: unknown, ctx: Context): boolean {
+  return ctx.loose ? looseEqual(a, b, ctx) : equal(a, b, ctx);
 }
 
 export function isDeepStrictEqual(a: unknown, b: unknown, skipPrototype = false): boolean {
-  return equal(a, b, { seen: new Map(), skipPrototype: Boolean(skipPrototype) });
+  return equal(a, b, { seen: new Map(), skipPrototype: Boolean(skipPrototype), loose: false });
 }
 
 function equal(a: unknown, b: unknown, ctx: Context): boolean {
@@ -69,6 +85,20 @@ function equal(a: unknown, b: unknown, ctx: Context): boolean {
 }
 
 function compareByKind(a: object, b: object, ctx: Context): boolean {
+  // Before every other kind, because these are the ones with nothing to
+  // compare. A `WeakMap` will not say what it holds, a `Promise` has not
+  // necessarily settled, and neither has own enumerable properties -- so the
+  // key walk at the bottom of this function finds two empty objects and calls
+  // them equal. Identity was ruled out by the caller, so the answer is no.
+  //
+  // This is the shape of mistake that survives a test suite: the fall-through
+  // gives a well-formed answer, and it is the *right* answer for a `WeakRef`
+  // (node agrees two distinct ones are deep-equal, for exactly this reason)
+  // and the wrong one here. Nothing at the point of the fall-through
+  // distinguishes them.
+  if (isWeakMap(a) || isWeakSet(a) || isPromise(a)) {
+    return false;
+  }
   if (isDate(a)) {
     return isDate(b) && Object.is(a.getTime(), (b as Date).getTime());
   }
@@ -197,7 +227,10 @@ function mapsEqual(a: Map<unknown, unknown>, b: Map<unknown, unknown>, ctx: Cont
     if (!b.has(key)) {
       return false;
     }
-    if (!equal(value, b.get(key), ctx)) {
+    // Through `compare`, not `equal`: this helper serves both relations, and
+    // comparing a loose walk's map values strictly is the same duplication
+    // bug one level down.
+    if (!compare(value, b.get(key), ctx)) {
       return false;
     }
   }
@@ -255,9 +288,9 @@ function matchPairs(
     for (let j = 0; j < right.length; j++) {
       if (used[j]) continue;
       const [otherKey, otherValue] = right[j]!;
-      if (!equal(key, otherKey, ctx)) continue;
+      if (!compare(key, otherKey, ctx)) continue;
       if (value !== undefined || otherValue !== undefined) {
-        if (!equal(value, otherValue, ctx)) continue;
+        if (!compare(value, otherValue, ctx)) continue;
       }
       used[j] = true;
       if (place(i + 1)) {
@@ -284,7 +317,7 @@ function matchPairs(
  * `deepStrictEqual`, and deprecated in node's documentation for the reason
  * that `'1' == 1`.
  */
-function looseEqual(a: unknown, b: unknown, seen: Map<object, Set<object>>): boolean {
+function looseEqual(a: unknown, b: unknown, ctx: Context): boolean {
   if (a === b) {
     return true;
   }
@@ -303,11 +336,20 @@ function looseEqual(a: unknown, b: unknown, seen: Map<object, Set<object>>): boo
     }
     return false;
   }
-  const known = seen.get(a);
+  const known = ctx.seen.get(a);
   if (known?.has(b)) {
     return true;
   }
-  seen.set(a, (known ?? new Set()).add(b));
+  ctx.seen.set(a, (known ?? new Set()).add(b));
+
+  // Nothing to compare, and identity was ruled out above. The same hole as in
+  // the strict walk, and it had to be closed twice because the two walks were
+  // written separately -- which is the argument for the single dispatch node
+  // has.
+  if (isWeakMap(a) || isWeakSet(a) || isPromise(a) ||
+      isWeakMap(b) || isWeakSet(b) || isPromise(b)) {
+    return false;
+  }
 
   // A `Date` with no own keys and `{}` both have zero enumerable properties,
   // so the key walk below would call them equal. Every kind whose *identity*
@@ -350,25 +392,45 @@ function looseEqual(a: unknown, b: unknown, seen: Map<object, Set<object>>): boo
       if (x[i] !== y[i]) return false;
     }
   }
+  // A boxed primitive has own index properties, so the key walk below matches
+  // `new String('a')` against `{ 0: 'a' }`. What it wraps is what it is.
+  if (isBoxedPrimitive(a) || isBoxedPrimitive(b)) {
+    if (!isBoxedPrimitive(a) || !isBoxedPrimitive(b)) {
+      return false;
+    }
+    try {
+      if (!Object.is(
+        (a as { valueOf(): unknown }).valueOf(),
+        (b as { valueOf(): unknown }).valueOf(),
+      )) {
+        return false;
+      }
+    } catch {
+      // `String.prototype.valueOf` throws on anything that is not a boxed
+      // string, and a comparison must answer rather than raise.
+      return false;
+    }
+  }
   if (Array.isArray(a) !== Array.isArray(b)) {
     return false;
   }
-  if (isMap(a)) {
-    for (const [key, value] of a as Map<unknown, unknown>) {
-      if (!(b as Map<unknown, unknown>).has(key)) {
-        return false;
-      }
-      if (!looseEqual(value, (b as Map<unknown, unknown>).get(key), seen)) {
-        return false;
-      }
+  if (Array.isArray(a)) {
+    if (a.length !== (b as unknown[]).length) {
+      return false;
+    }
+    if (!looseArrayElementsEqual(a, b as unknown[], ctx)) {
+      return false;
     }
   }
-  if (isSet(a)) {
-    for (const value of a as Set<unknown>) {
-      if (!(b as Set<unknown>).has(value)) {
-        return false;
-      }
-    }
+  // The same matching the strict walk uses. `has` and `get` find a member by
+  // identity, and two structurally equal objects are not the same object -- so
+  // a set of errors compared against an equal set of errors reported as
+  // different, for every member that was not a primitive.
+  if (isMap(a) && !mapsEqual(a as Map<unknown, unknown>, b as Map<unknown, unknown>, ctx)) {
+    return false;
+  }
+  if (isSet(a) && !setsEqual(a as Set<unknown>, b as Set<unknown>, ctx)) {
+    return false;
   }
 
   const aKeys = Object.keys(a);
@@ -380,7 +442,48 @@ function looseEqual(a: unknown, b: unknown, seen: Map<object, Set<object>>): boo
     if (!Object.prototype.hasOwnProperty.call(b, key)) {
       return false;
     }
-    if (!looseEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], seen)) {
+    // Index keys were compared above, with the rule the array path has.
+    if (Array.isArray(a) && indexKey.test(key)) {
+      continue;
+    }
+    if (!looseEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], ctx)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Array elements, under `deepEqual`'s rule rather than the key walk's.
+ *
+ * The rule is not symmetric and that is node's, not a slip here:
+ * `deepEqual([0], [null])` holds and `deepEqual([null], [0])` does not. A
+ * `null` on the *expected* side matches an element that is anything, because a
+ * hole reads as `undefined` and loose comparison has always treated the two as
+ * interchangeable -- so a caller writing `[null]` for "a two-element array
+ * whose second element I do not care about" has always worked. It applies to
+ * array elements only; `{ a: 0 }` and `{ a: null }` are not loosely deep-equal.
+ */
+function looseArrayElementsEqual(a: unknown[], b: unknown[], ctx: Context): boolean {
+  for (let i = 0; i < a.length; i++) {
+    if (b[i] === undefined) {
+      if (!Object.prototype.hasOwnProperty.call(b, i)) {
+        // A hole on the expected side, which matches a hole or `undefined`.
+        if (Object.prototype.hasOwnProperty.call(a, i) && a[i] !== undefined && a[i] !== null) {
+          return false;
+        }
+        continue;
+      }
+      if (
+        (a[i] !== undefined || !Object.prototype.hasOwnProperty.call(a, i)) &&
+        a[i] !== null
+      ) {
+        return false;
+      }
+    } else if (
+      (a[i] === undefined || !looseEqual(a[i], b[i], ctx)) &&
+      b[i] !== null
+    ) {
       return false;
     }
   }
@@ -392,7 +495,7 @@ function looseEqual(a: unknown, b: unknown, seen: Map<object, Set<object>>): boo
  * prototype check.
  */
 export function isDeepEqual(a: unknown, b: unknown): boolean {
-  return looseEqual(a, b, new Map());
+  return looseEqual(a, b, { seen: new Map(), skipPrototype: true, loose: true });
 }
 
 /**

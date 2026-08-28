@@ -379,9 +379,11 @@ comparisons, `inherits`, `deprecate`, `debuglog`, `promisify`, `callbackify`,
 `inspect` output character for character, so a single spacing difference fails
 a file that is otherwise entirely correct. The measures that say more:
 
-- **`isDeepStrictEqual` agrees with node on 30,000 random structures** —
-  primitives by `Object.is`, prototypes, symbol keys, `Map`/`Set` matched
-  without regard to order, cycles.
+- **All three comparisons agree with node on 480,000 random structures** —
+  `node tooling/conformance/fuzz-deep-equal.mjs [cases] [seed]`, over eight
+  seeds. The generator makes pairs that are usually equal and sometimes differ
+  in one place, because two random structures are almost never equal and a
+  fuzzer that answers `false` on both sides proves nothing.
 - **`format` matches on every specifier** — `%s %d %i %f %j %o %O %c %%`,
   including `-0`, bigints, `numericSeparator`, and deferring to a custom
   `toString`.
@@ -477,6 +479,29 @@ that were wrong in the obvious implementation:
   array with a length in the hundreds of millions. Materialising it took
   fourteen seconds and gave the wrong answer; walking `Object.keys` is instant
   and right.
+- **`deepEqual` on arrays is not symmetric.** `deepEqual([0], [null])` holds
+  and `deepEqual([null], [0])` does not: a `null` on the expected side matches
+  an element that is anything, because a hole reads as `undefined` and loose
+  comparison has always treated the two as interchangeable. It is node's rule,
+  it applies to array elements only, and `{ a: 0 }` and `{ a: null }` are not
+  loosely deep-equal.
+
+**One algorithm, and it took three tries to mean it.** The three relations
+shared a file before they shared any code, and the loose walk was missing four
+things the strict one had: the guard for kinds with nothing to compare, the
+structural matching for `Set` and `Map` members, boxed primitives, and -- one
+level down, after the first three were fixed -- the map-value comparison inside
+the shared helper still called the strict relation directly. Each was a case
+where a missing branch does not fail; it falls through to the key walk, which
+finds two objects with no own enumerable properties and calls them equal.
+
+That answer is well-formed. It is the *right* answer for a `WeakRef`, which
+node also calls deep-equal to another for exactly this reason, and the wrong
+one for a `WeakMap` -- and nothing at the point of the fall-through
+distinguishes them. Every gate was green while all four were live: node's own
+tests, the module suites, the type checker. The fuzzer is what found them, and
+it is in the repo so the number in this file can be re-run rather than
+believed.
 
 **Two things are absent rather than wrong.** `assert.ok(x)` with no message
 should read the failing expression out of the source and report `The expression
