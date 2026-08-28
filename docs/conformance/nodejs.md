@@ -1025,6 +1025,34 @@ is what compares them.
 **libuv, not reimplementation.** The C calls the same library node calls, so
 node's semantics are inherited rather than reimplemented and then tested for.
 
+**A compiled module was missing its initialization entirely, and neither axis
+showed it.** Module-level statements used to be dropped silently: the program
+compiled, reported success, and behaved as though the lines were not there.
+The compiler runs them now, as a `module#init` an embedder calls first, and
+what had been vanishing across this profile is twenty-three statements:
+
+| module | what a compiled build was missing |
+| --- | --- |
+| `url` | `setDomainToAscii` and `setDomainConversions` — **all** of IDNA, so every non-ASCII host would have gone through unconverted |
+| `events` | the `kCapture` default on the prototype, so `captureRejections` read `undefined` |
+| `buffer` | the `Uint` aliases and the custom inspection |
+| `console`, `assert` | the callable-without-`new` wrappers, which *are* those objects' public shape |
+| `internal/errors` | `reportBaseConstructor` on all four bases |
+| `internal/colors` | `refresh()`, so every colour was the empty string |
+| `util` | the colour aliases |
+| `os` | the `Symbol.toPrimitive` that makes `` `${os.hostname}` `` the hostname |
+
+Only `punycode`'s lowers today — its deprecation warning, which is now a real
+`module#init`. The rest refuse, mostly on `Object` and on module-scope
+initializers that are not constant. That is the honest state and it is visible;
+before, it was neither.
+
+**Worth naming as a gap in this document's own measurement.** The `compiles`
+column counts lowered *functions*. These are statements, so a module could
+have shown a rising function count while its initialization silently did
+nothing — and did. A number that cannot express a whole category of failure is
+a number that will not report it.
+
 **A module owns all three halves of its bindings.** A binding is a triple: a
 `declare function` in the TypeScript, a stand-in in `bindings.node.mjs`, and
 the C. All three live in the module's directory, so the pair a reader has to
