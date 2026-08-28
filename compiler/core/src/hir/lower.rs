@@ -3691,6 +3691,50 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// Every base in the chain has to be a type this compiler lays out itself.
+    ///
+    /// The checker's property list is *flattened*: a class that extends
+    /// something built in arrives here looking like a plain object, with the
+    /// inherited members all present and nothing in the list saying they came
+    /// from a base whose storage this compiler does not model.
+    ///
+    /// `class Bytes extends Uint8Array {}` laid out as five `int32_t` and no
+    /// bytes, and `b.length` compiled to a read of the fifth field of a struct
+    /// nothing ever allocates. Accepted, compiled, and wrong — while
+    /// `Uint8Array` used *directly* was refused, which is the shape of the bug:
+    /// the subclass was representable because nothing looked at what it derived
+    /// from.
+    ///
+    /// The test is that each base is laid out as an object here. That is
+    /// stronger than being representable — `class S extends String` would pass
+    /// the weaker test and inherit a layout it has no storage for — and it is
+    /// checked through the whole chain, because a class two steps below a
+    /// built-in has the same hole as one directly below it.
+    fn representable_bases(&self, id: NodeId, ty: TypeId, depth: u32) -> Result<(), Diagnostic> {
+        // A type that reaches itself through its bases is not a hierarchy, and
+        // recursing on one would not stop.
+        if depth > 32 {
+            return Ok(());
+        }
+        for base in self.snapshot.base_types.get(&ty).into_iter().flatten() {
+            if !matches!(
+                self.represent(*base),
+                Some(HirType::Managed(ManagedType::Object(_)))
+            ) {
+                let named = self
+                    .snapshot
+                    .types
+                    .get(base.0 as usize)
+                    .and_then(|record| record.symbol)
+                    .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+                    .map_or_else(|| format!("#{}", base.0), |symbol| symbol.name.clone());
+                return Err(self.unrepresentable_member(id, "a base", &named, *base));
+            }
+            self.representable_bases(id, *base, depth + 1)?;
+        }
+        Ok(())
+    }
+
     fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {
         if let Some(known) = self
             .layouts
@@ -3718,6 +3762,7 @@ impl<'a> FuncBuilder<'a> {
         let TypeKind::Object { properties } = &record.kind else {
             return Err(self.unsupported(id, "an object type that was not decomposed"));
         };
+        self.representable_bases(id, ty, 0)?;
 
         let mut fields = Vec::new();
         for property in properties {
