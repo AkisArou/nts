@@ -380,23 +380,38 @@ would otherwise have been silent.
 
 In order, with the reason rather than the ranking:
 
-1. **Finish generics** — generic *functions*, and a generic class extending
-   another. Both gate `som`'s collections, which gate the five Are We Fast Yet
-   macro benchmarks, which are the only real programs in reach. Everything below
-   is easier to judge against a program bigger than thirty lines.
-2. **The known defects above** — each is a case where this compiler says yes and
-   means no, which is worse than any absent feature.
-3. **Enums** — four corpus files, and a `const enum` is a table of constants,
-   which this compiler already has everywhere else.
-4. **`Map` and `Set`** — no real program does without them.
-5. **Template literals and destructuring** — the two most common things in modern
-   TypeScript that this compiler cannot read at all.
-6. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
+1. **A generic class extending another**, which is all that is left of
+   generics: generic functions are done, and a generic class *at* an
+   instantiation was already done. `class Set2<T> extends Vector<T>` fails
+   because `Vector<number>` never exists as a type — nothing in the program
+   names it, only `Set2<number>` does. Two designs and an RFC-level choice
+   between them, written up rather than guessed at. It gates `som`'s
+   collections, which gate the five Are We Fast Yet macro benchmarks, which are
+   the only real programs in reach.
+2. **A representation for `unknown`**, which `docs/any-unknown.md` describes:
+   chosen by whole-program analysis rather than by an annotation. It is 51 of
+   `node:path`'s 131 refusals — all validators taking an argument that came from
+   JavaScript — and it is the same feature that would make test262 runnable, so
+   it has two reasons rather than one. Worth asking first whether `unknown` ever
+   reaches more than a `typeof` test and an error message: if not, the
+   closed-union case covers it and the general erased value is not needed.
+3. **Getters and setters** — the blocker under every `Object.defineProperty(o,
+   k, { get() {…} })`, of which the Node profile has twelve.
+4. **Enums** — four corpus files, and a `const enum` is a table of constants,
+   which this compiler already has everywhere else. Note the differential
+   problem first: node's type stripping rejects an `enum` outright.
+5. **`Map` and `Set`** — no real program does without them.
+6. **Template literals and destructuring** — the two most common things in
+   modern TypeScript that this compiler cannot read at all. Interpolation needs
+   `ToString` on a number, which is Ryū or Grisu and not a missing arm.
+7. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
    for promises rather than an alternative to them.
-7. **Tagged unions** — `number | undefined` and unions of unrelated objects.
+8. **Tagged unions** — `number | undefined` and unions of unrelated objects.
    RFC-level: it changes the representation of every value that can reach the
    slot.
-8. **Promises and `async`/`await`**, on top of 6.
+9. **Promises and `async`/`await`**, on top of 7.
 
-Getters and `readonly`-in-a-constructor are small and can be taken whenever
-convenient; both are known defects rather than absent features.
+**Read the refusal histogram in the README as breadth, not as this list.** A
+refusal count and the lowered count are different currencies: a file refused for
+three reasons does not lower when one of them is fixed. Default parameters
+cleared seven files out of that table and moved *lowered completely* by zero.
