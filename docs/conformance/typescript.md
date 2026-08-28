@@ -55,10 +55,10 @@ diagnostic.
 | `return` | done | |
 | `throw` | done | as a *termination* — there is no handler to reach |
 | `let` / `const`, block scoping | done | |
-| `do...while` | **not done** | |
-| `break` / `continue` | **not done** | in almost every non-trivial loop |
-| `switch` | **not done** | |
-| labelled statements | **not done** | |
+| `do...while` | done | tests at the end, so the body runs once whatever the condition says |
+| `break` / `continue` | done | a loop's exit is a merge: `break` leaves with what the body reached, not what the header held |
+| `switch` | done | tested in source order, laid out in source order so a clause without a `break` falls through; `default` is reached only when every case has been tried |
+| labelled statements | **not done** | a labelled `break` is *refused* rather than treated as a bare one, which would leave the wrong loop |
 | `try` / `catch` / `finally` | **not done** | see *The runtime* |
 | `for...in` | **not done** | needs key enumeration, so needs a shape at run time |
 | `for await` | **not done** | needs async |
@@ -157,6 +157,7 @@ diagnostic.
 | `String`: `slice`, `substring`, `concat`, `repeat`, `length` | done | a slice that does not escape is built in the frame |
 | `String`: `split`, `replace`, `trim`, `toUpperCase`, `toLowerCase`, `padStart` | **not done** | the case operations are Unicode, not ASCII, and being wrong is worse than being absent |
 | `Array`: `push`, `pop`, `at`, `fill`, `reverse`, `slice`, `length` | done | |
+| an array of small whole numbers stored as `int32_t` | done | decided from every store in the program, and only where reading one does not go straight back into floating point |
 | `Array`: `indexOf`, `lastIndexOf`, `includes` | done | `includes` uses SameValueZero and finds `NaN`; `indexOf` does not |
 | `Array`: `map`, `filter`, `reduce`, `sort`, `splice`, `join`, `find`, `some`, `every` | **not done** | |
 | assigning `array.length` | **not done** | needed by `som`'s `Vector` |
@@ -266,10 +267,8 @@ In order, with the reason rather than the ranking:
    another. Both gate `som`'s collections, which gate the five Are We Fast Yet
    macro benchmarks, which are the only real programs in reach. Everything below
    is easier to judge against a program bigger than thirty lines.
-2. **`break`, `continue`, `switch`, `do...while`** — small, and between them in
-   almost every loop anyone writes.
-3. **The four known defects above** — each is a case where this compiler says
-   yes and means no, which is worse than any absent feature.
+2. **The known defects above** — each is a case where this compiler says yes and
+   means no, which is worse than any absent feature.
 4. **`Map` and `Set`** — no real program does without them.
 5. **Template literals and destructuring** — the two most common things in modern
    TypeScript that this compiler cannot read at all.

@@ -57,6 +57,7 @@ rather than inferred by a rule, so the number can be audited.
 | `buffer` | **49 / 60** | 2 / 85 | complete enough for `fs` and `string_decoder` |
 | `events` | — | — | not started |
 | `string_decoder` | **2 / 3** | 4 / 99 | complete; the failure is the class-vs-function difference |
+| `util` | 4 / 19 | 3 / 106 | `inspect`, `format`, `types`, `isDeepStrictEqual` and the helpers |
 | `stream` | — | — | not started |
 | `assert` | — | — | not started |
 
@@ -249,6 +250,38 @@ suppresses it when the caller is inside `node_modules`, on the grounds that a
 dependency's use of a deprecated module is not something the application can
 fix; a compiled program has no `node_modules` to be inside, so ours always
 warns.
+
+## `util`
+
+`inspect`, `format`/`formatWithOptions`, `types` (43 predicates),
+`isDeepStrictEqual`, `inherits`, `deprecate`, `debuglog`, `promisify`,
+`callbackify`, `styleText`, `parseEnv`, `stripVTControlCharacters`,
+`toUSVString`, and the `getSystemError*` family.
+
+4 of 19 applicable files pass, which understates it: `util`'s tests compare
+`inspect` output character for character, so a single spacing difference fails a
+file that is otherwise entirely correct. The measures that say more:
+
+- **`isDeepStrictEqual` agrees with node on 30,000 random structures** —
+  primitives by `Object.is`, prototypes, symbol keys, `Map`/`Set` matched
+  without regard to order, cycles.
+- **`format` matches on every specifier** — `%s %d %i %f %j %o %O %c %%`,
+  including `-0`, bigints, `numericSeparator`, and deferring to a custom
+  `toString`.
+- **`inspect` agrees with node on 88.5% of 5,000 random nested structures.**
+  What is left is line-breaking of deeply nested values, not content.
+
+Two things about `inspect` are worth recording because they look arbitrary and
+are not. `groupArrayElements` lays short array entries out as a padded grid with
+numbers right-aligned — thirty numbers one per line is unreadable and thirty on
+one line is too wide — and its column arithmetic is a fitted heuristic, so
+changing the constants changes the output. And `compact: 3` means "combine a
+subtree less than three levels deep", which requires tracking the deepest
+recursion reached; a child truncated to `[Object]` must *not* count towards it,
+or every parent breaks onto multiple lines.
+
+Not implemented: `getCallSites` (needs `Error.prepareStackTrace`), `MIMEType`,
+`TextEncoder`/`TextDecoder`, `parseArgs`, `diff`, and the `AbortSignal` helpers.
 
 ## `fs`
 
