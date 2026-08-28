@@ -54,7 +54,7 @@ real `node` child — those assert on node's binary, which our module is not in.
 Each exclusion is listed with a reason in the module's `not-applicable` file
 rather than inferred by a rule, so the number can be audited.
 
-**167 of node's own test files pass** across thirteen modules, of which 9 are hollow. The per-module
+**170 of node's own test files pass** across thirteen modules, of which 9 are hollow. The per-module
 counts below are `passed / applicable`; `compiles` is `functions lowered /
 constructs refused`, from `nts hir`.
 
@@ -68,7 +68,7 @@ constructs refused`, from `nts hir`.
 | `events` | **28 / 33** | 1 | 3 / 140 | complete but for domains, `EventTarget` and the promise forms |
 | `url` | 26 / 36 | 1 | 29 / 319 | complete; exact on the Web Platform Tests corpus |
 | `diagnostics_channel` | 23 / 45 | 0 | 3 / 132 | complete; the failures need node's own publishers |
-| `buffer` | 15 / 60 | 1 | 5 / 164 | the surface is there; the argument validation largely is not |
+| `buffer` | 18 / 60 | 1 | 5 / 164 | the read/write family is complete; the argument validation is not |
 | `assert` | 9 / 19 | 0 | 3 / 227 | complete, including `CallTracker` and node's Myers diff |
 | `fs` | 11 / 212 | 2 | 20 / 209 | the sync surface; async, streams and watchers are absent |
 | `util` | 7 / 18 | 1 | 9 / 193 | `inspect`, `format`, `types`, the comparisons and the helpers |
@@ -272,7 +272,7 @@ accepted anywhere bytes are, and it is what node does.
 | searching | `indexOf`, `lastIndexOf`, `includes` |
 | other | `copy`, `slice`, `subarray`, `fill`, `swap16`/`32`/`64`, `byteLength`, `isBuffer`, `isEncoding`, `isUtf8`, `isAscii`, `atob`, `btoa`, `constants` |
 
-15 of 60 applicable files pass. Two are not applicable: they need
+18 of 60 applicable files pass. Two are not applicable: they need
 `--allow-natives-syntax` to drive V8's optimiser, which is a question about V8
 rather than about `node:buffer`.
 
@@ -283,13 +283,31 @@ as the global, they were grading node's `Buffer` against itself. Running the
 suite with our module replaced by an empty object left **46 of the 51 still
 passing**, which is what a number that cannot go red looks like.
 
-Ours is installed as the global now and the suite measures it. The 45 failures
-are real and are mostly one thing: argument validation. Node throws
+Ours is installed as the global now and the suite measures it. The failures are
+real and are mostly one thing: argument validation. Node throws
 `ERR_INVALID_ARG_TYPE` from almost every method for almost every wrong
 argument, and a module reached from JavaScript has to, because JavaScript has
-no types to have stopped the caller. After that come the missing
-`readBigInt64*`/`writeBigInt64*` family and a handful of `ERR_OUT_OF_RANGE`
-bounds.
+no types to have stopped the caller.
+
+The accessor family is complete as of this pass: `readBigInt64BE`/`LE`,
+`readBigUInt64BE`/`LE` and their writes, the variable-width
+`readIntBE`/`readUIntLE` family, and the lowercase `Uint` spelling of every
+unsigned accessor, which node offers alongside `UInt` and a great deal of code
+uses. All of them agree with node on the boundary values -- the signed minimum,
+the unsigned maximum, and a six-byte integer, which is the widest a `double`
+holds exactly and the reason `byteLength` is a validated argument rather than a
+documented convention.
+
+Bounds errors are node's three, which are three because the distinctions
+matter: a non-integer offset is a mistake about the argument, an offset past
+the end is a mistake about the range, and a buffer too short for the access at
+all is neither -- there is no legal offset to suggest, so it reports
+`ERR_BUFFER_OUT_OF_BOUNDS` against the buffer rather than the argument.
+
+`kMaxLength` was wrong: 2**32 - 1 where node reports 2**53 - 1 on a 64-bit
+build. It is not an amount of memory anyone has; it is the largest integer a
+`double` indexes exactly, and node reports the representational limit rather
+than an allocatable one.
 
 I had recorded the opposite conclusion here -- that installing the global broke
 node's own modules -- on the strength of watching the count fall from 51 to 15

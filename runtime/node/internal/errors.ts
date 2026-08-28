@@ -572,3 +572,15 @@ export class ERR_INVALID_TUPLE extends NodeTypeError {
     this.name = "TypeError";
   }
 }
+
+/** `Attempt to access memory outside buffer bounds`. */
+export class ERR_BUFFER_OUT_OF_BOUNDS extends NodeRangeError {
+  override readonly code = "ERR_BUFFER_OUT_OF_BOUNDS";
+
+  constructor(name?: string) {
+    super(name === undefined
+      ? "Attempt to access memory outside buffer bounds"
+      : `"${name}" is outside of buffer bounds`);
+    this.name = "RangeError";
+  }
+}

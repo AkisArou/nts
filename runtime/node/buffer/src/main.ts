@@ -12,6 +12,7 @@
 // parser calls in its inner loop.
 
 import {
+  ERR_BUFFER_OUT_OF_BOUNDS,
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_STATE,
   ERR_OUT_OF_RANGE,
@@ -28,7 +29,15 @@ import {
 export { isEncodingName as isEncoding };
 
 /** Node's cap on a single buffer, and what `alloc` compares against. */
-export const kMaxLength = 4294967296 - 1;
+/**
+ * The largest a `Buffer` may be.
+ *
+ * `2**53 - 1` on a 64-bit build, which is not an amount of memory anyone has:
+ * it is the largest integer a `double` indexes exactly, and node reports the
+ * representational limit rather than an allocatable one. A 32-bit build
+ * reports `2**30 - 1`.
+ */
+export const kMaxLength = 2 ** 53 - 1;
 export const kStringMaxLength = 536870888;
 export const constants = { MAX_LENGTH: kMaxLength, MAX_STRING_LENGTH: kStringMaxLength };
 
@@ -48,6 +57,37 @@ function checkSize(size: unknown): number {
     throw new ERR_OUT_OF_RANGE("size", `>= 0 && <= ${kMaxLength}`, size);
   }
   return size;
+}
+
+/**
+ * One to six bytes: the widest signed integer a `double` holds exactly.
+ *
+ * Seven would round silently, which is why this is a validated argument rather
+ * than a documented convention.
+ */
+/** An index into a buffer of `length` bytes, inclusive of the end. */
+function checkRange(value: number, name: string, length: number): number {
+  if (typeof value !== "number") {
+    throw new ERR_INVALID_ARG_TYPE(name, "number", value);
+  }
+  if (value < 0 || value > length) {
+    throw new ERR_OUT_OF_RANGE(name, `>= 0 && <= ${length}`, value);
+  }
+  return value;
+}
+
+/** A `Buffer` or a plain `Uint8Array`; the methods do not distinguish them. */
+function checkBytes(value: unknown, name: string): asserts value is Uint8Array {
+  if (!(value instanceof Uint8Array)) {
+    throw new ERR_INVALID_ARG_TYPE(name, ["Buffer", "Uint8Array"], value);
+  }
+}
+
+function checkByteLength(byteLength: number): number {
+  if (!Number.isInteger(byteLength) || byteLength < 1 || byteLength > 6) {
+    throw new ERR_OUT_OF_RANGE("byteLength", ">= 1 and <= 6", byteLength);
+  }
+  return byteLength;
 }
 
 export class Buffer extends Uint8Array {
@@ -185,24 +225,33 @@ export class Buffer extends Uint8Array {
     return out;
   }
 
+  /** Whether `toString` and `write` would accept this name. */
+  static isEncoding(encoding: string): boolean {
+    return isEncodingName(encoding);
+  }
+
   static isBuffer(value: unknown): value is Buffer {
     return value instanceof Buffer;
   }
 
-  static byteLength(
-    value: string | Uint8Array | ArrayBuffer,
-    encoding?: string,
-  ): number {
+  static byteLength(value: unknown, encoding?: string): number {
     if (typeof value === "string") {
       return byteLengthIn(value, checkEncoding(encoding));
     }
-    if (value instanceof ArrayBuffer) {
+    if (ArrayBuffer.isView(value)) {
       return value.byteLength;
     }
-    return value.length;
+    if (value instanceof ArrayBuffer || value instanceof SharedArrayBuffer) {
+      return (value as ArrayBuffer).byteLength;
+    }
+    // Node names the parameter `string` even when the value is a buffer,
+    // because that is the argument's name in the signature.
+    throw new ERR_INVALID_ARG_TYPE("string", ["string", "Buffer", "ArrayBuffer"], value);
   }
 
   static compare(a: Uint8Array, b: Uint8Array): number {
+    checkBytes(a, "buf1");
+    checkBytes(b, "buf2");
     return compareBytes(a, 0, a.length, b, 0, b.length);
   }
 
@@ -260,17 +309,28 @@ export class Buffer extends Uint8Array {
 
   compare(
     target: Uint8Array,
-    targetStart = 0,
-    targetEnd = target.length,
-    sourceStart = 0,
-    sourceEnd = this.length,
+    targetStart?: number,
+    targetEnd?: number,
+    sourceStart?: number,
+    sourceEnd?: number,
   ): number {
-    return compareBytes(this, sourceStart, sourceEnd, target, targetStart, targetEnd);
+    // Checked before the defaults are read, because `target.length` is one of
+    // them and reading it off a string would answer rather than throw.
+    checkBytes(target, "target");
+    const ts = checkRange(targetStart ?? 0, "targetStart", target.length);
+    const te = checkRange(targetEnd ?? target.length, "targetEnd", target.length);
+    const ss = checkRange(sourceStart ?? 0, "sourceStart", this.length);
+    const se = checkRange(sourceEnd ?? this.length, "sourceEnd", this.length);
+    if (ts > te || ss > se) {
+      throw new ERR_OUT_OF_RANGE("targetStart", "<= targetEnd", ts);
+    }
+    return compareBytes(this, ss, se, target, ts, te);
   }
 
   // ---------------------------------------------------------------- copying
 
   copy(target: Uint8Array, targetStart = 0, sourceStart = 0, sourceEnd = this.length): number {
+    checkBytes(target, "target");
     const from = Math.max(0, Math.min(sourceStart, this.length));
     const to = Math.max(from, Math.min(sourceEnd, this.length));
     const room = target.length - targetStart;
@@ -336,6 +396,140 @@ export class Buffer extends Uint8Array {
 
   // ------------------------------------------------------------- byte order
 
+  // ------------------------------------------- the variable-width family
+  //
+  // `readIntBE(offset, byteLength)` reads one to six bytes. Six because that is
+  // the widest signed integer a double holds exactly, and reading seven would
+  // silently round -- which is why the limit is a validated argument rather
+  // than a documented convention.
+
+  readUIntBE(offset: number, byteLength: number): number {
+    const at = this.at8(offset, checkByteLength(byteLength));
+    let value = 0;
+    for (let i = 0; i < byteLength; i++) {
+      value = value * 256 + this[at + i]!;
+    }
+    return value;
+  }
+
+  readUIntLE(offset: number, byteLength: number): number {
+    const at = this.at8(offset, checkByteLength(byteLength));
+    let value = 0;
+    for (let i = byteLength - 1; i >= 0; i--) {
+      value = value * 256 + this[at + i]!;
+    }
+    return value;
+  }
+
+  readIntBE(offset: number, byteLength: number): number {
+    const value = this.readUIntBE(offset, byteLength);
+    // Sign-extend from the width actually read, by subtracting the modulus
+    // when the top bit is set. Arithmetic rather than a shift, because a
+    // six-byte value does not fit the 32-bit shift operators.
+    const limit = 2 ** (byteLength * 8 - 1);
+    return value >= limit ? value - limit * 2 : value;
+  }
+
+  readIntLE(offset: number, byteLength: number): number {
+    const value = this.readUIntLE(offset, byteLength);
+    const limit = 2 ** (byteLength * 8 - 1);
+    return value >= limit ? value - limit * 2 : value;
+  }
+
+  writeUIntBE(value: number, offset: number, byteLength: number): number {
+    const size = checkByteLength(byteLength);
+    const at = this.checkInt(value, 0, 2 ** (size * 8) - 1, offset, size);
+    let rest = value;
+    for (let i = size - 1; i >= 0; i--) {
+      this[at + i] = rest & 0xff;
+      rest = Math.floor(rest / 256);
+    }
+    return at + size;
+  }
+
+  writeUIntLE(value: number, offset: number, byteLength: number): number {
+    const size = checkByteLength(byteLength);
+    const at = this.checkInt(value, 0, 2 ** (size * 8) - 1, offset, size);
+    let rest = value;
+    for (let i = 0; i < size; i++) {
+      this[at + i] = rest & 0xff;
+      rest = Math.floor(rest / 256);
+    }
+    return at + size;
+  }
+
+  writeIntBE(value: number, offset: number, byteLength: number): number {
+    const size = checkByteLength(byteLength);
+    const limit = 2 ** (size * 8 - 1);
+    const at = this.checkInt(value, -limit, limit - 1, offset, size);
+    return this.writeUIntBE(value < 0 ? value + limit * 2 : value, at, size);
+  }
+
+  writeIntLE(value: number, offset: number, byteLength: number): number {
+    const size = checkByteLength(byteLength);
+    const limit = 2 ** (size * 8 - 1);
+    const at = this.checkInt(value, -limit, limit - 1, offset, size);
+    return this.writeUIntLE(value < 0 ? value + limit * 2 : value, at, size);
+  }
+
+  // ------------------------------------------------------ the 64-bit family
+  //
+  // `bigint` rather than `number`, because a `double` holds only 53 bits
+  // exactly and a 64-bit integer read into one would be silently wrong for
+  // half its range. That is the whole reason these methods exist.
+
+  readBigUInt64BE(offset = 0): bigint {
+    const at = this.at8(offset, 8);
+    const hi = this[at]! * 2 ** 24 + this[at + 1]! * 2 ** 16 + this[at + 2]! * 2 ** 8 + this[at + 3]!;
+    const lo = this[at + 4]! * 2 ** 24 + this[at + 5]! * 2 ** 16 + this[at + 6]! * 2 ** 8 + this[at + 7]!;
+    return (BigInt(hi) << 32n) + BigInt(lo);
+  }
+
+  readBigUInt64LE(offset = 0): bigint {
+    const at = this.at8(offset, 8);
+    const lo = this[at]! + this[at + 1]! * 2 ** 8 + this[at + 2]! * 2 ** 16 + this[at + 3]! * 2 ** 24;
+    const hi = this[at + 4]! + this[at + 5]! * 2 ** 8 + this[at + 6]! * 2 ** 16 + this[at + 7]! * 2 ** 24;
+    return (BigInt(hi) << 32n) + BigInt(lo);
+  }
+
+  readBigInt64BE(offset = 0): bigint {
+    return BigInt.asIntN(64, this.readBigUInt64BE(offset));
+  }
+
+  readBigInt64LE(offset = 0): bigint {
+    return BigInt.asIntN(64, this.readBigUInt64LE(offset));
+  }
+
+  writeBigUInt64BE(value: bigint, offset = 0): number {
+    const at = this.checkBigInt(value, 0n, 0xffffffffffffffffn, offset);
+    let rest = value;
+    for (let i = 7; i >= 0; i--) {
+      this[at + i] = Number(rest & 0xffn);
+      rest >>= 8n;
+    }
+    return at + 8;
+  }
+
+  writeBigUInt64LE(value: bigint, offset = 0): number {
+    const at = this.checkBigInt(value, 0n, 0xffffffffffffffffn, offset);
+    let rest = value;
+    for (let i = 0; i < 8; i++) {
+      this[at + i] = Number(rest & 0xffn);
+      rest >>= 8n;
+    }
+    return at + 8;
+  }
+
+  writeBigInt64BE(value: bigint, offset = 0): number {
+    this.checkBigInt(value, -(2n ** 63n), 2n ** 63n - 1n, offset);
+    return this.writeBigUInt64BE(BigInt.asUintN(64, value), offset);
+  }
+
+  writeBigInt64LE(value: bigint, offset = 0): number {
+    this.checkBigInt(value, -(2n ** 63n), 2n ** 63n - 1n, offset);
+    return this.writeBigUInt64LE(BigInt.asUintN(64, value), offset);
+  }
+
   swap16(): this {
     if (this.length % 2 !== 0) {
       throw new ERR_OUT_OF_RANGE("buffer.length", "a multiple of 2", this.length);
@@ -379,11 +573,65 @@ export class Buffer extends Uint8Array {
 
   // ------------------------------------------------------------- numerics
 
+  /**
+   * Check that `size` bytes are readable at `offset`, and return it.
+   *
+   * Upstream `checkBounds`/`boundsError`. Three different errors come out of
+   * one check, and the distinctions are node's: a non-integer offset is a
+   * mistake about the argument, an offset past the end is a mistake about the
+   * range, and a *buffer too short for the access at all* is neither -- there
+   * is no legal offset to suggest, so it reports the buffer rather than the
+   * argument.
+   */
   private at8(offset: number, size: number): number {
-    if (offset < 0 || offset + size > this.length) {
-      throw new ERR_OUT_OF_RANGE("offset", `>= 0 && <= ${this.length - size}`, offset);
+    const last = this.length - size;
+    if (offset >= 0 && offset <= last && Number.isInteger(offset)) {
+      return offset;
     }
-    return offset;
+    if (typeof offset !== "number") {
+      throw new ERR_INVALID_ARG_TYPE("offset", "number", offset);
+    }
+    if (!Number.isInteger(offset)) {
+      throw new ERR_OUT_OF_RANGE("offset", "an integer", offset);
+    }
+    if (last < 0) {
+      throw new ERR_BUFFER_OUT_OF_BOUNDS();
+    }
+    // `and`, not `&&`: node spells this range differently from the ones its
+    // validators produce, and its tests compare the text.
+    throw new ERR_OUT_OF_RANGE("offset", `>= 0 and <= ${last}`, offset);
+  }
+
+  /**
+   * The value fits the width being written, upstream `checkInt`.
+   *
+   * Past three bytes the range is written as a power of two rather than as a
+   * literal, because `< 2 ** 48` reads and `<= 281474976710655` does not.
+   */
+  private checkInt(value: number, min: number, max: number, offset: number, size: number): number {
+    if (value > max || value < min) {
+      let range: string;
+      if (size > 3) {
+        range = min === 0
+          ? `>= 0 and < 2 ** ${size * 8}`
+          : `>= -(2 ** ${size * 8 - 1}) and < 2 ** ${size * 8 - 1}`;
+      } else {
+        range = `>= ${min} and <= ${max}`;
+      }
+      throw new ERR_OUT_OF_RANGE("value", range, value);
+    }
+    return this.at8(offset, size);
+  }
+
+  /** The same, for the 64-bit family, where the bounds are bigints. */
+  private checkBigInt(value: bigint, min: bigint, max: bigint, offset: number): number {
+    if (value > max || value < min) {
+      const range = min === 0n
+        ? ">= 0n and < 2n ** 64n"
+        : ">= -(2n ** 63n) and < 2n ** 63n";
+      throw new ERR_OUT_OF_RANGE("value", range, value);
+    }
+    return this.at8(offset, 8);
   }
 
   readUInt8(offset = 0): number {
@@ -750,3 +998,24 @@ Object.defineProperty(Buffer.prototype, Symbol.for("nodejs.util.inspect.custom")
 });
 
 export default Buffer;
+
+/**
+ * Node spells every unsigned accessor two ways -- `readUInt8` and `readUint8`.
+ * The second is the newer form and a great deal of code uses each, so they are
+ * the same function object rather than a wrapper.
+ */
+for (const name of [
+  "readUInt8", "readUInt16BE", "readUInt16LE", "readUInt32BE", "readUInt32LE",
+  "readUIntBE", "readUIntLE", "readBigUInt64BE", "readBigUInt64LE",
+  "writeUInt8", "writeUInt16BE", "writeUInt16LE", "writeUInt32BE", "writeUInt32LE",
+  "writeUIntBE", "writeUIntLE", "writeBigUInt64BE", "writeBigUInt64LE",
+]) {
+  const alias = name.replace("UInt", "Uint");
+  Object.defineProperty(Buffer.prototype, alias, {
+    __proto__: null,
+    value: (Buffer.prototype as unknown as Record<string, unknown>)[name],
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  } as PropertyDescriptor);
+}
