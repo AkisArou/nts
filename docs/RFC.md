@@ -1011,6 +1011,50 @@ Advantages:
 
 Stackful fibers may remain an optional compatibility or performance mechanism, but only after their stack roots and source-debug behavior are specified.
 
+## 12.1 The microtask checkpoint
+
+Promise resolution ordering is ECMAScript-specified and directly observable: reactions run in FIFO order on the microtask queue, ahead of any macrotask, with a fixed number of ticks per `await`. It therefore belongs to the runtime and cannot be delegated to a platform primitive with different ordering.
+
+In a browser or in Node the queue drains when the JavaScript stack empties. Compiled TypeScript has no such moment: it is *entered from a host task* — a Looper message, a dispatch block, a Chromium `TaskRunner` task, a libuv callback. The draining rule must therefore be stated as a contract rather than inherited.
+
+```text
+nts_enter(runtime)      depth++
+        ↓
+   run TypeScript
+        ↓
+nts_leave(runtime)      depth--; if depth == 0, drain to fixpoint
+```
+
+The checkpoint drains **two** queues, not one, and the order between them is observable:
+
+```text
+do {
+    while (tick = ticks.shift())     tick.callback(tick.args)
+    drain microtasks until empty
+} while (ticks is not empty)
+```
+
+The second queue is `process.nextTick`'s. It is not a Node convenience: it is the mechanism by which every callback-style API avoids resolving before its caller returns, so `fs`, `net` and `stream` are all built on it. A host or profile that has no such concept never enqueues into it, the inner `while` never runs, and the algorithm degenerates *exactly* to the ECMAScript checkpoint — drain microtasks to fixpoint. One algorithm covers both; there is no branch on profile.
+
+Two consequences of the shape worth stating, because both are asserted by tests:
+
+- A tick enqueued *by a microtask* is run before the checkpoint ends, in a second pass. It is not deferred to the next macrotask.
+- The drain invokes the callback **directly**, with its arguments held beside it in the queue entry. A queue that stored a closure and called it would insert a frame between the drain and the callback, which is visible in a stack trace and is checked.
+
+Rules:
+
+- Every host entry into compiled TypeScript is wrapped in enter/leave.
+- The drain runs **to fixpoint**. This is what the specification requires, and it means a program can starve the host loop. That is the correct trade — the alternative reorders observable program behavior — and starvation is a program bug rather than a scheduling policy.
+- Nesting is by depth, not by a flag. A capability call that re-enters TypeScript synchronously must not drain on the inner return; only the outermost boundary is a checkpoint.
+- **Hosts do not see either queue.** The runtime hands the host an opaque task that already carries its own enter/leave, so a host cannot get the checkpoint wrong by omission. A host that forgot to drain would produce a program whose promises resolve late and in the wrong order, which no test of the host itself would catch.
+- A task posted by the host contract therefore runs *after* a complete checkpoint. That guarantee is what `setImmediate` needs, and it is specified here rather than left to each host to reproduce. What is **not** specified is the ordering of a zero-delay timer against it: under libuv that depends on which loop phase is running and is genuinely libuv's business.
+
+## 12.2 Where the microtask queue is not ours
+
+One host owns a microtask queue already, and running a second one beside it interleaves two orderings that are each individually correct and jointly wrong. See §26.6.
+
+The contract admits this as a configuration rather than a fork: a host may supply an `enqueue_microtask` operation, and supplying one means the host also owns checkpointing, so the runtime's own queue and its drain at `nts_leave` are both disabled. There is one code path either way.
+
 ---
 
 # 13. JVM Memory Model
@@ -1335,6 +1379,22 @@ explicit runtime thread attachment
 ```
 
 A foreign thread cannot access a runtime heap merely because it has a handle.
+
+### Completions are the common case
+
+This is not a rare edge. Every asynchronous transport worth having completes on a thread the runtime does not own:
+
+| Capability          | Completes on                        |
+| ------------------- | ----------------------------------- |
+| OkHttp              | its own dispatcher threads          |
+| URLSession          | a delegate queue                    |
+| WinHTTP             | a thread-pool callback              |
+| libuv file I/O      | the libuv thread pool               |
+| GIO async           | a worker thread                     |
+
+Resolving a Promise is a heap mutation. So **every capability adapter must post its completion to the owner executor before it touches a Promise**, through the one host operation that is safe to call from any thread. An adapter that resolves directly from its completion thread is a data race on the heap, and it is a race that will usually appear to work.
+
+This is a requirement on every capability contract in §6.7, not advice. The runtime should validate it: resolution asserts the owner thread in checked builds.
 
 ---
 
@@ -1819,6 +1879,17 @@ libuv
 
 libuv remains the default standalone eventing and OS abstraction, not the universal platform loop.
 
+It is also not the default for a *library*. An executable may own the process loop; `native-static-library`, `native-shared-library` and `host-surface-library` (§27) may not, and linking libuv into an embedder's program brings a thread pool and signal handling nobody asked for. Library products default to the `embedder-provided` host of §6.5, whose surface is deliberately narrow:
+
+```text
+drain microtasks
+run expired timers
+pending work?
+wake me  (the embedder's own signal, called from any thread)
+```
+
+The embedder calls these from its own loop. The runtime never owns one.
+
 ## 26.2 Android
 
 ```text
@@ -1868,6 +1939,7 @@ renderer:
     NativeTS native runtime
     selected native memory provider
     Chromium TaskRunner
+    Blink microtask queue          <- not ours
     direct Blink capsules
     Oilpan-backed handles
 
@@ -1877,6 +1949,18 @@ browser:
     privileged capabilities
     generated Mojo transport
 ```
+
+### The renderer is the exception to §12
+
+A Blink renderer already runs V8's microtask queue under the HTML specification's event loop, with checkpoints at defined points. Compiled TypeScript in that renderer talks to Blink through capsules, and those capsules return promises.
+
+Running our own microtask queue beside Blink's would give two independently-ordered queues over one logical event loop. Each is internally correct; interleaved they are not, and the resulting order is not the order the same source has in a browser today. The failure is invisible in any test that does not mix a Blink promise with a compiled-TypeScript promise — which is to say, invisible until it is in front of a user.
+
+So in the renderer the runtime **adopts Blink's microtask queue** and does not checkpoint at `nts_leave`: it supplies `enqueue_microtask` per §12.2 and Blink's checkpoints drain it. A promise crossing a Blink capsule boundary is adopted rather than wrapped, so there is one queue and one ordering.
+
+The browser process has no such constraint and uses the ordinary runtime queue.
+
+This decision is the reason §12.2 exists. It is a configuration of one contract, not a second implementation.
 
 ---
 
