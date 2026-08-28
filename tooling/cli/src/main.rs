@@ -619,6 +619,27 @@ fn print_types(tsconfig: &Utf8Path) -> Result<()> {
             .map_or_else(String::new, |args| format!(" args{args:?}"));
         println!("#{index}{named}{arguments} {:?}", record.kind);
     }
+    // Signatures too. A type prints as `Function(SignatureId(2))`, which says
+    // nothing about what the call takes -- and for a generic call, whether the
+    // checker handed back the *instantiated* signature is the question the
+    // monomorphizer turns on.
+    for (index, signature) in snapshot.signatures.iter().enumerate() {
+        let parameters: Vec<String> = signature
+            .parameters
+            .iter()
+            .map(|parameter| format!("{}: #{}", parameter.name, parameter.ty.0))
+            .collect();
+        let generic = if signature.type_parameters.is_empty() {
+            String::new()
+        } else {
+            format!(" <{:?}>", signature.type_parameters)
+        };
+        println!(
+            "sig#{index}{generic} ({}) -> #{}",
+            parameters.join(", "),
+            signature.return_type.0
+        );
+    }
     Ok(())
 }
 
