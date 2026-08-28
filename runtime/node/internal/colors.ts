@@ -6,7 +6,8 @@
 // overrides the check, which is how CI systems that do render colour but do
 // not look like a TTY get coloured output.
 
-declare function nts_process_env(name: string): string;
+import { stderr } from "./stdio.ts";
+
 declare function nts_process_env_has(name: string): boolean;
 declare function nts_stdio_color_depth(): number;
 
@@ -14,6 +15,47 @@ declare function nts_stdio_color_depth(): number;
 export interface ColorCapableStream {
   isTTY?: boolean | undefined;
   getColorDepth?: (() => number) | undefined;
+}
+
+/**
+ * The palette node's own diagnostics use, `lib/internal/util/colors.js`.
+ *
+ * Every entry is empty until `refresh()` decides the destination can render
+ * colour, so the code that builds a message concatenates these
+ * unconditionally and gets plain text when it should. `refresh` is called
+ * again on each use rather than once at startup, because the environment can
+ * change under a long-running process.
+ */
+export const colors: {
+  blue: string; green: string; white: string; yellow: string; red: string;
+  gray: string; clear: string; reset: string; hasColors: boolean;
+} = {
+  blue: "", green: "", white: "", yellow: "", red: "",
+  gray: "", clear: "", reset: "", hasColors: false,
+};
+
+export function refresh(): void {
+  if (shouldColorize(stderr as ColorCapableStream)) {
+    colors.blue = "\u001b[34m";
+    colors.green = "\u001b[32m";
+    colors.white = "\u001b[39m";
+    colors.yellow = "\u001b[33m";
+    colors.red = "\u001b[31m";
+    colors.gray = "\u001b[90m";
+    colors.clear = "\u001bc";
+    colors.reset = "\u001b[0m";
+    colors.hasColors = true;
+  } else {
+    colors.blue = "";
+    colors.green = "";
+    colors.white = "";
+    colors.yellow = "";
+    colors.red = "";
+    colors.gray = "";
+    colors.clear = "";
+    colors.reset = "";
+    colors.hasColors = false;
+  }
 }
 
 export function shouldColorize(stream: ColorCapableStream | null | undefined): boolean {
@@ -25,3 +67,6 @@ export function shouldColorize(stream: ColorCapableStream | null | undefined): b
   return Boolean(stream?.isTTY) && (
     typeof stream?.getColorDepth === "function" ? stream.getColorDepth() > 2 : true);
 }
+
+// The first read has to be right, and nothing else calls `refresh` before use.
+refresh();

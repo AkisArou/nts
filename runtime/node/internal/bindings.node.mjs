@@ -28,6 +28,7 @@ globalThis.nts_process_emit_warning = (message, name, code) => {
 };
 
 globalThis.nts_hrtime_ns = () => process.hrtime.bigint();
+globalThis.nts_process_is_exiting = () => Boolean(process._exiting);
 globalThis.nts_next_tick = (callback, args) => { process.nextTick(callback, ...(args ?? [])); };
 
 globalThis.nts_debug_write = (text) => { process.stderr.write(text); };

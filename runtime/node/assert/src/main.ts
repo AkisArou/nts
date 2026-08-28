@@ -1,453 +1,893 @@
 // `node:assert`, from node v24.20.0 `lib/assert.js`.
 //
-// Every function here is a comparison and a throw. What makes the module worth
-// care is the *message*: `assert.deepStrictEqual` on two large objects has to
-// say which line differs, not print both and leave the reader to find it. That
-// work is in `error.ts`, built on `util.inspect`.
+// Every function here does the same two things: decide whether a condition
+// holds, and -- when it does not -- build the most informative failure it can.
+// The second half is the larger one, and it lives in `error.ts`.
+//
+// The module is a callable object: `assert(value)` is `assert.ok(value)`, with
+// the rest of the family hung off it. `assert.strict` is the same set with the
+// loose comparisons replaced by their strict counterparts, and `Assert` is the
+// class an application instantiates when it wants those choices made
+// differently -- a full diff, say, or prototypes ignored.
 
-import { isDeepStrictEqual } from "../../util/src/deep-equal.ts";
-import { isArrayBufferView, isDate, isMap, isRegExp, isSet } from "../../util/src/types.ts";
 import { inspect } from "../../util/src/inspect.ts";
-import { AssertionError } from "./error.ts";
-import { ERR_INVALID_ARG_TYPE, ERR_MISSING_ARGS } from "../../internal/errors.ts";
+import {
+  isDeepEqual,
+  isDeepStrictEqual,
+  isPartialStrictEqual,
+} from "../../util/src/deep-equal.ts";
+import { isPromise, isRegExp } from "../../util/src/types.ts";
+import {
+  ERR_AMBIGUOUS_ARGUMENT,
+  ERR_CONSTRUCT_CALL_REQUIRED,
+  ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_ARG_VALUE,
+  ERR_INVALID_RETURN_VALUE,
+  ERR_MISSING_ARGS,
+} from "../../internal/errors.ts";
+import { validateFunction, validateOneOf } from "../../internal/validators.ts";
+import { AssertionError, type DiffMode } from "./error.ts";
+import { CallTracker } from "./calltracker.ts";
 
-export { AssertionError };
+export { AssertionError, CallTracker };
+// Re-exported for the tests that reach for node's internal spelling of them.
+export { myersDiff, printMyersDiff, printSimpleMyersDiff } from "../../internal/assert/myers-diff.ts";
+
+declare function nts_process_emit_warning(message: string, name: string, code: string): void;
+
+/**
+ * How an `Assert` instance was configured.
+ *
+ * A symbol rather than a private field, and read with optional chaining
+ * everywhere below, because these methods are routinely destructured off an
+ * instance -- `const { strictEqual } = myAssert` -- and lose their receiver. A
+ * private field would throw on the way out; a missing symbol just means the
+ * defaults apply, which is what a destructured method should do.
+ */
+const kOptions: unique symbol = Symbol("options") as never;
+
+export interface AssertOptions {
+  /** `'full'` prints the whole diff rather than collapsing unchanged runs. */
+  diff?: DiffMode;
+  /** When set, the loose comparisons behave like their strict counterparts. */
+  strict?: boolean;
+  /** When set, deep comparisons ignore prototypes. */
+  skipPrototype?: boolean;
+}
+
+/** `diff` stays optional: undefined means the `AssertionError` default. */
+type ResolvedOptions = AssertOptions & { strict: boolean; skipPrototype: boolean };
+
+interface Configured {
+  [kOptions]?: ResolvedOptions;
+}
+
+/** Distinguishes "the function returned" from "the function threw undefined". */
+const NO_EXCEPTION_SENTINEL: object = {};
 
 type AnyFn = (...args: never[]) => unknown;
 
-function innerFail(
-  actual: unknown,
-  expected: unknown,
-  message: string | Error | undefined,
-  operator: string,
-  stackStartFn: AnyFn,
-): never {
-  if (message instanceof Error) {
-    throw message;
-  }
-  throw new AssertionError({ actual, expected, message, operator, stackStartFn });
-}
-
-/** `assert(value)` and `assert.ok(value)` are the same function. */
-export function ok(value: unknown, message?: string | Error): asserts value {
-  if (arguments.length === 0) {
-    throw new ERR_MISSING_ARGS("value");
-  }
-  if (!value) {
-    innerFail(value, true, message, "==", ok);
-  }
-}
-
-export function fail(message?: string | Error): never {
-  if (message instanceof Error) {
-    throw message;
-  }
-  // No message means the error *generates* "Failed" rather than being handed
-  // it: `generatedMessage` is part of the observable shape, and node's tests
-  // check it.
-  throw new AssertionError({
-    ...(message === undefined ? {} : { message }),
-    actual: undefined,
-    expected: undefined,
-    operator: "fail",
-    stackStartFn: fail,
-  });
-}
-
-// ------------------------------------------------------------- equality
-
-export function equal(actual: unknown, expected: unknown, message?: string | Error): void {
-  if (arguments.length < 2) {
-    throw new ERR_MISSING_ARGS("actual", "expected");
-  }
-  // Loose equality on purpose: `assert.equal` is the `==` one, and node keeps
-  // it for the code that predates `strictEqual`.
-  // eslint-disable-next-line eqeqeq
-  if (actual != expected && !(Number.isNaN(actual) && Number.isNaN(expected))) {
-    innerFail(actual, expected, message, "==", equal);
-  }
-}
-
-export function notEqual(actual: unknown, expected: unknown, message?: string | Error): void {
-  if (arguments.length < 2) {
-    throw new ERR_MISSING_ARGS("actual", "expected");
-  }
-  // eslint-disable-next-line eqeqeq
-  if (actual == expected) {
-    innerFail(actual, expected, message, "!=", notEqual);
-  }
-}
-
-export function strictEqual(actual: unknown, expected: unknown, message?: string | Error): void {
-  if (arguments.length < 2) {
-    throw new ERR_MISSING_ARGS("actual", "expected");
-  }
-  // `Object.is`, so `NaN` equals itself and `-0` does not equal `0`. That is
-  // the difference from `===` and it is the point of the strict family.
-  if (!Object.is(actual, expected)) {
-    innerFail(actual, expected, message, "strictEqual", strictEqual);
-  }
-}
-
-export function notStrictEqual(actual: unknown, expected: unknown, message?: string | Error): void {
-  if (arguments.length < 2) {
-    throw new ERR_MISSING_ARGS("actual", "expected");
-  }
-  if (Object.is(actual, expected)) {
-    innerFail(actual, expected, message, "notStrictEqual", notStrictEqual);
-  }
-}
-
-export function deepStrictEqual(actual: unknown, expected: unknown, message?: string | Error): void {
-  if (arguments.length < 2) {
-    throw new ERR_MISSING_ARGS("actual", "expected");
-  }
-  if (!isDeepStrictEqual(actual, expected)) {
-    innerFail(actual, expected, message, "deepStrictEqual", deepStrictEqual);
-  }
-}
-
-export function notDeepStrictEqual(actual: unknown, expected: unknown, message?: string | Error): void {
-  if (arguments.length < 2) {
-    throw new ERR_MISSING_ARGS("actual", "expected");
-  }
-  if (isDeepStrictEqual(actual, expected)) {
-    innerFail(actual, expected, message, "notDeepStrictEqual", notDeepStrictEqual);
-  }
-}
-
-/**
- * Loose deep equality: the same walk as the strict one, with `==` at the
- * leaves and no prototype check. Kept because a great deal of code predates
- * `deepStrictEqual`, and deprecated in node's documentation for the reason
- * that `'1' == 1`.
- */
-function looseDeepEqual(a: unknown, b: unknown, seen: Map<object, Set<object>>): boolean {
-  if (a === b) {
-    return true;
-  }
-
-  // `==` applies only when *both* sides are primitives. Comparing a primitive
-  // against an object with it would make `'a'` loosely deep-equal to `['a']`,
-  // because `['a'] == 'a'` coerces through `toString` -- and node says those
-  // are not deep-equal, whatever `==` says about them.
-  const aPrimitive = a === null || typeof a !== "object";
-  const bPrimitive = b === null || typeof b !== "object";
-  if (aPrimitive || bPrimitive) {
-    if (aPrimitive && bPrimitive) {
-      // eslint-disable-next-line eqeqeq
-      return a == b ||
-        (typeof a === "number" && typeof b === "number" && Number.isNaN(a) && Number.isNaN(b));
-    }
-    return false;
-  }
-  const known = seen.get(a);
-  if (known?.has(b)) {
-    return true;
-  }
-  seen.set(a, (known ?? new Set()).add(b));
-
-  // A `Date` with no own keys and `{}` both have zero enumerable properties,
-  // so the key walk below would call them equal. Every kind whose *identity*
-  // lives outside its properties has to be checked for symmetry first.
-  // Guards, not answers: two regexps with the same source can still differ in
-  // their own properties, and the key walk below is what sees that. Returning
-  // early here made `/test/` equal to a `MyRegExp` carrying an extra field.
-  if (isDate(a) || isDate(b)) {
-    if (!isDate(a) || !isDate(b) || (a as Date).getTime() !== (b as Date).getTime()) {
-      return false;
-    }
-  }
-  if (isRegExp(a) || isRegExp(b)) {
-    if (
-      !isRegExp(a) || !isRegExp(b) ||
-      (a as RegExp).source !== (b as RegExp).source ||
-      (a as RegExp).flags !== (b as RegExp).flags
-    ) {
-      return false;
-    }
-  }
-  if (isMap(a) || isMap(b)) {
-    if (!isMap(a) || !isMap(b) || (a as Map<unknown, unknown>).size !== (b as Map<unknown, unknown>).size) {
-      return false;
-    }
-  }
-  if (isSet(a) || isSet(b)) {
-    if (!isSet(a) || !isSet(b) || (a as Set<unknown>).size !== (b as Set<unknown>).size) {
-      return false;
-    }
-  }
-  if (isArrayBufferView(a) || isArrayBufferView(b)) {
-    if (!isArrayBufferView(a) || !isArrayBufferView(b)) {
-      return false;
-    }
-    const x = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
-    const y = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-    if (x.length !== y.length) return false;
-    for (let i = 0; i < x.length; i++) {
-      if (x[i] !== y[i]) return false;
-    }
-  }
-  if (Array.isArray(a) !== Array.isArray(b)) {
-    return false;
-  }
-  if (isMap(a)) {
-    for (const [key, value] of a as Map<unknown, unknown>) {
-      if (!(b as Map<unknown, unknown>).has(key)) {
-        return false;
-      }
-      if (!looseDeepEqual(value, (b as Map<unknown, unknown>).get(key), seen)) {
-        return false;
-      }
-    }
-  }
-  if (isSet(a)) {
-    for (const value of a as Set<unknown>) {
-      if (!(b as Set<unknown>).has(value)) {
-        return false;
-      }
-    }
-  }
-
-  const aKeys = Object.keys(a);
-  const bKeys = Object.keys(b);
-  if (aKeys.length !== bKeys.length) {
-    return false;
-  }
-  for (const key of aKeys) {
-    if (!Object.prototype.hasOwnProperty.call(b, key)) {
-      return false;
-    }
-    if (!looseDeepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], seen)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-export function deepEqual(actual: unknown, expected: unknown, message?: string | Error): void {
-  if (arguments.length < 2) {
-    throw new ERR_MISSING_ARGS("actual", "expected");
-  }
-  if (!looseDeepEqual(actual, expected, new Map())) {
-    innerFail(actual, expected, message, "deepEqual", deepEqual);
-  }
-}
-
-export function notDeepEqual(actual: unknown, expected: unknown, message?: string | Error): void {
-  if (arguments.length < 2) {
-    throw new ERR_MISSING_ARGS("actual", "expected");
-  }
-  if (looseDeepEqual(actual, expected, new Map())) {
-    innerFail(actual, expected, message, "notDeepEqual", notDeepEqual);
-  }
-}
-
-// --------------------------------------------------------------- throwing
-
-type Expectation =
+/** What `throws` and friends accept as a description of the expected error. */
+export type Expectation =
   | RegExp
   | ((err: unknown) => boolean)
   | (new (...args: never[]) => Error)
   | Record<string, unknown>
   | Error;
 
-/** Does `err` satisfy `expected`? Upstream `expectedException`. */
-function matches(err: unknown, expected: Expectation | undefined): boolean {
-  if (expected === undefined) {
-    return true;
-  }
-  if (expected instanceof RegExp) {
-    return expected.test(String(err));
-  }
-  if (typeof expected === "function") {
-    // A class matches by `instanceof`; a plain predicate by its return value.
-    // The two are told apart by whether the value has a prototype object, which
-    // is what `new`-ability comes down to here.
-    if (expected.prototype !== undefined && err instanceof (expected as new () => Error)) {
-      return true;
+interface FailArgs {
+  actual?: unknown;
+  expected?: unknown;
+  message?: string | Error | undefined;
+  operator: string;
+  stackStartFn: unknown;
+  diff?: DiffMode | undefined;
+}
+
+/** An `Error` given as the message replaces the assertion rather than wrapping it. */
+function innerFail(obj: FailArgs): never {
+  if (obj.message instanceof Error) throw obj.message;
+  throw new AssertionError(obj);
+}
+
+/**
+ * `assert.ok`'s body, shared by the three spellings of it.
+ *
+ * `fn` is where the stack should start, which differs between `assert(x)`,
+ * `assert.ok(x)` and `myAssert.ok(x)` -- the reader wants the line they wrote.
+ */
+function innerOk(fn: unknown, argLen: number, value?: unknown, message?: string | Error): void {
+  if (!value) {
+    let generatedMessage = false;
+
+    if (argLen === 0) {
+      generatedMessage = true;
+      message = "No value argument passed to `assert.ok()`";
+    } else if (message == null) {
+      generatedMessage = true;
+      // Node reads the failing expression out of the source here and reports
+      // "The expression evaluated to a falsy value: assert.ok(x)". That needs
+      // V8's structured stack positions and a JavaScript tokenizer, neither of
+      // which is reachable from here; without it the generated message is the
+      // ordinary `false !== true` diff, which is true but says less.
+      message = undefined;
+    } else if (message instanceof Error) {
+      throw message;
     }
-    if (Object.prototype.isPrototypeOf.call(Error, expected)) {
-      return false;
-    }
-    return (expected as (e: unknown) => boolean).call(undefined, err) === true;
+
+    const err = new AssertionError({
+      actual: value,
+      expected: true,
+      message,
+      operator: "==",
+      stackStartFn: fn,
+    });
+    err.generatedMessage = generatedMessage;
+    throw err;
   }
-  if (typeof expected === "object" && expected !== null) {
-    // Every listed key must match; keys the error has beyond them are ignored,
-    // so a caller can assert on `code` without naming `message`.
-    for (const key of Object.keys(expected)) {
-      const wanted = (expected as Record<string, unknown>)[key];
-      const found = (err as Record<string, unknown>)?.[key];
-      if (wanted instanceof RegExp) {
-        if (!wanted.test(String(found))) return false;
-      } else if (!isDeepStrictEqual(found, wanted)) {
-        return false;
+}
+
+let failWarned = false;
+
+/**
+ * The assertion methods.
+ *
+ * Written as a class so the methods sit on one prototype and can be taken off
+ * it by name -- which is how both the module object and `assert.strict` are
+ * assembled below, and how node does it.
+ */
+class AssertImpl {
+  declare AssertionError: typeof AssertionError;
+  declare [kOptions]: ResolvedOptions;
+
+  constructor(options?: AssertOptions) {
+    const resolved: ResolvedOptions = Object.assign(
+      { __proto__: null, strict: true, skipPrototype: false } as ResolvedOptions,
+      options,
+    );
+
+    if (resolved.diff !== undefined) {
+      validateOneOf(resolved.diff, "options.diff", ["simple", "full"]);
+    }
+
+    this.AssertionError = AssertionError;
+    Object.defineProperty(this, kOptions, {
+      __proto__: null,
+      value: resolved,
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    } as PropertyDescriptor);
+
+    // An instance defaults to strict: the loose comparisons exist for code
+    // that predates the strict ones, and new code asking for an instance is
+    // not that code.
+    if (resolved.strict) {
+      const self = this as unknown as Record<string, unknown>;
+      self["equal"] = this.strictEqual;
+      self["deepEqual"] = this.deepStrictEqual;
+      self["notEqual"] = this.notStrictEqual;
+      self["notDeepEqual"] = this.notDeepStrictEqual;
+    }
+  }
+
+  /**
+   * Fail unconditionally.
+   *
+   * The argument handling is historical: one argument is the message, none is
+   * "Failed", and more than one is the deprecated form that took an actual and
+   * an expected.
+   */
+  fail(
+    this: Configured | void,
+    actual?: unknown,
+    expected?: unknown,
+    message?: string | Error,
+    operator?: string,
+    stackStartFn?: unknown,
+  ): never {
+    const argsLen = arguments.length;
+
+    let internalMessage = false;
+    if (actual == null && argsLen <= 1) {
+      internalMessage = true;
+      message = "Failed";
+    } else if (argsLen === 1) {
+      message = actual as string | Error;
+      actual = undefined;
+    } else {
+      if (failWarned === false) {
+        failWarned = true;
+        nts_process_emit_warning(
+          "assert.fail() with more than one argument is deprecated. " +
+            "Please use assert.strictEqual() instead or only pass a message.",
+          "DeprecationWarning",
+          "DEP0094",
+        );
+      }
+      if (argsLen === 2) {
+        operator = "!=";
       }
     }
-    return true;
-  }
-  return false;
-}
 
-export function throws(fn: AnyFn, expected?: Expectation | string, message?: string | Error): void {
-  if (typeof fn !== "function") {
-    throw new ERR_INVALID_ARG_TYPE("fn", "Function", fn);
-  }
-  // `throws(fn, 'message')` is the two-argument form where the second is the
-  // assertion's own message, not an expectation.
-  let expectation: Expectation | undefined;
-  let note = message;
-  if (typeof expected === "string") {
-    note = expected;
-  } else {
-    expectation = expected;
-  }
+    if (message instanceof Error) throw message;
 
-  let threw = false;
-  let thrown: unknown;
-  try {
-    fn();
-  } catch (err) {
-    threw = true;
-    thrown = err;
-  }
-
-  if (!threw) {
-    innerFail(undefined, expectation, note ?? "Missing expected exception.", "throws", throws);
-  }
-  if (!matches(thrown, expectation)) {
-    if (thrown instanceof Error && expectation !== undefined && typeof expectation === "object" &&
-        !(expectation instanceof RegExp)) {
-      innerFail(thrown, expectation, note, "throws", throws);
-    }
-    throw thrown;
-  }
-}
-
-export function doesNotThrow(fn: AnyFn, expected?: Expectation | string, message?: string | Error): void {
-  if (typeof fn !== "function") {
-    throw new ERR_INVALID_ARG_TYPE("fn", "Function", fn);
-  }
-  try {
-    fn();
-  } catch (err) {
-    const expectation = typeof expected === "string" ? undefined : expected;
-    const note = typeof expected === "string" ? expected : message;
-    if (!matches(err, expectation)) {
-      // Something else went wrong; the caller wanted to hear about that rather
-      // than about the assertion.
-      throw err;
-    }
-    innerFail(err, expectation, `Got unwanted exception${note ? `: ${note}` : "."}\nActual message: "${
-      (err as Error)?.message}"`, "doesNotThrow", doesNotThrow);
-  }
-}
-
-export async function rejects(
-  promiseOrFn: Promise<unknown> | (() => Promise<unknown>),
-  expected?: Expectation | string,
-  message?: string | Error,
-): Promise<void> {
-  const expectation = typeof expected === "string" ? undefined : expected;
-  const note = typeof expected === "string" ? expected : message;
-  let threw = false;
-  let thrown: unknown;
-  try {
-    await (typeof promiseOrFn === "function" ? promiseOrFn() : promiseOrFn);
-  } catch (err) {
-    threw = true;
-    thrown = err;
-  }
-  if (!threw) {
-    innerFail(undefined, expectation, note ?? "Missing expected rejection.", "rejects", rejects);
-  }
-  if (!matches(thrown, expectation)) {
-    throw thrown;
-  }
-}
-
-export async function doesNotReject(
-  promiseOrFn: Promise<unknown> | (() => Promise<unknown>),
-  expected?: Expectation | string,
-  message?: string | Error,
-): Promise<void> {
-  try {
-    await (typeof promiseOrFn === "function" ? promiseOrFn() : promiseOrFn);
-  } catch (err) {
-    const expectation = typeof expected === "string" ? undefined : expected;
-    const note = typeof expected === "string" ? expected : message;
-    if (!matches(err, expectation)) {
-      throw err;
-    }
-    innerFail(err, expectation, `Got unwanted rejection${note ? `: ${note}` : "."}`, "doesNotReject", doesNotReject);
-  }
-}
-
-/** `ifError(err)` throws whatever it was handed, unless that is nothing. */
-export function ifError(err: unknown): void {
-  if (err !== null && err !== undefined) {
-    const message = err instanceof Error
-      ? `ifError got unwanted exception: ${err.message}`
-      : `ifError got unwanted exception: ${inspect(err)}`;
-    throw new AssertionError({
-      actual: err, expected: null, operator: "ifError", message, stackStartFn: ifError,
+    const err = new AssertionError({
+      actual,
+      expected,
+      operator: operator === undefined ? "fail" : operator,
+      stackStartFn: stackStartFn || AssertImpl.prototype.fail,
+      message,
+      diff: this?.[kOptions]?.diff,
     });
+    if (internalMessage) {
+      err.generatedMessage = true;
+    }
+    throw err;
   }
-}
 
-// ---------------------------------------------------------------- matching
+  /** Truthiness, as `!!value` decides it. */
+  ok(this: Configured | void, ...args: unknown[]): void {
+    innerOk(AssertImpl.prototype.ok, args.length, args[0], args[1] as string | Error);
+  }
 
-export function match(str: string, regexp: RegExp, message?: string | Error): void {
-  if (!(regexp instanceof RegExp)) {
-    throw new ERR_INVALID_ARG_TYPE("regexp", "RegExp", regexp);
+  /** Shallow coercive equality, `==`, with `NaN` equal to itself. */
+  equal(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
+    if (arguments.length < 2) {
+      throw new ERR_MISSING_ARGS("actual", "expected");
+    }
+    // eslint-disable-next-line eqeqeq
+    if (actual != expected && (!Number.isNaN(actual) || !Number.isNaN(expected))) {
+      innerFail({
+        actual, expected, message,
+        operator: "==",
+        stackStartFn: AssertImpl.prototype.equal,
+        diff: this?.[kOptions]?.diff,
+      });
+    }
   }
-  if (typeof str !== "string" || !regexp.test(str)) {
-    innerFail(str, regexp,
-      message ?? `The input did not match the regular expression ${regexp}. Input:\n\n${inspect(str)}\n`,
-      "match", match);
-  }
-}
 
-export function doesNotMatch(str: string, regexp: RegExp, message?: string | Error): void {
-  if (!(regexp instanceof RegExp)) {
-    throw new ERR_INVALID_ARG_TYPE("regexp", "RegExp", regexp);
+  notEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
+    if (arguments.length < 2) {
+      throw new ERR_MISSING_ARGS("actual", "expected");
+    }
+    // eslint-disable-next-line eqeqeq
+    if (actual == expected || (Number.isNaN(actual) && Number.isNaN(expected))) {
+      innerFail({
+        actual, expected, message,
+        operator: "!=",
+        stackStartFn: AssertImpl.prototype.notEqual,
+        diff: this?.[kOptions]?.diff,
+      });
+    }
   }
-  if (typeof str === "string" && regexp.test(str)) {
-    innerFail(str, regexp,
-      message ?? `The input was expected to not match the regular expression ${regexp}. Input:\n\n${inspect(str)}\n`,
-      "doesNotMatch", doesNotMatch);
+
+  deepEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
+    if (arguments.length < 2) {
+      throw new ERR_MISSING_ARGS("actual", "expected");
+    }
+    if (!isDeepEqual(actual, expected)) {
+      innerFail({
+        actual, expected, message,
+        operator: "deepEqual",
+        stackStartFn: AssertImpl.prototype.deepEqual,
+        diff: this?.[kOptions]?.diff,
+      });
+    }
+  }
+
+  notDeepEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
+    if (arguments.length < 2) {
+      throw new ERR_MISSING_ARGS("actual", "expected");
+    }
+    if (isDeepEqual(actual, expected)) {
+      innerFail({
+        actual, expected, message,
+        operator: "notDeepEqual",
+        stackStartFn: AssertImpl.prototype.notDeepEqual,
+        diff: this?.[kOptions]?.diff,
+      });
+    }
+  }
+
+  deepStrictEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
+    if (arguments.length < 2) {
+      throw new ERR_MISSING_ARGS("actual", "expected");
+    }
+    if (!isDeepStrictEqual(actual, expected, this?.[kOptions]?.skipPrototype)) {
+      innerFail({
+        actual, expected, message,
+        operator: "deepStrictEqual",
+        stackStartFn: AssertImpl.prototype.deepStrictEqual,
+        diff: this?.[kOptions]?.diff,
+      });
+    }
+  }
+
+  notDeepStrictEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
+    if (arguments.length < 2) {
+      throw new ERR_MISSING_ARGS("actual", "expected");
+    }
+    if (isDeepStrictEqual(actual, expected, this?.[kOptions]?.skipPrototype)) {
+      innerFail({
+        actual, expected, message,
+        operator: "notDeepStrictEqual",
+        stackStartFn: AssertImpl.prototype.notDeepStrictEqual,
+        diff: this?.[kOptions]?.diff,
+      });
+    }
+  }
+
+  /** `Object.is`, so `NaN` equals itself and `0` does not equal `-0`. */
+  strictEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
+    if (arguments.length < 2) {
+      throw new ERR_MISSING_ARGS("actual", "expected");
+    }
+    if (!Object.is(actual, expected)) {
+      innerFail({
+        actual, expected, message,
+        operator: "strictEqual",
+        stackStartFn: AssertImpl.prototype.strictEqual,
+        diff: this?.[kOptions]?.diff,
+      });
+    }
+  }
+
+  notStrictEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
+    if (arguments.length < 2) {
+      throw new ERR_MISSING_ARGS("actual", "expected");
+    }
+    if (Object.is(actual, expected)) {
+      innerFail({
+        actual, expected, message,
+        operator: "notStrictEqual",
+        stackStartFn: AssertImpl.prototype.notStrictEqual,
+        diff: this?.[kOptions]?.diff,
+      });
+    }
+  }
+
+  /** Every key in `expected` matches; keys `actual` has beyond them are ignored. */
+  partialDeepStrictEqual(
+    this: Configured | void,
+    actual: unknown,
+    expected: unknown,
+    message?: string | Error,
+  ): void {
+    if (arguments.length < 2) {
+      throw new ERR_MISSING_ARGS("actual", "expected");
+    }
+    if (!isPartialStrictEqual(actual, expected)) {
+      innerFail({
+        actual, expected, message,
+        operator: "partialDeepStrictEqual",
+        stackStartFn: AssertImpl.prototype.partialDeepStrictEqual,
+        diff: this?.[kOptions]?.diff,
+      });
+    }
+  }
+
+  throws(this: Configured | void, promiseFn: AnyFn, ...args: unknown[]): void {
+    expectsError.call(
+      this, AssertImpl.prototype.throws, getActual(promiseFn),
+      args[0] as Expectation | string | undefined, args[1] as string | undefined,
+      args.length,
+    );
+  }
+
+  async rejects(this: Configured | void, promiseFn: AnyFn | Promise<unknown>, ...args: unknown[]): Promise<void> {
+    expectsError.call(
+      this, AssertImpl.prototype.rejects, await waitForActual(promiseFn),
+      args[0] as Expectation | string | undefined, args[1] as string | undefined,
+      args.length,
+    );
+  }
+
+  doesNotThrow(this: Configured | void, fn: AnyFn, ...args: unknown[]): void {
+    expectsNoError.call(
+      this, AssertImpl.prototype.doesNotThrow, getActual(fn),
+      args[0] as Expectation | string | undefined, args[1] as string | undefined,
+    );
+  }
+
+  async doesNotReject(this: Configured | void, fn: AnyFn | Promise<unknown>, ...args: unknown[]): Promise<void> {
+    expectsNoError.call(
+      this, AssertImpl.prototype.doesNotReject, await waitForActual(fn),
+      args[0] as Expectation | string | undefined, args[1] as string | undefined,
+    );
+  }
+
+  /**
+   * Fail if `err` is anything but `null` or `undefined`.
+   *
+   * The stack is spliced: the frames from inside `ifError` are replaced by the
+   * original error's, so the reader is pointed at where the error came from
+   * rather than at the line that checked for it.
+   */
+  ifError(this: Configured | void, err: unknown): void {
+    if (err !== null && err !== undefined) {
+      let message = "ifError got unwanted exception: ";
+      if (typeof err === "object" && typeof (err as Error).message === "string") {
+        if ((err as Error).message.length === 0 && (err as object).constructor) {
+          message += (err as object).constructor.name;
+        } else {
+          message += (err as Error).message;
+        }
+      } else {
+        message += inspect(err);
+      }
+
+      const newErr = new AssertionError({
+        actual: err,
+        expected: null,
+        operator: "ifError",
+        message,
+        stackStartFn: AssertImpl.prototype.ifError,
+        diff: this?.[kOptions]?.diff,
+      });
+
+      const origStack = (err as Error).stack;
+
+      if (typeof origStack === "string") {
+        const origStackStart = origStack.indexOf("\n    at");
+        if (origStackStart !== -1) {
+          const originalFrames = origStack.slice(origStackStart + 1).split("\n");
+          // Drop the frames the two stacks have in common, so the result reads
+          // as one trace rather than two overlapping ones.
+          let newFrames = (newErr.stack ?? "").split("\n");
+          for (const errFrame of originalFrames) {
+            const pos = newFrames.indexOf(errFrame);
+            if (pos !== -1) {
+              newFrames = newFrames.slice(0, pos);
+              break;
+            }
+          }
+          newErr.stack = `${newFrames.join("\n")}\n${originalFrames.join("\n")}`;
+        }
+      }
+
+      throw newErr;
+    }
+  }
+
+  match(this: Configured | void, string: string, regexp: RegExp, message?: string | Error): void {
+    internalMatch.call(this, string, regexp, message, AssertImpl.prototype.match, true);
+  }
+
+  doesNotMatch(this: Configured | void, string: string, regexp: RegExp, message?: string | Error): void {
+    internalMatch.call(this, string, regexp, message, AssertImpl.prototype.doesNotMatch, false);
   }
 }
 
 /**
- * `partialDeepStrictEqual`: every key in `expected` must match, and keys the
- * actual value has beyond them are ignored.
+ * A stand-in built from the keys a failed comparison looked at.
+ *
+ * Comparing two errors by a handful of properties would otherwise print both
+ * errors in full, stacks included. These carry only the keys under
+ * examination, so the diff shows what was compared and nothing else.
  */
-export function partialDeepStrictEqual(actual: unknown, expected: unknown, message?: string | Error): void {
-  if (!partialMatch(actual, expected)) {
-    innerFail(actual, expected, message, "partialDeepStrictEqual", partialDeepStrictEqual);
+function comparisonOf(
+  obj: Record<PropertyKey, unknown>,
+  keys: readonly string[],
+  actual?: Record<PropertyKey, unknown>,
+): object {
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (key in obj) {
+      // A regular expression that matched is shown as the string it matched:
+      // printing the pattern beside the value it accepted reads as a mismatch.
+      if (
+        actual !== undefined &&
+        typeof actual[key] === "string" &&
+        isRegExp(obj[key]) &&
+        (obj[key] as RegExp).exec(actual[key] as string) !== null
+      ) {
+        out[key] = actual[key];
+      } else {
+        out[key] = obj[key];
+      }
+    }
+  }
+  return out;
+}
+
+function compareExceptionKey(
+  this: Configured | void,
+  actual: Record<PropertyKey, unknown>,
+  expected: Record<PropertyKey, unknown>,
+  key: string,
+  message: string | Error | undefined,
+  keys: readonly string[],
+  fn: { name: string },
+): void {
+  if (!(key in actual) || !isDeepStrictEqual(actual[key], expected[key])) {
+    if (!message) {
+      const err = new AssertionError({
+        actual: comparisonOf(actual, keys),
+        expected: comparisonOf(expected, keys, actual),
+        operator: "deepStrictEqual",
+        stackStartFn: fn,
+        diff: this?.[kOptions]?.diff,
+      });
+      // The diff was built from the stand-ins; the properties report the real
+      // values, because that is what a caller inspecting the error wants.
+      err.actual = actual;
+      err.expected = expected;
+      err.operator = fn.name;
+      throw err;
+    }
+    innerFail({
+      actual, expected, message,
+      operator: fn.name,
+      stackStartFn: fn,
+      diff: this?.[kOptions]?.diff,
+    });
   }
 }
 
-function partialMatch(actual: unknown, expected: unknown): boolean {
-  if (Object.is(actual, expected)) {
+/**
+ * Does the thrown `actual` satisfy `expected`?
+ *
+ * `expected` may be a regular expression matched against the error's string
+ * form, an error class, a validation function, or an object of properties to
+ * compare -- and each of the four fails with its own wording.
+ */
+function expectedException(
+  this: Configured | void,
+  actual: unknown,
+  expected: Expectation,
+  message: string | Error | undefined,
+  fn: { name: string },
+): void {
+  let generatedMessage = false;
+  let throwError = false;
+
+  if (typeof expected !== "function") {
+    if (isRegExp(expected)) {
+      const str = String(actual);
+      if ((expected as RegExp).exec(str) !== null) {
+        return;
+      }
+
+      if (!message) {
+        generatedMessage = true;
+        message = "The input did not match the regular expression " +
+          `${inspect(expected)}. Input:\n\n${inspect(str)}\n`;
+      }
+      throwError = true;
+    } else if (typeof actual !== "object" || actual === null) {
+      // A primitive was thrown and an object was expected: there are no keys
+      // to compare, so report it as a plain inequality.
+      const err = new AssertionError({
+        actual, expected, message,
+        operator: "deepStrictEqual",
+        stackStartFn: fn,
+        diff: this?.[kOptions]?.diff,
+      });
+      err.operator = fn.name;
+      throw err;
+    } else {
+      const keys = Object.keys(expected as object);
+      // `name` and `message` are not enumerable on an error, and they are the
+      // two a caller most means to compare.
+      if (expected instanceof Error) {
+        keys.push("name", "message");
+      } else if (keys.length === 0) {
+        throw new ERR_INVALID_ARG_VALUE("error", expected, "may not be an empty object");
+      }
+      for (const key of keys) {
+        const actualValue = (actual as Record<string, unknown>)[key];
+        const expectedValue = (expected as Record<string, unknown>)[key];
+        if (
+          typeof actualValue === "string" &&
+          isRegExp(expectedValue) &&
+          (expectedValue as RegExp).exec(actualValue) !== null
+        ) {
+          continue;
+        }
+        compareExceptionKey.call(
+          this,
+          actual as Record<PropertyKey, unknown>,
+          expected as Record<PropertyKey, unknown>,
+          key, message, keys, fn,
+        );
+      }
+      return;
+    }
+    // An arrow function has no prototype, so `instanceof` would throw: guard
+    // before asking.
+  } else if (
+    (expected as { prototype?: unknown }).prototype !== undefined &&
+    actual instanceof (expected as new () => unknown)
+  ) {
+    return;
+  } else if (Object.prototype.isPrototypeOf.call(Error, expected)) {
+    if (!message) {
+      generatedMessage = true;
+      message = "The error is expected to be an instance of " +
+        `"${(expected as { name: string }).name}". Received `;
+      if (actual instanceof Error) {
+        const name = actual.constructor?.name || actual.name;
+        if ((expected as { name: string }).name === name) {
+          message += "an error with identical name but a different prototype.";
+        } else {
+          message += `"${name}"`;
+        }
+        if (actual.message) {
+          message += `\n\nError message:\n\n${actual.message}`;
+        }
+      } else {
+        message += `"${inspect(actual, { depth: -1 })}"`;
+      }
+    }
+    throwError = true;
+  } else {
+    // A validation function: anything but `true` is a failure, so that a
+    // function which forgets to return does not silently pass.
+    const res = (expected as (err: unknown) => unknown).call({}, actual);
+    if (res !== true) {
+      if (!message) {
+        generatedMessage = true;
+        const name = (expected as { name?: string }).name
+          ? `"${(expected as { name: string }).name}" `
+          : "";
+        message = `The ${name}validation function is expected to return` +
+          ` "true". Received ${inspect(res)}`;
+
+        if (actual instanceof Error) {
+          message += `\n\nCaught error:\n\n${actual}`;
+        }
+      }
+      throwError = true;
+    }
+  }
+
+  if (throwError) {
+    const err = new AssertionError({
+      actual, expected, message,
+      operator: fn.name,
+      stackStartFn: fn,
+      diff: this?.[kOptions]?.diff,
+    });
+    err.generatedMessage = generatedMessage;
+    throw err;
+  }
+}
+
+function getActual(fn: AnyFn): unknown {
+  validateFunction(fn, "fn");
+  try {
+    (fn as () => unknown)();
+  } catch (e) {
+    return e;
+  }
+  return NO_EXCEPTION_SENTINEL;
+}
+
+/**
+ * A native promise, or something close enough to be awaited safely.
+ *
+ * A thenable without a `catch` is not accepted: awaiting it could hand control
+ * to code that never gives it back, and the assertion would hang rather than
+ * fail.
+ */
+function checkIsPromise(obj: unknown): boolean {
+  return isPromise(obj) ||
+    (obj !== null && typeof obj === "object" &&
+      typeof (obj as { then?: unknown }).then === "function" &&
+      typeof (obj as { catch?: unknown }).catch === "function");
+}
+
+async function waitForActual(promiseFn: AnyFn | Promise<unknown>): Promise<unknown> {
+  let resultPromise: unknown;
+  if (typeof promiseFn === "function") {
+    resultPromise = (promiseFn as () => unknown)();
+    if (!checkIsPromise(resultPromise)) {
+      throw new ERR_INVALID_RETURN_VALUE("instance of Promise", "promiseFn", resultPromise);
+    }
+  } else if (checkIsPromise(promiseFn)) {
+    resultPromise = promiseFn;
+  } else {
+    throw new ERR_INVALID_ARG_TYPE("promiseFn", ["Function", "Promise"], promiseFn);
+  }
+
+  try {
+    await resultPromise;
+  } catch (e) {
+    return e;
+  }
+  return NO_EXCEPTION_SENTINEL;
+}
+
+function expectsError(
+  this: Configured | void,
+  stackStartFn: { name: string },
+  actual: unknown,
+  error?: Expectation | string,
+  message?: string,
+  argCount = 0,
+): void {
+  if (typeof error === "string") {
+    if (argCount === 2) {
+      throw new ERR_INVALID_ARG_TYPE("error", ["Object", "Error", "Function", "RegExp"], error);
+    }
+    // A message that happens to equal the error's own message is almost
+    // certainly a caller who meant it as the expectation, and the assertion
+    // would then pass without checking anything.
+    if (typeof actual === "object" && actual !== null) {
+      if ((actual as Error).message === error) {
+        throw new ERR_AMBIGUOUS_ARGUMENT(
+          "error/message",
+          `The error message "${(actual as Error).message}" is identical to the message.`,
+        );
+      }
+    } else if (actual === error) {
+      throw new ERR_AMBIGUOUS_ARGUMENT(
+        "error/message",
+        `The error "${actual}" is identical to the message.`,
+      );
+    }
+    message = error;
+    error = undefined;
+  } else if (error != null && typeof error !== "object" && typeof error !== "function") {
+    throw new ERR_INVALID_ARG_TYPE("error", ["Object", "Error", "Function", "RegExp"], error);
+  }
+
+  if (actual === NO_EXCEPTION_SENTINEL) {
+    let details = "";
+    if ((error as { name?: string })?.name) {
+      details += ` (${(error as { name: string }).name})`;
+    }
+    details += message ? `: ${message}` : ".";
+    const fnType = stackStartFn === AssertImpl.prototype.rejects ? "rejection" : "exception";
+    innerFail({
+      actual: undefined,
+      expected: error,
+      operator: stackStartFn.name,
+      message: `Missing expected ${fnType}${details}`,
+      stackStartFn,
+      diff: this?.[kOptions]?.diff,
+    });
+  }
+
+  if (!error) return;
+
+  expectedException.call(this, actual, error, message, stackStartFn);
+}
+
+function hasMatchingError(actual: unknown, expected: Expectation): boolean {
+  if (typeof expected !== "function") {
+    if (isRegExp(expected)) {
+      return (expected as RegExp).exec(String(actual)) !== null;
+    }
+    throw new ERR_INVALID_ARG_TYPE("expected", ["Function", "RegExp"], expected);
+  }
+  if (
+    (expected as { prototype?: unknown }).prototype !== undefined &&
+    actual instanceof (expected as new () => unknown)
+  ) {
     return true;
   }
-  if (typeof expected !== "object" || expected === null ||
-      typeof actual !== "object" || actual === null) {
+  // An error *class* that did not match above is simply not the one thrown;
+  // calling it as a validation function would construct an error instead.
+  if (Object.prototype.isPrototypeOf.call(Error, expected)) {
     return false;
   }
-  if (Array.isArray(expected)) {
-    if (!Array.isArray(actual) || actual.length !== expected.length) {
-      return false;
-    }
-    return expected.every((item, i) => partialMatch(actual[i], item));
-  }
-  for (const key of Reflect.ownKeys(expected)) {
-    if (!partialMatch((actual as Record<PropertyKey, unknown>)[key],
-                      (expected as Record<PropertyKey, unknown>)[key])) {
-      return false;
-    }
-  }
-  return true;
+  return (expected as (err: unknown) => unknown).call({}, actual) === true;
 }
+
+function expectsNoError(
+  this: Configured | void,
+  stackStartFn: { name: string },
+  actual: unknown,
+  error?: Expectation | string,
+  message?: string,
+): void {
+  if (actual === NO_EXCEPTION_SENTINEL) return;
+
+  if (typeof error === "string") {
+    message = error;
+    error = undefined;
+  }
+
+  if (!error || hasMatchingError(actual, error)) {
+    const details = message ? `: ${message}` : ".";
+    const fnType = stackStartFn === AssertImpl.prototype.doesNotReject ? "rejection" : "exception";
+    innerFail({
+      actual,
+      expected: error,
+      operator: stackStartFn.name,
+      message: `Got unwanted ${fnType}${details}\n` +
+        `Actual message: "${(actual as Error)?.message}"`,
+      stackStartFn,
+      diff: this?.[kOptions]?.diff,
+    });
+  }
+  // An error that was thrown and was not the unwanted one still happened, and
+  // swallowing it here would hide a real failure.
+  throw actual;
+}
+
+function internalMatch(
+  this: Configured | void,
+  string: string,
+  regexp: RegExp,
+  message: string | Error | undefined,
+  fn: { name: string },
+  shouldMatch: boolean,
+): void {
+  if (!isRegExp(regexp)) {
+    throw new ERR_INVALID_ARG_TYPE("regexp", "RegExp", regexp);
+  }
+  if (typeof string !== "string" || ((regexp.exec(string) !== null) !== shouldMatch)) {
+    if (message instanceof Error) {
+      throw message;
+    }
+
+    const generatedMessage = !message;
+
+    message ||= typeof string !== "string"
+      ? 'The "string" argument must be of type string. Received type ' +
+        `${typeof string} (${inspect(string)})`
+      : `${shouldMatch
+        ? "The input did not match the regular expression "
+        : "The input was expected to not match the regular expression "
+      }${inspect(regexp)}. Input:\n\n${inspect(string)}\n`;
+    const err = new AssertionError({
+      actual: string,
+      expected: regexp,
+      message,
+      operator: fn.name,
+      stackStartFn: fn,
+      diff: this?.[kOptions]?.diff,
+    });
+    err.generatedMessage = generatedMessage;
+    throw err;
+  }
+}
+
+/**
+ * `Assert` throws when called without `new`, so it cannot be the class itself:
+ * a class constructor called as a function throws a `TypeError` with no code,
+ * and the code is what a caller branches on.
+ */
+export interface AssertConstructor {
+  new (options?: AssertOptions): AssertImpl;
+  readonly prototype: AssertImpl;
+}
+
+const Assert = function Assert(this: unknown, options?: AssertOptions): AssertImpl {
+  if (new.target === undefined) {
+    throw new ERR_CONSTRUCT_CALL_REQUIRED("Assert");
+  }
+  return Reflect.construct(AssertImpl, [options], new.target) as AssertImpl;
+} as unknown as AssertConstructor;
+
+Object.defineProperty(Assert, "name", { __proto__: null, value: "Assert" } as PropertyDescriptor);
+(Assert as { prototype: AssertImpl }).prototype = AssertImpl.prototype;
+Object.setPrototypeOf(Assert, AssertImpl);
+
+export { Assert };
+
+// The module surface. Each is `Assert.prototype`'s method, unbound, exactly as
+// node exports it: `const { strictEqual } = require('assert')` has to keep
+// working, and these read their configuration through optional chaining so a
+// missing receiver means the defaults.
+export const fail = AssertImpl.prototype.fail;
+export const ok = AssertImpl.prototype.ok;
+export const equal = AssertImpl.prototype.equal;
+export const notEqual = AssertImpl.prototype.notEqual;
+export const deepEqual = AssertImpl.prototype.deepEqual;
+export const notDeepEqual = AssertImpl.prototype.notDeepEqual;
+export const deepStrictEqual = AssertImpl.prototype.deepStrictEqual;
+export const notDeepStrictEqual = AssertImpl.prototype.notDeepStrictEqual;
+export const strictEqual = AssertImpl.prototype.strictEqual;
+export const notStrictEqual = AssertImpl.prototype.notStrictEqual;
+export const partialDeepStrictEqual = AssertImpl.prototype.partialDeepStrictEqual;
+export const match = AssertImpl.prototype.match;
+export const doesNotMatch = AssertImpl.prototype.doesNotMatch;
+export const throws = AssertImpl.prototype.throws;
+export const rejects = AssertImpl.prototype.rejects;
+export const doesNotThrow = AssertImpl.prototype.doesNotThrow;
+export const doesNotReject = AssertImpl.prototype.doesNotReject;
+export const ifError = AssertImpl.prototype.ifError;

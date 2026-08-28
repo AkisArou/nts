@@ -80,3 +80,18 @@ export function validateOneOf(value: unknown, name: string, oneOf: readonly unkn
     throw new ERR_INVALID_ARG_VALUE(name, value, `must be one of: ${allowed}`);
   }
 }
+
+/** A 32-bit unsigned integer; `positive` makes zero invalid too. */
+export function validateUint32(value: unknown, name: string, positive = false): void {
+  if (typeof value !== "number") {
+    throw new ERR_INVALID_ARG_TYPE(name, "number", value);
+  }
+  if (!Number.isInteger(value)) {
+    throw new ERR_OUT_OF_RANGE(name, "an integer", value);
+  }
+  const min = positive ? 1 : 0;
+  const max = 4_294_967_295;
+  if (value < min || value > max) {
+    throw new ERR_OUT_OF_RANGE(name, `>= ${min} && <= ${max}`, value);
+  }
+}

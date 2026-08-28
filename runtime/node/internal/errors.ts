@@ -442,3 +442,55 @@ export class ERR_FALSY_VALUE_REJECTION extends NodeError {
     this.reason = reason;
   }
 }
+
+/** `Class constructor Assert cannot be invoked without \`new\``. */
+export class ERR_CONSTRUCT_CALL_REQUIRED extends NodeTypeError {
+  override readonly code = "ERR_CONSTRUCT_CALL_REQUIRED";
+
+  constructor(name: string) {
+    super(`Class constructor ${name} cannot be invoked without \`new\``);
+    this.name = "TypeError";
+  }
+}
+
+/**
+ * An argument that could plausibly have been meant as either of two things.
+ *
+ * `assert.throws(fn, 'oops')` is the case: `'oops'` is the message, but if the
+ * error's message is also `'oops'` then the caller probably meant it as the
+ * expectation and the assertion would pass for the wrong reason.
+ */
+export class ERR_AMBIGUOUS_ARGUMENT extends NodeTypeError {
+  override readonly code = "ERR_AMBIGUOUS_ARGUMENT";
+
+  constructor(name: string, reason: string) {
+    super(`The "${name}" argument is ambiguous. ${reason}`);
+    this.name = "TypeError";
+  }
+}
+
+/** A callback or supplied function returned something it should not have. */
+export class ERR_INVALID_RETURN_VALUE extends NodeTypeError {
+  override readonly code = "ERR_INVALID_RETURN_VALUE";
+
+  constructor(input: string, name: string, value: unknown) {
+    let type: string;
+    if (value != null && (value as object).constructor?.name) {
+      type = `instance of ${(value as object).constructor.name}`;
+    } else {
+      type = `type ${typeof value}`;
+    }
+    super(`Expected ${input} to be returned from the "${name}" function but got ${type}.`);
+    this.name = "TypeError";
+  }
+}
+
+/** Something was asked for while the process was on its way out. */
+export class ERR_UNAVAILABLE_DURING_EXIT extends NodeError {
+  override readonly code = "ERR_UNAVAILABLE_DURING_EXIT";
+
+  constructor() {
+    super("Cannot call function in process exit handler");
+    this.name = "Error";
+  }
+}
