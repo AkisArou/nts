@@ -109,6 +109,14 @@ pub const CLASS_DECLARATION: u16 = 264;
 pub const PROPERTY_ASSIGNMENT: u16 = 303;
 pub const SHORTHAND_PROPERTY_ASSIGNMENT: u16 = 304;
 pub const ARRAY_LITERAL_EXPRESSION: u16 = 210;
+/// `const { a, b } = o`. Its children are [`BINDING_ELEMENT`]s.
+pub const OBJECT_BINDING_PATTERN: u16 = 207;
+/// `const [a, b] = xs`. Its children are [`BINDING_ELEMENT`]s, in order.
+pub const ARRAY_BINDING_PATTERN: u16 = 208;
+/// One name bound by a pattern. One identifier for `{ a }` or `[a]`; two for
+/// `{ a: renamed }`, the property first and the new name second.
+pub const BINDING_ELEMENT: u16 = 209;
+
 pub const OBJECT_LITERAL_EXPRESSION: u16 = 211;
 /// `` `a${x}b` ``: a head, then one span per substitution.
 pub const TEMPLATE_EXPRESSION: u16 = 229;

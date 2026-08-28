@@ -85,7 +85,7 @@ diagnostic.
 | `?.` and `??` | **not done** | |
 | template literals | done | a head and one span per substitution, walked left to right — which is the evaluation order and is observable. Each substitution goes through the same conversion `String(n)` does. Tagged templates are not done |
 | spread and rest in calls or literals | **not done** | |
-| destructuring | **not done** | declarations, parameters and assignment |
+| destructuring | partial | declarations and parameters, for the two plain shapes. The initializer is lowered *once*, which is what the pattern means. A default, a rest, a nested pattern and a computed property name are each refused by name. Destructuring *assignment* — `[a, b] = [b, a]` — is not done |
 | `delete`, `in`, `instanceof` | **not done** | |
 | regular expression literals | **not done** | |
 
@@ -400,8 +400,9 @@ In order, with the reason rather than the ranking:
    which this compiler already has everywhere else. Note the differential
    problem first: node's type stripping rejects an `enum` outright.
 4. **`Map` and `Set`** — no real program does without them.
-5. **Destructuring** — declarations, parameters and assignment. The other half
-   of this entry, template literals, is done.
+5. **The rest of destructuring** — a default, a rest element, a nested pattern,
+   and destructuring *assignment*. Declarations and parameters are done, and
+   each remaining shape refuses by name, so the work is bounded and visible.
 6. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
    for promises rather than an alternative to them.
 7. **Tagged unions** — `number | undefined` and unions of unrelated objects.

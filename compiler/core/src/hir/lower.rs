@@ -2558,11 +2558,23 @@ impl<'a> FuncBuilder<'a> {
 
     fn lower_param(&mut self, id: NodeId, index: u32) -> Result<Param, Diagnostic> {
         let children = self.children(id);
+        // A name, or a pattern standing where one would be. `function f({ x }:
+        // P)` is one parameter carrying one value, and the pattern is what the
+        // body reads out of it.
         let name_node = children
             .iter()
-            .find(|child| self.kind_of(**child) == Some(syntax::IDENTIFIER))
+            .find(|child| {
+                matches!(
+                    self.kind_of(**child),
+                    Some(
+                        syntax::IDENTIFIER
+                            | syntax::OBJECT_BINDING_PATTERN
+                            | syntax::ARRAY_BINDING_PATTERN
+                    )
+                )
+            })
             .copied()
-            .ok_or_else(|| self.unsupported(id, "a destructured parameter"))?;
+            .ok_or_else(|| self.unsupported(id, "a parameter with no name"))?;
 
         // A parameter list that does not line up with the argument list, one
         // way or the other. Both were *silently* lowered as ordinary
@@ -2633,8 +2645,14 @@ impl<'a> FuncBuilder<'a> {
             });
         let value = self.push(OpKind::Param(index), ty.clone(), origin.clone());
         // Bound by symbol, so every later mention of this name resolves to the
-        // same value rather than to a fresh load.
-        if let Some(symbol) = self.node(name_node).symbol {
+        // same value rather than to a fresh load. A pattern has no symbol of
+        // its own -- its *elements* do, and each is a read of the parameter.
+        if matches!(
+            self.kind_of(name_node),
+            Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
+        ) {
+            self.bind_pattern(name_node, value)?;
+        } else if let Some(symbol) = self.node(name_node).symbol {
             self.bindings.insert(symbol.0, value);
         }
 
@@ -5381,11 +5399,120 @@ impl<'a> FuncBuilder<'a> {
             } else {
                 self.lower_expression(initializer)?
             };
+            // `const { a, b } = o` and `const [a, b] = xs`: one initializer,
+            // several names. Lowered as the reads it stands for -- a field per
+            // name, or an element per position.
+            if matches!(
+                self.kind_of(name),
+                Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
+            ) {
+                self.bind_pattern(name, value)?;
+                continue;
+            }
             let symbol = self
                 .node(name)
                 .symbol
                 .ok_or_else(|| self.unsupported(name, "an unresolved declaration"))?;
             self.bindings.insert(symbol.0, value);
+        }
+        Ok(())
+    }
+
+    /// Bind every name a destructuring pattern introduces.
+    ///
+    /// The initializer is lowered *once* and each name is a read of it, which
+    /// is what the pattern means: `const { a, b } = f()` calls `f` once.
+    ///
+    /// Only the two plain shapes. A default (`{ a = 1 }`), a rest (`[a,
+    /// ...tail]`), a nested pattern and a computed property name are each a
+    /// separate feature and are refused by name rather than by falling through
+    /// to something that looks close.
+    fn bind_pattern(&mut self, pattern: NodeId, value: ValueId) -> Result<(), Diagnostic> {
+        let object = self.kind_of(pattern) == Some(syntax::OBJECT_BINDING_PATTERN);
+        for (position, element) in self.children(pattern).into_iter().enumerate() {
+            if self.kind_of(element) != Some(syntax::BINDING_ELEMENT) {
+                return Err(self.unsupported(element, "a binding of unexpected shape"));
+            }
+            let parts = self.children(element);
+            // Each unsupported shape is named, because they are separate
+            // features and a reader who wrote one wants to know which.
+            if parts
+                .iter()
+                .any(|part| self.kind_of(*part) == Some(syntax::DOT_DOT_DOT_TOKEN))
+            {
+                return Err(self.unsupported(element, "a rest element in a pattern"));
+            }
+            // One identifier for `{ a }` and `[a]`; two for `{ a: renamed }`,
+            // the property first.
+            let (property, binding) = match parts.as_slice() {
+                [only] => (*only, *only),
+                [from, to] => (*from, *to),
+                _ => return Err(self.unsupported(element, "a default in a pattern")),
+            };
+            if matches!(
+                self.kind_of(binding),
+                Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
+            ) {
+                return Err(self.unsupported(element, "a nested destructuring pattern"));
+            }
+            if self.kind_of(binding) != Some(syntax::IDENTIFIER) {
+                // `{ a = 1 }` is the property and its default, with no rename.
+                return Err(self.unsupported(element, "a default in a pattern"));
+            }
+            let Some(symbol) = self.node(binding).symbol else {
+                return Err(self.unsupported(element, "an unresolved binding"));
+            };
+
+            let origin = self.origin(element);
+            let read = if object {
+                let HirType::Managed(ManagedType::Object(type_id)) =
+                    self.values[value.0 as usize].ty.clone()
+                else {
+                    return Err(self.unsupported(element, "destructuring something with no fields"));
+                };
+                let layout = self.layout_of(element, type_id)?;
+                let name = self
+                    .node(property)
+                    .text
+                    .clone()
+                    .ok_or_else(|| self.unsupported(element, "a computed property name"))?;
+                let Some(field) = layout.index_of(&name) else {
+                    return Err(self.absent_member(element, type_id, &name));
+                };
+                let ty = layout.fields[field as usize].ty.clone();
+                self.push(
+                    OpKind::FieldGet {
+                        object: value,
+                        field,
+                    },
+                    ty,
+                    origin,
+                )
+            } else {
+                let HirType::Managed(ManagedType::Array(element_ty)) =
+                    self.values[value.0 as usize].ty.clone()
+                else {
+                    return Err(
+                        self.unsupported(element, "destructuring something that is not an array")
+                    );
+                };
+                #[allow(clippy::cast_precision_loss)]
+                let at = position as f64;
+                let index = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
+                // Checked, like every other element read: a pattern longer than
+                // its array is `undefined` in JavaScript and this compiler has
+                // no `undefined` to hand back.
+                self.push(
+                    OpKind::ArrayGet {
+                        array: value,
+                        index,
+                        checked: true,
+                    },
+                    *element_ty,
+                    origin,
+                )
+            };
+            self.bindings.insert(symbol.0, read);
         }
         Ok(())
     }
