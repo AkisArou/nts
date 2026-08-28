@@ -1176,3 +1176,87 @@ NTS1018 ("assignment to an imported binding") is listed with fixture "M6's fixtu
 - **§4.1/§4.2's handle.** The hidden identity plus one relaxed load and compare is strictly cheaper and strictly stronger than the descriptor-address sentinel, and the choice to make exactly three words atomic is well-supported by the 24 non-atomic statics and the `nts_collecting` guard at `nts_runtime.c:471`.
 - **§6.4's fatality mechanism.** Implementable exactly as written: `drop_callers_of_refused` (`hir/mod.rs:1155+`) and `root_names` (`reachable.rs:109`) both exist, and the set intersection is exact rather than heuristic.
 - **§5.4's `release == NULL` and per-struct unit naming.** Correct, and correctly grounded in `NTS_IMMORTAL` static string emission.
+---
+
+# Amendments after review
+
+Three decisions in the body above were overturned by the user on reading it.
+Recorded here rather than edited in place, so that the argument the reviewers
+made and the reason it did not survive are both visible.
+
+## A1. An export does not take `NtsRuntimeHandle`
+
+**Was:** §12 decision 1, "an export takes `NtsRuntimeHandle`, from day one,
+even though it is ignored", described as the only external ABI decision in the
+document and the central "so we do not refactor later" purchase.
+
+**Now:** exports take their own arguments and nothing else.
+
+```c
+double counter_reading(void);
+```
+
+The reviewers' argument was future-proofing: changing a signature later breaks
+every consumer. It does not survive contact with the rest of the same
+document. §4 refuses more than one runtime per image and makes shutdown
+terminal, so there is exactly one runtime and the handle is a compile-time
+constant carrying no information. Every check it was said to enable --
+use-before-create, use-after-shutdown, a forged handle, the §17.4 thread check
+-- is a comparison against the image's own state word, which a parameter does
+not help with and which §4.1 already performs internally.
+
+What remains is a bet on multi-instance. But §4 lists what multi-instance
+actually costs: threading an `NtsRuntime *` through twenty-four file-scope
+objects and a cycle collector whose `nts_collecting` guard makes a concurrent
+second instance *drop* its candidates. The handle is the cheapest part of that
+change, so carrying it now buys a small fraction of a transition that is
+explicitly deferred, at the price of a parameter on every call in every
+program that ever links this.
+
+And the mechanism for changing it exists: §5's `NTS_ABI_VERSION` and surface
+digest were built for precisely this, then argued against being used. A
+pre-1.0 compiler with a version field and a staleness check should use them.
+
+The handle survives where it means something -- `create` produces one,
+`shutdown` consumes it -- because there it is the token that says *you* created
+this runtime.
+
+## A2. An export returns its own type, not `NtsStatus`
+
+**Was:** §5, uniform `NtsStatus <product>_<name>(handle, args…, out…)`.
+
+**Now:** `double counter_reading(void)`.
+
+The justification was that a TypeScript function can throw and a `double`
+return has nowhere to put that. But nothing throws *out* of a function today:
+there is no `try`/`catch`, so `nts_thrown` prints and calls `abort()`
+(`runtime/c/nts_runtime.c`, and the header says so at
+`runtime/c/nts_runtime.h:355-360` -- "every throw is uncaught by construction
+and a throw is a *termination*"). Every export would pay an out-parameter and a
+status test for a failure channel that does not exist.
+
+When exceptions land, a function that can throw takes the status form, the ABI
+version bumps and the digest catches stale headers. That is one bump on a
+compiler with no released ABI, against a permanent cost on every call.
+
+The status enum itself stays: `create` and `shutdown` genuinely have several
+outcomes, and that is where it belongs.
+
+## A3. The public surface is the entry module's exports
+
+**Was:** §6 and §8, the surface is `exports: [...]` in `nts.config.ts`.
+
+**Now:** by default the surface is what the entry module `export`s.
+TypeScript's `export` keyword already declares it; restating each name in a
+manifest is duplication that drifts, and the drift is silent in the direction
+that matters -- a name removed from the manifest is quietly pruned from the
+artifact.
+
+`exports: [...]` remains as optional *narrowing*, for a product that wants to
+publish less than its entry module exports. `undeclared()`
+(`compiler/core/src/hir/reachable.rs:78-89`) already reports the reverse
+mistake, a manifest naming something the program does not export.
+
+This also matches how a JavaScript package works: the entry's exports are its
+API. It removes the manifest from the common case entirely -- a library with
+one entry module and no narrowing needs no `exports` key at all.

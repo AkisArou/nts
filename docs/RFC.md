@@ -2086,6 +2086,36 @@ An MMTk configuration requiring a process-global heap should fail at build plann
 
 ---
 
+## 27.4 The reverse direction: C headers into TypeScript
+
+§27.1 is TypeScript out. The inverse — an existing C library in — has no
+tooling and needs some.
+
+The *calling* mechanism already exists: a `declare function` written by the
+program is an FFI import and stays external for the linker to supply, as
+distinct from a name declared only by `lib.d.ts`, which is a builtin this
+compiler has not implemented. What is missing is generating those declarations
+from a header, which is `bindgen` to §27.1's `cbindgen`.
+
+It matters for the same reason the generated header does, in the same
+direction of travel. A hand-written `declare function nts_env_get(name: string):
+string` is an *unchecked claim* about a foreign signature; getting it wrong is
+a silent ABI mismatch, which is precisely what generating the outward header
+exists to prevent. Every `declare function` in the Node profile today is
+trusted rather than verified.
+
+The design question is the projection table of §27.2 read backwards, and it is
+not simply its inverse: a C header offers `char *` with no length, `void *`
+with no type, structs by value, varargs and function pointers, none of which
+have a single correct TypeScript spelling. What is *not* in question is that
+the two directions must agree — a type that crosses out as an `NtsTextView`
+must cross back in as the same thing, or a program that round-trips a value
+through C is silently reinterpreting it.
+
+Not scheduled. Written down because it is a hole in the product story rather
+than a missing convenience: a native library that cannot consume native
+libraries is an island rather than a component.
+
 # 28. Portable Libraries
 
 Portable TypeScript should own behavior that is not inherently platform-specific.
