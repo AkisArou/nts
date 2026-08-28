@@ -5434,13 +5434,19 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(element, "a binding of unexpected shape"));
             }
             let parts = self.children(element);
-            // Each unsupported shape is named, because they are separate
-            // features and a reader who wrote one wants to know which.
+            // `[a, ...tail]`: everything from here on, as a new array. An
+            // object rest -- `{ a, ...others }` -- would have to *build* an
+            // object out of the fields nobody named, which is a different
+            // thing, and is refused.
             if parts
                 .iter()
                 .any(|part| self.kind_of(*part) == Some(syntax::DOT_DOT_DOT_TOKEN))
             {
-                return Err(self.unsupported(element, "a rest element in a pattern"));
+                if object {
+                    return Err(self.unsupported(element, "a rest element in an object pattern"));
+                }
+                self.bind_rest(element, value, position)?;
+                continue;
             }
             // One identifier for `{ a }` and `[a]`; two for `{ a: renamed }`,
             // the property first.
@@ -5449,18 +5455,21 @@ impl<'a> FuncBuilder<'a> {
                 [from, to] => (*from, *to),
                 _ => return Err(self.unsupported(element, "a default in a pattern")),
             };
-            if matches!(
+            let nested = matches!(
                 self.kind_of(binding),
                 Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
-            ) {
-                return Err(self.unsupported(element, "a nested destructuring pattern"));
-            }
-            if self.kind_of(binding) != Some(syntax::IDENTIFIER) {
+            );
+            if !nested && self.kind_of(binding) != Some(syntax::IDENTIFIER) {
                 // `{ a = 1 }` is the property and its default, with no rename.
                 return Err(self.unsupported(element, "a default in a pattern"));
             }
-            let Some(symbol) = self.node(binding).symbol else {
-                return Err(self.unsupported(element, "an unresolved binding"));
+            let symbol = if nested {
+                None
+            } else {
+                match self.node(binding).symbol {
+                    Some(symbol) => Some(symbol),
+                    None => return Err(self.unsupported(element, "an unresolved binding")),
+                }
             };
 
             let origin = self.origin(element);
@@ -5512,8 +5521,54 @@ impl<'a> FuncBuilder<'a> {
                     origin,
                 )
             };
-            self.bindings.insert(symbol.0, read);
+            // `{ p: { x } }` is a read and then another pattern over what it
+            // produced, which is the same function one level down.
+            match symbol {
+                Some(symbol) => {
+                    self.bindings.insert(symbol.0, read);
+                }
+                None => self.bind_pattern(binding, read)?,
+            }
         }
+        Ok(())
+    }
+
+    /// `[a, ...tail]`: everything from `position` on, as a new array.
+    ///
+    /// A slice rather than a view, which is what the language says: `tail` is a
+    /// fresh array and writing to it does not touch the one it came from.
+    fn bind_rest(
+        &mut self,
+        element: NodeId,
+        value: ValueId,
+        position: usize,
+    ) -> Result<(), Diagnostic> {
+        let Some(binding) = self
+            .children(element)
+            .into_iter()
+            .find(|part| self.kind_of(*part) == Some(syntax::IDENTIFIER))
+        else {
+            return Err(self.unsupported(element, "a rest element with no name"));
+        };
+        let Some(symbol) = self.node(binding).symbol else {
+            return Err(self.unsupported(element, "an unresolved binding"));
+        };
+        let ty = self.values[value.0 as usize].ty.clone();
+        let origin = self.origin(element);
+        #[allow(clippy::cast_precision_loss)]
+        let at = position as f64;
+        let from = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
+        let to = self.push(OpKind::Length(value), HirType::NUMBER, origin.clone());
+        let rest = self.push(
+            OpKind::Call {
+                callee: Callee::External("nts_array_slice".to_owned()),
+                args: vec![value, from, to],
+                frame: None,
+            },
+            ty,
+            origin,
+        );
+        self.bindings.insert(symbol.0, rest);
         Ok(())
     }
 

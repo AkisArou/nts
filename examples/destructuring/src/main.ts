@@ -63,3 +63,34 @@ export function inALoop(n: number): number {
   }
   return total;
 }
+
+interface Wrapper {
+  inner: Point;
+  scale: number;
+}
+
+// A pattern inside a pattern is a read and then the same function one level
+// down. The inner names are the ones that get bound; `inner` itself is not.
+export function nested(n: number): number {
+  const w: Wrapper = { inner: { x: n, y: n * 7 }, scale: n + 1 };
+  const {
+    inner: { x, y },
+    scale,
+  } = w;
+  return (x * 1000 + y) * 10 + scale;
+}
+
+// `...tail` is everything from that position on, as a new array. Its length and
+// its contents both have to be right, so the check reads both.
+export function restElement(n: number): number {
+  const xs: number[] = [n, n + 1, n + 2, n + 3];
+  const [head, ...tail] = xs;
+  return head * 10000 + tail.length * 1000 + tail[0]! * 10 + tail[2]!;
+}
+
+// A rest that takes nothing, which is an empty array rather than an absent one.
+export function emptyRest(n: number): number {
+  const xs: number[] = [n];
+  const [only, ...none] = xs;
+  return only * 10 + none.length;
+}
