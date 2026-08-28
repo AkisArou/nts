@@ -206,7 +206,7 @@ constructs refused`, from `nts hir`.
 | `fs` | 72 / 214 | 2 | ? | sync, callback and promise surfaces, the file streams and the watchers |
 | `zlib` | 30 / 64 | 0 | ? | the streams, the one-shots, brotli and zstd |
 | `net` | 37 / 139 | 0 | ? | `Socket` and `Server`; `BlockList` and auto-select-family absent |
-| `stream` | 151 / 195 | 2 | ? | the core is complete; `web`, `iter`, `consumers`, `compose` and `duplexify` are absent |
+| `stream` | 151 / 195 | 2 | ? | the core is complete; `web`, `iter` and `consumers` are absent |
 
 The first two columns are what
 
