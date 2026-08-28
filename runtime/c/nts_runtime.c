@@ -1411,3 +1411,315 @@ bool nts_string_eq(const NtsString *a, const NtsString *b) {
   }
   return true;
 }
+
+/* --- Tasks, the host seam, and the checkpoint (RFC 12.1) -------------------
+ *
+ * See docs/async.md. The short version: the runtime owns the two queues and
+ * the checkpoint because their ordering is observable, and the host owns the
+ * loop because it is the platform's. The vtable is what makes a deterministic
+ * test host possible, which is why it is a vtable rather than a compile-time
+ * choice.
+ */
+
+static NtsHost nts_host;
+static bool nts_host_installed = false;
+static uint32_t nts_depth = 0;
+
+void nts_host_install(const NtsHost *host) {
+  nts_host = *host;
+  nts_host_installed = true;
+}
+
+static void nts_require_host(const char *what) {
+  if (!nts_host_installed) {
+    fprintf(stderr, "nts: %s before a host was installed\n", what);
+    abort();
+  }
+}
+
+/* A growable ring of tasks.
+ *
+ * A ring rather than a list because the drain is FIFO and the whole point is
+ * that it stays FIFO: reaction order is what the specification pins. */
+typedef struct NtsQueue {
+  NtsTask *items;
+  uint32_t head;
+  uint32_t len;
+  uint32_t capacity;
+} NtsQueue;
+
+static NtsQueue nts_microtask_queue;
+static NtsQueue nts_tick_queue;
+
+static void nts_queue_push(NtsQueue *queue, NtsTask task) {
+  if (queue->len == queue->capacity) {
+    uint32_t capacity = queue->capacity ? queue->capacity * 2u : 16u;
+    NtsTask *items = (NtsTask *)malloc((size_t)capacity * sizeof(NtsTask));
+    if (!items) {
+      fprintf(stderr, "nts: out of memory growing a task queue\n");
+      abort();
+    }
+    /* Unrolled into the new order, so the ring starts at zero again. */
+    for (uint32_t i = 0; i < queue->len; i++) {
+      items[i] = queue->items[(queue->head + i) % queue->capacity];
+    }
+    free(queue->items);
+    queue->items = items;
+    queue->head = 0;
+    queue->capacity = capacity;
+  }
+  queue->items[(queue->head + queue->len) % queue->capacity] = task;
+  queue->len++;
+}
+
+static bool nts_queue_shift(NtsQueue *queue, NtsTask *out) {
+  if (queue->len == 0) {
+    return false;
+  }
+  *out = queue->items[queue->head];
+  queue->head = (queue->head + 1u) % queue->capacity;
+  queue->len--;
+  return true;
+}
+
+void nts_enqueue_microtask(NtsTask task) {
+  /* A host that owns checkpointing owns the queue with it, so there is one
+   * ordering rather than two interleaved (RFC 26.6). */
+  if (nts_host_installed && nts_host.enqueue_microtask) {
+    nts_host.enqueue_microtask(nts_host.state, task);
+    return;
+  }
+  nts_queue_push(&nts_microtask_queue, task);
+}
+
+void nts_enqueue_tick(NtsTask task) { nts_queue_push(&nts_tick_queue, task); }
+
+bool nts_has_pending_work(void) {
+  return nts_microtask_queue.len != 0 || nts_tick_queue.len != 0;
+}
+
+/* The checkpoint.
+ *
+ *     do {
+ *         while (tick = ticks.shift())  tick()
+ *         drain microtasks until empty
+ *     } while (ticks is not empty)
+ *
+ * Two queues, because `process.nextTick`'s runs ahead of the microtask queue
+ * and a tick enqueued *by* a microtask runs in a second pass of the same
+ * checkpoint rather than in the next macrotask. A profile that never enqueues
+ * a tick makes the inner loop a no-op and this is exactly the ECMAScript
+ * checkpoint -- it generalizes rather than special-cases, which is why it is
+ * here from the start rather than retrofitted around programs that would then
+ * change order.
+ *
+ * The drain runs to fixpoint, so a program can starve the host loop. That is
+ * the specified behaviour and the alternative reorders observable output;
+ * starvation is a program bug rather than a scheduling policy.
+ *
+ * Named for what a stack trace should call it. */
+static void nts_process_ticks_and_rejections(void) {
+  NtsTask task;
+  do {
+    while (nts_queue_shift(&nts_tick_queue, &task)) {
+      task.run(task.state);
+    }
+    while (nts_queue_shift(&nts_microtask_queue, &task)) {
+      task.run(task.state);
+    }
+  } while (nts_tick_queue.len != 0);
+}
+
+void nts_enter(void) { nts_depth++; }
+
+void nts_leave(void) {
+  if (nts_depth == 0) {
+    fprintf(stderr, "nts: unbalanced nts_leave\n");
+    abort();
+  }
+  nts_depth--;
+  if (nts_depth != 0) {
+    return;
+  }
+  /* A host that supplied `enqueue_microtask` checkpoints for us. */
+  if (nts_host_installed && nts_host.enqueue_microtask) {
+    return;
+  }
+  nts_process_ticks_and_rejections();
+}
+
+void nts_task_run(NtsTask task) {
+  nts_enter();
+  task.run(task.state);
+  nts_leave();
+}
+
+bool nts_is_owner_thread(void) {
+  return !nts_host_installed || !nts_host.is_owner_thread ||
+         nts_host.is_owner_thread(nts_host.state);
+}
+
+/* Posting is thin, and these exist for the assertion and the contract note
+ * rather than for the indirection. */
+void nts_post_task(NtsTask task) {
+  nts_require_host("nts_post_task");
+  nts_host.post_task(nts_host.state, task);
+}
+
+NtsTimerId nts_post_delayed(NtsTask task, double delay_ms, bool repeating) {
+  nts_require_host("nts_post_delayed");
+  return nts_host.post_delayed(nts_host.state, task, delay_ms, repeating);
+}
+
+void nts_cancel_delayed(NtsTimerId id) {
+  nts_require_host("nts_cancel_delayed");
+  nts_host.cancel_delayed(nts_host.state, id);
+}
+
+/* The one entry point that is safe off-thread. Everything a platform completes
+ * on its own thread -- OkHttp, URLSession, WinHTTP, libuv's file pool -- comes
+ * home through here before it may touch the heap. */
+void nts_post_from_any_thread(NtsTask task) {
+  nts_require_host("nts_post_from_any_thread");
+  nts_host.post_from_any_thread(nts_host.state, task);
+}
+
+
+/* --- Promises (RFC 12) -----------------------------------------------------
+ *
+ * Ordering is the whole substance here: reactions run in subscription order,
+ * on the microtask queue, and never inline. Everything else is bookkeeping.
+ */
+
+static const uint32_t nts_reaction_offsets[] = {
+    (uint32_t)offsetof(NtsReaction, state),
+    (uint32_t)offsetof(NtsReaction, next),
+};
+
+/* Cyclic, both of them: a reaction's state is an async frame, and a frame can
+ * hold the promise it will settle. That is an ordinary cycle and the collector
+ * has to be able to see it. */
+static const NtsDescriptor nts_desc_reaction = {
+    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsReaction), 2u, 1u,
+    nts_reaction_offsets, 0, "Reaction",
+};
+
+static const uint32_t nts_promise_offsets[] = {
+    (uint32_t)offsetof(NtsPromise, reference),
+    (uint32_t)offsetof(NtsPromise, reactions),
+};
+
+static const NtsDescriptor nts_desc_promise = {
+    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsPromise), 2u, 1u,
+    nts_promise_offsets, 0, "Promise",
+};
+
+NtsPromise *nts_promise_new(void) {
+  return (NtsPromise *)nts_object_new(&nts_desc_promise);
+}
+
+static void nts_promise_require_owner(const char *what) {
+  if (!nts_is_owner_thread()) {
+    /* A capability adapter resolving straight from its completion thread.
+     * OkHttp, URLSession, WinHTTP and libuv's file pool all complete on a
+     * thread the runtime does not own, and settling a promise is a heap
+     * mutation -- so this is a data race that would usually appear to work.
+     * RFC 17.4 requires the completion to come home first. */
+    fprintf(stderr, "nts: %s from a thread that does not own the runtime\n",
+            what);
+    abort();
+  }
+}
+
+/* Hand every reaction to the microtask queue, oldest subscription first.
+ *
+ * The chain is newest-first because subscribing prepends, so it is reversed
+ * here. Reversing costs one walk and happens once; keeping a tail pointer
+ * would cost the collector a second reference to every reaction. */
+static void nts_promise_schedule(NtsPromise *promise) {
+  NtsReaction *reaction = promise->reactions;
+  promise->reactions = 0;
+  NtsReaction *ordered = 0;
+  while (reaction) {
+    NtsReaction *next = reaction->next;
+    reaction->next = ordered;
+    ordered = reaction;
+    reaction = next;
+  }
+  while (ordered) {
+    NtsReaction *next = ordered->next;
+    ordered->next = 0;
+    NtsTask task;
+    task.run = ordered->run;
+    task.drop = ordered->drop;
+    task.state = ordered->state;
+    nts_enqueue_microtask(task);
+    /* The queue holds the state now; the reaction object itself is done. */
+    ordered->state = 0;
+    nts_release((NtsHeader *)ordered);
+    ordered = next;
+  }
+}
+
+static void nts_promise_settle(NtsPromise *promise, uint32_t state) {
+  promise->state = state;
+  nts_promise_schedule(promise);
+}
+
+void nts_promise_fulfill_void(NtsPromise *promise) {
+  nts_promise_require_owner("nts_promise_fulfill_void");
+  if (promise->state != NTS_PROMISE_PENDING) {
+    return;
+  }
+  promise->payload = NTS_PAYLOAD_NONE;
+  nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
+}
+
+void nts_promise_fulfill_number(NtsPromise *promise, double value) {
+  nts_promise_require_owner("nts_promise_fulfill_number");
+  if (promise->state != NTS_PROMISE_PENDING) {
+    return;
+  }
+  promise->payload = NTS_PAYLOAD_NUMBER;
+  promise->number = value;
+  nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
+}
+
+void nts_promise_fulfill_reference(NtsPromise *promise, NtsHeader *value) {
+  nts_promise_require_owner("nts_promise_fulfill_reference");
+  if (promise->state != NTS_PROMISE_PENDING) {
+    return;
+  }
+  promise->payload = NTS_PAYLOAD_REFERENCE;
+  nts_retain(value);
+  promise->reference = value;
+  nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
+}
+
+void nts_promise_reject(NtsPromise *promise, NtsHeader *reason) {
+  nts_promise_require_owner("nts_promise_reject");
+  if (promise->state != NTS_PROMISE_PENDING) {
+    return;
+  }
+  promise->payload = NTS_PAYLOAD_REFERENCE;
+  nts_retain(reason);
+  promise->reference = reason;
+  nts_promise_settle(promise, NTS_PROMISE_REJECTED);
+}
+
+void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction) {
+  nts_promise_require_owner("nts_promise_subscribe");
+  if (promise->state != NTS_PROMISE_PENDING) {
+    /* Settled already -- but still a microtask, not an inline call. Running it
+     * here would resolve one tick early, and the difference is observable
+     * through interleaving with any other pending promise. */
+    nts_enqueue_microtask(reaction);
+    return;
+  }
+  NtsReaction *entry = (NtsReaction *)nts_object_new(&nts_desc_reaction);
+  entry->run = reaction.run;
+  entry->drop = reaction.drop;
+  entry->state = (NtsHeader *)reaction.state;
+  entry->next = promise->reactions;
+  promise->reactions = entry;
+}

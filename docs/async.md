@@ -224,6 +224,45 @@ promise. The same argument that forbids delegating the queue forbids this.
 
 ---
 
+## 5a. What a promise holds
+
+The runtime never learns the *type* of a promise's value, for the same reason
+it never learns a closure's signature: whoever reads it was compiled knowing,
+and `NtsTask.run` is a compiler-emitted trampoline.
+
+It still has to *store* it, so the payload is a closed two-slot union — a
+`double`, or a managed reference — with a tag saying which is live, and a third
+state for `void`. That is not `any` creeping in: it is the same closed set of
+machine representations as the typed-array element table, written down rather
+than discovered. A rejection reason is always a reference, so it uses the same
+slot.
+
+The reaction list is the part that constrains the design, because the collector
+has to walk it. `nts_each_reference` knows two shapes — an array of references,
+and an object with reference fields at fixed offsets — and a dynamic list of
+`{run, drop, state}` triples is neither. So a reaction is a small managed object
+with one reference field, and the list is an ordinary managed array of them.
+Both shapes already trace, and no collector special case is needed.
+
+That costs two allocations beyond the promise for the common single-`await`
+case, where an inline first reaction would cost none. The inline version waits
+for a benchmark that says it matters: ordering first, then measure.
+
+Two behaviours worth stating because they look like details and are not:
+
+- Subscribing to an **already settled** promise enqueues a microtask; it does
+  not run the reaction inline. Running inline changes the tick count, which is
+  observable through interleaving.
+- Settling twice is a no-op. A promise settles once, and the second resolution
+  is silently ignored rather than an error, because that is what the
+  specification says and programs rely on it.
+
+Fulfilling and rejecting assert the owner thread. That assertion is the one
+that catches a capability adapter resolving straight from its completion thread
+(RFC §17.4), which is a data race that usually appears to work.
+
+---
+
 ## 6. How this gets tested
 
 The seam exists for portability, but its **first** value is that it makes the
@@ -284,10 +323,40 @@ session builds on it.
    checkpoint. Owner-thread assertions.
 2. Promise: state, reaction list, resolve, reject, subscribe.
 3. The deterministic test host with virtual time.
-4. The trace-comparison harness: run to quiescence, compare the marker
-   sequence against node.
+4. The ordering oracle, in two halves — see below.
 
 Nothing in A is reachable from TypeScript. It is all testable from C.
+
+### The oracle splits, and the second half needs a language surface
+
+Step 4 was written as one thing and is two, which only became clear when the
+first half was built.
+
+**A4a, done.** The C suites in `runtime/c/tests/`: every expected sequence
+transcribed from node, with the program that produced it in the comment beside
+it, run against the deterministic host. `checkpoint.c` covers the two queues
+and the fixpoint; `promises.c` covers reaction order, deferral, settling once,
+and that the reaction chain gives its memory back.
+
+Each was sabotage-tested rather than trusted for passing. That found a real
+hole: every promise test subscribed to an *already settled* promise, which goes
+straight to the microtask queue and never touches the reaction chain — so the
+code that puts the chain back into subscription order had no case reaching it,
+and reversing it to LIFO passed the whole suite. The case that reaches it is a
+*pending* promise with several subscribers, and it is there now.
+
+**A4b, blocked on a surface.** A trace of markers printed from TypeScript needs
+something to print with, and `console` belongs to the Node profile rather than
+to the core, which refuses it. Inventing a core `console.log` for the harness
+would duplicate work another session owns.
+
+The way through needs no new surface: drive several exported `async` functions
+and compare the order in which their promises *settle*, which is an ordering
+observation made of return values — and `nts check`'s driver already produces
+those. That is a smaller instrument than a marker trace and it observes the
+thing that matters. It is written after the lowering exists to produce a
+promise at all, which is the one place the plan's ordering genuinely cannot
+hold, and saying so is better than pretending A4 was finished.
 
 **B. The language.**
 

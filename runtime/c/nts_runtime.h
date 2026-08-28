@@ -657,4 +657,157 @@ static inline double nts_max(double a, double b) {
     return a > b ? a : b;
 }
 
+/* --- Tasks, the host seam, and the checkpoint (RFC 12.1, 26; docs/async.md) -
+ *
+ * The runtime owns language behavior; the host owns execution environment
+ * behavior. Promise ordering is specified and observable, so it stays here. The
+ * loop is the host's, and the host reaches it through the vtable below and
+ * nothing else.
+ */
+
+/* A unit of deferred work.
+ *
+ * `run` is a *compiler-emitted trampoline*, not a runtime closure wrapper: it
+ * knows the exact signature of the thing it calls, because the call site did.
+ * That is also what keeps the drain the caller of a tick callback rather than
+ * something between them, which a stack trace can see.
+ *
+ * `state` is usually a managed object, and a queued task owns a reference to
+ * it. Whoever holds the task must eventually either run it or drop it -- both
+ * give the reference back. A host that discards a task on teardown without
+ * saying so leaks the frame and everything it holds. */
+typedef struct NtsTask {
+    void (*run)(void *state);
+    /* Release `state` without running. Null when there is nothing owned. */
+    void (*drop)(void *state);
+    void *state;
+} NtsTask;
+
+typedef uint64_t NtsTimerId;
+
+/* Everything a host provides. Five operations and one opt-out. */
+typedef struct NtsHost {
+    /* Run after the current task *and* after a complete checkpoint. That
+     * ordering is what `setImmediate` is built on, so it is specified here
+     * rather than left for each host to reproduce. */
+    void (*post_task)(void *state, NtsTask task);
+
+    /* Run after at least `delay_ms`. The id is what `clearTimeout` cancels. */
+    NtsTimerId (*post_delayed)(void *state, NtsTask task, double delay_ms,
+                               bool repeating);
+    void (*cancel_delayed)(void *state, NtsTimerId id);
+
+    /* The only operation callable from a thread the runtime does not own.
+     * Every foreign completion goes through it before touching the heap:
+     * resolving a promise is a heap mutation (RFC 17.4). */
+    void (*post_from_any_thread)(void *state, NtsTask task);
+
+    /* For assertions, and cheap enough to leave on. */
+    bool (*is_owner_thread)(void *state);
+
+    /* Optional, and null for every host but a Blink renderer. Supplying it
+     * means the host owns checkpointing: our queues and our drain are both
+     * disabled, so there is one queue and one ordering (RFC 26.6). */
+    void (*enqueue_microtask)(void *state, NtsTask task);
+
+    void *state;
+} NtsHost;
+
+void nts_host_install(const NtsHost *host);
+
+/* Run a task with the checkpoint around it. Hosts call *this*, never
+ * `task.run`, so a host cannot omit a checkpoint by forgetting. */
+void nts_task_run(NtsTask task);
+
+/* Post to the host. Thin, but they are where the ownership contract is
+ * documented, and where the owner-thread assertion lives. */
+void nts_post_task(NtsTask task);
+NtsTimerId nts_post_delayed(NtsTask task, double delay_ms, bool repeating);
+void nts_cancel_delayed(NtsTimerId id);
+void nts_post_from_any_thread(NtsTask task);
+bool nts_is_owner_thread(void);
+
+/* The two queues. */
+void nts_enqueue_microtask(NtsTask task);
+void nts_enqueue_tick(NtsTask task);
+
+/* Nesting, by depth: a capability may re-enter compiled code synchronously and
+ * only the outermost return is a checkpoint. */
+void nts_enter(void);
+void nts_leave(void);
+
+/* Whether either queue has anything left. For an embedder driving its own
+ * loop, and for a test asserting quiescence. */
+bool nts_has_pending_work(void);
+
+/* --- Promises (RFC 12; docs/async.md 5a) -----------------------------------
+ *
+ * The runtime never learns what a promise's value *is*, for the same reason it
+ * never learns a closure's signature: whoever reads it was compiled knowing.
+ * It still has to store it, so the payload is a closed two-slot union with a
+ * tag -- the same closed set of machine representations as the typed-array
+ * element table, written down rather than discovered.
+ */
+
+enum {
+    NTS_PROMISE_PENDING = 0,
+    NTS_PROMISE_FULFILLED = 1,
+    NTS_PROMISE_REJECTED = 2
+};
+
+enum {
+    NTS_PAYLOAD_NONE = 0,
+    NTS_PAYLOAD_NUMBER = 1,
+    NTS_PAYLOAD_REFERENCE = 2
+};
+
+/* One reaction, as a managed object.
+ *
+ * A managed object rather than a bare `NtsTask` in a list because the
+ * collector walks two shapes -- an array of references, and an object with
+ * reference fields at fixed offsets -- and a dynamic list of triples is
+ * neither. This is the second shape, and the list is the first, so nothing in
+ * the collector needs a special case. */
+typedef struct NtsReaction {
+    NtsHeader header;
+    void (*run)(void *state);
+    void (*drop)(void *state);
+    NtsHeader *state;
+    /* The list is threaded through the reactions themselves rather than held
+     * in an array: an array of references would need its own growth and its
+     * elements are written through a `double`-typed helper. A chain of
+     * fixed-offset objects needs neither, and one allocation per reaction is
+     * what an array would have cost anyway. */
+    struct NtsReaction *next;
+} NtsReaction;
+
+typedef struct NtsPromise {
+    NtsHeader header;
+    uint32_t state;   /* NTS_PROMISE_* */
+    uint32_t payload; /* NTS_PAYLOAD_* */
+    double number;
+    /* The fulfilled value when it is a reference, or the rejection reason,
+     * which always is one. */
+    NtsHeader *reference;
+    /* Newest first; reversed into subscription order when it settles, so the
+     * chain holds exactly one strong reference to each reaction and there is
+     * no aliasing tail pointer for the collector to double-count. */
+    NtsReaction *reactions;
+} NtsPromise;
+
+NtsPromise *nts_promise_new(void);
+
+/* Settle it. A promise settles once: a second call is ignored rather than
+ * refused, because that is what the specification says and programs rely on
+ * it. Each asserts the owner thread. */
+void nts_promise_fulfill_void(NtsPromise *promise);
+void nts_promise_fulfill_number(NtsPromise *promise, double value);
+void nts_promise_fulfill_reference(NtsPromise *promise, NtsHeader *value);
+void nts_promise_reject(NtsPromise *promise, NtsHeader *reason);
+
+/* Run `reaction` when it settles, or on the microtask queue if it already has.
+ * Already-settled does *not* run inline: that would change the tick count,
+ * which is observable through interleaving. */
+void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction);
+
 #endif /* NTS_RUNTIME_H */
