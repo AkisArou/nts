@@ -167,7 +167,14 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**554 of node's own test files pass** across eighteen modules, of which 15 are hollow.
+**559 of node's own 991 applicable test files pass** across eighteen modules,
+of which 15 are hollow.
+
+This total was 554 in the previous revision, arrived at by adding each module's
+gain to the last number as it landed. It drifted by five. `sweep.mjs` prints
+the sum precisely so that nobody has to do that, and the rule this document
+already states about the per-module rows — a hand-copied number is a claim
+nobody can check — applies to the headline as much as to the table.
 
 > **The `compiles` column means something again.** For most of this document's
 > life it did not. The frontend decomposed types under a fixed budget, and
