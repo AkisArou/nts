@@ -42,7 +42,8 @@ diagnostic.
 | `globalThis` | **not done** | |
 | `isNaN`, `isFinite`, `parseInt`, `parseFloat` | **broken** | see *Known defects* — they lower to link-time externs rather than being refused |
 | `Number.MAX_SAFE_INTEGER`, `Number.isInteger`, … | **not done** | |
-| `.toString()`, `String(x)`, `Number(x)` | **not done** | no conversions between primitives |
+| `n.toString()`, `String(n)`, `s + n` | done for a **number** | ECMAScript's `Number::toString`, not a `printf` conversion: the shortest decimal that reads back as the same double, in the four layouts the specification gives, with exponential notation only outside 1e-7 and 1e21. `%.17g` gets all three wrong. `String(x)` on anything else refuses — on `unknown` it is a general renderer, on an object it walks a prototype chain |
+| `Number(x)`, `String(boolean)` | **not done** | |
 
 ## Statements and control flow
 
@@ -82,7 +83,7 @@ diagnostic.
 | the comma operator | **not done** | |
 | `s[0]` on a string | **not done** | indexing is an array operation here |
 | `?.` and `??` | **not done** | |
-| template literals | **not done** | very common in real TypeScript |
+| template literals | **not done** | very common in real TypeScript. The conversion they need now exists: `` `${n}` `` is `String(n)` and a concatenation, so what is left is the syntax rather than the semantics |
 | spread and rest in calls or literals | **not done** | |
 | destructuring | **not done** | declarations, parameters and assignment |
 | `delete`, `in`, `instanceof` | **not done** | |
@@ -400,8 +401,8 @@ In order, with the reason rather than the ranking:
    problem first: node's type stripping rejects an `enum` outright.
 4. **`Map` and `Set`** — no real program does without them.
 5. **Template literals and destructuring** — the two most common things in
-   modern TypeScript that this compiler cannot read at all. Interpolation needs
-   `ToString` on a number, which is Ryū or Grisu and not a missing arm.
+   modern TypeScript that this compiler cannot read at all. Interpolation is now
+   only syntax: `` `${n}` `` is `String(n)` and a concatenation, and both exist.
 6. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
    for promises rather than an alternative to them.
 7. **Tagged unions** — `number | undefined` and unions of unrelated objects.

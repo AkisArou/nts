@@ -284,6 +284,10 @@ NtsString *nts_concat_into(NtsHeader *into, const NtsString *a,
  * valid UTF-8 yields U+FFFD for each bad byte, which is what every decoder that
  * has to keep going does. */
 NtsString *nts_string_from_utf8(const char *bytes, size_t length);
+/* ECMAScript `Number::toString`, base 10. The shortest decimal that reads back
+ * as the same double, laid out the way the specification lays it out -- which
+ * is not what any `printf` conversion produces. */
+NtsString *nts_number_to_string(double x);
 
 /* Array methods, over arrays of numbers.
  *

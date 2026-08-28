@@ -3746,18 +3746,40 @@ impl<'a> FuncBuilder<'a> {
     /// number: the shortest decimal that round-trips through a `double` is a
     /// real algorithm — Ryū, Grisu — and `%.17g` is not it. So this is refused
     /// rather than approximated.
-    fn both_strings(&self, id: NodeId, lhs: ValueId, rhs: ValueId) -> Result<(), Diagnostic> {
-        for operand in [lhs, rhs] {
-            if !matches!(
-                self.values[operand.0 as usize].ty,
-                HirType::Managed(ManagedType::String)
-            ) {
-                return Err(
-                    self.unsupported(id, "a `+` between a string and a value that is not one")
-                );
+    /// A value as a string, converting a number the way JavaScript does.
+    ///
+    /// `+` resolves to concatenation from the *result* type, which is right —
+    /// `"a" + "b"` is a string and `1 + 2` is not — and says nothing about the
+    /// operands. `"" + n` is a string result with a `double` operand, and it
+    /// used to reach the backend as `(NtsString *)v0`: a cast from a double to
+    /// a pointer, which clang rejects.
+    ///
+    /// So the operands are converted here, by `nts_number_to_string` —
+    /// ECMAScript's `Number::toString` rather than a `printf` conversion,
+    /// because `%.17g` prints `0.1` as `0.10000000000000001` and switches to
+    /// exponential notation at a threshold that is not JavaScript's.
+    ///
+    /// Everything else is refused. `String(true)` is `"true"` and an object's
+    /// is `toString` off the prototype chain, and neither is a conversion this
+    /// compiler has.
+    fn as_string(&mut self, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+        let text = HirType::Managed(ManagedType::String);
+        match self.values[value.0 as usize].ty {
+            HirType::Managed(ManagedType::String) => Ok(value),
+            HirType::Float { .. } | HirType::Int { .. } => {
+                let origin = self.origin(id);
+                Ok(self.push(
+                    OpKind::Call {
+                        callee: Callee::External("nts_number_to_string".to_owned()),
+                        args: vec![value],
+                        frame: None,
+                    },
+                    text,
+                    origin,
+                ))
             }
+            _ => Err(self.unsupported(id, "a conversion to string from this type")),
         }
-        Ok(())
     }
 
     /// Put a value into a place.
@@ -5320,6 +5342,20 @@ impl<'a> FuncBuilder<'a> {
         };
         let receiver = self.lower_expression(*receiver_node)?;
 
+        // `n.toString()` is `ToString` spelled as a method. A number has no
+        // other method this compiler provides, so the arm is exact rather than
+        // a first guess.
+        if matches!(
+            self.values[receiver.0 as usize].ty,
+            HirType::Float { .. } | HirType::Int { .. }
+        ) {
+            let name = self.node(*member).text.clone().unwrap_or_default();
+            if name == "toString" && arguments.is_empty() {
+                return self.as_string(id, receiver);
+            }
+            return Err(self.unsupported(id, &format!("`{name}` on a number")));
+        }
+
         // A string's methods are the runtime's, not the program's: there is
         // no `String` class here to resolve a call against.
         if matches!(
@@ -5473,6 +5509,17 @@ impl<'a> FuncBuilder<'a> {
         // the checker resolved the call to a declaration node: the decoded file
         // set is the program's own sources, so a `lib.d.ts` declaration has
         // none.
+        // `String(x)` is one of the builtins this compiler *does* provide, for a
+        // number: it is `ToString`, which is what `s + n` already needs. Not
+        // for anything else -- `String(unknown)` is a general renderer and
+        // `String({})` walks a prototype chain.
+        if name == "String"
+            && target.callee.is_none()
+            && let [argument] = arguments.as_slice()
+        {
+            let value = self.lower_expression(*argument)?;
+            return self.as_string(id, value);
+        }
         if target.callee.is_none() {
             return Err(self.unsupported(
                 id,
@@ -6506,11 +6553,14 @@ impl<'a> FuncBuilder<'a> {
             // backend as pointer arithmetic. `lower_binary` resolves `+` against
             // the result type for exactly this reason; the compound form has to
             // ask the same question rather than assume the answer.
-            let op = if matches!(op, BinOp::Add) && ty.is_managed() {
-                self.both_strings(id, current, addend)?;
-                BinOp::Concat
+            let (op, current, addend) = if matches!(op, BinOp::Add) && ty.is_managed() {
+                (
+                    BinOp::Concat,
+                    self.as_string(id, current)?,
+                    self.as_string(id, addend)?,
+                )
             } else {
-                op
+                (op, current, addend)
             };
             let origin = self.origin(id);
             let updated = if bitwise_operator_of(op) {
@@ -6553,9 +6603,14 @@ impl<'a> FuncBuilder<'a> {
         // `+` is not one operator. On numbers it is arithmetic; on strings it is
         // concatenation, and the two lower to nothing alike. Resolving it here
         // against the result type means no backend has to ask again.
-        if token == syntax::PLUS_TOKEN && ty.is_managed() {
-            self.both_strings(id, lhs, rhs)?;
-        }
+        // `s + n` converts `n` before concatenating. Done here rather than in
+        // the backend, because the conversion is a *call* and a backend that
+        // synthesized one would be deciding a semantic question.
+        let (lhs, rhs) = if token == syntax::PLUS_TOKEN && ty.is_managed() {
+            (self.as_string(id, lhs)?, self.as_string(id, rhs)?)
+        } else {
+            (lhs, rhs)
+        };
         let op = match token {
             syntax::EQUALS_TOKEN => unreachable!("assignment is handled before this"),
             syntax::PLUS_TOKEN if ty.is_managed() => BinOp::Concat,

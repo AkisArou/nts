@@ -626,6 +626,15 @@ fn print_types(tsconfig: &Utf8Path) -> Result<()> {
             .map_or_else(String::new, |args| format!(" args{args:?}"));
         println!("#{index}{named}{arguments} {:?}", record.kind);
     }
+    // What each type extends. A generic class that extends another is the one
+    // place the checker's answer is not obvious from the type list alone.
+    for (ty, bases) in &snapshot.base_types {
+        println!(
+            "base #{} -> {:?}",
+            ty.0,
+            bases.iter().map(|b| b.0).collect::<Vec<_>>()
+        );
+    }
     // Signatures too. A type prints as `Function(SignatureId(2))`, which says
     // nothing about what the call takes -- and for a generic call, whether the
     // checker handed back the *instantiated* signature is the question the
