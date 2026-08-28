@@ -438,6 +438,15 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
 
+    // Warnings are printed whether or not the program typechecks. A partial
+    // type graph (NTS0002) makes every refusal below it suspect, so a consumer
+    // that showed diagnostics only on error would hide the one diagnostic that
+    // explains the others.
+    for diagnostic in &snapshot.diagnostics {
+        if diagnostic.severity == nts_diagnostics::Severity::Warning {
+            println!("warning: {} {}", diagnostic.code, diagnostic.message);
+        }
+    }
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
             println!("{} {}", diagnostic.code, diagnostic.message);
@@ -893,6 +902,15 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
+    // Warnings are printed whether or not the program typechecks. A partial
+    // type graph (NTS0002) makes every refusal below it suspect, so a consumer
+    // that showed diagnostics only on error would hide the one diagnostic that
+    // explains the others.
+    for diagnostic in &snapshot.diagnostics {
+        if diagnostic.severity == nts_diagnostics::Severity::Warning {
+            eprintln!("warning: {} {}", diagnostic.code, diagnostic.message);
+        }
+    }
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
             eprintln!("{} {}", diagnostic.code, diagnostic.message);

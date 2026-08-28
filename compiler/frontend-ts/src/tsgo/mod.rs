@@ -988,7 +988,46 @@ impl TsgoApi {
         );
         let mut stats = DeepStats::default();
         if let Some(budget) = self.decompose {
-            stats.decomposed = Some(deep.run(snapshot, seeds, budget)?);
+            let run = deep.run(snapshot, seeds, budget)?;
+            // A partial type graph is not a partial *answer* -- it is a wrong
+            // one wearing the clothes of an answer. Every type the budget did
+            // not reach stays a placeholder, the lowering finds it
+            // unrepresentable, and the refusal it prints names the construct
+            // rather than the truncation. So a program that exhausts the budget
+            // gets diagnostics that are individually plausible and collectively
+            // meaningless.
+            //
+            // The Node profile made that concrete: `diagnostics_channel`
+            // exhausted it, and adding an unrelated error class to a file it
+            // imports changed how many functions lowered from 12 to 27 to 7 --
+            // not because the code got worse, but because a different arbitrary
+            // subset of types won the race to the cutoff. Nothing anywhere said
+            // the graph was partial.
+            //
+            // Reported as a warning rather than an error because the build can
+            // still produce something, and as a *diagnostic* rather than a stat
+            // so that every consumer sees it: `nts hir`, `nts check` and
+            // `emit-c` all print the snapshot's diagnostics and none of them
+            // reads `FrontendStats`.
+            if run.exhausted {
+                snapshot.diagnostics.push(nts_diagnostics::Diagnostic {
+                    severity: nts_diagnostics::Severity::Warning,
+                    code: "NTS0002".to_owned(),
+                    message: format!(
+                        "the type graph is partial: decomposition stopped at its budget of {budget_types} types, so any refusal below may be a consequence of the truncation rather than of the construct it names",
+                        budget_types = budget.max_types,
+                    ),
+                    // The whole compilation rather than a place in it: the
+                    // truncation is a property of the program's type graph, and
+                    // pointing at one file would be inventing a culprit.
+                    primary: nts_diagnostics::Location {
+                        file: nts_diagnostics::SourceId(0),
+                        span: nts_diagnostics::Span { start: 0, end: 0 },
+                    },
+                    labels: Vec::new(),
+                });
+            }
+            stats.decomposed = Some(run);
         }
         if let Some(budget) = self.resolve_calls {
             stats.resolved = Some(deep.resolve_calls(snapshot, budget)?);
