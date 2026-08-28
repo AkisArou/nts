@@ -292,6 +292,10 @@ dependencies = [
  "nts-differential",
  "nts-frontend-ts",
  "rustc-hash",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "xxhash-rust",
 ]
 
 [[package]]

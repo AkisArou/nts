@@ -11,27 +11,25 @@ one answers, what it costs, and the order that gets the most out of them.
 | Suite | Answers | Blocked on |
 | --- | --- | --- |
 | TypeScript's own test cases | what we can compile, and whether we survive real code | nothing |
-| test262 (numeric slice) | whether our arithmetic *is* JavaScript's | nothing |
+| test262 | whether implemented ECMAScript behavior matches the specification | representation recovery and a script/test host for the full runner; nothing for the existing numeric extractor |
 | Are We Fast Yet | how fast we are on programs chosen by someone else | closures, inheritance, module state; then a port |
 
-## The thing all three need first
+## Give each suite its own oracle
 
-None of them is a correctness oracle on its own. The TypeScript cases check
-types, test262 is written against a JavaScript runtime we do not have, and Are
-We Fast Yet measures time. What turns any corpus into a correctness oracle is
-being able to run a program both ways and compare.
+These suites answer different questions and therefore do not share one verdict
+model. TypeScript's cases carry checker expectations. Test262 is self-checking
+and declares negative phase/type in metadata. Are We Fast Yet supplies programs
+whose ports need output checks before timings are comparable.
 
-We already have both halves. `compiler/codegen/c/tests/execute.rs` compiles an
-example, links a C harness and runs it; `benches/common/bench.mjs` imports the
-same `.ts` and runs it on node. Nothing joins them up outside a test.
+`nts check <tsconfig>` remains the right differential instrument for ordinary
+programs and the extracted Test262 expression pool: compile, link, run, execute
+the same source on Node, and report agreement, disagreement, or refusal. It is
+also how the Are We Fast Yet port proves that every language variant computes
+the same checksum.
 
-**Deliverable: `nts check <tsconfig>`.** Compile, link, run, run the same source
-on node, compare every exported function's result over a set of inputs. Report
-agreement, disagreement, or refusal.
-
-This is small — both pieces exist — and everything below is worth more once it
-exists. It is also the only way to verify the Are We Fast Yet port did not change
-the programs.
+That differential does not replace Test262's oracle. A standards-correct runner
+judges NativeTS directly against each test and its metadata; a Node control, if
+enabled, is reported separately.
 
 ## Phase 1 — TypeScript's test cases
 
@@ -73,10 +71,16 @@ Note the top refusal is uninformative as it stands. "A parameter of an
 unrepresentable type" does not say *which* type, and a histogram whose largest
 bar is unreadable is not yet a work queue. The diagnostic should name the type.
 
-## Phase 2 — test262, the numeric slice
+## Phase 2 — test262
 
-Most of test262 is irrelevant: `eval`, proxies, prototypes, getters on
-`Object.prototype`. Three directories are not:
+There are two distinct instruments here. The existing numeric extractor is a
+differential test of arithmetic and constant folding; a future Test262 runner is
+a conformance test whose oracle is the test body and metadata. Node is useful as
+a control for the former and optional diagnostics for the latter, but it cannot
+decide a Test262 verdict.
+
+Three directories remain the cheapest high-value input to the current
+extractor:
 
 - `test/language/expressions/` — the operators
 - `test/built-ins/Math/`
@@ -88,19 +92,23 @@ wrapping, `Math.round` going half-toward-`+∞` rather than away from zero,
 `Math.min` propagating NaN where `fmin` does not. Every one of those was a bug we
 found ourselves, some of them twice.
 
-Many of these tests are literally `assert.sameValue(expr, expected)`. Two ways to
-use them, and we should do both:
+Many of these tests are literally `assert.sameValue(expr, expected)`. The
+extractor uses them in two ways:
 
 1. **Extract the value pool.** `facts.rs` sweeps a hand-picked pool of doubles
    through every transfer function. test262's arguments are a pool chosen by
    people trying to break implementations. Folding them in costs nothing and
    makes four million existing cases sharper.
 2. **Extract the assertions.** A `sameValue` over an expression made of
-   supported operations becomes a `nts check` case directly.
+   supported operations becomes a differential case directly.
 
-What this will *not* do is run as a suite. The harness (`assert.js`, `sta.js`,
-`propertyHelper.js`) assumes a JavaScript runtime. Extraction is the workflow,
-and the extractor is a script we own.
+This extractor is not Test262 conformance. The standards-correct runner will
+instead preserve the suite's YAML metadata, strict/sloppy variants, separate
+harness and include units, fresh realms, and exact negative phase/type. It is
+blocked first on the general `NeedsRepresentation` analysis for
+checker-accepted untyped JavaScript, then on top-level script execution and a
+typed host boundary. Compiler refusal remains unsupported rather than becoming
+a pass. See `docs/conformance/test262.md` for the complete protocol.
 
 ## Phase 3 — the features
 

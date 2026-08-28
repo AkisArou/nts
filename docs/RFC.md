@@ -256,6 +256,8 @@ MMTk may become a default only after all of the following pass:
 Native TypeScript should:
 
 - Accept ordinary TypeScript and TSX syntax.
+- Accept profile-enabled JavaScript through representation recovery without
+  introducing a runtime `any` type.
 - Use real TypeScript semantic information.
 - Compile all reachable supported behavior ahead of time.
 - Diagnose unsupported reachable behavior precisely.
@@ -468,13 +470,17 @@ release-symbols
 # 7. Compiler Pipeline
 
 ```text
-TypeScript / TSX
+TypeScript / TSX / JavaScript / JSX
         │
         ▼
 TypeScript semantic adapter
         │
         ▼
 SemanticSnapshot vN
+        │
+        ▼
+representation recovery
+and operation legalization
         │
         ▼
 NativeTS HIR
@@ -530,6 +536,46 @@ ts.TypeChecker
 ```
 
 The compiler consumes a versioned, serializable semantic snapshot.
+
+### 7.1.1 `any`, `unknown`, and executable representations
+
+The TypeScript checker's type and a native value's executable representation
+are separate facts. TypeScript diagnostics remain authoritative: NativeTS does
+not suppress `noImplicitAny` or another checker error. Every `any` that the
+checker accepts, however, may enter a compiler-owned
+`NeedsRepresentation` state regardless of whether it came from explicit
+TypeScript, permitted implicit TypeScript, JSDoc, unannotated JavaScript, or a
+declaration file.
+
+`NeedsRepresentation` is frontend analysis state with retained provenance, not
+a source type and not an HIR type. Whole-program analysis must establish both:
+
+- **representation evidence**, from literals, typed flows, call arguments,
+  constructors, narrowing, checked assertions, and trusted boundaries; and
+- **operation requirements**, from arithmetic, calls, property and element
+  access, assignments, returns, containers, equality, coercion, and storage.
+
+A requirement is not evidence. An operation written through TypeScript `any`
+does not justify assuming the representation that would make the operation
+work. Each reachable operation must receive a concrete legal lowering.
+
+Direct non-escaping functions may be specialized by their argument
+representation tuple. Escaping functions, shared mutable storage, indirect
+calls, and open-world ABIs require a supported closed union, platform handle,
+or erased representation. If no representation supports every reachable use,
+compilation stops with a diagnostic.
+
+`unknown` uses the same representation planner but retains its safe source
+semantics: concrete operations require narrowing or an assertion. Neither
+`TypeKind::Any`, `NeedsRepresentation`, an unresolved representation variable,
+nor a generic dynamic operation may reach HIR or MIR. A future erased value is
+an explicit `unknown` or closed-union representation with specified operations;
+it is not a runtime implementation of TypeScript `any`.
+
+Source policy and host profile remain independent. A conformance host such as
+Test262 may supply declarations and host semantics, but it does not receive a
+test-only exception to these representation rules. The detailed contract and
+examples live in `docs/any-unknown.md`.
 
 ## 7.2 Managed-reference MIR
 
@@ -3188,6 +3234,20 @@ fault injection
 OOM injection
 ```
 
+## 36.8 Representation recovery
+
+Golden and execution tests must cover checker-accepted explicit TypeScript and
+JSDoc `any`, permitted implicit `any`, declaration values, trusted boundaries,
+narrowing, direct-call specialization, escaping values, shared storage, and
+open-world exports. Separate frontend tests must prove that implicit `any`
+rejected by the selected TypeScript configuration remains a fatal diagnostic.
+
+Tests must keep evidence separate from requirements: a numeric operation over
+an opaque declaration result is not numeric evidence. A verifier test must
+attempt to leak each unresolved state into HIR and prove that lowering rejects
+it. Every successfully recovered case must produce the same concrete HIR and
+observable result as an equivalent fully typed program.
+
 ---
 
 # 37. Phased Plan
@@ -3445,6 +3505,7 @@ This RFC adopts the following durable decisions:
 24. HMR generations retain matching code, GC descriptors, and debug maps.
 25. Crash artifacts carry product build IDs and Native TypeScript debug-map identities.
 26. Broad Node.js compatibility remains a later product phase.
+27. TypeScript `any` is frontend-only: checker-accepted values may undergo representation recovery, but no `Any`, unresolved representation, or generic dynamic operation reaches HIR or MIR.
 
 # 40. Recommended First Vertical Slice
 

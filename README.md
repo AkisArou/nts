@@ -106,8 +106,28 @@ This is a work queue ordered by evidence rather than intuition, which is most of
 
 ### Whether its arithmetic is JavaScript's
 
+> **Generation caveat:** The explanation below has been corrected manually,
+> but that correction is not yet reflected in the Rust generator at
+> `tooling/suite/src/main.rs`. Running `nts-suite test262` may restore the older
+> text that incorrectly describes Node as the Test262 oracle. The generator was
+> intentionally left unchanged as part of this documentation-only decision.
+
 <!-- test262:start -->
-Expressions taken from test262's `Math`, `Number` and operator tests, compiled and compared against node. The expected values in those files are deliberately *not* used: node is the oracle, which is a better one, and it means the harness those files need is not needed here.
+The table below measures the current **numeric expression harvester**, not
+Test262 conformance. It takes closed expressions from Test262's `Math`, `Number`
+and operator tests, compiles them, and compares their values with Node. Node is
+a differential reference for this arithmetic instrument; it is not the oracle
+for a future Test262 runner.
+
+A standards-correct runner instead uses each test's source, harness, and YAML
+metadata as the oracle, including strict/sloppy variants and exact negative
+phase and exception type. At the pinned suite commit, NativeTS's ECMA-262 scope
+is 50,221 standalone files and 96,204 required variants after excluding
+ECMA-402. Running that suite requires the general frontend-only
+`NeedsRepresentation` analysis for checker-accepted `any`, followed by a real
+script initializer and typed test host; no `Any` may reach HIR or MIR. See
+[`docs/conformance/test262.md`](docs/conformance/test262.md) for the full
+protocol.
 
 | | |
 | --- | ---: |

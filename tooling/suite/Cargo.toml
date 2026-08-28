@@ -9,14 +9,33 @@ publish.workspace = true
 [[bin]]
 name = "nts-suite"
 path = "src/main.rs"
+required-features = ["measurements"]
+
+[[bin]]
+name = "nts-test262-protocol"
+path = "src/bin/nts-test262-protocol.rs"
 
 [dependencies]
 anyhow.workspace = true
-camino.workspace = true
-nts-core.workspace = true
-nts-differential.workspace = true
-nts-frontend-ts.workspace = true
-rustc-hash.workspace = true
+camino = { workspace = true, optional = true }
+nts-core = { workspace = true, optional = true }
+nts-differential = { workspace = true, optional = true }
+nts-frontend-ts = { workspace = true, optional = true }
+rustc-hash = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+xxhash-rust.workspace = true
+
+[features]
+default = ["measurements"]
+measurements = [
+    "dep:camino",
+    "dep:nts-core",
+    "dep:nts-differential",
+    "dep:nts-frontend-ts",
+    "dep:rustc-hash",
+]
 
 [lints]
 workspace = true
