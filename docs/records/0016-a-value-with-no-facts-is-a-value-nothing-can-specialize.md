@@ -55,7 +55,7 @@ thrown away.
 bytes   1.98 ms -> 838 us      2.36x the C++ reference -> 1.00x
 ```
 
-## What to take from it
+## Correctness said yes, and the point of the feature was missing
 
 The gap between "the feature works" and "the feature is worth having" was one
 benchmark. Everything the differential harness checks was already green: 292
@@ -69,3 +69,114 @@ operation with no transfer function does not fail, it returns `TOP`** — and a
 degrades silently, at a distance, and in a pass that is working correctly.
 `hir::flow`'s catch-all now has two arms fewer, and the next thing to reach it
 should be looked at rather than accepted.
+
+## The sharper form, from two more instances
+
+The Node session went looking in their own code after reading this and found
+`isDeepStrictEqual(new WeakMap(), new WeakMap())` answering **true** — no own
+enumerable properties, so the key walk found two empty objects and agreed. Their
+refinement of the rule is better than the one above:
+
+> The tell is not "a default". It is **a default that is right for a
+> neighbouring case.** `TOP` for an unmodelled operation and `false` for an
+> unmodelled operation are both defaults; only one of them is silently
+> plausible.
+
+Their fall-through is the *correct* answer for a `WeakRef`, which genuinely has
+nothing to compare, and the wrong one for a `WeakMap` — and nothing at the point
+of the fall-through distinguishes them. `TOP` is correct for a call whose callee
+is not analyzed and wrong for a conversion, in the same match.
+
+## And the instrument has to be able to fail
+
+Twice in one night, here and there:
+
+- Their first fuzzer built two independent random structures. Those are almost
+  never equal, so both implementations answered `false` and it agreed on
+  everything while testing nothing.
+- The unsigned-arithmetic work in `hir::specialize` that followed this record
+  passed `bitwise`, `arith`, `typed-arrays`, `literals` and `conditionals`, and
+  failed `negative-zero` and `mathops`. It was wrong in three separate ways —
+  a comparison against a parameter that may be negative, and `Math.abs`
+  compiling to `x < 0 ? -x : x` with `x` unsigned, where the test cannot be
+  true. Every one of those was found by a pool that includes negative values.
+  A pool of positives would have been green and meaningless.
+
+A green result that is well-formed and means nothing is the same failure as a
+diagnostic that is well-formed about the wrong subject. Ask of any measurement
+what input would make it fail, and check that the input is in it.
+
+## The companion rule, and it cuts both ways
+
+From the Node session, after they built a `--sabotage` mode that hands every
+test an empty object instead of the module under test — "what input makes this
+go red, and is it in the set", made executable. It found that 46 of their 51
+passing `node:buffer` files passed with the module *removed*, because node's
+tests reach `Buffer` as a global rather than through the export. Their honest
+number is 15.
+
+The part worth copying is what they had done hours earlier: they had tried
+installing the global, watched the count fall from 51 to 15, concluded they had
+broken node's internals, reverted, and *written it up as a documented negative
+result*. Without reading a single failure. Nothing was broken. The count fell
+because the measurement had started working.
+
+> A measurement that changes sharply has at least two explanations, and the
+> flattering one is that the instrument is broken.
+
+51 → 15 reads as "I broke it". 2.36x → 1.00x reads as "I fixed it". Neither
+reading is *entailed* by the number, and the discipline is the same in both
+directions.
+
+For the `bytes` number above, what makes it a measurement rather than a hope:
+the runner computes a checksum from every variant and refuses to report a case
+whose variants disagree, so the fast version is known to compute what the slow
+one did; the seed is `volatile`, so the loop cannot be folded away; and the
+`nts f64` column — the same program with specialization off — did not move while
+the specialized column fell by 2.4x. If the instrument had broken, both columns
+would have moved together.
+
+That check is worth writing down beside any speedup, because the alternative
+explanation is always available and is never the one you reach for.
+
+## Postscript: the optimization that paid for itself somewhere else
+
+Having fixed the facts, `bytes` still lost to node — which should not happen,
+because node was also beating the C++ reference. That was signed `%`: C has to
+correct for the sign of the dividend, and the unsigned form does not. Measured
+standalone at **1.88x**, and the facts already prove the accumulators
+non-negative, so `hir::specialize` can choose `uint32_t` for a class it can
+prove never holds a negative.
+
+Three bugs, all caught by the differential harness and all described in
+`unsigned_classes`. Then a fourth thing, which no differential could catch
+because it was not a correctness problem:
+
+```text
+awfy-sieve   1.74x the C++ reference -> 2.20x
+```
+
+`sieve` contains no division. It went unsigned because its bound is a known
+5000 and every index is non-negative, and it got **26% slower**. Signed
+overflow is undefined in C, and that is exactly what lets a compiler assume an
+induction variable never wraps and transform the loop on that basis. Unsigned
+wraparound is *defined*, so the same loop has to be preserved as written. The
+optimization is real and it was being applied to code that could not use it.
+
+The rule is now that the class has to contain the operation that pays. The
+operands are coerced to the operation's type anyway, so making the remainder's
+own class unsigned is enough to get the unsigned instruction.
+
+```text
+bytes        2.36x the C++ reference -> 1.03x, against an unsigned reference
+awfy-sieve   unchanged
+```
+
+The reference had to move too. It was written with `int32_t` accumulators, and
+zlib's `adler32` uses unsigned — so the honest comparison is against the faster
+C++, and the thing worth measuring is whether the compiler works out on its own
+what the C++ programmer knew.
+
+**What would have hidden this: measuring the case being optimized.** `bytes`
+alone said the change was a win. Only the full suite said what it cost, and it
+cost it somewhere with no remainder in it, which is not where anyone would look.

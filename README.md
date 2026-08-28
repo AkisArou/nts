@@ -25,26 +25,26 @@ them, so read the ratios rather than the absolute times.
 <!-- benchmarks:start -->
 | case | C++ | nts | nts f64 | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| accumulate | 1.36 us | **2.08 us** | 28.55 us | 3.69 us | 30.85 us | 1.53x | 0.56x | 0.07x |
-| array-methods | 3.33 us | **1.52 us** | 3.87 us | 5.88 us | 5.20 us | 0.46x | 0.26x | 0.29x |
-| arrays | 1.75 us | **1.86 us** | 5.17 us | 2.69 us | 1.83 us | 1.06x | 0.69x | 1.02x |
-| awfy-bounce | 4.34 us | **7.79 us** | 12.24 us | 11.79 us | 10.54 us | 1.79x | 0.66x | 0.74x |
-| awfy-list | 8.57 us | **8.45 us** | 8.50 us | 14.11 us | 12.10 us | 0.99x | 0.60x | 0.70x |
-| awfy-mandelbrot | 23.13 ms | **24.22 ms** | 28.08 ms | 23.24 ms | 23.23 ms | 1.05x | 1.04x | 1.04x |
-| awfy-nbody | 9.12 ms | **10.93 ms** | 11.16 ms | 86.01 ms | 16.60 ms | 1.20x | 0.13x | 0.66x |
-| awfy-permute | 11.54 us | **19.43 us** | 28.69 us | 26.75 us | 20.17 us | 1.68x | 0.73x | 0.96x |
-| awfy-queens | 6.04 us | **7.67 us** | 22.59 us | 18.46 us | 14.27 us | 1.27x | 0.42x | 0.54x |
-| awfy-sieve | 4.25 us | **7.40 us** | 16.74 us | 9.75 us | 14.90 us | 1.74x | 0.76x | 0.50x |
-| awfy-towers | 13.84 us | **21.58 us** | 26.59 us | 39.98 us | 25.46 us | 1.56x | 0.54x | 0.85x |
-| bytes | 836.69 us | **883.10 us** | 2.34 ms | 651.17 us | 880.24 us | 1.06x | 1.36x | 1.00x |
-| checksum | 6.37 us | **6.38 us** | 64.58 us | 7.30 us | 33.85 us | 1.00x | 0.87x | 0.19x |
-| closures | 1.20 us | **1.20 us** | 49.12 us | 3.45 us | 19.59 us | 1.00x | 0.35x | 0.06x |
-| dispatch | 11.02 us | **11.66 us** | 159.49 us | 56.15 us | 17.48 us | 1.06x | 0.21x | 0.67x |
-| fib | 344.67 us | **610.64 us** | 625.23 us | 1.15 ms | 742.78 us | 1.77x | 0.53x | 0.82x |
-| loop | 996.2 ns | **906.1 ns** | 858.5 ns | 1.01 us | 984.3 ns | 0.91x | 0.90x | 0.92x |
-| objects (rc) | 2.08 us | **2.09 us** | 2.34 us | 2.21 us | 1.77 us | 1.00x | 0.94x | 1.18x |
-| strings | 558.1 ns | **407.8 ns** | 28.09 us | 2.93 us | 3.21 us | 0.73x | 0.14x | 0.13x |
-| substrings (rc) | 1.93 us | **4.28 us** | 12.00 us | 7.24 us | 36.99 us | 2.22x | 0.59x | 0.12x |
+| accumulate | 1.38 us | **2.14 us** | 28.95 us | 3.74 us | 31.82 us | 1.56x | 0.57x | 0.07x |
+| array-methods | 3.48 us | **1.58 us** | 3.94 us | 5.91 us | 8.05 us | 0.45x | 0.27x | 0.20x |
+| arrays | 1.79 us | **1.92 us** | 5.29 us | 2.84 us | 1.92 us | 1.08x | 0.68x | 1.00x |
+| awfy-bounce | 4.63 us | **8.21 us** | 12.61 us | 11.59 us | 11.05 us | 1.77x | 0.71x | 0.74x |
+| awfy-list | 8.84 us | **8.85 us** | 9.14 us | 15.14 us | 13.39 us | 1.00x | 0.58x | 0.66x |
+| awfy-mandelbrot | 23.71 ms | **25.21 ms** | 28.46 ms | 24.31 ms | 23.77 ms | 1.06x | 1.04x | 1.06x |
+| awfy-nbody | 9.52 ms | **11.30 ms** | 11.61 ms | 91.04 ms | 17.22 ms | 1.19x | 0.12x | 0.66x |
+| awfy-permute | 12.33 us | **20.47 us** | 30.22 us | 28.84 us | 21.70 us | 1.66x | 0.71x | 0.94x |
+| awfy-queens | 6.72 us | **8.28 us** | 24.20 us | 17.80 us | 15.56 us | 1.23x | 0.47x | 0.53x |
+| awfy-sieve | 4.58 us | **7.78 us** | 18.12 us | 11.24 us | 14.30 us | 1.70x | 0.69x | 0.54x |
+| awfy-towers | 16.55 us | **22.69 us** | 29.01 us | 41.07 us | 29.37 us | 1.37x | 0.55x | 0.77x |
+| bytes | 627.92 us | **611.89 us** | 2.34 ms | 686.25 us | 949.71 us | 0.97x | 0.89x | 0.64x |
+| checksum | 6.50 us | **6.79 us** | 68.66 us | 7.34 us | 34.93 us | 1.04x | 0.93x | 0.19x |
+| closures | 1.23 us | **1.25 us** | 51.10 us | 3.63 us | 20.79 us | 1.02x | 0.35x | 0.06x |
+| dispatch | 11.69 us | **12.43 us** | 163.44 us | 61.22 us | 18.91 us | 1.06x | 0.20x | 0.66x |
+| fib | 372.38 us | **648.96 us** | 669.88 us | 1.15 ms | 791.20 us | 1.74x | 0.57x | 0.82x |
+| loop | 1.03 us | **918.1 ns** | 882.4 ns | 1.05 us | 1.02 us | 0.89x | 0.88x | 0.90x |
+| objects (rc) | 2.16 us | **2.14 us** | 2.40 us | 2.39 us | 1.85 us | 0.99x | 0.90x | 1.16x |
+| strings | 612.0 ns | **429.8 ns** | 29.24 us | 3.24 us | 3.32 us | 0.70x | 0.13x | 0.13x |
+| substrings (rc) | 2.52 us | **4.97 us** | 12.86 us | 9.01 us | 38.72 us | 1.97x | 0.55x | 0.13x |
 
 Every ratio is nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and `nts/Bun` under 1.00 beat those engines.
 

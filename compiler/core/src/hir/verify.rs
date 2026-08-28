@@ -715,7 +715,11 @@ mod tests {
         assert!(
             problems.iter().any(|problem| matches!(
                 problem,
-                Invalid::CallArgumentCount { expected: 2, found: 1, .. }
+                Invalid::CallArgumentCount {
+                    expected: 2,
+                    found: 1,
+                    ..
+                }
             )),
             "{problems:?}"
         );

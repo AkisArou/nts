@@ -28,7 +28,7 @@
 //! call (signatures are not specialized), or a return. Each is one instruction,
 //! and each is visible in the emitted code.
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::facts;
 use super::flow::Analysis;
@@ -181,6 +181,8 @@ pub fn specialize(
         }
     }
 
+    let unsigned = unsigned_classes(func, analysis, &mut classes, count);
+
     let mut report = Report::default();
     for index in 0..count {
         let root = classes.find(u32::try_from(index).unwrap_or(0));
@@ -191,7 +193,10 @@ pub fn specialize(
             continue;
         }
         report.specialized += 1;
-        func.values[index].ty = HirType::Int { bits, signed: true };
+        func.values[index].ty = HirType::Int {
+            bits,
+            signed: !unsigned.contains(&root),
+        };
         // A float constant that is provably whole is an integer constant. Left
         // as a float it would be converted back on every use.
         if let OpKind::ConstFloat(value) = func.values[index].kind {
@@ -556,6 +561,117 @@ fn comparison_type(func: &Func, analysis: &Analysis, lhs: ValueId, rhs: ValueId)
     // every integer this pass produces is inside 2^53 and so is exact as an
     // `f64`, while narrowing the other side would not be.
     HirType::NUMBER
+}
+
+/// The classes whose integer type can be unsigned.
+///
+/// # Why it is worth asking, and why only there
+///
+/// Division and remainder. C's signed forms have to correct for the sign of the
+/// dividend, which costs a multiply and two shifts more than the unsigned form
+/// — measured at **1.88x** on the `bytes` inner loop, which is two `% 65521`
+/// per byte.
+///
+/// Nothing else is faster unsigned, and a loop counter is *slower*: signed
+/// overflow is undefined in C, which is what lets the compiler assume an
+/// induction variable never wraps and transform the loop on that basis.
+/// Unsigned wraparound is defined, so the same loop has to be preserved as
+/// written. `awfy-sieve` has no remainder in it, went unsigned because its
+/// bound is a known 5000 and every index is non-negative, and got **26%
+/// slower** for it.
+///
+/// So a class has to contain the operation that pays. The operands are coerced
+/// to the operation's type, so making the remainder's own class unsigned is
+/// enough to get the unsigned instruction; whatever feeds it keeps its own type
+/// and pays one cast, which is what specialization does everywhere else.
+///
+/// # What has to be true
+///
+/// Every value in the class non-negative, which is what makes the unsigned
+/// reading of its bits the same number.
+///
+/// And, wherever an operator *interprets* the sign bit, both of its operands
+/// non-negative. That is not a refinement of the first rule, it is the whole
+/// correctness argument: the operands are coerced to the *operation's* type, so
+/// making an operation unsigned can put an unsigned cast on a value from
+/// outside the class entirely.
+///
+/// Leaving that at division cost `for (let i = 0; i < n; i++)` its loop. The
+/// counter's class is non-negative; `n` is a parameter and deliberately not
+/// joined to it, so it is not in the class and not consulted; and `i < n` with
+/// `n` of -1 read as `4294967295` runs four billion times instead of none. The
+/// unary case is `Math.abs`, which emits `x < 0 ? -x : x` — with `x` unsigned
+/// the test cannot be true, and `Math.abs(-32768)` came back as 4294934528. Its
+/// result is legitimately non-negative, which is exactly why its class was
+/// eligible and its operand must not have been.
+///
+/// The operators that do not interpret the sign need no check: `+`, `-`, `*`,
+/// `&`, `|`, `^` and `<<` are bit-identical either way, and their result
+/// landing in range is exactly the condition under which two's-complement
+/// wraparound gives the right answer. `==` and `!=` are bit-identical too and
+/// are checked anyway, because they arrive through `is_comparison` and telling
+/// them apart would buy nothing.
+fn unsigned_classes(
+    func: &Func,
+    analysis: &Analysis,
+    classes: &mut Classes,
+    count: usize,
+) -> FxHashSet<u32> {
+    let non_negative = |value: ValueId| {
+        let facts = analysis.get(value);
+        !facts.is_bottom() && !facts.maybe_nan && facts.lo >= 0.0 && facts.hi <= facts::U32_MAX
+    };
+
+    let mut unsigned: FxHashSet<u32> = FxHashSet::default();
+    let mut rejected: FxHashSet<u32> = FxHashSet::default();
+    let mut pays: FxHashSet<u32> = FxHashSet::default();
+    for index in 0..count {
+        let value = ValueId(u32::try_from(index).unwrap_or(0));
+        let root = classes.find(value.0);
+        if non_negative(value) {
+            unsigned.insert(root);
+        } else {
+            rejected.insert(root);
+        }
+        // `Math.abs` is the unary case, and the one that reads most like a
+        // no-op until it is wrong: it emits `x < 0 ? -x : x`, and with `x`
+        // unsigned the test cannot be true. `Math.abs(-32768)` came back as
+        // 4294934528. Its *result* is legitimately non-negative, which is
+        // exactly why its class was eligible and its operand must not be.
+        if let OpKind::Unary {
+            op: UnOp::Abs | UnOp::Neg,
+            operand,
+        } = &func.values[index].kind
+            && !non_negative(*operand)
+        {
+            rejected.insert(root);
+            rejected.insert(classes.find(operand.0));
+        }
+        // `>>>` is unsigned by definition and `<<` is bit-identical, so the
+        // sign-sensitive shift is only `>>`.
+        if matches!(
+            func.values[index].kind,
+            OpKind::Binary {
+                op: BinOp::Div | BinOp::Rem,
+                ..
+            }
+        ) {
+            pays.insert(root);
+        }
+        if let OpKind::Binary { op, lhs, rhs } = &func.values[index].kind
+            && (op.is_comparison() || matches!(op, BinOp::Div | BinOp::Rem | BinOp::Shr))
+            && !(non_negative(*lhs) && non_negative(*rhs))
+        {
+            // All three, because the operands are coerced to the operation's
+            // type: leaving either operand's class unsigned would put the cast
+            // on the value that cannot survive one.
+            rejected.insert(root);
+            rejected.insert(classes.find(lhs.0));
+            rejected.insert(classes.find(rhs.0));
+        }
+    }
+    unsigned.retain(|root| pays.contains(root) && !rejected.contains(root));
+    unsigned
 }
 
 /// A value of the wanted type, converting if it is not already.

@@ -124,12 +124,30 @@ pub(super) fn typed_array_element(name: &str) -> Option<HirType> {
 /// narrowing conversion and `double` to `double` is nothing at all.
 pub(super) fn element_coercion(element: &HirType) -> Option<&'static str> {
     match element {
-        HirType::Int { bits: 8, signed: true } => Some("nts_to_int8"),
-        HirType::Int { bits: 8, signed: false } => Some("nts_to_uint8"),
-        HirType::Int { bits: 16, signed: true } => Some("nts_to_int16"),
-        HirType::Int { bits: 16, signed: false } => Some("nts_to_uint16"),
-        HirType::Int { bits: 32, signed: true } => Some("nts_to_int32"),
-        HirType::Int { bits: 32, signed: false } => Some("nts_to_uint32"),
+        HirType::Int {
+            bits: 8,
+            signed: true,
+        } => Some("nts_to_int8"),
+        HirType::Int {
+            bits: 8,
+            signed: false,
+        } => Some("nts_to_uint8"),
+        HirType::Int {
+            bits: 16,
+            signed: true,
+        } => Some("nts_to_int16"),
+        HirType::Int {
+            bits: 16,
+            signed: false,
+        } => Some("nts_to_uint16"),
+        HirType::Int {
+            bits: 32,
+            signed: true,
+        } => Some("nts_to_int32"),
+        HirType::Int {
+            bits: 32,
+            signed: false,
+        } => Some("nts_to_uint32"),
         _ => None,
     }
 }

@@ -643,125 +643,125 @@ fn transfer_op(
     values: &[Facts],
 ) -> Facts {
     match &op.kind {
-            OpKind::ConstFloat(v) => Facts::constant(*v),
-            #[allow(clippy::cast_precision_loss)]
-            OpKind::ConstInt(v) => Facts::constant(*v as f64),
-            OpKind::Binary { op: bin, lhs, rhs } => facts::transfer_binary(
-                *bin,
-                lookup(refinements, values, *lhs),
-                lookup(refinements, values, *rhs),
-            )
-            .unwrap_or(Facts::TOP),
-            OpKind::Unary {
-                op: UnOp::Neg,
-                operand,
-            } => facts::neg(lookup(refinements, values, *operand)),
-            // The coercions are where an unconstrained value becomes a known
-            // integer. Everything about `x | 0` depends on this arm.
-            OpKind::Unary {
-                op: UnOp::ToInt32,
-                operand,
-            } => facts::to_int32(lookup(refinements, values, *operand)),
-            OpKind::Unary {
-                op: UnOp::ToUint32,
-                operand,
-            } => facts::to_uint32(lookup(refinements, values, *operand)),
-            OpKind::Unary {
-                op: rounding @ (UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round),
-                operand,
-            } => facts::round_to_integer(*rounding, lookup(refinements, values, *operand)),
-            OpKind::Unary {
-                op: UnOp::Abs,
-                operand,
-            } => facts::abs(lookup(refinements, values, *operand)),
-            // A length is a `uint32`, always. Where the array was allocated
-            // here with a known size, it is that size exactly — which is what
-            // lets an index into an array literal be proven in bounds by the
-            // interval domain alone, with no reasoning about the array at all.
-            // A code unit is a `uint16`. Out of range is NaN rather than a
-            // trap, so an unproven index is the same set plus NaN -- and once
-            // the index is proven inside the string it is just the range, which
-            // is what lets a scan by code unit stay in integers.
-            OpKind::StringUnitAt { checked, .. } => Facts::new(0.0, 65535.0, true, *checked, false),
-            OpKind::Length(array) => {
-                let bound = Facts::new(0.0, facts::U32_MAX, true, false, false);
-                match &func.values[array.0 as usize].kind {
-                    // Only while nothing can have grown it: an array handed to a
-                    // call may come back longer, and the object does not move so
-                    // every reference sees the new length.
-                    OpKind::ArrayNew { length }
-                        if super::allocated_length_is_exact(func, *array, context.growable) =>
-                    {
-                        lookup(refinements, values, *length).narrow(bound)
-                    }
-                    // A string's length is bounded by the string it was made
-                    // from, however many slices back that is.
-                    _ => string_span(func, *array, 0).unwrap_or(bound).narrow(bound),
-                }
-            }
-            // A parameter keeps what its declared type said. It is an operation
-            // in the entry block like any other, so without this arm the
-            // transfer recomputes it as TOP and joins that over the seed —
-            // silently discarding the one thing that makes a parameter provable.
-            OpKind::Param(slot) => parameter_facts(func, context, *slot),
-            // What the callee was proven to return. Without this every call is
-            // a wall: an unanalyzed result poisons everything downstream of it,
-            // which for a program made of small functions is everything.
-            OpKind::Call { callee, .. } => call_result(context, callee),
-            // What was stored into this field, anywhere in the program.
-            OpKind::FieldGet { object, field } => {
-                field_facts(context, &func.values[object.0 as usize].ty, *field)
-            }
-            // What anything in the program stored into an array of this type,
-            // but *only once the storage agrees*.
-            //
-            // The fact is true either way -- an array of `number` holding 0 to
-            // 100 holds them whether it is `double[]` or `int32_t[]`. Acting on
-            // it is what needs the storage: from a `double[]`, proving the
-            // element whole makes the arithmetic after it integer, and every
-            // one of those results is converted back at the first floating
-            // point use. Measured on `arrays`, that is four conversions per
-            // iteration and 18% slower.
-            //
-            // So `hir::elements` decides the storage, and the fact follows it.
-            OpKind::ArrayGet { array, .. } => match &func.values[array.0 as usize].ty {
-                super::HirType::Managed(super::ManagedType::Array(element))
-                    if matches!(**element, super::HirType::Int { .. }) =>
+        OpKind::ConstFloat(v) => Facts::constant(*v),
+        #[allow(clippy::cast_precision_loss)]
+        OpKind::ConstInt(v) => Facts::constant(*v as f64),
+        OpKind::Binary { op: bin, lhs, rhs } => facts::transfer_binary(
+            *bin,
+            lookup(refinements, values, *lhs),
+            lookup(refinements, values, *rhs),
+        )
+        .unwrap_or(Facts::TOP),
+        OpKind::Unary {
+            op: UnOp::Neg,
+            operand,
+        } => facts::neg(lookup(refinements, values, *operand)),
+        // The coercions are where an unconstrained value becomes a known
+        // integer. Everything about `x | 0` depends on this arm.
+        OpKind::Unary {
+            op: UnOp::ToInt32,
+            operand,
+        } => facts::to_int32(lookup(refinements, values, *operand)),
+        OpKind::Unary {
+            op: UnOp::ToUint32,
+            operand,
+        } => facts::to_uint32(lookup(refinements, values, *operand)),
+        OpKind::Unary {
+            op: rounding @ (UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round),
+            operand,
+        } => facts::round_to_integer(*rounding, lookup(refinements, values, *operand)),
+        OpKind::Unary {
+            op: UnOp::Abs,
+            operand,
+        } => facts::abs(lookup(refinements, values, *operand)),
+        // A length is a `uint32`, always. Where the array was allocated
+        // here with a known size, it is that size exactly — which is what
+        // lets an index into an array literal be proven in bounds by the
+        // interval domain alone, with no reasoning about the array at all.
+        // A code unit is a `uint16`. Out of range is NaN rather than a
+        // trap, so an unproven index is the same set plus NaN -- and once
+        // the index is proven inside the string it is just the range, which
+        // is what lets a scan by code unit stay in integers.
+        OpKind::StringUnitAt { checked, .. } => Facts::new(0.0, 65535.0, true, *checked, false),
+        OpKind::Length(array) => {
+            let bound = Facts::new(0.0, facts::U32_MAX, true, false, false);
+            match &func.values[array.0 as usize].kind {
+                // Only while nothing can have grown it: an array handed to a
+                // call may come back longer, and the object does not move so
+                // every reference sees the new length.
+                OpKind::ArrayNew { length }
+                    if super::allocated_length_is_exact(func, *array, context.growable) =>
                 {
-                    // The width *is* a range, whatever the stores say. A
-                    // `Uint8Array`'s element is 0 to 255 by construction, and
-                    // for a declared typed array that is the only fact there
-                    // is: nothing narrowed it, so nothing recorded it.
-                    let stored = context
-                        .element_facts
-                        .get(element.as_ref())
-                        .copied()
-                        .unwrap_or(Facts::TOP);
-                    match held_by(element) {
-                        Some(width) => stored.narrow(width),
-                        None => stored,
-                    }
+                    lookup(refinements, values, *length).narrow(bound)
                 }
-                _ => Facts::TOP,
-            },
-            // A conversion keeps the value it was given, as far as it fits.
-            //
-            // Without this every typed array read was TOP: the read is narrow
-            // and the expression around it is `number`, so lowering converts —
-            // and an operand with no facts is an operand nothing can specialize.
-            // `bytes` compiled its two `% 65521` to `fmod`, a library call, two
-            // per byte, and ran at 2.36x the C++ reference.
-            OpKind::Convert(operand) => {
-                let incoming = lookup(refinements, values, *operand);
-                match held_by(&op.ty) {
-                    Some(width) => incoming.narrow(width),
-                    None => incoming,
+                // A string's length is bounded by the string it was made
+                // from, however many slices back that is.
+                _ => string_span(func, *array, 0).unwrap_or(bound).narrow(bound),
+            }
+        }
+        // A parameter keeps what its declared type said. It is an operation
+        // in the entry block like any other, so without this arm the
+        // transfer recomputes it as TOP and joins that over the seed —
+        // silently discarding the one thing that makes a parameter provable.
+        OpKind::Param(slot) => parameter_facts(func, context, *slot),
+        // What the callee was proven to return. Without this every call is
+        // a wall: an unanalyzed result poisons everything downstream of it,
+        // which for a program made of small functions is everything.
+        OpKind::Call { callee, .. } => call_result(context, callee),
+        // What was stored into this field, anywhere in the program.
+        OpKind::FieldGet { object, field } => {
+            field_facts(context, &func.values[object.0 as usize].ty, *field)
+        }
+        // What anything in the program stored into an array of this type,
+        // but *only once the storage agrees*.
+        //
+        // The fact is true either way -- an array of `number` holding 0 to
+        // 100 holds them whether it is `double[]` or `int32_t[]`. Acting on
+        // it is what needs the storage: from a `double[]`, proving the
+        // element whole makes the arithmetic after it integer, and every
+        // one of those results is converted back at the first floating
+        // point use. Measured on `arrays`, that is four conversions per
+        // iteration and 18% slower.
+        //
+        // So `hir::elements` decides the storage, and the fact follows it.
+        OpKind::ArrayGet { array, .. } => match &func.values[array.0 as usize].ty {
+            super::HirType::Managed(super::ManagedType::Array(element))
+                if matches!(**element, super::HirType::Int { .. }) =>
+            {
+                // The width *is* a range, whatever the stores say. A
+                // `Uint8Array`'s element is 0 to 255 by construction, and
+                // for a declared typed array that is the only fact there
+                // is: nothing narrowed it, so nothing recorded it.
+                let stored = context
+                    .element_facts
+                    .get(element.as_ref())
+                    .copied()
+                    .unwrap_or(Facts::TOP);
+                match held_by(element) {
+                    Some(width) => stored.narrow(width),
+                    None => stored,
                 }
             }
-            // A bool is not a number, and a call's result needs the callee
-            // analyzed — neither is a claim this pass can make.
             _ => Facts::TOP,
+        },
+        // A conversion keeps the value it was given, as far as it fits.
+        //
+        // Without this every typed array read was TOP: the read is narrow
+        // and the expression around it is `number`, so lowering converts —
+        // and an operand with no facts is an operand nothing can specialize.
+        // `bytes` compiled its two `% 65521` to `fmod`, a library call, two
+        // per byte, and ran at 2.36x the C++ reference.
+        OpKind::Convert(operand) => {
+            let incoming = lookup(refinements, values, *operand);
+            match held_by(&op.ty) {
+                Some(width) => incoming.narrow(width),
+                None => incoming,
+            }
         }
+        // A bool is not a number, and a call's result needs the callee
+        // analyzed — neither is a claim this pass can make.
+        _ => Facts::TOP,
+    }
 }
 
 fn transfer_block(
@@ -1237,5 +1237,72 @@ mod tests {
         let analysis = analyze(&function);
         let facts = analysis.get(ValueId(0));
         assert!(facts.maybe_nan && !facts.whole, "{facts:?}");
+    }
+
+    /// The arm whose absence cost the `bytes` benchmark 2.4x. A conversion is
+    /// not an unknown: it is the value it was given, as far as the result type
+    /// can hold it.
+    #[test]
+    fn a_conversion_keeps_the_facts_of_its_operand() {
+        let narrow = HirType::Int {
+            bits: 8,
+            signed: false,
+        };
+        let values = vec![
+            Op {
+                kind: OpKind::ConstInt(200),
+                ty: narrow,
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::Convert(ValueId(0)),
+                ty: HirType::Float { bits: 64 },
+                origin: origin(),
+            },
+        ];
+        let blocks = vec![block(
+            Vec::new(),
+            vec![ValueId(0), ValueId(1)],
+            Terminator::Return(Some(ValueId(1))),
+        )];
+        let analysis = analyze(&func(values, blocks, 0));
+        let converted = analysis.get(ValueId(1));
+        assert!(
+            converted.is_singleton() && converted.contains(200.0),
+            "a widening conversion is exact: {converted:?}"
+        );
+    }
+
+    /// And a machine type's width is a range on its own, which is the only
+    /// fact a *declared* `Uint8Array` has — nothing narrowed it, so nothing
+    /// recorded what it holds.
+    #[test]
+    fn a_narrow_result_type_bounds_the_conversion() {
+        let values = vec![
+            Op {
+                kind: OpKind::ConstFloat(70_000.0),
+                ty: HirType::Float { bits: 64 },
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::Convert(ValueId(0)),
+                ty: HirType::Int {
+                    bits: 16,
+                    signed: false,
+                },
+                origin: origin(),
+            },
+        ];
+        let blocks = vec![block(
+            Vec::new(),
+            vec![ValueId(0), ValueId(1)],
+            Terminator::Return(Some(ValueId(1))),
+        )];
+        let analysis = analyze(&func(values, blocks, 0));
+        let narrowed = analysis.get(ValueId(1));
+        assert!(
+            narrowed.hi <= 65535.0 && narrowed.lo >= 0.0,
+            "a `u16` holds 0 to 65535 whatever reached it: {narrowed:?}"
+        );
     }
 }
