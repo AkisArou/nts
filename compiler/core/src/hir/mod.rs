@@ -96,6 +96,20 @@ pub enum ManagedType {
     /// mean two answers to one question.
     Object(TypeId),
     Array(Box<HirType>),
+    /// A promise, carrying the representation of what it settles with.
+    ///
+    /// The payload type is here for the *compiler*: it is what says which
+    /// `nts_promise_fulfill_*` to emit and how to read the value back out. The
+    /// runtime layout does not vary with it -- there is one `NtsPromise` with a
+    /// tagged union, so this is not a monomorphization.
+    ///
+    /// A distinct managed type rather than a provided class in the manner of
+    /// `hir::builtin`'s `Error`, which was the alternative. A provided class
+    /// would have reused the object machinery, and would have been a shape that
+    /// lies about itself: its C type is a fixed runtime struct rather than a
+    /// generated one, and it would have had a "layout" with no field anyone may
+    /// read.
+    Promise(Box<HirType>),
 }
 
 impl HirType {

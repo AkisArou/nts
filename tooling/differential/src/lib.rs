@@ -147,6 +147,14 @@ fn inputs(ty: &HirType, known: Facts) -> Vec<f64> {
 }
 
 /// How a type is spelled in C.
+/// The C spelling of a type, for the harness's own declarations.
+///
+/// Exhaustive, with no catch-all. It ended in `_ => "double"`, and when
+/// `Promise` arrived that quietly declared an `async` function as returning a
+/// number -- a pointer marshalled as a double, which clang accepted at the
+/// declaration and rejected only where the two met. A default that is right for
+/// its neighbours is wrong for the newcomer, and the newcomer is exactly what
+/// nobody is looking at.
 fn c_type(ty: &HirType) -> &'static str {
     match ty {
         HirType::Managed(nts_core::hir::ManagedType::String) => "NtsString *",
@@ -180,7 +188,16 @@ fn c_type(ty: &HirType) -> &'static str {
             }
         }
         HirType::Float { bits: 32 } => "float",
-        _ => "double",
+        HirType::Float { .. } => "double",
+        // An `async` function hands back the fixed runtime type whatever it
+        // settles with; `show_settled` reads the payload out.
+        HirType::Managed(nts_core::hir::ManagedType::Promise(_)) => "NtsPromise *",
+        // Neither is drivable -- `drivable` gates what reaches here -- but a
+        // wrong *spelling* would be a wrong C declaration rather than a
+        // refusal, so they are named rather than defaulted.
+        HirType::Managed(nts_core::hir::ManagedType::Array(_)) => "NtsArray *",
+        HirType::Managed(nts_core::hir::ManagedType::Object(_)) => "void *",
+        HirType::Void | HirType::Never => "void",
     }
 }
 
@@ -328,8 +345,27 @@ fn is_string(ty: &HirType) -> bool {
     matches!(ty, HirType::Managed(nts_core::hir::ManagedType::String))
 }
 
+/// What a promise-returning function settles with, if that is what this is.
+///
+/// An `async` function's HIR return type is the promise rather than the value,
+/// so driving one means calling it, running the loop until nothing is left,
+/// and reading what it settled with. That is an *ordering* observation made of
+/// return values, which is why it needs no new language surface: node's side of
+/// it is an `await`.
+fn settles_with(ty: &HirType) -> Option<&HirType> {
+    match ty {
+        HirType::Managed(nts_core::hir::ManagedType::Promise(payload)) => Some(payload),
+        _ => None,
+    }
+}
+
 /// Whether this can drive a function at all.
 fn drivable(ty: &HirType) -> bool {
+    if let Some(payload) = settles_with(ty) {
+        // `Promise<void>` is drivable: settling with nothing is an answer, and
+        // it is the one `await` on node prints as `undefined`.
+        return matches!(payload, HirType::Void) || scalar(payload) || is_string(payload);
+    }
     scalar(ty) || is_string(ty)
 }
 
@@ -515,17 +551,21 @@ fn literal(value: f64) -> String {
 /// Separate from the building and running because it is the part worth
 /// reading when a case does not compile, and because the two have nothing
 /// to say to each other beyond this string.
-fn native_harness(testable: &[Testable]) -> String {
-    let mut main = String::from(
-        // Deliberately *not* `<stdlib.h>`. The generated program includes
-        // `nts_runtime.h` and nothing else, so a TypeScript function called
-        // `div` or `abs` keeps its name -- and a harness that pulled in more
-        // headers than the program does would collide on names the program was
-        // entitled to use. `<string.h>` is here for `memcpy` and declares
-        // nothing a program is likely to want.
-        "#include <math.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n\
+/// Everything the generated driver needs before the first case.
+///
+/// A constant rather than an inline literal because it is most of
+/// `native_harness` by line count and none of it varies with the program.
+const HARNESS_PRELUDE: &str =
+    // Deliberately *not* `<stdlib.h>`. The generated program includes
+    // `nts_runtime.h` and nothing else, so a TypeScript function called
+    // `div` or `abs` keeps its name -- and a harness that pulled in more
+    // headers than the program does would collide on names the program was
+    // entitled to use. `<string.h>` is here for `memcpy` and declares
+    // nothing a program is likely to want.
+    "#include <math.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n\
          long strtol(const char *, char **, int);\n\
-         #include \"nts_runtime.h\"\n\n\
+         #include \"nts_runtime.h\"\n\
+         #include \"nts_test_host.h\"\n\n\
          /* A string is compared by its code units, which is what a JavaScript\n\
           * string is. Printing them beats printing the text: it needs no\n\
           * escaping rules, and a surrogate pair shows up as the two units\n\
@@ -552,8 +592,35 @@ fn native_harness(testable: &[Testable]) -> String {
          \x20   memcpy(&bits, &value, sizeof bits);\n\
          \x20   printf(\"%s %d %016llx\\n\", name, at, (unsigned long long)bits);\n\
          \x20   fflush(stdout);\n\
-         }\n\n",
-    );
+         }\n\n\
+         /* An `async` function hands back a promise, so its answer is what it\n\
+          * settles with once the loop has nothing left to run. The budget is a\n\
+          * bound rather than a guess: a program that starves the loop fails\n\
+          * here instead of hanging the run. */\n\
+         static void show_settled(const char *name, int at, NtsPromise *p) {\n\
+         \x20   nts_test_host_run(1000000);\n\
+         \x20   if (p->state == NTS_PROMISE_FULFILLED\n\
+         \x20       && p->payload == NTS_PAYLOAD_NUMBER) {\n\
+         \x20       show(name, at, p->number);\n\
+         \x20       return;\n\
+         \x20   }\n\
+         \x20   if (p->state == NTS_PROMISE_FULFILLED\n\
+         \x20       && p->payload == NTS_PAYLOAD_REFERENCE) {\n\
+         \x20       show_string(name, at, (const NtsString *)p->reference);\n\
+         \x20       return;\n\
+         \x20   }\n\
+         \x20   if (p->state == NTS_PROMISE_PENDING) {\n\
+         \x20       printf(\"%s %d pending\\n\", name, at);\n\
+         \x20   } else if (p->state == NTS_PROMISE_REJECTED) {\n\
+         \x20       printf(\"%s %d rejected\\n\", name, at);\n\
+         \x20   } else {\n\
+         \x20       printf(\"%s %d undefined\\n\", name, at);\n\
+         \x20   }\n\
+         \x20   fflush(stdout);\n\
+         }\n\n";
+
+fn native_harness(testable: &[Testable]) -> String {
+    let mut main = String::from(HARNESS_PRELUDE);
     for one in testable {
         let params: Vec<String> = one
             .params
@@ -585,7 +652,10 @@ fn native_harness(testable: &[Testable]) -> String {
     main.push_str(
         "int main(int argc, char **argv) {\n\
          \x20   long from = argc > 1 ? strtol(argv[1], 0, 10) : 0;\n\
-         \x20   long at_case = -1;\n",
+         \x20   long at_case = -1;\n\
+         \x20   /* Deterministic: virtual time, one thread, no I/O. Ordering is\n\
+         \x20    * reproducible here in a way it is not against a real loop. */\n\
+         \x20   nts_test_host_install();\n",
     );
     for (one, at, tuple) in interleaved(testable) {
         {
@@ -604,7 +674,9 @@ fn native_harness(testable: &[Testable]) -> String {
                 nts_codegen_c::c_identifier(&one.name),
                 args.join(", ")
             );
-            let show = if is_string(&one.returns) {
+            let show = if settles_with(&one.returns).is_some() {
+                format!("show_settled(\"{}\", {at}, {call});", one.name)
+            } else if is_string(&one.returns) {
                 format!("show_string(\"{}\", {at}, {call});", one.name)
             } else {
                 format!("show(\"{}\", {at}, (double){call});", one.name)
@@ -615,6 +687,10 @@ fn native_harness(testable: &[Testable]) -> String {
     main.push_str("    return 0;\n}\n");
     main
 }
+
+/// The deterministic host, compiled beside the runtime for every check.
+const TEST_HOST_HEADER: &str = include_str!("../../../runtime/c/nts_test_host.h");
+const TEST_HOST_SOURCE: &str = include_str!("../../../runtime/c/nts_test_host.c");
 
 /// Whether the C backend's output for a program is well-formed C.
 ///
@@ -682,6 +758,13 @@ fn run_native(
     )?;
     let runtime = dir.join(nts_codegen_c::RUNTIME_SOURCE_NAME);
     std::fs::write(&runtime, nts_codegen_c::RUNTIME_SOURCE)?;
+    // The deterministic host, so a compiled `async` function has a loop to be
+    // driven to quiescence on. Virtual time and one thread: the differential
+    // must not depend on a wall clock.
+    let host_header = dir.join("nts_test_host.h");
+    std::fs::write(&host_header, TEST_HOST_HEADER)?;
+    let host = dir.join("nts_test_host.c");
+    std::fs::write(&host, TEST_HOST_SOURCE)?;
 
     let main = native_harness(testable);
     let main_path = dir.join("check_main.c");
@@ -708,6 +791,7 @@ fn run_native(
         .arg(&main_path)
         .arg(&generated)
         .arg(&runtime)
+        .arg(&host)
         .arg("-lm")
         .output()
         .context("running clang")?;
@@ -790,17 +874,29 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
                     }
                 })
                 .collect();
-            let show = if is_string(&one.returns) {
+            let payload = settles_with(&one.returns);
+            let show = if is_string(payload.unwrap_or(&one.returns)) {
                 "showString"
             } else {
                 "show"
             };
-            let _ = writeln!(
-                driver,
-                "{show}({:?}, {at}, m.{exported}({}));",
-                one.name,
-                args.join(", ")
-            );
+            // `await` is the node side of running the loop to quiescence. It is
+            // also why the driver is a module rather than a script: top-level
+            // await needs one.
+            //
+            // A settled `Promise<void>` is `undefined`, which `show` would
+            // print as NaN -- so it takes the same spelling the native side
+            // gives it, and the two compare.
+            let call = format!("m.{exported}({})", args.join(", "));
+            let _ = match payload {
+                Some(HirType::Void) => writeln!(
+                    driver,
+                    "await {call}; process.stdout.write(`{} {at} undefined\n`);",
+                    one.name
+                ),
+                Some(_) => writeln!(driver, "{show}({:?}, {at}, await {call});", one.name),
+                None => writeln!(driver, "{show}({:?}, {at}, {call});", one.name),
+            };
         }
     }
     let path = dir.join("check_driver.mjs");

@@ -177,6 +177,29 @@ impl<'a> Decomposer<'a> {
             // is exactly what the boundary is protecting against.
             let array_like = self.client.is_array_type(self.handle, &self.project, ty)?
                 || self.client.is_tuple_type(self.handle, &self.project, ty)?;
+            // `Promise<T>` is across the boundary too, and the comment below
+            // names it: it is one of the two types that pull the standard
+            // library's whole graph in. But this compiler represents a promise
+            // natively, and what it needs from the checker is the *argument* --
+            // which says whether to emit `nts_promise_fulfill_number` or
+            // `_reference` -- not the members.
+            //
+            // So the arguments are recorded and the type stays a placeholder.
+            // Decomposing it properly would pull in `then`, `catch` and
+            // `finally`, which is exactly what the boundary is for. Without
+            // this, every `Promise<T>` reached the lowering with no arguments
+            // at all and became `Promise<void>` -- silently, and for every
+            // payload alike.
+            if Self::is_promise(snapshot, slot) {
+                let mut walk = Walk {
+                    worklist: &mut worklist,
+                    stats: &mut stats,
+                    seeded: &seeded,
+                };
+                self.record_promise_arguments(snapshot, ty, slot, &mut walk)?;
+                continue;
+            }
+
             if !array_like && !Self::is_ours(snapshot, slot) {
                 // Stop at the library boundary. `Promise<void>` and a class
                 // prototype are enough to pull the standard library's whole type
@@ -653,6 +676,56 @@ impl<'a> Decomposer<'a> {
     /// An anonymous type — an object literal's, say — has no declaring symbol and
     /// counts as ours: it exists only where it was written. A named type counts as
     /// ours only if its symbol has a declaration node in the decoded set.
+    /// Record what a `Promise<T>` was instantiated at, and nothing else.
+    ///
+    /// The same guard `resolve_members` uses: `getTypeArguments` dereferences a
+    /// nil when the type is not a reference, and a type that is not a reference
+    /// has no arguments to lose.
+    fn record_promise_arguments(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        ty: u32,
+        slot: TypeId,
+        walk: &mut Walk<'_>,
+    ) -> Result<(), TsgoError> {
+        if self
+            .client
+            .target_of_type(self.handle, &self.project, ty)?
+            .is_none()
+        {
+            return Ok(());
+        }
+        let arguments = self
+            .client
+            .type_arguments(self.handle, &self.project, ty)
+            .unwrap_or_default();
+        if arguments.is_empty() {
+            return Ok(());
+        }
+        let ids = self.intern_all(snapshot, &arguments, walk);
+        snapshot.type_arguments.insert(slot, ids);
+        Ok(())
+    }
+
+    /// Whether this is the standard library's `Promise`.
+    ///
+    /// By name, which is the same approximation the lowering makes for `Math`
+    /// and for the same reason: a program declaring its own `Promise` would be
+    /// mis-read, and the principled version is a profile tying a trusted
+    /// declaration identity to compiler-owned semantics.
+    fn is_promise(snapshot: &SemanticSnapshot, slot: TypeId) -> bool {
+        let Some(record) = snapshot.types.get(slot.0 as usize) else {
+            return false;
+        };
+        let Some(symbol) = record.symbol else {
+            return false;
+        };
+        snapshot
+            .symbols
+            .get(symbol.0 as usize)
+            .is_some_and(|declared| declared.name == "Promise")
+    }
+
     fn is_ours(snapshot: &SemanticSnapshot, slot: TypeId) -> bool {
         let Some(record) = snapshot.types.get(slot.0 as usize) else {
             return false;

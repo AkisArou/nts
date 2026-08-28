@@ -345,27 +345,36 @@ code that puts the chain back into subscription order had no case reaching it,
 and reversing it to LIFO passed the whole suite. The case that reaches it is a
 *pending* promise with several subscribers, and it is there now.
 
-**A4b, blocked on a surface.** A trace of markers printed from TypeScript needs
-something to print with, and `console` belongs to the Node profile rather than
-to the core, which refuses it. Inventing a core `console.log` for the harness
-would duplicate work another session owns.
+**A4b, done, and it needed no new surface.** A trace of markers printed from
+TypeScript would have needed something to print with, and `console` belongs to
+the Node profile rather than to the core. The way through was to observe the
+promises instead: `nts check` drives a promise-returning function, links the
+deterministic host, runs the loop to quiescence, and compares what settled
+against node's `await`.
 
-The way through needs no new surface: drive several exported `async` functions
-and compare the order in which their promises *settle*, which is an ordering
-observation made of return values — and `nts check`'s driver already produces
-those. That is a smaller instrument than a marker trace and it observes the
-thing that matters. It is written after the lowering exists to produce a
-promise at all, which is the one place the plan's ordering genuinely cannot
-hold, and saying so is better than pretending A4 was finished.
+Wiring it found the same defect a third time. The differential's own `c_type`
+ended in `_ => "double"`, so it declared an `async` function as returning a
+number — a pointer marshalled as a double, which clang accepts at the
+declaration and rejects only where the two meet. It is exhaustive now. That is
+three instances in one day of a catch-all being right for its neighbours and
+wrong for the newcomer: `Convert` returning `TOP` in the facts analysis,
+`_ => "double"` in the napi wrapper, and this one.
 
 **B. The language.**
 
-5. Async frame layout and descriptor.
-6. Lowering: `async function` to a state machine. Refuse, by name and from the
-   start: `for await`, async generators, and `try`/`finally` spanning an
-   `await` — the last needs the exception state machine and is the one most
-   likely to be quietly wrong.
-7. `Promise.resolve`, `reject`, `all`, `race` as the profile needs them.
+5. ~~`Promise<T>` as a type, and `async` without `await`.~~ **Done.** The
+   promise is allocated on entry and every `return` settles it and hands it
+   back, so falling off the end and a bare `return` are the same path. The three
+   named refusals — `for await`, async generators, and a `finally` spanning an
+   `await` — are live and checked *ahead* of the `await` rule, so they are
+   testable now rather than the day suspension lands.
+6. Async frame layout and descriptor.
+7. Lowering `await`: the state machine. The piece that makes a function
+   resumable, and the reason `await` cannot be a runtime call.
+8. `Promise.resolve`, `reject`, `all`, `race` as the profile needs them.
+9. `new Promise(executor)`, whose hard half is that `resolve` is a closure over
+   the promise, so settling reaches back through a function the constructor
+   supplied.
 
 **C. The libuv host.**
 

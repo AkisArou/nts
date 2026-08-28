@@ -816,6 +816,24 @@ struct Shared {
 }
 
 impl Shared {
+    /// What every function's lowering needs and none of them computes: the
+    /// module scope, the class hierarchy, the closures, the qualified names,
+    /// and which generic functions were instantiated at what.
+    fn whole_program(
+        snapshot: &SemanticSnapshot,
+        module: &ModuleScope,
+        hierarchy: &Hierarchy,
+        closures: &[ClosureInfo],
+    ) -> Self {
+        Self {
+            module: module.clone(),
+            hierarchy: hierarchy.clone(),
+            closures: closures.to_vec(),
+            naming: naming(snapshot),
+            generics: super::generics::function_instantiations(snapshot),
+        }
+    }
+
     /// A builder for one copy, wired to the program-wide naming.
     fn builder<'a>(
         &self,
@@ -848,13 +866,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
     let generic = generic_classes(snapshot);
-    let shared = Shared {
-        module: module.clone(),
-        hierarchy: hierarchy.clone(),
-        closures: closures.clone(),
-        naming: naming(snapshot),
-        generics: super::generics::function_instantiations(snapshot),
-    };
+    let shared = Shared::whole_program(snapshot, &module, &hierarchy, &closures);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
@@ -902,13 +914,35 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         // representation and a suspension is a transformation of the function,
         // and neither exists yet; until they do, saying so is the whole of what
         // this compiler can honestly do.
+        // The shapes that are refused *by name*, ahead of the blanket refusal
+        // below.
+        //
+        // Ordered this way on purpose. While `async` is refused wholesale these
+        // three are refused with it, so a specific diagnostic added afterwards
+        // would be a rule with no case reaching it -- and the day the blanket
+        // comes off, each of these would silently start compiling as though the
+        // hard part were not there. Checking them first means they are live and
+        // testable now, and stay so.
+        if let Some(what) = refused_by_name(snapshot, id) {
+            lowered
+                .diagnostics
+                .push(FuncBuilder::new(snapshot).unsupported(id, what));
+            continue;
+        }
+
+        // An `async` function with no `await` in it is an ordinary function
+        // whose returns settle a promise, and that much lowers. Suspension is
+        // the part that needs a state machine and a frame, so it is what is
+        // still refused -- named for the `await`, not for the `async`, because
+        // that is the construct that is missing.
         if node
             .modifiers
             .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+            && contains_kind(snapshot, id, syntax::AWAIT_EXPRESSION)
         {
             lowered
                 .diagnostics
-                .push(FuncBuilder::new(snapshot).unsupported(id, "an `async` function"));
+                .push(FuncBuilder::new(snapshot).unsupported(id, "an `await`"));
             continue;
         }
 
@@ -1361,6 +1395,25 @@ fn representation_of(
         // The layout for the function type itself has no fields. What varies
         // between two closures of one type is what they captured, and that
         // belongs to the closure's own class, which has this one as its base.
+        // `Promise<T>`, recognized by name the way the rest of the provided
+        // surface is. The same caveat applies as for `Math`: a program that
+        // declared its own `Promise` would be mis-read, and the principled
+        // version is `docs/any-unknown.md`'s profiles, which tie a trusted
+        // *declaration identity* to compiler-owned semantics.
+        //
+        // The payload comes from the checker's type arguments rather than from
+        // the return annotation, so an inferred `Promise<number>` works as well
+        // as a written one. `Promise` with no argument is `Promise<void>`,
+        // which is what an `async` function with no `return` has.
+        TypeKind::Object { .. } | TypeKind::Structured { .. }
+            if named(snapshot, ty) == Some("Promise") =>
+        {
+            let payload = match snapshot.type_arguments.get(&ty).and_then(|a| a.first()) {
+                Some(argument) => representation_within(snapshot, *argument, path, subst)?,
+                None => HirType::Void,
+            };
+            HirType::Managed(ManagedType::Promise(Box::new(payload)))
+        }
         TypeKind::Object { .. } | TypeKind::Function(_) => {
             HirType::Managed(ManagedType::Object(ty))
         }
@@ -1506,6 +1559,18 @@ enum Step {
     Expression(NodeId),
     /// One added to a carried name, for a loop this compiler synthesized.
     Increment(u32),
+}
+
+/// What an `async` function returns, and what it settles with.
+#[derive(Clone)]
+struct AsyncResult {
+    /// The promise allocated on entry. Every `return` settles this one and
+    /// hands it back, so the function's HIR return type is the promise rather
+    /// than the payload.
+    promise: ValueId,
+    /// The payload's representation, which is what says whether settling emits
+    /// `nts_promise_fulfill_number`, `_reference` or `_void`.
+    payload: HirType,
 }
 
 /// An array method that is a loop with the callback's body inlined.
@@ -1694,6 +1759,12 @@ struct FuncBuilder<'a> {
     /// Empty everywhere else, so `return` keeps its ordinary meaning outside
     /// one of these bodies.
     callback_returns: Vec<CallbackReturn>,
+    /// The promise an `async` function settles, and what it settles with.
+    ///
+    /// Set for the whole of an `async` body and `None` everywhere else, so
+    /// `return e` means "settle this and hand the promise back" there and
+    /// keeps its ordinary meaning otherwise.
+    async_result: Option<AsyncResult>,
     /// Which of them this function allocated.
     ///
     /// A closure nobody creates is not lowered at all. That is the rule
@@ -1729,6 +1800,7 @@ impl<'a> FuncBuilder<'a> {
             synthetic: 0,
             breakables: Vec::new(),
             callback_returns: Vec::new(),
+            async_result: None,
             used_closures: Vec::new(),
             substitution: Substitution::default(),
         }
@@ -2425,9 +2497,24 @@ impl<'a> FuncBuilder<'a> {
         let return_type = self.declared_return(id).unwrap_or(HirType::Void);
         self.materialize(id, &return_type)?;
 
+        // An `async` function allocates its promise before the body runs, so
+        // that every `return` has one to settle -- and so that the allocation
+        // happens once rather than on each path out.
+        let asynchronous = self.begin_async(id, &return_type)?;
+
         self.lower_block(body)?;
 
-        self.close_body(&return_type);
+        if let Some(result) = asynchronous {
+            // Falling off the end of an `async` function resolves it with
+            // `undefined`, which is what `return;` does -- so the two are the
+            // same path rather than the second being a special case.
+            if !self.is_terminated() {
+                self.settle_and_return(id, &result, None)?;
+            }
+            self.async_result = None;
+        } else {
+            self.close_body(&return_type);
+        }
 
         let origin = self.origin(id);
         let exported = self
@@ -2435,6 +2522,39 @@ impl<'a> FuncBuilder<'a> {
             .modifiers
             .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
         Ok(self.finish(name, params, return_type, origin, exported))
+    }
+
+    /// Allocate the promise an `async` function settles, if this is one.
+    ///
+    /// Returns `None` for an ordinary function, which is the signal to close
+    /// the body the ordinary way.
+    fn begin_async(
+        &mut self,
+        id: NodeId,
+        return_type: &HirType,
+    ) -> Result<Option<AsyncResult>, Diagnostic> {
+        if !self
+            .node(id)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+        {
+            return Ok(None);
+        }
+        // The checker gives an `async` function a `Promise<T>` return type
+        // whether or not the source wrote one, so anything else here is a type
+        // this lowering could not represent rather than a function that is not
+        // async.
+        let HirType::Managed(ManagedType::Promise(payload)) = return_type else {
+            return Err(self.unrepresentable(id, "an `async` function's result"));
+        };
+        let origin = self.origin(id);
+        let promise = self.runtime_call("nts_promise_new", Vec::new(), return_type.clone(), origin);
+        let result = AsyncResult {
+            promise,
+            payload: (**payload).clone(),
+        };
+        self.async_result = Some(result.clone());
+        Ok(Some(result))
     }
 
     /// One arrow function, as the `call` method of a class.
@@ -3427,6 +3547,40 @@ impl<'a> FuncBuilder<'a> {
             target: latch,
             args,
         });
+        Ok(())
+    }
+
+    /// Settle an `async` function's promise and hand it back.
+    ///
+    /// The function's HIR return type is the promise, not the payload, so every
+    /// `return` in the body becomes two steps: settle, then return the promise
+    /// that was allocated on entry.
+    ///
+    /// Which `fulfill` depends on the payload's representation, which is the
+    /// whole reason [`ManagedType::Promise`] carries one. The runtime stores a
+    /// tagged union and the tag has to be right: a number written into the
+    /// reference slot is a pointer the collector would follow.
+    fn settle_and_return(
+        &mut self,
+        id: NodeId,
+        result: &AsyncResult,
+        value: Option<ValueId>,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let (helper, args) = match (&result.payload, value) {
+            (HirType::Void, _) | (_, None) => ("nts_promise_fulfill_void", vec![result.promise]),
+            (HirType::Float { .. } | HirType::Int { .. } | HirType::Bool, Some(value)) => {
+                ("nts_promise_fulfill_number", vec![result.promise, value])
+            }
+            (HirType::Managed(_), Some(value)) => {
+                ("nts_promise_fulfill_reference", vec![result.promise, value])
+            }
+            (HirType::Never, Some(_)) => {
+                return Err(self.unrepresentable(id, "an `async` function returning `never`"));
+            }
+        };
+        self.runtime_call(helper, args, HirType::Void, origin);
+        self.terminate(Terminator::Return(Some(result.promise)));
         Ok(())
     }
 
@@ -4451,6 +4605,9 @@ impl<'a> FuncBuilder<'a> {
                 };
                 if let Some(target) = self.callback_returns.last().copied() {
                     return self.return_from_callback(id, target, value);
+                }
+                if let Some(result) = self.async_result.clone() {
+                    return self.settle_and_return(id, &result, value);
                 }
                 self.terminate(Terminator::Return(value));
                 Ok(())
@@ -7666,6 +7823,105 @@ const fn compound_operator(token: u16) -> Option<Compound> {
         syntax::GREATER_THAN_GREATER_THAN_GREATER_THAN_EQUALS_TOKEN => BinOp::UShr,
         _ => return None,
     }))
+}
+
+/// A construct refused by name rather than by the blanket `async` rule.
+///
+/// Each of these is a *different* transformation from the one an ordinary
+/// `async` function needs, and each is the kind that looks like it nearly
+/// works:
+///
+/// - An async generator is two suspension mechanisms at once, and its frame has
+///   to survive being resumed from both a consumer and an awaited promise.
+/// - `for await` is a loop whose *iteration protocol* suspends, so the
+///   suspension points are inside machinery the source never wrote.
+/// - A `finally` that spans an `await` has to run on every path out of the try,
+///   including the one where the function suspended and was resumed with an
+///   exception -- which is the exception state machine, not the value one.
+///
+/// Conservative in the safe direction: any `await` anywhere inside a `try` that
+/// has a `finally` is refused, rather than only those on a path the `finally`
+/// could observe. A narrower rule is a proof this lowering has not written.
+fn refused_by_name(snapshot: &SemanticSnapshot, id: NodeId) -> Option<&'static str> {
+    let node = snapshot.nodes.get(id.0 as usize)?;
+    let asynchronous = node
+        .modifiers
+        .contains(nts_semantic_schema::DeclarationModifiers::ASYNC);
+    if asynchronous && has_child_of_kind(snapshot, id, syntax::ASTERISK_TOKEN) {
+        return Some("an async generator");
+    }
+    let mut found = None;
+    walk(snapshot, id, &mut |child| {
+        if found.is_some() {
+            return;
+        }
+        let kind = kind_at(snapshot, child);
+        if kind == Some(syntax::FOR_OF_STATEMENT)
+            && has_child_of_kind(snapshot, child, syntax::AWAIT_KEYWORD)
+        {
+            found = Some("a `for await` loop");
+        }
+        if kind == Some(syntax::TRY_STATEMENT)
+            && has_finally(snapshot, child)
+            && contains_kind(snapshot, child, syntax::AWAIT_EXPRESSION)
+        {
+            found = Some("a `finally` that spans an `await`");
+        }
+    });
+    found
+}
+
+/// A `try` has a `finally` when its last part is a block: `try/catch` ends in a
+/// catch clause, and `try/finally` and `try/catch/finally` end in the block the
+/// `finally` introduces.
+fn has_finally(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
+    let parts = direct_children(snapshot, id);
+    parts.len() >= 2 && kind_at(snapshot, parts[parts.len() - 1]) == Some(syntax::BLOCK)
+}
+
+/// The syntax kind of a node, or `None` for a list.
+fn kind_at(snapshot: &SemanticSnapshot, id: NodeId) -> Option<u16> {
+    match snapshot.nodes.get(id.0 as usize)?.kind {
+        NodeKind::Syntax(kind) => Some(kind),
+        NodeKind::List => None,
+    }
+}
+
+fn direct_children(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
+    let Some(node) = snapshot.nodes.get(id.0 as usize) else {
+        return Vec::new();
+    };
+    node.children
+        .iter()
+        .flat_map(|child| match snapshot.nodes.get(child.0 as usize) {
+            Some(record) if record.kind == NodeKind::List => record.children.clone(),
+            _ => vec![*child],
+        })
+        .collect()
+}
+
+fn has_child_of_kind(snapshot: &SemanticSnapshot, id: NodeId, kind: u16) -> bool {
+    direct_children(snapshot, id)
+        .into_iter()
+        .any(|child| kind_at(snapshot, child) == Some(kind))
+}
+
+fn contains_kind(snapshot: &SemanticSnapshot, id: NodeId, kind: u16) -> bool {
+    let mut found = false;
+    walk(snapshot, id, &mut |child| {
+        if kind_at(snapshot, child) == Some(kind) {
+            found = true;
+        }
+    });
+    found
+}
+
+/// Every node under `id`, itself included.
+fn walk(snapshot: &SemanticSnapshot, id: NodeId, visit: &mut impl FnMut(NodeId)) {
+    visit(id);
+    for child in direct_children(snapshot, id) {
+        walk(snapshot, child, visit);
+    }
 }
 
 /// The `Math` member a name spells.

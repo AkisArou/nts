@@ -69,7 +69,7 @@ worse.
 | labelled statements | **not done** | a labelled `break` is *refused* rather than treated as a bare one, which would leave the wrong loop |
 | `try` / `catch` / `finally` | **not done** | see *The runtime* |
 | `for...in` | **not done** | needs key enumeration, so needs a shape at run time |
-| `for await` | **not done** | needs async |
+| `for await` | **not done** | refused by name: a loop whose *iteration protocol* suspends, so the suspension points are inside machinery the source never wrote |
 
 ## Expressions and operators
 
@@ -182,7 +182,7 @@ worse.
 | typed arrays | partial | `Int8Array` through `Float64Array` are ordinary arrays whose element width was written down rather than inferred, so the descriptors, bounds checks and escape analysis already work on one. A store is ECMAScript's conversion, not a C cast: `u8[i] = 300` stores 44 and `u8[i] = NaN` stores 0. Construction from a length only; the methods refuse, because the runtime's array helpers read the block as `double`. Measured: `bytes`, an Adler-32 over a byte buffer, runs at parity with the C++ reference — see record 0016 for the transfer function that was missing between them |
 | `Uint8ClampedArray` | **not done** | it stores by *clamping* where the others wrap, and the wrapping conversion would be silently wrong for exactly the inputs anyone would notice |
 | `ArrayBuffer`, `DataView`, `.buffer` | **not done** | a typed array here owns its storage rather than viewing storage something else can also see, which is what these are for |
-| `Promise` | **not done** | see below |
+| `Promise<T>` as a type | done | a distinct managed type carrying the payload's *representation*, which is what says whether settling emits `nts_promise_fulfill_number`, `_reference` or `_void`. One fixed runtime layout with a tagged union — the payload is compile-time information, not a monomorphization. `new Promise(executor)` still refuses |
 | `Reflect`, `Proxy`, `Intl`, `WeakRef` | **not done** | |
 | `console.log` | partial | a `throw`'s message is printed; there is no general `console` |
 
@@ -198,34 +198,46 @@ worse.
 | FFI to C | done | `declare function` plus an emitted prototype |
 | a nursery / generational GC | **not done** | RFC §9.3 — what closes the last gap to V8 on allocation-heavy code |
 | **exceptions** | **not done** | `throw` terminates; no unwinding, no handler |
-| **promises and `async` / `await`** | **not done** | see below |
+| `async` functions without `await` | done | the promise is allocated on entry and every `return` settles it and hands it back, so falling off the end and a bare `return` are one path. Driven by `nts check`, which runs the loop to quiescence and compares what settled against node's `await` |
+| `await`, and suspension | **not done** | refused by name. See below |
+| async generators, `for await`, a `finally` spanning an `await` | **not done** | each refused *by name*, and checked ahead of the `await` rule so they are live rather than hidden behind it |
+| an event loop | partial | the host seam, the two queues and the checkpoint are built and tested against node; a deterministic host with virtual time exists. libuv is phase C of [`../async.md`](../async.md) |
 | an event loop | **not done** | |
 | a native library ABI | **not done** | RFC §27.1 — everything emitted is `static` |
 | separate compilation | **not done** | one program at a time |
 | threads, atomics, `SharedArrayBuffer` | **not done** | |
 
-### Why promises and `async`/`await` are one large item
+### What is left of promises and `async`/`await`
 
-Until today `async` was *accepted and wrong*: `Promise<number>` had no
-representation, so the return type resolved to `void` and the returned value was
-converted away. It is refused now, which is honest. The real thing needs four
-things that do not exist:
+`async` was once *accepted and wrong*: `Promise<number>` had no representation,
+so the return type resolved to `void` and the returned value was converted away.
+Three of the four things it needed now exist.
 
-1. **A representation for `Promise<T>`** — an object holding a state, a value or
-   an error, and a list of continuations.
-2. **A transformation of the function** into something resumable: a state machine
-   or CPS. This is the part that is a *compiler* feature rather than a library
-   one, and it is why `await` cannot be a runtime call.
-3. **Frames that outlive their caller.** A suspended function's locals cannot be
-   on the stack, so the transformation decides what is captured and hands it to
-   the memory provider — the same escape question this compiler already answers
-   for closures, asked at a harder moment.
-4. **An event loop, and something for it to wait on.** A microtask queue alone
-   runs `Promise.resolve().then(...)` and nothing anyone wants; what makes it
-   worth having is I/O.
+1. ~~**A representation for `Promise<T>`.**~~ Done. A distinct managed type
+   carrying the payload's representation. Getting there needed a second fix that
+   would have shipped quietly: `Promise<T>` is declared in `lib.d.ts`, and the
+   frontend stops at that boundary, so every promise arrived with *no type
+   arguments* and became `Promise<void>` — a correct-looking answer for every
+   input. `Array<T>` already had an exception for the same reason; `Promise<T>`
+   now has a narrower one that records the arguments and leaves the members
+   alone.
+2. **A transformation of the function** into something resumable: a state
+   machine. Still to do, and it is the part that is a *compiler* feature rather
+   than a library one — which is why `await` cannot be a runtime call. An
+   `async` function with no `await` needs none of it, which is why that half
+   landed first.
+3. **Frames that outlive their caller.** Still to do. A suspended function's
+   locals cannot be on the stack, so the transformation decides what is captured
+   and hands it to the memory provider — the same escape question this compiler
+   already answers for closures, asked at a harder moment.
+4. ~~**An event loop, and something for it to wait on.**~~ The queues, the
+   checkpoint and the host seam are built; see [`../async.md`](../async.md). What
+   is left is a real host, which is where the I/O that makes it worth having
+   comes from.
 
-It belongs *after* exceptions: a rejected promise is an exception that crossed a
-suspension, so building promises first means building unwinding twice.
+A rejected promise is an exception that crossed a suspension, so the *rejection*
+half still belongs after exceptions — building it first would mean building
+unwinding twice. Fulfilment does not, which is why this slice exists.
 
 ---
 

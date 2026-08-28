@@ -416,6 +416,9 @@ fn render(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Array(element)) => {
             format!("managed<[{}]>", render(element))
         }
+        HirType::Managed(ManagedType::Promise(payload)) => {
+            format!("managed<promise<{}>>", render(payload))
+        }
     }
 }
 

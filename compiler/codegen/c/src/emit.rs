@@ -1328,6 +1328,11 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         // type for no benefit.
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *",
         HirType::Managed(ManagedType::String) => "NtsString *",
+        // One runtime type whatever it carries. The payload's representation is
+        // in the HIR type for the compiler's sake -- it says which
+        // `nts_promise_fulfill_*` to emit -- and the C sees a tagged union, so
+        // there is nothing per payload to name here.
+        HirType::Managed(ManagedType::Promise(_)) => "NtsPromise *",
         // An object type is named per program, so it has no `&'static str`
         // spelling. `c_type_of` answers for those; reaching here means a caller
         // asked the question that cannot be answered without the program.
