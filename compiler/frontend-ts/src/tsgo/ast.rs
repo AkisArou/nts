@@ -157,7 +157,12 @@ pub fn decode(payload: &[u8], file: SourceId) -> Result<EncodedSourceFile, AstEr
         data: &payload[header.string_data_at..],
     };
 
-    let mut nodes = decode_nodes(&payload[header.nodes_at..], file, &strings)?;
+    let mut nodes = decode_nodes(
+        &payload[header.nodes_at..],
+        &payload[header.extended_at..header.structured_at],
+        file,
+        &strings,
+    )?;
     rebuild_children(&mut nodes);
     assign_modifiers(&mut nodes);
 
@@ -172,6 +177,11 @@ struct Header {
     content_hash: [u8; 16],
     string_offsets_at: usize,
     string_data_at: usize,
+    /// Where the extended blocks start. A template literal's *cooked* text
+    /// lives here rather than in the tagged string index every other literal
+    /// uses, which is why a template part arrived with no text at all.
+    extended_at: usize,
+    structured_at: usize,
     nodes_at: usize,
 }
 
@@ -241,6 +251,8 @@ impl Header {
             content_hash,
             string_offsets_at,
             string_data_at,
+            extended_at,
+            structured_at,
             nodes_at,
         })
     }
@@ -249,6 +261,7 @@ impl Header {
 /// Decode the flat node array, dropping the nil sentinel at index 0.
 fn decode_nodes(
     nodes_bytes: &[u8],
+    extended: &[u8],
     file: SourceId,
     strings: &StringTable<'_>,
 ) -> Result<Vec<NodeRecord>, AstError> {
@@ -312,6 +325,35 @@ fn decode_nodes(
             && text.is_none()
         {
             text = strings.source(raw.pos, raw.end).map(str::to_owned);
+        }
+
+        // A template literal's text is in the *extended* section rather than
+        // behind a tagged string index, and the first `u32` of its block is the
+        // **cooked** string -- escapes processed, delimiters gone. Reading the
+        // source span instead would give `` `a\tb${ `` where the program means
+        // `a<tab>b`, so this is not a place to be clever with `pos` and `end`.
+        //
+        // Without it every template part arrived with no text, and
+        // `` `a${n}b` `` compiled to the conversion alone: node said `a0b` and
+        // this said `0`.
+        if !is_list
+            && text.is_none()
+            && let NodeData::Extended { offset, .. } = data
+            && matches!(
+                u16::try_from(raw.kind),
+                Ok(
+                    nts_semantic_schema::syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL
+                        | nts_semantic_schema::syntax::TEMPLATE_HEAD
+                        | nts_semantic_schema::syntax::TEMPLATE_MIDDLE
+                        | nts_semantic_schema::syntax::TEMPLATE_TAIL
+                )
+            )
+        {
+            let at = offset as usize;
+            if let Some(bytes) = extended.get(at..at + 4) {
+                let index = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                text = strings.get(index, node_index).ok();
+            }
         }
 
         nodes.push(NodeRecord {

@@ -83,7 +83,7 @@ diagnostic.
 | the comma operator | **not done** | |
 | `s[0]` on a string | **not done** | indexing is an array operation here |
 | `?.` and `??` | **not done** | |
-| template literals | **not done** | very common in real TypeScript. The conversion they need now exists: `` `${n}` `` is `String(n)` and a concatenation, so what is left is the syntax rather than the semantics |
+| template literals | done | a head and one span per substitution, walked left to right — which is the evaluation order and is observable. Each substitution goes through the same conversion `String(n)` does. Tagged templates are not done |
 | spread and rest in calls or literals | **not done** | |
 | destructuring | **not done** | declarations, parameters and assignment |
 | `delete`, `in`, `instanceof` | **not done** | |
@@ -400,9 +400,8 @@ In order, with the reason rather than the ranking:
    which this compiler already has everywhere else. Note the differential
    problem first: node's type stripping rejects an `enum` outright.
 4. **`Map` and `Set`** — no real program does without them.
-5. **Template literals and destructuring** — the two most common things in
-   modern TypeScript that this compiler cannot read at all. Interpolation is now
-   only syntax: `` `${n}` `` is `String(n)` and a concatenation, and both exist.
+5. **Destructuring** — declarations, parameters and assignment. The other half
+   of this entry, template literals, is done.
 6. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
    for promises rather than an alternative to them.
 7. **Tagged unions** — `number | undefined` and unions of unrelated objects.

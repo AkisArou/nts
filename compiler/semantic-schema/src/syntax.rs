@@ -89,6 +89,15 @@ pub const FOR_OF_STATEMENT: u16 = 251;
 pub const PARAMETER: u16 = 170;
 pub const PROPERTY_DECLARATION: u16 = 173;
 pub const METHOD_DECLARATION: u16 = 175;
+/// `` `abc` `` with no `${}` in it. Its text is the whole of the string.
+pub const NO_SUBSTITUTION_TEMPLATE_LITERAL: u16 = 14;
+/// The literal text before the first `${` of a template.
+pub const TEMPLATE_HEAD: u16 = 15;
+/// The literal text between two substitutions.
+pub const TEMPLATE_MIDDLE: u16 = 16;
+/// The literal text after the last substitution.
+pub const TEMPLATE_TAIL: u16 = 17;
+
 pub const CONSTRUCTOR: u16 = 177;
 /// `get x() { … }`. Immediately after [`CONSTRUCTOR`] in tsgo's enumeration,
 /// which is where TypeScript's own `SyntaxKind` puts it.
@@ -101,6 +110,10 @@ pub const PROPERTY_ASSIGNMENT: u16 = 303;
 pub const SHORTHAND_PROPERTY_ASSIGNMENT: u16 = 304;
 pub const ARRAY_LITERAL_EXPRESSION: u16 = 210;
 pub const OBJECT_LITERAL_EXPRESSION: u16 = 211;
+/// `` `a${x}b` ``: a head, then one span per substitution.
+pub const TEMPLATE_EXPRESSION: u16 = 229;
+/// One substitution and the literal text that follows it.
+pub const TEMPLATE_SPAN: u16 = 240;
 pub const PROPERTY_ACCESS_EXPRESSION: u16 = 212;
 pub const ELEMENT_ACCESS_EXPRESSION: u16 = 213;
 pub const PARENTHESIZED_EXPRESSION: u16 = 218;

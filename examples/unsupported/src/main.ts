@@ -35,10 +35,6 @@ export function hasForIn(xs: number[]): number {
   return count;
 }
 
-export function hasTemplateLiteral(n: number): string {
-  return `value ${n}`;
-}
-
 // A default is filled in at the call, which is where JavaScript evaluates it.
 // This one reads `a`, which at the call site is the caller's argument
 // expression rather than the callee's binding -- so filling it would evaluate

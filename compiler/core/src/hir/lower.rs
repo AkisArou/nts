@@ -3746,6 +3746,85 @@ impl<'a> FuncBuilder<'a> {
     /// number: the shortest decimal that round-trips through a `double` is a
     /// real algorithm — Ryū, Grisu — and `%.17g` is not it. So this is refused
     /// rather than approximated.
+    /// `` `a${x}b` ``, which is a concatenation written with fewer plus signs.
+    ///
+    /// The tree is a head, then one span per substitution, each span holding
+    /// its expression and the literal text that follows it. So the lowering is
+    /// the same walk left to right that the source reads as, and the
+    /// substitutions are evaluated in that order — which is observable, because
+    /// one of them may call something.
+    ///
+    /// Each substitution goes through [`Self::as_string`], so `` `${n}` `` is
+    /// `String(n)` and gets ECMAScript's conversion rather than a `printf` one.
+    /// An empty literal part contributes no concatenation: `` `${a}${b}` `` is
+    /// one join rather than three.
+    fn lower_template(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let text = HirType::Managed(ManagedType::String);
+        let mut result: Option<ValueId> = None;
+
+        for part in self.children(id) {
+            match self.kind_of(part) {
+                Some(syntax::TEMPLATE_HEAD) => {
+                    let literal = self.node(part).text.clone().unwrap_or_default();
+                    if !literal.is_empty() {
+                        let origin = self.origin(part);
+                        result =
+                            Some(self.push(OpKind::ConstString(literal), text.clone(), origin));
+                    }
+                }
+                Some(syntax::TEMPLATE_SPAN) => {
+                    let pieces = self.children(part);
+                    let [expression, literal] = pieces.as_slice() else {
+                        return Err(self.unsupported(part, "a template span of unexpected shape"));
+                    };
+                    let value = self.lower_expression(*expression)?;
+                    let value = self.as_string(*expression, value)?;
+                    result = Some(self.join(part, result, value, &text));
+
+                    let literal_text = self.node(*literal).text.clone().unwrap_or_default();
+                    if !literal_text.is_empty() {
+                        let origin = self.origin(*literal);
+                        let piece =
+                            self.push(OpKind::ConstString(literal_text), text.clone(), origin);
+                        result = Some(self.join(part, result, piece, &text));
+                    }
+                }
+                _ => return Err(self.unsupported(part, "a template part of unexpected shape")),
+            }
+        }
+
+        // `` `` `` has no parts at all, and a template of empty ones reduces to
+        // the same nothing. Both are the empty string.
+        if let Some(value) = result {
+            return Ok(value);
+        }
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::ConstString(String::new()), text, origin))
+    }
+
+    /// Concatenate onto what a template has built so far, or start it.
+    fn join(
+        &mut self,
+        at: NodeId,
+        left: Option<ValueId>,
+        right: ValueId,
+        text: &HirType,
+    ) -> ValueId {
+        let Some(left) = left else {
+            return right;
+        };
+        let origin = self.origin(at);
+        self.push(
+            OpKind::Binary {
+                op: BinOp::Concat,
+                lhs: left,
+                rhs: right,
+            },
+            text.clone(),
+            origin,
+        )
+    }
+
     /// A value as a string, converting a number the way JavaScript does.
     ///
     /// `+` resolves to concatenation from the *result* type, which is right —
@@ -4147,6 +4226,18 @@ impl<'a> FuncBuilder<'a> {
                 let origin = self.origin(id);
                 Ok(self.push(OpKind::ConstBool(false), HirType::Bool, origin))
             }
+            // A template with nothing in it is a string literal written with
+            // different quotes.
+            Some(syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL) => {
+                let text = self.node(id).text.clone().unwrap_or_default();
+                let origin = self.origin(id);
+                Ok(self.push(
+                    OpKind::ConstString(text),
+                    HirType::Managed(ManagedType::String),
+                    origin,
+                ))
+            }
+            Some(syntax::TEMPLATE_EXPRESSION) => self.lower_template(id),
             _ => Err(self.unsupported(id, "this expression")),
         }
     }
