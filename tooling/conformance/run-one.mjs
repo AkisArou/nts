@@ -17,6 +17,7 @@ import process from "node:process";
 import { makeCommon, checkPending, Skip } from "./common.mjs";
 import tmpdir from "./tmpdir.mjs";
 import fixtures from "./fixtures.mjs";
+import * as hijackstdio from "./hijackstdio.mjs";
 
 const [, , moduleName, file, addon] = process.argv;
 const HERE = dirname(new URL(import.meta.url).pathname);
@@ -32,8 +33,12 @@ const moduleDir = join(ROOT, "runtime/node", moduleName);
  * those handlers, and a throw from one sets a non-zero exit status that the
  * parent turns into a failure.
  */
+const reportTo = process.stdout.write.bind(process.stdout);
+
 function report(result) {
-  process.stdout.write(`${JSON.stringify(result)}\n`);
+  // Bound at load: node's console tests replace `process.stdout.write`, and
+  // the report must reach the parent whatever the test did to the stream.
+  reportTo(`${JSON.stringify(result)}\n`);
 }
 
 /**
@@ -51,6 +56,17 @@ async function settle() {
   }
 }
 
+/**
+ * The siblings this module shares state with, named in its `uses` file.
+ *
+ * One `name` per line. Each is loaded exactly as the module under test is,
+ * native half included, so that both halves of a shared registry are ours.
+ */
+const siblings = new Map();
+
+/** Node-internal module ids the module under test answers for, from its shape. */
+let internals = null;
+
 let underTest;
 try {
   let exports;
@@ -62,11 +78,37 @@ try {
     exports = await import(join(moduleDir, "src/main.ts"));
   }
   const shapePath = join(moduleDir, "shape.mjs");
-  underTest = existsSync(shapePath)
-    ? (await import(shapePath)).shape({ ...exports })
-    : { ...exports };
+  const shapeModule = existsSync(shapePath) ? await import(shapePath) : null;
+  underTest = shapeModule ? shapeModule.shape({ ...exports }) : { ...exports };
+  // A module that is also a global -- `console` -- has to be installed as one,
+  // or a test comparing `require('console')` with `globalThis.console` sees
+  // node's on one side and ours on the other. Declared per module rather than
+  // guessed, so the substitution stays auditable.
+  shapeModule?.installGlobals?.(underTest);
+  internals = shapeModule?.internals?.({ ...exports }) ?? null;
+
+  const usesPath = join(moduleDir, "uses");
+  if (existsSync(usesPath)) {
+    for (const name of readFileSync(usesPath, "utf8").split("\n").map((l) => l.trim())) {
+      if (!name || name.startsWith("#")) continue;
+      const dir = join(ROOT, "runtime/node", name);
+      const siblingShims = join(dir, "bindings.node.mjs");
+      if (existsSync(siblingShims)) await import(siblingShims);
+      const siblingExports = { ...(await import(join(dir, "src/main.ts"))) };
+      const siblingShape = join(dir, "shape.mjs");
+      siblings.set(
+        name,
+        existsSync(siblingShape)
+          ? (await import(siblingShape)).shape(siblingExports)
+          : siblingExports,
+      );
+    }
+  }
 } catch (e) {
+  // Nothing to run against, so stop here rather than letting the test fail
+  // later for a reason that only restates this one.
   report({ kind: "fail", why: `loading the module: ${e?.message ?? e}` });
+  process.exit(0);
 }
 
 const common = makeCommon();
@@ -81,9 +123,25 @@ function shimmedRequire(id) {
     throw new Skip(`needs ${id}`);
   }
   if (bare === "assert" || bare === "assert/strict") return assert;
+  // A sibling the module under test shares state with. `console` publishes to
+  // `diagnostics_channel`, and a test that subscribes has to reach the same
+  // registry the console publishes into -- node's would be a different one and
+  // the subscription would silently never fire.
+  //
+  // Only the modules named in the module's `uses` file, never every module we
+  // happen to have: a test that builds its expected output with `util.inspect`
+  // is checking us *against node*, and handing it our own `util` would turn a
+  // differential test into a tautology.
+  if (siblings.has(bare)) return siblings.get(bare);
+  // A node-internal module the test reaches for with `--expose-internals`.
+  // Ours live in different files, so the module says which of its exports
+  // stand in -- declared in `shape.mjs`, so the mapping is readable next to
+  // the module rather than hidden in the harness.
+  if (internals && bare in internals) return internals[bare];
   if (id.endsWith("../common")) return common;
   if (id.endsWith("common/tmpdir")) return tmpdir;
   if (id.endsWith("common/fixtures")) return fixtures;
+  if (id.endsWith("common/hijackstdio")) return hijackstdio;
   // Anything else is infrastructure rather than the subject: `node:test` is a
   // test runner, `child_process` spawns, `util` formats. Node's own is the
   // right answer for those -- substituting ours would test ours. A module we
@@ -105,12 +163,16 @@ try {
   // substituted `require` is the whole mechanism: no rewriting, so what runs is
   // what node's maintainers wrote.
   const run = new Function(
+    // `console` is deliberately absent: node's tests reassign
+    // `globalThis.console` and expect the next unqualified `console` to see
+    // the new value, which a parameter binding would not. Some of them also
+    // declare a local `const console`, which a parameter would collide with.
     "require", "module", "exports", "__filename", "__dirname",
-    "process", "global", "globalThis", "console",
+    "process", "global", "globalThis",
     src,
   );
   run(shimmedRequire, module, module.exports, file, dirname(file),
-      process, globalThis, globalThis, console);
+      process, globalThis, globalThis);
   await settle();
   const missed = checkPending();
   if (missed.length > 0) {

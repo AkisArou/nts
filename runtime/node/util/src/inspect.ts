@@ -25,6 +25,77 @@ import {
  */
 export const customInspectSymbol: unique symbol = Symbol.for("nodejs.util.inspect.custom") as never;
 
+/**
+ * The style names `inspect` asks for, and the colour each maps to.
+ *
+ * Two tables rather than one because both are public and mutable: a program
+ * can rename a style's colour (`util.inspect.styles.string = 'cyan'`) or add a
+ * colour of its own (`util.inspect.colors.orange = [38, 39]`), and node's own
+ * tests do both.
+ */
+export type StyleType =
+  | "special" | "number" | "bigint" | "boolean" | "undefined" | "null"
+  | "string" | "symbol" | "date" | "regexp" | "module" | "name";
+
+export const inspectStyles: Record<string, string | undefined> = {
+  __proto__: null,
+  special: "cyan",
+  number: "yellow",
+  bigint: "yellow",
+  boolean: "yellow",
+  undefined: "grey",
+  null: "bold",
+  string: "green",
+  symbol: "green",
+  date: "magenta",
+  // `name` is deliberately unstyled: a key is not a value.
+  regexp: "red",
+  module: "underline",
+} as never;
+
+/**
+ * ANSI codes by name. Each is the pair that turns the style on and off --
+ * `[31, 39]` for red -- because a nested style has to restore the outer one
+ * rather than reset everything.
+ */
+export const inspectColors: Record<string, [number, number] | undefined> = {
+  __proto__: null,
+  reset: [0, 0], bold: [1, 22], dim: [2, 22], italic: [3, 23], underline: [4, 24],
+  blink: [5, 25], inverse: [7, 27], hidden: [8, 28], strikethrough: [9, 29],
+  doubleunderline: [21, 24],
+  black: [30, 39], red: [31, 39], green: [32, 39], yellow: [33, 39],
+  blue: [34, 39], magenta: [35, 39], cyan: [36, 39], white: [37, 39],
+  bgBlack: [40, 49], bgRed: [41, 49], bgGreen: [42, 49], bgYellow: [43, 49],
+  bgBlue: [44, 49], bgMagenta: [45, 49], bgCyan: [46, 49], bgWhite: [47, 49],
+  framed: [51, 54], overlined: [53, 55],
+  gray: [90, 39], grey: [90, 39],
+  redBright: [91, 39], greenBright: [92, 39], yellowBright: [93, 39],
+  blueBright: [94, 39], magentaBright: [95, 39], cyanBright: [96, 39],
+  whiteBright: [97, 39],
+  bgGray: [100, 49], bgGrey: [100, 49],
+  bgRedBright: [101, 49], bgGreenBright: [102, 49], bgYellowBright: [103, 49],
+  bgBlueBright: [104, 49], bgMagentaBright: [105, 49], bgCyanBright: [106, 49],
+  bgWhiteBright: [107, 49],
+} as never;
+
+/** What every piece of output goes through. The colourless one is the default. */
+export type Stylize = (str: string, styleType: StyleType) => string;
+
+export function stylizeNoColor(str: string): string {
+  return str;
+}
+
+export function stylizeWithColor(str: string, styleType: StyleType): string {
+  const style = inspectStyles[styleType];
+  if (style !== undefined) {
+    const color = inspectColors[style];
+    if (color !== undefined) {
+      return `\u001b[${color[0]}m${str}\u001b[${color[1]}m`;
+    }
+  }
+  return str;
+}
+
 export interface InspectOptions {
   depth?: number | null;
   colors?: boolean;
@@ -48,6 +119,8 @@ interface Context extends Required<Omit<InspectOptions, "depth" | "maxArrayLengt
   circular: Map<object, number>;
   /** The deepest recursion reached so far, for the `compact` rule below. */
   currentDepth: number;
+  /** Colour, or the identity. Chosen once per `inspect` call. */
+  stylize: Stylize;
 }
 
 /**
@@ -81,7 +154,14 @@ export function inspect(value: unknown, options?: InspectOptions | boolean): str
     seen: [],
     circular: new Map(),
     currentDepth: 0,
+    // Chosen once, so that every piece of output goes through the same
+    // function and a nested value cannot end up coloured differently from the
+    // one containing it.
+    stylize: stylizeNoColor as Stylize,
   } as Context;
+  if (ctx.colors) {
+    ctx.stylize = stylizeWithColor;
+  }
   return formatValue(ctx, value, 0);
 }
 
@@ -163,15 +243,19 @@ export function formatNumber(value: number, numericSeparator = false): string {
   }`;
 }
 
-function formatPrimitive(value: unknown, numericSeparator = false): string | undefined {
+function formatPrimitive(
+  stylize: Stylize,
+  value: unknown,
+  numericSeparator = false,
+): string | undefined {
   switch (typeof value) {
-    case "string": return quoteString(value);
-    case "number": return formatNumber(value, numericSeparator);
-    case "bigint": return formatBigInt(value, numericSeparator);
-    case "boolean": return String(value);
-    case "undefined": return "undefined";
-    case "symbol": return value.toString();
-    default: return value === null ? "null" : undefined;
+    case "string": return stylize(quoteString(value), "string");
+    case "number": return stylize(formatNumber(value, numericSeparator), "number");
+    case "bigint": return stylize(formatBigInt(value, numericSeparator), "bigint");
+    case "boolean": return stylize(String(value), "boolean");
+    case "undefined": return stylize("undefined", "undefined");
+    case "symbol": return stylize(value.toString(), "symbol");
+    default: return value === null ? stylize("null", "null") : undefined;
   }
 }
 
@@ -185,12 +269,13 @@ function functionLabel(value: (...args: never[]) => unknown): string {
 }
 
 function formatValue(ctx: Context, value: unknown, recurseTimes: number): string {
-  const primitive = formatPrimitive(value, ctx.numericSeparator);
+  const primitive = formatPrimitive(ctx.stylize, value, ctx.numericSeparator);
   if (primitive !== undefined) {
     return primitive;
   }
   if (typeof value === "function") {
-    return formatWithKeys(ctx, value as object, recurseTimes, functionLabel(value as never), ["{", "}"], []);
+    const label = ctx.stylize(functionLabel(value as never), "special");
+    return formatWithKeys(ctx, value as object, recurseTimes, label, ["{", "}"], []);
   }
   return formatObject(ctx, value as object, recurseTimes);
 }
@@ -204,7 +289,31 @@ function constructorName(value: object): string | undefined {
   return name === "Object" ? undefined : name;
 }
 
+/**
+ * A revoked proxy answers no internal method: reading a property, taking its
+ * prototype, listing its keys all throw. There is nothing to print and no way
+ * to look, so node prints a placeholder.
+ *
+ * Node asks the engine (`getProxyDetails`) whether it really is one. We cannot,
+ * so the test is behavioural: an object that throws on `isExtensible` is
+ * treated as revoked. A live proxy whose handler throws for every trap is
+ * indistinguishable from a revoked one at the language level, and would be
+ * reported the same way.
+ */
+function isRevokedProxy(value: object): boolean {
+  try {
+    Object.isExtensible(value);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 function formatObject(ctx: Context, value: object, recurseTimes: number): string {
+  if (isRevokedProxy(value)) {
+    return ctx.stylize("<Revoked Proxy>", "special");
+  }
+
   // An object that knows how to render itself is asked first, before any of
   // the shape detection below.
   if (ctx.customInspect) {
@@ -224,14 +333,17 @@ function formatObject(ctx: Context, value: object, recurseTimes: number): string
       index = ctx.circular.size + 1;
       ctx.circular.set(value, index);
     }
-    return `[Circular *${index}]`;
+    return ctx.stylize(`[Circular *${index}]`, "special");
   }
 
   if (isDate(value)) {
-    return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+    return ctx.stylize(
+      Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString(),
+      "date",
+    );
   }
   if (isRegExp(value)) {
-    return String(value);
+    return ctx.stylize(String(value), "regexp");
   }
   if (value instanceof Error) {
     return formatError(value);
@@ -240,14 +352,17 @@ function formatObject(ctx: Context, value: object, recurseTimes: number): string
     const wrapped = (value as { valueOf(): unknown }).valueOf();
     return `[${typeof wrapped === "string" ? "String" : typeof wrapped === "number" ? "Number"
       : typeof wrapped === "boolean" ? "Boolean" : typeof wrapped === "bigint" ? "BigInt" : "Symbol"}: ${
-      formatPrimitive(wrapped)}]`;
+      formatPrimitive(ctx.stylize, wrapped)}]`;
   }
 
   const depthReached = ctx.depth !== null && recurseTimes > ctx.depth;
   if (depthReached) {
-    if (Array.isArray(value)) return "[Array]";
+    if (Array.isArray(value)) return ctx.stylize("[Array]", "special");
     const name = constructorName(value);
-    return name && name !== "[Object: null prototype]" ? `[${name}]` : "[Object]";
+    return ctx.stylize(
+      name && name !== "[Object: null prototype]" ? `[${name}]` : "[Object]",
+      "special",
+    );
   }
 
   ctx.seen.push(value);
@@ -273,7 +388,7 @@ function formatByShape(ctx: Context, value: object, recurseTimes: number): strin
     const entries: string[] = [];
     const limit = ctx.maxArrayLength ?? array.length;
     for (let i = 0; i < Math.min(array.length, limit); i++) {
-      entries.push(formatNumber(array[i]!, ctx.numericSeparator));
+      entries.push(ctx.stylize(formatNumber(array[i]!, ctx.numericSeparator), "number"));
     }
     if (array.length > limit) {
       entries.push(`... ${array.length - limit} more item${array.length - limit > 1 ? "s" : ""}`);
@@ -324,7 +439,7 @@ function formatArrayEntries(ctx: Context, value: unknown[], recurseTimes: number
     if (!Object.prototype.hasOwnProperty.call(value, i)) {
       let end = i;
       while (end < shown && !Object.prototype.hasOwnProperty.call(value, end)) end++;
-      entries.push(`<${end - i} empty item${end - i > 1 ? "s" : ""}>`);
+      entries.push(ctx.stylize(`<${end - i} empty item${end - i > 1 ? "s" : ""}>`, "undefined"));
       i = end - 1;
       continue;
     }
@@ -385,7 +500,7 @@ function formatWithKeys(
   ctx.indentationLvl += 2;
   try {
     for (const key of keys) {
-      output.push(`${formatKey(key)}: ${formatProperty(ctx, value, key, recurseTimes)}`);
+      output.push(formatProperty(ctx, value, key, recurseTimes));
     }
   } finally {
     ctx.indentationLvl -= 2;
@@ -407,18 +522,43 @@ function formatWithKeys(
   return marker === undefined ? wrapped : `<ref *${marker}> ${wrapped}`;
 }
 
-function formatKey(key: PropertyKey): string {
+/**
+ * How a key is spelled, upstream `formatProperty`.
+ *
+ * A symbol prints as `Symbol(x)` with no brackets, an identifier bare, and
+ * anything else quoted. `__proto__` is bracketed and quoted even though it is
+ * an identifier, because `{ __proto__: ... }` in the printed output would mean
+ * something else if it were pasted back in. Brackets around the whole name
+ * mark a non-enumerable property, which is only ever reached under
+ * `showHidden`.
+ */
+function formatKey(ctx: Context, key: PropertyKey, enumerable: boolean): string {
+  let name: string;
   if (typeof key === "symbol") {
-    return `[${key.toString()}]`;
+    name = ctx.stylize(key.toString(), "symbol");
+  } else if (/^[a-zA-Z_][a-zA-Z_0-9]*$/.test(String(key))) {
+    name = key === "__proto__" ? "['__proto__']" : ctx.stylize(String(key), "name");
+  } else {
+    name = ctx.stylize(quoteString(String(key)), "string");
   }
-  // An identifier needs no quotes; anything else does.
-  return /^[A-Za-z_$][\w$]*$/.test(String(key)) ? String(key) : quoteString(String(key));
+  return enumerable ? name : `[${name}]`;
 }
 
+/** `key: value` for one own property, with the key spelled as node spells it. */
 function formatProperty(ctx: Context, value: object, key: PropertyKey, recurseTimes: number): string {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  const name = formatKey(ctx, key, descriptor?.enumerable !== false);
+  return `${name}: ${formatPropertyValue(ctx, value, descriptor, recurseTimes)}`;
+}
+
+function formatPropertyValue(
+  ctx: Context,
+  value: object,
+  descriptor: PropertyDescriptor | undefined,
+  recurseTimes: number,
+): string {
   if (descriptor === undefined) {
-    return "undefined";
+    return ctx.stylize("undefined", "undefined");
   }
   if (descriptor.get !== undefined) {
     // Calling a getter to print it would run arbitrary code as a side effect
@@ -427,13 +567,13 @@ function formatProperty(ctx: Context, value: object, key: PropertyKey, recurseTi
       try {
         return formatValue(ctx, descriptor.get.call(value), recurseTimes + 1);
       } catch {
-        return "[Getter: <Inspection threw>]";
+        return ctx.stylize("[Getter: <Inspection threw>]", "special");
       }
     }
-    return descriptor.set === undefined ? "[Getter]" : "[Getter/Setter]";
+    return ctx.stylize(descriptor.set === undefined ? "[Getter]" : "[Getter/Setter]", "special");
   }
   if (descriptor.set !== undefined) {
-    return "[Setter]";
+    return ctx.stylize("[Setter]", "special");
   }
   return formatValue(ctx, descriptor.value, recurseTimes + 1);
 }

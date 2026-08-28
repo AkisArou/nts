@@ -1,3 +1,5 @@
+import { inspect } from "../util/src/inspect.ts";
+
 // Node's error codes, and the messages its own tests assert on.
 //
 // The message text is not decoration. `test-path.js` compares against a string
@@ -5,10 +7,15 @@
 // a conformance failure even when the throw itself is correct. These are
 // transcribed from node `lib/internal/errors.js`.
 //
-// Node attaches `code` to an ordinary `TypeError` and gives the class a name of
-// the form `TypeError [ERR_INVALID_ARG_TYPE]`. We subclass instead, which is
-// the same observable shape for `err.code`, `err.name` and `err.message`, and
-// is what TypeScript can express without a class factory.
+// Node builds these with a class factory over a table of message templates.
+// We write them out, one class per code: the message is then ordinary
+// TypeScript rather than a `%s` template, and a caller that gets the argument
+// count wrong is a type error instead of a runtime assertion.
+//
+// What the factory adds beyond `code` and `message` is in `NodeTypeError` and
+// its siblings below, and it matters: `assert.throws(fn, /ERR_INVALID_ARG_TYPE/)`
+// is how a great many of node's tests spell their expectation, and it works
+// because `toString` puts the code in the text.
 
 /**
  * `determineSpecificType`, node `lib/internal/errors.js:996`.
@@ -78,21 +85,63 @@ export function determineSpecificType(value: unknown): string {
   }
 }
 
-/**
- * What `util.inspect(value, { depth: -1 })` prints for a value with no
- * constructor: `[Object: null prototype] {}` and the like.
- *
- * A real `util.inspect` belongs in `node:util` and will replace this. Until
- * then this covers the shapes `determineSpecificType` can reach, which is
- * narrower than the general case: it is only called for an object whose
- * constructor is missing.
- */
 function inspectShallow(value: unknown): string {
-  if (Array.isArray(value)) {
-    return "[Array]";
-  }
-  return "[Object: null prototype] {}";
+  return inspect(value, { depth: -1 });
 }
+
+/**
+ * The two members node's error factory adds to every code.
+ *
+ * `toString` carries the code, which is what makes
+ * `assert.throws(fn, /ERR_INVALID_ARG_TYPE/)` match: `assert` stringifies the
+ * error and tests the regular expression against that, so a message alone is
+ * not enough. The `constructor` getter reports the built-in rather than the
+ * subclass, so that code checking `err.constructor === TypeError` agrees --
+ * node calls that a workaround for the web-platform tests and keeps it.
+ *
+ * Four bases rather than one generic factory, because the four built-ins are
+ * the four node uses and a class expression parameterised over them types
+ * worse than writing them out.
+ */
+function reportBaseConstructor(prototype: object, Base: unknown): void {
+  Object.defineProperty(prototype, "constructor", {
+    __proto__: null,
+    get(): unknown { return Base; },
+    configurable: true,
+  } as PropertyDescriptor);
+}
+
+abstract class NodeError extends Error {
+  abstract readonly code: string;
+  override toString(): string {
+    return `${this.name} [${this.code}]: ${this.message}`;
+  }
+}
+reportBaseConstructor(NodeError.prototype, Error);
+
+abstract class NodeTypeError extends TypeError {
+  abstract readonly code: string;
+  override toString(): string {
+    return `${this.name} [${this.code}]: ${this.message}`;
+  }
+}
+reportBaseConstructor(NodeTypeError.prototype, TypeError);
+
+abstract class NodeRangeError extends RangeError {
+  abstract readonly code: string;
+  override toString(): string {
+    return `${this.name} [${this.code}]: ${this.message}`;
+  }
+}
+reportBaseConstructor(NodeRangeError.prototype, RangeError);
+
+abstract class NodeURIError extends URIError {
+  abstract readonly code: string;
+  override toString(): string {
+    return `${this.name} [${this.code}]: ${this.message}`;
+  }
+}
+reportBaseConstructor(NodeURIError.prototype, URIError);
 
 /**
  * The type names that format as `of type x` rather than `an instance of X`.
@@ -112,6 +161,9 @@ const kTypes = [
   "symbol",
 ];
 
+/** A class rather than a `typeof` result: `Buffer`, `TracingChannel`. */
+const classNamePattern = /^[A-Z][a-zA-Z0-9]*$/;
+
 /**
  * `a`, `a or b`, `a, b, or c`. Node `lib/internal/errors.js`'s `formatList`
  * with the conjunction fixed to "or", which is the only one these errors use.
@@ -124,8 +176,8 @@ function formatList(items: string[]): string {
 }
 
 /** `The "path" argument must be of type string. Received type number (42)`. */
-export class ERR_INVALID_ARG_TYPE extends TypeError {
-  readonly code = "ERR_INVALID_ARG_TYPE";
+export class ERR_INVALID_ARG_TYPE extends NodeTypeError {
+  override readonly code = "ERR_INVALID_ARG_TYPE";
 
   constructor(name: string, expected: string | string[], actual: unknown) {
     // node `lib/internal/errors.js:1390`. Expected types split into the ones
@@ -137,23 +189,50 @@ export class ERR_INVALID_ARG_TYPE extends TypeError {
     const wanted = Array.isArray(expected) ? expected : [expected];
     const types: string[] = [];
     const instances: string[] = [];
+    const other: string[] = [];
     for (const one of wanted) {
       if (kTypes.includes(one)) {
         types.push(one.toLowerCase());
-      } else {
+      } else if (classNamePattern.test(one)) {
         instances.push(one);
+      } else {
+        // Neither a `typeof` result nor a class name: a phrase such as
+        // `"a valid port"`, which reads on its own.
+        other.push(one);
+      }
+    }
+
+    // With a class in the list, a bare `object` is the odd one out and reads
+    // better beside the classes: "an instance of TracingChannel or Object",
+    // not "of type object or an instance of TracingChannel".
+    if (instances.length > 0) {
+      const at = types.indexOf("object");
+      if (at !== -1) {
+        types.splice(at, 1);
+        instances.push("Object");
       }
     }
 
     let described = "";
     if (types.length > 0) {
       described += `${types.length > 1 ? "one of type" : "of type"} ${formatList(types)}`;
-      if (instances.length > 0) {
+      if (instances.length > 0 || other.length > 0) {
         described += " or ";
       }
     }
     if (instances.length > 0) {
       described += `an instance of ${formatList(instances)}`;
+      if (other.length > 0) {
+        described += " or ";
+      }
+    }
+    if (other.length > 0) {
+      if (other.length > 1) {
+        described += `one of ${formatList(other)}`;
+      } else {
+        const only = other[0]!;
+        described += only.toLowerCase() !== only ? `an ${only}` : only;
+      }
     }
 
     super(`The ${subject}must be ${described}. Received ${determineSpecificType(actual)}`);
@@ -177,8 +256,8 @@ function addNumericalSeparator(value: string): string {
 }
 
 /** `The value of "pid" is out of range. It must be an integer. Received NaN`. */
-export class ERR_OUT_OF_RANGE extends RangeError {
-  readonly code = "ERR_OUT_OF_RANGE";
+export class ERR_OUT_OF_RANGE extends NodeRangeError {
+  override readonly code = "ERR_OUT_OF_RANGE";
 
   constructor(name: string, range: string, input: unknown, replaceDefaultBoolean = false) {
     let received: string;
@@ -234,12 +313,18 @@ export function inspectValue(value: unknown): string {
 }
 
 /** `The "ext" argument must be of type string. Received ...` for a value. */
-export class ERR_INVALID_ARG_VALUE extends TypeError {
-  readonly code = "ERR_INVALID_ARG_VALUE";
+export class ERR_INVALID_ARG_VALUE extends NodeTypeError {
+  override readonly code = "ERR_INVALID_ARG_VALUE";
 
   constructor(name: string, value: unknown, reason = "is invalid") {
+    // The value itself, not a description of its type: this error is about
+    // *which* value was wrong, and `'auto'` is more use than `type string`.
+    let inspected = inspect(value);
+    if (inspected.length > 128) {
+      inspected = `${inspected.slice(0, 128)}...`;
+    }
     const kind = name.includes(".") ? "property" : "argument";
-    super(`The ${kind} '${name}' ${reason}. Received ${determineSpecificType(value)}`);
+    super(`The ${kind} '${name}' ${reason}. Received ${inspected}`);
     this.name = "TypeError";
   }
 }
@@ -252,8 +337,8 @@ export class ERR_INVALID_ARG_TYPE_FUNCTION extends ERR_INVALID_ARG_TYPE {
 }
 
 /** `Unhandled error. (…)` — an `error` event with nobody listening. */
-export class ERR_UNHANDLED_ERROR extends Error {
-  readonly code = "ERR_UNHANDLED_ERROR";
+export class ERR_UNHANDLED_ERROR extends NodeError {
+  override readonly code = "ERR_UNHANDLED_ERROR";
   context: unknown;
 
   constructor(err?: string) {
@@ -263,8 +348,8 @@ export class ERR_UNHANDLED_ERROR extends Error {
 }
 
 /** `URI malformed` — a lone surrogate, which has no UTF-8 encoding. */
-export class ERR_INVALID_URI extends URIError {
-  readonly code = "ERR_INVALID_URI";
+export class ERR_INVALID_URI extends NodeURIError {
+  override readonly code = "ERR_INVALID_URI";
 
   constructor() {
     super("URI malformed");
@@ -273,8 +358,8 @@ export class ERR_INVALID_URI extends URIError {
 }
 
 /** `Unknown encoding: utf9`. */
-export class ERR_UNKNOWN_ENCODING extends TypeError {
-  readonly code = "ERR_UNKNOWN_ENCODING";
+export class ERR_UNKNOWN_ENCODING extends NodeTypeError {
+  override readonly code = "ERR_UNKNOWN_ENCODING";
 
   constructor(encoding: string) {
     super(`Unknown encoding: ${encoding}`);
@@ -283,8 +368,8 @@ export class ERR_UNKNOWN_ENCODING extends TypeError {
 }
 
 /** `The "actual" and "expected" arguments must be specified`. */
-export class ERR_MISSING_ARGS extends TypeError {
-  readonly code = "ERR_MISSING_ARGS";
+export class ERR_MISSING_ARGS extends NodeTypeError {
+  override readonly code = "ERR_MISSING_ARGS";
 
   constructor(...names: string[]) {
     const quoted = names.map((n) => `"${n}"`);
@@ -293,6 +378,36 @@ export class ERR_MISSING_ARGS extends TypeError {
       : quoted.length === 2 ? `${quoted[0]} and ${quoted[1]}`
       : `${quoted.slice(0, -1).join(", ")}, and ${quoted[quoted.length - 1]}`;
     super(`The ${list} argument${names.length > 1 ? "s" : ""} must be specified`);
+    this.name = "TypeError";
+  }
+}
+
+/** `Console expects a writable stream instance for stdout`. */
+export class ERR_CONSOLE_WRITABLE_STREAM extends NodeTypeError {
+  override readonly code = "ERR_CONSOLE_WRITABLE_STREAM";
+
+  constructor(name: string) {
+    super(`Console expects a writable stream instance for ${name}`);
+    this.name = "TypeError";
+  }
+}
+
+/** Two options that cannot both be given, such as `colorMode` and `colors`. */
+export class ERR_INCOMPATIBLE_OPTION_PAIR extends NodeTypeError {
+  override readonly code = "ERR_INCOMPATIBLE_OPTION_PAIR";
+
+  constructor(first: string, second: string) {
+    super(`Option "${first}" cannot be used in combination with option "${second}"`);
+    this.name = "TypeError";
+  }
+}
+
+/** `Cannot set cursor row without setting its column`. */
+export class ERR_INVALID_CURSOR_POS extends NodeTypeError {
+  override readonly code = "ERR_INVALID_CURSOR_POS";
+
+  constructor() {
+    super("Cannot set cursor row without setting its column");
     this.name = "TypeError";
   }
 }
