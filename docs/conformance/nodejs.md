@@ -60,19 +60,19 @@ constructs refused`, from `nts hir`.
 
 | module | node's tests | hollow | compiles | note |
 | --- | :---: | :---: | :---: | --- |
-| `console` | **22 / 22** | 2 | 9 / 266 | complete |
+| `console` | **22 / 22** | 2 | 9 / 269 | complete |
 | `punycode` | **1 / 1** | 0 | 5 / 10 | complete |
-| `querystring` | **4 / 4** | 0 | 6 / 172 | complete |
-| `os` | **4 / 4** | 1 | 18 / 99 | complete |
-| `path` | **15 / 16** | 0 | 5 / 129 | complete but for `matchesGlob`; the skip is Windows-only |
-| `events` | **28 / 33** | 1 | 3 / 137 | complete but for domains, `EventTarget` and the promise forms |
-| `url` | 26 / 36 | 1 | 28 / 317 | complete; exact on the Web Platform Tests corpus |
-| `diagnostics_channel` | 23 / 45 | 0 | 3 / 129 | complete; the failures need node's own publishers |
-| `buffer` | 15 / 60 | 1 | 5 / 161 | the surface is there; the argument validation largely is not |
-| `assert` | 9 / 19 | 0 | 3 / 223 | complete, including `CallTracker` and node's Myers diff |
-| `fs` | 11 / 212 | 2 | 20 / 206 | the sync surface; async, streams and watchers are absent |
-| `util` | 7 / 18 | 1 | 9 / 190 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `string_decoder` | **2 / 3** | 0 | 5 / 175 | complete; the failure is the class-vs-function difference |
+| `querystring` | **4 / 4** | 0 | 6 / 175 | complete |
+| `os` | **4 / 4** | 1 | 18 / 102 | complete |
+| `path` | **15 / 16** | 0 | 6 / 131 | complete but for `matchesGlob`; the skip is Windows-only |
+| `events` | **28 / 33** | 1 | 3 / 140 | complete but for domains, `EventTarget` and the promise forms |
+| `url` | 26 / 36 | 1 | 29 / 319 | complete; exact on the Web Platform Tests corpus |
+| `diagnostics_channel` | 23 / 45 | 0 | 3 / 132 | complete; the failures need node's own publishers |
+| `buffer` | 15 / 60 | 1 | 5 / 164 | the surface is there; the argument validation largely is not |
+| `assert` | 9 / 19 | 0 | 3 / 227 | complete, including `CallTracker` and node's Myers diff |
+| `fs` | 11 / 212 | 2 | 20 / 209 | the sync surface; async, streams and watchers are absent |
+| `util` | 7 / 18 | 1 | 9 / 193 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `string_decoder` | **2 / 3** | 0 | 5 / 178 | complete; the failure is the class-vs-function difference |
 | `stream` | — | — | — | not started |
 | `process` | — | — | — | not started |
 | `timers` | — | — | — | not started |
@@ -747,14 +747,27 @@ for, it says so.
 **Two refusal classes arrived from compiler changes aimed elsewhere, and both
 are worth naming because neither is in the compiler's own corpus.**
 
-*Twenty-five refusals from duplicate function names.* `format` collides seven
-ways, `parse` six, `resolve` five, and `basename`, `dirname`, `join`,
-`normalize`, `relative`, `extname`, `isAbsolute` and `toNamespacedPath` four
-each. Those last are `path/src/posix.ts` and `path/src/win32.ts`, which
-genuinely define one interface twice because node ships both. Two C functions
-may not share a name, so the refusal is correct; the resolution is mangling
-rather than refusal, since these are ordinary module-private helpers rather
-than two namespaces fighting over one name.
+*Twenty-five refusals from duplicate function names, since fixed.* `format`
+collided seven ways, `parse` six, and `basename`, `dirname`, `join` and the
+rest of `path`'s interface four each -- `path/src/posix.ts` and
+`path/src/win32.ts` genuinely define one interface twice, because node ships
+both. Two C functions may not share a name, so the refusal was correct; the
+resolution was to qualify the name by the file it came from rather than to
+refuse it.
+
+**What clearing that class actually bought is the most useful number in this
+file.** Twenty-five refusals went away and the profile gained *two* lowered
+functions: `path` 5 to 6, `url` 28 to 29. Refusals went **up** by 35, because a
+function that used to stop at the name collision is now walked further and
+refuses for its real reasons.
+
+So refusal counts and lowered counts are different currencies and do not
+convert. A function refused for three reasons does not lower when one is fixed;
+`basename@posix` is nameable now and still refuses for an `unknown` parameter,
+a `null | number` property and a rest parameter. That makes a ranked refusal
+histogram a fair guide to *breadth* -- how many places a feature is wanted --
+and a poor predictor of *progress*, and every ranked table in this document
+should be read that way.
 
 *Twelve functions the compiler reached by neither walk.* All of them methods in
 an object literal in argument position:
