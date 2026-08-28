@@ -19,14 +19,26 @@ import {
   isNativeError, isRegExp, isSet,
 } from "./types.ts";
 
-/** Pairs already being compared, so a cycle terminates. */
-type Memo = Map<object, Set<object>>;
-
-export function isDeepStrictEqual(a: unknown, b: unknown): boolean {
-  return equal(a, b, new Map());
+/**
+ * One comparison in progress: the pairs already on the stack, so a cycle
+ * terminates, and whether prototypes count.
+ */
+interface Context {
+  seen: Map<object, Set<object>>;
+  /**
+   * When set, two objects with the same fields are equal even if one is a
+   * class instance and the other a literal. Node added it for the case where
+   * the shape is what matters and the constructor is an implementation
+   * detail -- comparing a `Buffer` with the `Uint8Array` it wraps, say.
+   */
+  skipPrototype: boolean;
 }
 
-function equal(a: unknown, b: unknown, memo: Memo): boolean {
+export function isDeepStrictEqual(a: unknown, b: unknown, skipPrototype = false): boolean {
+  return equal(a, b, { seen: new Map(), skipPrototype: Boolean(skipPrototype) });
+}
+
+function equal(a: unknown, b: unknown, ctx: Context): boolean {
   // `Object.is`, not `===`: `NaN` is equal to itself here and `-0` is not
   // equal to `0`, which is the whole difference between deep-strict and deep.
   if (Object.is(a, b)) {
@@ -35,28 +47,28 @@ function equal(a: unknown, b: unknown, memo: Memo): boolean {
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) {
     return false;
   }
-  if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) {
+  if (!ctx.skipPrototype && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) {
     return false;
   }
 
   // A cycle: if this pair is already on the stack, the structures agree so far
   // and anything below is what we are already deciding.
-  const seen = memo.get(a);
+  const seen = ctx.seen.get(a);
   if (seen?.has(b)) {
     return true;
   }
   if (seen === undefined) {
-    memo.set(a, new Set([b]));
+    ctx.seen.set(a, new Set([b]));
   } else {
     seen.add(b);
   }
 
-  const result = compareByKind(a, b, memo);
-  memo.get(a)?.delete(b);
+  const result = compareByKind(a, b, ctx);
+  ctx.seen.get(a)?.delete(b);
   return result;
 }
 
-function compareByKind(a: object, b: object, memo: Memo): boolean {
+function compareByKind(a: object, b: object, ctx: Context): boolean {
   if (isDate(a)) {
     return isDate(b) && Object.is(a.getTime(), (b as Date).getTime());
   }
@@ -80,7 +92,10 @@ function compareByKind(a: object, b: object, memo: Memo): boolean {
     for (let i = 0; i < x.length; i++) {
       if (x[i] !== y[i]) return false;
     }
-    return true;
+    // The elements are done; anything else hung on the view still counts.
+    // Indices are skipped because they *are* the elements -- a typed array
+    // cannot have an own index property that is not one.
+    return ownPropertiesEqual(a, b, ctx, true);
   }
   if (isAnyArrayBuffer(a)) {
     const x = new Uint8Array(a as ArrayBuffer);
@@ -120,7 +135,7 @@ function compareByKind(a: object, b: object, memo: Memo): boolean {
     if (!isMap(b) || a.size !== (b as Map<unknown, unknown>).size) {
       return false;
     }
-    if (!mapsEqual(a, b as Map<unknown, unknown>, memo)) {
+    if (!mapsEqual(a, b as Map<unknown, unknown>, ctx)) {
       return false;
     }
   }
@@ -128,17 +143,17 @@ function compareByKind(a: object, b: object, memo: Memo): boolean {
     if (!isSet(b) || a.size !== (b as Set<unknown>).size) {
       return false;
     }
-    if (!setsEqual(a, b as Set<unknown>, memo)) {
+    if (!setsEqual(a, b as Set<unknown>, ctx)) {
       return false;
     }
   }
 
-  return ownPropertiesEqual(a, b, memo);
+  return ownPropertiesEqual(a, b, ctx);
 }
 
-function ownPropertiesEqual(a: object, b: object, memo: Memo): boolean {
-  const aKeys = ownEnumerableKeys(a);
-  const bKeys = ownEnumerableKeys(b);
+function ownPropertiesEqual(a: object, b: object, ctx: Context, skipIndices = false): boolean {
+  const aKeys = ownEnumerableKeys(a, skipIndices);
+  const bKeys = ownEnumerableKeys(b, skipIndices);
   if (aKeys.length !== bKeys.length) {
     return false;
   }
@@ -146,7 +161,7 @@ function ownPropertiesEqual(a: object, b: object, memo: Memo): boolean {
     if (!Object.prototype.propertyIsEnumerable.call(b, key)) {
       return false;
     }
-    if (!equal((a as Record<PropertyKey, unknown>)[key], (b as Record<PropertyKey, unknown>)[key], memo)) {
+    if (!equal((a as Record<PropertyKey, unknown>)[key], (b as Record<PropertyKey, unknown>)[key], ctx)) {
       return false;
     }
   }
@@ -154,8 +169,10 @@ function ownPropertiesEqual(a: object, b: object, memo: Memo): boolean {
 }
 
 /** Own enumerable keys, strings and symbols alike. */
-function ownEnumerableKeys(value: object): PropertyKey[] {
-  const keys: PropertyKey[] = Object.keys(value);
+function ownEnumerableKeys(value: object, skipIndices = false): PropertyKey[] {
+  const keys: PropertyKey[] = skipIndices
+    ? Object.keys(value).filter((k) => !/^(?:0|[1-9][0-9]*)$/.test(k))
+    : Object.keys(value);
   for (const symbol of Object.getOwnPropertySymbols(value)) {
     if (Object.prototype.propertyIsEnumerable.call(value, symbol)) {
       keys.push(symbol);
@@ -169,7 +186,7 @@ function ownEnumerableKeys(value: object): PropertyKey[] {
  * against the other side rather than looked up: two structurally equal keys
  * are different objects and hash differently.
  */
-function mapsEqual(a: Map<unknown, unknown>, b: Map<unknown, unknown>, memo: Memo): boolean {
+function mapsEqual(a: Map<unknown, unknown>, b: Map<unknown, unknown>, ctx: Context): boolean {
   const unmatched: Array<[unknown, unknown]> = [];
   for (const [key, value] of a) {
     if (key !== null && typeof key === "object") {
@@ -180,7 +197,7 @@ function mapsEqual(a: Map<unknown, unknown>, b: Map<unknown, unknown>, memo: Mem
     if (!b.has(key)) {
       return false;
     }
-    if (!equal(value, b.get(key), memo)) {
+    if (!equal(value, b.get(key), ctx)) {
       return false;
     }
   }
@@ -189,10 +206,10 @@ function mapsEqual(a: Map<unknown, unknown>, b: Map<unknown, unknown>, memo: Mem
   }
 
   const candidates = [...b.entries()].filter(([key]) => key !== null && typeof key === "object");
-  return matchPairs(unmatched, candidates, memo);
+  return matchPairs(unmatched, candidates, ctx);
 }
 
-function setsEqual(a: Set<unknown>, b: Set<unknown>, memo: Memo): boolean {
+function setsEqual(a: Set<unknown>, b: Set<unknown>, ctx: Context): boolean {
   const unmatched: Array<[unknown, unknown]> = [];
   for (const value of a) {
     if (value !== null && typeof value === "object") {
@@ -209,7 +226,7 @@ function setsEqual(a: Set<unknown>, b: Set<unknown>, memo: Memo): boolean {
   const candidates = [...b].filter((v) => v !== null && typeof v === "object").map(
     (v) => [v, undefined] as [unknown, unknown],
   );
-  return matchPairs(unmatched, candidates, memo);
+  return matchPairs(unmatched, candidates, ctx);
 }
 
 /**
@@ -223,7 +240,7 @@ function setsEqual(a: Set<unknown>, b: Set<unknown>, memo: Memo): boolean {
 function matchPairs(
   left: Array<[unknown, unknown]>,
   right: Array<[unknown, unknown]>,
-  memo: Memo,
+  ctx: Context,
 ): boolean {
   if (left.length !== right.length) {
     return false;
@@ -238,9 +255,9 @@ function matchPairs(
     for (let j = 0; j < right.length; j++) {
       if (used[j]) continue;
       const [otherKey, otherValue] = right[j]!;
-      if (!equal(key, otherKey, memo)) continue;
+      if (!equal(key, otherKey, ctx)) continue;
       if (value !== undefined || otherValue !== undefined) {
-        if (!equal(value, otherValue, memo)) continue;
+        if (!equal(value, otherValue, ctx)) continue;
       }
       used[j] = true;
       if (place(i + 1)) {

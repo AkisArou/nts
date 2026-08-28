@@ -1,4 +1,5 @@
 // The native half of `node:fs`, for the node-side run only.
+import "../internal/bindings.node.mjs";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 //

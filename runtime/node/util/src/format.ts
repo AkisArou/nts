@@ -6,32 +6,77 @@
 import { formatBigInt, formatNumber, inspect, inspectDefaultOptions, type InspectOptions } from "./inspect.ts";
 
 /**
- * Whether `value` still uses the inherited `toString`, upstream
- * `lib/internal/util/inspect.js`.
+ * The global constructors, by name. Node `lib/internal/util/inspect.js`.
  *
- * The walk stops at a hundred prototypes: a chain longer than that is a
- * pathological object rather than a real one, and node answers `true` to avoid
- * spending the time.
+ * Read off `globalThis` rather than listed, so that it stays correct as the
+ * language grows one.
+ */
+const builtInObjects = new Set(
+  Object.getOwnPropertyNames(globalThis).filter((name) => /^[A-Z][a-zA-Z0-9]+$/.test(name)),
+);
+
+function returnFalse(): boolean {
+  return false;
+}
+
+/**
+ * Whether `%s` should inspect `value` rather than call `String` on it, upstream
+ * `hasBuiltInToString`.
+ *
+ * An object that defines its own way of becoming a string -- `toString` or
+ * `Symbol.toPrimitive`, its own or inherited from a class of its own -- is
+ * asking to be printed that way. One still relying on a built-in's is not:
+ * `[object Object]` tells a reader nothing, and `inspect` tells them
+ * everything.
+ *
+ * The two `hasOwn` variables are how node decides *which* of the two
+ * properties the prototype walk is looking for. If `value` has no callable
+ * `toString` at all, only `Symbol.toPrimitive` counts; if it has no
+ * `Symbol.toPrimitive`, only `toString` does. Swapping the unwanted one for a
+ * function that always says no is neater than a flag in the loop.
  */
 function hasBuiltInToString(value: object): boolean {
-  // An own `toString` is the most specific answer there is; the chain below
-  // only matters when the value does not define one itself.
-  if (Object.prototype.hasOwnProperty.call(value, "toString")) {
+  type HasOwn = (target: object, key: PropertyKey) => boolean;
+  const hasOwnProperty: HasOwn = (target, key) => Object.hasOwn(target, key);
+  let hasOwnToString: HasOwn = hasOwnProperty;
+  let hasOwnToPrimitive: HasOwn = hasOwnProperty;
+
+  const holder = value as Record<PropertyKey, unknown>;
+  if (typeof holder["toString"] !== "function") {
+    if (typeof holder[Symbol.toPrimitive] !== "function") {
+      // Neither: there is nothing to call, so `String(value)` would throw.
+      return true;
+    } else if (Object.hasOwn(value, Symbol.toPrimitive)) {
+      return false;
+    }
+    hasOwnToString = returnFalse;
+  } else if (Object.hasOwn(value, "toString")) {
+    return false;
+  } else if (typeof holder[Symbol.toPrimitive] !== "function") {
+    hasOwnToPrimitive = returnFalse;
+  } else if (Object.hasOwn(value, Symbol.toPrimitive)) {
     return false;
   }
-  let pointer: object | null = value;
-  let counter = 0;
-  while ((pointer = Object.getPrototypeOf(pointer)) !== null) {
-    if (++counter > 100) {
-      return true;
-    }
-    if (Object.prototype.hasOwnProperty.call(pointer, "toString")) {
-      // Whoever owns `toString` first in the chain decides. Only
-      // `Object.prototype`'s is uninformative enough to replace with `inspect`.
-      return pointer === Object.prototype;
-    }
+
+  // Whoever owns the property first in the chain decides. The walk terminates
+  // because `Object.prototype` has `toString`, and a chain that does not reach
+  // it was answered above.
+  let pointer: object = value;
+  do {
+    pointer = Object.getPrototypeOf(pointer) as object;
+  } while (
+    pointer !== null &&
+    !hasOwnToString(pointer, "toString") &&
+    !hasOwnToPrimitive(pointer, Symbol.toPrimitive)
+  );
+
+  if (pointer === null) {
+    return true;
   }
-  return !Object.prototype.hasOwnProperty.call(value, "toString");
+  const descriptor = Object.getOwnPropertyDescriptor(pointer, "constructor");
+  return descriptor !== undefined &&
+    typeof descriptor.value === "function" &&
+    builtInObjects.has((descriptor.value as { name: string }).name);
 }
 
 /** `%j`, which has to survive a cycle rather than throwing. */

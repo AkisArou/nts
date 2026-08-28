@@ -1,14 +1,10 @@
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 // The native half of `node:util`, for the node-side run only.
-import process from "node:process";
-
-globalThis.nts_process_emit_warning = (message, name, code) => {
-  process.emitWarning(message, name, code || undefined);
-};
-globalThis.nts_process_env = (name) => process.env[name] ?? "";
-globalThis.nts_process_pid = () => process.pid;
-globalThis.nts_debug_write = (text) => process.stderr.write(text);
+//
+// The process-level ones are shared; what is left is the errno table, which
+// `util.getSystemErrorName` and the error messages are built from.
+import "../internal/bindings.node.mjs";
 
 globalThis.nts_uv_err_name = (code) => {
   try { return require("node:util").getSystemErrorName(code); } catch { return "UNKNOWN"; }

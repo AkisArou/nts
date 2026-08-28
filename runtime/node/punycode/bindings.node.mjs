@@ -2,6 +2,7 @@
 //
 // Two bindings, and both are really about the *process* rather than about
 // punycode: where a warning goes, and whether the caller is a dependency.
+import "../internal/bindings.node.mjs";
 import process from "node:process";
 
 globalThis.nts_process_emit_warning = (message, name, code) => {

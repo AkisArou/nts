@@ -6,10 +6,18 @@
 // this file goes away when it does.
 
 /** Queue `callback` to run once the current stack unwinds. */
-declare function nts_next_tick(callback: () => void): void;
+declare function nts_next_tick(callback: (...args: never) => void, args: unknown[]): void;
 
-export function nextTick(callback: () => void): void {
-  nts_next_tick(callback);
+/**
+ * The arguments travel beside the callback rather than in a closure, because
+ * the queue calls the callback itself: a wrapper would put its own frame
+ * between the tick and the callback, and node's tests read that stack.
+ */
+export function nextTick<A extends unknown[]>(
+  callback: (...args: A) => void,
+  ...args: A
+): void {
+  nts_next_tick(callback as unknown as (...a: never) => void, args);
 }
 
 /**
@@ -21,7 +29,7 @@ export function nextTick(callback: () => void): void {
  * handling.
  */
 export function triggerUncaughtException(err: unknown): void {
-  nts_next_tick(() => {
+  nextTick(() => {
     throw err;
   });
 }

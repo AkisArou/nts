@@ -24,6 +24,7 @@ import * as stdio from "../../internal/stdio.ts";
 import type { WritableLike } from "../../internal/stdio.ts";
 import { formatTime, time, timeEnd, timeLog, type Timestamp } from "../../internal/time.ts";
 import {
+  captureStackTrace,
   ERR_CONSOLE_WRITABLE_STREAM,
   ERR_INCOMPATIBLE_OPTION_PAIR,
 } from "../../internal/errors.ts";
@@ -68,16 +69,6 @@ const kColorInspectOptions: InspectOptions = { colors: true };
 const kNoColorInspectOptions: InspectOptions = {};
 
 function noop(): void {}
-
-/**
- * V8's `Error.captureStackTrace` fills in `stack` on any object and hides the
- * frames at or above `below`. It is not in TypeScript's library, so the cast
- * is here rather than as a global declaration that would claim every engine
- * has it.
- */
-const { captureStackTrace } = Error as unknown as {
-  captureStackTrace(target: object, below?: unknown): void;
-};
 
 /**
  * Which of the two streams a method writes to.

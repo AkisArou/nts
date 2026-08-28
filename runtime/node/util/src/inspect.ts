@@ -78,6 +78,35 @@ export const inspectColors: Record<string, [number, number] | undefined> = {
   bgWhiteBright: [107, 49],
 } as never;
 
+/**
+ * The names node accepts as spellings of an existing colour.
+ *
+ * Getters rather than copies, so that a program changing `colors.gray` changes
+ * `colors.grey` with it, and non-enumerable so that listing the colours does
+ * not list each one three times. `styleText` validates against
+ * `getOwnPropertyNames`, which sees them regardless.
+ */
+for (const [target, alias] of [
+  ["gray", "grey"], ["gray", "blackBright"],
+  ["bgGray", "bgGrey"], ["bgGray", "bgBlackBright"],
+  ["dim", "faint"],
+  ["strikethrough", "crossedout"], ["strikethrough", "strikeThrough"],
+  ["strikethrough", "crossedOut"],
+  ["hidden", "conceal"],
+  ["inverse", "swapColors"], ["inverse", "swapcolors"],
+  ["doubleunderline", "doubleUnderline"],
+] as const) {
+  Object.defineProperty(inspectColors, alias, {
+    __proto__: null,
+    get(this: Record<string, [number, number] | undefined>) { return this[target]; },
+    set(this: Record<string, [number, number] | undefined>, value: [number, number]) {
+      this[target] = value;
+    },
+    configurable: true,
+    enumerable: false,
+  } as PropertyDescriptor);
+}
+
 /** What every piece of output goes through. The colourless one is the default. */
 export type Stylize = (str: string, styleType: StyleType) => string;
 

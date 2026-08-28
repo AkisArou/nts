@@ -4,12 +4,21 @@
 // `console.log` is built from), `types`, `isDeepStrictEqual` (what
 // `assert.deepStrictEqual` compares with), and the small helpers around them.
 
-import { inspect, inspectDefaultOptions, type InspectOptions } from "./inspect.ts";
+import { inspect, inspectColors, inspectDefaultOptions, type InspectOptions } from "./inspect.ts";
 import { format, formatWithOptions } from "./format.ts";
 import { isDeepStrictEqual } from "./deep-equal.ts";
 import * as types from "./types.ts";
-import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from "../../internal/errors.ts";
-import { validateFunction } from "../../internal/validators.ts";
+import {
+  captureStackTrace,
+  ERR_FALSY_VALUE_REJECTION, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE,
+} from "../../internal/errors.ts";
+import { nextTick } from "../../internal/tick.ts";
+import {
+  validateBoolean, validateFunction, validateObject, validateOneOf, validateString,
+} from "../../internal/validators.ts";
+import { isNodeStream, isReadableStream, isWritableStream } from "../../internal/streams/utils.ts";
+import { shouldColorize } from "../../internal/colors.ts";
+import { stdout } from "../../internal/stdio.ts";
 
 export { inspect, inspectDefaultOptions, format, formatWithOptions, isDeepStrictEqual, types };
 export type { InspectOptions };
@@ -100,36 +109,36 @@ export function debuglogEnabled(section: string): boolean {
 declare function nts_debug_write(text: string): void;
 declare function nts_process_pid(): number;
 
+/**
+ * Every ANSI escape sequence in one regular expression, upstream
+ * `lib/internal/util/inspect.js`, which took it from chalk's `ansi-regex`.
+ *
+ * Two alternatives: an OSC sequence, which carries a payload and ends with one
+ * of three string terminators (BEL, ESC-backslash, or the 8-bit ST); and a CSI
+ * sequence, which is numeric parameters and a single final byte. Both may be
+ * introduced by the 7-bit ESC form or the 8-bit single byte.
+ */
+const ansiPattern = new RegExp(
+  "[\\u001B\\u009B][[\\]()#;?]*" +
+  "(?:(?:(?:(?:;[-a-zA-Z\\d\\/\\#&.:=?%@~_]+)*" +
+  "|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/\\#&.:=?%@~_]*)*)?" +
+  "(?:\\u0007|\\u001B\\u005C|\\u009C))" +
+  "|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?" +
+  "[\\dA-PR-TZcf-nq-uy=><~]))",
+  "g",
+);
+
 /** ANSI escape sequences removed, upstream `lib/internal/util.js`. */
 export function stripVTControlCharacters(str: string): string {
-  if (typeof str !== "string") {
-    throw new ERR_INVALID_ARG_TYPE("str", "string", str);
+  validateString(str, "str");
+
+  // Every sequence starts with one of the two introducers. Without either
+  // there is nothing to strip, and the scan is much cheaper than the match.
+  if (!str.includes("\u001b") && !str.includes("\u009b")) {
+    return str;
   }
-  let out = "";
-  let i = 0;
-  while (i < str.length) {
-    if (str.charCodeAt(i) === 0x1b) {
-      // CSI: ESC [ ... final-byte, or a two-character escape.
-      if (str[i + 1] === "[") {
-        let j = i + 2;
-        while (j < str.length && !/[@-~]/.test(str[j]!)) j++;
-        i = j + 1;
-        continue;
-      }
-      if (str[i + 1] === "]") {
-        // OSC: ends at BEL or ST.
-        let j = i + 2;
-        while (j < str.length && str.charCodeAt(j) !== 7 && !(str[j] === "\x1b" && str[j + 1] === "\\")) j++;
-        i = str[j] === "\x1b" ? j + 2 : j + 1;
-        continue;
-      }
-      i += 2;
-      continue;
-    }
-    out += str[i];
-    i++;
-  }
-  return out;
+
+  return str.replace(ansiPattern, "");
 }
 
 /** Lone surrogates replaced, upstream `lib/util.js`. */
@@ -204,31 +213,61 @@ export function promisify(
 }
 
 /** The inverse of `promisify`, upstream `lib/internal/util.js`. */
+/**
+ * A rejection reason, made safe to pass as a callback's first argument.
+ *
+ * `!reason` rather than `reason === null`: a callback consumer tests
+ * `if (err)`, so any falsy rejection would read as success. The original is
+ * kept on `.reason`.
+ */
+function callbackifyOnRejected(reason: unknown, cb: (err: unknown) => void): void {
+  if (!reason) {
+    reason = new ERR_FALSY_VALUE_REJECTION(reason);
+    // Without this the stack would start inside `callbackify`, which is not
+    // where anything went wrong.
+    captureStackTrace(reason as object, callbackifyOnRejected);
+  }
+  cb(reason);
+}
+
+/**
+ * A promise-returning function, wrapped to take a node-style callback.
+ *
+ * The promise is deliberately not returned: handing it back would suggest the
+ * callback's outcome is related to it, and a throw from the callback would
+ * then reject a promise nobody is watching. The callback runs on the next tick
+ * for the same reason node's own do -- a throw from it reaches
+ * `uncaughtException` rather than the promise machinery.
+ */
 export function callbackify(
   original: (...args: never[]) => Promise<unknown>,
 ): (...args: unknown[]) => void {
   validateFunction(original, "original");
 
   function callbackified(this: unknown, ...args: unknown[]): void {
-    const callback = args.pop() as (err: unknown, value?: unknown) => void;
-    validateFunction(callback, "last argument");
+    const maybeCb = args.pop();
+    validateFunction(maybeCb, "last argument");
+    const cb = (maybeCb as (...a: unknown[]) => void).bind(this);
     Reflect.apply(original, this, args as never[]).then(
-      (value: unknown) => callback(null, value),
-      // A falsy rejection reason would look like success to a callback that
-      // tests `if (err)`, so node wraps it.
-      (reason: unknown) => callback(reason || wrapFalsyReason(reason)),
+      (ret: unknown) => nextTick(cb, null, ret),
+      (rej: unknown) => nextTick(callbackifyOnRejected, rej, cb),
     );
   }
 
-  Object.setPrototypeOf(callbackified, Object.getPrototypeOf(original));
+  // Copied rather than assigned, so that a function whose `length` or `name`
+  // has been redefined keeps whatever it was redefined to -- with the two
+  // adjustments the wrapper implies: one more argument, and a longer name.
+  const descriptors = Object.getOwnPropertyDescriptors(original);
+  if (typeof descriptors["length"]?.value === "number") {
+    descriptors["length"].value++;
+  }
+  if (typeof descriptors["name"]?.value === "string") {
+    descriptors["name"].value += "Callbackified";
+  }
+  Object.defineProperties(callbackified, descriptors);
   return callbackified;
 }
 
-function wrapFalsyReason(reason: unknown): Error {
-  const err = new Error("Promise was rejected with a falsy value") as Error & { reason?: unknown };
-  err.reason = reason;
-  return err;
-}
 
 export const isArray = Array.isArray;
 
@@ -255,28 +294,10 @@ export default {
 
 
 /**
- * ANSI codes by name, upstream `lib/internal/util/colors.js`. Each is the pair
- * that turns the style on and off -- `[31, 39]` for red -- because a nested
- * style has to restore the outer one rather than reset everything.
+ * `util.inspect.colors`, re-exported. One table, so that a program that adds a
+ * colour can use it both in `styleText` and in a custom `inspect` style.
  */
-export const colors: Record<string, [number, number]> = {
-  reset: [0, 0], bold: [1, 22], dim: [2, 22], italic: [3, 23], underline: [4, 24],
-  blink: [5, 25], inverse: [7, 27], hidden: [8, 28], strikethrough: [9, 29],
-  doubleunderline: [21, 24],
-  black: [30, 39], red: [31, 39], green: [32, 39], yellow: [33, 39],
-  blue: [34, 39], magenta: [35, 39], cyan: [36, 39], white: [37, 39],
-  bgBlack: [40, 49], bgRed: [41, 49], bgGreen: [42, 49], bgYellow: [43, 49],
-  bgBlue: [44, 49], bgMagenta: [45, 49], bgCyan: [46, 49], bgWhite: [47, 49],
-  framed: [51, 54], overlined: [53, 55],
-  gray: [90, 39], grey: [90, 39],
-  redBright: [91, 39], greenBright: [92, 39], yellowBright: [93, 39],
-  blueBright: [94, 39], magentaBright: [95, 39], cyanBright: [96, 39],
-  whiteBright: [97, 39],
-  bgGray: [100, 49], bgGrey: [100, 49],
-  bgRedBright: [101, 49], bgGreenBright: [102, 49], bgYellowBright: [103, 49],
-  bgBlueBright: [104, 49], bgMagentaBright: [105, 49], bgCyanBright: [106, 49],
-  bgWhiteBright: [107, 49],
-};
+export const colors: Record<string, [number, number] | undefined> = inspectColors;
 
 /**
  * Turn this style back on wherever the inner text turned it off, upstream
@@ -328,18 +349,94 @@ const kDimCode = 2;
  * each style's close has to be inserted into text that already carries the
  * previous ones.
  */
+const kEscape = "\u001b[";
+const kEscapeEnd = "m";
+/** The close sequence for a 24-bit foreground colour: back to the default. */
+const kHexCloseSeq = `${kEscape}39${kEscapeEnd}`;
+const hexColorPattern = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+interface Style {
+  openSeq: string;
+  closeSeq: string;
+  /**
+   * Whether the close code has to be re-emitted before reopening.
+   *
+   * Bold and dim share the close code 22, so turning one off inside the other
+   * turns both off; the only way back is to close and reopen. Every other
+   * style closes to its own default and can simply be reopened.
+   */
+  keepClose: boolean;
+}
+
+function codesToStyle(codes: [number, number]): Style {
+  const openNum = codes[0];
+  return {
+    openSeq: `${kEscape}${openNum}${kEscapeEnd}`,
+    closeSeq: `${kEscape}${codes[1]}${kEscapeEnd}`,
+    keepClose: openNum === kDimCode || openNum === kBoldCode,
+  };
+}
+
+/** `#abc` and `#aabbcc` both mean the same colour. */
+function hexToRgb(hex: string): [number, number, number] {
+  let digits: string;
+  if (hex.length === 4) {
+    digits = `${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+  } else if (hex.length === 7) {
+    digits = hex.slice(1);
+  } else {
+    throw new ERR_OUT_OF_RANGE("hex", "#RGB or #RRGGBB", hex);
+  }
+  return [
+    Number.parseInt(digits.slice(0, 2), 16),
+    Number.parseInt(digits.slice(2, 4), 16),
+    Number.parseInt(digits.slice(4, 6), 16),
+  ];
+}
+
+/** ANSI TrueColor: a foreground colour given as three bytes. */
+function rgbToAnsi24Bit(r: number, g: number, b: number): string {
+  return `38;2;${r};${g};${b}`;
+}
+
+/**
+ * `text` wrapped in the ANSI codes for `format`, upstream `lib/util.js`.
+ *
+ * Two things make it more than a concatenation. Nesting: a style inside
+ * another has to reopen the outer one where it closed, or the rest of the
+ * outer text loses its colour -- that is what `replaceCloseCode` does. And the
+ * destination: writing colour to a redirected file stores escape sequences as
+ * garbage, so unless the caller opts out the stream is checked first and the
+ * text comes back unchanged when it is not a terminal.
+ */
 export function styleText(
-  format: string | string[],
+  format: string | readonly string[],
   text: string,
   options?: { validateStream?: boolean; stream?: unknown },
 ): string {
-  if (typeof text !== "string") {
-    throw new ERR_INVALID_ARG_TYPE("text", "string", text);
-  }
-  void options;
+  const validateStream = options?.validateStream ?? true;
 
-  const formats = Array.isArray(format) ? format : [format];
-  const ESC = "\u001b[";
+  validateString(text, "text");
+  if (options !== undefined) {
+    validateObject(options, "options");
+  }
+  validateBoolean(validateStream, "options.validateStream");
+
+  let skipColorize = false;
+  if (validateStream) {
+    const stream = options?.stream ?? stdout;
+    if (!isReadableStream(stream) && !isWritableStream(stream) && !isNodeStream(stream)) {
+      throw new ERR_INVALID_ARG_TYPE(
+        "stream",
+        ["ReadableStream", "WritableStream", "Stream"],
+        stream,
+      );
+    }
+    skipColorize = !shouldColorize(stream as { isTTY?: boolean });
+  }
+
+  const formats = Array.isArray(format) ? format : [format as string];
+
   let openCodes = "";
   let closeCodes = "";
   let processed = text;
@@ -348,21 +445,36 @@ export function styleText(
     if (key === "none") {
       continue;
     }
-    const pair = colors[key];
-    if (pair === undefined) {
-      throw new ERR_INVALID_ARG_VALUE("format", key, "must be one of the supported styles");
+
+    if (typeof key === "string" && key[0] === "#") {
+      if (!hexColorPattern.test(key)) {
+        throw new ERR_INVALID_ARG_VALUE("format", key, "must be a valid hex color (#RGB or #RRGGBB)");
+      }
+      // Validated even when the output will not be coloured, so that a typo
+      // is reported on a pipe as well as on a terminal.
+      if (skipColorize) continue;
+      const [r, g, b] = hexToRgb(key);
+      const hexOpenSeq = kEscape + rgbToAnsi24Bit(r, g, b) + kEscapeEnd;
+      openCodes += hexOpenSeq;
+      closeCodes = kHexCloseSeq + closeCodes;
+      processed = replaceCloseCode(processed, kHexCloseSeq, hexOpenSeq, false);
+      continue;
     }
-    const openSeq = `${ESC}${pair[0]}m`;
-    const closeSeq = `${ESC}${pair[1]}m`;
+
+    const codes = colors[key as string];
+    if (!codes) {
+      // Through `validateOneOf` so the message lists what is allowed, and over
+      // `getOwnPropertyNames` so the aliases -- `grey`, `faint` -- count.
+      validateOneOf(key, "format", Object.getOwnPropertyNames(colors));
+      continue;
+    }
+    const { openSeq, closeSeq, keepClose } = codesToStyle(codes);
     openCodes += openSeq;
     closeCodes = closeSeq + closeCodes;
-    processed = replaceCloseCode(
-      processed,
-      closeSeq,
-      openSeq,
-      pair[0] === kDimCode || pair[0] === kBoldCode,
-    );
+    processed = replaceCloseCode(processed, closeSeq, openSeq, keepClose);
   }
+
+  if (skipColorize) return text;
 
   return openCodes + processed + closeCodes;
 }
@@ -410,25 +522,45 @@ export function parseEnv(content: string): Record<string, string> {
 declare function nts_uv_err_name(code: number): string;
 
 /** `util._exceptionWithHostPort`, upstream `lib/internal/errors.js`. */
+/**
+ * The error shape a failed socket operation produces, node
+ * `lib/internal/errors.js`'s `ExceptionWithHostPort`.
+ *
+ * `connect ECONNREFUSED 127.0.0.1:8080`, with `errno`, `code`, `syscall`,
+ * `address` and `port` attached so that a caller can branch on the parts
+ * rather than parse the message. `additional` names the local end when the
+ * failure had one, which is what tells two connections to the same peer apart.
+ */
 export function _exceptionWithHostPort(
   err: number,
   syscall: string,
-  address?: string,
+  address?: string | null,
   port?: number,
+  additional?: string,
 ): Error {
+  const code = getSystemErrorName(err);
   let details = "";
-  if (port !== undefined && port > 0) {
+  if (port && port > 0) {
     details = ` ${address}:${port}`;
-  } else if (address !== undefined) {
+  } else if (address) {
     details = ` ${address}`;
   }
-  const code = nts_uv_err_name(err);
+  if (additional) {
+    details += ` - Local (${additional})`;
+  }
+
   const ex = new Error(`${syscall} ${code}${details}`) as Error & Record<string, unknown>;
-  ex["code"] = code;
   ex["errno"] = err;
+  ex["code"] = code;
   ex["syscall"] = syscall;
-  if (address !== undefined) ex["address"] = address;
-  if (port !== undefined && port > 0) ex["port"] = port;
+  // Set even when null: a caller reads `address` to report what it tried, and
+  // an absent property and an explicit `null` mean different things.
+  ex["address"] = address;
+  if (port) {
+    ex["port"] = port;
+  }
+  // The frames start at the caller: this function is not where the failure is.
+  captureStackTrace(ex, _exceptionWithHostPort);
   return ex;
 }
 

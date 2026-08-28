@@ -161,6 +161,19 @@ const kTypes = [
   "symbol",
 ];
 
+/**
+ * V8's `Error.captureStackTrace`: fill in `stack` on `target`, omitting the
+ * frames at and above `below`.
+ *
+ * Not in TypeScript's library, so the cast is here rather than as a global
+ * declaration that would claim every engine has it. Node uses it to keep its
+ * own machinery out of a user's stack trace, and its tests check that the
+ * frames are gone.
+ */
+export const { captureStackTrace } = Error as unknown as {
+  captureStackTrace(target: object, below?: unknown): void;
+};
+
 /** A class rather than a `typeof` result: `Buffer`, `TracingChannel`. */
 const classNamePattern = /^[A-Z][a-zA-Z0-9]*$/;
 
@@ -409,5 +422,23 @@ export class ERR_INVALID_CURSOR_POS extends NodeTypeError {
   constructor() {
     super("Cannot set cursor row without setting its column");
     this.name = "TypeError";
+  }
+}
+
+/**
+ * `Promise was rejected with falsy value`.
+ *
+ * `null` means "no error" to a callback, so a promise that rejects with a
+ * falsy value has to arrive as something truthy or the callback would read it
+ * as success. The original is kept on `reason`.
+ */
+export class ERR_FALSY_VALUE_REJECTION extends NodeError {
+  override readonly code = "ERR_FALSY_VALUE_REJECTION";
+  readonly reason: unknown;
+
+  constructor(reason: unknown) {
+    super("Promise was rejected with falsy value");
+    this.name = "Error";
+    this.reason = reason;
   }
 }

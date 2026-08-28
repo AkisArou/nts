@@ -8,6 +8,7 @@
 // These stand-ins are only as good as their agreement with the C, and nothing
 // but `nts check` compares them. Keep them trivial for that reason: anything
 // with judgement in it belongs in the TypeScript, where there is one copy.
+import "../internal/bindings.node.mjs";
 import process from "node:process";
 
 globalThis.nts_process_cwd = () => process.cwd();

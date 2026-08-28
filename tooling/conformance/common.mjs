@@ -14,9 +14,12 @@
 //   skip                   ours; raises so the runner can count it
 //   mustCall / mustNotCall ours; the runner checks the tallies at the end
 //   invalidArgTypeHelper   node's, verbatim, test/common/index.js:802
+//   getTTYfd               node's, verbatim, test/common/index.js
 //   allowGlobals, ...      no-ops; they configure node's own leak checker
 
 import { inspect } from "node:util";
+import { openSync } from "node:fs";
+import { createRequire } from "node:module";
 
 /** Raised by `skip`, so the runner can tell "not applicable" from "failed". */
 export class Skip extends Error {
@@ -37,7 +40,29 @@ export function checkPending() {
 }
 
 export function makeCommon() {
+  /**
+   * A file descriptor that is a terminal, or -1.
+   *
+   * Node's own, transcribed: a test that checks colour behaviour needs a real
+   * TTY, and the only way to get one is to find a descriptor that already is
+   * one or open the controlling terminal.
+   */
+  function getTTYfd() {
+    const tty = createRequire(import.meta.url)("node:tty");
+    // Not fd 0: it is not writable on Windows.
+    const ttyFd = [1, 2, 4, 5].find(tty.isatty);
+    if (ttyFd === undefined) {
+      try {
+        return openSync("/dev/tty");
+      } catch {
+        return -1;
+      }
+    }
+    return ttyFd;
+  }
+
   return {
+    getTTYfd,
     isWindows: false,
     isMainThread: true,
     hasCrypto: false,

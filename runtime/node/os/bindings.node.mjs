@@ -5,6 +5,7 @@
 // columns. Where node exposes the same libuv call through its own `os` module
 // we use it, so a disagreement here is a disagreement about assembly rather
 // than about the syscall.
+import "../internal/bindings.node.mjs";
 import os from "node:os";
 import process from "node:process";
 

@@ -192,7 +192,13 @@ try {
     // harness's are noise; the test file and the module under test are not.
     detail: [
       (e?.message ?? String(e)).split("\n").slice(0, 16).join("\n"),
-      ...(e?.stack ?? "").split("\n").filter((l) => l.includes("/runtime/node/") || l.includes("/test/parallel/")).slice(0, 6),
+      // Our frames, the test file's, and the anonymous ones -- a test runs
+      // inside `new Function`, so its own frames are `<anonymous>` with a line
+      // number two off the file's, which is still the fastest way to find the
+      // assertion that failed.
+      ...(e?.stack ?? "").split("\n").filter((l) =>
+        l.includes("/runtime/node/") || l.includes("/test/parallel/") || l.includes("<anonymous")
+      ).slice(0, 8),
     ].join("\n"),
   });
 }
