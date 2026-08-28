@@ -70,6 +70,10 @@ struct Crossing {
     slot_returns: FxHashMap<u32, Facts>,
     /// What each object field can hold, over every store in the program.
     fields: super::fields::FieldFacts,
+    /// What the elements of each array type can hold, over every store in the
+    /// program. Keyed on the element type rather than on the array, for the
+    /// aliasing reason [`super::elements`] gives.
+    elements: super::elements::ElementFacts,
     /// How long the array each parameter points at can be, per function and
     /// slot. In this fixpoint rather than beside it because it is read from the
     /// arguments at every call, which is what this loop already walks.
@@ -130,6 +134,7 @@ fn settle(
             .collect(),
         slot_returns: FxHashMap::default(),
         fields: FxHashMap::default(),
+        elements: FxHashMap::default(),
         param_lengths: no_lengths(program),
     };
     // A property of the whole program rather than of a round: whether anything
@@ -180,6 +185,7 @@ fn settle(
         // each other: a field is written with a value a call produced, and read
         // to make an argument for the next one.
         let fields = super::fields::analyze(program, &analyses);
+        let elements = super::elements::analyze(program, &analyses, outward);
         let param_lengths = if growable {
             no_lengths(program)
         } else {
@@ -189,6 +195,7 @@ fn settle(
             && returns == crossing.returns
             && slot_returns == crossing.slot_returns
             && fields == crossing.fields
+            && elements == crossing.elements
             && param_lengths == crossing.param_lengths
         {
             break;
@@ -198,6 +205,7 @@ fn settle(
             returns,
             slot_returns,
             fields,
+            elements,
             param_lengths,
         };
     }
@@ -272,6 +280,7 @@ fn analyze_all(
                     param_lengths: crossing.param_lengths[index].clone(),
                     slot_returns: crossing.slot_returns.clone(),
                     field_facts: crossing.fields.clone(),
+                    element_facts: crossing.elements.clone(),
                     caps: caps.get(index).cloned().unwrap_or_default(),
                 },
             )

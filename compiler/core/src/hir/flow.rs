@@ -260,6 +260,10 @@ pub struct Context {
     /// A field read is otherwise TOP, and a TOP in a loop that touches an
     /// object is a double round trip per iteration.
     pub field_facts: super::fields::FieldFacts,
+    /// What each array type's elements can hold, from every store in the
+    /// program. The same idea as [`Self::field_facts`] for the other kind of
+    /// container. See [`super::elements`].
+    pub element_facts: super::elements::ElementFacts,
     /// Interval bounds for loop-carried values, from counting iterations.
     ///
     /// The value domain cannot derive these: it knows what one round does, not
@@ -688,6 +692,30 @@ fn transfer_block(
             OpKind::FieldGet { object, field } => {
                 field_facts(context, &func.values[object.0 as usize].ty, *field)
             }
+            // What anything in the program stored into an array of this type,
+            // but *only once the storage agrees*.
+            //
+            // The fact is true either way -- an array of `number` holding 0 to
+            // 100 holds them whether it is `double[]` or `int32_t[]`. Acting on
+            // it is what needs the storage: from a `double[]`, proving the
+            // element whole makes the arithmetic after it integer, and every
+            // one of those results is converted back at the first floating
+            // point use. Measured on `arrays`, that is four conversions per
+            // iteration and 18% slower.
+            //
+            // So `hir::elements` decides the storage, and the fact follows it.
+            OpKind::ArrayGet { array, .. } => match &func.values[array.0 as usize].ty {
+                super::HirType::Managed(super::ManagedType::Array(element))
+                    if matches!(**element, super::HirType::Int { .. }) =>
+                {
+                    context
+                        .element_facts
+                        .get(element.as_ref())
+                        .copied()
+                        .unwrap_or(Facts::TOP)
+                }
+                _ => Facts::TOP,
+            },
             // A bool is not a number, and a call's result needs the callee
             // analyzed — neither is a claim this pass can make.
             _ => Facts::TOP,

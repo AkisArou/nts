@@ -358,6 +358,17 @@ fn width_of(
         // the class, because a class is only as good as its worst member.
         OpKind::FieldGet { .. } => matches!(func.values[id.0 as usize].ty, HirType::Int { .. }),
 
+        // An element whose *storage* is an integer, decided by
+        // `hir::elements` from every store in the program. The same rule as a
+        // field's and for the same reason: the load already produces one, so
+        // there is nothing to convert, and leaving it out of its class would
+        // sink the class.
+        //
+        // Narrowing a *double* element with a conversion at the load was tried
+        // and bought nothing -- the conversion costs what the floating-point
+        // comparison did.
+        OpKind::ArrayGet { .. } => matches!(func.values[id.0 as usize].ty, HirType::Int { .. }),
+
         // Everything else stays a double, for one of two reasons:
         //
         // - A parameter's representation is the function's ABI, and this pass

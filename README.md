@@ -83,10 +83,10 @@ What is stopping the rest, in order:
 | --- | ---: |
 | a name declared outside this function | 12 |
 | a parameter with a default | 7 |
-| a property of unrepresentable type (an object type) | 6 |
 | a module-scope variable whose initializer is not constant | 4 |
 | a module-scope variable with no initializer | 4 |
 | a parameter of unrepresentable type (the type parameter `T`) | 4 |
+| a property `timestamp` of unrepresentable type (a structured type (flags 0x100000)) | 4 |
 | a rest parameter | 4 |
 | a parameter of unrepresentable type (any) | 3 |
 | a class of unrepresentable type (a structured type (flags 0x100000)) | 2 |

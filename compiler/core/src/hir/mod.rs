@@ -26,6 +26,7 @@
 
 pub mod bounds;
 pub mod dce;
+pub mod elements;
 pub mod escape;
 pub mod facts;
 pub mod fields;
@@ -1122,6 +1123,16 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         let analyses = interprocedural::analyze_program(&program, options.roots);
         let narrowed = fields::representations(&program, &analyses);
         fields::narrow(&mut program, &narrowed);
+
+        // And the same for what an array holds. An element that arrives as an
+        // integer is what lets a `switch` over one become a jump table, and it
+        // halves the memory besides.
+        let roots: rustc_hash::FxHashSet<&str> = reachable::root_names(&program, options.roots)
+            .into_iter()
+            .collect();
+        let element_widths =
+            elements::representations(&program, &elements::analyze(&program, &analyses, &roots));
+        elements::narrow(&mut program, &element_widths);
 
         // Signatures before bodies. A parameter narrowed to an integer changes
         // what its body can prove about everything derived from it, and every

@@ -1588,6 +1588,22 @@ impl<'a> FuncBuilder<'a> {
         self.unsupported(id, &format!("{what} of unrepresentable type ({named})"))
     }
 
+    /// The same, for a type that is not the node's own.
+    ///
+    /// A layout fails on one of its *properties*, and the node it fails at is
+    /// whatever asked for the layout — a `new` expression, a parameter. Naming
+    /// the node's type there describes the class and not the property, so
+    /// `context: unknown` was reported as "a property of unrepresentable type
+    /// (an object type)" — which reads as though records could not nest, and
+    /// cost a reader a day.
+    fn unrepresentable_member(&self, id: NodeId, what: &str, name: &str, ty: TypeId) -> Diagnostic {
+        let named = describe(self.snapshot, ty);
+        self.unsupported(
+            id,
+            &format!("{what} `{name}` of unrepresentable type ({named})"),
+        )
+    }
+
     /// The nearest ancestor of a given kind.
     fn ancestor(&self, id: NodeId, kind: u16) -> Option<NodeId> {
         let mut at = self.node(id).parent;
@@ -3731,9 +3747,9 @@ impl<'a> FuncBuilder<'a> {
             // references is recorded on the layout for the collector that comes
             // later, because that is a fact about the layout and the layout is
             // decided here.
-            let field_ty = self
-                .represent(property.ty)
-                .ok_or_else(|| self.unrepresentable(id, "a property"))?;
+            let field_ty = self.represent(property.ty).ok_or_else(|| {
+                self.unrepresentable_member(id, "a property", &property.name, property.ty)
+            })?;
             fields.push(Field {
                 name: property.name.clone(),
                 ty: field_ty,
