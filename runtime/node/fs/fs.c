@@ -12,8 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
-#include "nts_node.h"
-#include "shared.h"
+#include "fs.h"
+#include "../internal/shared.h"
 
 /* One loop for the synchronous calls. libuv wants one even when the callback
  * is NULL and the work happens inline. */

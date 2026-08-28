@@ -40,11 +40,20 @@ NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$root/target/debug/nts" \
 # qualified naming of RFC §27.1 lands.
 rename="-Ddirname=nts_node_dirname"
 
+# The module's own C, plus the C every module shares. Globbed rather than
+# listed: a module owns its bindings, so adding one is adding a file to its own
+# directory and nothing else. The previous version named a single
+# `runtime/node/c/node_all.c`, which was deleted in 299b218 and left this
+# script referring to a file that does not exist -- invisible because no module
+# lowers enough to reach the link step yet.
+module_c=$(find "$src" -maxdepth 1 -name '*.c' 2>/dev/null | tr '\n' ' ')
+shared_c=$(find "$root/runtime/node/internal" -maxdepth 1 -name '*.c' | tr '\n' ' ')
+
 clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared $rename \
-  -I"$work" -I"$napi" -I"$root/runtime/node/c" \
+  -I"$work" -I"$napi" -I"$src" -I"$root/runtime/node/internal" \
   -o "$out/$module.node" \
   "$work/program.c" "$work/nts_runtime.c" "$work/addon.c" \
-  "$root/runtime/node/c/node_all.c" \
+  $module_c $shared_c \
   -luv -lm
 
 echo "$out/$module.node: $(stat -c%s "$out/$module.node") bytes"

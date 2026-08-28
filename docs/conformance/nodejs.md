@@ -1017,10 +1017,27 @@ survives a program that reassigns `String.prototype.slice`; a compiled program
 has no such prototype, so the indirection buys nothing.
 
 **The native half is `declare function`.** One declaration, satisfied two ways:
-compiled it is an extern linked against `runtime/node/c`; on node the
+compiled it is an extern linked against the module's own C; on node the
 declaration erases and the call becomes a global lookup, which the module's
 `bindings.node.mjs` supplies. The same source runs both ways, and `nts check`
 is what compares them.
 
 **libuv, not reimplementation.** The C calls the same library node calls, so
 node's semantics are inherited rather than reimplemented and then tested for.
+
+**A module owns all three halves of its bindings.** A binding is a triple: a
+`declare function` in the TypeScript, a stand-in in `bindings.node.mjs`, and
+the C. All three live in the module's directory, so the pair a reader has to
+check against each other can be read side by side:
+
+```
+runtime/node/fs/     src/*.ts  bindings.node.mjs  fs.c  fs.h
+runtime/node/os/     src/*.ts  bindings.node.mjs  os.c  os.h
+runtime/node/internal/  *.ts   shared.c  shared.h  process.c  nts_node.h
+```
+
+`internal/` is what more than one module needs, in both languages — the same
+rule for the TypeScript and for the C. A binding lands there when a *second*
+module declares it: `nts_process_env` is read by `console`, `path` and `util`,
+so it is not `path`'s to own, and it moves into `node:process` when that
+exists.

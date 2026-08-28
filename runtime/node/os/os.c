@@ -13,8 +13,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <uv.h>
-#include "nts_node.h"
-#include "shared.h"
+#include "os.h"
+#include "../internal/shared.h"
 
 static NtsString *utf8(const char *s) {
     return nts_string_from_utf8(s, s ? strlen(s) : 0);
