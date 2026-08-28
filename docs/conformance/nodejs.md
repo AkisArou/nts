@@ -167,7 +167,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**517 of node's own test files pass** across seventeen modules, of which 15 are hollow.
+**554 of node's own test files pass** across eighteen modules, of which 15 are hollow.
 
 > **The `compiles` column is currently unverified.** The frontend decomposes
 > types under a fixed budget, and **thirteen of the sixteen modules here
@@ -205,6 +205,7 @@ constructs refused`, from `nts hir`.
 | `util` | 7 / 19 | 1 | 23 / 197 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `fs` | 72 / 214 | 2 | ? | sync, callback and promise surfaces, the file streams and the watchers |
 | `zlib` | 30 / 64 | 0 | ? | the streams, the one-shots, brotli and zstd |
+| `net` | 37 / 139 | 0 | ? | `Socket` and `Server`; `BlockList` and auto-select-family absent |
 | `stream` | 151 / 195 | 2 | ? | the core is complete; `web`, `iter`, `consumers`, `compose` and `duplexify` are absent |
 
 The first two columns are what
@@ -952,6 +953,41 @@ anything worker-related. Seventeen files spawn a real `node` and assert on what
 the child printed, and seven call `execve` successfully -- which does not fail
 the runner, it *ends* it, because the kernel loads another program over this
 one. Both sets are listed with reasons in `not-applicable`.
+
+## `net`
+
+`Socket` as a `Duplex`, `Server`, the address predicates, and a seam of one
+handle per connection and per listener. 37 of 139 applicable files pass, none hollow.
+
+A TCP socket's two halves are genuinely independent: the direction you write
+and the direction you read are separate streams over one connection, and either
+can end without the other. That is what `FIN` means on the wire, and it is why
+`allowHalfOpen` exists — sending it says "I have nothing more to send", not
+"stop sending to me". Node closes anyway by default, because most programs do
+not want the half-open state and the ones that do know they want it.
+
+**`push(null)` records an end-of-file; it does not deliver one.** A readable
+with no consumer never asks again on its own, so a socket nobody reads never
+emits `end` or `close` — which is most of the sockets in a server that only
+writes. Node's EOF path is two calls, `stream.push(null)` then
+`stream.read(0)`, and the second is the whole of the delivery. This was found
+by measuring rather than reading: a plain `Readable` here behaves exactly as
+node's does, including *not* emitting `end` without a consumer, so the
+difference had to be in `net` and was.
+
+**`listening` must not be emitted until the bind has succeeded.** Binding is
+asynchronous and can fail for reasons only the kernel has — an address that is
+not local, a port already taken — so reporting it synchronously is a claim
+about something that has not happened. The seam reports it instead, and the
+failure carries the address and port, because `EADDRINUSE` alone does not tell
+a program which of its listeners collided.
+
+The socket turns the stream's own `close` off and emits its own. A stream's
+carries nothing; a socket's carries whether it is closing because of an error,
+which is what a listener deciding whether to reconnect needs.
+
+Absent: `BlockList`, `SocketAddress`, the auto-select-family connection
+strategy, and the IPC/child-process paths.
 
 ## `zlib`
 
