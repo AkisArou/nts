@@ -170,11 +170,14 @@ rows below are.
 **425 of node's own test files pass** across sixteen modules, of which 15 are hollow.
 
 > **The `compiles` column is currently unverified.** The frontend decomposes
-> types under a fixed budget, and at least one module in this profile exhausts
-> it — after which the type graph is partial and the refusals that follow name
+> types under a fixed budget, and **thirteen of the sixteen modules here
+> exhaust it** — every one except `os`, `path` and `punycode`, which are the
+> three that import least from `internal/`. `nts hir` says so now, per module,
+> as `NTS0002`. After the budget is reached the type graph is partial — after which the type graph is partial and the refusals that follow name
 > constructs that may not be the actual cause. Which types survive the cutoff
 > depends on ordering, so the numbers move when anything upstream changes and
-> they move by *permutation* rather than by an offset. A bisect over one module
+> they move by *permutation* rather than by an offset. The three clean rows are
+> the only ones in this table that have ever been measurements. A bisect over one module
 > produced 12, 21, 27 and 7 lowered functions from four combinations of two
 > unrelated edits; none of the four was the real answer. The numbers below are
 > left as they were last taken rather than refreshed, because a fresher
@@ -201,7 +204,7 @@ constructs refused`, from `nts hir`.
 | `assert` | 9 / 19 | 0 | 14 / 236 | complete, including `CallTracker` and node's Myers diff |
 | `util` | 7 / 19 | 1 | 23 / 197 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `fs` | 11 / 212 | 2 | 31 / 236 | the sync surface; async, streams and watchers are absent |
-| `stream` | 145 / 195 | 2 | ? | the core is complete; `web`, `iter`, `consumers`, `compose` and `duplexify` are absent |
+| `stream` | 150 / 195 | 2 | ? | the core is complete; `web`, `iter`, `consumers`, `compose` and `duplexify` are absent |
 
 The first two columns are what
 
@@ -952,7 +955,7 @@ one. Both sets are listed with reasons in `not-applicable`.
 ## `stream`
 
 The largest module in node's library — 7,763 lines across `lib/stream.js` and
-`lib/internal/streams/*` — and the one everything else is built on. 145 of 195
+`lib/internal/streams/*` — and the one everything else is built on. 150 of 195
 applicable files pass, 2 of them hollow; 49 skip.
 
 Written: `Stream` and its legacy `pipe`, `Readable`, `Writable`, `Duplex`,
@@ -960,7 +963,8 @@ Written: `Stream` and its legacy `pipe`, `Readable`, `Writable`, `Duplex`,
 `destroy`, the high-water-mark rules, the predicates, `Readable.from`, the
 async iterator, the iterator helpers (`map`, `filter`, `flatMap`, `drop`,
 `take`, `reduce`, `toArray`, `some`, `every`, `find`, `forEach`) and
-`stream/promises`.
+`stream/promises`, `compose`, `duplexify` (`Duplex.from`), `duplexPair`,
+`Readable.prototype.wrap` and the operators.
 
 **The bit-packed state is not reproduced, and that is a decision rather than a
 shortcut.** Node stores about thirty booleans per stream side in a single
@@ -992,9 +996,28 @@ holds the *write callback* rather than the data. One chunk goes through, and if
 the readable side is now full the callback that would admit the next chunk is
 kept until somebody reads.
 
-Absent: `stream/web` (the WHATWG streams, a different API family),
-`stream/consumers`, `stream/iter`, `compose` and `duplexify`. The 40 files
-needing `stream/iter` are its broadcast helpers, added in a recent node.
+**Nine failures are the class-versus-function difference**, the same one
+recorded under `events` and `string_decoder`. Node's constructors are ordinary
+functions with an `if (!(this instanceof X)) return new X(...)` guard, so
+`Readable(opts)` works without `new` and `Stream.call(this, opts)` is how
+node's own `Duplex` inherits. An ES class cannot be called without `new`, and
+wrapping one in a callable function breaks subclassing -- a base constructor
+that returns an object makes that object the derived `this`, so the subclass's
+prototype drops out of the chain. Classes are kept: they are the shape the
+compiler is being taught to lower, and a function-with-prototype-assignment
+implementation would trade that for compatibility with a 2010 calling
+convention.
+
+Absent by decision, not oversight:
+
+- **`stream/iter`**, which is 7,209 lines across twelve files -- as large as
+  the whole of the rest of this module -- is gated behind
+  `--experimental-stream-iter`, and accounts for 40 of the 49 skips. Writing it
+  while `fs` sits at 11 of 212 would be the wrong allocation.
+- **`stream/web`**, the WHATWG streams. A different API family that needs
+  implementing before it can be adapted to; `Readable.toWeb` and `fromWeb` are
+  four of the failures.
+- **`stream/consumers`**, which is small and depends on `Blob`.
 
 ## `fs`
 

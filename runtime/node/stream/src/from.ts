@@ -33,12 +33,24 @@ type AnyIterator = {
 const isThenable = (value: unknown): boolean =>
   Boolean(value) && typeof (value as { then?: unknown }).then === "function";
 
-export function from(iterable: unknown, opts?: ReadableOptions): Readable {
+/**
+ * `Readable.from`, and the machinery behind `Duplex.from`.
+ *
+ * The constructor is a parameter because `duplexify` builds the same iterator
+ * pump into a `Duplex` -- the readable half is this loop and the writable half
+ * is the caller's. Hard-coding `Readable` here would mean a second copy of the
+ * pump over there.
+ */
+export function from<T extends Readable>(
+  iterable: unknown,
+  opts?: ReadableOptions,
+  Ctor: new (options?: ReadableOptions) => T = Readable as unknown as new (o?: ReadableOptions) => T,
+): T {
   // A string or a buffer is iterable, but iterating it would produce one
   // stream chunk per character or per byte, which is never what the caller
   // meant. It becomes a stream of exactly one chunk.
   if (typeof iterable === "string" || iterable instanceof Buffer) {
-    return new Readable({
+    return new Ctor({
       objectMode: true,
       ...opts,
       read() {
@@ -62,7 +74,7 @@ export function from(iterable: unknown, opts?: ReadableOptions): Readable {
     throw new ERR_INVALID_ARG_TYPE("iterable", ["Iterable"], iterable);
   }
 
-  const readable = new Readable({
+  const readable = new Ctor({
     objectMode: true,
     // One at a time. The iterator is the buffer; reading ahead would mean
     // pulling values the consumer has not asked for, which for a generator

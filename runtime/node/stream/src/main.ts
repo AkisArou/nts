@@ -19,6 +19,17 @@ import { ERR_ILLEGAL_CONSTRUCTOR } from "../../internal/errors.ts";
 import { promiseReturningOperators, streamReturningOperators } from "./operators.ts";
 import { pipeline, pipelineImpl } from "./pipeline.ts";
 import * as promises from "./promises.ts";
+// Imported for its side effect: it fills the hole `Duplex.from` calls
+// through, which it cannot do by being imported *by* `duplex.ts` without a
+// cycle.
+import "./duplexify.ts";
+import { compose } from "./compose.ts";
+import { duplexPair } from "./duplexpair.ts";
+import { setCompose } from "./readable.ts";
+
+// `Readable.prototype.compose` calls through this, which `readable.ts` cannot
+// import directly: `compose` builds a `Duplex`, which extends `Readable`.
+setCompose(compose);
 import { getDefaultHighWaterMark, setDefaultHighWaterMark } from "./state.ts";
 import {
   isDestroyed,
@@ -89,6 +100,8 @@ export {
   pipeline,
   pipelineImpl,
   promises,
+  compose,
+  duplexPair,
   addAbortSignal,
   destroyer,
   getDefaultHighWaterMark,

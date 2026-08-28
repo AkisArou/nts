@@ -20,7 +20,7 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import { StringDecoder } from "../../string_decoder/src/main.ts";
-import { validateObject } from "../../internal/validators.ts";
+import { validateAbortSignal, validateObject } from "../../internal/validators.ts";
 import {
   aggregateTwoErrors,
   AbortError,
@@ -729,6 +729,87 @@ export class Readable extends Stream {
   }
 
   /**
+   * Present a stream from before this design as a modern one.
+   *
+   * "Old style" means an emitter with `data`, `end` and optionally
+   * `pause`/`resume` and nothing else -- which is what a stream was before
+   * `read()` existed, and what a great deal of published code still is. The
+   * wrapping is not just forwarding: `push` returning false has to become a
+   * `pause` on the wrapped stream, or the wrapper buffers without limit.
+   */
+  wrap(stream: {
+    on(event: string, listener: (...args: never[]) => void): unknown;
+    pause?(): void;
+    resume?(): void;
+    [key: string]: unknown;
+  }): this {
+    let paused = false;
+
+    stream.on("data", ((chunk: unknown) => {
+      if (!this.push(chunk) && stream.pause) {
+        paused = true;
+        stream.pause();
+      }
+    }) as never);
+
+    stream.on("end", (() => {
+      this.push(null);
+    }) as never);
+
+    stream.on("error", ((error: unknown) => {
+      errorOrDestroy(this as unknown as DestroyableStream, error);
+    }) as never);
+
+    stream.on("close", (() => {
+      this.destroy();
+    }) as never);
+
+    stream.on("destroy", (() => {
+      this.destroy();
+    }) as never);
+
+    this._read = (): void => {
+      if (paused && stream.resume) {
+        paused = false;
+        stream.resume();
+      }
+    };
+
+    // Anything else the wrapped stream offers is forwarded, which matters
+    // when what is being wrapped is a filter or a duplex rather than a plain
+    // source: its own methods are part of why the caller wanted it.
+    for (const key of Object.keys(stream)) {
+      if ((this as unknown as Record<string, unknown>)[key] === undefined &&
+        typeof stream[key] === "function") {
+        (this as unknown as Record<string, unknown>)[key] =
+          (stream[key] as (...args: unknown[]) => unknown).bind(stream);
+      }
+    }
+
+    return this;
+  }
+
+  /**
+   * This stream followed by another, as one stream.
+   *
+   * Filled in by `main.ts`, because composing needs `compose`, which builds a
+   * `Duplex`, which is built on this class.
+   */
+  compose(stream: unknown, options?: { signal?: AbortSignalLike }): unknown {
+    if (options != null) validateObject(options, "options");
+    if (options?.signal != null) validateAbortSignal(options.signal, "options.signal");
+
+    const composed = composeImpl(this, stream);
+
+    if (options?.signal) {
+      // Already validated above.
+      addAbortSignalNoValidate(options.signal, composed);
+    }
+
+    return composed;
+  }
+
+  /**
    * `for await (const chunk of stream)`.
    *
    * The bridge back from streams to iterators: `readable` wakes the loop,
@@ -753,6 +834,28 @@ export class Readable extends Stream {
     return streamToAsyncIterator(this, options);
   }
 
+  /**
+   * An old-style stream as a `Readable`, as a static.
+   *
+   * The instance method wraps *into* an existing stream; this makes the
+   * stream for you and, unlike the method, arranges for destroying the
+   * wrapper to destroy what it wraps.
+   */
+  static wrap(src: {
+    readableObjectMode?: boolean;
+    objectMode?: boolean;
+    [key: string]: unknown;
+  }, options?: ReadableOptions): Readable {
+    return new Readable({
+      objectMode: src.readableObjectMode ?? src.objectMode ?? true,
+      ...options,
+      destroy(error: unknown, callback: (error?: unknown) => void) {
+        destroyer(src, error);
+        callback(error);
+      },
+    }).wrap(src as never);
+  }
+
   async [Symbol.asyncDispose](): Promise<void> {
     let error: unknown;
     if (!this.destroyed) {
@@ -774,6 +877,20 @@ export class Readable extends Stream {
 export function onReadableConstructed(stream: Readable): void {
   const state = stream._readableState;
   if (state.needReadable) maybeReadMore(stream, state);
+}
+
+/**
+ * `compose`, supplied by `main.ts`.
+ *
+ * A hole rather than an import: `compose` builds a `Duplex`, which extends
+ * this class, so importing it here would be a cycle.
+ */
+let composeImpl: (a: unknown, b: unknown) => unknown = () => {
+  throw new Error("stream/compose has not been loaded");
+};
+
+export function setCompose(impl: (a: unknown, b: unknown) => unknown): void {
+  composeImpl = impl;
 }
 
 function streamToAsyncIterator(

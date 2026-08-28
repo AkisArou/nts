@@ -45,7 +45,7 @@ interface WritableSide {
   setDefaultEncoding(encoding: string): this;
   _write(chunk: unknown, encoding: string, callback: WriteCallback): void;
   _writev: ((chunks: never, callback: WriteCallback) => void) | null;
-  _final?: (callback: WriteCallback) => void;
+  _final?(callback: WriteCallback): void;
   readonly writable: boolean;
   readonly writableFinished: boolean;
   readonly writableObjectMode: boolean;
