@@ -828,11 +828,34 @@ those errors and nearly every function can throw. A ranked histogram of use
 sites promotes whatever lives in a shared module, which is the direction that
 wastes the most time. Read this table as a list of causes, not a tally.
 
-Why `unknown` is unavoidable here rather than a style choice: every one of those
-296 is a validator or an error field. `validateString(value: unknown, name:
-string)` exists because a module reached through the Node-API wrapper is called
-from JavaScript, which has no types — `readFileSync(42)` has to throw node's
-error rather than open a file named `42`.
+Why `unknown` is unavoidable here rather than a style choice:
+`validateString(value: unknown, name: string)` exists because a module reached
+through the Node-API wrapper is called from JavaScript, which has no types —
+`readFileSync(42)` has to throw node's error rather than open a file named
+`42`.
+
+**What the profile does with `unknown`, read rather than counted.** 174
+parameters, and the validators are ten of them:
+
+| | sites | |
+| --- | ---: | --- |
+| carried | 56 | `...args: unknown[]` through `console`, `events`, `diagnostics_channel`. Stored in an array and passed on; nothing at the site looks at it. |
+| examined | 55 | `inspect`, `format`, `deep-equal`, and `util/types`'s 36 predicates. Full generality. |
+| tested | 10 | the validators. A closed `typeof` test — and an open error path. |
+| the rest | ~53 | `assert`'s comparison and message machinery, mostly examined. |
+
+The validators look like the cheap case and are not, for a reason that is not
+in the test. `typeof value !== "string"` narrows, and the value flows on as a
+`string`; but the `throw` hands the still-open value to `determineSpecificType`,
+which dispatches on every kind and calls `inspect` for anything left. So
+`unknown` reaches a type test *and* a general renderer, and the renderer is on
+the path the validator exists to take.
+
+The first row is why this needs whole-program analysis rather than a local
+choice. Within `node:console`, `log(...args: unknown[])` only moves the value —
+a boxed pointer would do. It is `formatWithOptions`, in `node:util`, that
+examines it. The cheapest representation for `console`'s `unknown` is decided
+by a use that is not in `console`.
 
 ## What stops `path` compiling
 
