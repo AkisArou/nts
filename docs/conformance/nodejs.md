@@ -60,19 +60,19 @@ constructs refused`, from `nts hir`.
 
 | module | node's tests | hollow | compiles | note |
 | --- | :---: | :---: | :---: | --- |
-| `console` | **22 / 22** | 2 | 8 / 255 | complete |
+| `console` | **22 / 22** | 2 | 9 / 266 | complete |
 | `punycode` | **1 / 1** | 0 | 5 / 10 | complete |
-| `querystring` | **4 / 4** | 0 | 6 / 165 | complete |
-| `os` | **4 / 4** | 1 | 19 / 91 | complete |
-| `path` | **15 / 16** | 0 | 3 / 124 | complete but for `matchesGlob`; the skip is Windows-only |
-| `events` | **28 / 33** | 1 | 2 / 126 | complete but for domains, `EventTarget` and the promise forms |
+| `querystring` | **4 / 4** | 0 | 6 / 172 | complete |
+| `os` | **4 / 4** | 1 | 18 / 99 | complete |
+| `path` | **15 / 16** | 0 | 5 / 129 | complete but for `matchesGlob`; the skip is Windows-only |
+| `events` | **28 / 33** | 1 | 3 / 137 | complete but for domains, `EventTarget` and the promise forms |
 | `url` | 26 / 36 | 1 | 28 / 317 | complete; exact on the Web Platform Tests corpus |
-| `diagnostics_channel` | 23 / 45 | 0 | 2 / 123 | complete; the failures need node's own publishers |
-| `buffer` | 15 / 60 | 1 | 5 / 154 | the surface is there; the argument validation largely is not |
-| `assert` | 9 / 19 | 0 | 3 / 209 | complete, including `CallTracker` and node's Myers diff |
-| `fs` | 11 / 212 | 2 | 28 / 191 | the sync surface; async, streams and watchers are absent |
-| `util` | 7 / 18 | 1 | 7 / 180 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `string_decoder` | **2 / 3** | 0 | 3 / 170 | complete; the failure is the class-vs-function difference |
+| `diagnostics_channel` | 23 / 45 | 0 | 3 / 129 | complete; the failures need node's own publishers |
+| `buffer` | 15 / 60 | 1 | 5 / 161 | the surface is there; the argument validation largely is not |
+| `assert` | 9 / 19 | 0 | 3 / 223 | complete, including `CallTracker` and node's Myers diff |
+| `fs` | 11 / 212 | 2 | 20 / 206 | the sync surface; async, streams and watchers are absent |
+| `util` | 7 / 18 | 1 | 9 / 190 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `string_decoder` | **2 / 3** | 0 | 5 / 175 | complete; the failure is the class-vs-function difference |
 | `stream` | — | — | — | not started |
 | `process` | — | — | — | not started |
 | `timers` | — | — | — | not started |
@@ -687,8 +687,31 @@ test files. The counts below were taken across eight modules and have not been
 retaken since `console`, `diagnostics_channel` and the `assert` rewrite landed;
 the ranking has not changed, but the absolute numbers are now low.
 
-Since they were taken, one item has moved to the top of the list and is not in
-the table. **`class X extends Error`** now underlies every module in the
+**`Object` is now the top blocker, and it arrived by a route worth recording.**
+The compiler used to treat a name declared only by `lib.d.ts` as an FFI import:
+it emitted a prototype, produced a link error, and reported the enclosing
+function as lowered. Once that was fixed, twenty-five sites across the profile
+started refusing honestly, and `fs` fell from 28 lowered functions to 20. The
+drop is the measurement starting to work -- those eight functions were being
+emitted incomplete.
+
+What the profile asks of it, counted across `runtime/node`:
+
+| | sites | | sites |
+| --- | ---: | --- | ---: |
+| `Object.prototype.hasOwnProperty` / `propertyIsEnumerable` | 24 | `Object.getOwnPropertyDescriptor` | 6 |
+| `Object.defineProperty` | 21 | `Object.create` | 5 |
+| `Object.is` | 15 | `Object.setPrototypeOf`, `Object.assign` | 4 each |
+| `Object.keys` | 14 | `Object.getOwnPropertyNames`, `freeze` | 3 each |
+| `Object.hasOwn` | 9 | `String(x)` | 47 |
+| `Object.getPrototypeOf` | 8 | `Number(x)` | 6 |
+
+`Object.prototype.hasOwnProperty.call(x, k)` is the single most common shape
+here: it is what a key walk is made of, and every comparison, every inspection
+and every option-object read is a key walk.
+
+Since the counts below were taken, one other item has moved to the top of the
+list and is not in the table. **`class X extends Error`** now underlies every module in the
 profile: `internal/errors.ts` is four abstract bases -- over `Error`,
 `TypeError`, `RangeError` and `URIError` -- with twenty-one codes subclassing
 them, and `path`, `fs`, `buffer`, `util`, `assert`, `console` and
