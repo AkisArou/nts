@@ -688,8 +688,19 @@ fn run_native(
     std::fs::write(&main_path, main)?;
 
     let binary = dir.join("check");
+    // `NTS_POISON=1` fills every uninitialized allocation with a non-zero
+    // pattern. The compiler emits one only where it believes the lowering
+    // writes every slot; running the suite under this is what turns that
+    // belief into a checked claim, since an unwritten slot then reads as a
+    // conspicuous value rather than as whatever the allocator left.
+    let poison = std::env::var("NTS_POISON").is_ok_and(|value| value != "0");
     let build = std::process::Command::new("clang")
         .args(["-std=c11", "-O1", "-w"])
+        .args(if poison {
+            &["-DNTS_POISON=1"][..]
+        } else {
+            &[][..]
+        })
         .arg("-I")
         .arg(dir)
         .arg("-o")

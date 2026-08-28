@@ -340,6 +340,20 @@ pub enum OpKind {
     /// type, which is a [`ManagedType::Array`].
     ArrayNew {
         length: ValueId,
+        /// Whether the elements have to be zeroed.
+        ///
+        /// They do for anything the *source* can observe before writing, because
+        /// there is no `undefined` in a double and so a hole has no
+        /// representation to leave behind. `new Array(n)` is that case.
+        ///
+        /// `false` only where this lowering fills every slot itself before the
+        /// array can be read, which today is `map` alone: its loop runs from 0
+        /// to the length it allocated, `deliver` stores on every path through
+        /// the body, and there is no early exit. Worth 7% on `pipeline`, which
+        /// it takes to parity with hand-written C++ -- and worth being narrow
+        /// about, because the failure mode is reading uninitialized memory
+        /// rather than reading a zero.
+        zeroed: bool,
     },
     /// The element count of a variable-length managed object.
     ///
@@ -1431,7 +1445,10 @@ mod tests {
                 origin: origin(),
             },
             Op {
-                kind: OpKind::ArrayNew { length: ValueId(0) },
+                kind: OpKind::ArrayNew {
+                    length: ValueId(0),
+                    zeroed: true,
+                },
                 ty: numbers.clone(),
                 origin: origin(),
             },

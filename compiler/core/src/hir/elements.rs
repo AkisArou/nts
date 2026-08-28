@@ -370,7 +370,13 @@ mod tests {
     fn program(helper: Option<&str>) -> Program {
         let mut values = vec![
             op(OpKind::ConstFloat(1.0), HirType::NUMBER),
-            op(OpKind::ArrayNew { length: ValueId(0) }, numbers()),
+            op(
+                OpKind::ArrayNew {
+                    length: ValueId(0),
+                    zeroed: true,
+                },
+                numbers(),
+            ),
         ];
         if let Some(name) = helper {
             values.push(op(

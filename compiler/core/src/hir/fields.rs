@@ -428,7 +428,7 @@ fn allocated_length(func: &super::Func, analysis: &Analysis, value: super::Value
     let mut at = value;
     for _ in 0..8 {
         match &func.values[at.0 as usize].kind {
-            OpKind::ArrayNew { length } => return analysis.get(*length),
+            OpKind::ArrayNew { length, .. } => return analysis.get(*length),
             // The absent reference contributes no length, and excluding it
             // costs no safety: reading `length` through a null array faults,
             // and so does the bounds check that would have read it. A

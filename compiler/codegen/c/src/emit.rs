@@ -1884,9 +1884,16 @@ fn managed_op(
             field,
             value: stored,
         } => field_store(func, op, *object, *field, *stored, context)?,
-        OpKind::ArrayNew { length } => {
+        OpKind::ArrayNew { length, zeroed } => {
+            // Two entry points rather than a flag argument, so the branch is
+            // taken here rather than once per allocation at run time.
+            let allocate = if *zeroed {
+                "nts_array_new"
+            } else {
+                "nts_array_new_uninitialized"
+            };
             format!(
-                "{name} = nts_array_new(&{}, {});",
+                "{name} = {allocate}(&{}, {});",
                 element_descriptor(&op.ty, &op.origin)?,
                 value_name(*length)
             )

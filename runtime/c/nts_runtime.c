@@ -42,6 +42,13 @@ static size_t nts_bytes_held = 0;
 size_t nts_live_bytes(void) { return nts_bytes_held; }
 
 #ifdef NTS_PROVIDER_RC
+/* Whether an uninitialized allocation is filled with a pattern that is not
+ * zero, so that reading a slot nobody wrote is visible rather than lucky.
+ * Off by default; the differential suite turns it on. */
+#ifndef NTS_POISON
+#define NTS_POISON 0
+#endif
+
 /* Whether this build recycles memory itself.
  *
  * Not under AddressSanitizer. A recycling allocator hands the same address back
@@ -538,7 +545,8 @@ void nts_bounds(double index, uint32_t length) {
   abort();
 }
 
-NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length) {
+/* The shared part: everything but deciding what the elements start as. */
+static NtsArray *nts_array_allocate(const NtsDescriptor *descriptor, double length) {
   if (!(length >= 0.0 && length <= 4294967295.0 &&
         length == (double)(uint32_t)length)) {
     fprintf(stderr, "nts: %g is not a valid array length\n", length);
@@ -556,9 +564,46 @@ NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length) {
   /* Just past the struct, so an array nothing grows keeps its elements next to
    * its header and reads them with the locality inline storage had. */
   array->elements = (unsigned char *)array + sizeof(NtsArray);
-  /* Zeroed rather than left as holes: there is no `undefined` in a double, so
-   * a hole has no representation to leave behind. */
-  memset(array->elements, 0, (size_t)count * descriptor->size);
+  return array;
+}
+
+/* Zeroed rather than left as holes: there is no `undefined` in a double, so a
+ * hole has no representation to leave behind. This is what `new Array(n)` gets,
+ * and anything else the source can read before it writes. */
+NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length) {
+  NtsArray *array = nts_array_allocate(descriptor, length);
+  memset(array->elements, 0, (size_t)array->header.length * descriptor->size);
+  return array;
+}
+
+/* Not zeroed, for an allocation the compiler fills completely before anything
+ * can read it -- `map`'s result, whose loop runs the length it just allocated.
+ *
+ * Worth 7% on the `pipeline` benchmark, which it takes to parity with
+ * hand-written C++. The compiler emits this one only where it can see every
+ * slot being written, because the failure mode here is reading uninitialized
+ * memory rather than reading a zero. */
+NtsArray *nts_array_new_uninitialized(const NtsDescriptor *descriptor,
+                                      double length) {
+  NtsArray *array = nts_array_allocate(descriptor, length);
+#if NTS_POISON
+  /* Fill with something that is *not* zero, so that "every slot is written"
+   * stops being an argument and becomes a check: a slot this allocation's
+   * caller failed to write reads as -1.4e-130 rather than as 0, and any sum
+   * over the array says so immediately.
+   *
+   * Measured rather than assumed: with `map` sabotaged to store nothing, the
+   * unwritten slots read as *exactly zero* -- the allocator hands back zeroed
+   * pages -- which is indistinguishable from a slot legitimately holding zero,
+   * and is precisely the value the old unconditional `memset` produced. A
+   * program whose correct answer contains a zero there would agree by
+   * accident. Under `NTS_POISON` it cannot: the same sabotage reads
+   * `a5d03c3c3c3c3c3c`.
+   *
+   * The evidence for the whole optimization is that the example suite agrees
+   * with node under this define. */
+  memset(array->elements, 0xA5, (size_t)array->header.length * descriptor->size);
+#endif
   return array;
 }
 

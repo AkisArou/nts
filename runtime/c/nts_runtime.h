@@ -190,6 +190,10 @@ void nts_retain(NtsHeader *object);
 size_t nts_live_count(void);
 void nts_release(NtsHeader *object);
 NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length);
+/* The same, without zeroing the elements. Only for an allocation the compiler
+ * fills completely before anything can read it; see the definition. */
+NtsArray *nts_array_new_uninitialized(const NtsDescriptor *descriptor,
+                                      double length);
 NtsHeader *nts_object_new(const NtsDescriptor *descriptor);
 void nts_bounds(double index, uint32_t length);
 NtsString *nts_concat(const NtsString *a, const NtsString *b);

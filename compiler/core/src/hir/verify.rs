@@ -398,7 +398,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         OpKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
         OpKind::Unary { operand, .. } | OpKind::Convert(operand) => vec![*operand],
         OpKind::Call { args, .. } => args.clone(),
-        OpKind::ArrayNew { length } => vec![*length],
+        OpKind::ArrayNew { length, .. } => vec![*length],
         OpKind::Length(array) | OpKind::Retain(array) | OpKind::Release(array) => {
             vec![*array]
         }

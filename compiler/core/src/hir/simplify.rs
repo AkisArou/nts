@@ -152,7 +152,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         OpKind::Retain(object) | OpKind::Release(object) | OpKind::Length(object) => {
             *object = of(*object);
         }
-        OpKind::ArrayNew { length } => *length = of(*length),
+        OpKind::ArrayNew { length, .. } => *length = of(*length),
         OpKind::FieldGet { object, .. } => *object = of(*object),
         OpKind::FieldSet { object, value, .. } => {
             *object = of(*object);

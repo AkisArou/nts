@@ -689,7 +689,7 @@ fn transfer_op(
                 // Only while nothing can have grown it: an array handed to a
                 // call may come back longer, and the object does not move so
                 // every reference sees the new length.
-                OpKind::ArrayNew { length }
+                OpKind::ArrayNew { length, .. }
                     if super::allocated_length_is_exact(func, *array, context.growable) =>
                 {
                     lookup(refinements, values, *length).narrow(bound)

@@ -149,7 +149,7 @@ fn names_the_length_of(func: &Func, growable: bool, array: ValueId, candidate: V
     }
     matches!(
         func.values[array.0 as usize].kind,
-        OpKind::ArrayNew { length } if length == candidate
+        OpKind::ArrayNew { length, .. } if length == candidate
     ) && super::allocated_length_is_exact(func, array, growable)
 }
 
@@ -212,7 +212,7 @@ fn length_facts(
                 .unwrap_or(Facts::BOTTOM),
             _ => Facts::BOTTOM,
         },
-        OpKind::ArrayNew { length }
+        OpKind::ArrayNew { length, .. }
             if super::allocated_length_is_exact(func, array, analysis.growable()) =>
         {
             analysis.get_at(at, *length)

@@ -476,7 +476,12 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             )
         }
         OpKind::Convert(operand) => format!("%{index} = convert %{} : {ty}", operand.0),
-        OpKind::ArrayNew { length } => format!("%{index} = array.new %{} : {ty}", length.0),
+        OpKind::ArrayNew { length, zeroed } => {
+            // Printed, because "not zeroed" is a claim about what the rest of
+            // the function does and is worth being able to read back.
+            let fill = if *zeroed { "" } else { " uninitialized" };
+            format!("%{index} = array.new{fill} %{} : {ty}", length.0)
+        }
         OpKind::Length(array) => format!("%{index} = array.len %{} : {ty}", array.0),
         OpKind::StringUnitAt {
             string,

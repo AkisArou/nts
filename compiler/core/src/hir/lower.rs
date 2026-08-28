@@ -4579,7 +4579,14 @@ impl<'a> FuncBuilder<'a> {
         #[allow(clippy::cast_precision_loss)]
         let count = elements.len() as f64;
         let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
-        let array = self.push(OpKind::ArrayNew { length }, ty, origin.clone());
+        let array = self.push(
+            OpKind::ArrayNew {
+                length,
+                zeroed: true,
+            },
+            ty,
+            origin.clone(),
+        );
 
         for (index, element) in elements.iter().enumerate() {
             let value = self.lower_expression(*element)?;
@@ -4611,7 +4618,14 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(id);
         let length = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        Ok(self.push(OpKind::ArrayNew { length }, ty, origin))
+        Ok(self.push(
+            OpKind::ArrayNew {
+                length,
+                zeroed: true,
+            },
+            ty,
+            origin,
+        ))
     }
 
     /// `{ x: 1, y }`.
@@ -5228,7 +5242,14 @@ impl<'a> FuncBuilder<'a> {
             ) {
                 return Err(self.unsupported(id, &format!("a `new {class}` from a value")));
             }
-            return Ok(self.push(OpKind::ArrayNew { length }, ty, origin));
+            return Ok(self.push(
+                OpKind::ArrayNew {
+                    length,
+                    zeroed: true,
+                },
+                ty,
+                origin,
+            ));
         }
 
         let ty = self
@@ -6858,17 +6879,7 @@ impl<'a> FuncBuilder<'a> {
         synthetic.extend(accumulator);
         let carried = self.carried_across(body, &synthetic, names);
 
-        // `map`'s result exists before the loop and is never rebound, so it is
-        // not carried: it is one allocation the body writes into.
-        let produced = match kind {
-            Iteration::Map => {
-                let ty = self
-                    .type_of(id)
-                    .ok_or_else(|| self.unrepresentable(id, "a `map` result"))?;
-                Some(self.push(OpKind::ArrayNew { length }, ty, origin.clone()))
-            }
-            Iteration::ForEach | Iteration::Reduce => None,
-        };
+        let produced = self.iteration_result_array(id, kind, length, &origin)?;
 
         // `steps: true`, so the index moves in a latch block of its own. A
         // `return` inside the callback jumps there, the way `continue` does,
@@ -6956,6 +6967,40 @@ impl<'a> FuncBuilder<'a> {
             (Iteration::Reduce, _, Some(symbol)) => Ok(self.bindings[&symbol]),
             _ => unreachable!("the result of a kind is decided with the kind"),
         }
+    }
+
+    /// `map`'s result, allocated once before the loop.
+    ///
+    /// It exists before the loop and is never rebound, so it is not carried:
+    /// it is one allocation the body writes into.
+    ///
+    /// Not zeroed. The loop runs every index from 0 to this very length,
+    /// [`Self::deliver`] stores on every path through the body, and there is no
+    /// early exit -- so nothing can read a slot this allocation did not fill.
+    /// The claim is checked rather than argued: `NTS_POISON` fills an
+    /// uninitialized allocation with a pattern that is not zero, and the whole
+    /// example suite still agrees with node under it.
+    fn iteration_result_array(
+        &mut self,
+        id: NodeId,
+        kind: Iteration,
+        length: ValueId,
+        origin: &Origin,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        if !matches!(kind, Iteration::Map) {
+            return Ok(None);
+        }
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a `map` result"))?;
+        Ok(Some(self.push(
+            OpKind::ArrayNew {
+                length,
+                zeroed: false,
+            },
+            ty,
+            origin.clone(),
+        )))
     }
 
     /// The names an inlined callback's loop has to carry.
