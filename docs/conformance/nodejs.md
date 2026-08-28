@@ -54,7 +54,7 @@ real `node` child — those assert on node's binary, which our module is not in.
 Each exclusion is listed with a reason in the module's `not-applicable` file
 rather than inferred by a rule, so the number can be audited.
 
-**170 of node's own test files pass** across thirteen modules. The per-module
+**167 of node's own test files pass** across thirteen modules, of which 9 are hollow. The per-module
 counts below are `passed / applicable`; `compiles` is `functions lowered /
 constructs refused`, from `nts hir`.
 
@@ -66,12 +66,12 @@ constructs refused`, from `nts hir`.
 | `os` | **4 / 4** | 1 | 19 / 91 | complete |
 | `path` | **15 / 16** | 0 | 3 / 124 | complete but for `matchesGlob`; the skip is Windows-only |
 | `events` | **28 / 33** | 1 | 2 / 126 | complete but for domains, `EventTarget` and the promise forms |
-| `url` | 26 / 36 | 4 | 28 / 317 | complete; exact on the Web Platform Tests corpus |
-| `diagnostics_channel` | 23 / 35 | 0 | 2 / 123 | complete; the failures need node's own publishers |
+| `url` | 26 / 38 | 1 | 28 / 317 | complete; exact on the Web Platform Tests corpus |
+| `diagnostics_channel` | 23 / 45 | 0 | 2 / 123 | complete; the failures need node's own publishers |
 | `buffer` | 15 / 60 | 1 | 5 / 154 | the surface is there; the argument validation largely is not |
-| `assert` | 11 / 19 | 1 | 3 / 209 | complete, including `CallTracker` and node's Myers diff |
+| `assert` | 9 / 19 | 0 | 3 / 209 | complete, including `CallTracker` and node's Myers diff |
 | `fs` | 11 / 212 | 2 | 28 / 191 | the sync surface; async, streams and watchers are absent |
-| `util` | 8 / 18 | 1 | 7 / 180 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `util` | 7 / 18 | 1 | 7 / 180 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `string_decoder` | **2 / 3** | 0 | 3 / 170 | complete; the failure is the class-vs-function difference |
 | `stream` | — | — | — | not started |
 | `process` | — | — | — | not started |
@@ -86,7 +86,20 @@ node tooling/conformance/run.mjs --module buffer --sabotage
 hands every test an empty object instead of our module. Whatever still passes
 was never measuring us — it reached node's own implementation through a global,
 or asserted something true of any module at all. Thirteen of the 170 are
-hollow, and each is a specific reason rather than a rounding error.
+hollow, and each is a specific reason rather than a rounding error: two files
+whose whole content is `globalThis.console = globalThis.console`, one that
+compares `globalThis.URL`'s property descriptor against itself, one that
+asserts `os.constants.signals` is immutable and is satisfied by *anything*
+that throws a `TypeError`, and so on.
+
+**A second kind of hollow pass, found the same way and larger.** The
+`test/common` shim reported `hasIntl: false` and `hasCrypto: false`, which are
+untrue of the process these tests run in. Node's tests guard cases with
+`{ skip: !hasIntl }`, and a file whose every case skips still exits zero --
+which this runner read as a pass. Both flags now report the truth, and a file
+whose every `node:test` case skipped is reported as a skip rather than a pass.
+That moved `assert` from 11 to 9 and `util` from 8 to 7, and turned ten of
+`diagnostics_channel`'s skips into honest failures.
 
 This column exists because the number above it was wrong. `node:buffer` read
 **51 of 60** until the check was run, and 15 afterwards. Node's tests write
@@ -380,7 +393,7 @@ Complete, from node v24.20.0 `lib/diagnostics_channel.js`: `channel`,
 `subscribe`, `unsubscribe`, `hasSubscribers`, `tracingChannel`, `Channel` and
 `TracingChannel` with `traceSync`, `tracePromise` and `traceCallback`.
 
-23 of 35 applicable files pass. The remaining 12 are one cause: they assert
+23 of 45 applicable files pass. The remaining 22 are one cause: they assert
 that *node's own* `http`, `net`, `udp`, `worker_threads`, `child_process` or
 module loader publish to a well-known channel. Those subsystems publish into
 node's registry, not ours, and no substitution can bridge that — the tests pass
@@ -415,7 +428,7 @@ comparisons, `inherits`, `deprecate`, `debuglog`, `promisify`, `callbackify`,
 `styleText`, `parseEnv`, `stripVTControlCharacters`, `toUSVString`, and the
 `getSystemError*` family.
 
-8 of 18 applicable files pass, which understates it: `util`'s tests compare
+7 of 18 applicable files pass, which understates it: `util`'s tests compare
 `inspect` output character for character, so a single spacing difference fails
 a file that is otherwise entirely correct. The measures that say more:
 
@@ -472,7 +485,7 @@ Every function: `ok`, `equal`/`notEqual`, `strictEqual`/`notStrictEqual`,
 `ifError`, `match`/`doesNotMatch`, `fail`, `AssertionError`, `CallTracker`, the
 `Assert` class, and the `strict` variant.
 
-11 of 19 files pass. `assert`'s tests check the *message text* of every
+9 of 19 files pass. `assert`'s tests check the *message text* of every
 failure, and rightly so: that text is what a developer reads when a test fails,
 and it is most of what this module produces.
 
@@ -562,7 +575,7 @@ Two APIs, and the older one is deprecated. Both are implemented.
 | paths | `fileURLToPath`, `pathToFileURL`, `urlToHttpOptions` |
 | domains | `domainToASCII`, `domainToUnicode` |
 
-26 of 36 applicable test files pass. **The number that matters more is the Web
+26 of 38 applicable test files pass. **The number that matters more is the Web
 Platform Tests corpus, which this passes in full: 891 of 891 parses and 278 of
 278 setter cases.** That is the same `urltestdata.json` and `setters_tests.json`
 node checks `ada` against, and it grades the algorithm where node's own tests

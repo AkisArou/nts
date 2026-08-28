@@ -65,8 +65,12 @@ export function makeCommon() {
     getTTYfd,
     isWindows: false,
     isMainThread: true,
-    hasCrypto: false,
-    hasIntl: false,
+    // The truth about the process these tests run in, not a conservative
+    // default. Reporting `false` makes every `{ skip: !hasIntl }` case skip,
+    // and a file whose every case skipped still exits 0 -- which the runner
+    // counted as a pass. Four files were passing that way.
+    hasCrypto: true,
+    hasIntl: typeof Intl !== "undefined",
 
     skip(reason) {
       throw new Skip(reason ?? "skipped");

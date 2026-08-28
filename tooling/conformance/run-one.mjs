@@ -130,6 +130,34 @@ try {
 const common = makeCommon();
 const realRequire = createRequire(import.meta.url);
 
+/**
+ * How many of the file's `node:test` cases were registered, and how many were
+ * declared skipped.
+ *
+ * A file whose every case skipped exits 0, and exiting 0 is what this runner
+ * reads as a pass -- so such a file was reported as passing while running
+ * nothing. It is reported as a skip now, which is what it is.
+ */
+const testCases = { registered: 0, skipped: 0 };
+
+let wrappedTestRunner;
+function countingTestRunner() {
+  if (wrappedTestRunner !== undefined) return wrappedTestRunner;
+  const real = realRequire("node:test");
+  const count = (fn) => (...args) => {
+    testCases.registered++;
+    // `test(name, options, fn)` and `test(options, fn)` both carry `skip`.
+    const options = args.find((a) => a !== null && typeof a === "object" && !Array.isArray(a));
+    if (options?.skip || options?.todo) testCases.skipped++;
+    return fn(...args);
+  };
+  wrappedTestRunner = Object.assign(count(real), real, {
+    test: count(real.test ?? real),
+    it: count(real.it ?? real),
+  });
+  return wrappedTestRunner;
+}
+
 function shimmedRequire(id) {
   const bare = id.replace(/^node:/, "");
   if (bare === moduleName) return underTest;
@@ -139,6 +167,7 @@ function shimmedRequire(id) {
     throw new Skip(`needs ${id}`);
   }
   if (bare === "assert" || bare === "assert/strict") return assert;
+  if (bare === "test" || bare === "node:test") return countingTestRunner();
   // A sibling the module under test shares state with. `console` publishes to
   // `diagnostics_channel`, and a test that subscribes has to reach the same
   // registry the console publishes into -- node's would be a different one and
@@ -195,7 +224,11 @@ try {
     const m = missed[0];
     throw new Error(`${m.name} was called ${m.actual} times, expected ${m.expected}`);
   }
-  report({ kind: "pass" });
+  if (testCases.registered > 0 && testCases.skipped === testCases.registered) {
+    report({ kind: "skip", why: `all ${testCases.registered} node:test case(s) skipped` });
+  } else {
+    report({ kind: "pass" });
+  }
 } catch (e) {
   if (e instanceof Skip || e?.name === "Skip") {
     report({ kind: "skip", why: e.message });
