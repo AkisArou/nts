@@ -190,7 +190,7 @@ export class Writable extends Stream {
   _writableState: WritableState;
   _writev: ((chunks: never, callback: WriteCallback) => void) | null = null;
   _final?: (callback: WriteCallback) => void;
-  _construct?: (callback: WriteCallback) => void;
+  _construct?(callback: WriteCallback): void;
 
   constructor(options?: WritableOptions) {
     super();

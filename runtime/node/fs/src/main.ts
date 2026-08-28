@@ -8,9 +8,10 @@
 // having `readFile(path, cb)` call `cb` before it returns. That is a runtime
 // decision rather than a `node:fs` one, tracked in `docs/conformance/`.
 //
-// `readFileSync` takes an encoding rather than defaulting to a `Buffer`,
-// because `node:buffer` does not exist yet. What that costs is the
-// Buffer-returning form, not the correctness of the encoded one.
+// The callback forms are in `async.ts` and re-exported here. They were absent
+// for as long as there was no event loop to run them on; there is one now, and
+// each is the same system call handed to the loop's thread pool instead of run
+// on the calling thread.
 
 import { validateString } from "../../internal/validators.ts";
 import { ERR_INVALID_ARG_TYPE } from "../../internal/errors.ts";
@@ -21,6 +22,20 @@ import * as constants from "./constants.ts";
 import { getOptions, requireTextEncoding, type FileOptions } from "./options.ts";
 
 export { Stats, Dirent, constants };
+
+// The callback surface, which shares this module's argument handling and its
+// errors: the work is the same system call and only the route back differs.
+export {
+  access, appendFile, chmod, chown, close, copyFile, exists, fdatasync, fstat,
+  fsync, ftruncate, link, lstat, mkdir, mkdtemp, open, read, readFile, readdir,
+  readlink, realpath, rename, rm, rmdir, stat, symlink, truncate, unlink,
+  utimes, write, writeFile,
+} from "./async.ts";
+
+// `fs.promises` and `node:fs/promises` are the same object.
+export * as promises from "./promises.ts";
+
+export { ReadStream, WriteStream, createReadStream, createWriteStream } from "./streams.ts";
 
 // -------------------------------------------------------------- the bindings
 

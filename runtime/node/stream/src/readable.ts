@@ -203,7 +203,7 @@ function howMuchToRead(n: number, state: ReadableState): number {
 
 export class Readable extends Stream {
   _readableState: ReadableState;
-  _construct?: (callback: (error?: unknown) => void) => void;
+  _construct?(callback: (error?: unknown) => void): void;
 
   constructor(options?: ReadableOptions) {
     super();

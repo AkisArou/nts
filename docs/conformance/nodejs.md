@@ -167,7 +167,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**425 of node's own test files pass** across sixteen modules, of which 15 are hollow.
+**469 of node's own test files pass** across sixteen modules, of which 15 are hollow.
 
 > **The `compiles` column is currently unverified.** The frontend decomposes
 > types under a fixed budget, and **thirteen of the sixteen modules here
@@ -203,8 +203,8 @@ constructs refused`, from `nts hir`.
 | `diagnostics_channel` | 23 / 45 | 0 | 7 / 141 | complete; the failures need node's own publishers |
 | `assert` | 9 / 19 | 0 | 14 / 236 | complete, including `CallTracker` and node's Myers diff |
 | `util` | 7 / 19 | 1 | 23 / 197 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `fs` | 11 / 212 | 2 | 31 / 236 | the sync surface; async, streams and watchers are absent |
-| `stream` | 150 / 195 | 2 | ? | the core is complete; `web`, `iter`, `consumers`, `compose` and `duplexify` are absent |
+| `fs` | 54 / 214 | 2 | ? | sync, callback and promise surfaces plus the file streams; watchers absent |
+| `stream` | 151 / 195 | 2 | ? | the core is complete; `web`, `iter`, `consumers`, `compose` and `duplexify` are absent |
 
 The first two columns are what
 
@@ -951,6 +951,47 @@ anything worker-related. Seventeen files spawn a real `node` and assert on what
 the child printed, and seven call `execve` successfully -- which does not fail
 the runner, it *ends* it, because the kernel loads another program over this
 one. Both sets are listed with reasons in `not-applicable`.
+
+## `fs`, the asynchronous half
+
+The callback surface, `fs/promises` with `FileHandle`, and
+`createReadStream`/`createWriteStream`. 54 of 214 applicable files pass, up
+from 11.
+
+The module's own header used to say the callback forms were absent because
+"they need an event loop and a thread pool to run the work on, and there is no
+point having `readFile(path, cb)` call `cb` before it returns". There is a loop
+now. Every async function here is the same system call as its `*Sync` twin,
+handed to the loop's thread pool instead of run on the calling thread — which
+is why the two share their argument handling and their errors.
+
+One binding per operation, mirroring `uv_fs_*`, rather than a single generic
+dispatch. The generic form would be less code and would have to name operations
+with strings, which moves a mistake the compiler could catch into a place where
+it becomes "no such operation" at run time.
+
+**The promise forms wrap the callback forms**, where node implements both
+directly on its binding. The only difference that makes is one microtask, which
+is what a promise costs anyway; a second implementation of the argument
+handling would be a second place for it to be wrong.
+
+`FileHandle` is the one place where the promise API is a different *design*
+rather than a different spelling. A file descriptor is an integer that means
+nothing on its own and that nothing will close for you; a handle carries its
+own operations, knows whether it is closed, and can be disposed. `close` is
+idempotent, because a handle closed by a `finally` and again by a `using`
+declaration is ordinary code and making the second throw would turn tidy
+cleanup into a failure.
+
+**The file streams wait for their own I/O before closing.** It is normally safe
+to close a descriptor with operations outstanding, but libuv implements file
+I/O with synchronous calls on a thread pool — so a descriptor closed during a
+pending read can be reused by the operating system before that read runs, and
+the read then succeeds against a different file. A destroyed stream waits for
+`kIoDone` before closing.
+
+Absent: `fs.watch` and `fs.watchFile`, which need the loop's file-watching
+handles; `opendir`; `cp`; and `glob`.
 
 ## `stream`
 

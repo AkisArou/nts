@@ -11,7 +11,11 @@ import { Writable } from "./writable.ts";
 import { Duplex } from "./duplex.ts";
 import { Transform } from "./transform.ts";
 import { PassThrough } from "./passthrough.ts";
-import { eos, finished } from "./end-of-stream.ts";
+// `stream.finished` is the *callback* form. The promise-returning one of the
+// same name lives in `stream/promises`, and exporting that here instead --
+// which this did -- makes `finished(stream, cb)` silently ignore the callback
+// and hand back a promise nobody awaits.
+import { eos as finished } from "./end-of-stream.ts";
 import { addAbortSignal } from "./add-abort-signal.ts";
 import { destroyer } from "./destroy.ts";
 import { from } from "./from.ts";
@@ -96,7 +100,6 @@ export {
   Transform,
   PassThrough,
   finished,
-  eos,
   pipeline,
   pipelineImpl,
   promises,
