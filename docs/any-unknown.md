@@ -4,29 +4,134 @@ Native TypeScript is a typed-first native compiler. It must preserve ordinary Ty
 
 The compiler therefore distinguishes **TypeScript's checker type** from the **runtime trust and representation** of a value.
 
+This document is the design contract. The current lowerer still refuses both
+`any` and `unknown`; the analysis described here has not been implemented yet.
+
 ## `any`
 
 `any` is not a Native TypeScript runtime type.
 
-It exists only in the TypeScript semantic frontend as an indication that the TypeScript checker has stopped providing type safety. No `any` type or generic dynamic-operation representation may reach MIR.
+It exists only in the TypeScript semantic frontend as an indication that the
+TypeScript checker has stopped providing type safety. No `any` type, unresolved
+representation variable, or generic dynamic operation may reach HIR or MIR.
 
 The compiler classifies reachable `any` values by provenance.
 
-### Application `any`
+### What the checker accepts
 
-Explicit or implicitly inferred `any` in reachable application code is rejected by default.
+Native TypeScript does not waive TypeScript errors. If the selected TypeScript
+configuration reports an implicit `any`, such as under `noImplicitAny: true`,
+the program fails before native representation analysis begins.
 
 ```ts
-let value: any; // error
+function omitted(value) { // TS7006 when noImplicitAny is enabled
+  return value;
+}
 ```
 
-This includes arbitrary property access, invocation, indexing, arithmetic, and other operations whose correctness depends only on TypeScript's `any` escape hatch.
+Every `any` that the TypeScript checker *does* accept may enter representation
+analysis. This includes:
+
+- explicit TypeScript `any`;
+- implicit TypeScript `any` when the project configuration permits it;
+- explicit JSDoc `any`;
+- implicit values in unannotated JavaScript;
+- `any` originating in `lib.*.d.ts`, `@types`, or another declaration file.
+
+The semantic snapshot keeps `TypeKind::Any`, because that is the checker's
+answer. Native TypeScript separately marks the runtime value as
+**`NeedsRepresentation`** and records its provenance. `NeedsRepresentation` is
+analysis state associated with a value, node, or symbol; it is not a source
+type and is never an HIR type.
+
+### Evidence is not a requirement
+
+The representation pass records two different things.
+
+**Evidence** says what a value can be: a literal, a concretely typed flow, a
+constructor result, a direct-call argument, a successful narrowing or checked
+assertion, or a trusted boundary materialization.
+
+**Requirements** say what an operation needs: the operand semantics of
+arithmetic, a property or element layout, a callable target and signature, an
+assignment or return ABI, container storage, equality, coercion, or truthiness.
+
+A requirement cannot prove itself. Multiplying an opaque result requires a
+number, but writing the multiplication does not prove that the result is one:
+
+```ts
+declare function load(): any;
+
+const value = load();
+const result = value * 2; // numeric requirement, no numeric evidence
+```
+
+This remains a diagnostic unless the declaration has trusted semantics, an
+assertion checks the boundary, or another reachable flow proves the value.
+
+By contrast, the direct caller supplies the missing evidence here:
+
+```ts
+function twice(value: any) {
+  return value * 2;
+}
+
+twice(21);
+```
+
+The literal supplies a numeric representation and `*` requires numeric
+semantics, so the function may lower as
+`twice(NumberRep) -> NumberRep`. The same rule applies when the annotation is
+JSDoc:
+
+```js
+/** @param {*} value */
+function twice(value) {
+  return value * 2;
+}
+
+twice(21);
+```
+
+TypeScript's permission to write an operation on `any` is never itself
+permission to emit a dynamic operation. Property access must resolve a receiver
+layout and member, a call must resolve a target and signature, and coercion must
+select semantics for the proven input representations. Otherwise compilation
+stops with a representation or operation diagnostic.
+
+### Polymorphic recovery
+
+Direct, statically known calls do not require one representation for every use
+of a source function:
+
+```js
+function identity(value) {
+  return value;
+}
+
+identity(42);
+identity("hello");
+```
+
+When the function does not escape, whole-program analysis may create internal
+`identity(NumberRep) -> NumberRep` and
+`identity(StringRef) -> StringRef` specializations. The source function's
+observable identity remains one; the specializations are compiler-owned call
+targets.
+
+A value crossing shared mutable storage, an exported open-world ABI, an
+escaping function, or an indirect call instead needs a compatible closed union,
+handle, or erased representation. If the selected representation does not also
+provide every operation the program performs, the program is refused. There is
+no fallback to a universal `any` value.
 
 ### Declaration-originated `any`
 
 Native TypeScript does not modify upstream `lib.*.d.ts`, `@types/node`, or third-party declarations merely to replace `any` with `unknown`.
 
-A value originating from an `any` declaration is instead tracked internally as **unchecked**.
+A value originating from an `any` declaration follows the same
+`NeedsRepresentation` flow, with declaration provenance retained for
+diagnostics and trusted-boundary lookup.
 
 For example:
 
@@ -34,16 +139,21 @@ For example:
 const value = JSON.parse(text);
 ```
 
-continues to have the ordinary TypeScript checker type `any`, but Native TypeScript separately records that the value has not yet acquired a statically safe executable representation.
+The expression continues to have the ordinary TypeScript checker type `any`, but Native
+TypeScript separately records that the value has not yet acquired a statically
+safe executable representation.
 
-Unchecked values may:
+Such values may:
 
 - be explicitly quarantined as `unknown`;
 - flow through operations whose semantics are known to Native TypeScript;
 - be asserted to a static type;
 - remain in erased type-only positions.
 
-They may not be used for unrestricted dynamic operations.
+They may not be used for unrestricted dynamic operations. Assigning one to a
+typed destination imposes a requirement; it does not prove that the source has
+the destination's representation. Analysis must prove compatibility or an
+explicit assertion must perform the required check.
 
 This allows Native TypeScript to consume the existing TypeScript ecosystem without redefining its declaration files or silently introducing dynamic JavaScript semantics.
 
@@ -78,6 +188,12 @@ const values: unknown[] = [];
 Such storage may have a representation cost, but it is valid source code.
 
 ## Runtime representation of `unknown`
+
+`unknown` and `NeedsRepresentation` share the same whole-program representation
+planner, but they do not have the same source-language semantics. `unknown` is
+safe and requires narrowing before concrete operations. Checker-accepted `any`
+allows those operations syntactically, so Native TypeScript must legalize each
+one from independent representation evidence before lowering it.
 
 `unknown` does not imply one universal boxed representation.
 
@@ -352,13 +468,19 @@ No secondary runtime type DSL is required.
 The intended model is:
 
 ```text
-any
+checker-accepted any
     ↓
 frontend-only unchecked provenance
     ↓
-must be quarantined, asserted, or eliminated
+NeedsRepresentation
     ↓
-never reaches MIR
+representation evidence + operation requirements
+    ├── proven
+    │       → concrete specialization / supported union / handle
+    └── unresolved
+            → diagnostic
+    ↓
+never reaches HIR or MIR as any
 
 
 unknown
@@ -386,4 +508,8 @@ as T
 
 The guiding principle is:
 
-> `any` is a loss of static trust, not a native value type. `unknown` is a safe erased type, not a dynamic language. Assertions establish a native representation; trusted data boundaries may be specialized so that generic intermediate values never need to exist.
+> `any` is a loss of static trust, not a native value type. It may enter
+> representation recovery, but neither its representation nor its operations
+> are trusted. `unknown` is a safe top type, not a dynamic language. Assertions
+> establish a native representation; trusted data boundaries may be specialized
+> so that generic intermediate values never need to exist.
