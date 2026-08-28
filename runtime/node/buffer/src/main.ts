@@ -83,11 +83,38 @@ function checkBytes(value: unknown, name: string): asserts value is Uint8Array {
   }
 }
 
-function checkByteLength(byteLength: number): number {
-  if (!Number.isInteger(byteLength) || byteLength < 1 || byteLength > 6) {
-    throw new ERR_OUT_OF_RANGE("byteLength", ">= 1 and <= 6", byteLength);
+/**
+ * The one place a bad index is reported, upstream `boundsError`.
+ *
+ * Three errors, and the distinctions are what a caller needs. Not a number at
+ * all: the wrong kind of argument. A number that is not an integer: the right
+ * kind, wrong value, and no range worth quoting because none of it is legal.
+ * An integer past the end: the right kind and the range is useful. And a
+ * negative `length` means the buffer is too short for the access at any
+ * offset, so there is no legal offset to suggest and the buffer is what is
+ * wrong.
+ *
+ * `type` names the argument; without one it is an offset, whose range starts
+ * at 0 where a `byteLength`'s starts at 1.
+ */
+function boundsError(value: number, length: number, type?: string): never {
+  if (Math.floor(value) !== value) {
+    if (typeof value !== "number") {
+      throw new ERR_INVALID_ARG_TYPE(type ?? "offset", "number", value);
+    }
+    throw new ERR_OUT_OF_RANGE(type ?? "offset", "an integer", value);
   }
-  return byteLength;
+  if (length < 0) {
+    throw new ERR_BUFFER_OUT_OF_BOUNDS();
+  }
+  throw new ERR_OUT_OF_RANGE(type ?? "offset", `>= ${type ? 1 : 0} and <= ${length}`, value);
+}
+
+function checkByteLength(byteLength: number): number {
+  if (byteLength >= 1 && byteLength <= 6 && Number.isInteger(byteLength)) {
+    return byteLength;
+  }
+  boundsError(byteLength, 6, "byteLength");
 }
 
 export class Buffer extends Uint8Array {
@@ -588,18 +615,7 @@ export class Buffer extends Uint8Array {
     if (offset >= 0 && offset <= last && Number.isInteger(offset)) {
       return offset;
     }
-    if (typeof offset !== "number") {
-      throw new ERR_INVALID_ARG_TYPE("offset", "number", offset);
-    }
-    if (!Number.isInteger(offset)) {
-      throw new ERR_OUT_OF_RANGE("offset", "an integer", offset);
-    }
-    if (last < 0) {
-      throw new ERR_BUFFER_OUT_OF_BOUNDS();
-    }
-    // `and`, not `&&`: node spells this range differently from the ones its
-    // validators produce, and its tests compare the text.
-    throw new ERR_OUT_OF_RANGE("offset", `>= 0 and <= ${last}`, offset);
+    boundsError(offset, last);
   }
 
   /**
@@ -611,7 +627,11 @@ export class Buffer extends Uint8Array {
   private checkInt(value: number, min: number, max: number, offset: number, size: number): number {
     if (value > max || value < min) {
       let range: string;
-      if (size > 3) {
+      // Node's own check takes the *last byte index* rather than the width, so
+      // its threshold of 3 is a width of 4. A four-byte range is still short
+      // enough to write out; past that `< 2 ** 48` reads and
+      // `<= 281474976710655` does not.
+      if (size > 4) {
         range = min === 0
           ? `>= 0 and < 2 ** ${size * 8}`
           : `>= -(2 ** ${size * 8 - 1}) and < 2 ** ${size * 8 - 1}`;
@@ -685,39 +705,48 @@ export class Buffer extends Uint8Array {
   }
 
   writeUInt8(value: number, offset = 0): number {
-    const at = this.at8(offset, 1);
+    const at = this.checkInt(value, 0, 0xff, offset, 1);
     this[at] = value & 0xff;
     return at + 1;
   }
 
   writeInt8(value: number, offset = 0): number {
-    return this.writeUInt8(value, offset);
+    this.checkInt(value, -0x80, 0x7f, offset, 1);
+    // Two's complement before delegating: the unsigned write checks its
+    // own range, and a negative would fail a check it was never meant for.
+    return this.writeUInt8(value < 0 ? value + 0x100 : value, offset);
   }
 
   writeUInt16LE(value: number, offset = 0): number {
-    const at = this.at8(offset, 2);
+    const at = this.checkInt(value, 0, 0xffff, offset, 2);
     this[at] = value & 0xff;
     this[at + 1] = (value >>> 8) & 0xff;
     return at + 2;
   }
 
   writeUInt16BE(value: number, offset = 0): number {
-    const at = this.at8(offset, 2);
+    const at = this.checkInt(value, 0, 0xffff, offset, 2);
     this[at] = (value >>> 8) & 0xff;
     this[at + 1] = value & 0xff;
     return at + 2;
   }
 
   writeInt16LE(value: number, offset = 0): number {
-    return this.writeUInt16LE(value, offset);
+    this.checkInt(value, -0x8000, 0x7fff, offset, 2);
+    // Two's complement before delegating: the unsigned write checks its
+    // own range, and a negative would fail a check it was never meant for.
+    return this.writeUInt16LE(value < 0 ? value + 0x10000 : value, offset);
   }
 
   writeInt16BE(value: number, offset = 0): number {
-    return this.writeUInt16BE(value, offset);
+    this.checkInt(value, -0x8000, 0x7fff, offset, 2);
+    // Two's complement before delegating: the unsigned write checks its
+    // own range, and a negative would fail a check it was never meant for.
+    return this.writeUInt16BE(value < 0 ? value + 0x10000 : value, offset);
   }
 
   writeUInt32LE(value: number, offset = 0): number {
-    const at = this.at8(offset, 4);
+    const at = this.checkInt(value, 0, 0xffffffff, offset, 4);
     this[at] = value & 0xff;
     this[at + 1] = (value >>> 8) & 0xff;
     this[at + 2] = (value >>> 16) & 0xff;
@@ -726,7 +755,7 @@ export class Buffer extends Uint8Array {
   }
 
   writeUInt32BE(value: number, offset = 0): number {
-    const at = this.at8(offset, 4);
+    const at = this.checkInt(value, 0, 0xffffffff, offset, 4);
     this[at] = (value >>> 24) & 0xff;
     this[at + 1] = (value >>> 16) & 0xff;
     this[at + 2] = (value >>> 8) & 0xff;
@@ -735,11 +764,17 @@ export class Buffer extends Uint8Array {
   }
 
   writeInt32LE(value: number, offset = 0): number {
-    return this.writeUInt32LE(value, offset);
+    this.checkInt(value, -0x80000000, 0x7fffffff, offset, 4);
+    // Two's complement before delegating: the unsigned write checks its
+    // own range, and a negative would fail a check it was never meant for.
+    return this.writeUInt32LE(value < 0 ? value + 0x100000000 : value, offset);
   }
 
   writeInt32BE(value: number, offset = 0): number {
-    return this.writeUInt32BE(value, offset);
+    this.checkInt(value, -0x80000000, 0x7fffffff, offset, 4);
+    // Two's complement before delegating: the unsigned write checks its
+    // own range, and a negative would fail a check it was never meant for.
+    return this.writeUInt32BE(value < 0 ? value + 0x100000000 : value, offset);
   }
 
   // Floats go through a one-element typed array, because reproducing IEEE-754

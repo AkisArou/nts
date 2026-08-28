@@ -54,7 +54,7 @@ real `node` child — those assert on node's binary, which our module is not in.
 Each exclusion is listed with a reason in the module's `not-applicable` file
 rather than inferred by a rule, so the number can be audited.
 
-**170 of node's own test files pass** across thirteen modules, of which 9 are hollow. The per-module
+**178 of node's own test files pass** across thirteen modules, of which 9 are hollow. The per-module
 counts below are `passed / applicable`; `compiles` is `functions lowered /
 constructs refused`, from `nts hir`.
 
@@ -68,7 +68,7 @@ constructs refused`, from `nts hir`.
 | `events` | **28 / 33** | 1 | 6 / 142 | complete but for domains, `EventTarget` and the promise forms |
 | `url` | 26 / 36 | 1 | 30 / 364 | complete; exact on the Web Platform Tests corpus |
 | `diagnostics_channel` | 23 / 45 | 0 | 3 / 135 | complete; the failures need node's own publishers |
-| `buffer` | 18 / 60 | 1 | 6 / 186 | the read/write family is complete; the argument validation is not |
+| `buffer` | 26 / 60 | 1 | 6 / 186 | the read/write surface is complete and validated |
 | `assert` | 9 / 19 | 0 | 7 / 230 | complete, including `CallTracker` and node's Myers diff |
 | `fs` | 11 / 212 | 2 | 30 / 222 | the sync surface; async, streams and watchers are absent |
 | `util` | 7 / 18 | 1 | 12 / 196 | `inspect`, `format`, `types`, the comparisons and the helpers |
@@ -272,7 +272,7 @@ accepted anywhere bytes are, and it is what node does.
 | searching | `indexOf`, `lastIndexOf`, `includes` |
 | other | `copy`, `slice`, `subarray`, `fill`, `swap16`/`32`/`64`, `byteLength`, `isBuffer`, `isEncoding`, `isUtf8`, `isAscii`, `atob`, `btoa`, `constants` |
 
-18 of 60 applicable files pass. Two are not applicable: they need
+26 of 60 applicable files pass. Two are not applicable: they need
 `--allow-natives-syntax` to drive V8's optimiser, which is a question about V8
 rather than about `node:buffer`.
 
@@ -302,7 +302,22 @@ Bounds errors are node's three, which are three because the distinctions
 matter: a non-integer offset is a mistake about the argument, an offset past
 the end is a mistake about the range, and a buffer too short for the access at
 all is neither -- there is no legal offset to suggest, so it reports
-`ERR_BUFFER_OUT_OF_BOUNDS` against the buffer rather than the argument.
+`ERR_BUFFER_OUT_OF_BOUNDS` against the buffer rather than the argument. One
+`boundsError` reports all three and every accessor routes through it, which is
+node's structure; writing the three cases out twice is how the `byteLength`
+argument came to report a range error for a caller who had passed a string.
+
+Every write bounds its value as well as its offset, and the range is spelled
+the way node spells it: `>= 0 and <= 65535` up to four bytes and
+`>= 0 and < 2 ** 48` past that, because a six-byte maximum written out is a
+number nobody reads. The threshold is a width of four and it took a
+differential run to find -- node's own check takes the *last byte index* rather
+than the width, so its `> 3` is my `> 4`.
+
+**348 write cases agree with node**, across every fixed and variable width, at
+each type's minimum and maximum and one past each: the boundary values are the
+whole point, since a write that is right in the middle of its range is right in
+any implementation.
 
 `kMaxLength` was wrong: 2**32 - 1 where node reports 2**53 - 1 on a 64-bit
 build. It is not an amount of memory anyone has; it is the largest integer a
