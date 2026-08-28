@@ -1,7 +1,7 @@
 // Every module, both modes, as the table the conformance doc carries.
 //
 //   node tooling/conformance/sweep.mjs [--modules a,b,c] [--no-sabotage]
-//                                     [--compiles]
+//                                     [--compiles] [--no-tests]
 //
 // Two reasons this exists rather than thirteen invocations typed by hand.
 //
@@ -9,6 +9,16 @@
 // hand-copied, and a hand-copied number is a claim nobody can check -- which is
 // the same failure as a measurement that cannot go red, one level up. The rows
 // this prints are the rows that belong in the document.
+//
+// `--compiles --no-tests` is the compiler axis alone, in seconds rather than
+// minutes. It exists for the other side of this project: their corpus is
+// TypeScript's own test suite, which is single-file by construction, so a rule
+// about the relationship *between* modules has nowhere to appear in it. Three
+// separate compiler bugs have been found here and not there for that reason --
+// a name collision across two files, calls to imported functions, and the
+// evaluation order of a second module's top-level statements. This profile is
+// thirteen real multi-module programs sharing an `internal/`, so pointing the
+// compiler at it is a standing test of a dimension the corpus does not have.
 //
 // `--compiles` adds the other axis: `nts hir` per module, lowered and refused.
 // It is off by default because it is slow, and it exists because a change to
@@ -39,6 +49,7 @@ const arg = (name) => {
 };
 const withSabotage = !argv.includes("--no-sabotage");
 const withCompiles = argv.includes("--compiles");
+const withTests = !argv.includes("--no-tests");
 
 const requested = arg("--modules");
 const modules = requested
@@ -99,30 +110,40 @@ let totalHollow = 0;
 
 for (const module of modules) {
   const started = Date.now();
-  const real = run(module, false);
+  const real = withTests ? run(module, false) : { pass: 0, fail: 0 };
   if (real === null) {
     console.error(`  ${module}: the runner produced nothing`);
     continue;
   }
-  const hollow = withSabotage ? run(module, true)?.pass ?? null : null;
+  const hollow = withTests && withSabotage ? run(module, true)?.pass ?? null : null;
   const lowering = withCompiles ? compiles(module) : null;
   const applicable = real.pass + real.fail;
   totalPass += real.pass;
   if (hollow !== null) totalHollow += hollow;
   rows.push({ module, pass: real.pass, applicable, hollow, lowering });
   process.stderr.write(
-    `  ${module.padEnd(22)} ${String(real.pass).padStart(3)} / ${String(applicable).padEnd(4)}` +
-      `${hollow === null ? "" : ` hollow ${hollow}`}` +
-      `  (${((Date.now() - started) / 1000).toFixed(0)}s)\n`,
+    withTests
+      ? `  ${module.padEnd(22)} ${String(real.pass).padStart(3)} / ${String(applicable).padEnd(4)}` +
+        `${hollow === null ? "" : ` hollow ${hollow}`}` +
+        `  (${((Date.now() - started) / 1000).toFixed(0)}s)\n`
+      : `  ${module.padEnd(22)} ${lowering ? `${lowering.lowered} lowered, ${lowering.refused} refused` : "no compiler"}\n`,
   );
 }
 
 // Best first, as the document orders them: a reader wants the finished modules
 // at the top and the ones with the most left to do at the bottom.
-rows.sort((a, b) => (b.pass / (b.applicable || 1)) - (a.pass / (a.applicable || 1)));
+rows.sort((a, b) =>
+  withTests
+    ? (b.pass / (b.applicable || 1)) - (a.pass / (a.applicable || 1))
+    : (b.lowering?.lowered ?? 0) - (a.lowering?.lowered ?? 0));
 
-console.log(`\n| module | node's tests | hollow |${withCompiles ? " compiles |" : ""}`);
-console.log(`| --- | :---: | :---: |${withCompiles ? " :---: |" : ""}`);
+if (withTests) {
+  console.log(`\n| module | node's tests | hollow |${withCompiles ? " compiles |" : ""}`);
+  console.log(`| --- | :---: | :---: |${withCompiles ? " :---: |" : ""}`);
+} else {
+  console.log(`\n| module | lowered / refused |`);
+  console.log(`| --- | :---: |`);
+}
 let totalLowered = 0;
 for (const { module, pass, applicable, hollow, lowering } of rows) {
   const complete = applicable > 0 && pass === applicable;
@@ -130,13 +151,17 @@ for (const { module, pass, applicable, hollow, lowering } of rows) {
   const compiled = lowering ? `${lowering.lowered} / ${lowering.refused}` : "—";
   if (lowering) totalLowered += lowering.lowered;
   console.log(
-    `| \`${module}\` | ${count} | ${hollow ?? "—"} |${withCompiles ? ` ${compiled} |` : ""}`,
+    withTests
+      ? `| \`${module}\` | ${count} | ${hollow ?? "—"} |${withCompiles ? ` ${compiled} |` : ""}`
+      : `| \`${module}\` | ${compiled} |`,
   );
 }
-console.log(
-  `\n${totalPass} of node's own test files pass across ${rows.length} modules` +
-    (withSabotage ? `, of which ${totalHollow} are hollow.` : "."),
-);
+if (withTests) {
+  console.log(
+    `\n${totalPass} of node's own test files pass across ${rows.length} modules` +
+      (withSabotage ? `, of which ${totalHollow} are hollow.` : "."),
+  );
+}
 if (withCompiles) {
   console.log(`${totalLowered} functions lower.`);
 }
