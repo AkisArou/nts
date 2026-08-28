@@ -858,6 +858,24 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     }
 
     canonicalize_objects(&mut lowered.program);
+    // The conservation law, enforced rather than merely measured: every
+    // function the checker knows about is either lowered or refused, and never
+    // neither. `super::unaccounted` explains why that is worth asking; this is
+    // what happens when the answer is no.
+    //
+    // A construct marked "not done" has to be *refused*. Several were silently
+    // absent instead — a method of a class expression is the clearest, since
+    // nothing walks a class expression at all — and a function that vanishes
+    // takes its callers' correctness with it while the compiler reports
+    // success.
+    for location in super::unaccounted(snapshot, &lowered.program, &lowered.diagnostics) {
+        lowered.diagnostics.push(Diagnostic::error(
+            "NTS1001",
+            "a function declaration outside every walk".to_owned(),
+            location,
+        ));
+    }
+
     lowered
 }
 
@@ -2024,13 +2042,19 @@ impl<'a> FuncBuilder<'a> {
                 Some(ty) => HirType::Managed(ManagedType::Object(ty)),
                 None => self
                     .type_of(class)
-                    .ok_or_else(|| self.unrepresentable(class, "a class"))?,
+                    .ok_or_else(|| self.unrepresentable(member, "a class"))?,
             };
             // `this` is a parameter like any other and needs its layout to
             // exist. Nothing else builds it for a class nothing constructs --
             // an abstract base whose only role is to be extended is exactly
             // that.
-            self.materialize(class, &instance)?;
+            //
+            // Reported against the *member*, not the class. The failure is
+            // about the class's layout and the thing being refused is this
+            // method, so pointing at the class gave one identical diagnostic
+            // per method at the same line -- and left each method looking as
+            // though nothing had been said about it at all.
+            self.materialize(member, &instance)?;
             let receiver = self.push(OpKind::Param(0), instance.clone(), origin.clone());
             self.this = Some(receiver);
             self.base = self.base_class(class);

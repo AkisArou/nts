@@ -249,9 +249,29 @@ does not compile, and in every case **the compiler reports success**. A construc
 that fails quietly never enters the refusal histogram, so it never enters the
 work queue either — which is how each of these survived.
 
-**The table is empty.** Every defect recorded here has been fixed; the section
-stays because the *class* of failure has not gone away, and the next one will go
-here. What they had in common is worth keeping: each was a construct that
+**The table is empty**, and there is now a machine that looks for the next one.
+
+Every defect here had the same shape — a construct that compiled to nothing, or
+to a link error, while the compiler reported success — and each was found by a
+person tripping over it. The Node session's suggestion turns that into a rule
+worth checking: **every function the checker knows about is either lowered or
+refused, and never neither.** It says nothing about whether the answer is right,
+only whether anything *vanished*, and it is checkable from data the compiler
+already produces.
+
+`hir::unaccounted` asks it, and `hir::lower` enforces it: a function declaration
+neither walk reached is refused rather than dropped. On its first run over the
+corpus it found fourteen files, in constructs marked "not done" that were being
+silently skipped rather than refused — a method of a class *expression* is the
+clearest, since nothing walks a class expression at all.
+
+It also found a diagnostic filed against the wrong node. A method whose receiver
+layout fails was reported at the *class*, so a class with four bad methods gave
+four identical refusals on line 1 and none inside any method. Fixed; that was
+nine of the fourteen.
+
+The section stays because the class of failure has not gone away, and the next
+one will go here. What they had in common is worth keeping: each was a construct that
 compiled to nothing, or to a link error, while this compiler reported success —
 so none of them ever entered the refusal histogram, and none entered the work
 queue.

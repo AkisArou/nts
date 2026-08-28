@@ -935,6 +935,82 @@ pub struct Prepared {
 /// only because something checked it, and specialization rewrites types and
 /// inserts operations — so it has to earn that trust again rather than inherit
 /// it from the lowering.
+/// Function declarations the lowering neither emitted nor refused.
+///
+/// A conservation law, suggested by the Node session: **every function the
+/// checker knows about is either lowered or refused, and never neither.** It
+/// asks nothing about whether the answer is right, only whether anything
+/// vanished — which is exactly what every defect in the known-defects table
+/// did. An object-literal method was neither lowered nor refused. A namespace
+/// member was lowered under a name that collided with another's, so one of the
+/// two vanished at link time. `isNaN` was lowered into a call to a definition
+/// that does not exist.
+///
+/// Each of those was found by someone tripping over it. This is checkable from
+/// data the compiler already produces, over every file in the corpus, without
+/// anyone thinking to look at object literals.
+///
+/// Attribution is by span containment rather than by name, because a name is
+/// exactly what a generic instantiation and a namespace member change.
+///
+/// # What it does not cover
+///
+/// Arrow functions and function expressions. Those become closures, or are
+/// desugared away entirely — `xs.forEach(v => …)` is compiled as the loop it
+/// is, and a rule that expected a function for it would report the optimization
+/// as a loss.
+#[must_use]
+pub fn unaccounted(
+    snapshot: &SemanticSnapshot,
+    program: &Program,
+    diagnostics: &[nts_diagnostics::Diagnostic],
+) -> Vec<nts_diagnostics::Location> {
+    use nts_semantic_schema::{NodeKind, syntax};
+
+    let within = |outer: &nts_diagnostics::Location, inner: &nts_diagnostics::Location| {
+        outer.file == inner.file
+            && inner.span.start >= outer.span.start
+            && inner.span.end <= outer.span.end
+    };
+
+    let mut missing = Vec::new();
+    for node in &snapshot.nodes {
+        let NodeKind::Syntax(kind) = node.kind else {
+            continue;
+        };
+        if !matches!(
+            kind,
+            syntax::FUNCTION_DECLARATION | syntax::METHOD_DECLARATION | syntax::CONSTRUCTOR
+        ) {
+            continue;
+        }
+        // No body: an overload signature, or an ambient declaration whose
+        // definition is somewhere else. There is nothing to emit and nothing to
+        // refuse.
+        let has_body = node.children.iter().any(|child| {
+            matches!(
+                snapshot.nodes.get(child.0 as usize).map(|child| child.kind),
+                Some(NodeKind::Syntax(syntax::BLOCK))
+            )
+        });
+        if !has_body {
+            continue;
+        }
+        let here = node.origin.location;
+        let emitted = program
+            .funcs
+            .iter()
+            .any(|func| within(&here, &func.origin.location));
+        let refused = diagnostics
+            .iter()
+            .any(|diagnostic| within(&here, &diagnostic.primary));
+        if !emitted && !refused {
+            missing.push(here);
+        }
+    }
+    missing
+}
+
 pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Vec<verify::Invalid>> {
     prepare_with(snapshot, &Options::default())
 }

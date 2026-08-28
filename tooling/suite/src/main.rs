@@ -242,6 +242,12 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         // share whatever state a pathological input leaves behind, and the
         // point of a corpus is that some of these inputs are pathological.
         let mut source = TsgoApi::for_compilation(tsgo.clone());
+        // The conservation law is enforced in the lowering rather than measured
+        // here: `hir::lower` refuses every function neither walk reached, which
+        // is why it shows up as an ordinary refusal in the histogram. Asking
+        // again at *this* point would be wrong -- `prepare` has run dead-code
+        // elimination by now, and a function that was lowered and then
+        // legitimately removed looks exactly like one that vanished.
         let outcome = match source.snapshot(&tsconfig) {
             Err(error) => Outcome::Failed(error.to_string()),
             Ok(snapshot) if snapshot.has_errors() => Outcome::Rejected,

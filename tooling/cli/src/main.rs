@@ -369,7 +369,14 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     }
 
     for diagnostic in &diagnostics {
-        println!("  -- {} {}", diagnostic.code, diagnostic.message);
+        // With its location. A refusal without one is a scavenger hunt, and
+        // `where_it_is` already existed for the other subcommands.
+        println!(
+            "  -- {} {} {}",
+            where_it_is(&snapshot, &diagnostic.primary),
+            diagnostic.code,
+            diagnostic.message
+        );
     }
     println!(
         "\n{} function(s), {}",
