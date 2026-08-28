@@ -649,6 +649,149 @@ export class ERR_INVALID_ARG_VALUE_RANGE extends NodeRangeError {
   }
 }
 
+/** A callback that was already called, called again. */
+export class ERR_MULTIPLE_CALLBACK extends NodeError {
+  override readonly code = "ERR_MULTIPLE_CALLBACK";
+
+  constructor() {
+    super("Callback called multiple times");
+    this.name = "Error";
+  }
+}
+
+/**
+ * Two errors where one is expected.
+ *
+ * A stream can fail twice -- once in its own `_destroy` and once in what it
+ * was destroying because of -- and the caller is given one `error`. Dropping
+ * either loses the one that explains the other, so both are kept: an
+ * `AggregateError` carrying the outer error's message and code, so a program
+ * matching on `err.code` still matches while `err.errors` has the detail.
+ *
+ * Already-aggregated errors accumulate rather than nest, or a chain of five
+ * failures would be five levels deep for no gain.
+ */
+export function aggregateTwoErrors(inner: unknown, outer: unknown): unknown {
+  if (inner && outer && inner !== outer) {
+    const outerError = outer as { errors?: unknown[]; message?: string; code?: string };
+    if (Array.isArray(outerError.errors)) {
+      outerError.errors.push(inner);
+      return outer;
+    }
+    const aggregate = new AggregateError([outer, inner], outerError.message) as Error & {
+      code?: string;
+    };
+    aggregate.code = outerError.code;
+    captureStackTrace(aggregate, aggregateTwoErrors);
+    return aggregate;
+  }
+  return inner || outer;
+}
+
+// The stream errors. Node keeps these in one table with a printf-style
+// template; here each is a class, so the arguments a message needs are the
+// constructor's parameters and cannot be forgotten at a call site.
+
+/** A subclass did not provide a method the base class requires. */
+export class ERR_METHOD_NOT_IMPLEMENTED extends NodeError {
+  override readonly code = "ERR_METHOD_NOT_IMPLEMENTED";
+
+  constructor(name: string) {
+    super(`The ${name} method is not implemented`);
+    this.name = "Error";
+  }
+}
+
+/** `Cannot pipe, not readable`. A `Writable` inherits `pipe` and refuses it. */
+export class ERR_STREAM_CANNOT_PIPE extends NodeError {
+  override readonly code = "ERR_STREAM_CANNOT_PIPE";
+
+  constructor() {
+    super("Cannot pipe, not readable");
+    this.name = "Error";
+  }
+}
+
+export class ERR_STREAM_DESTROYED extends NodeError {
+  override readonly code = "ERR_STREAM_DESTROYED";
+
+  constructor(name: string) {
+    super(`Cannot call ${name} after a stream was destroyed`);
+    this.name = "Error";
+  }
+}
+
+export class ERR_STREAM_ALREADY_FINISHED extends NodeError {
+  override readonly code = "ERR_STREAM_ALREADY_FINISHED";
+
+  constructor(name: string) {
+    super(`Cannot call ${name} after a stream was finished`);
+    this.name = "Error";
+  }
+}
+
+/**
+ * `May not write null values to stream`.
+ *
+ * A `TypeError` rather than an `Error`, because `null` is the end-of-stream
+ * marker on the readable side and writing it is a category mistake rather than
+ * a runtime condition.
+ */
+export class ERR_STREAM_NULL_VALUES extends NodeTypeError {
+  override readonly code = "ERR_STREAM_NULL_VALUES";
+
+  constructor() {
+    super("May not write null values to stream");
+    this.name = "TypeError";
+  }
+}
+
+export class ERR_STREAM_WRITE_AFTER_END extends NodeError {
+  override readonly code = "ERR_STREAM_WRITE_AFTER_END";
+
+  constructor() {
+    super("write after end");
+    this.name = "Error";
+  }
+}
+
+/** The stream closed before it said it was done. */
+export class ERR_STREAM_PREMATURE_CLOSE extends NodeError {
+  override readonly code = "ERR_STREAM_PREMATURE_CLOSE";
+
+  constructor() {
+    super("Premature close");
+    this.name = "Error";
+  }
+}
+
+export class ERR_STREAM_PUSH_AFTER_EOF extends NodeError {
+  override readonly code = "ERR_STREAM_PUSH_AFTER_EOF";
+
+  constructor() {
+    super("stream.push() after EOF");
+    this.name = "Error";
+  }
+}
+
+export class ERR_STREAM_UNSHIFT_AFTER_END_EVENT extends NodeError {
+  override readonly code = "ERR_STREAM_UNSHIFT_AFTER_END_EVENT";
+
+  constructor() {
+    super("stream.unshift() after end event");
+    this.name = "Error";
+  }
+}
+
+export class ERR_STREAM_UNABLE_TO_PIPE extends NodeError {
+  override readonly code = "ERR_STREAM_UNABLE_TO_PIPE";
+
+  constructor() {
+    super("Cannot pipe to a closed or destroyed stream");
+    this.name = "Error";
+  }
+}
+
 export class ERR_INVALID_THIS extends NodeTypeError {
   override readonly code = "ERR_INVALID_THIS";
 

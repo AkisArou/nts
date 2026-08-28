@@ -167,7 +167,20 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**280 of node's own test files pass** across fifteen modules, of which 13 are hollow. The per-module
+**425 of node's own test files pass** across sixteen modules, of which 15 are hollow.
+
+> **The `compiles` column is currently unverified.** The frontend decomposes
+> types under a fixed budget, and at least one module in this profile exhausts
+> it — after which the type graph is partial and the refusals that follow name
+> constructs that may not be the actual cause. Which types survive the cutoff
+> depends on ordering, so the numbers move when anything upstream changes and
+> they move by *permutation* rather than by an offset. A bisect over one module
+> produced 12, 21, 27 and 7 lowered functions from four combinations of two
+> unrelated edits; none of the four was the real answer. The numbers below are
+> left as they were last taken rather than refreshed, because a fresher
+> arbitrary number is not an improvement. They will be re-derived once the
+> frontend seeds decomposition from the reachable set. Nothing else in this
+> document depends on them. The per-module
 counts below are `passed / applicable`; `compiles` is `functions lowered /
 constructs refused`, from `nts hir`.
 
@@ -188,7 +201,7 @@ constructs refused`, from `nts hir`.
 | `assert` | 9 / 19 | 0 | 14 / 236 | complete, including `CallTracker` and node's Myers diff |
 | `util` | 7 / 19 | 1 | 23 / 197 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `fs` | 11 / 212 | 2 | 31 / 236 | the sync surface; async, streams and watchers are absent |
-| `stream` | — | — | — | not started |
+| `stream` | 145 / 195 | 2 | ? | the core is complete; `web`, `iter`, `consumers`, `compose` and `duplexify` are absent |
 
 The first two columns are what
 
@@ -936,6 +949,53 @@ the child printed, and seven call `execve` successfully -- which does not fail
 the runner, it *ends* it, because the kernel loads another program over this
 one. Both sets are listed with reasons in `not-applicable`.
 
+## `stream`
+
+The largest module in node's library — 7,763 lines across `lib/stream.js` and
+`lib/internal/streams/*` — and the one everything else is built on. 145 of 195
+applicable files pass, 2 of them hollow; 49 skip.
+
+Written: `Stream` and its legacy `pipe`, `Readable`, `Writable`, `Duplex`,
+`Transform`, `PassThrough`, `pipeline`, `end-of-stream`, `add-abort-signal`,
+`destroy`, the high-water-mark rules, the predicates, `Readable.from`, the
+async iterator, the iterator helpers (`map`, `filter`, `flatMap`, `drop`,
+`take`, `reduce`, `toArray`, `some`, `every`, `find`, `forEach`) and
+`stream/promises`.
+
+**The bit-packed state is not reproduced, and that is a decision rather than a
+shortcut.** Node stores about thirty booleans per stream side in a single
+integer under a private symbol, with generated accessors over the bits. That is
+a workaround for V8, where every field is a slot and a differently-ordered
+assignment produces a different hidden class. A compiler that lays objects out
+as flat structs with fixed offsets gets nothing from the packing and pays for
+it in readability, so the state here is ordinary named fields. Every predicate
+reads the same property names either way, and the interop symbols — which node
+registers with `Symbol.for` so that a bundled copy of `readable-stream` can
+read node's state — are preserved exactly.
+
+Three things in this module are worth knowing before reading it:
+
+- **`write` returning `false` is advice, not refusal.** The chunk was accepted.
+  A producer that ignores it will buffer without limit, which is why the
+  failure mode of getting backpressure wrong is memory rather than an
+  exception.
+- **Adding a listener changes the stream.** A `data` listener switches a
+  readable from paused to flowing; a `readable` listener switches it back.
+  This is the documented behaviour and it surprises everyone.
+- **`pipeline` exists because `pipe` leaks.** `a.pipe(b).pipe(c)` does not
+  propagate failure: if `b` fails, `a` is never told and keeps reading. Every
+  joint needs that bookkeeping and `pipeline` is it, done once.
+
+`Transform` is where the two halves meet, and its trick is worth naming: to
+stop an inflating transform from turning a 4 MB write into an out-of-memory, it
+holds the *write callback* rather than the data. One chunk goes through, and if
+the readable side is now full the callback that would admit the next chunk is
+kept until somebody reads.
+
+Absent: `stream/web` (the WHATWG streams, a different API family),
+`stream/consumers`, `stream/iter`, `compose` and `duplexify`. The 40 files
+needing `stream/iter` are its broadcast helpers, added in a recent node.
+
 ## `fs`
 
 The synchronous surface, from node v24.20.0 `lib/fs.js`: `statSync`,
@@ -978,6 +1038,12 @@ ENOENT: no such file or directory, stat '/nope/x'
 ```
 
 ## What stops all of it compiling
+
+> Counted before the type-decomposition budget was known to be exhausted for at
+> least one module in this profile. A refusal from a module with a truncated
+> type graph names a construct that may be a consequence of the truncation
+> rather than its cause, so the causes below are a starting point rather than a
+> measurement. See the note under *Modules*.
 
 Every module together, ranked — a work queue ordered by how much of the Node
 surface each item unblocks, rather than by how often it appears in a corpus of
@@ -1175,6 +1241,12 @@ by a use that is not in `console`.
 
 ## What stops `path` compiling
 
+> Counted before the type-decomposition budget was known to be exhausted for at
+> least one module in this profile. A refusal from a module with a truncated
+> type graph names a construct that may be a consequence of the truncation
+> rather than its cause, so the causes below are a starting point rather than a
+> measurement. See the note under *Modules*.
+
 `nts hir` refuses 38 constructs and lowers 1 function. Ranked, and every one of
 them is in [`typescript.md`](typescript.md) as a language feature rather than
 anything specific to Node:
@@ -1193,6 +1265,12 @@ None of these is a design question. They are the ordinary language, and the
 module compiles unchanged when they arrive.
 
 ## What stops `os` compiling
+
+> Counted before the type-decomposition budget was known to be exhausted for at
+> least one module in this profile. A refusal from a module with a truncated
+> type graph names a construct that may be a consequence of the truncation
+> rather than its cause, so the causes below are a starting point rather than a
+> measurement. See the note under *Modules*.
 
 16 of 31 functions lower. The rest:
 
