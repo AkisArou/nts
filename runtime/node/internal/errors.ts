@@ -504,3 +504,71 @@ export class ERR_INVALID_STATE extends NodeError {
     this.name = "Error";
   }
 }
+
+/** `Invalid URL` — the input could not be parsed as one. */
+export class ERR_INVALID_URL extends NodeTypeError {
+  override readonly code = "ERR_INVALID_URL";
+  readonly input: string;
+
+  constructor(input: string) {
+    super("Invalid URL");
+    this.name = "TypeError";
+    // The offending text is a property rather than part of the message: node
+    // keeps messages free of user data so that they group when logged.
+    this.input = input;
+  }
+}
+
+/** `File URL host must be "localhost" or empty on linux`. */
+export class ERR_INVALID_FILE_URL_HOST extends NodeTypeError {
+  override readonly code = "ERR_INVALID_FILE_URL_HOST";
+
+  constructor(platform: string) {
+    super(`File URL host must be "localhost" or empty on ${platform}`);
+    this.name = "TypeError";
+  }
+}
+
+/** `File URL path must be absolute`. */
+export class ERR_INVALID_FILE_URL_PATH extends NodeTypeError {
+  override readonly code = "ERR_INVALID_FILE_URL_PATH";
+  readonly input: unknown;
+
+  constructor(reason: string, input?: unknown) {
+    super(`File URL path ${reason}`);
+    this.name = "TypeError";
+    this.input = input;
+  }
+}
+
+/** `The URL must be of scheme file`. */
+export class ERR_INVALID_URL_SCHEME extends NodeTypeError {
+  override readonly code = "ERR_INVALID_URL_SCHEME";
+
+  constructor(expected: string | readonly string[]) {
+    const list = typeof expected === "string" ? [expected] : expected;
+    const wanted = list.length === 2 ? `one of scheme ${list[0]} or ${list[1]}` : `of scheme ${list[0]}`;
+    super(`The URL must be ${wanted}`);
+    this.name = "TypeError";
+  }
+}
+
+/** `Value of "this" must be of type URLSearchParams`. */
+export class ERR_INVALID_THIS extends NodeTypeError {
+  override readonly code = "ERR_INVALID_THIS";
+
+  constructor(type: string) {
+    super(`Value of "this" must be of type ${type}`);
+    this.name = "TypeError";
+  }
+}
+
+/** `Each query pair must be an iterable [name, value] tuple`. */
+export class ERR_INVALID_TUPLE extends NodeTypeError {
+  override readonly code = "ERR_INVALID_TUPLE";
+
+  constructor(name: string, reason: string) {
+    super(`Each ${name} must be ${reason}`);
+    this.name = "TypeError";
+  }
+}

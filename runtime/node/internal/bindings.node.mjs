@@ -32,3 +32,11 @@ globalThis.nts_process_is_exiting = () => Boolean(process._exiting);
 globalThis.nts_next_tick = (callback, args) => { process.nextTick(callback, ...(args ?? [])); };
 
 globalThis.nts_debug_write = (text) => { process.stderr.write(text); };
+globalThis.nts_platform = () => process.platform;
+globalThis.nts_process_cwd = () => process.cwd();
+
+// Node suppresses a deprecation warning raised from inside a dependency, on
+// the grounds that the application cannot act on it. A compiled program has no
+// `node_modules` to be inside, so the compiled answer is always false; on node
+// the stack is what says.
+globalThis.nts_is_inside_node_modules = () => false;

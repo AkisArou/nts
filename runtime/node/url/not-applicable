@@ -1,0 +1,5 @@
+# Each of these spawns a real `node` and asserts on what it prints. The child
+# is node running node's own `url`, so the assertion is about node's binary and
+# there is no way to inject our module into a process we did not start.
+test-url-parse-deprecation.js: spawns node to see when the DEP0169 warning is printed
+test-url-parse-invalid-input.js: spawns node to check the error printed for a bad URL
