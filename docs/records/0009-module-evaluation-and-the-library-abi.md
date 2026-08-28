@@ -1443,3 +1443,69 @@ embedder must now reimplement.
 
 A5's shape-A and A' conclusions are unaffected: a library whose work does not
 outlive a call exports none of the above.
+
+## A7. The loop surface is uniform and tiered, and forgetting it is loud
+
+A6 emits the pump only for shape B. That makes a consumer read the header to
+find out whether this library schedules, and it has a worse consequence: adding
+a `setInterval` to a library grows its header and *silently* breaks every
+existing consumer, who compiles unchanged and stops receiving callbacks. A
+source-compatible change that alters behaviour is the shape this record exists
+to eliminate.
+
+**Decision: every library emits the same loop surface, in three tiers, and
+which tiers do anything is a property of the build rather than of the header.**
+
+```c
+/* Tier 1 -- the common case. Runs everything already due, then returns.
+ * On a library that schedules nothing this returns immediately, and that is
+ * a *fact about this build*, not a different API. */
+void     counter_run_until_idle(void);
+
+/* Tier 2 -- integrate with a loop you already have. */
+bool     counter_has_pending_work(void);
+int64_t  counter_next_deadline_ms(void);   /* -1: nothing pending */
+void     counter_run_ready(void);
+void     counter_set_wake(void (*wake)(void *), void *state);
+
+/* Tier 3 -- you have no loop and want none. Blocks until nothing is pending.
+ * Emitted only when the manifest asks (`bundledLoop: true`), because it links
+ * libuv, and RFC 1935 is explicit that a library must not impose a thread pool
+ * and signal handling on an embedder that did not ask. */
+void     counter_run_forever(void);
+```
+
+This is libcurl's answer to the same question -- `curl_easy_perform` for the
+consumer who wants it to work, `curl_multi_*` for the one with their own loop
+-- and it is the right one for the same reason: the difficulty is not the API,
+it is that only the embedder knows whether it owns a loop.
+
+**Tier 1 is why this is not merely uniform but cheap.** `run_until_idle` needs
+no libuv: it drains our own queues and runs whatever a monotonic clock says is
+expired. Waiting is the part that needs a loop, and waiting is exactly what
+tiers 2 and 3 are for. So the 90% consumer writes one call and never learns the
+word "host".
+
+### Forgetting is diagnosed, not silent
+
+A consumer who schedules work and never pumps gets nothing, and today that is
+indistinguishable from a library that does nothing. So: at process exit, if
+work was ever scheduled and no tier was ever entered, the library says so.
+
+```
+nts: libcounter scheduled 3 callbacks and none ran -- nothing called
+     counter_run_until_idle(), counter_run_ready() or counter_run_forever()
+```
+
+Cheap -- a counter and a flag, checked once -- and it converts the failure mode
+from "the feature appears not to work" into a sentence naming the fix. It
+cannot detect *late* pumping, which is fine: late is correct.
+
+### What the consumer never has to know
+
+Nothing about internals, and nothing about which functions schedule. The
+uniform surface means the question "does this library need pumping?" is not
+asked at integration time; `run_until_idle` is correct on a library that
+schedules nothing and on one that schedules constantly. The descriptor carries
+`schedules` for tooling that wants to assert it, and a header diff never
+changes when a library gains its first timer.
