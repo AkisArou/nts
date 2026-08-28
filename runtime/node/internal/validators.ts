@@ -95,3 +95,21 @@ export function validateUint32(value: unknown, name: string, positive = false): 
     throw new ERR_OUT_OF_RANGE(name, `>= ${min} && <= ${max}`, value);
   }
 }
+
+/**
+ * An `AbortSignal`, or nothing.
+ *
+ * Duck-typed on `aborted` rather than tested with `instanceof`, because a
+ * signal may come from a different realm -- a worker, or a polyfill -- and the
+ * only thing the caller does with it is read `aborted` and add a listener.
+ * Refusing a working signal because its constructor is a different object
+ * would be a check that only ever rejects valid programs.
+ */
+export function validateAbortSignal(signal: unknown, name: string): void {
+  if (
+    signal !== undefined &&
+    (signal === null || typeof signal !== "object" || !("aborted" in signal))
+  ) {
+    throw new ERR_INVALID_ARG_TYPE(name, "AbortSignal", signal);
+  }
+}

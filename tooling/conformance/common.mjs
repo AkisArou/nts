@@ -17,6 +17,7 @@
 //   getTTYfd               node's, verbatim, test/common/index.js
 //   allowGlobals, ...      no-ops; they configure node's own leak checker
 
+import assert from "node:assert";
 import { inspect } from "node:util";
 import { openSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -31,6 +32,37 @@ export class Skip extends Error {
 
 /** Calls a test declared as `mustCall` did not make, checked after it returns. */
 const pending = [];
+
+/**
+ * Record an expectation and return the function that satisfies it.
+ *
+ * Node lets the count stand in for the callback -- `mustCall(10)` means "some
+ * function, called ten times" -- and tests use that form freely. Reading it as
+ * the callback instead gives a number where a function should be, and the
+ * failure surfaces inside this file rather than in the test.
+ *
+ * The wrapper forwards `this`, because node's does: a test that writes
+ * `emitter.on('x', common.mustCall(function () { this.listeners('x'); }))`
+ * depends on it.
+ */
+function expect(fn, count, atLeast) {
+  if (typeof fn === "number") {
+    count = fn;
+    fn = () => {};
+  }
+  if (fn === undefined) fn = () => {};
+  const record = {
+    expected: count === undefined ? 1 : count,
+    actual: 0,
+    atLeast,
+    name: fn.name || "anonymous",
+  };
+  pending.push(record);
+  return function (...args) {
+    record.actual++;
+    return Reflect.apply(fn, this, args);
+  };
+}
 
 export function checkPending() {
   const missed = pending.filter((p) =>
@@ -80,22 +112,12 @@ export function makeCommon() {
     // emitter as `this`, and a wrapper that dropped it would make
     // `this.listeners('baz')` inside a test throw. Forwarding `this` is part
     // of the contract, not a detail.
-    mustCall(fn = () => {}, expected = 1) {
-      const record = { expected, actual: 0, name: fn.name || "anonymous" };
-      pending.push(record);
-      return function (...args) {
-        record.actual++;
-        return fn.apply(this, args);
-      };
+    mustCall(fn, expected) {
+      return expect(fn, expected, false);
     },
 
-    mustCallAtLeast(fn = () => {}, minimum = 1) {
-      const record = { expected: minimum, actual: 0, atLeast: true, name: fn.name || "anonymous" };
-      pending.push(record);
-      return function (...args) {
-        record.actual++;
-        return fn.apply(this, args);
-      };
+    mustCallAtLeast(fn, minimum) {
+      return expect(fn, minimum, true);
     },
 
     mustNotCall(message = "should not have been called") {
@@ -111,8 +133,26 @@ export function makeCommon() {
       }, expected);
     },
 
-    expectsError(fn) {
-      return fn;
+    /**
+     * A handler that asserts the error it is given matches `validator`.
+     *
+     * Node builds this on `assert.throws`, so the validator can be anything
+     * `assert.throws` accepts -- a constructor, a regular expression, an
+     * object of expected properties, or a predicate. Tests pass an object far
+     * more often than a function, and returning the argument unchanged (which
+     * this used to do) handed an *object* to something expecting a listener.
+     *
+     * Wrapped in `mustCall`, as node's is: a test that installs an error
+     * handler and never sees the error has not passed.
+     */
+    expectsError(validator, exact) {
+      return this.mustCall((...args) => {
+        const [error] = args;
+        assert.throws(() => {
+          throw error;
+        }, validator);
+        return true;
+      }, exact);
     },
 
     /**

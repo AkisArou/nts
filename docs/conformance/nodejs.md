@@ -88,6 +88,47 @@ node tooling/conformance/run.mjs --module <name> --sabotage
 It hands every test an empty object instead of our module. Whatever still
 passes was never measuring us. See *hollow* in the table.
 
+**A test suite is judged when the loop is empty, not after a fixed number of
+turns.** This runner used to give each file three turns of the loop and then
+check its `mustCall` tallies. Node checks its own from `process.on('exit')` --
+that is, once there is nothing left to run -- and three turns is not the same
+thing. `setTimeout(common.mustCall(), 10)` had about a millisecond to fire and
+was reported as a callback that never ran. It waits for `beforeExit` now, with
+a cap for a test that leaves an interval running on purpose.
+
+That fix immediately needed a second one. Draining afterwards with
+`setImmediate` *turns the loop*, and a turn after the loop has gone quiet runs
+exactly the work that was supposed to have been abandoned:
+`setImmediate(common.mustNotCall()).unref()` called its callback. The drain
+afterwards is ticks and microtasks only, which deliver a pending warning
+without giving the loop another turn. Both of these were the runner
+manufacturing the behaviour it was measuring, in opposite directions.
+
+**Two differential fuzzers, for the two places reading the source was not
+enough.**
+
+```sh
+node tooling/conformance/fuzz-deep-equal.mjs   # comparison relations
+node tooling/conformance/fuzz-timer-order.mjs  # scheduling order
+```
+
+The timer one generates random trees of timeouts, intervals, immediates, ticks
+and microtasks, runs each under node and under ours, and compares the order
+things ran in. Programs where node disagrees with *itself* are discarded --
+`setImmediate` against `setTimeout(0)` at the top level is genuinely
+unspecified, and reporting it would be reporting node's nondeterminism as our
+bug.
+
+Both fuzzers were sabotage-tested, and the timer one failed that test twice
+before it was worth anything. Its first generator cleared every interval on the
+first tick, so the reinsertion path -- the whole of what makes a repeating
+timer repeat -- was never reached, and breaking it changed nothing. Its first
+determinism filter ran each program twice, which the same seed disproved by
+reporting zero differences on one invocation and three on the next. Five runs
+now, and the two properties fight: the programs sensitive enough to expose a
+re-arm bug are the racy ones the filter most wants to drop, so that sabotage is
+caught on two seeds in six rather than on all of them. Run several.
+
 ## Modules
 
 Counts are `passed / applicable`, where applicable excludes tests that spawn a
@@ -95,28 +136,28 @@ real `node` child — those assert on node's binary, which our module is not in.
 Each exclusion is listed with a reason in the module's `not-applicable` file
 rather than inferred by a rule, so the number can be audited.
 
-**185 of node's own test files pass** across thirteen modules, of which 9 are hollow. The per-module
+**237 of node's own test files pass** across fourteen modules, of which 11 are hollow. The per-module
 counts below are `passed / applicable`; `compiles` is `functions lowered /
 constructs refused`, from `nts hir`.
 
 | module | node's tests | hollow | compiles | note |
 | --- | :---: | :---: | :---: | --- |
-| `console` | **22 / 22** | 2 | 17 / 269 | complete |
-| `punycode` | **1 / 1** | 0 | 6 / 9 | complete |
-| `querystring` | **4 / 4** | 0 | 11 / 194 | complete |
-| `os` | **4 / 4** | 1 | 22 / 99 | complete |
-| `path` | **15 / 16** | 0 | 23 / 115 | complete but for `matchesGlob`; the skip is Windows-only |
-| `events` | **28 / 33** | 1 | 11 / 137 | complete but for domains, `EventTarget` and the promise forms |
-| `url` | 26 / 36 | 1 | 33 / 362 | complete; exact on the Web Platform Tests corpus |
-| `diagnostics_channel` | 23 / 45 | 0 | 8 / 130 | complete; the failures need node's own publishers |
-| `buffer` | 33 / 60 | 1 | 11 / 182 | the read/write surface is complete and validated |
-| `assert` | 9 / 19 | 0 | 12 / 225 | complete, including `CallTracker` and node's Myers diff |
-| `fs` | 11 / 212 | 2 | 24 / 229 | the sync surface; async, streams and watchers are absent |
-| `util` | 7 / 18 | 1 | 17 / 191 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `string_decoder` | **2 / 3** | 0 | 11 / 196 | complete; the failure is the class-vs-function difference |
+| `console` | **22 / 22** | 2 | 32 / 261 | complete |
+| `os` | **4 / 4** | 1 | 40 / 85 | complete |
+| `punycode` | **1 / 1** | 0 | 7 / 9 | complete |
+| `querystring` | **4 / 4** | 0 | 30 / 182 | complete |
+| `timers` | 52 / 62 | 2 | 12 / 170 | complete but for `async_hooks` and the `domain` integration built on it |
+| `path` | **15 / 16** | 0 | 24 / 118 | complete but for `matchesGlob`; the skip is Windows-only |
+| `events` | **28 / 33** | 1 | 25 / 128 | complete but for domains, `EventTarget` and the promise forms |
+| `url` | 26 / 36 | 1 | 51 / 356 | complete; exact on the Web Platform Tests corpus |
+| `string_decoder` | **2 / 3** | 0 | 27 / 187 | complete; the failure is the class-vs-function difference |
+| `buffer` | 33 / 60 | 1 | 10 / 190 | the read/write surface is complete and validated |
+| `diagnostics_channel` | 23 / 45 | 0 | 22 / 120 | complete; the failures need node's own publishers |
+| `assert` | 9 / 19 | 0 | 27 / 217 | complete, including `CallTracker` and node's Myers diff |
+| `util` | 7 / 19 | 1 | 19 / 195 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `fs` | 11 / 212 | 2 | 43 / 218 | the sync surface; async, streams and watchers are absent |
 | `stream` | — | — | — | not started |
 | `process` | — | — | — | not started |
-| `timers` | — | — | — | not started |
 
 The first two columns are what
 
@@ -730,6 +771,66 @@ Two details worth recording:
 Not implemented: `URLPattern`, and `URL.createObjectURL`/`revokeObjectURL`,
 which need a blob registry that belongs to the runtime rather than to this
 module.
+
+## `timers`
+
+Complete from node v24.20.0: `setTimeout`, `setInterval`, `setImmediate` and
+the three that cancel them, the `Timeout` and `Immediate` handles with
+`ref`/`unref`/`hasRef`/`refresh`/`close`, `Symbol.toPrimitive` and
+`Symbol.dispose`, and all of `timers/promises` including the async-iterator
+`setInterval` and the WICG `scheduler`. 52 of 62 files pass, 2 of them hollow.
+
+The architecture is node's, and the obvious alternative is worse. Giving every
+timeout its own host timer makes `setTimeout` a syscall and puts ten thousand
+pending timeouts in the loop's heap. Node instead keys a linked list by
+duration: every `setTimeout(fn, 40)` joins the `40` list, and because they all
+wait the same length of time, one enrolled later always expires later — so the
+list is sorted by construction and enrolling is an append. Only the *lists*
+compete, through a binary heap ordered by expiry, and the loop holds exactly
+one timer. Insertion and removal are constant time; the logarithmic part is
+over the number of distinct durations a program uses, which does not grow with
+the number of timers.
+
+That design is why `_idlePrev`, `_idleStart` and `refresh()` are observable at
+all, and reproducing the observable surface without the design underneath would
+have been a set of fields that mean nothing.
+
+The seam to the loop is seven primitives, mirroring node's
+`internalBinding('timers')`: install the two drains, arm and disarm the timer,
+arm the check-phase slot, two ref toggles, and a synchronous tick drain. Node
+installs its drains once at bootstrap through `setupTimers`; so does this. A
+host holding one reference per scheduled timer would be back to one host timer
+per `setTimeout`.
+
+Two departures from node's code, both forced by where the seam sits:
+
+- **Re-arming happens here, not in the host.** Node returns the next expiry
+  from `processTimers` and its C++ re-arms. Ours calls the host directly, so
+  the decision stays on the side that owns the heap — and it happens in a
+  `finally`, because a callback may throw. An interval whose callback throws
+  has to keep running, which browsers do and node matches, and it only can if
+  the exception on its way out still leaves the loop armed.
+- **The ref count toggles the host when it reaches zero.** Node decrements a
+  shared count without telling anyone, because its loop re-reads that count
+  each time it re-arms. Nothing re-reads it here, so a process whose remaining
+  timers were all unrefed would refuse to exit.
+
+`Reflect.apply` rather than `callback.apply(...)`, because the callback is the
+caller's object and `apply` is one of its properties. `fn.apply = 'not a
+function'` is a strange thing to write and a real thing to receive; node has a
+regression test for it.
+
+What is absent is `async_hooks`. Node emits an init/before/after/destroy
+quartet around every timer and threads an async context frame through it, and
+`domain` is built on that. The two remaining failures are both domain tests:
+`process.domain` is not restored across a timer callback because nothing here
+emits the events `domain` listens for. That is an absent module rather than an
+incomplete one — the timer semantics are whole without it — and those two will
+pass when `async_hooks` exists, not before.
+
+Eight files skip. Three want `NodeEventTarget` to count listeners on a
+non-`AbortSignal` event target, which is `events`' to provide; three want
+`internal/test/binding`; two want child-process helpers.
 
 ## `fs`
 

@@ -20,6 +20,18 @@ import fixtures from "./fixtures.mjs";
 import * as hijackstdio from "./hijackstdio.mjs";
 
 const [, , moduleName, file, addon] = process.argv;
+
+// Node's own scheduling, captured before anything can replace it.
+//
+// The harness schedules the test body and its settle loop, and `node:timers`
+// installs itself over the globals. Without capturing, running the timers
+// module would make the harness measure the subject with the subject: a broken
+// `setImmediate` would report every file as failing for reasons that have
+// nothing to do with the file. The same rule as substituting node's `util`
+// into a differential test.
+const hostSetImmediate = globalThis.setImmediate;
+const hostSetTimeout = globalThis.setTimeout;
+const hostClearTimeout = globalThis.clearTimeout;
 const HERE = dirname(new URL(import.meta.url).pathname);
 const ROOT = resolvePath(HERE, "../..");
 const moduleDir = join(ROOT, "runtime/node", moduleName);
@@ -42,17 +54,55 @@ function report(result) {
 }
 
 /**
- * Let the loop turn before deciding whether a `mustCall` was called.
+ * A cap on waiting for the loop to drain, for a test that leaves something
+ * running on purpose. Long enough for any delay these tests use.
+ */
+const SETTLE_CAP_MS = 2000;
+
+/**
+ * Wait for the loop to run out of work before deciding whether a `mustCall`
+ * was called.
  *
- * `process.emitWarning` delivers on the next tick, and a test that expects a
- * warning is not wrong just because we asked too early. Three turns covers a
- * microtask, a `setImmediate` and a zero timer, which is everything these
- * tests use.
+ * Node checks its own `mustCall` tallies from a `process.on('exit')` handler,
+ * so a test is judged only once there is nothing left to run. Turning the loop
+ * a fixed number of times is not the same thing and quietly fails any test
+ * that waits on a real delay: `setTimeout(common.mustCall(), 10)` had three
+ * turns to fire, took ten milliseconds, and was reported as a callback that
+ * never ran.
+ *
+ * `beforeExit` is that signal -- it fires when the loop has nothing pending --
+ * and the cap keeps a test that leaves an interval running from hanging the
+ * runner. The cap timer is unrefed, or it would itself be pending work and
+ * `beforeExit` would never arrive before it.
  */
 async function settle() {
+  await new Promise((resolve) => {
+    let cap;
+    const finish = () => {
+      hostClearTimeout(cap);
+      process.off("beforeExit", finish);
+      resolve();
+    };
+    cap = hostSetTimeout(() => {
+      process.off("beforeExit", finish);
+      resolve();
+    }, SETTLE_CAP_MS);
+    cap.unref();
+    process.on("beforeExit", finish);
+  });
+  // Then let ticks and microtasks finish, because `process.emitWarning`
+  // delivers on a tick.
+  //
+  // Ticks and microtasks only -- deliberately not `setImmediate` or a zero
+  // timer. Those turn the loop, and a turn after the loop has gone quiet runs
+  // exactly the work that was supposed to have been abandoned: an unrefed
+  // immediate does not *keep* the loop alive but does run if something else
+  // turns it. Draining with a `setImmediate` here made
+  // `setImmediate(common.mustNotCall()).unref()` call its callback, which is
+  // the runner manufacturing the behaviour it was measuring.
   for (let i = 0; i < 3; i++) {
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => process.nextTick(resolve));
+    await Promise.resolve();
   }
 }
 
@@ -182,6 +232,32 @@ function countingTestRunner() {
   return wrappedTestRunner;
 }
 
+/**
+ * Block the thread for `ms`, the way node's `internal/util.sleep` does.
+ *
+ * `Atomics.wait` on a value that never changes is a real sleep: it parks the
+ * thread rather than spinning, and nothing else on this thread runs, which is
+ * the point. A test uses it to prove that a callback taking longer than an
+ * interval does not make the interval fire twice.
+ */
+const sleepCell = new Int32Array(new SharedArrayBuffer(4));
+
+const internalUtilStandIn = new Proxy(
+  {
+    sleep(ms) {
+      Atomics.wait(sleepCell, 0, 0, ms);
+    },
+  },
+  {
+    get(target, property) {
+      if (property in target || typeof property === "symbol") {
+        return target[property];
+      }
+      throw new Skip(`needs internal/util.${String(property)}`);
+    },
+  },
+);
+
 function shimmedRequire(id) {
   const bare = id.replace(/^node:/, "");
   if (bare === moduleName) {
@@ -212,6 +288,17 @@ function shimmedRequire(id) {
   // stand in -- declared in `shape.mjs`, so the mapping is readable next to
   // the module rather than hidden in the harness.
   if (internals && bare in internals) return internals[bare];
+  // `internal/util` holds one thing these tests want that is test
+  // infrastructure rather than any module's implementation: a blocking sleep,
+  // used to make wall-clock time pass inside a callback. It is served here,
+  // beside `common` and `fixtures`, rather than pretended to be part of a
+  // module that does not have it.
+  //
+  // Only `sleep`. Anything else on that module is a real implementation
+  // detail, and asking for one is a skip that names it -- not `undefined`,
+  // which would let a test run against a missing dependency and report
+  // whatever came of that.
+  if (bare === "internal/util") return internalUtilStandIn;
   if (id.endsWith("../common")) return common;
   if (id.endsWith("common/tmpdir")) return tmpdir;
   if (id.endsWith("common/fixtures")) return fixtures;
@@ -260,7 +347,7 @@ try {
   // A module system is a hidden parameter of every ordering assertion, and
   // this harness was silently supplying the wrong one.
   capturingLoadWarnings = false;
-  await new Promise((resolve, reject) => setImmediate(() => {
+  await new Promise((resolve, reject) => hostSetImmediate(() => {
     try {
       run(shimmedRequire, module, module.exports, file, dirname(file),
           process, globalThis, globalThis);

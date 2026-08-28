@@ -554,6 +554,37 @@ export class ERR_INVALID_URL_SCHEME extends NodeTypeError {
 }
 
 /** `Value of "this" must be of type URLSearchParams`. */
+/**
+ * An operation cancelled through an `AbortSignal`.
+ *
+ * Not a `NodeError`: this one is web-platform rather than node's own, so it is
+ * named `AbortError` with the code `ABORT_ERR`, and code written against
+ * `fetch` or the DOM recognises it by either.
+ */
+export class AbortError extends Error {
+  readonly code = "ABORT_ERR";
+
+  constructor(message = "The operation was aborted", options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "AbortError";
+  }
+}
+
+/**
+ * A class the program is given an instance of but may not construct.
+ *
+ * The message says only `Illegal constructor`, matching what a browser throws
+ * for the same mistake.
+ */
+export class ERR_ILLEGAL_CONSTRUCTOR extends NodeTypeError {
+  override readonly code = "ERR_ILLEGAL_CONSTRUCTOR";
+
+  constructor() {
+    super("Illegal constructor");
+    this.name = "TypeError";
+  }
+}
+
 export class ERR_INVALID_THIS extends NodeTypeError {
   override readonly code = "ERR_INVALID_THIS";
 
