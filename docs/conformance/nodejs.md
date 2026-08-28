@@ -60,19 +60,19 @@ constructs refused`, from `nts hir`.
 
 | module | node's tests | hollow | compiles | note |
 | --- | :---: | :---: | :---: | --- |
-| `console` | **22 / 22** | 2 | 9 / 269 | complete |
+| `console` | **22 / 22** | 2 | 12 / 274 | complete |
 | `punycode` | **1 / 1** | 0 | 5 / 10 | complete |
-| `querystring` | **4 / 4** | 0 | 6 / 175 | complete |
-| `os` | **4 / 4** | 1 | 18 / 102 | complete |
-| `path` | **15 / 16** | 0 | 6 / 131 | complete but for `matchesGlob`; the skip is Windows-only |
-| `events` | **28 / 33** | 1 | 3 / 140 | complete but for domains, `EventTarget` and the promise forms |
-| `url` | 26 / 36 | 1 | 29 / 319 | complete; exact on the Web Platform Tests corpus |
-| `diagnostics_channel` | 23 / 45 | 0 | 3 / 132 | complete; the failures need node's own publishers |
-| `buffer` | 18 / 60 | 1 | 5 / 164 | the read/write family is complete; the argument validation is not |
-| `assert` | 9 / 19 | 0 | 3 / 227 | complete, including `CallTracker` and node's Myers diff |
-| `fs` | 11 / 212 | 2 | 20 / 209 | the sync surface; async, streams and watchers are absent |
-| `util` | 7 / 18 | 1 | 9 / 193 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `string_decoder` | **2 / 3** | 0 | 5 / 178 | complete; the failure is the class-vs-function difference |
+| `querystring` | **4 / 4** | 0 | 8 / 196 | complete |
+| `os` | **4 / 4** | 1 | 18 / 103 | complete |
+| `path` | **15 / 16** | 0 | 7 / 131 | complete but for `matchesGlob`; the skip is Windows-only |
+| `events` | **28 / 33** | 1 | 6 / 142 | complete but for domains, `EventTarget` and the promise forms |
+| `url` | 26 / 36 | 1 | 30 / 364 | complete; exact on the Web Platform Tests corpus |
+| `diagnostics_channel` | 23 / 45 | 0 | 3 / 135 | complete; the failures need node's own publishers |
+| `buffer` | 18 / 60 | 1 | 6 / 186 | the read/write family is complete; the argument validation is not |
+| `assert` | 9 / 19 | 0 | 7 / 230 | complete, including `CallTracker` and node's Myers diff |
+| `fs` | 11 / 212 | 2 | 30 / 222 | the sync surface; async, streams and watchers are absent |
+| `util` | 7 / 18 | 1 | 12 / 196 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `string_decoder` | **2 / 3** | 0 | 7 / 199 | complete; the failure is the class-vs-function difference |
 | `stream` | — | — | — | not started |
 | `process` | — | — | — | not started |
 | `timers` | — | — | — | not started |
@@ -775,7 +775,14 @@ refuse it.
 
 **What clearing that class actually bought is the most useful number in this
 file.** Twenty-five refusals went away and the profile gained *two* lowered
-functions: `path` 5 to 6, `url` 28 to 29. Refusals went **up** by 35, because a
+functions: `path` 5 to 6, `url` 28 to 29.
+
+For contrast, and it is the other half of the same lesson: accessors landing
+took the profile from **121 lowered to 151**, across ten of thirteen modules --
+`fs` alone from 20 to 30. One feature bought fifteen times what clearing
+twenty-five refusals did, because an accessor was the *last* blocker on a great
+many functions where a name collision was one of several. Nothing in a refusal
+histogram distinguishes those two cases. Refusals went **up** by 35, because a
 function that used to stop at the name collision is now walked further and
 refuses for its real reasons.
 
@@ -797,7 +804,13 @@ new Proxy(target, { apply(fn, thisArg, args) { … } });
 
 They were compiling to nothing while the compiler reported success, which is
 the class of failure that never enters a refusal histogram and so never enters
-a work queue. Found by the compiler's conservation law — every declaration is
+a work queue. They are still refused, and not for the reason both sides
+believed: accessors landing did not move them, because they were never blocked
+on the accessor. Nothing walks an object literal in *argument position* at all,
+so the `get()` inside `Object.defineProperty(o, k, { get() { … } })` is never
+reached to be blocked on anything. A plausible attribution that survived two
+people looking at it, corrected by an instrument that counts rather than
+explains. Found by the compiler's conservation law — every declaration is
 either lowered or refused, never neither — which is the one instrument here
 that can see a thing that is *absent*. Every gate on this side was green while
 they sat in the tree: they are unreachable from behaviour, because the
