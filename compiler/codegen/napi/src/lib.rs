@@ -58,6 +58,11 @@ enum Cross {
     Void,
 }
 
+// Several types answer `None` and each answers it for its own reason. Merged
+// into one arm the reasons would be gone, and the next type to arrive would
+// join a list rather than be decided about -- which is what the wildcard this
+// replaced was doing.
+#[allow(clippy::match_same_arms)]
 fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> Option<Cross> {
     match ty {
         HirType::Void => Some(Cross::Void),
@@ -69,6 +74,11 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         {
             Some(Cross::StrArray)
         }
+        // A promise has no synchronous crossing: its value does not exist yet.
+        // Handing one to JavaScript means creating a napi deferred and resolving
+        // it when the promise settles, which is a threadsafe-function design
+        // rather than a marshalling rule.
+        HirType::Managed(ManagedType::Promise(_)) => None,
         HirType::Managed(ManagedType::Object(id)) => {
             let at = layouts.iter().position(|l| l.types.contains(id))?;
             // A class instance is more than its fields: its methods are how it
@@ -94,7 +104,13 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
                 })
                 .then_some(Cross::Object(at))
         }
-        _ => None,
+        // An array of anything but strings. The runtime holds one
+        // representation per element type and only the string case has a
+        // conversion written; the others would each need their own.
+        HirType::Managed(ManagedType::Array(_)) => None,
+        // A `never` return means the call does not come back, so there is
+        // nothing for a wrapper to hand back.
+        HirType::Never => None,
     }
 }
 
@@ -107,6 +123,9 @@ fn spell(ty: &HirType) -> String {
         HirType::Managed(ManagedType::String) => "string".to_owned(),
         HirType::Managed(ManagedType::Array(e)) => format!("{}[]", spell(e)),
         HirType::Managed(ManagedType::Object(_)) => "an object".to_owned(),
+        HirType::Managed(ManagedType::Promise(payload)) => {
+            format!("Promise<{}>", spell(payload))
+        }
         HirType::Never => "never".to_owned(),
     }
 }
@@ -117,10 +136,16 @@ fn spell(ty: &HirType) -> String {
 /// the name is built from the same [`c_identifier`] rather than spelled again.
 fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
     match ty {
-        HirType::Void => "void".to_owned(),
+        // Neither has a value to marshal: `void` is a function that returned
+        // nothing, `never` one that did not return.
+        HirType::Void | HirType::Never => "void".to_owned(),
         HirType::Bool => "bool".to_owned(),
         HirType::Managed(ManagedType::String) => "NtsString *".to_owned(),
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *".to_owned(),
+        // The fixed runtime layout, not a generated struct: the payload's
+        // representation is in the type for the compiler's benefit, and the C
+        // sees one tagged union whatever it carries.
+        HirType::Managed(ManagedType::Promise(_)) => "NtsPromise *".to_owned(),
         HirType::Managed(ManagedType::Object(id)) => {
             layouts.iter().find(|l| l.types.contains(id)).map_or_else(
                 || "void *".to_owned(),
@@ -131,9 +156,6 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         // has one number type, so a wrapper that received an `i32` would have
         // to widen it anyway.
         HirType::Int { .. } | HirType::Float { .. } => "double".to_owned(),
-        // A function that does not return cannot have its return marshalled,
-        // and `void` is what the wrapper's signature needs.
-        HirType::Never => "void".to_owned(),
     }
 }
 
