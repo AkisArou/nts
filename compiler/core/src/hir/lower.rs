@@ -1164,11 +1164,19 @@ fn representation_of(
         // put there, and outside an instantiation there is nothing to say.
         TypeKind::TypeParameter { .. } => subst.get(&ty)?.clone(),
 
-        // A class this compiler provides. `Error` is never decomposed -- see
-        // `super::builtin` for why it cannot be -- so it arrives as a structured
-        // type and would otherwise have no representation at all.
-        TypeKind::Structured { .. } if named(snapshot, ty).is_some_and(super::builtin::is_error) => {
-            HirType::Managed(ManagedType::Object(ty))
+        // The named types this compiler provides rather than reads. Neither
+        // `Error` nor `Uint8Array` is ever decomposed -- see `super::builtin`
+        // for why the first cannot be -- so both arrive structured and would
+        // otherwise have no representation at all.
+        TypeKind::Structured { .. } => {
+            let name = named(snapshot, ty)?;
+            if let Some(element) = super::builtin::typed_array_element(name) {
+                HirType::Managed(ManagedType::Array(Box::new(element)))
+            } else if super::builtin::is_error(name) {
+                HirType::Managed(ManagedType::Object(ty))
+            } else {
+                return None;
+            }
         }
 
         // `any` and `unknown` fall here and are refused, which is right for one
@@ -3338,6 +3346,44 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
+    /// What actually gets stored into an array slot.
+    ///
+    /// For a `number[]` the value *is* what is stored. For a typed array it is
+    /// not: `u8[i] = 300` stores 44, `i32[i] = 1.7` stores 1, and `u8[i] = NaN`
+    /// stores 0 — ECMAScript truncates toward zero and takes the result modulo
+    /// the width, with every non-finite case going to zero.
+    ///
+    /// C's `(uint8_t)someDouble` is *undefined behaviour* for all three, so the
+    /// conversion is a named helper rather than a cast left to the backend. The
+    /// helper is `static inline` and folds to nothing where the range is
+    /// already known, which is the common case in a loop that built the value.
+    fn coerce_element(&mut self, id: NodeId, array: ValueId, value: ValueId) -> ValueId {
+        let numeric = |ty: &HirType| matches!(ty, HirType::Int { .. } | HirType::Float { .. });
+        let HirType::Managed(ManagedType::Array(element)) =
+            self.values[array.0 as usize].ty.clone()
+        else {
+            return value;
+        };
+        let held = self.values[value.0 as usize].ty.clone();
+        if held == *element || !numeric(&element) || !numeric(&held) {
+            return value;
+        }
+        let origin = self.origin(id);
+        match super::builtin::element_coercion(&element) {
+            Some(helper) => self.push(
+                OpKind::Call {
+                    callee: Callee::External(helper.to_owned()),
+                    args: vec![value],
+                    frame: None,
+                },
+                (*element).clone(),
+                origin,
+            ),
+            // A defined narrowing — `double` to `float` — or nothing at all.
+            None => self.push(OpKind::Convert(value), (*element).clone(), origin),
+        }
+    }
+
     /// Put a value into a place.
     fn write_place(&mut self, id: NodeId, place: &Place, value: ValueId) {
         let origin = self.origin(id);
@@ -3354,6 +3400,7 @@ impl<'a> FuncBuilder<'a> {
                 );
             }
             Place::Element { array, index } => {
+                let value = self.coerce_element(id, array, value);
                 self.push(
                     OpKind::ArraySet {
                         array,
@@ -4322,7 +4369,9 @@ impl<'a> FuncBuilder<'a> {
         // The type comes from where the result goes, because the constructor's
         // own type is a union of the overloads in `lib.d.ts` and says nothing
         // about the element.
-        if class == "Array" {
+        // `new Uint8Array(n)` is the same allocation with the element width
+        // written down instead of inferred.
+        if class == "Array" || super::builtin::typed_array_element(&class).is_some() {
             let ty = self
                 .type_of(id)
                 .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Array(_))))
@@ -4337,6 +4386,16 @@ impl<'a> FuncBuilder<'a> {
                 return self.lower_empty_array(id, ty);
             };
             let length = self.lower_expression(*count)?;
+            // `new Uint8Array([1, 2, 3])` and `new Uint8Array(other)` copy from
+            // what they are given rather than sizing to it. Refused, because
+            // taking the argument as a length would allocate an array of
+            // whatever the pointer happened to be.
+            if !matches!(
+                self.values[length.0 as usize].ty,
+                HirType::Int { .. } | HirType::Float { .. }
+            ) {
+                return Err(self.unsupported(id, &format!("a `new {class}` from a value")));
+            }
             return Ok(self.push(OpKind::ArrayNew { length }, ty, origin));
         }
 
@@ -4417,15 +4476,29 @@ impl<'a> FuncBuilder<'a> {
         };
         let ty = *element;
         let origin = self.origin(id);
-        Ok(self.push(
+        let read = self.push(
             OpKind::ArrayGet {
                 array,
                 index,
                 checked: true,
             },
-            ty,
-            origin,
-        ))
+            ty.clone(),
+            origin.clone(),
+        );
+        // A typed array's element is narrower than the `number` every
+        // expression around it is typed in -- TypeScript says `Uint8Array[i]`
+        // is a `number`, and it is. Converting here keeps the HIR well typed
+        // without asking the checker, which under `noUncheckedIndexedAccess`
+        // would answer `number | undefined` and have no representation to give.
+        //
+        // It is not a cost so much as a statement of where the value is:
+        // `hir::specialize` puts the arithmetic back into the narrow type where
+        // that is what the program does, and `hir::simplify` drops a conversion
+        // that turned out to be the identity.
+        if matches!(ty, HirType::Int { .. } | HirType::Float { bits: 32 }) {
+            return Ok(self.push(OpKind::Convert(read), HirType::NUMBER, origin));
+        }
+        Ok(read)
     }
 
     /// The array and index of an `xs[i]`, lowered in source order.
@@ -4477,13 +4550,24 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
 
-        if member_name != "length" {
-            return Err(self.unsupported(id, "this property"));
-        }
-        if !matches!(
+        let sequence = matches!(
             self.values[value.0 as usize].ty,
             HirType::Managed(ManagedType::Array(_) | ManagedType::String)
-        ) {
+        );
+        if member_name != "length" {
+            // `buffer`, `byteLength` and `byteOffset` land here: a typed array
+            // is an array of a known width and not a view onto storage
+            // something else can also see, so it has a length and nothing else.
+            return Err(self.unsupported(
+                id,
+                &if sequence {
+                    format!("`{member_name}`, where an array has only `length`")
+                } else {
+                    format!("`{member_name}`, a property of a value with no fields")
+                },
+            ));
+        }
+        if !sequence {
             return Err(self.unsupported(id, "`length` of something without one"));
         }
         let origin = self.origin(id);
@@ -5263,6 +5347,20 @@ impl<'a> FuncBuilder<'a> {
             .text
             .clone()
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
+
+        // The runtime's array helpers read the block at one width:
+        // `nts_array_index_of` takes a `const double *`. A narrower element
+        // means a typed array, and handing one to a helper compiled for doubles
+        // makes it read pairs of elements as a single value -- which is not a
+        // wrong answer so much as unrelated memory.
+        //
+        // `hir::elements` refuses to *narrow* an array that reaches a helper
+        // for exactly this reason, having been caught by a benchmark that
+        // returned -512 for 4864. This is the same rule from the other side:
+        // an array that arrived narrow does not reach one.
+        if !matches!(element, HirType::Float { bits: 64 } | HirType::Managed(_) | HirType::Bool) {
+            return Err(self.unsupported(id, &format!("`{name}` on a typed array")));
+        }
 
         // `xs.forEach(v => ...)` is a loop written as a call, and it is
         // compiled as the loop. See [`Self::lower_for_each`].

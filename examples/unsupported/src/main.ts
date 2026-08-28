@@ -66,3 +66,14 @@ export function readsAStack(): number {
 export function callsErrorToString(): number {
   return new Coded("x").toString().length;
 }
+
+// A typed array here is an array of a known width, not a view onto storage
+// something else can also see -- so it has a `length` and nothing else, and the
+// runtime's array helpers are compiled for `double` and must not be handed one.
+export function readsATypedArrayBuffer(): number {
+  return new Uint8Array(4).buffer.byteLength;
+}
+
+export function callsAMethodOnATypedArray(): number {
+  return new Uint8Array(4).indexOf(7);
+}

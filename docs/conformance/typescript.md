@@ -167,7 +167,9 @@ diagnostic.
 | `Map`, `Set`, `WeakMap`, `WeakSet` | **not done** | every real program needs the first two |
 | `Error` and its subclasses | partial | `Error`, `TypeError`, `RangeError` and `URIError` are classes this compiler *provides* — a `message` and a `name` — because the declared interface has `stack?` and `cause?` and an optional property is refused. A subclass adds its own fields after those. `.stack`, `.cause`, `toString()` and `new Error(m, { cause })` refuse, each saying which |
 | `JSON`, `Date`, `RegExp` | **not done** | |
-| typed arrays, `ArrayBuffer`, `DataView` | **not done** | |
+| typed arrays | partial | `Int8Array` through `Float64Array` are ordinary arrays whose element width was written down rather than inferred, so the descriptors, bounds checks and escape analysis already work on one. A store is ECMAScript's conversion, not a C cast: `u8[i] = 300` stores 44 and `u8[i] = NaN` stores 0. Construction from a length only; the methods refuse, because the runtime's array helpers read the block as `double` |
+| `Uint8ClampedArray` | **not done** | it stores by *clamping* where the others wrap, and the wrapping conversion would be silently wrong for exactly the inputs anyone would notice |
+| `ArrayBuffer`, `DataView`, `.buffer` | **not done** | a typed array here owns its storage rather than viewing storage something else can also see, which is what these are for |
 | `Promise` | **not done** | see below |
 | `Reflect`, `Proxy`, `Intl`, `WeakRef` | **not done** | |
 | `console.log` | partial | a `throw`'s message is printed; there is no general `console` |
@@ -285,24 +287,19 @@ In order, with the reason rather than the ranking:
    another. Both gate `som`'s collections, which gate the five Are We Fast Yet
    macro benchmarks, which are the only real programs in reach. Everything below
    is easier to judge against a program bigger than thirty lines.
-2. **Typed arrays** — `Uint8Array` and the rest. Three reasons at once: they are
-   what `Buffer` is, so they block the Node profile's largest module; they are
-   the *declared* form of the element width `hir::elements` already infers, so
-   the machinery exists; and a byte array is the one storage a `number[]` cannot
-   express at all.
-3. **The known defects above** — each is a case where this compiler says yes and
+2. **The known defects above** — each is a case where this compiler says yes and
    means no, which is worse than any absent feature.
-4. **Enums** — four corpus files, and a `const enum` is a table of constants,
+3. **Enums** — four corpus files, and a `const enum` is a table of constants,
    which this compiler already has everywhere else.
-5. **`Map` and `Set`** — no real program does without them.
-6. **Template literals and destructuring** — the two most common things in modern
+4. **`Map` and `Set`** — no real program does without them.
+5. **Template literals and destructuring** — the two most common things in modern
    TypeScript that this compiler cannot read at all.
-7. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
+6. **Exceptions** — `try`/`catch` with real unwinding. Large, and a prerequisite
    for promises rather than an alternative to them.
-8. **Tagged unions** — `number | undefined` and unions of unrelated objects.
+7. **Tagged unions** — `number | undefined` and unions of unrelated objects.
    RFC-level: it changes the representation of every value that can reach the
    slot.
-9. **Promises and `async`/`await`**, on top of 7.
+8. **Promises and `async`/`await`**, on top of 6.
 
 Getters and `readonly`-in-a-constructor are small and can be taken whenever
 convenient; both are known defects rather than absent features.

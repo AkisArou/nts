@@ -84,3 +84,55 @@ pub(super) fn error_fields() -> Vec<Field> {
         })
         .collect()
 }
+
+/// What each typed array stores, if the name is one.
+///
+/// A typed array needs no representation of its own: it is an ordinary
+/// [`ManagedType::Array`] whose element width was *written down* rather than
+/// inferred. `hir::elements` decides that a `number[]` holding small whole
+/// numbers can be an `int32_t[]`; `Int32Array` is the same storage, chosen by
+/// the author instead of proved by the compiler. So the descriptors, the bounds
+/// checks, the escape analysis and the reference counting all already work on
+/// one.
+///
+/// `Uint8ClampedArray` is deliberately absent. It stores by *clamping* to
+/// `[0, 255]` where the others wrap, and giving it the wrapping conversion
+/// would be silently wrong for exactly the inputs anyone would notice.
+/// `BigInt64Array` and `BigUint64Array` are absent because `bigint` is.
+pub(super) fn typed_array_element(name: &str) -> Option<HirType> {
+    let int = |bits, signed| HirType::Int { bits, signed };
+    Some(match name {
+        "Int8Array" => int(8, true),
+        "Uint8Array" => int(8, false),
+        "Int16Array" => int(16, true),
+        "Uint16Array" => int(16, false),
+        "Int32Array" => int(32, true),
+        "Uint32Array" => int(32, false),
+        "Float32Array" => HirType::Float { bits: 32 },
+        "Float64Array" => HirType::Float { bits: 64 },
+        _ => return None,
+    })
+}
+
+/// The runtime helper that turns a `number` into what a typed array stores.
+///
+/// Storing into an integer typed array is not a cast. `u8[i] = 300` stores 44,
+/// `i32[i] = 1.7` stores 1, and `u8[i] = NaN` stores 0 — ECMAScript truncates
+/// toward zero and then takes the value modulo the width, with the
+/// non-finite cases going to zero. C's `(uint8_t)someDouble` is *undefined
+/// behaviour* for every one of those inputs, so the conversion is a named
+/// helper rather than a cast the backend guesses at.
+///
+/// `None` for the floating-point arrays: `double` to `float` is a defined
+/// narrowing conversion and `double` to `double` is nothing at all.
+pub(super) fn element_coercion(element: &HirType) -> Option<&'static str> {
+    match element {
+        HirType::Int { bits: 8, signed: true } => Some("nts_to_int8"),
+        HirType::Int { bits: 8, signed: false } => Some("nts_to_uint8"),
+        HirType::Int { bits: 16, signed: true } => Some("nts_to_int16"),
+        HirType::Int { bits: 16, signed: false } => Some("nts_to_uint16"),
+        HirType::Int { bits: 32, signed: true } => Some("nts_to_int32"),
+        HirType::Int { bits: 32, signed: false } => Some("nts_to_uint32"),
+        _ => None,
+    }
+}
