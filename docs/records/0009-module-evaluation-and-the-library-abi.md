@@ -1387,3 +1387,59 @@ Draining to quiescence has one honest cost worth stating: `setTimeout(f, 5000)`
 inside a synchronous export blocks that call for five seconds. Defined, and
 almost certainly not what the author meant -- which is an argument for the
 diagnostic naming the delay, not for pretending the callback ran.
+
+## A6. Correction to A5: a library is *pumped*, it is not given an `NtsHost`
+
+A5 said shape B's ceremony is `counter_set_host(const NtsHost *)`. That is the
+wrong seam, and RFC 6.5 says so in one line: "The embedder calls these from its
+own loop. The runtime never owns one."
+
+`NtsHost` is the *standalone* shape -- five operations the runtime calls *out*
+to, which is right when we own a libuv loop and wrong for a library, because it
+requires the embedder to own a timer facility and implement `post_delayed`,
+`cancel_delayed` and a cross-thread post before anything works. §6.5's
+`embedder-provided` surface is four lines and points the other way:
+
+```text
+drain microtasks
+run expired timers
+pending work?
+wake me  (the embedder's own signal, called from any thread)
+```
+
+So a shape-B library exports the pump, not a setter:
+
+```c
+/* Is there anything to do, and when. -1 means nothing is pending. */
+bool     counter_has_pending_work(void);
+int64_t  counter_next_deadline_ms(void);
+
+/* Run whatever is due: expired timers, then the checkpoint. */
+void     counter_run_ready(void);
+
+/* Optional, and only for capabilities that complete on another thread: we call
+ * this to ask the embedder to wake its loop. Without it, cross-thread
+ * completions are still safe -- they are queued -- but the embedder discovers
+ * them on its next poll rather than immediately. */
+void     counter_set_wake(void (*wake)(void *), void *state);
+```
+
+The embedder's loop becomes:
+
+```c
+for (;;) {
+    counter_run_ready();
+    int64_t due = counter_next_deadline_ms();
+    poll_my_own_things(due);        /* due is a timeout hint, -1 = block */
+}
+```
+
+This is better on every axis that matters. It is less for the embedder to
+implement -- a pump rather than five callbacks. It does not require the
+embedder to have a timer facility at all, only the ability to wait with a
+timeout, which every loop has. And it keeps `nts_uv_host.c` as what it is: the
+*standalone* host, used when we own the loop, rather than a shape every
+embedder must now reimplement.
+
+A5's shape-A and A' conclusions are unaffected: a library whose work does not
+outlive a call exports none of the above.
