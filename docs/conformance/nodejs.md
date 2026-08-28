@@ -45,6 +45,9 @@ real `node` child — those assert on node's binary, which our module is not in.
 Each exclusion is listed with a reason in the module's `not-applicable` file
 rather than inferred by a rule, so the number can be audited.
 
+**118 of node's own test files pass** across ten modules. The per-module counts
+below are `passed / applicable`.
+
 | module | node's tests | compiles | note |
 | --- | :---: | :---: | --- |
 | `path` | **15 / 16** | 1 / 49 | complete but for `matchesGlob`; the skip is Windows-only |
@@ -59,7 +62,7 @@ rather than inferred by a rule, so the number can be audited.
 | `string_decoder` | **2 / 3** | 4 / 99 | complete; the failure is the class-vs-function difference |
 | `util` | 4 / 19 | 3 / 106 | `inspect`, `format`, `types`, `isDeepStrictEqual` and the helpers |
 | `stream` | — | — | not started |
-| `assert` | 2 / 18 | 0 / 110 | the comparisons are right; the messages are not yet exact |
+| `assert` | 2 / 18 | 1 / 103 | the comparisons are right; the messages are not yet exact |
 
 ## `path`
 
