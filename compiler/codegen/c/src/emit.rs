@@ -574,6 +574,22 @@ fn erases_class(callee: &str, at: usize) -> bool {
     )
 }
 
+/// Whether a runtime helper *returns* a managed reference of any class.
+///
+/// The mirror of [`erases_class`], and it needs the same treatment for the
+/// same reason: the runtime stores one reference slot for every payload, so it
+/// hands back `NtsHeader *` and the caller supplies the class. The caller can,
+/// because the payload's representation is in the type -- that is what
+/// `ManagedType::Promise` carries it for.
+///
+/// A string and an object both went unnoticed here, because assigning to a
+/// `NtsString *` from a `NtsHeader *` is the typedef and C allows it. An array
+/// payload is the first one C objects to, which is a warning about how narrow
+/// the accident of a passing test can be.
+fn erases_result(callee: &str) -> bool {
+    matches!(callee, "nts_promise_reference")
+}
+
 /// A call: static, external, or through the receiver's dispatch table.
 fn call_text(
     func: &Func,
@@ -673,6 +689,13 @@ fn call_text(
         // with a second operation.
         format!(
             "{}_into(&{name}_frame.header, {})",
+            c_identifier(target),
+            arguments.join(", ")
+        )
+    } else if erases_result(target) {
+        let wanted = c_type_of(context.program, &func.values[value.0 as usize].ty, origin)?;
+        format!(
+            "({wanted}){}({})",
             c_identifier(target),
             arguments.join(", ")
         )

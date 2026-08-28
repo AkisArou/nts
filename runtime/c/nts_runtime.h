@@ -838,4 +838,27 @@ void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction);
 double nts_promise_number(const NtsPromise *promise);
 NtsHeader *nts_promise_reference(const NtsPromise *promise);
 
+/* Whether the resumed state machine has to propagate a rejection rather than
+ * read a value. A rejected promise has no payload and both readers above
+ * assert, so an `await` asks this first. */
+bool nts_promise_is_rejected(const NtsPromise *promise);
+/* Reject `result` with whatever `source` was rejected with. One call, so the
+ * reason never has to become a typed value on the compiler's side. */
+void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source);
+
+/* --- Combinators (docs/async.md 5b) ----------------------------------------
+ *
+ * `Promise.all` fulfils with the values in *input* order once every element
+ * has fulfilled, and rejects with the first rejection. `Promise.race` settles
+ * with the first settlement of either kind. Both subscribe to every element
+ * before returning, so an element that settles during the call is not missed.
+ *
+ * `values` is the result array, allocated by the compiler because only it
+ * knows whether a payload is a double or a pointer -- and an array carries its
+ * own descriptor, so the runtime reads that fact back rather than being told
+ * it twice. It must have the length of `promises`. `race` keeps no values, so
+ * it takes none. */
+NtsPromise *nts_promise_all(NtsArray *promises, NtsArray *values);
+NtsPromise *nts_promise_race(NtsArray *promises);
+
 #endif /* NTS_RUNTIME_H */

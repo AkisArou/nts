@@ -1742,3 +1742,195 @@ NtsHeader *nts_promise_reference(const NtsPromise *promise) {
   }
   return promise->reference;
 }
+
+/* Whether an `await` has to propagate a rejection instead of reading a value.
+ *
+ * The resumed state machine asks this before it reads the payload, because a
+ * rejected promise has no payload to read -- both readers assert, so an
+ * `await` of a rejected promise aborted the program until this existed. */
+bool nts_promise_is_rejected(const NtsPromise *promise) {
+  return promise->state == NTS_PROMISE_REJECTED;
+}
+
+/* Reject `result` with whatever `source` was rejected with.
+ *
+ * One call rather than a reason accessor and a reject, so the reason never
+ * becomes a value in the compiler's world. It has no type there: the runtime
+ * stores every rejection in one reference slot, and the machinery for saying
+ * "a managed reference of unknown class" would be a type-system change bought
+ * for one argument that is immediately passed back. */
+void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source) {
+  if (source->state != NTS_PROMISE_REJECTED) {
+    fprintf(stderr, "nts: forwarded a rejection from a promise that has none\n");
+    abort();
+  }
+  nts_promise_reject(result, source->reference);
+}
+
+/* --- Combinators: `Promise.all` and `Promise.race` --------------------------
+ *
+ * Both are the same machine with two dials: how many settlements it waits for,
+ * and whether it keeps the values. `all` waits for every fulfilment and fills
+ * an array; `race` takes the first settlement of either kind and forwards it.
+ * Writing them as one is not a saving -- it is the claim that they *are* one,
+ * which is what the specification says: each subscribes to every element, in
+ * order, before returning, and the result promise settles once.
+ *
+ * The combinator holds no type. `all`'s result array is allocated by the
+ * compiler and handed in, because whether a payload is a double or a pointer
+ * is a fact about the type and the compiler is the only party that has it --
+ * and an array already carries its descriptor, so passing one says it once.
+ */
+
+typedef struct NtsCombinator {
+    NtsHeader header;
+    NtsPromise *result;
+    /* The array being filled, or null for `race`, which keeps no values. */
+    NtsArray *values;
+    /* Fulfilments still owed. A rejection does not decrement it: `all` rejects
+     * outright, and a count that could still reach zero afterwards would
+     * fulfil a promise that is already rejected. The second settle would be
+     * ignored, so this is belt and braces -- but the invariant worth having is
+     * that zero *means* every element fulfilled. */
+    uint32_t remaining;
+} NtsCombinator;
+
+/* One element's share: which combinator, which promise, and which slot of the
+ * result it fills. A separate object per element rather than an index baked
+ * into a closure, because a reaction's state is one managed reference and the
+ * collector reaches the combinator through it. */
+typedef struct NtsCombinatorSlot {
+    NtsHeader header;
+    NtsCombinator *combinator;
+    NtsPromise *source;
+    uint32_t index;
+} NtsCombinatorSlot;
+
+static const uint32_t nts_combinator_offsets[] = {
+    (uint32_t)offsetof(NtsCombinator, result),
+    (uint32_t)offsetof(NtsCombinator, values),
+};
+
+/* Cyclic: a slot points at the combinator, the combinator's result promise
+ * holds reactions, and a reaction's state is a slot. */
+static const NtsDescriptor nts_desc_combinator = {
+    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsCombinator), 2u, 1u,
+    nts_combinator_offsets, 0, "Combinator",
+};
+
+static const uint32_t nts_combinator_slot_offsets[] = {
+    (uint32_t)offsetof(NtsCombinatorSlot, combinator),
+    (uint32_t)offsetof(NtsCombinatorSlot, source),
+};
+
+static const NtsDescriptor nts_desc_combinator_slot = {
+    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsCombinatorSlot), 2u, 1u,
+    nts_combinator_slot_offsets, 0, "CombinatorSlot",
+};
+
+/* Copy a settled promise's payload onto another promise. `race` is exactly
+ * this, and `all`'s rejection is the same thing for the rejected case. */
+static void nts_promise_forward(NtsPromise *to, const NtsPromise *from) {
+  if (from->state == NTS_PROMISE_REJECTED) {
+    nts_promise_reject(to, from->reference);
+    return;
+  }
+  switch (from->payload) {
+  case NTS_PAYLOAD_NUMBER:
+    nts_promise_fulfill_number(to, from->number);
+    return;
+  case NTS_PAYLOAD_REFERENCE:
+    nts_promise_fulfill_reference(to, from->reference);
+    return;
+  default:
+    nts_promise_fulfill_void(to);
+    return;
+  }
+}
+
+/* One element settled. */
+static void nts_combinator_settled(void *state) {
+  NtsCombinatorSlot *slot = (NtsCombinatorSlot *)state;
+  NtsCombinator *all = slot->combinator;
+
+  if (!all->values) {
+    /* `race`: the first settlement of either kind wins, and a later one meets
+     * an already-settled promise, which ignores it. */
+    nts_promise_forward(all->result, slot->source);
+  } else if (slot->source->state == NTS_PROMISE_REJECTED) {
+    nts_promise_reject(all->result, slot->source->reference);
+  } else {
+    if (all->values->header.descriptor->references) {
+      NtsHeader *value = slot->source->reference;
+      nts_retain(value);
+      NTS_ITEMS(all->values, NtsHeader *)[slot->index] = value;
+    } else {
+      NTS_ITEMS(all->values, double)[slot->index] = slot->source->number;
+    }
+    if (--all->remaining == 0) {
+      nts_promise_fulfill_reference(all->result, (NtsHeader *)all->values);
+    }
+  }
+
+  /* The queue's reference, given back by running. */
+  nts_release((NtsHeader *)slot);
+}
+
+static void nts_combinator_drop(void *state) {
+  nts_release((NtsHeader *)state);
+}
+
+/* Subscribe to every element, in order, before returning.
+ *
+ * Eagerly and synchronously: the specification iterates the argument inside
+ * the call, and a program can tell -- an element that settles between the call
+ * and a later subscription would be missed by a lazy one. */
+static NtsPromise *nts_combinator_new(NtsArray *promises, NtsArray *values) {
+  nts_promise_require_owner("a promise combinator");
+
+  NtsCombinator *all = (NtsCombinator *)nts_object_new(&nts_desc_combinator);
+  all->result = nts_promise_new();
+  all->values = values;
+  all->remaining = promises->header.length;
+
+  /* `Promise.all([])` is fulfilled by the time it is returned, with an empty
+   * array. `Promise.race([])` is pending forever, which is not a special case
+   * here so much as the absence of one: nothing was subscribed, so nothing
+   * will ever settle it. */
+  if (values && promises->header.length == 0) {
+    nts_promise_fulfill_reference(all->result, (NtsHeader *)values);
+  }
+
+  for (uint32_t i = 0; i < promises->header.length; i++) {
+    NtsPromise *source = NTS_ITEMS(promises, NtsPromise *)[i];
+    NtsCombinatorSlot *slot =
+        (NtsCombinatorSlot *)nts_object_new(&nts_desc_combinator_slot);
+    slot->combinator = all;
+    nts_retain((NtsHeader *)all);
+    slot->source = source;
+    nts_retain((NtsHeader *)source);
+    slot->index = i;
+    nts_promise_subscribe(
+        source, (NtsTask){nts_combinator_settled, nts_combinator_drop, slot});
+  }
+
+  NtsPromise *result = all->result;
+  nts_retain((NtsHeader *)result);
+  nts_release((NtsHeader *)all);
+  return result;
+}
+
+NtsPromise *nts_promise_all(NtsArray *promises, NtsArray *values) {
+  if (values->header.length != promises->header.length) {
+    /* The compiler allocates `values` with the length of `promises`, so a
+     * mismatch is a compiler bug and the next line would write past the end
+     * of the array. Cheaper to say so than to debug the corruption. */
+    fprintf(stderr, "nts: `Promise.all` given a result array of the wrong size\n");
+    abort();
+  }
+  return nts_combinator_new(promises, values);
+}
+
+NtsPromise *nts_promise_race(NtsArray *promises) {
+  return nts_combinator_new(promises, 0);
+}

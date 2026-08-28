@@ -522,6 +522,9 @@ fn resume_function(
     };
 
     let (base, starts) = segment_layout(func, points);
+    // Immediately after the dispatch chain, which is what `segment_layout`
+    // reserved the extra block for.
+    let reject = super::BlockId(base - 1);
 
     let mut body: Vec<super::Block> = Vec::new();
     let mut resume_at: Vec<super::BlockId> = vec![super::BlockId(starts[0])];
@@ -589,8 +592,22 @@ fn resume_function(
                 ops: std::mem::take(&mut build.ops),
                 terminator: Terminator::Return(None),
             });
-            resume_at.push(super::BlockId(
-                base + u32::try_from(body.len()).unwrap_or(0),
+            let landing = base + u32::try_from(body.len()).unwrap_or(0);
+            resume_at.push(super::BlockId(landing));
+            // The dispatch lands here rather than on the payload read. A
+            // rejected promise holds a reason and no value, so both readers
+            // assert -- `await` of one aborted the program, which is the
+            // failure mode a test that only awaits successes never sees.
+            //
+            // There is no `try`/`catch` across an `await` yet, so the only
+            // thing a rejection can do is reject this function's own promise,
+            // which is what the shared block does.
+            body.push(rejection_check(
+                &mut build,
+                frame,
+                std::mem::take(&mut params),
+                reject,
+                super::BlockId(landing + 1),
             ));
             read_settled(&mut build, frame, awaited, slot_of);
             from = op + 1;
@@ -598,6 +615,10 @@ fn resume_function(
     }
 
     let mut blocks = dispatch_chain(&mut build, frame, &resume_at);
+    // The shared rejection exit. It reads the awaited promise out of the frame
+    // rather than taking it as a parameter, so every resumption can share one
+    // block: the field holds whichever promise this resumption was waiting on.
+    blocks.push(rejection_exit(&mut build, frame));
     blocks.extend(body);
     Func {
         name: name.to_owned(),
@@ -623,7 +644,9 @@ fn resume_function(
 /// one nothing reaches so the last test has somewhere to send a state that
 /// cannot happen. Everything after that is the body, a block per segment.
 fn segment_layout(func: &Func, points: &[(usize, usize, ValueId)]) -> (u32, Vec<u32>) {
-    let base = u32::try_from(points.len() + 2).unwrap_or(0);
+    // The dispatch chain, then one block the whole function shares for
+    // propagating a rejection, then the body.
+    let base = u32::try_from(points.len() + 3).unwrap_or(0);
     let mut starts = Vec::new();
     let mut count = 0u32;
     for index in 0..func.blocks.len() {
@@ -632,7 +655,10 @@ fn segment_layout(func: &Func, points: &[(usize, usize, ValueId)]) -> (u32, Vec<
             .iter()
             .filter(|(block, _, _)| *block == index)
             .count();
-        count += u32::try_from(cuts + 1).unwrap_or(1);
+        // Two blocks per suspension, not one: the segment that suspends, and
+        // the one the dispatch lands on, which tests for a rejection before
+        // anything reads a payload.
+        count += u32::try_from(2 * cuts + 1).unwrap_or(1);
     }
     (base, starts)
 }
@@ -677,6 +703,70 @@ fn entry_owned(func: &Func, slot_of: &rustc_hash::FxHashMap<ValueId, u32>, value
 ///
 /// The `await` operation itself becomes that read, so every later reference to
 /// it finds the settled value with none of them rewritten.
+/// The block a resumption lands on: is this a rejection or a value?
+///
+/// A rejected promise holds a reason and no payload, so both readers assert.
+/// The test comes before anything reads, which is why the dispatch targets this
+/// block rather than the payload read itself.
+fn rejection_check(
+    build: &mut Build,
+    frame: ValueId,
+    params: Vec<ValueId>,
+    reject: super::BlockId,
+    settled: super::BlockId,
+) -> super::Block {
+    let held = build.get(
+        frame,
+        FIELD_AWAITED,
+        HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
+    );
+    let rejected = build.push(
+        OpKind::Call {
+            callee: super::Callee::External("nts_promise_is_rejected".to_owned()),
+            args: vec![held],
+            frame: None,
+        },
+        HirType::Bool,
+    );
+    super::Block {
+        params,
+        ops: std::mem::take(&mut build.ops),
+        terminator: Terminator::Branch {
+            cond: rejected,
+            then_target: reject,
+            then_args: Vec::new(),
+            else_target: settled,
+            else_args: Vec::new(),
+        },
+    }
+}
+
+/// The one block every resumption's rejection goes to.
+///
+/// Shared rather than one per suspension because it needs nothing from the
+/// suspension: the awaited promise is a frame field, so this reads whichever
+/// one this resumption was waiting on. With no `try`/`catch` across an `await`,
+/// rejecting this function's own promise is the whole of what a rejection can
+/// do.
+fn rejection_exit(build: &mut Build, frame: ValueId) -> super::Block {
+    let promise = HirType::Managed(ManagedType::Promise(Box::new(HirType::Void)));
+    let result = build.get(frame, FIELD_RESULT, promise.clone());
+    let held = build.get(frame, FIELD_AWAITED, promise);
+    build.push(
+        OpKind::Call {
+            callee: super::Callee::External("nts_promise_reject_with".to_owned()),
+            args: vec![result, held],
+            frame: None,
+        },
+        HirType::Void,
+    );
+    super::Block {
+        params: Vec::new(),
+        ops: std::mem::take(&mut build.ops),
+        terminator: Terminator::Return(None),
+    }
+}
+
 fn read_settled(
     build: &mut Build,
     frame: ValueId,

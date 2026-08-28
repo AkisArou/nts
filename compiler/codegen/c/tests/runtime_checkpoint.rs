@@ -96,3 +96,15 @@ fn promises_resolve_in_the_order_node_resolves_them() {
         checks(&report)
     );
 }
+
+#[test]
+fn combinators_settle_in_the_order_node_settles_them() {
+    // Reference counting, and the suite collects cycles before it measures:
+    // a combinator, its slots and its result promise form one.
+    let report = run_suite("combinators", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 7,
+        "expected at least 7 combinator checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}

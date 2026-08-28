@@ -223,3 +223,107 @@ export function refused(n: number): Promise<number> {
   }
   return Promise.reject(new Error("not positive"));
 }
+
+// --- `Promise.all` and `Promise.race` --------------------------------------
+//
+// One machine with two dials: how many settlements it waits for, and whether
+// it keeps the values. Both subscribe to every element, in order, before
+// returning -- an element that settles during the call is not missed -- and
+// both settle their result once.
+//
+// The tick that these exist to pin: `all` settles one microtask *after* its
+// last element, because the element's reaction runs and then settling the
+// result schedules its own. A combinator that resolved inline would return the
+// same values and the wrong interleaving.
+
+async function afterOneTick(n: number): Promise<number> {
+  return await Promise.resolve(n);
+}
+
+async function afterThreeTicks(n: number): Promise<number> {
+  let v = await Promise.resolve(n);
+  v = await Promise.resolve(v);
+  return await Promise.resolve(v);
+}
+
+export async function allOfTwo(n: number): Promise<number> {
+  const values = await Promise.all([afterOneTick(n), afterOneTick(n + 1)]);
+  return values[0]! * 1000 + values[1]!;
+}
+
+// The slow one is first in the array and settles last. Completion order and
+// input order agree in most tests, which is exactly what lets a combinator
+// that reports completion order pass them.
+export async function allKeepsInputOrder(n: number): Promise<number> {
+  const values = await Promise.all([afterThreeTicks(n), afterOneTick(n + 5)]);
+  return values[0]! * 1000 + values[1]!;
+}
+
+// Fulfilled with an empty array before the call returns, rather than a tick
+// later. Nothing is subscribed, so there is no reaction to wait for.
+export async function allOfNone(n: number): Promise<number> {
+  const none: Promise<number>[] = [];
+  const values = await Promise.all(none);
+  return values.length + n;
+}
+
+// A reference payload, which is a different `fulfill` and a different read.
+// The read is why this case is here: the runtime hands back one erased
+// reference for every payload, and the array is the first class C refuses to
+// take it for -- a string and an object both compiled silently.
+export async function allOfStrings(n: number): Promise<string> {
+  const values = await Promise.all([describe(n), describe(-n)]);
+  return values[0]! + "/" + values[1]!;
+}
+
+export async function raceTakesTheFirstToSettle(n: number): Promise<number> {
+  return await Promise.race([afterThreeTicks(n), afterOneTick(n + 5)]);
+}
+
+// Both are settled, so the winner is subscription order, which is input order.
+export async function raceOfSettled(n: number): Promise<number> {
+  return await Promise.race([Promise.resolve(n), Promise.resolve(n + 1)]);
+}
+
+// --- Rejection ---------------------------------------------------------------
+//
+// A rejected promise holds a reason and no value, so both payload readers
+// assert. `await` of one aborted the program until the resumption learned to
+// test for it first -- a failure no test that only awaits successes can see.
+//
+// With no `try`/`catch` across an `await`, the only thing a rejection can do is
+// reject this function's own promise, which is what these check. `nts check`
+// compares that against node's, where the `await` throws and the rejection
+// comes out of the async function the same way.
+
+function rejects(n: number): Promise<number> {
+  return Promise.reject(new Error("rejected on purpose"));
+}
+
+export async function awaitARejection(n: number): Promise<number> {
+  const v = await rejects(n);
+  return v + 1;
+}
+
+// The rejection arrives at the *second* resumption, so the state machine has
+// already dispatched once and has live values in the frame.
+export async function rejectionAfterASuspension(n: number): Promise<number> {
+  const first = await Promise.resolve(n);
+  if (first > 0) {
+    return await rejects(n);
+  }
+  return first;
+}
+
+// One rejecting element rejects the whole `all`, and the element that fulfils
+// afterwards does not un-reject it.
+export async function allWithARejection(n: number): Promise<number> {
+  const values = await Promise.all([afterOneTick(n), rejects(n)]);
+  return values[0]!;
+}
+
+// `race` forwards a rejection as readily as a value: first settlement of
+// either kind wins, and this one is already rejected at subscription.
+export async function raceWithARejection(n: number): Promise<number> {
+  return await Promise.race([afterOneTick(n), rejects(n)]);
+}

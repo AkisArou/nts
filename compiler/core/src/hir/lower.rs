@@ -3607,12 +3607,92 @@ impl<'a> FuncBuilder<'a> {
         {
             return None;
         }
-        let rejecting = match self.node(member).text.as_deref()? {
-            "resolve" => false,
-            "reject" => true,
+        let member = self.node(member).text.clone()?;
+        Some(match member.as_str() {
+            "resolve" => self.settled_promise(id, arguments, false),
+            "reject" => self.settled_promise(id, arguments, true),
+            "all" => self.combinator(id, arguments, true),
+            "race" => self.combinator(id, arguments, false),
             _ => return None,
+        })
+    }
+
+    /// `Promise.all(xs)` and `Promise.race(xs)`.
+    ///
+    /// One function because they are one machine with two dials, which is the
+    /// same claim the runtime makes: both subscribe to every element in order
+    /// before returning, and both settle their result once. What differs is
+    /// whether the values are kept.
+    ///
+    /// `collecting` is `all`. The result array is allocated *here* rather than
+    /// in the runtime: whether a payload is a double or a pointer is a fact
+    /// about the type, and an array carries its own descriptor, so allocating
+    /// it on this side says that fact once instead of passing it separately.
+    ///
+    /// A heterogeneous tuple -- `Promise.all([Promise<number>, Promise<string>])`,
+    /// whose result is `Promise<[number, string]>` -- needs no rule here. A
+    /// tuple whose elements do not share a representation has none either, so
+    /// the type is refused before this is reached.
+    fn combinator(
+        &mut self,
+        id: NodeId,
+        arguments: &[NodeId],
+        collecting: bool,
+    ) -> Result<ValueId, Diagnostic> {
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a `Promise` combinator result"))?;
+        let HirType::Managed(ManagedType::Promise(payload)) = ty.clone() else {
+            return Err(self.unrepresentable(id, "a `Promise` combinator result"));
         };
-        Some(self.settled_promise(id, arguments, rejecting))
+        let [only] = arguments else {
+            // `Promise.all()` and `Promise.all(a, b)` are both type errors, so
+            // arriving here means the shape is not what this reads.
+            return Err(self.unsupported(id, "a `Promise` combinator with these arguments"));
+        };
+        let promises = self.lower_expression(*only)?;
+        let HirType::Managed(ManagedType::Array(element)) =
+            self.values[promises.0 as usize].ty.clone()
+        else {
+            // An iterable that is not an array: legal JavaScript, and it needs
+            // the iteration protocol rather than a length and an index.
+            return Err(self.unsupported(id, "a `Promise` combinator over a non-array"));
+        };
+        let HirType::Managed(ManagedType::Promise(settles)) = *element else {
+            // `Promise.all([1, 2])` is legal and fulfils with the values
+            // unchanged. Supporting it means a per-element test for whether a
+            // value is a promise at all, which is a different mechanism from
+            // this one rather than a bigger version of it.
+            return Err(self.unsupported(id, "a `Promise` combinator over non-promises"));
+        };
+        let origin = self.origin(id);
+        if !collecting {
+            if *payload != *settles {
+                return Err(self.unrepresentable(id, "a `Promise.race` result"));
+            }
+            return Ok(self.runtime_call("nts_promise_race", vec![promises], ty, origin));
+        }
+        // The checker's answer is `Promise<T[]>`; the argument's is `Promise<T>[]`.
+        // They agree by construction, and disagreeing means this read one of
+        // them wrong rather than that the program is unusual.
+        let HirType::Managed(ManagedType::Array(collected)) = &*payload else {
+            return Err(self.unrepresentable(id, "a `Promise.all` result"));
+        };
+        if **collected != *settles {
+            return Err(self.unrepresentable(id, "a `Promise.all` result"));
+        }
+        let length = self.push(OpKind::Length(promises), HirType::NUMBER, origin.clone());
+        let values = self.push(
+            // Zeroed, because a rejection leaves it partly filled and a
+            // collector that walked the rest would follow whatever was there.
+            OpKind::ArrayNew {
+                length,
+                zeroed: true,
+            },
+            HirType::Managed(ManagedType::Array(collected.clone())),
+            origin.clone(),
+        );
+        Ok(self.runtime_call("nts_promise_all", vec![promises, values], ty, origin))
     }
 
     /// The body of [`Self::lower_promise_static`], once the shape is known.
@@ -3690,6 +3770,26 @@ impl<'a> FuncBuilder<'a> {
         result: &AsyncResult,
         value: Option<ValueId>,
     ) -> Result<(), Diagnostic> {
+        // Settling a promise *with* a promise is adoption: the outer one
+        // subscribes to the inner, waits, and takes its value -- two extra
+        // ticks that a program can see through any interleaving. Storing the
+        // inner promise in the payload slot instead would be a different value
+        // of a different type.
+        //
+        // It was already an error, but the C compiler's: `NtsPromise *` does
+        // not go where a `double` is wanted, so `return g(n)` from an `async`
+        // function reported a clang diagnostic against generated code. That
+        // reads as a compiler defect rather than as a construct this does not
+        // implement, and only the number payload was loud -- a reference
+        // payload would have compiled and settled with the wrong object.
+        if let Some(value) = value
+            && matches!(
+                self.values[value.0 as usize].ty,
+                HirType::Managed(ManagedType::Promise(_))
+            )
+        {
+            return Err(self.unsupported(id, "a promise settled with another promise"));
+        }
         let origin = self.origin(id);
         let (helper, args) = match (&result.payload, value) {
             (HirType::Void, _) | (_, None) => ("nts_promise_fulfill_void", vec![result.promise]),

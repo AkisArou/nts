@@ -66,3 +66,39 @@ export async function guarded(p: Promise<number>): Promise<number> {
     // Nothing here: it is spanning the `await` that is refused, not the body.
   }
 }
+
+// A promise settled *with* a promise: adoption. The outer one subscribes to
+// the inner, waits, and takes its value -- two extra ticks that any
+// interleaving can see. Storing the inner promise in the payload slot would be
+// a different value of a different type.
+//
+// It was already an error, but the C compiler's, which reads as a defect in
+// this compiler rather than as a construct it does not implement. And only the
+// number payload was loud: `NtsPromise *` will not go where a `double` is
+// wanted, but a reference payload would have compiled and settled with the
+// wrong object.
+export async function adopts(n: number): Promise<number> {
+  return inner(n);
+}
+
+// `Promise.all` over an array of values rather than promises. Legal, and it
+// fulfils with the values unchanged -- but deciding per element whether a
+// value is a promise at all is a different mechanism from this one rather than
+// a larger version of it.
+export async function allOfPlainValues(n: number): Promise<number> {
+  const values = await Promise.all([n, n + 1]);
+  return values[0]!;
+}
+
+// A heterogeneous result. `Promise.all` of a `number` and a `string` is
+// `Promise<[number, string]>`, and a tuple whose elements do not share a
+// representation has none -- so this is refused by the type rather than by a
+// rule of its own.
+async function named(n: number): Promise<string> {
+  return "n";
+}
+
+export async function allOfMixed(n: number): Promise<string> {
+  const values = await Promise.all([inner(n), named(n)]);
+  return values[1]!;
+}

@@ -289,6 +289,53 @@ The first two are the interesting pair, because they produce a program that
 
 ---
 
+### 5c. The combinators, and the tick they hang on
+
+`Promise.all` and `Promise.race` are one machine with two dials: how many
+settlements it waits for, and whether it keeps the values. Writing them as one
+is not a saving, it is the claim that they *are* one — both subscribe to every
+element, in order, before returning, and both settle their result once.
+
+The part worth pinning is a tick. `all` settles one microtask *after* its last
+element: the element's reaction runs, and settling the result schedules its own
+reaction. A combinator that resolved inline returns the same values in the same
+order and the wrong interleaving, and no test that checks the result can see the
+difference. Node says
+
+    Promise.all([Promise.resolve(1), Promise.resolve(2)]).then(v => t("all " + v));
+    Promise.resolve().then(()=>t("t1")).then(()=>t("t2")).then(()=>t("t3"));
+    // t1 -> all 1,2 -> t2 -> t3
+
+and `runtime/c/tests/combinators.c` asserts that sequence, with five more beside
+it: input order preserved when completion order differs, an empty `all`
+fulfilled *before it returns*, an empty `race` that never settles, the first
+rejection winning, and `race` taking the first element when several are already
+settled.
+
+The result array is allocated by the compiler and handed in, rather than the
+runtime allocating it from a descriptor. Whether a payload is a double or a
+pointer is a fact about the type, and an array already carries its own
+descriptor — so passing the array says that fact once instead of twice.
+
+### Rejection, which was aborting
+
+A rejected promise holds a reason and no payload, so both payload readers
+assert. `await` of one *aborted the program* — not a wrong answer, a crash, and
+one that no test which only awaits successes can reach. It was found by writing
+`Promise.all` with a rejecting element, which is to say by accident.
+
+The resumption now tests before it reads, and a rejection goes to a single
+block the whole function shares: reject this function's own promise with the
+same reason, and return. Shared because it needs nothing from the suspension —
+the awaited promise is a frame field, so one block serves every resumption.
+
+With no `try`/`catch` across an `await`, that is the whole of what a rejection
+can do, and it is the same thing node does with an uncaught one. `nts check`
+compares them: the driver wraps its `await` so a rejection is an answer rather
+than the end of the run.
+
+---
+
 ### What the general case cost
 
 Two more, on top of the three above.
@@ -435,10 +482,20 @@ wrong for the newcomer: `Convert` returning `TOP` in the facts analysis,
    each suspension point, on the *original* function -- what leaves the block,
    plus what the rest of the block reads, minus what does not exist yet. That
    avoids building the body twice.
-9. `Promise.resolve`, `reject`, `all`, `race` as the profile needs them.
+9. ~~`Promise.resolve`, `reject`, `all`, `race`.~~ **Done**, with the ordering
+   asserted against node in `runtime/c/tests/combinators.c` and end to end by
+   `nts check` — see 5c. Rejection *propagation* came with them: `await` of a
+   rejected promise used to abort, because both payload readers assert and a
+   rejected promise has neither slot filled.
 10. `new Promise(executor)`, whose hard half is that `resolve` is a closure over
     the promise, so settling reaches back through a function the constructor
-    supplied.
+    supplied. What used to be its *other* half — that mentioning it cost every
+    other promise in the file its payload — is gone: the cause was the `Promise`
+    constructor's type dragging 8,189 types of `lib.d.ts` through decomposition
+    and exhausting a 4,096 budget, so everything decomposed afterwards silently
+    stayed a placeholder. The constructor's surface is recognized and left
+    alone now, and a file that mentions `Promise` costs six types rather than
+    eight thousand.
 
 **C. The libuv host.**
 

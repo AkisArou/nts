@@ -39,9 +39,9 @@ use std::time::Instant;
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_diagnostics::{Digest, SourceFile, SourceId};
 use nts_semantic_schema::{
-    NodeId, NodeKind, SCHEMA_VERSION, SemanticSnapshot, SnapshotError, SymbolId, TypeId,
+    NodeId, NodeKind, SCHEMA_VERSION, SemanticSnapshot, SnapshotError, SymbolId, TypeId, syntax,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -936,6 +936,69 @@ fn absolute(path: &Utf8Path) -> Utf8PathBuf {
         .map_or_else(|_| path.to_owned(), |cwd| cwd.join(path))
 }
 
+/// What the deep passes cost, when they ran. `None` is "that pass was not
+/// asked for", which is a different answer from a run that did nothing.
+#[derive(Default)]
+struct DeepStats {
+    decomposed: Option<decompose::DecomposeStats>,
+    resolved: Option<decompose::DecomposeStats>,
+    folded: Option<decompose::DecomposeStats>,
+}
+
+impl TsgoApi {
+    /// The passes that ask the checker follow-up questions: decomposition,
+    /// call resolution, constant folding.
+    ///
+    /// Seeded with every interned type *except* the ones this compiler
+    /// implements itself, because reachability does not exist yet to say which
+    /// of them the build will actually reach. The seam is the seed set: when it
+    /// does, only that argument changes.
+    #[allow(clippy::too_many_arguments)]
+    fn deepen(
+        &mut self,
+        client: &mut Client,
+        snapshot: &mut SemanticSnapshot,
+        opened: &UpdateSnapshotResponse,
+        interned: FxHashMap<u32, TypeId>,
+        symbol_ids: FxHashMap<u32, SymbolId>,
+        file_bases: &[(String, u32)],
+        natively_implemented: &FxHashSet<u32>,
+    ) -> Result<DeepStats, TsgoError> {
+        if self.decompose.is_none() && self.resolve_calls.is_none() && self.fold_constants.is_none()
+        {
+            return Ok(DeepStats::default());
+        }
+        let seeds: Vec<u32> = interned
+            .keys()
+            .copied()
+            .filter(|id| !natively_implemented.contains(id))
+            .collect();
+        let project = opened
+            .projects
+            .first()
+            .map_or_else(|| ProjectHandle(String::new()), |p| p.id.clone());
+        let mut deep = decompose::Decomposer::new(
+            client,
+            opened.snapshot,
+            project,
+            interned,
+            symbol_ids,
+            file_bases.to_vec(),
+        );
+        let mut stats = DeepStats::default();
+        if let Some(budget) = self.decompose {
+            stats.decomposed = Some(deep.run(snapshot, seeds, budget)?);
+        }
+        if let Some(budget) = self.resolve_calls {
+            stats.resolved = Some(deep.resolve_calls(snapshot, budget)?);
+        }
+        if let Some(budget) = self.fold_constants {
+            stats.folded = Some(deep.fold_constants(snapshot, budget)?);
+        }
+        Ok(stats)
+    }
+}
+
 impl SemanticSource for TsgoApi {
     fn snapshot(&mut self, tsconfig: &Utf8Path) -> Result<SemanticSnapshot, SnapshotError> {
         let started = Instant::now();
@@ -952,6 +1015,8 @@ impl SemanticSource for TsgoApi {
         // tsgo's ids are stable within a session, so one `string` type interns to
         // one record no matter how many nodes name it.
         let mut interned: FxHashMap<u32, TypeId> = FxHashMap::default();
+        // Types this compiler implements itself; see `promise_surface`.
+        let mut natively_implemented: FxHashSet<u32> = FxHashSet::default();
         let mut symbol_ids: FxHashMap<u32, SymbolId> = FxHashMap::default();
         // Where each file's nodes begin, so a declaration handle can be mapped
         // back onto the shared arena.
@@ -1003,7 +1068,14 @@ impl SemanticSource for TsgoApi {
                 // Symbols first: a type's declaring symbol must be interned before the
                 // type records it, or the type would carry no arena index for it.
                 symbols::resolve(&mut client, &mut snapshot, &mut symbol_ids, ctx)?;
-                resolve_types(&mut client, &mut snapshot, &mut interned, &symbol_ids, ctx)?;
+                resolve_types(
+                    &mut client,
+                    &mut snapshot,
+                    &mut interned,
+                    &symbol_ids,
+                    &mut natively_implemented,
+                    ctx,
+                )?;
 
                 snapshot.sources.push(SourceFile {
                     uri: workspace_uri(cwd, path),
@@ -1017,37 +1089,19 @@ impl SemanticSource for TsgoApi {
 
         collect_diagnostics(&mut client, &mut snapshot, &opened)?;
 
-        // Seeded with every interned type, because reachability does not exist yet
-        // to say which of them the build will actually reach. The seam is the seed
-        // set: when it does, only this argument changes.
-        let mut decomposed = None;
-        let mut resolved = None;
-        let mut folded = None;
-        if self.decompose.is_some() || self.resolve_calls.is_some() || self.fold_constants.is_some()
-        {
-            let seeds: Vec<u32> = interned.keys().copied().collect();
-            let project = opened
-                .projects
-                .first()
-                .map_or_else(|| ProjectHandle(String::new()), |p| p.id.clone());
-            let mut deep = decompose::Decomposer::new(
-                &mut client,
-                opened.snapshot,
-                project,
-                interned,
-                symbol_ids,
-                file_bases.clone(),
-            );
-            if let Some(budget) = self.decompose {
-                decomposed = Some(deep.run(&mut snapshot, seeds, budget)?);
-            }
-            if let Some(budget) = self.resolve_calls {
-                resolved = Some(deep.resolve_calls(&mut snapshot, budget)?);
-            }
-            if let Some(budget) = self.fold_constants {
-                folded = Some(deep.fold_constants(&mut snapshot, budget)?);
-            }
-        }
+        let DeepStats {
+            decomposed,
+            resolved,
+            folded,
+        } = self.deepen(
+            &mut client,
+            &mut snapshot,
+            &opened,
+            interned,
+            symbol_ids,
+            &file_bases,
+            &natively_implemented,
+        )?;
 
         self.stats = FrontendStats {
             elapsed_ms: started.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
@@ -1081,6 +1135,7 @@ fn resolve_types(
     snapshot: &mut SemanticSnapshot,
     interned: &mut FxHashMap<u32, TypeId>,
     symbols: &FxHashMap<u32, SymbolId>,
+    natively_implemented: &mut FxHashSet<u32>,
     ctx: symbols::FileContext<'_>,
 ) -> Result<(), TsgoError> {
     // Lists are skipped, not because their type is uninteresting but because a
@@ -1118,6 +1173,9 @@ fn resolve_types(
         let Some(response) = response else {
             continue;
         };
+        if promise_surface(snapshot, *node) {
+            natively_implemented.insert(response.id);
+        }
         let type_id = *interned.entry(response.id).or_insert_with(|| {
             let id = TypeId(u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX));
             snapshot.types.push(types::classify(response, symbols));
@@ -1264,4 +1322,50 @@ fn compiled_files(
     }
 
     Ok(compiled)
+}
+
+/// Whether a node's type is part of the `Promise` constructor's surface.
+///
+/// The `Promise` identifier, and any member read off it. Both are library
+/// types this compiler implements natively: the lowering recognizes
+/// `Promise.resolve`, `.reject`, `.all` and `.race` by name and never reads
+/// their declared types, so decomposing them buys nothing and costs the whole
+/// standard library's promise graph.
+///
+/// It costs 8,189 types -- `PromiseLike`, `Awaited`, and the eleven tuple
+/// overloads of `all` -- against a budget of 4,096, so *mentioning* `Promise`
+/// exhausted it and everything decomposed afterwards silently stayed a
+/// placeholder. That is what made `Promise<string>` unrepresentable in a file
+/// where `Promise<number>` was fine.
+///
+/// The library boundary in `decompose` does not stop it, because the checker
+/// gives that type no symbol and a type with no symbol is read as one of ours
+/// -- right for an object literal, wrong for an anonymous interface out of
+/// `lib.d.ts`. Recognized here rather than there for the same reason the
+/// lowering recognizes it syntactically: at this point there is a node.
+///
+/// By name, with the same caveat as everywhere else this compiler recognizes a
+/// provided type: a program that declared its own `Promise` would be mis-read.
+/// The principled version is `docs/any-unknown.md`'s profiles, which tie a
+/// trusted declaration identity to compiler-owned semantics.
+fn promise_surface(snapshot: &SemanticSnapshot, node: NodeId) -> bool {
+    let Some(record) = snapshot.nodes.get(node.0 as usize) else {
+        return false;
+    };
+    let NodeKind::Syntax(kind) = record.kind else {
+        return false;
+    };
+    if kind == syntax::IDENTIFIER {
+        return record.text.as_deref() == Some("Promise");
+    }
+    if kind != syntax::PROPERTY_ACCESS_EXPRESSION {
+        return false;
+    }
+    // `Promise.all` is its own type, reached without going through the
+    // constructor's members, so stopping at the constructor alone would leave
+    // the overload set to pull the same graph in by itself.
+    record
+        .children
+        .first()
+        .is_some_and(|object| promise_surface(snapshot, *object))
 }

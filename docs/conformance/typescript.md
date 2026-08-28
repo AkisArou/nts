@@ -200,7 +200,11 @@ worse.
 | **exceptions** | **not done** | `throw` terminates; no unwinding, no handler |
 | `async` functions without `await` | done | the promise is allocated on entry and every `return` settles it and hands it back, so falling off the end and a bare `return` are one path. Driven by `nts check`, which runs the loop to quiescence and compares what settled against node's `await` |
 | `await`, and suspension | done | the function becomes a state machine over a heap frame: a thin entry that allocates it and hands back a promise, and a resume function the microtask queue calls when the awaited promise settles. Each block is cut into segments at its `await`s; everything still needed on the far side lives in the frame, because a segment reached only from the state dispatch is dominated by nothing that defines it. Several suspension points, `await` in a branch or a loop, and values that outlive a suspension all work. The frame is a synthetic class, exactly as a closure is, so it gets the layout, the descriptor, precise tracing and reference counting for free |
-| `new Promise(executor)` | **not done** | `resolve` is a closure over the promise, so settling reaches back through a function the constructor supplied. It also costs every other promise in its file their payload, for a reason not yet understood — see `examples/promise-constructor` |
+| `Promise.resolve`, `.reject` | done | constructors rather than operations: each allocates a promise and settles it before anyone can subscribe. Already settled is not synchronous — a reaction still runs on the microtask queue, one tick later |
+| `Promise.all`, `.race` | done | one machine with two dials: how many settlements it waits for, and whether it keeps the values. Both subscribe to every element, in order, before returning. `all` settles one microtask *after* its last element, which is the part a test that only checks the result cannot see; the sequences are transcribed from node in `runtime/c/tests/combinators.c`. The result array is allocated by the compiler, because whether a payload is a double or a pointer is a fact about the type. A heterogeneous result is refused by the type: a tuple whose elements do not share a representation has none |
+| a rejection crossing an `await` | done | the resumption tests before it reads, because a rejected promise holds a reason and no payload and both readers assert — `await` of one *aborted*. A rejection rejects the awaiting function's own promise, through one block the whole function shares. Catching one still needs `try`/`catch` across a suspension, which is refused |
+| a promise settled with a promise | **not done** | adoption: the outer subscribes to the inner and takes its value, two extra ticks that any interleaving can see. Refused by name — it was a clang error against generated code, and only for a number payload |
+| `new Promise(executor)` | **not done** | `resolve` is a closure over the promise, so settling reaches back through a function the constructor supplied |
 | async generators, `for await`, a `finally` spanning an `await` | **not done** | each refused *by name*, and checked ahead of the `await` rule so they are live rather than hidden behind it |
 | an event loop | partial | the host seam, the two queues and the checkpoint are built and tested against node; a deterministic host with virtual time exists. libuv is phase C of [`../async.md`](../async.md) |
 | an event loop | **not done** | |
@@ -236,9 +240,10 @@ Three of the four things it needed now exist.
    is left is a real host, which is where the I/O that makes it worth having
    comes from.
 
-A rejected promise is an exception that crossed a suspension, so the *rejection*
-half still belongs after exceptions — building it first would mean building
-unwinding twice. Fulfilment does not, which is why this slice exists.
+A rejected promise *propagates* now: the resumption tests for one before it
+reads a payload, and rejects the awaiting function's own promise. **Catching**
+one is what still belongs after exceptions — `try`/`catch` across a suspension
+is unwinding, and building it here would mean building unwinding twice.
 
 ---
 
