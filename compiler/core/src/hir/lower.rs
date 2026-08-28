@@ -553,6 +553,37 @@ impl FuncBuilder<'_> {
     }
 }
 
+/// Function names this program declares more than once.
+///
+/// A namespace is how this happens in practice. Its members are lowered under
+/// their *unqualified* names, so `Rect.area` and `Tri.area` both emit `area` —
+/// and the failure was a C redefinition error with no source location, while
+/// this compiler said "nothing refused".
+///
+/// Overload signatures share a name legitimately and only the implementation
+/// has a body, so a declaration without one does not count. Methods are spelled
+/// `Class#method` and cannot collide with a plain function.
+fn colliding_function_names(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashSet<String> {
+    let probe = FuncBuilder::new(snapshot);
+    let mut seen: rustc_hash::FxHashMap<String, usize> = rustc_hash::FxHashMap::default();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::FUNCTION_DECLARATION) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        if !probe.has_a_body(id) {
+            continue;
+        }
+        if let Some(name) = probe.declared_name(id) {
+            *seen.entry(name).or_default() += 1;
+        }
+    }
+    seen.into_iter()
+        .filter(|(_, count)| *count > 1)
+        .map(|(name, _)| name)
+        .collect()
+}
+
 fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
     let mut scope = ModuleScope::default();
     let probe = FuncBuilder::new(snapshot);
@@ -651,6 +682,44 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
 
 /// Lower every function declaration in a snapshot.
 #[must_use]
+/// The methods and constructors a class declares.
+fn members_of(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
+    let probe = FuncBuilder::new(snapshot);
+    probe
+        .children(id)
+        .into_iter()
+        .filter(|child| {
+            matches!(
+                probe.kind_of(*child),
+                Some(syntax::METHOD_DECLARATION | syntax::CONSTRUCTOR)
+            )
+        })
+        .collect()
+}
+
+/// The copies of a class to lower.
+///
+/// A generic class is lowered once per instantiation and not at all as itself:
+/// a field of type `T` has no width, and `Vector<Body>` and `Vector<double>` are
+/// two classes that happen to share a source. A class with type parameters that
+/// nothing instantiates is dead, and lowering it would report a refusal for a
+/// program nobody wrote.
+fn copies_of(
+    generic: &rustc_hash::FxHashMap<NodeId, Vec<super::generics::Instantiation>>,
+    id: NodeId,
+) -> Vec<(Option<TypeId>, Substitution)> {
+    generic.get(&id).map_or_else(
+        || vec![(None, Substitution::default())],
+        |instances| {
+            instances
+                .iter()
+                .map(|instance| (Some(instance.ty), instance.substitution.clone()))
+                .collect()
+        },
+    )
+}
+
+#[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
     let module = collect_module_scope(snapshot);
@@ -661,6 +730,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
     let generic = generic_classes(snapshot);
+    let ambiguous = colliding_function_names(snapshot);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
@@ -670,34 +740,14 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         // arrange: the checker resolved every call site, so a method call is a
         // static call and `this` is an ordinary argument.
         if node.kind == NodeKind::Syntax(syntax::CLASS_DECLARATION) {
-            let members: Vec<NodeId> = {
-                let probe = FuncBuilder::new(snapshot);
-                probe
-                    .children(id)
-                    .into_iter()
-                    .filter(|child| {
-                        matches!(
-                            probe.kind_of(*child),
-                            Some(syntax::METHOD_DECLARATION | syntax::CONSTRUCTOR)
-                        )
-                    })
-                    .collect()
-            };
+            let members = members_of(snapshot, id);
             // A generic class is lowered once per instantiation and not at all
             // as itself: a field of type `T` has no width, and `Vector<Body>`
             // and `Vector<double>` are two classes that happen to share a
             // source. A class with type parameters that nothing instantiates is
             // dead, and lowering it would report a refusal for a program nobody
             // wrote.
-            let copies: Vec<(Option<TypeId>, Substitution)> = generic.get(&id).map_or_else(
-                || vec![(None, Substitution::default())],
-                |instances| {
-                    instances
-                        .iter()
-                        .map(|instance| (Some(instance.ty), instance.substitution.clone()))
-                        .collect()
-                },
-            );
+            let copies = copies_of(&generic, id);
 
             for (instance, substitution) in copies {
                 for &member in &members {
@@ -751,6 +801,21 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         // overload signature has the same shape and the same answer: the
         // implementation that follows is the one to lower.
         if !FuncBuilder::new(snapshot).has_a_body(id) {
+            continue;
+        }
+        // Two functions cannot share a name: the emitted C would define one
+        // twice. Both are refused rather than the second, because emitting the
+        // first and dropping the second is a program that compiles and calls
+        // the wrong one.
+        if let Some(name) = FuncBuilder::new(snapshot).declared_name(id)
+            && ambiguous.contains(&name)
+        {
+            lowered
+                .diagnostics
+                .push(FuncBuilder::new(snapshot).unsupported(
+                    id,
+                    &format!("a second function named `{name}` in this program"),
+                ));
             continue;
         }
         let mut builder = FuncBuilder::within(

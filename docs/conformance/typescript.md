@@ -251,7 +251,6 @@ work queue either — which is how each of these survived.
 
 | defect | what happens | found by |
 | --- | --- | --- |
-| a `namespace` | the declaration is silently skipped; only a *use* of it is refused. Same cause as the row above. | this cross-check |
 | `readonly` assigned in a constructor | refused, though TypeScript permits it | the Node session |
 
 Three more were found the same way and are **fixed**: bare `async` returning
@@ -259,6 +258,24 @@ Three more were found the same way and are **fixed**: bare `async` returning
 arithmetic; and default and rest parameters lowering as ordinary ones, which
 emitted a call with the wrong number of arguments. Defaults have since been
 implemented rather than merely refused; a rest parameter is still refused.
+
+The `namespace` row was fixed too, and it was also worse than recorded. The
+declaration is not skipped: its members *are* lowered, under their
+**unqualified** names. So
+
+    export namespace Rect { export function area(w, h) { … } }
+    export namespace Tri  { export function area(w, h) { … } }
+
+emitted two C functions called `area` — a redefinition error with no source
+location, while this compiler said "nothing refused". Two functions in one
+program may not share a name now, and both are refused rather than the second,
+because emitting the first and dropping the second is a program that compiles
+and calls the wrong one. Overload signatures are unaffected: only a declaration
+with a body counts. The verifier checks the same invariant, and finds nothing,
+which is the point.
+
+Qualifying namespace members is the actual feature and is still not done; a
+*use* of a namespace is refused as before.
 
 The object-literal method is fixed, and the cause was not the one recorded here.
 `const bag = { f() {…} }` *does* have an `IDENTIFIER` child, so the symbol was

@@ -68,6 +68,15 @@ pub enum Invalid {
     /// provided `Error` emitted `E#toString` because nothing declared the
     /// method and the receiver's own type was used as a fallback.
     MissingCallee { func: String, callee: String },
+    /// Two functions in one program share a name.
+    ///
+    /// The emitted C would define one of them twice, and a call naming it
+    /// reaches whichever the linker picked. A namespace is how this arises: its
+    /// members are lowered under their unqualified names, so `Rect.area` and
+    /// `Tri.area` both emit `area`. Refused in the lowering, so this should
+    /// never fire — it is here because the failure without it was a C
+    /// redefinition error with no source location.
+    DuplicateFunction { name: String },
 }
 
 /// Check a whole program.
@@ -98,11 +107,17 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
 /// receiver, and every override of a method has the signature the base declares,
 /// so the question this asks is answered by the typechecker rather than here.
 fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
-    let arity: rustc_hash::FxHashMap<&str, usize> = program
-        .funcs
-        .iter()
-        .map(|func| (func.name.as_str(), func.params.len()))
-        .collect();
+    let mut arity: rustc_hash::FxHashMap<&str, usize> = rustc_hash::FxHashMap::default();
+    for func in &program.funcs {
+        if arity
+            .insert(func.name.as_str(), func.params.len())
+            .is_some()
+        {
+            problems.push(Invalid::DuplicateFunction {
+                name: func.name.clone(),
+            });
+        }
+    }
     for func in &program.funcs {
         for op in &func.values {
             let OpKind::Call {
