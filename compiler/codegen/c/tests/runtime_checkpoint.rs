@@ -27,6 +27,15 @@ fn repository() -> PathBuf {
 /// `provider` is the memory provider to build against: the promise suite
 /// measures live bytes, which only reference counting keeps.
 fn run_suite(name: &str, provider: &[&str]) -> String {
+    run_suite_with(name, provider, &["nts_test_host.c"], &[])
+}
+
+/// The same, with extra runtime sources and linker flags.
+///
+/// The libuv host needs both, and it is the only suite that does: everything
+/// else links the runtime and the deterministic host and nothing else, which
+/// is the point of the deterministic host.
+fn run_suite_with(name: &str, provider: &[&str], sources: &[&str], link: &[&str]) -> String {
     let root = repository();
     let runtime = root.join("runtime/c");
     let out = std::env::temp_dir().join(format!("nts-{name}-{}", std::process::id()));
@@ -41,9 +50,10 @@ fn run_suite(name: &str, provider: &[&str]) -> String {
         .arg("-o")
         .arg(&binary)
         .arg(runtime.join(format!("tests/{name}.c")))
-        .arg(runtime.join("nts_test_host.c"))
+        .args(sources.iter().map(|source| runtime.join(source)))
         .arg(runtime.join("nts_runtime.c"))
         .arg("-lm")
+        .args(link)
         .output()
         .expect("clang should run");
     assert!(
@@ -105,6 +115,32 @@ fn combinators_settle_in_the_order_node_settles_them() {
     assert!(
         checks(&report) >= 7,
         "expected at least 7 combinator checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}
+
+/// The libuv host, on a real loop.
+///
+/// Skipped rather than failed where libuv is not installed: it is a system
+/// dependency of the *host*, not of the compiler, and a machine without it can
+/// still build and test everything else.
+#[test]
+fn the_libuv_host_keeps_the_same_contract_as_the_deterministic_one() {
+    if !std::path::Path::new("/usr/include/uv.h").exists()
+        && !std::path::Path::new("/usr/local/include/uv.h").exists()
+    {
+        eprintln!("skipping: libuv headers are not installed");
+        return;
+    }
+    let report = run_suite_with(
+        "uv_host",
+        &["-DNTS_PROVIDER_RC"],
+        &["nts_uv_host.c"],
+        &["-luv"],
+    );
+    assert!(
+        checks(&report) >= 11,
+        "expected at least 11 host checks, saw {}:\n{report}",
         checks(&report)
     );
 }

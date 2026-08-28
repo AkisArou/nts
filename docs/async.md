@@ -499,7 +499,23 @@ wrong for the newcomer: `Convert` returning `TOP` in the facts analysis,
 
 **C. The libuv host.**
 
-8. The five operations over `uv_idle_t`, `uv_timer_t`, `uv_async_t`.
+8. ~~The five operations over `uv_idle_t`, `uv_timer_t`, `uv_async_t`.~~
+   **Done.** One handle per operation rather than one per task: the idle is
+   started only while its queue has something in it, because an idle handle
+   that stays started keeps `uv_run` from ever blocking; the async is
+   unreferenced, because an always-active referenced handle would keep a
+   finished program alive. `runtime/c/tests/uv_host.c` asserts the *runtime's*
+   rules on a real loop — a checkpoint between tasks, timers in delay order,
+   equal delays in creation order — rather than testing libuv.
+
+   Two things the suite found. Clearing a timer that already fired is legal and
+   common, and a slot table without a generation counter would have cancelled
+   whichever timer had reused the slot; that needs two timers and a fire in
+   between to reach. And shutdown identified its timers by walking the loop for
+   `UV_TIMER` handles, which is wrong the moment the loop is not ours — an
+   embedder passes its own — so it reads whatever else is there as an
+   `NtsUvTimer`. It walks the slot table now. The suite's own watchdog was the
+   foreign handle that found it.
 9. `setTimeout` / `setInterval` / `clearTimeout` as the `timers` capability;
    `setImmediate` on `post_task`.
 10. The standalone runner: run until quiescent, then shut down cleanly.
