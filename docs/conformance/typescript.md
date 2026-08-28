@@ -249,7 +249,28 @@ does not compile, and in every case **the compiler reports success**. A construc
 that fails quietly never enters the refusal histogram, so it never enters the
 work queue either — which is how each of these survived.
 
-**The table is empty**, and there is now a machine that looks for the next one.
+| defect | what happens | found by |
+| --- | --- | --- |
+| the corpus never compiles the C it produces | `hir::prepare` is checked and the backend's output is not, so a lowering that emits invalid C reads as a clean run. That is how `"" + n` survived — see below. Compiling 184 files is not free, but neither is the class of bug it hides. | this cross-check |
+
+The table was empty for about an hour, and the entry above is the reason it did
+not stay that way — found by looking for something else, which is the point of
+the section.
+
+`"" + n` emitted `(NtsString *)v0`, a cast from a `double` to a pointer. Not
+merely wrong: **C that does not compile**, from a lowering that reported "1
+function, nothing refused". `+` resolves to concatenation from the *result*
+type, which is right and says nothing about the operands. It is refused now,
+naming the operand; what it needs is `ToString` on a number, and there is no
+cheap version of that — the shortest decimal that round-trips through a `double`
+is Ryū or Grisu, and `%.17g` is not it.
+
+The conservation law did not catch it, and could not have: the function *was*
+lowered. It is a different failure mode, and the instrument for it is the one in
+the table — compile what the backend produces.
+
+**Every other defect recorded here has been fixed**, and there is now a machine
+that looks for the next one.
 
 Every defect here had the same shape — a construct that compiled to nothing, or
 to a link error, while the compiler reported success — and each was found by a

@@ -3571,6 +3571,34 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// Both sides of a string `+` have to *be* strings.
+    ///
+    /// `+` resolves to concatenation from the *result* type, which is right —
+    /// `"a" + "b"` is a string and `1 + 2` is not — and says nothing about the
+    /// operands. `"" + n` is a string result with a `double` operand, and it
+    /// reached the backend as `(NtsString *)v0`: a cast from a double to a
+    /// pointer, which is not merely wrong but is C that does not compile. The
+    /// lowering reported success and clang reported the error, with no source
+    /// location and nothing pointing at the `+`.
+    ///
+    /// What it needs is `ToString`, and there is no cheap version of that for a
+    /// number: the shortest decimal that round-trips through a `double` is a
+    /// real algorithm — Ryū, Grisu — and `%.17g` is not it. So this is refused
+    /// rather than approximated.
+    fn both_strings(&self, id: NodeId, lhs: ValueId, rhs: ValueId) -> Result<(), Diagnostic> {
+        for operand in [lhs, rhs] {
+            if !matches!(
+                self.values[operand.0 as usize].ty,
+                HirType::Managed(ManagedType::String)
+            ) {
+                return Err(
+                    self.unsupported(id, "a `+` between a string and a value that is not one")
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// Put a value into a place.
     fn write_place(&mut self, id: NodeId, place: &Place, value: ValueId) {
         let origin = self.origin(id);
@@ -6261,6 +6289,7 @@ impl<'a> FuncBuilder<'a> {
             // the result type for exactly this reason; the compound form has to
             // ask the same question rather than assume the answer.
             let op = if matches!(op, BinOp::Add) && ty.is_managed() {
+                self.both_strings(id, current, addend)?;
                 BinOp::Concat
             } else {
                 op
@@ -6306,6 +6335,9 @@ impl<'a> FuncBuilder<'a> {
         // `+` is not one operator. On numbers it is arithmetic; on strings it is
         // concatenation, and the two lower to nothing alike. Resolving it here
         // against the result type means no backend has to ask again.
+        if token == syntax::PLUS_TOKEN && ty.is_managed() {
+            self.both_strings(id, lhs, rhs)?;
+        }
         let op = match token {
             syntax::EQUALS_TOKEN => unreachable!("assignment is handled before this"),
             syntax::PLUS_TOKEN if ty.is_managed() => BinOp::Concat,
