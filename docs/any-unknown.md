@@ -106,6 +106,71 @@ may compile to ordinary numeric code when all reachable callers provide numbers.
 
 Programs that never require general erased storage should not pay for a general erased-value runtime.
 
+### A measurement, from the Node profile
+
+The Node session read — rather than counted — all **174 `unknown` parameters**
+across thirteen `node:*` modules, and the distribution is the argument for doing
+this by whole-program analysis rather than by a rule:
+
+| | sites | what happens to the value |
+| --- | ---: | --- |
+| **carried** | 56 | `...args: unknown[]` through `console`, `events`, `diagnostics_channel`; 39 variadic. Stored in an array and passed on. Nothing at the site looks at it. |
+| **examined** | 55 | `inspect`, `format`, deep equality, and `util/types`' 36 predicates. Full generality. |
+| **tested** | 10 | the validators: `typeof value !== "string"` and throw. |
+| the rest | ~53 | `assert`'s comparison and message machinery, mostly examined. |
+
+Two things follow, and the first is the one this section exists for.
+
+**The cheapest representation for `console`'s `unknown` is decided by a use that
+is not in `console`.** `log(...args: unknown[])` only moves its arguments — a
+boxed pointer would do — and it is `formatWithOptions` in `node:util`, a
+different module, that examines them. No per-module or per-signature rule can
+see that. This is the whole-program case as a worked example rather than as a
+principle.
+
+**And the closed-union case does not rescue even the validators**, which look
+like the easiest ten sites:
+
+```ts
+export function validateString(value: unknown, name: string): void {
+  if (typeof value !== "string") {
+    throw new ERR_INVALID_ARG_TYPE(name, "string", value);   // still open here
+  }
+}
+```
+
+The *test* narrows and the value flows on as a `string`. The **throw** passes the
+still-open value to a general renderer — `typeof` dispatch across every kind,
+`String(value)`, `value.constructor.name`, `JSON.stringify`, `inspect`. So
+`unknown` reaches a type test *and* a general renderer, and the renderer is on
+the path the validator exists to take. `validateOneOf` is worse:
+`oneOf.includes(value)` is `===` between two erased values.
+
+### One capability that might be cheaper than erasure
+
+All 36 predicates in `util/types.ts` go through one function:
+
+```ts
+function brand(value: unknown, probe: (v: never) => unknown): boolean {
+  if (value === null || typeof value !== "object") return false;
+  try { probe(value as never); return true; } catch { return false; }
+}
+```
+
+These sites never *read* the value. They call a known built-in prototype method
+on it and observe whether it threw. If "call a known method and catch" is
+cheaper to support than general erasure, it takes a fifth of the examined sites
+out of the hard case — worth checking before assuming the 55 all need the same
+representation.
+
+### The caveat that matters
+
+"Carried" versus "examined" is a **reachability question over uses**, which is
+precisely the analysis this section specifies. The table above is one person's
+reading of one program, and it is evidence about the shape of the problem rather
+than an input to the algorithm. When this is built, the compiler should produce
+that table itself.
+
 ## Narrowing
 
 `unknown` supports ordinary TypeScript narrowing operations whose semantics Native TypeScript can implement statically and safely, including:
