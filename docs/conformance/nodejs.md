@@ -169,44 +169,47 @@ rows below are.
 
 **554 of node's own test files pass** across eighteen modules, of which 15 are hollow.
 
-> **The `compiles` column is currently unverified.** The frontend decomposes
-> types under a fixed budget, and **thirteen of the sixteen modules here
-> exhaust it** — every one except `os`, `path` and `punycode`, which are the
-> three that import least from `internal/`. `nts hir` says so now, per module,
-> as `NTS0002`. After the budget is reached the type graph is partial — after which the type graph is partial and the refusals that follow name
-> constructs that may not be the actual cause. Which types survive the cutoff
-> depends on ordering, so the numbers move when anything upstream changes and
-> they move by *permutation* rather than by an offset. The three clean rows are
-> the only ones in this table that have ever been measurements. A bisect over one module
-> produced 12, 21, 27 and 7 lowered functions from four combinations of two
-> unrelated edits; none of the four was the real answer. The numbers below are
-> left as they were last taken rather than refreshed, because a fresher
-> arbitrary number is not an improvement. They will be re-derived once the
-> frontend seeds decomposition from the reachable set. Nothing else in this
-> document depends on them. The per-module
-counts below are `passed / applicable`; `compiles` is `functions lowered /
-constructs refused`, from `nts hir`.
+> **The `compiles` column means something again.** For most of this document's
+> life it did not. The frontend decomposed types under a fixed budget, and
+> thirteen of sixteen modules exhausted it — after which the type graph is
+> partial and the refusals name constructs that may be consequences of the
+> truncation rather than causes. Worse, the numbers moved by *permutation*
+> rather than by an offset: a bisect over two unrelated edits to one module
+> gave 12, 21, 27 and 7 lowered functions from the four combinations, and none
+> of the four was the answer.
+>
+> That is fixed. No module truncates now, and the numbers below are the first
+> ones that were ever measurements — 946 functions across twenty modules.
+> Four modules, `fs`, `net`, `stream` and `zlib`, carry two types each that the
+> checker could not answer for, reported as `NTS0003`; two rather than
+> thousands.
+>
+> The lesson worth keeping is not about budgets. A number that is quietly
+> arbitrary and never contradicts itself is the hardest kind to catch: it took
+> a decrease nobody expected, a bisect run because the *shape* looked wrong
+> rather than because anything had failed, and someone checking a claim they
+> were inclined to believe.
 
 | module | node's tests | hollow | compiles | note |
 | --- | :---: | :---: | :---: | --- |
-| `console` | **22 / 22** | 2 | 18 / 281 | complete |
-| `os` | **4 / 4** | 1 | 44 / 86 | complete |
+| `console` | **22 / 22** | 2 | 49 / 264 | complete |
+| `os` | **4 / 4** | 1 | 56 / 88 | complete |
 | `punycode` | **1 / 1** | 0 | 7 / 9 | complete |
-| `querystring` | **4 / 4** | 0 | 18 / 199 | complete |
-| `timers` | 52 / 54 | 2 | 14 / 174 | complete but for `async_hooks` and the `domain` integration built on it |
-| `path` | **15 / 16** | 0 | 28 / 120 | complete but for `matchesGlob`; the skip is Windows-only |
-| `events` | **28 / 33** | 1 | 13 / 146 | complete but for domains, `EventTarget` and the promise forms |
-| `process` | 43 / 63 | 2 | 51 / 225 | complete but for `process.binding`, `stdin` and workers |
-| `url` | 26 / 36 | 1 | 35 / 378 | complete; exact on the Web Platform Tests corpus |
-| `string_decoder` | **2 / 3** | 0 | 12 / 207 | complete; the failure is the class-vs-function difference |
-| `buffer` | 33 / 60 | 1 | 10 / 195 | the read/write surface is complete and validated |
-| `diagnostics_channel` | 23 / 45 | 0 | 7 / 141 | complete; the failures need node's own publishers |
-| `assert` | 9 / 19 | 0 | 14 / 236 | complete, including `CallTracker` and node's Myers diff |
-| `util` | 7 / 19 | 1 | 23 / 197 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `fs` | 72 / 214 | 2 | ? | sync, callback and promise surfaces, the file streams and the watchers |
-| `zlib` | 30 / 64 | 0 | ? | the streams, the one-shots, brotli and zstd |
-| `net` | 37 / 139 | 0 | ? | `Socket` and `Server`; `BlockList` and auto-select-family absent |
-| `stream` | 151 / 195 | 2 | ? | the core is complete; `web`, `iter` and `consumers` are absent |
+| `querystring` | **4 / 4** | 0 | 48 / 183 | complete |
+| `timers` | 52 / 54 | 2 | 46 / 156 | complete but for `async_hooks` and the `domain` integration built on it |
+| `path` | **15 / 16** | 0 | 40 / 122 | complete but for `matchesGlob`; the skip is Windows-only |
+| `events` | **28 / 33** | 1 | 42 / 131 | complete but for domains, `EventTarget` and the promise forms |
+| `process` | 43 / 63 | 2 | 77 / 219 | complete but for `process.binding`, `stdin` and workers |
+| `url` | 26 / 36 | 1 | 75 / 367 | complete; exact on the Web Platform Tests corpus |
+| `string_decoder` | **2 / 3** | 0 | 49 / 184 | complete; the failure is the class-vs-function difference |
+| `buffer` | 33 / 60 | 1 | 47 / 172 | the read/write surface is complete and validated |
+| `diagnostics_channel` | 23 / 45 | 0 | 39 / 123 | complete; the failures need node's own publishers |
+| `assert` | 9 / 19 | 0 | 44 / 220 | complete, including `CallTracker` and node's Myers diff |
+| `util` | 7 / 19 | 1 | 48 / 186 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `fs` | 72 / 214 | 2 | 98 / 603 | sync, callback and promise surfaces, the file streams and the watchers |
+| `zlib` | 30 / 64 | 0 | 58 / 532 | the streams, the one-shots, brotli and zstd |
+| `net` | 37 / 139 | 0 | 65 / 531 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
+| `stream` | 151 / 195 | 2 | 58 / 498 | the core is complete; `web`, `iter` and `consumers` are absent |
 
 The first two columns are what
 
@@ -1194,11 +1197,35 @@ ENOENT: no such file or directory, stat '/nope/x'
 
 ## What stops all of it compiling
 
-> Counted before the type-decomposition budget was known to be exhausted for at
-> least one module in this profile. A refusal from a module with a truncated
-> type graph names a construct that may be a consequence of the truncation
-> rather than its cause, so the causes below are a starting point rather than a
-> measurement. See the note under *Modules*.
+> Re-derived from a type graph that is no longer truncated. See the note under
+> *Modules* for why the earlier version of this section could not be trusted.
+
+**Three causes account for most of it, measured across the two largest
+modules.** In `process` (219 refusals) and `stream` (498):
+
+| cause | `process` | `stream` |
+| --- | :---: | :---: |
+| a parameter of unrepresentable type `unknown` | 62 | 120 |
+| an object with an optional property | — | 117 |
+| a base `Uint8Array` (that is, `Buffer`) | — | 76 |
+| a property of type `T | undefined` | 76 | 54 |
+| a function declaration outside every walk | 11 | 14 |
+| a base `Set` | 10 | — |
+| `for await` | — | 8 |
+
+`unknown` in parameter position is the largest and the least avoidable: it is
+node's own signature for every validator — `validateString(value: unknown,
+name: string)` — and `internal/validators.ts` is imported by every module here.
+Whatever fraction of those 182 is real, it is the same fraction everywhere.
+
+The optional-property entries are one shape wearing three hats. `_maxListeners`,
+`exitCode` and `depth` are all "a numeric property that may be absent", and
+`stream`'s 117 "object with an optional property" is the same thing from the
+other side — an options object with `{ highWaterMark?: number }`. Together they
+are about 200 across the two modules.
+
+`Buffer extends Uint8Array` is 76 in `stream` alone and will be in `fs`, `net`
+and `zlib` too, since everything that moves bytes touches it.
 
 Every module together, ranked — a work queue ordered by how much of the Node
 surface each item unblocks, rather than by how often it appears in a corpus of
@@ -1396,11 +1423,35 @@ by a use that is not in `console`.
 
 ## What stops `path` compiling
 
-> Counted before the type-decomposition budget was known to be exhausted for at
-> least one module in this profile. A refusal from a module with a truncated
-> type graph names a construct that may be a consequence of the truncation
-> rather than its cause, so the causes below are a starting point rather than a
-> measurement. See the note under *Modules*.
+> Re-derived from a type graph that is no longer truncated. See the note under
+> *Modules* for why the earlier version of this section could not be trusted.
+
+**Three causes account for most of it, measured across the two largest
+modules.** In `process` (219 refusals) and `stream` (498):
+
+| cause | `process` | `stream` |
+| --- | :---: | :---: |
+| a parameter of unrepresentable type `unknown` | 62 | 120 |
+| an object with an optional property | — | 117 |
+| a base `Uint8Array` (that is, `Buffer`) | — | 76 |
+| a property of type `T | undefined` | 76 | 54 |
+| a function declaration outside every walk | 11 | 14 |
+| a base `Set` | 10 | — |
+| `for await` | — | 8 |
+
+`unknown` in parameter position is the largest and the least avoidable: it is
+node's own signature for every validator — `validateString(value: unknown,
+name: string)` — and `internal/validators.ts` is imported by every module here.
+Whatever fraction of those 182 is real, it is the same fraction everywhere.
+
+The optional-property entries are one shape wearing three hats. `_maxListeners`,
+`exitCode` and `depth` are all "a numeric property that may be absent", and
+`stream`'s 117 "object with an optional property" is the same thing from the
+other side — an options object with `{ highWaterMark?: number }`. Together they
+are about 200 across the two modules.
+
+`Buffer extends Uint8Array` is 76 in `stream` alone and will be in `fs`, `net`
+and `zlib` too, since everything that moves bytes touches it.
 
 `nts hir` refuses 38 constructs and lowers 1 function. Ranked, and every one of
 them is in [`typescript.md`](typescript.md) as a language feature rather than
@@ -1421,11 +1472,35 @@ module compiles unchanged when they arrive.
 
 ## What stops `os` compiling
 
-> Counted before the type-decomposition budget was known to be exhausted for at
-> least one module in this profile. A refusal from a module with a truncated
-> type graph names a construct that may be a consequence of the truncation
-> rather than its cause, so the causes below are a starting point rather than a
-> measurement. See the note under *Modules*.
+> Re-derived from a type graph that is no longer truncated. See the note under
+> *Modules* for why the earlier version of this section could not be trusted.
+
+**Three causes account for most of it, measured across the two largest
+modules.** In `process` (219 refusals) and `stream` (498):
+
+| cause | `process` | `stream` |
+| --- | :---: | :---: |
+| a parameter of unrepresentable type `unknown` | 62 | 120 |
+| an object with an optional property | — | 117 |
+| a base `Uint8Array` (that is, `Buffer`) | — | 76 |
+| a property of type `T | undefined` | 76 | 54 |
+| a function declaration outside every walk | 11 | 14 |
+| a base `Set` | 10 | — |
+| `for await` | — | 8 |
+
+`unknown` in parameter position is the largest and the least avoidable: it is
+node's own signature for every validator — `validateString(value: unknown,
+name: string)` — and `internal/validators.ts` is imported by every module here.
+Whatever fraction of those 182 is real, it is the same fraction everywhere.
+
+The optional-property entries are one shape wearing three hats. `_maxListeners`,
+`exitCode` and `depth` are all "a numeric property that may be absent", and
+`stream`'s 117 "object with an optional property" is the same thing from the
+other side — an options object with `{ highWaterMark?: number }`. Together they
+are about 200 across the two modules.
+
+`Buffer extends Uint8Array` is 76 in `stream` alone and will be in `fs`, `net`
+and `zlib` too, since everything that moves bytes touches it.
 
 16 of 31 functions lower. The rest:
 
