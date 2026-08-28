@@ -251,7 +251,6 @@ work queue either — which is how each of these survived.
 
 | defect | what happens | found by |
 | --- | --- | --- |
-| an object-literal method | `export const bag = { f() {…} }` produces no HIR and no diagnostic — "0 functions, nothing refused". `collect_module_scope` finds a module-scope name by looking for an `IDENTIFIER` child, and a binding pattern has none, so the symbol is neither registered nor refused. | the Node session |
 | a `namespace` | the declaration is silently skipped; only a *use* of it is refused. Same cause as the row above. | this cross-check |
 | `readonly` assigned in a constructor | refused, though TypeScript permits it | the Node session |
 
@@ -260,6 +259,23 @@ Three more were found the same way and are **fixed**: bare `async` returning
 arithmetic; and default and rest parameters lowering as ordinary ones, which
 emitted a call with the wrong number of arguments. Defaults have since been
 implemented rather than merely refused; a rest parameter is still refused.
+
+The object-literal method is fixed, and the cause was not the one recorded here.
+`const bag = { f() {…} }` *does* have an `IDENTIFIER` child, so the symbol was
+registered — as a module-scope variable whose initializer is not constant, which
+is refused only when something **reads** the name. Nothing in the file did, so
+nothing was said; and nothing walks into an object literal looking for methods,
+so `f` was never lowered either.
+
+The laziness is right for *data* and wrong for *code*. A constant nothing reads
+is not a problem, and reporting those eagerly once took this corpus from 54
+files to 25. A method is a function the author wrote. So an object literal with
+a method is refused on sight, in both spellings — `{ f() {} }` and
+`{ f: () => {} }` — and everything else stays lazy.
+
+It costs two files: the corpus goes from 66 lowered to 64, because those two
+were producing incomplete programs and reporting success. Three files hit the
+new refusal.
 
 `isNaN`, `parseInt` and the rest of `lib.d.ts` are fixed too, and the fix is one
 line because the distinction was already in the snapshot. A `declare function`

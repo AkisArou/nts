@@ -67,6 +67,15 @@ struct ModuleScope {
     /// Reporting them eagerly took the share of TypeScript's own test cases that
     /// lower completely from 54 files to 25.
     unsupported: rustc_hash::FxHashMap<u32, String>,
+    /// Declarations refused on sight rather than on use.
+    ///
+    /// The laziness above is right for *data* — a constant nothing reads is not
+    /// a problem — and wrong for *code*. `export const bag = { f() {…} }` is a
+    /// function the author wrote, and it was neither lowered nor reported:
+    /// nothing walks into an object literal looking for methods, and the
+    /// declaration itself is only refused if something reads the name. The file
+    /// compiled to "0 functions, nothing refused".
+    refusals: Vec<Diagnostic>,
 }
 
 /// The class hierarchy, as far as method dispatch needs it.
@@ -521,6 +530,29 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
 /// running it needs a module initializer, which is a real thing to design (what
 /// order, and what happens when one throws) rather than something to improvise
 /// here.
+impl FuncBuilder<'_> {
+    /// The first method an object literal declares, if it declares one.
+    ///
+    /// Both spellings: `{ f() {} }` is a method declaration, and
+    /// `{ f: () => {} }` is a property whose value is a function. Neither is
+    /// lowered, and the point of finding one is to say so.
+    fn method_of_an_object_literal(&self, initializer: NodeId) -> Option<NodeId> {
+        if self.kind_of(initializer) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+            return None;
+        }
+        self.children(initializer)
+            .into_iter()
+            .find(|member| match self.kind_of(*member) {
+                Some(syntax::METHOD_DECLARATION) => true,
+                Some(syntax::PROPERTY_ASSIGNMENT) => self
+                    .children(*member)
+                    .into_iter()
+                    .any(|part| self.kind_of(part) == Some(syntax::ARROW_FUNCTION)),
+                _ => false,
+            })
+    }
+}
+
 fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
     let mut scope = ModuleScope::default();
     let probe = FuncBuilder::new(snapshot);
@@ -556,6 +588,14 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
         };
 
         let Some(value) = probe.constant_value(*initializer, &scope.constants) else {
+            // Code, rather than data this file happens not to use. Reported
+            // here because nothing downstream will: the methods of an object
+            // literal are not walked, so they are not lowered and not refused.
+            if let Some(member) = probe.method_of_an_object_literal(*initializer) {
+                scope
+                    .refusals
+                    .push(probe.unsupported(member, "a method on an object literal"));
+            }
             scope.unsupported.insert(
                 symbol.0,
                 "a module-scope variable whose initializer is not constant".to_owned(),
@@ -614,6 +654,7 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
     let module = collect_module_scope(snapshot);
+    lowered.diagnostics.extend(module.refusals.iter().cloned());
     let closures = collect_closures(snapshot);
     let hierarchy = collect_hierarchy(snapshot, &closures);
     lowered.program.globals.clone_from(&module.globals);
