@@ -80,9 +80,15 @@ size_t nts_live_bytes(void) { return nts_bytes_held; }
  * This is what a nursery buys a tracing collector, arrived at from the other
  * direction: RFC 9.2's counting already knows what 9.3's collector would have
  * to discover. */
+/* Declared only where it is used. Every use is behind `NTS_RECYCLES`, and a
+ * declaration that is not makes an AddressSanitizer build -- the one case that
+ * turns recycling off -- fail on `-Wunused-variable`, which the tests build
+ * with `-Werror`. */
+#if NTS_RECYCLES
 #define NTS_CLASS_STEP 16u
 #define NTS_CLASSES 65u /* up to 1024 bytes */
 static void *nts_recycled[NTS_CLASSES];
+#endif
 #endif
 
 void *nts_alloc(size_t bytes) {
@@ -1134,6 +1140,84 @@ static int nts_shortest_digits(double x, char *s, int *n) {
     *n = 1;
     return 1;
 }
+
+/* The `Number` predicates, each exactly specified -- no approximation here.
+ *
+ * A call rather than an expression because none of them is one operation. The
+ * exception is `Number.isNaN`, which is `x != x` and is lowered as that: it
+ * costs nothing, and folds away entirely where the specializer has narrowed the
+ * value to an integer, which cannot be NaN. */
+bool nts_is_finite(double x) {
+    return isfinite(x);
+}
+
+/* Finite and equal to its own truncation. `Math.floor` would do as well; the
+ * point is that infinity is not an integer even though it has no fraction. */
+bool nts_is_integer(double x) {
+    return isfinite(x) && trunc(x) == x;
+}
+
+/* An integer that a `double` represents uniquely: |x| <= 2^53 - 1. Above that
+ * the spacing between representable doubles exceeds 1, so the value stands for
+ * a range rather than for itself. */
+bool nts_is_safe_integer(double x) {
+    return nts_is_integer(x) && fabs(x) <= 9007199254740991.0;
+}
+
+/* The `Math` functions that are a call into libm, and the three that are not.
+ *
+ * Forwarded rather than lowered to an IR operation, because none of them is a
+ * candidate for integer specialization -- a transcendental of an integer is not
+ * an integer -- so an opcode would buy nothing and cost an arm in every pass.
+ *
+ * Each is checked against node rather than assumed to match libm. Two do not:
+ * `pow` and `sign`. */
+
+/* ECMAScript's exponentiation, which is **not** C's `pow`.
+ *
+ * The specification says that if the base is 1 or -1 and the exponent is an
+ * infinity, the result is NaN. C99 says both are 1, on the grounds that the
+ * limit is 1 -- and the difference is reachable from ordinary source:
+ * `Math.pow(1, x)` where `x` overflows to infinity. */
+double nts_math_pow(double base, double exponent) {
+    if ((base == 1.0 || base == -1.0) && (exponent == INFINITY || exponent == -INFINITY)) {
+        return NAN;
+    }
+    return pow(base, exponent);
+}
+
+/* `Math.sign`, which libm has no equivalent for. Zero keeps its sign and NaN
+ * stays NaN, so this is neither `copysign` nor a pair of comparisons. */
+double nts_math_sign(double x) {
+    if (x != x || x == 0.0) {
+        return x;
+    }
+    return x < 0.0 ? -1.0 : 1.0;
+}
+
+/* `Math.fround`: the nearest `float`, back as a `double`. */
+double nts_math_fround(double x) {
+    return (double)(float)x;
+}
+
+double nts_math_log(double x) { return log(x); }
+double nts_math_log2(double x) { return log2(x); }
+double nts_math_log10(double x) { return log10(x); }
+double nts_math_log1p(double x) { return log1p(x); }
+double nts_math_exp(double x) { return exp(x); }
+double nts_math_expm1(double x) { return expm1(x); }
+double nts_math_sin(double x) { return sin(x); }
+double nts_math_cos(double x) { return cos(x); }
+double nts_math_tan(double x) { return tan(x); }
+double nts_math_asin(double x) { return asin(x); }
+double nts_math_acos(double x) { return acos(x); }
+double nts_math_atan(double x) { return atan(x); }
+double nts_math_sinh(double x) { return sinh(x); }
+double nts_math_cosh(double x) { return cosh(x); }
+double nts_math_tanh(double x) { return tanh(x); }
+double nts_math_cbrt(double x) { return cbrt(x); }
+double nts_math_atan2(double y, double x) { return atan2(y, x); }
+double nts_math_hypot(double a, double b) { return hypot(a, b); }
 
 NtsString *nts_number_to_string(double x) {
     char out[64];

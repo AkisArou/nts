@@ -151,3 +151,81 @@ pub(super) fn element_coercion(element: &HirType) -> Option<&'static str> {
         _ => None,
     }
 }
+
+/// The runtime helpers whose result the specification leaves approximate.
+///
+/// ECMAScript divides `Math` in two. `abs`, `sign`, `floor`, `ceil`, `trunc`,
+/// `round`, `sqrt`, `fround`, `min`, `max` and the named constants each have
+/// exactly one correct answer for every input, and this compiler must produce
+/// it. The rest are *implementation-approximated*: the specification names the
+/// mathematical function, requires the special cases, and lets the
+/// implementation choose how closely it lands on the rest. It recommends
+/// fdlibm; it does not require it.
+///
+/// So bit-equality with node is not the oracle for these, and treating it as
+/// one would make a green differential mean "glibc agreed with V8 today".
+/// Measured over a pool built to reach the hard cases, the two differ by up to
+/// 2 ULP -- `pow` included, where `Math.pow(0.9999999999999999, 0.5)` is
+/// exactly `1` under glibc and the next double below it under V8.
+///
+/// Naming them here rather than in the differential keeps the classification
+/// with the runtime that has to honour it: a helper added to one list without
+/// the other is a helper whose oracle is wrong.
+pub const APPROXIMATED: &[&str] = &[
+    "nts_math_pow",
+    "nts_math_atan2",
+    "nts_math_hypot",
+    "nts_math_cbrt",
+    "nts_math_exp",
+    "nts_math_expm1",
+    "nts_math_log",
+    "nts_math_log2",
+    "nts_math_log10",
+    "nts_math_log1p",
+    "nts_math_sin",
+    "nts_math_cos",
+    "nts_math_tan",
+    "nts_math_asin",
+    "nts_math_acos",
+    "nts_math_atan",
+    "nts_math_sinh",
+    "nts_math_cosh",
+    "nts_math_tanh",
+];
+
+/// The functions an implementation-approximated result can reach.
+///
+/// Transitive, because the property travels: a function that returns
+/// `helper(x)` is as approximate as `helper`. Call edges only -- a value that
+/// reaches a *branch* rather than the result can diverge by any amount at all,
+/// and no tolerance would be the right answer for that. It shows up as an
+/// ordinary disagreement, which is what it is.
+#[must_use]
+pub fn approximating(program: &super::Program) -> std::collections::HashSet<String> {
+    let mut approximate: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for func in &program.funcs {
+            if approximate.contains(&func.name) {
+                continue;
+            }
+            let reaches = func.values.iter().any(|op| match &op.kind {
+                super::OpKind::Call {
+                    callee: super::Callee::External(name),
+                    ..
+                } => APPROXIMATED.contains(&name.as_str()),
+                super::OpKind::Call {
+                    callee: super::Callee::Direct(name),
+                    ..
+                } => approximate.contains(name),
+                _ => false,
+            });
+            if reaches {
+                approximate.insert(func.name.clone());
+                changed = true;
+            }
+        }
+    }
+    approximate
+}

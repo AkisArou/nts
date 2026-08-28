@@ -1957,6 +1957,17 @@ impl<'a> FuncBuilder<'a> {
             // Nothing in the compiled set declares it, so it is a global the
             // host is expected to have. Which one matters: `Math` is a table of
             // functions this compiler could provide, and `document` is not.
+            //
+            // So `Math` names the member, the way `Error` does above. The
+            // corpus reported `Math.random()` as "`Math`, a global with no
+            // definition here" -- true, and not the reason: `Math` is provided
+            // and `random` is the part that is not. It is absent deliberately,
+            // being the one member of the family no differential can check.
+            if record.name == "Math"
+                && let Some(member) = self.member_read_from(id)
+            {
+                return format!("`Math.{member}`, not a member of this compiler's `Math`");
+            }
             return format!("`{}`, a global with no definition here", record.name);
         }
         if is(SymbolFlags::FUNCTION) {
@@ -5199,6 +5210,18 @@ impl<'a> FuncBuilder<'a> {
             .text
             .clone()
             .ok_or_else(|| self.unsupported(id, "a computed property name"))?;
+
+        // The constants `Math` and `Number` hold, taken before the object is
+        // lowered because neither is a value: both are namespaces, and lowering
+        // one would fail on the name rather than on the member.
+        if self.kind_of(*object) == Some(syntax::IDENTIFIER)
+            && let Some(namespace) = self.node(*object).text.as_deref()
+            && let Some(constant) = named_constant(namespace, &member_name)
+        {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::ConstFloat(constant), HirType::NUMBER, origin));
+        }
+
         let value = self.lower_expression(*object)?;
 
         if let HirType::Managed(ManagedType::Object(type_id)) =
@@ -5826,8 +5849,8 @@ impl<'a> FuncBuilder<'a> {
         // as operations is what lets the analysis see that the result is a whole
         // number — which is the entire reason an author writes `Math.floor`
         // rather than a division.
-        if let Some(intrinsic) = self.math_intrinsic(callee_node) {
-            return self.lower_math(id, intrinsic, &arguments);
+        if let Some(intrinsic) = self.intrinsic_of(callee_node) {
+            return self.lower_intrinsic(id, intrinsic, &arguments);
         }
 
         // `Body.jupiter()` — a *static* method. It looks like a method call and
@@ -5914,16 +5937,12 @@ impl<'a> FuncBuilder<'a> {
         // the checker resolved the call to a declaration node: the decoded file
         // set is the program's own sources, so a `lib.d.ts` declaration has
         // none.
-        // `String(x)` is one of the builtins this compiler *does* provide, for a
-        // number: it is `ToString`, which is what `s + n` already needs. Not
-        // for anything else -- `String(unknown)` is a general renderer and
-        // `String({})` walks a prototype chain.
-        if name == "String"
-            && target.callee.is_none()
-            && let [argument] = arguments.as_slice()
+        // Some of those `lib.d.ts` names are builtins this compiler *does*
+        // provide, and they are taken before the refusal below.
+        if target.callee.is_none()
+            && let Some(provided) = self.lower_provided_builtin(id, &name, &arguments)
         {
-            let value = self.lower_expression(*argument)?;
-            return self.as_string(id, value);
+            return provided;
         }
         if target.callee.is_none() {
             return Err(self.unsupported(
@@ -6082,7 +6101,7 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
-    /// The `Math` member a callee names, if it names one.
+    /// The `Math` or `Number` member a callee names, if it names one.
     ///
     /// Recognized by shape rather than by symbol identity, which is a
     /// simplification: a program that shadowed the global `Math` with its own
@@ -6095,35 +6114,195 @@ impl<'a> FuncBuilder<'a> {
     /// associate trusted *declaration identities* with a closed set of
     /// compiler-owned semantics, so the core never matches on a name at all.
     /// This is the shape that becomes.
-    fn math_intrinsic(&self, callee: NodeId) -> Option<MathIntrinsic> {
+    fn intrinsic_of(&self, callee: NodeId) -> Option<Intrinsic> {
         if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
             return None;
         }
         let children = self.children(callee);
         let object = *children.first()?;
         let member = *children.last()?;
-        if self.kind_of(object) != Some(syntax::IDENTIFIER)
-            || self.node(object).text.as_deref() != Some("Math")
-        {
+        if self.kind_of(object) != Some(syntax::IDENTIFIER) {
             return None;
         }
-        match self.node(member).text.as_deref()? {
-            "floor" => Some(MathIntrinsic::Unary(UnOp::Floor)),
-            "ceil" => Some(MathIntrinsic::Unary(UnOp::Ceil)),
-            "trunc" => Some(MathIntrinsic::Unary(UnOp::Trunc)),
-            "round" => Some(MathIntrinsic::Unary(UnOp::Round)),
-            "abs" => Some(MathIntrinsic::Unary(UnOp::Abs)),
-            "sqrt" => Some(MathIntrinsic::Unary(UnOp::Sqrt)),
-            "min" => Some(MathIntrinsic::Binary(BinOp::Min)),
-            "max" => Some(MathIntrinsic::Binary(BinOp::Max)),
+        let member = self.node(member).text.as_deref()?;
+        match self.node(object).text.as_deref()? {
+            "Math" => math_member(member),
+            // `Number`'s four predicates. The first two are `Number` only in
+            // spelling: over a `number` they are exactly the global `isNaN`
+            // and `isFinite`, because the whole difference the `Number.` forms
+            // exist for is what they do to a value that is *not* a number,
+            // and one cannot reach here.
+            "Number" => Some(match member {
+                "isNaN" => Intrinsic::NotANumber,
+                "isFinite" => Intrinsic::UnaryCall("nts_is_finite"),
+                "isInteger" => Intrinsic::UnaryCall("nts_is_integer"),
+                "isSafeInteger" => Intrinsic::UnaryCall("nts_is_safe_integer"),
+                _ => return None,
+            }),
             _ => None,
         }
     }
 
-    fn lower_math(
+    /// A global function this compiler implements, if this call names one.
+    ///
+    /// `None` means the name is not one of them, which is a different answer
+    /// from `Some(Err(..))`: the second is a builtin that is provided and was
+    /// given something it cannot take, and it says so rather than falling
+    /// through to "a builtin this compiler does not provide".
+    fn lower_provided_builtin(
         &mut self,
         id: NodeId,
-        intrinsic: MathIntrinsic,
+        name: &str,
+        arguments: &[NodeId],
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        // `isNaN` and `isFinite`. Over a `number` these are exactly the
+        // `Number.` forms -- the whole difference between the two pairs is what
+        // they do to a value that is not a number, and one cannot reach here.
+        if let Some(intrinsic) = global_predicate(name) {
+            return Some(self.lower_intrinsic(id, intrinsic, arguments));
+        }
+        let [argument] = arguments else {
+            return None;
+        };
+        // `String(x)` is `ToString`, which is what `s + n` already needs. For a
+        // number only -- `String(unknown)` is a general renderer and
+        // `String({})` walks a prototype chain.
+        if name == "String" {
+            return Some(
+                self.lower_expression(*argument)
+                    .and_then(|value| self.as_string(id, value)),
+            );
+        }
+        // `Number(x)`, the mirror of it and a much smaller job: the identity on
+        // a number, and `ToNumber` on a boolean, which the specification gives
+        // as 1 and 0. On a string it is a parse -- the same parse `parseFloat`
+        // needs, and neither exists yet -- and on anything else it is `valueOf`
+        // off a prototype chain.
+        if name == "Number" {
+            let value = match self.lower_expression(*argument) {
+                Ok(value) => value,
+                Err(problem) => return Some(Err(problem)),
+            };
+            let origin = self.origin(id);
+            return Some(match self.values[value.0 as usize].ty {
+                HirType::Float { .. } | HirType::Int { .. } => Ok(value),
+                HirType::Bool => Ok(self.push(OpKind::Convert(value), HirType::NUMBER, origin)),
+                _ => Err(self.unsupported(id, "a conversion to number from this type")),
+            });
+        }
+        None
+    }
+
+    /// A call into the C runtime.
+    ///
+    /// The prototype the backend emits comes from the header, not from this
+    /// call site, so an argument that specialization narrowed to an integer
+    /// converts at the call the way C converts any argument to a declared
+    /// parameter type. Nothing here has to pin its operands to `double`.
+    fn runtime_call(
+        &mut self,
+        name: &str,
+        args: Vec<ValueId>,
+        ty: HirType,
+        origin: Origin,
+    ) -> ValueId {
+        self.push(
+            OpKind::Call {
+                callee: Callee::External(name.to_owned()),
+                args,
+                frame: None,
+            },
+            ty,
+            origin,
+        )
+    }
+
+    /// ECMAScript's exponentiation, which `**`, `**=` and `Math.pow` all spell.
+    ///
+    /// A call rather than an operation, because it is **not** C's `pow`: the
+    /// specification says a base of 1 or -1 with an infinite exponent is NaN,
+    /// where C99 says 1. The runtime holds that difference in one place; see
+    /// `nts_math_pow`.
+    fn exponentiate(
+        &mut self,
+        id: NodeId,
+        ty: HirType,
+        base: ValueId,
+        exponent: ValueId,
+    ) -> ValueId {
+        let origin = self.origin(id);
+        if let OpKind::ConstFloat(power) = self.values[exponent.0 as usize].kind
+            && let Some(folded) = self.fold_power(base, power, &ty, &origin)
+        {
+            return folded;
+        }
+        self.runtime_call("nts_math_pow", vec![base, exponent], ty, origin)
+    }
+
+    /// `x ** k` for a literal `k`, where the operations spell it exactly.
+    ///
+    /// Worth doing because `nts_math_pow` lives in the runtime's translation
+    /// unit, so the C compiler cannot see through it the way it sees through
+    /// `pow` -- `x ** 2` would cost a call where the C++ it is measured against
+    /// costs a multiply. `pow(x, 2)` is one of the calls clang folds itself,
+    /// and this compiler has to fold its own.
+    ///
+    /// Three exponents, and the boundary was found by measurement rather than
+    /// by reasoning:
+    ///
+    /// - `x ** 3` is **not** `x * x * x`. `pow` rounds the cube once and three
+    ///   multiplications round twice, and they differ: at `x = -828.3432249414309`
+    ///   the two answers are `-568369773.2487181` and `-568369773.2487183`.
+    ///   A pool of interesting values agreed on every one of them, which is
+    ///   what makes the case worth writing down.
+    /// - `x ** -1` is **not** `1 / x` in practice, even though it is in theory:
+    ///   both are the correctly rounded reciprocal, and V8's `pow` is not
+    ///   correctly rounded at `x = -2.126284657577152e-37`. The specification
+    ///   allows that -- `pow` is implementation-approximated -- so the fold
+    ///   would be righter than node and would still be a difference.
+    /// - `x ** 0.5` is not `sqrt(x)`: they disagree on `-0`, where `pow` gives
+    ///   `+0` and `sqrt` gives `-0`.
+    ///
+    /// What is left is exact. `x * x` is the correctly rounded square for every
+    /// double including the infinities, the zeros and NaN; `x ** 1` is `x`; and
+    /// `x ** 0` is `1` for every base, NaN included, which the specification
+    /// says before it says anything else about the base.
+    // The comparisons here are exact on purpose: the exponent is a literal, and
+    // folding `x ** 1.9999999999999998` as though it were `x ** 2` would be a
+    // wrong answer rather than an imprecise one. A margin is what this lint
+    // exists to suggest and is exactly what must not happen.
+    #[allow(clippy::float_cmp)]
+    fn fold_power(
+        &mut self,
+        base: ValueId,
+        power: f64,
+        ty: &HirType,
+        origin: &Origin,
+    ) -> Option<ValueId> {
+        if power == 0.0 {
+            return Some(self.push(OpKind::ConstFloat(1.0), ty.clone(), origin.clone()));
+        }
+        if power == 1.0 {
+            return Some(base);
+        }
+        if power == 2.0 {
+            return Some(self.push(
+                OpKind::Binary {
+                    op: BinOp::Mul,
+                    lhs: base,
+                    rhs: base,
+                },
+                ty.clone(),
+                origin.clone(),
+            ));
+        }
+        None
+    }
+
+    fn lower_intrinsic(
+        &mut self,
+        id: NodeId,
+        intrinsic: Intrinsic,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         let ty = self
@@ -6132,14 +6311,35 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
 
         match (intrinsic, arguments) {
-            (MathIntrinsic::Unary(op), [argument]) => {
+            (Intrinsic::Unary(op), [argument]) => {
                 let operand = self.lower_expression(*argument)?;
                 Ok(self.push(OpKind::Unary { op, operand }, ty, origin))
             }
-            (MathIntrinsic::Binary(op), [left, right]) => {
+            (Intrinsic::Binary(op), [left, right]) => {
                 let lhs = self.lower_expression(*left)?;
                 let rhs = self.lower_expression(*right)?;
                 Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))
+            }
+            (Intrinsic::NotANumber, [argument]) => {
+                let operand = self.lower_expression(*argument)?;
+                Ok(self.push(
+                    OpKind::Binary {
+                        op: BinOp::Ne,
+                        lhs: operand,
+                        rhs: operand,
+                    },
+                    ty,
+                    origin,
+                ))
+            }
+            (Intrinsic::UnaryCall(name), [argument]) => {
+                let operand = self.lower_expression(*argument)?;
+                Ok(self.runtime_call(name, vec![operand], ty, origin))
+            }
+            (Intrinsic::BinaryCall(name), [left, right]) => {
+                let lhs = self.lower_expression(*left)?;
+                let rhs = self.lower_expression(*right)?;
+                Ok(self.runtime_call(name, vec![lhs, rhs], ty, origin))
             }
             // `Math.min()` is `Infinity` and `Math.min(a, b, c)` folds, but both
             // are shapes this lowering does not accept yet, and quietly
@@ -6946,40 +7146,46 @@ impl<'a> FuncBuilder<'a> {
         // `x += e` is `x = x + e`: the operator applies, and the name rebinds.
         // Spelling it out here rather than in a desugaring keeps one place that
         // knows a bitwise operator needs its coercions.
-        if let Some(op) = compound_operator(self.kind_of(*operator).unwrap_or(0)) {
+        if let Some(compound) = compound_operator(self.kind_of(*operator).unwrap_or(0)) {
             let place = self.place_of(*lhs_node)?;
             let current = self.read_place(*lhs_node, &place)?;
             let addend = self.lower_expression(*rhs_node)?;
             let ty = self.type_of(id).ok_or_else(|| {
                 self.unsupported(id, "a compound assignment of unrepresentable type")
             })?;
-            // `s += t` on strings is concatenation, not addition, and the two
-            // lower to nothing alike -- `Add` on two `NtsString *` reaches the
-            // backend as pointer arithmetic. `lower_binary` resolves `+` against
-            // the result type for exactly this reason; the compound form has to
-            // ask the same question rather than assume the answer.
-            let (op, current, addend) = if matches!(op, BinOp::Add) && ty.is_managed() {
-                (
-                    BinOp::Concat,
-                    self.as_string(id, current)?,
-                    self.as_string(id, addend)?,
-                )
-            } else {
-                (op, current, addend)
-            };
-            let origin = self.origin(id);
-            let updated = if bitwise_operator_of(op) {
-                self.push_bitwise(op, current, addend, ty, &origin)
-            } else {
-                self.push(
-                    OpKind::Binary {
-                        op,
-                        lhs: current,
-                        rhs: addend,
-                    },
-                    ty,
-                    origin,
-                )
+            let updated = match compound {
+                Compound::Exponentiate => self.exponentiate(id, ty, current, addend),
+                Compound::Op(op) => {
+                    // `s += t` on strings is concatenation, not addition, and
+                    // the two lower to nothing alike -- `Add` on two
+                    // `NtsString *` reaches the backend as pointer arithmetic.
+                    // `lower_binary` resolves `+` against the result type for
+                    // exactly this reason; the compound form has to ask the
+                    // same question rather than assume the answer.
+                    let (op, current, addend) = if matches!(op, BinOp::Add) && ty.is_managed() {
+                        (
+                            BinOp::Concat,
+                            self.as_string(id, current)?,
+                            self.as_string(id, addend)?,
+                        )
+                    } else {
+                        (op, current, addend)
+                    };
+                    let origin = self.origin(id);
+                    if bitwise_operator_of(op) {
+                        self.push_bitwise(op, current, addend, ty, &origin)
+                    } else {
+                        self.push(
+                            OpKind::Binary {
+                                op,
+                                lhs: current,
+                                rhs: addend,
+                            },
+                            ty,
+                            origin,
+                        )
+                    }
+                }
             };
             self.write_place(id, &place, updated);
             return Ok(updated);
@@ -7016,6 +7222,10 @@ impl<'a> FuncBuilder<'a> {
         } else {
             (lhs, rhs)
         };
+        if token == syntax::ASTERISK_ASTERISK_TOKEN {
+            return Ok(self.exponentiate(id, ty, lhs, rhs));
+        }
+
         let op = match token {
             syntax::EQUALS_TOKEN => unreachable!("assignment is handled before this"),
             syntax::PLUS_TOKEN if ty.is_managed() => BinOp::Concat,
@@ -7056,8 +7266,9 @@ const fn bitwise_operator(token: u16) -> Option<BinOp> {
 }
 
 /// The operator a compound-assignment token applies.
-const fn compound_operator(token: u16) -> Option<BinOp> {
-    Some(match token {
+const fn compound_operator(token: u16) -> Option<Compound> {
+    Some(Compound::Op(match token {
+        syntax::ASTERISK_ASTERISK_EQUALS_TOKEN => return Some(Compound::Exponentiate),
         syntax::PLUS_EQUALS_TOKEN => BinOp::Add,
         syntax::MINUS_EQUALS_TOKEN => BinOp::Sub,
         syntax::ASTERISK_EQUALS_TOKEN => BinOp::Mul,
@@ -7070,7 +7281,122 @@ const fn compound_operator(token: u16) -> Option<BinOp> {
         syntax::GREATER_THAN_GREATER_THAN_EQUALS_TOKEN => BinOp::Shr,
         syntax::GREATER_THAN_GREATER_THAN_GREATER_THAN_EQUALS_TOKEN => BinOp::UShr,
         _ => return None,
+    }))
+}
+
+/// The `Math` member a name spells.
+fn math_member(member: &str) -> Option<Intrinsic> {
+    Some(match member {
+        "floor" => Intrinsic::Unary(UnOp::Floor),
+        "ceil" => Intrinsic::Unary(UnOp::Ceil),
+        "trunc" => Intrinsic::Unary(UnOp::Trunc),
+        "round" => Intrinsic::Unary(UnOp::Round),
+        "abs" => Intrinsic::Unary(UnOp::Abs),
+        "sqrt" => Intrinsic::Unary(UnOp::Sqrt),
+        "min" => Intrinsic::Binary(BinOp::Min),
+        "max" => Intrinsic::Binary(BinOp::Max),
+        "pow" => Intrinsic::BinaryCall("nts_math_pow"),
+        "atan2" => Intrinsic::BinaryCall("nts_math_atan2"),
+        "hypot" => Intrinsic::BinaryCall("nts_math_hypot"),
+        "sign" => Intrinsic::UnaryCall("nts_math_sign"),
+        "fround" => Intrinsic::UnaryCall("nts_math_fround"),
+        "cbrt" => Intrinsic::UnaryCall("nts_math_cbrt"),
+        "exp" => Intrinsic::UnaryCall("nts_math_exp"),
+        "expm1" => Intrinsic::UnaryCall("nts_math_expm1"),
+        "log" => Intrinsic::UnaryCall("nts_math_log"),
+        "log2" => Intrinsic::UnaryCall("nts_math_log2"),
+        "log10" => Intrinsic::UnaryCall("nts_math_log10"),
+        "log1p" => Intrinsic::UnaryCall("nts_math_log1p"),
+        "sin" => Intrinsic::UnaryCall("nts_math_sin"),
+        "cos" => Intrinsic::UnaryCall("nts_math_cos"),
+        "tan" => Intrinsic::UnaryCall("nts_math_tan"),
+        "asin" => Intrinsic::UnaryCall("nts_math_asin"),
+        "acos" => Intrinsic::UnaryCall("nts_math_acos"),
+        "atan" => Intrinsic::UnaryCall("nts_math_atan"),
+        "sinh" => Intrinsic::UnaryCall("nts_math_sinh"),
+        "cosh" => Intrinsic::UnaryCall("nts_math_cosh"),
+        "tanh" => Intrinsic::UnaryCall("nts_math_tanh"),
+        // `Math.random` is absent on purpose: it is the one member of this
+        // family that no differential can check, because two runs of the
+        // same program disagree by design.
+        _ => return None,
     })
+}
+
+/// The global function a name spells, for the two that are numeric predicates.
+fn global_predicate(name: &str) -> Option<Intrinsic> {
+    Some(match name {
+        "isNaN" => Intrinsic::NotANumber,
+        "isFinite" => Intrinsic::UnaryCall("nts_is_finite"),
+        _ => return None,
+    })
+}
+
+/// The value a namespace's named constant holds.
+///
+/// `Math` and `Number` between them, because both are namespaces of numbers
+/// with no representation of their own, and the lowering asks the same question
+/// of each.
+fn named_constant(namespace: &str, name: &str) -> Option<f64> {
+    match namespace {
+        "Math" => math_constant(name),
+        "Number" => number_constant(name),
+        _ => None,
+    }
+}
+
+/// The value `Number`'s named constants hold.
+///
+/// The specification gives each as an exact `double`, so these are values and
+/// not approximations -- `EPSILON` is 2^-52 and `MAX_SAFE_INTEGER` is 2^53 - 1,
+/// both exactly representable. `Number.NaN` is here as well: it is a constant
+/// like the rest, and the global `NaN` is the same value under a shorter name.
+fn number_constant(name: &str) -> Option<f64> {
+    Some(match name {
+        "MAX_SAFE_INTEGER" => 9_007_199_254_740_991.0,
+        "MIN_SAFE_INTEGER" => -9_007_199_254_740_991.0,
+        "MAX_VALUE" => f64::MAX,
+        // The smallest *subnormal*, which is what the specification says and is
+        // not `f64::MIN_POSITIVE` -- that is the smallest normal, 2^-1022,
+        // where this is 2^-1074. Four orders of magnitude apart in the exponent.
+        "MIN_VALUE" => f64::from_bits(1),
+        "EPSILON" => f64::EPSILON,
+        "POSITIVE_INFINITY" => f64::INFINITY,
+        "NEGATIVE_INFINITY" => f64::NEG_INFINITY,
+        "NaN" => f64::NAN,
+        _ => return None,
+    })
+}
+
+/// The value `Math`'s named constants hold.
+///
+/// Spelled out rather than computed, because the specification gives each one
+/// as the `double` nearest a mathematical constant and `M_PI` and friends are
+/// not guaranteed to be that -- they are a POSIX extension, not C, and their
+/// precision is the implementation's business. These are the digits node
+/// prints.
+fn math_constant(name: &str) -> Option<f64> {
+    Some(match name {
+        "PI" => std::f64::consts::PI,
+        "E" => std::f64::consts::E,
+        "LN2" => std::f64::consts::LN_2,
+        "LN10" => std::f64::consts::LN_10,
+        "LOG2E" => std::f64::consts::LOG2_E,
+        "LOG10E" => std::f64::consts::LOG10_E,
+        "SQRT2" => std::f64::consts::SQRT_2,
+        "SQRT1_2" => std::f64::consts::FRAC_1_SQRT_2,
+        _ => return None,
+    })
+}
+
+/// What a compound assignment applies to the place it reads.
+///
+/// Two variants rather than one, because `**=` is the only compound assignment
+/// whose operator is not an operator: exponentiation is a runtime call, so it
+/// cannot be spelled as a [`BinOp`].
+enum Compound {
+    Op(BinOp),
+    Exponentiate,
 }
 
 /// Whether an operator needs the `ToInt32` coercions.
@@ -7106,9 +7432,20 @@ fn known_values(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> Facts {
 
 /// A `Math` member the compiler implements directly.
 #[derive(Debug, Clone, Copy)]
-enum MathIntrinsic {
+enum Intrinsic {
     Unary(UnOp),
     Binary(BinOp),
+    /// A one-argument call into the runtime, named here.
+    UnaryCall(&'static str),
+    /// A two-argument call into the runtime, named here.
+    BinaryCall(&'static str),
+    /// `Number.isNaN`, which is `x != x` rather than a call.
+    ///
+    /// Free, and it folds away entirely where the specializer has narrowed the
+    /// operand to an integer -- which cannot be NaN, so the comparison is a
+    /// constant `false` that the C compiler removes. A runtime call would have
+    /// pinned the value to a `double` to pass it.
+    NotANumber,
 }
 
 /// Where an assignment writes.

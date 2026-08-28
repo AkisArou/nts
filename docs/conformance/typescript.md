@@ -21,8 +21,11 @@ re-runnable:
 - **`nts check`**, which runs a compiled program and node's answer side by side.
 
 The corpus (`cargo run -p nts-suite`) is the independent measure: 184 files from
-TypeScript's own test suite, **66 lowering completely** and 30 refused with a
-diagnostic.
+TypeScript's own test suite, **63 lowering completely** and 33 refused with a
+diagnostic. The counts move in both directions as work lands: three files left
+the first column when constructs that had been failing silently started
+refusing honestly, which is the number getting *more* accurate rather than
+worse.
 
 ---
 
@@ -40,10 +43,14 @@ diagnostic.
 | `bigint` / `1n` | **not done** | |
 | `object` (the type) | **not done** | |
 | `globalThis` | **not done** | |
-| `isNaN`, `isFinite`, `parseInt`, `parseFloat` | **broken** | see *Known defects* — they lower to link-time externs rather than being refused |
-| `Number.MAX_SAFE_INTEGER`, `Number.isInteger`, … | **not done** | |
+| `isNaN`, `isFinite` | done | over a `number` these are exactly `Number.isNaN` and `Number.isFinite` — the two pairs differ only in what they do to a value that is not a number, which cannot reach the lowering. `isNaN` is `x != x` rather than a call, so it costs nothing and folds to a constant `false` wherever the specializer has narrowed the operand to an integer |
+| `parseInt`, `parseFloat` | **not done** | both are a parse of a string, and there is no `ToNumber` on a string yet |
+| `Number`: `isNaN`, `isFinite`, `isInteger`, `isSafeInteger` | done | exactly specified, so compared bit for bit with no tolerance. Infinity has no fractional part and is still not an integer, which is what a hand-written `Math.floor(x) === x` gets wrong |
+| `Number`: `MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `MAX_VALUE`, `MIN_VALUE`, `EPSILON`, `POSITIVE_INFINITY`, `NEGATIVE_INFINITY`, `NaN` | done | `MIN_VALUE` is the smallest *subnormal*, 2^-1074 — not `DBL_MIN`, which is the smallest normal and four orders of magnitude away in the exponent |
+| `Number.prototype`: `toFixed`, `toPrecision`, `toExponential` | **not done** | |
 | `n.toString()`, `String(n)`, `s + n` | done for a **number** | ECMAScript's `Number::toString`, not a `printf` conversion: the shortest decimal that reads back as the same double, in the four layouts the specification gives, with exponential notation only outside 1e-7 and 1e21. `%.17g` gets all three wrong. `String(x)` on anything else refuses — on `unknown` it is a general renderer, on an object it walks a prototype chain |
-| `Number(x)`, `String(boolean)` | **not done** | |
+| `Number(x)` | done for a **number** and a **boolean** | the identity on the first and `ToNumber` on the second, which the specification gives as 1 and 0. On a string it is a parse and refuses |
+| `String(boolean)` | **not done** | |
 
 ## Statements and control flow
 
@@ -78,7 +85,7 @@ diagnostic.
 | array and object literals | done | |
 | `as`, `!`, `satisfies` | done | erased |
 | immediately-invoked arrows | done | |
-| `**` | **not done** | |
+| `**` and `**=` | done | ECMAScript's exponentiation, which is **not** C's `pow`: a base of 1 or -1 with an infinite exponent is NaN where C99 says 1. The runtime holds that difference, and `examples/math` reaches it the way a program does — an exponent that overflowed |
 | the `void` operator | **not done** | |
 | the comma operator | **not done** | |
 | `s[0]` on a string | **not done** | indexing is an array operation here |
@@ -163,7 +170,10 @@ diagnostic.
 | `Array`: `map`, `filter`, `reduce`, `sort`, `splice`, `join`, `find`, `some`, `every` | **not done** | |
 | assigning `array.length` | **not done** | needed by `som`'s `Vector` |
 | `Math`: `abs`, `ceil`, `floor`, `round`, `trunc`, `sqrt`, `min`, `max` | done | `Math.round` is not C's `round`, and this one is JavaScript's |
-| `Math`: `pow`, `log`, `exp`, `sin`, `cos`, `atan2`, `random`, `hypot` | **not done** | |
+| `Math`: `pow`, `sign`, `fround`, `cbrt`, the log, exponential, trigonometric and hyperbolic families, `atan2`, `hypot` | done | Runtime calls rather than IR operations, because a logarithm of an integer is not an integer: no pass had to learn an opcode. `sign` and `pow` are not their libm namesakes; the rest are |
+| `Math`: the named constants (`PI`, `E`, `LN2`, `LN10`, `LOG2E`, `LOG10E`, `SQRT2`, `SQRT1_2`) | done | The specification gives each as an exact `double`. Emitted from Rust's `std::f64::consts`, checked bit-for-bit against node — not from `M_PI`, which is a POSIX extension whose precision is the implementation's business |
+| `Math.random` | **not done** | deliberately: it is the one member of the family no differential can check, because two runs of the same program disagree by design |
+| `Math`: `clz32`, `imul` | **not done** | integer operations that want the `ToUint32`/`ToInt32` coercions, not the floating-point forwarding the rest use |
 | `Object`: `keys`, `values`, `entries`, `assign`, `freeze` | **not done** | |
 | `Map`, `Set`, `WeakMap`, `WeakSet` | **not done** | every real program needs the first two |
 | `Error` and its subclasses | partial | `Error`, `TypeError`, `RangeError` and `URIError` are classes this compiler *provides* — a `message` and a `name` — because the declared interface has `stack?` and `cause?` and an optional property is refused. A subclass adds its own fields after those. `.stack`, `.cause`, `toString()` and `new Error(m, { cause })` refuse, each saying which |

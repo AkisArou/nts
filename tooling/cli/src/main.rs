@@ -64,6 +64,15 @@ fn main() -> Result<()> {
                     report.checked, report.functions
                 );
             }
+            if report.approximated > 0 {
+                println!(
+                    "{} case(s) matched only to within {} ULP, in functions whose \
+                     result the specification leaves implementation-approximated \
+                     -- glibc and V8 are both right there",
+                    report.approximated,
+                    nts_differential::TOLERANCE
+                );
+            }
             for (native, engine) in report.disagreements.iter().take(20) {
                 println!("  nts  {native}");
                 println!("  node {engine}");

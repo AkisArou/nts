@@ -289,6 +289,38 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  * is not what any `printf` conversion produces. */
 NtsString *nts_number_to_string(double x);
 
+/* The `Number` predicates. Exactly specified, unlike most of `Math` below.
+ * `Number.isNaN` is absent because it is `x != x`, which the lowering emits
+ * directly rather than paying for a call. */
+bool nts_is_finite(double x);
+bool nts_is_integer(double x);
+bool nts_is_safe_integer(double x);
+
+/* `Math`, forwarded. Two of these are not their libm namesakes: `pow` differs
+ * from C's for a base of +/-1 and an infinite exponent, and `sign` has no libm
+ * equivalent at all. See the definitions for what the specification says. */
+double nts_math_pow(double base, double exponent);
+double nts_math_sign(double x);
+double nts_math_fround(double x);
+double nts_math_log(double x);
+double nts_math_log2(double x);
+double nts_math_log10(double x);
+double nts_math_log1p(double x);
+double nts_math_exp(double x);
+double nts_math_expm1(double x);
+double nts_math_sin(double x);
+double nts_math_cos(double x);
+double nts_math_tan(double x);
+double nts_math_asin(double x);
+double nts_math_acos(double x);
+double nts_math_atan(double x);
+double nts_math_sinh(double x);
+double nts_math_cosh(double x);
+double nts_math_tanh(double x);
+double nts_math_cbrt(double x);
+double nts_math_atan2(double y, double x);
+double nts_math_hypot(double a, double b);
+
 /* Array methods, over arrays of numbers.
  *
  * What is here is what can be done *without growing* the array: the elements

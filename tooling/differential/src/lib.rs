@@ -248,7 +248,71 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
     let mut refused = Vec::new();
     let native = run_native(&dir, &prepared.program, &testable, &mut refused)?;
     let engine = run_node(&dir, &entry, &testable)?;
-    Ok(report(&native, &engine, &testable, &refused))
+    let approximate = nts_core::hir::builtin::approximating(&prepared.program);
+    Ok(report(&native, &engine, &testable, &refused, &approximate))
+}
+
+/// How far apart two doubles may be and still be the same answer.
+///
+/// Only for a function the specification leaves approximate -- see
+/// [`nts_core::hir::builtin::APPROXIMATED`]. Four rather than the two that
+/// glibc and V8 were measured to differ by, because the bound being tested is
+/// "two conforming implementations of the same function", not "this libm
+/// build". A real defect -- the wrong helper, the arguments the wrong way
+/// round, a missing conversion -- is off by millions of ULP, not by four.
+pub const TOLERANCE: u64 = 4;
+
+/// The distance between two doubles, counted in representable values.
+///
+/// Ordering the bit patterns as signed magnitudes makes adjacent doubles differ
+/// by one, and makes `-0.0` and `0.0` adjacent rather than a hemisphere apart.
+/// Infinities and NaN are not near anything: comparing those is exact, because
+/// the specification pins every special case even where it leaves the rest
+/// approximate.
+fn ulps_apart(a: f64, b: f64) -> Option<u64> {
+    if !a.is_finite() || !b.is_finite() {
+        return None;
+    }
+    let ordered = |x: f64| {
+        let bits = x.to_bits().cast_signed();
+        if bits < 0 { i64::MIN - bits } else { bits }
+    };
+    Some(ordered(a).abs_diff(ordered(b)))
+}
+
+/// Whether two result lines say the same thing, given how exact this function
+/// has to be.
+///
+/// A line is `name at bits`, or `name at nan`, or a string's code units. Only
+/// the `bits` form can be near-miss compared; everything else is exact, and a
+/// function that is not approximate is exact in every form.
+fn agrees(native: &str, engine: &str, approximate: bool) -> bool {
+    if native == engine {
+        return true;
+    }
+    if !approximate {
+        return false;
+    }
+    let (Some((left, left_at, x)), Some((right, right_at, y))) =
+        (numeric_result(native), numeric_result(engine))
+    else {
+        return false;
+    };
+    left == right
+        && left_at == right_at
+        && ulps_apart(x, y).is_some_and(|distance| distance <= TOLERANCE)
+}
+
+/// A result line that carries a finite double, split into what it says.
+fn numeric_result(line: &str) -> Option<(&str, &str, f64)> {
+    let mut parts = line.split(' ');
+    let name = parts.next()?;
+    let at = parts.next()?;
+    let bits = u64::from_str_radix(parts.next()?, 16).ok()?;
+    parts
+        .next()
+        .is_none()
+        .then_some((name, at, f64::from_bits(bits)))
 }
 
 /// Whether a type is something this can pass and compare.
@@ -796,6 +860,11 @@ pub struct Report {
     /// Cases the compiled program declined to answer -- an index its `!`
     /// promised was in range and was not, most often.
     pub refused: usize,
+    /// Cases that differed in the last bits of a result the specification
+    /// leaves approximate, and were accepted for that reason. Reported rather
+    /// than swallowed: a tolerance nobody can see is a tolerance nobody can
+    /// tell has grown.
+    pub approximated: usize,
     /// Every disagreement, as the two lines that differ.
     pub disagreements: Vec<(String, String)>,
 }
@@ -813,6 +882,7 @@ fn report(
     engine: &[String],
     testable: &[Testable],
     refused: &[usize],
+    approximate: &std::collections::HashSet<String>,
 ) -> Report {
     // The native side skipped the cases it refused, so the node side's lines
     // are dropped at the same indices to line the two up again. Dropping rather
@@ -828,16 +898,25 @@ fn report(
 
     let checked = native.len().min(engine.len());
     let mut disagreements = Vec::new();
+    let mut approximated = 0;
     for at in 0..checked {
-        if &native[at] != engine[at] {
-            disagreements.push((native[at].clone(), engine[at].clone()));
+        let name = native[at].split(' ').next().unwrap_or_default();
+        let loose = approximate.contains(name);
+        if native[at] == *engine[at] {
+            continue;
         }
+        if agrees(&native[at], engine[at], loose) {
+            approximated += 1;
+            continue;
+        }
+        disagreements.push((native[at].clone(), engine[at].clone()));
     }
     Report {
         functions: testable.len(),
         checked,
         expected: testable.iter().map(|one| tuples(&one.params).len()).sum(),
         refused: refused.len(),
+        approximated,
         disagreements,
     }
 }
