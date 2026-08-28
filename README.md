@@ -79,7 +79,18 @@ The last two rows are the ones that must stay at zero: a panic or a rejected SSA
 
 The second row was counted as a typecheck rejection until it was split out, which is how eight of these hid. Six are now survived: a batched query that crashes tsgo is bisected and retried, so one poisonous location costs its own type rather than the file. The two that remain are an enum member whose value is `NaN`, which tsgo cannot write as JSON at all — and they are reached through queries whose answers are *sets* rather than positional lists, where dropping the one that failed would quietly change a type rather than leave a hole.
 
-What is stopping the rest, in order:
+What is stopping the rest, in order — and **read this table as breadth rather
+than as a work queue.** A refusal count and the lowered count are different
+currencies and do not convert: a file refused for three reasons does not lower
+when one of them is fixed. Default parameters cleared seven files out of this
+table in one commit and moved *lowered completely* by zero, because each of the
+seven went on to refuse for something else. The Node session watched the same
+thing at a larger scale — twenty-five collisions cleared, two functions gained,
+and thirty-five *new* refusals as functions that had stopped at the collision
+were walked further and refused for their real reasons.
+
+So a tall row means a construct many files use, which is worth knowing. It does
+not mean that fixing it moves the number above it.
 
 | refused | files |
 | --- | ---: |
