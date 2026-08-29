@@ -30,4 +30,20 @@ export class Holder {
   set ["size"](v: number) {
     this.n = v;
   }
+
+  // A private name is a name, and its node kind is not the identifier kind.
+  // Leaving it out left this method nameless — and every member declared after
+  // it was then neither lowered nor refused, which is the failure the
+  // conservation law exists to catch.
+  static #check(value: number): number {
+    return value + 1;
+  }
+
+  #twice(): number {
+    return this.n * 2;
+  }
+
+  after(): number {
+    return Holder.#check(this.#twice());
+  }
 }

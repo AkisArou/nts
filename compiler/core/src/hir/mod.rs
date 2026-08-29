@@ -1143,10 +1143,26 @@ pub struct Prepared {
 /// is, and a rule that expected a function for it would report the optimization
 /// as a loss.
 #[must_use]
+/// Whether a declaration has a body to emit.
+///
+/// An overload signature and an ambient declaration have none: there is
+/// nothing to emit and nothing to refuse.
+fn has_a_body(snapshot: &SemanticSnapshot, node: &nts_semantic_schema::NodeRecord) -> bool {
+    use nts_semantic_schema::{NodeKind, syntax};
+    node.children.iter().any(|child| {
+        matches!(
+            snapshot.nodes.get(child.0 as usize).map(|child| child.kind),
+            Some(NodeKind::Syntax(syntax::BLOCK))
+        )
+    })
+}
+
+#[must_use]
 pub fn unaccounted(
     snapshot: &SemanticSnapshot,
     program: &Program,
     diagnostics: &[nts_diagnostics::Diagnostic],
+    generic: &generics::GenericFunctions,
 ) -> Vec<nts_diagnostics::Location> {
     use nts_semantic_schema::{NodeKind, syntax};
 
@@ -1156,8 +1172,41 @@ pub fn unaccounted(
             && inner.span.end <= outer.span.end
     };
 
+    // Every function-ish declaration with a body, and whether it was refused.
+    //
+    // Collected first because the question below is asked of *enclosing*
+    // declarations too: a method declared inside a function that was itself
+    // refused did not vanish silently, because nothing was emitted for the
+    // function it is in. Fifty of the node profile's fifty-one reports were
+    // that -- an object literal method inside a function refused for something
+    // else entirely, where the refusal's span covers the offending expression
+    // and not the method three lines below it.
+    let declarations: Vec<(nts_diagnostics::Location, bool)> = snapshot
+        .nodes
+        .iter()
+        .filter(|node| {
+            matches!(
+                node.kind,
+                NodeKind::Syntax(
+                    syntax::FUNCTION_DECLARATION
+                        | syntax::METHOD_DECLARATION
+                        | syntax::CONSTRUCTOR
+                        | syntax::GET_ACCESSOR
+                        | syntax::SET_ACCESSOR
+                )
+            ) && has_a_body(snapshot, node)
+        })
+        .map(|node| {
+            let here = node.origin.location;
+            let refused = diagnostics
+                .iter()
+                .any(|diagnostic| within(&here, &diagnostic.primary));
+            (here, refused)
+        })
+        .collect();
+
     let mut missing = Vec::new();
-    for node in &snapshot.nodes {
+    for (index, node) in snapshot.nodes.iter().enumerate() {
         let NodeKind::Syntax(kind) = node.kind else {
             continue;
         };
@@ -1174,13 +1223,18 @@ pub fn unaccounted(
         // No body: an overload signature, or an ambient declaration whose
         // definition is somewhere else. There is nothing to emit and nothing to
         // refuse.
-        let has_body = node.children.iter().any(|child| {
-            matches!(
-                snapshot.nodes.get(child.0 as usize).map(|child| child.kind),
-                Some(NodeKind::Syntax(syntax::BLOCK))
-            )
-        });
-        if !has_body {
+        if !has_a_body(snapshot, node) {
+            continue;
+        }
+        // A generic function is lowered once per instantiation and not at all
+        // as itself: a parameter of type `T` has no width. One that nothing
+        // calls is dead, and `lower::function_copies` says so in those words --
+        // so reporting it here contradicted a decision the lowering makes
+        // deliberately, and did it for a third of everything this reported.
+        let id = nts_semantic_schema::NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        if generics::declared_type_parameters(snapshot, id) > 0
+            && !generic.copies.contains_key(&id)
+        {
             continue;
         }
         let here = node.origin.location;
@@ -1188,9 +1242,27 @@ pub fn unaccounted(
             .funcs
             .iter()
             .any(|func| within(&here, &func.origin.location));
-        let refused = diagnostics
+        // Refused itself, or declared inside something that was. The second is
+        // what keeps this a question about *vanishing*: a function whose
+        // enclosing declaration was refused had nothing emitted for it and no
+        // caller that could reach it, which is not the failure this exists to
+        // catch.
+        //
+        // It still catches that failure. A method of a class expression is the
+        // case it was built for -- nothing walks a class expression at all --
+        // and there the enclosing function lowers *successfully* while the
+        // method disappears, so no refusal covers either.
+        let refused = declarations
             .iter()
-            .any(|diagnostic| within(&here, &diagnostic.primary));
+            .any(|(outer, refused)| *refused && within(outer, &here))
+            // Or inside a refusal's own span. A module-scope statement is not a
+            // declaration, so nothing above covers `const env = new Proxy({},
+            // { get() {...} })` -- and the refusal for that statement does span
+            // it, which is what makes this the same question and not a weaker
+            // one.
+            || diagnostics
+                .iter()
+                .any(|diagnostic| within(&diagnostic.primary, &here));
         if !emitted && !refused {
             missing.push(here);
         }

@@ -195,6 +195,59 @@ entries were `#record`, `#index`, `#otherSide`, `#localAddress`, `#callback`,
 Stripping the prefix in the frontend took the node profile from **391 lowered
 functions to 453**.
 
+## A private name is a name, and it is not an identifier
+
+`#check` is a `PrivateIdentifier` — a node kind of its own, not an identifier
+spelled oddly. The resolver read identifiers, string literals, numeric literals
+and computed names, and did not read that one. So a private *method* had no
+name at all.
+
+A private *field* was fine, which is what kept this hidden: a field's slot
+comes from the checker's property list, and only a method's name goes through
+the resolver.
+
+What it cost was not the method. **Every member declared after it in the same
+class was then neither lowered nor refused** — twelve of `URLSearchParams`'s
+methods among them. Nothing tested for that. What noticed was the conservation
+law in `hir::unaccounted`, which asks whether every function the checker knows
+about was either lowered or refused, and which exists for exactly this: *a
+function that vanishes takes its callers' correctness with it while the
+compiler reports success.*
+
+Two more readers had the same gap, and one of them had a second bug behind it.
+`lower_static_call` looked for the first identifier among a method
+declaration's children — which is the right node only because a
+`MethodDeclaration` has no other identifier before its name. Written as "the
+last child" it would have found the body; written as `member_name` it is the
+same question the other two readers ask.
+
+## What the conservation law was reporting instead
+
+Fifty-one reports, and forty-three of them were the law being wrong rather than
+the compiler:
+
+- **Thirty-one** were functions declared inside something that was itself
+  refused — an object literal method inside a function refused for an
+  unrelated reason, where the refusal's span covers the offending expression
+  and not the method three lines below it. Nothing was emitted for the
+  enclosing function, so nothing vanished.
+- **Thirteen** were *generic* functions that nothing instantiates. A generic is
+  lowered once per instantiation and not at all as itself, and
+  `lower::function_copies` already says so in those words — "one that nothing
+  calls is dead, and lowering it would report a refusal for a program nobody
+  wrote". The law was contradicting a decision the lowering makes deliberately.
+
+The law still catches what it was built for. A method of a class expression
+disappears while its enclosing function lowers *successfully*, so no refusal
+covers either — which is why the rule is "declared inside something that was
+refused" and not "declared inside something that failed to emit".
+
+The remainder is eight, and they are real.
+
+While fixing it, the statement-level diagnostic started pointing at the
+statement. It says *"this statement, which module evaluation therefore
+skips"* and pointed at the expression inside it, which is a different claim.
+
 ## What it did not buy
 
 The whole-profile function count did not move: **171 both before and after**,

@@ -1351,13 +1351,20 @@ fn lower_module_initializer(
             match attempt {
                 Ok(()) => true,
                 Err(diagnostic) => {
-                    lost.push(diagnostic);
+                    // The *statement's* span, not the cause's. The message
+                    // below says "this statement" and pointed at the
+                    // expression inside it, which is a different claim -- and
+                    // it also left every function declared in the statement
+                    // looking unaccounted for, because `super::unaccounted`
+                    // asks whether a refusal covers one. Fifty-one object
+                    // literal methods in the node profile were reported as
+                    // functions outside every walk for exactly that reason.
+                    lost.push((probe.origin(*statement).location, diagnostic));
                     false
                 }
             }
         });
-        for diagnostic in lost {
-            let origin = diagnostic.primary;
+        for (statement, diagnostic) in lost {
             lowered.diagnostics.push(diagnostic);
             lowered.diagnostics.push(Diagnostic::error(
                 "NTS1001",
@@ -1365,7 +1372,7 @@ fn lower_module_initializer(
                  module's evaluation still runs, and every value this line would have \
                  computed keeps whatever it held before it"
                     .to_owned(),
-                origin,
+                statement,
             ));
         }
 
@@ -1554,7 +1561,12 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     // nothing walks a class expression at all — and a function that vanishes
     // takes its callers' correctness with it while the compiler reports
     // success.
-    for location in super::unaccounted(snapshot, &lowered.program, &lowered.diagnostics) {
+    for location in super::unaccounted(
+        snapshot,
+        &lowered.program,
+        &lowered.diagnostics,
+        &shared.generics,
+    ) {
         lowered.diagnostics.push(Diagnostic::error(
             "NTS1001",
             "a function declaration outside every walk".to_owned(),
@@ -3270,6 +3282,13 @@ impl<'a> FuncBuilder<'a> {
                 self.kind_of(*child),
                 Some(
                     syntax::IDENTIFIER
+                        // `#check` is a name, and a node kind of its own rather
+                        // than an identifier spelled oddly -- so leaving it out
+                        // meant a private *method* had no name at all. It was
+                        // refused as "a member whose name the program
+                        // computes", and the members declared after it in the
+                        // same class were neither lowered nor refused.
+                        | syntax::PRIVATE_IDENTIFIER
                         | syntax::STRING_LITERAL
                         | syntax::NUMERIC_LITERAL
                         | syntax::COMPUTED_PROPERTY_NAME
@@ -7876,11 +7895,9 @@ impl<'a> FuncBuilder<'a> {
             if let [target, member] = parts.as_slice()
                 && self.kind_of(*target) == Some(syntax::SUPER_KEYWORD)
             {
-                let name = self
-                    .node(*member)
-                    .text
-                    .clone()
-                    .ok_or_else(|| self.unsupported(*member, "a computed method name"))?;
+                let name = self.literal_name(*member).ok_or_else(|| {
+                    self.unsupported(*member, "a method whose name the program computes")
+                })?;
                 return self.lower_super(id, &name, &arguments);
             }
         }
@@ -8067,12 +8084,21 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+        // The *last* child. `Box.#check` is an object beside a name, and
+        // looking for the first identifier found `Box` -- which named the
+        // method after its class for every static call whose receiver is a
+        // plain name, and found nothing at all when the name was `#check`.
+        // The declaration's own name -- `member` is the `MethodDeclaration`
+        // here, not a property access. Through the shared resolver, because
+        // `#check` is a name and the private-identifier kind is not the
+        // identifier kind: reading only identifiers left a private static
+        // method nameless, and the members declared after it in the same class
+        // were then neither lowered nor refused.
         let member_name = self
-            .children(member)
-            .into_iter()
-            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
-            .and_then(|child| self.node(child).text.clone())
-            .ok_or_else(|| self.unsupported(member, "a static method with a computed name"))?;
+            .member_name(member)
+            .ok_or_else(|| {
+                self.unsupported(member, "a static method whose name the program computes")
+            })?;
 
         let args = self.lower_arguments(id, arguments)?;
         let ty = self

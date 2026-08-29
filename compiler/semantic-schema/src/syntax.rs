@@ -55,6 +55,13 @@ pub const QUESTION_TOKEN: u16 = 57;
 /// `...`, on a rest parameter or a spread element.
 pub const DOT_DOT_DOT_TOKEN: u16 = 25;
 pub const IDENTIFIER: u16 = 79;
+/// `#name`, in a declaration or a member access.
+///
+/// A name like any other as far as this compiler is concerned: the privacy is
+/// checked by the typechecker, and what reaches here is a member whose name
+/// begins with `#`. It is a *different node kind* rather than an identifier
+/// spelled oddly, which is the whole reason it needs saying.
+pub const PRIVATE_IDENTIFIER: u16 = 80;
 pub const FALSE_KEYWORD: u16 = 96;
 pub const TRUE_KEYWORD: u16 = 111;
 pub const CONST_KEYWORD: u16 = 86;

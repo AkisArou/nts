@@ -60,7 +60,7 @@ fn every_literal_spelling_names_the_same_kind_of_member() {
     let Some(lowered) = lower_at("tests/programs/computed-names") else {
         return;
     };
-    for member in ["plain", "quoted", "bracketed", "get getter", "set size"] {
+    for member in ["plain", "quoted", "bracketed", "get getter", "set size", "#twice", "after"] {
         assert!(
             named(&lowered, &format!("Holder#{member}")).is_some(),
             "no function for `{member}`; lowered {:?}",
@@ -126,5 +126,35 @@ fn brackets_at_the_use_site_reach_the_same_member() {
         calls(accessors).contains(&"Registry#0"),
         "`registry[0]()` should call the member named `0`, found {:?}",
         calls(accessors),
+    );
+}
+
+/// A private name is a name, and everything declared after one still is.
+///
+/// `#check` has a node kind of its own rather than being an identifier spelled
+/// oddly, so a resolver that reads identifiers found nothing — and the members
+/// after it in the same class were neither lowered nor refused. Twelve of
+/// `URLSearchParams`'s methods vanished that way, and what noticed was the
+/// conservation law rather than any test.
+#[test]
+fn a_private_name_does_not_swallow_the_members_after_it() {
+    let Some(lowered) = lower_at("tests/programs/computed-names") else {
+        return;
+    };
+    assert!(
+        named(&lowered, "Holder.#check").is_some(),
+        "a private static method has a name; lowered {:?}",
+        lowered
+            .program
+            .funcs
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect::<Vec<_>>(),
+    );
+    let after = named(&lowered, "Holder#after").expect("the member after it lowers too");
+    assert!(
+        calls(after).contains(&"Holder.#check"),
+        "and the call reaches it rather than a name taken from the class, found {:?}",
+        calls(after),
     );
 }
