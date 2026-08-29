@@ -46,6 +46,23 @@ pub enum Invalid {
         expected: HirType,
         found: HirType,
     },
+    /// A value was stored into a slot of an incompatible representation.
+    ///
+    /// The companion to [`Self::CallArgumentType`], and it exists because that
+    /// one was not enough. A conversion is needed wherever a value meets a slot
+    /// whose type the source states -- an argument, a declaration, a return, a
+    /// global, an array element, a field -- and the argument check found the
+    /// missing conversion in the *one* place its author had been looking at.
+    /// The other four were each found by something else: a `typeof` that
+    /// matched neither path, a C compiler, a differential disagreeing with
+    /// node. An instrument covers what its author had in mind, so this one
+    /// covers the whole class rather than the next case.
+    StoreType {
+        func: String,
+        what: &'static str,
+        expected: HirType,
+        found: HirType,
+    },
     /// A jump passed a different number of arguments than the target takes.
     ///
     /// The arguments *are* the edge's contribution to the target's parameters, so
@@ -147,6 +164,7 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
         }
     }
     for func in &program.funcs {
+        check_stores(program, func, problems);
         for op in &func.values {
             let OpKind::Call {
                 callee: Callee::Direct(name),
@@ -206,13 +224,89 @@ fn compatible(found: &HirType, want: &HirType) -> bool {
     if found == want {
         return true;
     }
+    // Two references are two pointers, however their types relate. A `Square`
+    // where a `Shape` is expected is a no-op cast under base-first layout, and
+    // a `Promise<void>` slot holding a `Promise<number>` is one pointer either
+    // way -- the payload is in the type for the compiler's benefit, and C sees
+    // `NtsPromise *`.
+    if found.may_hold_a_reference()
+        && want.may_hold_a_reference()
+        && *found != HirType::Erased
+        && *want != HirType::Erased
+    {
+        return true;
+    }
+    // Two scalars are a conversion the backend already emits: a field narrowed
+    // to `i32` by specialization is assigned from a `double` and C converts.
     matches!(
         (found, want),
         (
-            HirType::Managed(super::ManagedType::Object(_)),
-            HirType::Managed(super::ManagedType::Object(_))
+            HirType::Bool | HirType::Int { .. } | HirType::Float { .. },
+            HirType::Bool | HirType::Int { .. } | HirType::Float { .. }
         )
     )
+}
+
+fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
+    let mut report = |what, expected: &HirType, found: &HirType| {
+        if !compatible(found, expected) {
+            problems.push(Invalid::StoreType {
+                func: func.name.clone(),
+                what,
+                expected: expected.clone(),
+                found: found.clone(),
+            });
+        }
+    };
+    for op in &func.values {
+        match &op.kind {
+            OpKind::ArraySet { array, value, .. } => {
+                if let HirType::Managed(super::ManagedType::Array(element)) =
+                    &func.values[array.0 as usize].ty
+                {
+                    report(
+                        "an array element",
+                        element,
+                        &func.values[value.0 as usize].ty,
+                    );
+                }
+            }
+            OpKind::GlobalSet { global, value } => {
+                if let Some(slot) = program.globals.get(*global as usize) {
+                    report("a global", &slot.ty, &func.values[value.0 as usize].ty);
+                }
+            }
+            OpKind::FieldSet {
+                object,
+                field,
+                value,
+            } => {
+                if let HirType::Managed(super::ManagedType::Object(ty)) =
+                    &func.values[object.0 as usize].ty
+                    && let Some(layout) = program
+                        .layouts
+                        .iter()
+                        .find(|layout| layout.types.contains(ty))
+                    && let Some(slot) = layout.fields.get(*field as usize)
+                {
+                    report("a field", &slot.ty, &func.values[value.0 as usize].ty);
+                }
+            }
+            _ => {}
+        }
+    }
+    if let Some(Terminator::Return(Some(value))) = func
+        .blocks
+        .iter()
+        .map(|block| &block.terminator)
+        .find(|t| matches!(t, Terminator::Return(Some(_))))
+    {
+        report(
+            "a return",
+            &func.return_type,
+            &func.values[value.0 as usize].ty,
+        );
+    }
 }
 
 fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {

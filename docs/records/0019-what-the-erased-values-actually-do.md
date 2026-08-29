@@ -287,3 +287,59 @@ than the struct whole.
 a gap: it is the checker announcing it has stopped providing safety, and a
 representation would accept the escape hatch the rule exists to close. An `any`
 is legalized from evidence or refused.
+
+# Phase 2: what erasure costs at run time
+
+Every earlier number here was static -- bytes, instruction counts, emitted
+lines. None of them says what a program *does*. `benches/cases/erasure-*` are
+paired programs, identical but for `unknown` where the control has `number`, so
+the ratio between their `nts` columns is the cost of erasure and nothing else.
+
+| | typed | erased | cost |
+| --- | ---: | ---: | ---: |
+| through small functions | 191.75 us | 191.74 us | **0%** |
+| stored in an array (2,000) | 99.32 us | 110.41 us | **11%** |
+| stored in an array (500) | 91.31 us | 93.52 us | **2.4%** |
+
+## The three rows say different things, and the third is the useful one
+
+**Through small functions, erasure is free.** Not nearly free -- 191.75 against
+191.74. With `-flto` clang inlines the erased boundary away, the sixteen bytes
+never reach memory, and the `typeof` is an integer compare since the fold. The
+representation costs nothing it cannot see.
+
+**Stored in memory it costs 11%**, and the obvious reading is that this is the
+tag test. It is not.
+
+**The third row is the same program with a smaller array**, sized so that both
+fit in L1 where the 2,000-element pair does not. The cost falls to 2.4%. Same
+tag test per element, same branch, same work -- the only thing removed is the
+cache pressure of sixteen bytes where eight would do.
+
+So the 11% is roughly **2.4% tag test and 8.6% memory traffic**, and the split
+is what orders the rest of the work.
+
+## What that changes
+
+The plan had specialization before NaN-boxing, on the grounds that 55% of sites
+need only a pointer or a tag. The measurement says otherwise:
+
+- **NaN-boxing removes the larger half and removes it everywhere.** Sixteen
+  bytes to eight halves the traffic for *every* erased value, including the
+  genuinely mixed arrays that no specialization can collapse. It is also the
+  smaller change -- the runtime header and one emitter, which is precisely why
+  `HirType::Erased` names no layout.
+- **Specialization removes both halves, where it applies.** A site proven to
+  hold only numbers becomes a `number[]` with no tag at all. Strictly better
+  than NaN-boxing on the sites it reaches, and it reaches only the homogeneous
+  ones.
+
+So NaN-boxing first. It is the bigger win, the more general one, and the
+cheaper one, and none of those three was apparent before the third row existed.
+
+## A prediction this benchmark should be held to
+
+`erasure-stored-unknown` holds only numbers. Specialization should therefore
+collapse it to the typed case exactly, and the gap closing to zero is what will
+show that it worked -- which is a better test than any assertion about the pass.
+If it lands and the gap does not close, the pass is not doing what it claims.

@@ -5377,6 +5377,15 @@ impl<'a> FuncBuilder<'a> {
             return value;
         };
         let held = self.values[value.0 as usize].ty.clone();
+        // An erased element is the general case rather than a numeric
+        // coercion: the value is tagged on the way in, whatever it was. It
+        // comes first because the numeric guard below would return the value
+        // unchanged, and a `double` stored into an `NtsValue` slot is what the
+        // C compiler then reports -- which is how this was found, four
+        // conversion sites after the first.
+        if *element == HirType::Erased && held != HirType::Erased {
+            return self.coerce(value, &HirType::Erased, id).unwrap_or(value);
+        }
         if held == *element || !numeric(&element) || !numeric(&held) {
             return value;
         }

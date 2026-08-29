@@ -1240,8 +1240,14 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\" }};",
-                descriptor_name(element)
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\", {}, 0 }};",
+                descriptor_name(element),
+                // For an array, `erased` is a fact about every element rather
+                // than a table of offsets -- exactly as `references` is. An
+                // array of erased values whose descriptor said `0` would never
+                // be walked, so a string held in one would be released while
+                // something still pointed at it.
+                u32::from(**element == *"NtsValue")
             ),
         );
     }
