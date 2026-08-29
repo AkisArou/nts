@@ -167,12 +167,13 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**569 of node's own 991 applicable test files pass** across eighteen modules,
+**616 of node's own 1,341 applicable test files pass** across nineteen modules,
 of which 15 are hollow.
 
-`node:http` is not in that count yet: its 398-file suite has not finished a
-run since the client landed, and a number nobody has measured does not go in
-the table.
+`http`'s row was taken at `8d024b2`, before the `unref` fix in `96b1553`; its
+suite takes long enough that it has not completed since. The number is a floor
+rather than a stale figure -- the fix removed a hang -- but it is labelled here
+rather than quietly assumed to have improved.
 
 An earlier revision said 554 here, arrived at by adding each module's gain to
 the previous total as it landed; it had drifted by five. The totals are summed
@@ -226,7 +227,8 @@ headline as much as to the table.
 | `util` | 7 / 19 | 1 | 48 / 186 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `fs` | 72 / 214 | 2 | 98 / 603 | sync, callback and promise surfaces, the file streams and the watchers |
 | `zlib` | 30 / 64 | 0 | 58 / 532 | the streams, the one-shots, brotli and zstd |
-| `net` | 47 / 139 | 0 | 67 / 528 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
+| `http` | 44 / 350 | ? | 70 / 585 | a complete HTTP/1.1 implementation, parser included; no HTTPS or HTTP/2 |
+| `net` | 50 / 139 | 0 | 67 / 528 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
 | `stream` | 151 / 195 | 2 | 58 / 498 | the core is complete; `web`, `iter` and `consumers` are absent |
 
 The first two columns are what
@@ -975,10 +977,54 @@ the child printed, and seven call `execve` successfully -- which does not fail
 the runner, it *ends* it, because the kernel loads another program over this
 one. Both sets are listed with reasons in `not-applicable`.
 
+## `http`
+
+The module with no native half at all. Node's parser is llhttp, a C library;
+this profile's is TypeScript, so `node:http` here is a complete HTTP/1.1
+implementation rather than a wrapper around one. Once `net` supplies the
+socket, HTTP is a text protocol and there is nothing left that needs the
+operating system. 44 of 350 applicable files pass.
+
+Everything round-trips: this client against node's server, node's client
+against this server, and this against itself. Node's client is a strict reader
+and did not have to be met halfway.
+
+**The parser is a state machine because bytes arrive in pieces.** A header may
+be split across three reads and a chunk size mid-digit, so there is no "parse
+this message" function -- only a machine that consumes what it has, remembers
+where it was, and asks for more. Its suite (`tooling/conformance/http-parser.mjs`)
+delivers every message a byte at a time as well as whole, which is the case a
+whole-message test cannot reach.
+
+**Two refusals in it are security rather than strictness.** A message carrying
+both a `Content-Length` and a `Transfer-Encoding` is refused, and so is a space
+before a header's colon. Both are shapes where a proxy and an origin server can
+be made to disagree about where a message ends, which is request smuggling. RFC
+9112 requires the first; the second is the same hazard by a different route.
+
+**The framing decision is the whole of the outgoing side.** A declared length
+means the body is that many bytes; no length on HTTP/1.1 means chunked; no
+length on HTTP/1.0 means the body ends when the connection does, so the
+connection cannot be reused. A response whose declared length disagrees with
+its body desynchronises the connection -- the next response begins where the
+reader is still counting.
+
+And "no length and no chunking" means *until close* only for a message that may
+have a body at all. A `GET` cannot, so for it the same condition means the body
+is empty. Treating it as until-close made every bodiless request send
+`Connection: close`, which ended keep-alive for the commonest case.
+
+**The server refuses to reuse a connection whose request body was never read.**
+Those bytes are still in the socket and would be parsed as the start of the
+next request, which is how a server ends up answering a message nobody sent.
+
+Absent: HTTPS, HTTP/2, `http.OutgoingMessage`'s legacy `_headers` accessors,
+and the informational-response paths beyond `100-continue`.
+
 ## `net`
 
 `Socket` as a `Duplex`, `Server`, the address predicates, and a seam of one
-handle per connection and per listener. 47 of 139 applicable files pass, none hollow.
+handle per connection and per listener. 50 of 139 applicable files pass, none hollow.
 
 A TCP socket's two halves are genuinely independent: the direction you write
 and the direction you read are separate streams over one connection, and either
