@@ -3374,6 +3374,32 @@ impl<'a> FuncBuilder<'a> {
         self.literal_name(self.name_node(member)?)
     }
 
+    /// Whether an expression names a module rather than a value.
+    ///
+    /// `import * as C from "./m"` binds `C` to the module itself. `C.x` is a
+    /// reference to `m`'s export `x` -- resolved by the checker to that
+    /// export's own symbol -- and not a field of an object this program
+    /// allocates. There is no value for `C`, which is why lowering one asked
+    /// for "a name from an enclosing scope" and named a module path.
+    fn denotes_a_module(&self, id: NodeId) -> bool {
+        self.node(id)
+            .symbol
+            .map(|symbol| self.denoted_symbol(symbol))
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .is_some_and(|record| {
+                // Declared by a source file, which is what a module is. By the
+                // declaration rather than by `SymbolFlags::MODULE`, because the
+                // frontend does not populate flags for these -- both the local
+                // binding and the module it aliases arrive with zero -- and a
+                // predicate that reads a field nobody fills is a predicate that
+                // is always false.
+                record
+                    .declarations
+                    .iter()
+                    .any(|node| self.kind_of(*node) == Some(syntax::SOURCE_FILE))
+            })
+    }
+
     /// Whether an expression names a property of an object.
     ///
     /// `o.x` and `o["x"]` are one thing said two ways, and their node shapes
@@ -3386,7 +3412,14 @@ impl<'a> FuncBuilder<'a> {
     /// contain.
     fn names_a_property(&self, id: NodeId) -> bool {
         match self.kind_of(id) {
-            Some(syntax::PROPERTY_ACCESS_EXPRESSION) => true,
+            // A module's member is not one: there is no receiver, so a call
+            // through it is a plain call and an access is a plain name. Saying
+            // so here is what lets `C.scale(n)` reach the direct-callee path,
+            // which resolves it from the checker's target like any other.
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION) => match self.children(id).as_slice() {
+                [object, _] => !self.denotes_a_module(*object),
+                _ => true,
+            },
             Some(syntax::ELEMENT_ACCESS_EXPRESSION) => match self.children(id).as_slice() {
                 [object, index] => {
                     matches!(
@@ -7353,6 +7386,12 @@ impl<'a> FuncBuilder<'a> {
         let [object, member] = children.as_slice() else {
             return Err(self.unsupported(id, "a property access of unexpected shape"));
         };
+        // `C.x` where `C` is a module: the checker resolved the member to the
+        // export's own symbol, so this is a name and lowers as one -- through
+        // the same alias-following path `import { x }` already takes.
+        if self.denotes_a_module(*object) {
+            return self.lower_identifier(*member);
+        }
         let member_name = self
             .literal_name(*member)
             .ok_or_else(|| self.unsupported(id, "a computed property name"))?;
