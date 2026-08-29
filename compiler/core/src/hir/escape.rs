@@ -130,6 +130,31 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
     results
 }
 
+/// Mark a value as escaped, and whatever it carries.
+///
+/// An erased value *is* its payload as far as reachability goes. `Erase` puts a
+/// pointer into a tagged slot, so storing the slot anywhere makes the pointer
+/// reachable from there — and marking only the erasure left the payload looking
+/// frame-local, which is a pointer into a dead frame wherever the slot outlives
+/// the function.
+///
+/// The chain rather than one step, because guessing that the lowering never
+/// emits an erasure of an erasure costs correctness and following it costs
+/// nothing.
+fn escaped(escapes: &mut Escapes, func: &Func, value: ValueId) {
+    let mut at = value;
+    loop {
+        escapes.values.insert(at);
+        let OpKind::Erase { value: payload } = func.values[at.0 as usize].kind else {
+            return;
+        };
+        if escapes.values.contains(&payload) {
+            return;
+        }
+        at = payload;
+    }
+}
+
 /// One function, given what each callee does with its parameters.
 fn analyze(
     func: &Func,
@@ -143,20 +168,33 @@ fn analyze(
     for block in &func.blocks {
         for value in &block.ops {
             match &func.values[value.0 as usize].kind {
-                // The container is written through, not handed anywhere; what
-                // goes into it is now reachable from wherever the container is.
-                OpKind::FieldSet { value: stored, .. } | OpKind::ArraySet { value: stored, .. } => {
-                    escapes.values.insert(*stored);
+                // Into a container, which is written through rather than
+                // handed anywhere: what goes in is now reachable from wherever
+                // the container is. A *global* is the same statement with the
+                // strongest possible container -- one that outlives every
+                // function -- and it reached the catch-all below exactly the
+                // way `Suspend` did, with the same consequence: `{ tag: n }`
+                // assigned to a module-scope `unknown` was placed in the
+                // caller's frame, and the global pointed at dead stack from the
+                // moment that function returned. Nothing failed loudly.
+                OpKind::FieldSet { value: stored, .. }
+                | OpKind::ArraySet { value: stored, .. }
+                | OpKind::GlobalSet { value: stored, .. } => {
+                    escaped(&mut escapes, func, *stored);
                 }
                 OpKind::Call { callee, args, .. } => match callee {
                     // A body that is not here could do anything with what it is
                     // given.
                     Callee::External(_) => {
-                        escapes.values.extend(args.iter().copied());
+                        for argument in args {
+                            escaped(&mut escapes, func, *argument);
+                        }
                     }
                     Callee::Direct(name) => {
                         let Some(target) = by_name.get(name.as_str()) else {
-                            escapes.values.extend(args.iter().copied());
+                            for argument in args {
+                                escaped(&mut escapes, func, *argument);
+                            }
                             continue;
                         };
                         escape_into(
@@ -173,7 +211,9 @@ fn analyze(
                     // than a guess, because the table is the complete list.
                     Callee::Virtual { slot, .. } | Callee::Closure { slot } => {
                         let Some(targets) = in_slot.get(slot) else {
-                            escapes.values.extend(args.iter().copied());
+                            for argument in args {
+                                escaped(&mut escapes, func, *argument);
+                            }
                             continue;
                         };
                         escape_into(&mut escapes, args, targets, arity, escaping_params);
@@ -455,6 +495,48 @@ mod tests {
         // `b` is put inside `a`, and outlives the call that put it there.
         assert!(caller.escapes(ValueId(2)));
         assert!(!caller.is_frame_local(ValueId(2)));
+    }
+
+    /// A global outlives every function, so what it holds cannot be in a frame.
+    ///
+    /// And it is reached *through* an erasure, which is the half that made this
+    /// silent: marking the erasure escaped left the object it carries looking
+    /// frame-local, so `{ tag: n }` assigned to a module-scope `unknown` was
+    /// placed in the caller's frame and the global pointed at dead stack from
+    /// the moment the function returned. The emitted C said `NtsObj_..._frame`
+    /// and nothing failed.
+    #[test]
+    fn what_a_global_holds_cannot_live_in_a_frame() {
+        let mut program = Program::default();
+        program.funcs.push(func(
+            "stash",
+            0,
+            vec![
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(OpKind::Erase { value: ValueId(0) }, HirType::Erased),
+                op(
+                    OpKind::GlobalSet {
+                        global: 0,
+                        value: ValueId(1),
+                    },
+                    HirType::Void,
+                ),
+            ],
+            vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                terminator: Terminator::Return(None),
+            }],
+        ));
+
+        let escapes = analyze_program(&program);
+        let stash = &escapes[0];
+        assert!(stash.escapes(ValueId(1)), "the erasure is stored in a global");
+        assert!(
+            stash.escapes(ValueId(0)),
+            "and so is the object it carries",
+        );
+        assert!(!stash.is_frame_local(ValueId(0)));
     }
 
     /// An allocation nothing does anything with stays in the frame, which is
