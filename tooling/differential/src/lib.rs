@@ -87,11 +87,47 @@ const QUIET: f64 = 3.0;
 /// How long either side may take before its remaining cases are abandoned.
 const TIMEOUT: &str = "20";
 
+/// How much address space either side may claim, in bytes.
+///
+/// The pool above is deliberately hostile and no analysis here can tell which
+/// parameter is a loop bound -- that is already said of *time*, and memory is
+/// the same hazard through a different door: `selfCycle(9007199254740991)`
+/// allocates once per iteration, so it exhausts a machine long before twenty
+/// seconds are up.
+///
+/// Bounding it is not a nicety. Unbounded, the outcome depends on how much RAM
+/// the machine has: where `malloc` fails early the runtime declines the case
+/// and the run continues, and where it succeeds the kernel's OOM killer picks a
+/// victim -- which on a large machine was the *harness*, and on occasion the
+/// terminal that started it. The same suite passed on a 16GB laptop and took
+/// down a 32GB desktop.
+///
+/// Two gigabytes is far more than any example needs and far less than a
+/// runaway wants, so it separates the two without tuning.
+const MEMORY: &str = "2147483648";
+
 /// How many times the compiled program may end before the run gives up.
 ///
 /// A handful is a program with a few assertions this pool falsifies. Hundreds is
 /// something else, and continuing to restart would take all day to say so.
 const REFUSALS: usize = 16;
+
+/// A child of this harness, bounded in both dimensions.
+///
+/// One place, because both sides are driven by the same hostile pool and a
+/// bound that only one of them has is a bound that reports a disagreement where
+/// there is none. `prlimit` and `timeout` rather than the equivalents in this
+/// process: the limits have to apply to the child and to whatever it spawns,
+/// and both utilities are already how this runs its children.
+fn bounded(program: &str) -> std::process::Command {
+    let mut command = std::process::Command::new("prlimit");
+    command
+        .arg(format!("--as={MEMORY}"))
+        .arg("timeout")
+        .arg(TIMEOUT)
+        .arg(program);
+    command
+}
 
 /// A function this can drive, and the shape of its signature.
 ///
@@ -821,6 +857,16 @@ pub fn compiles(program: &hir::Program, dir: &Utf8Path) -> Result<(), String> {
 /// legitimate as the index one, and one of three rather than one of one.
 const REFUSED: &str = "nts: refused: ";
 
+/// And what it prints when it runs out of the memory this harness allowed it.
+///
+/// Neither a defect nor a refusal. The pool asks for a loop bound of
+/// 9,007,199,254,740,991 and a program that allocates once per iteration does
+/// exactly what that asks; the answer is that the case cannot be run, not that
+/// the compiler is wrong. It is [`TIMEOUT`]'s hazard through a different door
+/// and is counted the same way -- the case is not reached, the run continues,
+/// and the total says how many were.
+const EXHAUSTED: &str = "nts: out of memory";
+
 fn run_native(
     dir: &Utf8Path,
     program: &hir::Program,
@@ -895,9 +941,7 @@ fn run_native(
     let mut from = 0;
     let mut restarts = 0;
     while from < total && restarts <= REFUSALS {
-        let run = std::process::Command::new("timeout")
-            .arg(TIMEOUT)
-            .arg(&binary)
+        let run = bounded(binary.as_str())
             .arg(from.to_string())
             .output()
             .context("running the compiled program")?;
@@ -910,7 +954,11 @@ fn run_native(
         let complaint = String::from_utf8_lossy(&run.stderr);
         if let Some(line) = complaint
             .lines()
-            .find(|line| line.starts_with("nts:") && !line.starts_with(REFUSED))
+            .find(|line| {
+                line.starts_with("nts:")
+                    && !line.starts_with(REFUSED)
+                    && !line.starts_with(EXHAUSTED)
+            })
         {
             aborts.push(line.trim().to_owned());
         }
@@ -1007,9 +1055,7 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
     let hook = dir.join("resolve_ts.mjs");
     std::fs::write(&hook, RESOLVE_TS)?;
 
-    let run = std::process::Command::new("timeout")
-        .arg(TIMEOUT)
-        .arg("node")
+    let run = bounded("node")
         .arg("--import")
         .arg(format!("file://{hook}"))
         .arg(&path)
