@@ -85,7 +85,6 @@ globalThis.nts_process_umask = (mask) => host.umask(mask);
 globalThis.nts_process_umask_read = () => host.umask();
 globalThis.nts_process_kill = (pid, signal) => host._kill(pid, signal);
 globalThis.nts_process_abort = () => host.abort();
-globalThis.nts_process_really_exit = (code) => host.reallyExit(code);
 
 globalThis.nts_process_getuid = () => host.getuid();
 globalThis.nts_process_getgid = () => host.getgid();

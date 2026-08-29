@@ -29,6 +29,19 @@ import { PriorityQueue } from "./priority-queue.ts";
 import * as host from "./host.ts";
 import { ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
 import { validateFunction, validateNumber } from "../../internal/validators.ts";
+import { AsyncContextFrame } from "../../internal/async-context.ts";
+import {
+  emitAfter,
+  emitBefore,
+  emitDestroy,
+  emitInit,
+  getDefaultTriggerAsyncId,
+  initHooksExist,
+  kAsyncId,
+  kContextFrame,
+  kTriggerAsyncId,
+  newAsyncId,
+} from "../../internal/async-hooks.ts";
 
 declare function nts_process_emit_warning(message: string, name: string, code: string): void;
 
@@ -74,6 +87,23 @@ export const knownTimersById = new Map<number, Timeout>();
 let warnedNegativeNumber = false;
 let warnedNotNumber = false;
 
+/**
+ * Give `timer` an identity and the context of whoever created it.
+ *
+ * Both halves are captured here rather than when the timer fires, because the
+ * gap a timer spans is exactly the thing that loses them: by the time the
+ * callback runs, the code that scheduled it has returned and the runtime is
+ * midway through a completely unrelated part of the loop.
+ */
+function initAsyncResource(timer: Timeout): void {
+  const asyncId = newAsyncId();
+  const trigger = getDefaultTriggerAsyncId();
+  timer[kAsyncId] = asyncId;
+  timer[kTriggerAsyncId] = trigger;
+  timer[kContextFrame] = AsyncContextFrame.current();
+  if (initHooksExist()) emitInit(asyncId, "Timeout", trigger, timer);
+}
+
 export class Timeout implements ListNode {
   _idleTimeout: number;
   _idlePrev: ListNode | null;
@@ -86,6 +116,9 @@ export class Timeout implements ListNode {
   [kRefed]: boolean | null;
   [kHasPrimitive]: boolean;
   [kTimerId]: number;
+  declare [kAsyncId]: number;
+  declare [kTriggerAsyncId]: number;
+  declare [kContextFrame]: AsyncContextFrame | undefined;
 
   constructor(
     callback: TimerCallback,
@@ -146,6 +179,7 @@ export class Timeout implements ListNode {
     this[kRefed] = isRefed;
     this[kHasPrimitive] = false;
     this[kTimerId] = nextTimerId++;
+    initAsyncResource(this);
   }
 
   /**
@@ -364,6 +398,11 @@ function insertGuarded(item: Timeout, refed: boolean): void {
   const wasDestroyed = item._destroyed;
   if (wasDestroyed) {
     item._destroyed = false;
+    // A refreshed timer is a new piece of asynchronous work, not a
+    // continuation of the one that finished: it was scheduled from somewhere
+    // else, and a hook that saw the old id would attribute it to the wrong
+    // caller.
+    initAsyncResource(item);
     if (refed) incRefCount();
   } else if (refed === !item[kRefed]) {
     if (refed) incRefCount();
@@ -387,6 +426,9 @@ export function unenroll(item: Timeout): void {
 
   const wasEnrolled = item._idleNext !== null || item._idlePrev !== null;
   item._destroyed = true;
+  // A cancelled timer is finished, and nothing else will say so: it will never
+  // reach the batch that reports the ones that fired.
+  emitDestroy(item[kAsyncId]);
 
   if (item[kHasPrimitive]) knownTimersById.delete(item[kTimerId]);
 
@@ -555,6 +597,7 @@ function listOnTimeout(list: TimersList, now: number): void {
         cleanTimer(timer);
         if (timer[kHasPrimitive]) knownTimersById.delete(timer[kTimerId]);
         if (timer[kRefed]) decRefCount();
+        emitDestroy(timer[kAsyncId]);
       }
       continue;
     }
@@ -564,32 +607,50 @@ function listOnTimeout(list: TimersList, now: number): void {
     let start = 0;
     if (timer._repeat) start = host.now();
 
+    // The context of whoever scheduled this timer, restored for the duration
+    // of its callback. Nothing in the engine carries it across the gap a timer
+    // spans, so it is put back by hand here and taken away again below.
+    const asyncId = timer[kAsyncId];
+    const priorFrame = AsyncContextFrame.exchange(timer[kContextFrame]);
+    emitBefore(asyncId, timer[kTriggerAsyncId], timer);
+
     try {
-      const args = timer._timerArgs;
-      if (args === undefined) timer._onTimeout();
-      // Through `Reflect.apply` rather than `callback.apply(...)`, because the
-      // callback is the caller's object and `apply` is one of its properties.
-      // A function with `fn.apply = "not a function"` is a strange thing to
-      // write and a real one to receive, and calling through it would throw
-      // inside the timer rather than in the caller's own code.
-      else Reflect.apply(timer._onTimeout as (...a: unknown[]) => void, timer, args);
-    } finally {
-      if (timer._repeat && timer._idleTimeout !== -1) {
-        timer._idleTimeout = timer._repeat;
-        insert(timer, timer._idleTimeout, start);
-      } else if (!timer._idleNext && !timer._idlePrev) {
-        // Still unlinked, so the callback did not re-arm it and this timer is
-        // finished. A callback that called `refresh` on its own timer would
-        // have relinked it, and then it is live and must not be destroyed.
-        if (timer._destroyed) {
-          timer._onTimeout = undefined;
-          timer._timerArgs = undefined;
-        } else {
-          timer._destroyed = true;
-          if (timer[kHasPrimitive]) knownTimersById.delete(timer[kTimerId]);
-          if (timer[kRefed]) decRefCount();
+      try {
+        const args = timer._timerArgs;
+        if (args === undefined) timer._onTimeout();
+        // Through `Reflect.apply` rather than `callback.apply(...)`, because
+        // the callback is the caller's object and `apply` is one of its
+        // properties. A function with `fn.apply = "not a function"` is a
+        // strange thing to write and a real one to receive, and calling
+        // through it would throw inside the timer rather than in the caller's
+        // own code.
+        else Reflect.apply(timer._onTimeout as (...a: unknown[]) => void, timer, args);
+      } finally {
+        if (timer._repeat && timer._idleTimeout !== -1) {
+          timer._idleTimeout = timer._repeat;
+          insert(timer, timer._idleTimeout, start);
+        } else if (!timer._idleNext && !timer._idlePrev) {
+          // Still unlinked, so the callback did not re-arm it and this timer
+          // is finished. A callback that called `refresh` on its own timer
+          // would have relinked it, and then it is live and must not be
+          // destroyed.
+          if (timer._destroyed) {
+            timer._onTimeout = undefined;
+            timer._timerArgs = undefined;
+          } else {
+            timer._destroyed = true;
+            if (timer[kHasPrimitive]) knownTimersById.delete(timer[kTimerId]);
+            if (timer[kRefed]) decRefCount();
+            emitDestroy(asyncId);
+          }
         }
       }
+    } finally {
+      // Outside the re-arming block, and in this order: `destroy` above says
+      // the timer is finished, `after` here says its scope has closed. A
+      // resource cannot stop existing while a scope of its own is still open.
+      emitAfter(asyncId);
+      AsyncContextFrame.setCurrent(priorFrame);
     }
   }
 

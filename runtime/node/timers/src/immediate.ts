@@ -15,6 +15,19 @@
 // two-field assignment.
 
 import * as host from "./host.ts";
+import { AsyncContextFrame } from "../../internal/async-context.ts";
+import {
+  emitAfter,
+  emitBefore,
+  emitDestroy,
+  emitInit,
+  getDefaultTriggerAsyncId,
+  initHooksExist,
+  kAsyncId,
+  kContextFrame,
+  kTriggerAsyncId,
+  newAsyncId,
+} from "../../internal/async-hooks.ts";
 
 export const kRefed = Symbol("refed");
 
@@ -27,6 +40,9 @@ export class Immediate {
   _argv: unknown[] | undefined;
   _destroyed: boolean;
   [kRefed]: boolean | null;
+  [kAsyncId]: number;
+  [kTriggerAsyncId]: number;
+  [kContextFrame]: AsyncContextFrame | undefined;
 
   constructor(callback: ImmediateCallback, args: unknown[] | undefined) {
     this._idleNext = null;
@@ -35,6 +51,16 @@ export class Immediate {
     this._argv = args;
     this._destroyed = false;
     this[kRefed] = false;
+
+    // Identity and context captured here, at the moment the immediate is
+    // asked for, because that is the only moment its caller is still on the
+    // stack. By the time it runs, the loop has moved on.
+    const asyncId = newAsyncId();
+    const trigger = getDefaultTriggerAsyncId();
+    this[kAsyncId] = asyncId;
+    this[kTriggerAsyncId] = trigger;
+    this[kContextFrame] = AsyncContextFrame.current();
+    if (initHooksExist()) emitInit(asyncId, "Immediate", trigger, this);
 
     this.ref();
     count++;
@@ -136,6 +162,7 @@ export function clearImmediate(immediate: Immediate | null | undefined): void {
 
   count--;
   immediate._destroyed = true;
+  emitDestroy(immediate[kAsyncId]);
 
   if (immediate[kRefed] && --refCount === 0) {
     host.toggleImmediateRef(false);
@@ -200,15 +227,27 @@ export function processImmediate(): void {
 
       previous = immediate;
 
+      const asyncId = immediate[kAsyncId];
+      const priorFrame = AsyncContextFrame.exchange(immediate[kContextFrame]);
+      emitBefore(asyncId, immediate[kTriggerAsyncId], immediate);
+
       try {
-        const argv = immediate._argv;
-        if (!argv) (immediate._onImmediate as ImmediateCallback)();
-        else (immediate._onImmediate as (...a: unknown[]) => void)(...argv);
+        try {
+          const argv = immediate._argv;
+          if (!argv) (immediate._onImmediate as ImmediateCallback)();
+          else (immediate._onImmediate as (...a: unknown[]) => void)(...argv);
+        } finally {
+          // An immediate runs once, so it is finished the moment its callback
+          // returns -- there is no re-arming case as there is for a timer.
+          emitDestroy(asyncId);
+          cleanImmediate(immediate);
+          // Recorded before the callback's exception unwinds, so a throw
+          // leaves the remainder of the queue findable rather than lost.
+          outstandingQueue.head = immediate = immediate._idleNext;
+        }
       } finally {
-        cleanImmediate(immediate);
-        // Recorded before the callback's exception unwinds, so a throw leaves
-        // the remainder of the queue findable rather than lost.
-        outstandingQueue.head = immediate = immediate._idleNext;
+        emitAfter(asyncId);
+        AsyncContextFrame.setCurrent(priorFrame);
       }
     }
     if (resuming) outstandingQueue.head = null;

@@ -259,10 +259,6 @@ export class ClientRequest extends OutgoingMessage {
     const socket = this.socket as unknown as Socket | null;
     socket?.setKeepAlive?.(enable, initialDelay);
   }
-
-  flushHeaders(): void {
-    super.flushHeaders();
-  }
 }
 
 /** `http.request("http://host/path")`, taken apart. */

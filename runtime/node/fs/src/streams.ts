@@ -92,7 +92,7 @@ export class ReadStream extends Readable {
     return this.fd === null;
   }
 
-  _construct(callback: (error?: unknown) => void): void {
+  override _construct(callback: (error?: unknown) => void): void {
     if (typeof this.fd === "number") {
       callback();
       return;
@@ -201,7 +201,7 @@ export class WriteStream extends Writable {
     return this.fd === null;
   }
 
-  _construct(callback: (error?: unknown) => void): void {
+  override _construct(callback: (error?: unknown) => void): void {
     if (typeof this.fd === "number") {
       callback();
       return;

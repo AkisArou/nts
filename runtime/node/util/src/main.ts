@@ -13,6 +13,7 @@ import {
   ERR_FALSY_VALUE_REJECTION, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE,
 } from "../../internal/errors.ts";
 import { nextTick } from "../../internal/tick.ts";
+import { deprecate } from "../../internal/deprecate.ts";
 import {
   validateBoolean, validateFunction, validateObject, validateOneOf, validateString,
 } from "../../internal/validators.ts";
@@ -21,13 +22,9 @@ import { shouldColorize } from "../../internal/colors.ts";
 import { stdout } from "../../internal/stdio.ts";
 
 export { inspect, inspectDefaultOptions, format, formatWithOptions, isDeepStrictEqual, types };
+export { deprecate };
 export type { InspectOptions };
 
-declare function nts_process_emit_warning(
-  message: string,
-  name: string,
-  code: string,
-): void;
 declare function nts_process_env(name: string): string;
 
 /**
@@ -52,32 +49,6 @@ export function inherits(ctor: Function, superCtor: Function): void {
     configurable: true,
   });
   Object.setPrototypeOf(ctor.prototype, superCtor.prototype);
-}
-
-/**
- * Wrap `fn` so that calling it warns once, upstream `lib/internal/util.js`.
- *
- * Once, not every call: a deprecation that prints on every invocation of a
- * function in a loop is noise that hides everything else.
- */
-export function deprecate<T extends (...args: never[]) => unknown>(
-  fn: T,
-  message: string,
-  code?: string,
-): T {
-  if (code !== undefined && typeof code !== "string") {
-    throw new ERR_INVALID_ARG_TYPE("code", "string", code);
-  }
-  let warned = false;
-  const deprecated = function (this: unknown, ...args: never[]): unknown {
-    if (!warned) {
-      warned = true;
-      nts_process_emit_warning(message, "DeprecationWarning", code ?? "");
-    }
-    return Reflect.apply(fn, this, args);
-  };
-  Object.defineProperty(deprecated, "name", { value: fn.name });
-  return deprecated as unknown as T;
 }
 
 /** Enabled sections of `NODE_DEBUG`, upstream `lib/internal/util/debuglog.js`. */

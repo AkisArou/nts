@@ -868,3 +868,46 @@ export class ERR_BUFFER_OUT_OF_BOUNDS extends NodeRangeError {
     this.name = "RangeError";
   }
 }
+
+/**
+ * `hook.init must be a function` -- a bad callback given to `createHook`.
+ *
+ * Checked at `createHook` rather than at the call, because a hook that throws
+ * has nowhere to throw to: it runs between a resource being created and the
+ * code that created it, so an error there is a fatal condition rather than
+ * something the caller could catch.
+ */
+export class ERR_ASYNC_CALLBACK extends NodeTypeError {
+  override readonly code = "ERR_ASYNC_CALLBACK";
+
+  constructor(name: string) {
+    super(`${name} must be a function`);
+    this.name = "TypeError";
+  }
+}
+
+/** `Invalid name for async "type": ` — an `AsyncResource` with an empty type. */
+export class ERR_ASYNC_TYPE extends NodeTypeError {
+  override readonly code = "ERR_ASYNC_TYPE";
+
+  constructor(type: unknown) {
+    super(`Invalid name for async "type": ${String(type)}`);
+    this.name = "TypeError";
+  }
+}
+
+/**
+ * `Invalid triggerAsyncId value: -2`.
+ *
+ * A `RangeError` rather than a `TypeError` because the ids that fail this are
+ * the right type and the wrong number: -1 means "none", 0 is the root, and
+ * anything below -1 is not an id at all.
+ */
+export class ERR_INVALID_ASYNC_ID extends NodeRangeError {
+  override readonly code = "ERR_INVALID_ASYNC_ID";
+
+  constructor(name: string, value: unknown) {
+    super(`Invalid ${name} value: ${String(value)}`);
+    this.name = "RangeError";
+  }
+}

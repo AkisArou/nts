@@ -280,12 +280,17 @@ try {
       if (existsSync(siblingShims)) await import(siblingShims);
       const siblingExports = { ...(await import(join(dir, "src/main.ts"))) };
       const siblingShape = join(dir, "shape.mjs");
-      siblings.set(
-        name,
-        sabotaged ? {} : (existsSync(siblingShape)
-          ? (await import(siblingShape)).shape(siblingExports)
-          : siblingExports),
-      );
+      const siblingShapeModule = existsSync(siblingShape) ? await import(siblingShape) : null;
+      const shaped = sabotaged
+        ? {}
+        : (siblingShapeModule ? siblingShapeModule.shape(siblingExports) : siblingExports);
+      siblings.set(name, shaped);
+      // A sibling that owns globals has to install them, or the test reaches
+      // node's. An `async_hooks` test calling `setImmediate` is the case that
+      // found this: it was measuring node's timers and reporting the result as
+      // ours, which is a hollow pass the sabotage run cannot catch -- sabotage
+      // blanks our module, and node's globals were never ours to blank.
+      if (!sabotaged) siblingShapeModule?.installGlobals?.(shaped);
     }
   }
 } catch (e) {
