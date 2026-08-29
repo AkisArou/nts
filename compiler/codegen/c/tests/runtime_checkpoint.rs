@@ -62,7 +62,14 @@ fn run_suite_with(name: &str, provider: &[&str], sources: &[&str], link: &[&str]
         String::from_utf8_lossy(&compile.stderr)
     );
 
-    let run = std::process::Command::new(&binary)
+    // Bounded, because a suite can fail by *hanging*. Sabotaging the erased
+    // retain into a no-op frees a payload something still points at, and the
+    // allocator then loops rather than crashing -- so the strongest sabotage of
+    // the three produced no output, no failing exit, and no end. A harness that
+    // waits forever cannot report that.
+    let run = std::process::Command::new("timeout")
+        .arg("120")
+        .arg(&binary)
         .output()
         .expect("the suite should run");
     let report = String::from_utf8_lossy(&run.stdout).into_owned();
@@ -172,6 +179,22 @@ fn timers_behave_as_the_capability_says() {
     assert!(
         checks(&report) >= 8,
         "expected at least 8 timer checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}
+
+/// An erased value holding a reference, counted and traced.
+///
+/// Reference counting, because that is the whole subject: under `NoGC` nothing is
+/// ever released, so every check here would pass against a runtime that had
+/// never learned any of it. The differential harness runs `NoGC`, which is why
+/// this cannot be an example.
+#[test]
+fn an_erased_reference_is_counted_and_traced() {
+    let report = run_suite("erased_refs", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 10,
+        "expected at least 10 erased-reference checks, saw {}:\n{report}",
         checks(&report)
     );
 }

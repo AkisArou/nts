@@ -50,7 +50,7 @@ static void *const closure_methods[] = {(void *)closure_call};
 
 static const NtsDescriptor desc_closure = {
     NTS_KIND_OBJECT, (uint32_t)sizeof(Closure), 0u, 0u, 0,
-    closure_methods, "Closure",
+    closure_methods, "Closure", 0u, 0,
 };
 
 static Closure *closure(const char *label) {
@@ -123,7 +123,7 @@ static void tick(Closure *self) {
 static void *const tick_methods[] = {(void *)tick};
 
 static const NtsDescriptor desc_tick = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(Closure), 0u, 0u, 0, tick_methods, "Tick",
+    NTS_KIND_OBJECT, (uint32_t)sizeof(Closure), 0u, 0u, 0, tick_methods, "Tick", 0u, 0,
 };
 
 static void an_interval_repeats_until_cleared(void) {

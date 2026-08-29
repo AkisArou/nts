@@ -163,6 +163,20 @@ impl HirType {
         matches!(self, Self::Managed(_))
     }
 
+    /// Whether a value of this type can hold a reference the collector must see.
+    ///
+    /// A separate question from [`Self::is_managed`], which is asked in at
+    /// least three different senses across this compiler -- "is this a pointer
+    /// to cast", "does this need reference counting", "is this field a
+    /// reference". An erased value answers *yes* to the last two and *no* to
+    /// the first: it is sixteen bytes that may or may not contain a pointer,
+    /// depending on a tag only the runtime reads. Widening `is_managed` would
+    /// have made the emitter try to cast one.
+    #[must_use]
+    pub const fn may_hold_a_reference(&self) -> bool {
+        matches!(self, Self::Managed(_) | Self::Erased)
+    }
+
     /// Whether this type fits in a machine register.
     #[must_use]
     pub const fn is_scalar(&self) -> bool {
@@ -774,7 +788,7 @@ impl Layout {
     pub fn reference_fields(&self) -> Vec<&str> {
         self.fields
             .iter()
-            .filter(|field| field.ty.is_managed())
+            .filter(|field| field.ty.may_hold_a_reference())
             .map(|field| field.name.as_str())
             .collect()
     }

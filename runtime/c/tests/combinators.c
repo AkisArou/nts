@@ -60,12 +60,12 @@ static const uint32_t step_offsets[] = {
 };
 
 static const NtsDescriptor desc_step = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(Step), 2u, 1u, step_offsets, 0, "Step",
+    NTS_KIND_OBJECT, (uint32_t)sizeof(Step), 2u, 1u, step_offsets, 0, "Step", 0u, 0,
 };
 
 /* The result array of an `all` over number payloads. */
 static const NtsDescriptor desc_numbers = {
-    NTS_KIND_ARRAY, (uint32_t)sizeof(double), 0u, 0u, 0, 0, "number[]",
+    NTS_KIND_ARRAY, (uint32_t)sizeof(double), 0u, 0u, 0, 0, "number[]", 0u, 0,
 };
 
 static void step_run(void *state) {

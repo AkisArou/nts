@@ -23,11 +23,11 @@ size_t nts_live_count(void) { return nts_allocated - nts_reclaimed; }
 /* Cyclic, because one descriptor serves every array of references and says
    nothing about what the elements point at. */
 const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY, sizeof(void *), 1, 1, 0, 0,
-                                    "reference"};
+                                    "reference", 0u, 0};
 const NtsDescriptor nts_desc_string1 = {NTS_KIND_STRING, 1, 0, 0, 0, 0,
-                                        "string"};
+                                        "string", 0u, 0};
 const NtsDescriptor nts_desc_string2 = {NTS_KIND_STRING, 2, 0, 0, 0, 0,
-                                        "string"};
+                                        "string", 0u, 0};
 
 /* The NoGC provider (RFC 9.1): a bump allocator that never frees. For compiler
  * bring-up, allocation testing and bounded-lifetime tools. It must never be
@@ -200,10 +200,21 @@ void nts_retain(NtsHeader *object) {
  * in what they do with each child, so the walking is written once. */
 static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *)) {
   const NtsDescriptor *descriptor = object->descriptor;
-  if (descriptor->references == 0) {
+  if (descriptor->references == 0 && descriptor->erased == 0) {
     return;
   }
   if (descriptor->kind == NTS_KIND_ARRAY) {
+    /* An array of erased values: every element is an `NtsValue` and each one
+     * is a reference only when its own tag says so. */
+    if (descriptor->erased) {
+      NtsValue *slots = NTS_ITEMS((const NtsArray *)object, NtsValue);
+      for (uint32_t index = 0; index < object->length; index++) {
+        if (NTS_TAG_IS_REFERENCE(slots[index].tag) && slots[index].as.reference) {
+          visit(slots[index].as.reference);
+        }
+      }
+      return;
+    }
     NtsHeader **slots = NTS_ITEMS((const NtsArray *)object, NtsHeader *);
     for (uint32_t index = 0; index < object->length; index++) {
       if (slots[index]) {
@@ -218,6 +229,34 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *)) {
     if (child) {
       visit(child);
     }
+  }
+  /* And the slots whose contents decide whether they are references at all.
+   *
+   * This is the single traversal: `nts_release_contents` and all four passes of
+   * the cycle collector go through here, so teaching it about erased slots
+   * teaches the whole collector at once. That is the reason an erased value is
+   * stored whole rather than decomposed into a tag beside a typed slot at every
+   * kind of storage -- one concept here, against a parallel tag slot in object
+   * layout, array layout, globals and closure captures. */
+  for (uint32_t index = 0; index < descriptor->erased; index++) {
+    unsigned char *slot = (unsigned char *)object + descriptor->erased_offsets[index];
+    const NtsValue *value = (const NtsValue *)slot;
+    if (NTS_TAG_IS_REFERENCE(value->tag) && value->as.reference) {
+      visit(value->as.reference);
+    }
+  }
+}
+
+/* Claim and give up what an erased value holds. */
+void nts_value_retain(NtsValue value) {
+  if (NTS_TAG_IS_REFERENCE(value.tag) && value.as.reference) {
+    nts_retain(value.as.reference);
+  }
+}
+
+void nts_value_release(NtsValue value) {
+  if (NTS_TAG_IS_REFERENCE(value.tag) && value.as.reference) {
+    nts_release(value.as.reference);
   }
 }
 
@@ -1670,7 +1709,7 @@ static const uint32_t nts_reaction_offsets[] = {
  * has to be able to see it. */
 static const NtsDescriptor nts_desc_reaction = {
     NTS_KIND_OBJECT, (uint32_t)sizeof(NtsReaction), 2u, 1u,
-    nts_reaction_offsets, 0, "Reaction",
+    nts_reaction_offsets, 0, "Reaction", 0u, 0,
 };
 
 static const uint32_t nts_promise_offsets[] = {
@@ -1680,7 +1719,7 @@ static const uint32_t nts_promise_offsets[] = {
 
 static const NtsDescriptor nts_desc_promise = {
     NTS_KIND_OBJECT, (uint32_t)sizeof(NtsPromise), 2u, 1u,
-    nts_promise_offsets, 0, "Promise",
+    nts_promise_offsets, 0, "Promise", 0u, 0,
 };
 
 NtsPromise *nts_promise_new(void) {
@@ -1952,7 +1991,7 @@ static const uint32_t nts_combinator_offsets[] = {
  * holds reactions, and a reaction's state is a slot. */
 static const NtsDescriptor nts_desc_combinator = {
     NTS_KIND_OBJECT, (uint32_t)sizeof(NtsCombinator), 2u, 1u,
-    nts_combinator_offsets, 0, "Combinator",
+    nts_combinator_offsets, 0, "Combinator", 0u, 0,
 };
 
 static const uint32_t nts_combinator_slot_offsets[] = {
@@ -1962,7 +2001,7 @@ static const uint32_t nts_combinator_slot_offsets[] = {
 
 static const NtsDescriptor nts_desc_combinator_slot = {
     NTS_KIND_OBJECT, (uint32_t)sizeof(NtsCombinatorSlot), 2u, 1u,
-    nts_combinator_slot_offsets, 0, "CombinatorSlot",
+    nts_combinator_slot_offsets, 0, "CombinatorSlot", 0u, 0,
 };
 
 /* Copy a settled promise's payload onto another promise. `race` is exactly
@@ -2107,7 +2146,7 @@ static const uint32_t nts_callback_offsets[] = {
 
 static const NtsDescriptor nts_desc_callback = {
     NTS_KIND_OBJECT, (uint32_t)sizeof(NtsCallback), 1u, 1u,
-    nts_callback_offsets, 0, "Callback",
+    nts_callback_offsets, 0, "Callback", 0u, 0,
 };
 
 static void nts_callback_call(NtsCallback *entry) {

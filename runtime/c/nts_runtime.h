@@ -78,6 +78,26 @@ typedef struct NtsDescriptor {
      * has the whole hierarchy and can say which calls need it. */
     void *const *methods;
     const char *name;
+    /* Slots holding an `NtsValue`, which is a reference only when its tag says
+     * so. `erased` is how many and `erased_offsets` is where, in the same byte
+     * offsets and for the same reason as `offsets` above.
+     *
+     * A separate table rather than a flag on the entries in `offsets`, because
+     * the two are read differently: a reference slot is dereferenced, an erased
+     * slot is inspected first. Merging them would put a branch in the loop that
+     * walks the common case.
+     *
+     * For an array, `erased` is 1 when the elements are `NtsValue`s and 0
+     * otherwise, matching how `references` works for one.
+     *
+     * Last in the struct, and every descriptor states them: this runtime is
+     * built with `-Wmissing-field-initializers -Werror`, so C's zero-fill is
+     * not available and each descriptor has to say it has no erased slots
+     * rather than be assumed to. That is the better half of the trade -- adding
+     * a slot kind costs one line in every descriptor and cannot be forgotten in
+     * one. */
+    uint32_t erased;
+    const uint32_t *erased_offsets;
 } NtsDescriptor;
 
 /* RFC 8.2. One header for every variable-length managed object: an array and a
@@ -156,6 +176,21 @@ typedef struct NtsValue {
  * something folds it, and that folding is a peephole this does not yet have.
  * Correct first. */
 NtsString *nts_tag_name(uint32_t tag);
+
+/* Whether a tag means the payload is a reference.
+ *
+ * The one place that knows, so that the tracer, retain, release and the
+ * emitter cannot disagree about it. */
+#define NTS_TAG_IS_REFERENCE(tag) ((tag) == NTS_TAG_STRING || (tag) == NTS_TAG_OBJECT)
+
+/* Claim and give up what an erased value holds.
+ *
+ * A no-op for a scalar tag, which is why the compiler can emit these wherever
+ * it would emit `nts_retain`/`nts_release` for a reference and let the tag
+ * decide at run time. That branch is what a site pays for being erased, and it
+ * is what specializing a site by its reaching representations removes. */
+void nts_value_retain(NtsValue value);
+void nts_value_release(NtsValue value);
 
 /* The inline elements of a string. */
 #define NTS_ELEMENTS(a, T) ((T *)((unsigned char *)(a) + sizeof(NtsHeader)))

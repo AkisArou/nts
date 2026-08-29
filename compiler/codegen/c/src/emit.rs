@@ -1184,6 +1184,32 @@ fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &P
             );
             format!("nts_refs_{name}")
         };
+        // Slots holding an erased value, which is a reference only when its tag
+        // says so. Emitted the same way and for the same reason as the
+        // reference table above: `offsetof`, so the compiler that laid the
+        // struct out is the one that says where its fields are.
+        let erased: Vec<&str> = layout
+            .fields
+            .iter()
+            .filter(|field| field.ty == HirType::Erased)
+            .map(|field| field.name.as_str())
+            .collect();
+        let erased_offsets = if erased.is_empty() {
+            "0".to_owned()
+        } else {
+            let entries: Vec<String> = erased
+                .iter()
+                .map(|field| format!("offsetof({name}, {})", c_identifier(field)))
+                .collect();
+            writer.line(
+                origin,
+                format!(
+                    "static const uint32_t nts_erased_{name}[] = {{ {} }};",
+                    entries.join(", ")
+                ),
+            );
+            format!("nts_erased_{name}")
+        };
         // Whether an object of this type could be in a reference cycle. The
         // collector reads it to stay away from the programs that have none,
         // which is nearly all of them.
@@ -1192,9 +1218,11 @@ fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &P
             origin,
             format!(
                 "static const NtsDescriptor nts_desc_{name} = \
-                 {{ NTS_KIND_OBJECT, sizeof({name}), {}u, {cyclic}u, {offsets}, {methods}, \"{}\" }};",
+                 {{ NTS_KIND_OBJECT, sizeof({name}), {}u, {cyclic}u, {offsets}, {methods}, \"{}\", \
+                 {}u, {erased_offsets} }};",
                 references.len(),
-                layout.name
+                layout.name,
+                erased.len()
             ),
         );
         writer.blank(origin);
@@ -1403,6 +1431,7 @@ fn erased_conversion(
     op: &nts_core::hir::Op,
     name: &str,
     kind: &OpKind,
+    context: &Context<'_>,
 ) -> Result<String, Diagnostic> {
     let refuse = |ty: &HirType, direction: &str| {
         Diagnostic::error(
@@ -1419,14 +1448,30 @@ fn erased_conversion(
         OpKind::Erase { value } => {
             let from = &func.value(*value).ty;
             let (tag, field) = erased_tag(from).ok_or_else(|| refuse(from, "erased"))?;
+            // The payload is one `NtsHeader *` for every reference, because
+            // that is what retain, release and the tracer all take. The cast is
+            // the same one `nts_retain` needs and for the same reason: a class
+            // instance is a header followed by its fields, so the two point at
+            // the same address.
+            let cast = if field == "reference" {
+                "(NtsHeader *)"
+            } else {
+                ""
+            };
             Ok(format!(
-                "{name} = (NtsValue){{ .tag = {tag}, .as.{field} = {} }};",
+                "{name} = (NtsValue){{ .tag = {tag}, .as.{field} = {cast}{} }};",
                 value_name(*value)
             ))
         }
         OpKind::Unerase { value } => {
             let (_, field) = erased_tag(&op.ty).ok_or_else(|| refuse(&op.ty, "read back"))?;
-            Ok(format!("{name} = {}.as.{field};", value_name(*value)))
+            let cast = if field == "reference" {
+                let ty = c_type_of(context.program, &op.ty, &op.origin)?;
+                format!("({ty})")
+            } else {
+                String::new()
+            };
+            Ok(format!("{name} = {cast}{}.as.{field};", value_name(*value)))
         }
         _ => unreachable!("only the two conversions reach here"),
     }
@@ -1443,6 +1488,17 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
         HirType::Float { .. } | HirType::Int { .. } => Some(("NTS_TAG_NUMBER", "number")),
         HirType::Bool => Some(("NTS_TAG_BOOLEAN", "boolean")),
         HirType::Void => Some(("NTS_TAG_UNDEFINED", "number")),
+        HirType::Managed(ManagedType::String) => Some(("NTS_TAG_STRING", "reference")),
+        // Every object shares one tag. `typeof` cannot tell two classes apart
+        // -- it answers "object" for both -- and which class it is comes from
+        // the header the payload points at, which is where the collector and
+        // dispatch already look.
+        // An array answers "object" to `typeof`, like any other object, and it
+        // carries the same header -- so the collector and the refcount reach it
+        // through the payload exactly as they reach a class instance.
+        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
+            Some(("NTS_TAG_OBJECT", "reference"))
+        }
         _ => None,
     }
 }
@@ -2173,7 +2229,7 @@ fn emit_op(
         // are one line and both can fail, so they live together in
         // `erased_conversion` rather than growing this match by twenty.
         OpKind::Erase { .. } | OpKind::Unerase { .. } => {
-            erased_conversion(func, op, &name, &op.kind)?
+            erased_conversion(func, op, &name, &op.kind, context)?
         }
         OpKind::TagOf { value: operand } => format!("{name} = {}.tag;", value_name(*operand)),
         // The absent reference. Typed, because C distinguishes a null
@@ -2240,6 +2296,18 @@ fn emit_op(
         | OpKind::Await { .. }
         | OpKind::Suspend { .. } => {
             return managed_op(writer, func, value, context);
+        }
+        // An erased value is not a pointer to cast: it is sixteen bytes that
+        // hold one only when the tag says so, and the runtime helper is where
+        // that question is asked. The compiler emits the same retain and
+        // release it would for a reference and lets the tag decide -- which is
+        // exactly the branch that specializing a site by its reaching
+        // representations would remove.
+        OpKind::Retain(object) if func.value(*object).ty == HirType::Erased => {
+            format!("nts_value_retain({});", value_name(*object))
+        }
+        OpKind::Release(object) if func.value(*object).ty == HirType::Erased => {
+            format!("nts_value_release({});", value_name(*object))
         }
         OpKind::Retain(object) => {
             format!("nts_retain((NtsHeader *){});", value_name(*object))

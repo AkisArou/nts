@@ -134,27 +134,51 @@ fn an_unerase_appears_only_inside_the_narrowed_branch() {
     );
 }
 
-/// Erasing a reference is refused, and says what is missing.
+/// A reference goes into an erased value and comes back out.
 ///
-/// The bound on the first representation. A payload that is sometimes a
-/// pointer needs retain and release that switch on the tag, and reference
-/// counting that is subtly wrong frees something still in use, later, somewhere
-/// else. Refusing beats storing a pointer in a union and hoping.
+/// Refused in both directions until the collector could see one. The difficulty
+/// was never the union: it was that a payload which is *sometimes* a pointer
+/// cannot be described by a fixed-offset reference table, so retain, release
+/// and every cycle pass had no way to know whether to follow it.
+///
+/// The descriptor now carries a table of erased slots beside its table of
+/// reference slots, and `nts_each_reference` reads the tag before visiting.
+/// That it is the *single* traversal is the whole argument for storing an
+/// erased value whole rather than decomposing it at every kind of storage:
+/// one loop teaches release-contents and all four cycle passes at once.
+///
+/// The counting itself is checked in `runtime/c/tests/erased_refs.c`, under
+/// reference counting. It cannot be checked here: the differential harness
+/// builds `NoGC`, where nothing is ever released and every assertion about
+/// releasing would pass against a runtime that had never learned any of this.
 #[test]
-fn erasing_a_reference_is_refused_by_name() {
-    let Some(lowered) = lower_at("tests/programs/erased-references") else {
+fn a_reference_survives_being_erased() {
+    let Some(lowered) = lower_at("../../examples/unknown-references") else {
         return;
     };
     assert!(
-        lowered
-            .diagnostics
-            .iter()
-            .any(|d| d.message.contains("retain and release")),
-        "the refusal should say what is missing: {:?}",
+        lowered.diagnostics.is_empty(),
+        "examples/unknown-references should lower clean: {:?}",
         lowered
             .diagnostics
             .iter()
             .map(|d| d.message.as_str())
             .collect::<Vec<_>>(),
+    );
+    // A string in, and a string out: the erase and the unerase are both there,
+    // and the unerase is what the earlier refusal made impossible.
+    let width = func(&lowered, "widthOf");
+    assert_eq!(
+        count(width, |k| matches!(k, OpKind::Unerase { .. })),
+        1,
+        "the narrowed read reads the payload back",
+    );
+    assert_eq!(
+        count(func(&lowered, "ofString"), |k| matches!(
+            k,
+            OpKind::Erase { .. }
+        )),
+        1,
+        "and the string is erased where it meets the parameter",
     );
 }

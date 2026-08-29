@@ -3143,11 +3143,16 @@ impl<'a> FuncBuilder<'a> {
         }
         if !matches!(
             want,
-            HirType::Float { .. } | HirType::Int { .. } | HirType::Bool
+            HirType::Float { .. }
+                | HirType::Int { .. }
+                | HirType::Bool
+                | HirType::Managed(
+                    ManagedType::String | ManagedType::Object(_) | ManagedType::Array(_)
+                )
         ) {
             return Err(self.unsupported(
                 id,
-                "an `unknown` narrowed to a reference, whose payload needs retain and release",
+                &format!("an `unknown` narrowed to {want:?}, which it cannot be read back as"),
             ));
         }
         let origin = self.origin(id);
@@ -3180,12 +3185,17 @@ impl<'a> FuncBuilder<'a> {
         }
         if !matches!(
             have,
-            HirType::Float { .. } | HirType::Int { .. } | HirType::Bool | HirType::Void
+            HirType::Float { .. }
+                | HirType::Int { .. }
+                | HirType::Bool
+                | HirType::Void
+                | HirType::Managed(
+                    ManagedType::String | ManagedType::Object(_) | ManagedType::Array(_)
+                )
         ) {
             return Err(self.unsupported(
                 id,
-                "a reference where `unknown` is expected; erasing one needs retain and release \
-                 that switch on the tag",
+                &format!("a value of type {have:?} where `unknown` is expected"),
             ));
         }
         let origin = self.origin(id);

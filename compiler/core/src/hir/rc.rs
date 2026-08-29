@@ -127,7 +127,7 @@ fn ordered(
 ///
 fn counted(func: &Func, layouts: &[Layout], value: ValueId) -> bool {
     let op = &func.values[value.0 as usize];
-    if !op.ty.is_managed() {
+    if !op.ty.may_hold_a_reference() {
         return false;
     }
     match op.kind {
@@ -156,7 +156,7 @@ fn reference_fields(func: &Func, layouts: &[Layout], value: ValueId) -> Vec<u32>
         .fields
         .iter()
         .enumerate()
-        .filter(|(_, field)| field.ty.is_managed())
+        .filter(|(_, field)| field.ty.may_hold_a_reference())
         .filter_map(|(index, _)| u32::try_from(index).ok())
         .collect()
 }
