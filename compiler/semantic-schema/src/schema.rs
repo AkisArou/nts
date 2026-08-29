@@ -277,6 +277,17 @@ pub struct SymbolRecord {
     pub declarations: Vec<NodeId>,
     /// The symbol's type, if the checker resolved one.
     pub ty: Option<TypeId>,
+    /// The symbol this one aliases, for an `import` or `export` specifier.
+    ///
+    /// TypeScript gives an imported name a symbol of its own, declared at the
+    /// import site: `import { count } from "./a"` binds a *local* `count`
+    /// whose whole content is a pointer to `a.ts`'s. A consumer that looks the
+    /// local one up in module scope finds nothing — which is why every read of
+    /// an imported value was refused as "a name from an enclosing scope".
+    ///
+    /// Followed to the end of the chain, so a re-export costs a reader one hop
+    /// rather than as many as the program happens to have.
+    pub aliased: Option<SymbolId>,
 }
 
 /// What kind of entity a symbol names.

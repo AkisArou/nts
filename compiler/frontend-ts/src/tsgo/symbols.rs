@@ -136,15 +136,42 @@ pub fn resolve(
     let responses = client.symbols_at(handle, project, handles)?;
 
     let mut module_symbol = None;
+    // An import specifier binds a symbol of its own, and every reference to the
+    // imported name resolves to that one rather than to the declaration it
+    // stands for. Collected here and resolved below in one pass: the same alias
+    // is the symbol of every node that reads it, so resolving on sight would
+    // ask the checker the same question once per reference.
+    let mut aliases: Vec<(SymbolId, u32)> = Vec::new();
     for ((node, _), response) in addressable.iter().zip(&responses) {
         let Some(response) = response else { continue };
+        let fresh = !interned.contains_key(&response.id);
         let id = intern(snapshot, interned, response, root, path, base, file);
         snapshot.nodes[node.0 as usize].symbol = Some(id);
+        if fresh && response.flags & bits::ALIAS != 0 {
+            aliases.push((id, response.id));
+        }
 
         // The SourceFile node's symbol is the module symbol — present for a
         // module, absent for a plain script.
         if node.0 == base && snapshot.nodes[node.0 as usize].kind != NodeKind::List {
             module_symbol = Some(response.id);
+        }
+    }
+
+    for (id, tsgo) in aliases {
+        // Gated on the flag rather than tried and caught: `getAliasedSymbol`
+        // panics on a symbol that is not an alias ("Should only get alias
+        // here"), and a panic in the checker takes the whole snapshot.
+        let Some(target) = client.aliased_symbol(handle, project, tsgo).ok().flatten() else {
+            continue;
+        };
+        let target = intern(snapshot, interned, &target, root, path, base, file);
+        // A symbol is not its own alias. `export { x }` with no `from` clause
+        // is an alias whose target is the local declaration, and the two are
+        // the same symbol -- following that would be a self-loop for any
+        // consumer that walks the chain.
+        if target != id {
+            snapshot.symbols[id.0 as usize].aliased = Some(target);
         }
     }
 
@@ -227,6 +254,10 @@ fn intern(
         // node through `node_types`, so asking for it again would be a round trip
         // for something the snapshot already knows.
         ty: None,
+        // Filled by `resolve_aliases` once the whole file is interned. Not
+        // here, because resolving needs the client and interning is also done
+        // from the export walk, where the target is already in hand.
+        aliased: None,
     });
     interned.insert(response.id, id);
     id

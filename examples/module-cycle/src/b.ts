@@ -8,5 +8,5 @@ let seen = 0;
 seen = 5;
 
 export function fromB(): number {
-  return fromA() + 100;
+  return fromA() + 100 + seen;
 }

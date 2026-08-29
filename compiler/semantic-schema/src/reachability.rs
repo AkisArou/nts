@@ -207,6 +207,7 @@ mod tests {
             flags: SymbolFlags::default(),
             declarations,
             ty: None,
+            aliased: None,
         }
     }
 

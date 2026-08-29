@@ -927,6 +927,131 @@ impl Shared {
     }
 }
 
+/// Reads that happen before the module declaring them has evaluated.
+///
+/// This is the compile-time half of what node reports at runtime as
+/// `ReferenceError: Cannot access 'x' before initialization`, and it is the one
+/// thing a compiler can do here that a runtime cannot: node finds out when the
+/// read executes, and only for the path it took.
+///
+/// The shape needs a cycle to exist at all. `b` importing `a` puts `a` first,
+/// so a read in `b`'s module body is always safe -- unless `a` also imports
+/// `b`, which is what lets the walk reach `b` first and leaves `a`'s bindings
+/// in their dead zone while `b`'s body runs. That is why this arrived with
+/// cycles rather than before them.
+///
+/// Without this the program compiles and is *wrong quietly*: a module-scope
+/// binding is a global with a static initializer, so the read finds the
+/// initializer rather than nothing, and the compiled program answers 7 where
+/// node refuses to answer at all.
+///
+/// # What is and is not looked at
+///
+/// Only module-scope variable bindings, and only reads that module evaluation
+/// actually performs. A read inside a function body is not one: by the time
+/// anything calls it every module has evaluated, which is exactly how the
+/// legal half of a cycle is written and why `examples/module-cycle-late`
+/// compiles.
+///
+/// A class is a dead-zone binding too, and is not checked here. Its heritage
+/// clause is walked -- `class X extends Imported` does read at evaluation --
+/// but the map is built from variable declarations, so nothing matches yet.
+/// Instance property initializers are skipped for the opposite reason: they
+/// run at construction, and treating them as evaluation would refuse programs
+/// that are fine.
+fn dead_zone_reads(snapshot: &SemanticSnapshot, order: &[usize]) -> Vec<Diagnostic> {
+    let probe = FuncBuilder::new(snapshot);
+
+    let mut position = vec![usize::MAX; snapshot.modules.len()];
+    for (rank, at) in order.iter().enumerate() {
+        if let Some(slot) = position.get_mut(*at) {
+            *slot = rank;
+        }
+    }
+
+    // Which module declares each module-scope binding. Keyed by the
+    // declaration's own symbol, which is what an import alias resolves to.
+    let mut declared_in: rustc_hash::FxHashMap<u32, usize> = rustc_hash::FxHashMap::default();
+    for (at, module) in snapshot.modules.iter().enumerate() {
+        for child in probe.children(module.root) {
+            if probe.kind_of(child) != Some(syntax::VARIABLE_STATEMENT) {
+                continue;
+            }
+            let mut names = Vec::new();
+            probe.declared_symbols(child, &mut names);
+            for symbol in names {
+                declared_in.insert(symbol, at);
+            }
+        }
+    }
+
+    let mut found = Vec::new();
+    for (at, module) in snapshot.modules.iter().enumerate() {
+        let mine = position[at];
+        for child in probe.children(module.root) {
+            evaluated_reads(&probe, child, &mut |id| {
+                let Some(symbol) = probe.node(id).symbol else {
+                    return;
+                };
+                let target = probe.denoted_symbol(symbol);
+                let Some(&declaring) = declared_in.get(&target.0) else {
+                    return;
+                };
+                if declaring == at || position[declaring] <= mine {
+                    return;
+                }
+                let name = &snapshot.symbols[target.0 as usize].name;
+                let file = snapshot
+                    .sources
+                    .get(snapshot.modules[declaring].file.0 as usize)
+                    .map_or_else(|| "another module".to_owned(), |source| source.uri.clone());
+                found.push(Diagnostic::error(
+                    "NTS1004",
+                    format!(
+                        "`{name}` is read here while evaluating this module, and `{file}` -- \
+                         which declares it -- has not been evaluated yet; the two modules \
+                         import each other, so one of them runs first and this is the one. \
+                         Node reports the same program as `ReferenceError: Cannot access \
+                         '{name}' before initialization`, at the moment the read runs"
+                    ),
+                    probe.location(id),
+                ));
+            });
+        }
+    }
+    found
+}
+
+/// Identifiers a module's evaluation actually reads.
+///
+/// The walk stops at anything deferred. A function body runs when it is
+/// called, not when the module is evaluated, and descending into one would
+/// refuse the legal way to cross a cycle. An import clause names a binding
+/// rather than reading it, and would otherwise report every import in a cycle
+/// as a dead-zone read of itself.
+fn evaluated_reads(probe: &FuncBuilder, id: NodeId, visit: &mut impl FnMut(NodeId)) {
+    let Some(kind) = probe.kind_of(id) else {
+        return;
+    };
+    match kind {
+        syntax::FUNCTION_DECLARATION
+        | syntax::ARROW_FUNCTION
+        | syntax::METHOD_DECLARATION
+        | syntax::CONSTRUCTOR
+        | syntax::GET_ACCESSOR
+        | syntax::SET_ACCESSOR
+        | syntax::PROPERTY_DECLARATION
+        | syntax::IMPORT_DECLARATION
+        | syntax::EXPORT_DECLARATION
+        | syntax::INTERFACE_DECLARATION => return,
+        syntax::IDENTIFIER => visit(id),
+        _ => {}
+    }
+    for child in &probe.node(id).children {
+        evaluated_reads(probe, *child, visit);
+    }
+}
+
 #[must_use]
 /// Every top-level statement in the program, in the order they must run.
 ///
@@ -964,62 +1089,23 @@ fn module_statements(
 
     let (order, cycles) = evaluation_order(snapshot);
 
-    // A cycle only matters if something on it has code to run. `a.ts` and
-    // `b.ts` importing each other's *functions* is ordinary and lowers; it is a
-    // cycle whose modules initialise that has no answer here.
-    let mut refused_a_cycle = false;
-    for cycle in cycles {
-        if !cycle.iter().any(|at| !per_module[*at].is_empty()) {
-            continue;
-        }
-        refused_a_cycle = true;
-        let path: Vec<&str> = cycle
-            .iter()
-            .chain(cycle.first())
-            .filter_map(|at| snapshot.modules.get(*at))
-            .filter_map(|module| snapshot.sources.get(module.file.0 as usize))
-            .map(|source| source.display_path.as_str())
-            .collect();
-        let anchor = snapshot.modules[cycle[0]].root;
-        refusals.push(probe.unsupported(
-            anchor,
-            &format!(
-                "a cycle in the module graph ({}) whose modules have top-level code; ES modules resolve this with a temporal dead zone on the not-yet-initialized binding, and this compiler has no representation for one, so it would read the binding's static initializer instead of throwing",
-                path.join(" -> ")
-            ),
-        ));
-    }
-    if refused_a_cycle {
-        // The consequence, said out loud. A refused initializer does not stop
-        // the build: the program is emitted, runs, and answers from static
-        // initializers alone, so every module-scope value it computed is
-        // simply absent. That is a wrong answer with exit status 0, and it is
-        // worth a sentence of its own because the refusal above names a *cycle*
-        // while the thing the caller will notice is a number.
-        //
-        // Whether it should stop the build is a policy question about what a
-        // refusal means -- `Severity::Error` is documented as "the build cannot
-        // produce an artifact" and today does not -- and that is a decision
-        // about every refusal, not this one.
-        let ran: usize = per_module.iter().filter(|m| !m.is_empty()).count();
-        let anchor = snapshot
-            .modules
-            .first()
-            .map_or(NodeId(0), |module| module.root);
-        refusals.push(probe.unsupported(
-            anchor,
-            &format!(
-                "module evaluation for {ran} module(s), which is refused above and so will not run; \
-                 the program still builds, and every module-scope value it would have computed \
-                 stays at its static initializer"
-            ),
-        ));
-        return (None, refusals);
-    }
+    // Cycles are *evaluated*, not refused. ES modules specify them, node runs
+    // them, and the post-order walk above already handles one the way
+    // `InnerModuleEvaluation` does: a module still being visited is not
+    // re-entered, so it keeps the position it already has.
+    //
+    // Nothing to collect from `cycles` itself: a cycle is evaluated rather than
+    // refused, and the walk above already orders one the way
+    // `InnerModuleEvaluation` does. What a cycle *does* enable is a read of a
+    // binding whose module has not run, which is checked here rather than
+    // there because the check needs the order and the cycle set does not.
+    let _ = cycles;
+    refusals.extend(dead_zone_reads(snapshot, &order));
 
     // Concatenated in evaluation order rather than emitted per module: with
-    // cycles refused and top-level `await` refused, what a program can observe
-    // is the order of the statements, and one function says exactly that.
+    // top-level `await` refused, and a read across a cycle refused above, what
+    // a program can observe of module evaluation is the order of its
+    // statements -- and one function in that order says exactly that.
     let mut statements = Vec::new();
     let mut anchor = None;
     for at in order {
@@ -1036,6 +1122,22 @@ fn module_statements(
 
 /// Evaluation order, and any cycles found on the way.
 ///
+/// # Cycles are evaluated, not refused
+///
+/// ES modules specify them and node runs them, so refusing them was wrong --
+/// and far too coarse. `node:fs` had four and every one was harmless: the only
+/// thing crossing them was a *function*, which is hoisted and callable before
+/// its module has evaluated. Refusing cost that module its whole
+/// initialization to guard against something it was not doing.
+///
+/// The one thing a cycle can do that this compiler must not accept is a read of
+/// a module-scope binding whose module has not evaluated -- a temporal dead
+/// zone, where node throws a `ReferenceError` and this would quietly answer the
+/// binding's static initializer. [`dead_zone_reads`] is that check, and the
+/// order computed here is what makes it decidable: the violation is a read
+/// whose declaring module sits *later* in this list than the module doing the
+/// reading.
+///
 /// Post-order over each module's imports in source order, which is what
 /// `InnerModuleEvaluation` specifies: a module's dependencies evaluate before
 /// it, each exactly once. Verified against node with a diamond -- `d, a, b,
@@ -1043,11 +1145,18 @@ fn module_statements(
 /// the *order* of a module's imports is observable and the graph stores them
 /// ordered.
 ///
-/// Every module is a root, in index order, rather than only the entry. The
-/// frontend does not know the product: a library's surface is its exports and
-/// an executable's is its entry, and that choice is made after lowering. The
-/// cost is that an executable may evaluate a module nothing imports, which node
-/// would not; the alternative is not evaluating a library's modules at all.
+/// Rooted at the modules nothing imports, then at every other module in index
+/// order. The two-stage roll call matters: rooting at every module in index
+/// order put `ex-cycle`'s `a` before `b` where node runs `b` first, because the
+/// walk entered the cycle at whichever member the file order happened to reach
+/// first rather than at the entry. Modules with no incoming edge are the
+/// entries, and starting there is what makes the walk agree.
+///
+/// Every other module is still a root afterwards, because the frontend does not
+/// know the product: a library's surface is its exports and an executable's is
+/// its entry, and that choice is made after lowering. The cost is that an
+/// executable may evaluate a module nothing imports, which node would not; the
+/// alternative is not evaluating a library's modules at all.
 #[must_use]
 fn evaluation_order(snapshot: &SemanticSnapshot) -> (Vec<usize>, Vec<Vec<usize>>) {
     #[derive(Clone, Copy, PartialEq)]
@@ -1061,10 +1170,31 @@ fn evaluation_order(snapshot: &SemanticSnapshot) -> (Vec<usize>, Vec<Vec<usize>>
     let mut cycles = Vec::new();
     let mut path: Vec<usize> = Vec::new();
 
+    // Entries first: a module nothing imports. That is what node starts from,
+    // and inside a cycle it decides the answer -- for `b <-> a` reached from
+    // `main`, node evaluates `b, a, main`, and starting the walk at `b` instead
+    // gives `a, b, main`. Both are valid dependency orders and only one is
+    // node's.
+    //
+    // The remaining modules are roots too, in index order, so a component
+    // every member of which is imported -- a cycle with nothing outside it --
+    // is still evaluated rather than skipped.
+    let mut imported = vec![false; snapshot.modules.len()];
+    for module in &snapshot.modules {
+        for target in &module.imports {
+            if let Some(flag) = imported.get_mut(target.0 as usize) {
+                *flag = true;
+            }
+        }
+    }
+    let roots = (0..snapshot.modules.len())
+        .filter(|at| !imported[*at])
+        .chain(0..snapshot.modules.len());
+
     // An explicit stack rather than recursion: a module graph is program input,
     // and a deep one must not decide how much C stack this compiler has.
     let mut work: Vec<(usize, usize)> = Vec::new();
-    for root in 0..snapshot.modules.len() {
+    for root in roots {
         if marks[root] != Mark::Unseen {
             continue;
         }
@@ -1099,6 +1229,57 @@ fn evaluation_order(snapshot: &SemanticSnapshot) -> (Vec<usize>, Vec<Vec<usize>>
         }
     }
     (order, cycles)
+}
+
+/// The module initializer: every module-scope statement, in evaluation order,
+/// as one function. Separate from `lower` because losing it has a consequence
+/// worth stating at length, and because it is the one lowering that is about
+/// the program rather than about a declaration in it.
+fn lower_module_initializer(
+    snapshot: &SemanticSnapshot,
+    shared: &Shared,
+    lowered: &mut Lowered,
+    wanted: &mut std::collections::BTreeSet<usize>,
+) {
+    // Module-level statements. Nothing above walks them: the loop finds
+    // declarations, and `total = bump(41)` is not one -- so it was dropped, and
+    // the program compiled, ran, and answered as though the line were not
+    // there. Lowered *after* the declarations so that a closure it allocates
+    // joins the worklist below rather than missing it.
+    let (initializer, refusals) = module_statements(snapshot);
+    lowered.diagnostics.extend(refusals);
+    if let Some((file, statements)) = initializer {
+        let mut builder = shared.builder(snapshot, Substitution::default(), String::new());
+        match builder.lower_module_init(file, &statements) {
+            Ok(func) => lowered.program.funcs.push(func),
+            Err(diagnostic) => {
+                // The consequence, said out loud. One refused statement loses
+                // the *whole* initializer, and that does not stop the build:
+                // the program is emitted, runs, and answers from static
+                // initializers alone. A wrong answer with exit status 0.
+                //
+                // The refusal above names a construct; what a caller notices is
+                // a number, so the two are worth separate sentences.
+                //
+                // Whether it should stop the build is a policy question about
+                // what a refusal means -- `Severity::Error` is documented as
+                // "the build cannot produce an artifact" and today does not --
+                // and that is a decision about every refusal, not this one.
+                let origin = diagnostic.primary;
+                lowered.diagnostics.push(diagnostic);
+                lowered.diagnostics.push(Diagnostic::error(
+                "NTS1001",
+                "module evaluation, which the refusal above loses in full and so will not run; \
+                 the program still builds, and every module-scope value it would have computed \
+                 stays at its static initializer"
+                    .to_owned(),
+                origin,
+            ));
+            }
+        }
+        wanted.extend(builder.used_closures.iter().copied());
+        collect_layouts(&mut lowered.program, builder.layouts);
+    }
 }
 
 #[must_use]
@@ -1215,22 +1396,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         }
     }
 
-    // Module-level statements. Nothing above walks them: the loop finds
-    // declarations, and `total = bump(41)` is not one -- so it was dropped, and
-    // the program compiled, ran, and answered as though the line were not
-    // there. Lowered *after* the declarations so that a closure it allocates
-    // joins the worklist below rather than missing it.
-    let (initializer, refusals) = module_statements(snapshot);
-    lowered.diagnostics.extend(refusals);
-    if let Some((file, statements)) = initializer {
-        let mut builder = shared.builder(snapshot, Substitution::default(), String::new());
-        match builder.lower_module_init(file, &statements) {
-            Ok(func) => lowered.program.funcs.push(func),
-            Err(diagnostic) => lowered.diagnostics.push(diagnostic),
-        }
-        wanted.extend(builder.used_closures.iter().copied());
-        collect_layouts(&mut lowered.program, builder.layouts);
-    }
+    lower_module_initializer(snapshot, &shared, &mut lowered, &mut wanted);
 
     // Each closure something allocated, and each as a function of its own.
     // Nothing about it depends on the function that allocates it -- that is the
@@ -2343,6 +2509,29 @@ impl<'a> FuncBuilder<'a> {
             id,
             &format!("{what} `{name}` of unrepresentable type ({named})"),
         )
+    }
+
+    /// The symbol a name ultimately denotes, following an import alias.
+    ///
+    /// Every reference to an imported name resolves to a symbol declared at the
+    /// *import site*, not to the declaration it stands for. Module scope is
+    /// keyed by the declaration, so a read of an imported value used to look
+    /// itself up, find nothing, and be refused as a name from an enclosing
+    /// scope -- the refusal that made the temporal dead zone unreachable.
+    ///
+    /// The frontend follows the whole chain, so this is one hop in every case
+    /// it has produced. The loop is a bound rather than an algorithm: a
+    /// self-referential chain would be a bug in the frontend, and a lowering
+    /// should refuse such a program rather than hang on it.
+    fn denoted_symbol(&self, symbol: SymbolId) -> SymbolId {
+        let mut at = symbol;
+        for _ in 0..8 {
+            match self.snapshot.symbols[at.0 as usize].aliased {
+                Some(next) => at = next,
+                None => return at,
+            }
+        }
+        at
     }
 
     /// What kind of name the lowering ran out of places to look for.
@@ -4609,6 +4798,10 @@ impl<'a> FuncBuilder<'a> {
             .node(target)
             .symbol
             .ok_or_else(|| self.unsupported(target, "assignment to a computed target"))?;
+        // No alias resolution here, unlike the read: assigning to an imported
+        // binding is a type error, so an alias symbol cannot be the target of
+        // an assignment in a program that got this far.
+        //
         // A module-scope variable is a store, not a rebinding: every function
         // sees the same one, so there is nothing to shadow.
         if !self.bindings.contains_key(&symbol.0)
@@ -8073,6 +8266,9 @@ impl<'a> FuncBuilder<'a> {
         if let Some(value) = self.bindings.get(&symbol.0) {
             return Ok(*value);
         }
+        // An imported name, resolved to what it imports. Below the local
+        // lookup because an import binds nothing a function body can shadow.
+        let symbol = self.denoted_symbol(symbol);
 
         // Declared at module scope. A constant is its value; a variable is a
         // load.

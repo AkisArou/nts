@@ -108,3 +108,54 @@ fn compiled_file_paths_are_still_remapped() {
         assert!(!source.uri.contains("/home/"), "{}", source.uri);
     }
 }
+
+/// An import binds a symbol of its own, and the snapshot records what it means.
+///
+/// TypeScript gives `import { count } from "./state.js"` a *local* `count`,
+/// declared at the import site, whose whole content is a pointer to the other
+/// module's. Nothing downstream can find a binding by that symbol -- module
+/// scope is keyed by the declaration -- so before this was recorded, every read
+/// of an imported value was refused as "a name from an enclosing scope", and
+/// with it the whole temporal-dead-zone question, which cannot arise for a
+/// program that has no imported reads to begin with.
+#[test]
+fn an_import_records_the_symbol_it_aliases() {
+    let tsgo = nts_frontend_ts::tsgo::locate();
+    let Some(tsgo) = tsgo else { return };
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/module-bindings/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("examples/module-bindings fixture is checked in");
+    let snapshot = TsgoApi::new(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed");
+
+    let aliases: Vec<(&str, &str)> = snapshot
+        .symbols
+        .iter()
+        .filter_map(|record| {
+            let target = record.aliased?;
+            Some((
+                record.name.as_str(),
+                snapshot.symbols[target.0 as usize].name.as_str(),
+            ))
+        })
+        .collect();
+    assert!(
+        aliases
+            .iter()
+            .any(|(from, to)| *from == "count" && *to == "count"),
+        "the imported `count` should alias the declared one, saw: {aliases:?}",
+    );
+    // A symbol is not its own alias. `export { x }` with no `from` clause
+    // resolves to the local declaration, and recording that would give every
+    // consumer that follows the chain a self-loop to detect.
+    for (at, symbol) in snapshot.symbols.iter().enumerate() {
+        assert_ne!(
+            symbol.aliased.map(|target| target.0 as usize),
+            Some(at),
+            "`{}` aliases itself",
+            symbol.name,
+        );
+    }
+}

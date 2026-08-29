@@ -1509,3 +1509,93 @@ asked at integration time; `run_until_idle` is correct on a library that
 schedules nothing and on one that schedules constantly. The descriptor carries
 `schedules` for tooling that wants to assert it, and a header diff never
 changes when a library gains its first timer.
+
+## A8. Cycles are evaluated, and the dead zone is a compile-time error
+
+The record's §3 refused import cycles. That was wrong twice, and the correction
+is worth stating in full because the first version of the fix was also wrong.
+
+### Refusing them was too coarse
+
+ES modules specify cycles, and node runs them. `node:fs` had four. Every one
+was harmless: the only thing crossing them was a *function*, which is hoisted
+and callable before its module has evaluated. Refusing cost those modules their
+entire initialization to guard against something they were not doing.
+
+So `InnerModuleEvaluation` is implemented as written: post-order over each
+module's imports in source order, a module already being visited is not
+re-entered and keeps the position it has. Five shapes are checked against node
+and agree — two modules calling into each other, a module importing itself, a
+three-module ring, a re-export inside a cycle, and a value read across a cycle
+from inside a function.
+
+### Rooting the walk at the entry, not at file order
+
+Ordering every module as a root in index order produced `a, b, main` where node
+produces `b, a, main`. The walk entered the cycle at whichever member the file
+order reached first rather than at the entry. Roots are now the modules with no
+incoming import edge — the entries — and every other module afterwards, which
+keeps a library's unimported modules evaluated without letting file order pick
+the entry point.
+
+### The one thing a cycle can do that must not compile
+
+A module-scope read of a binding whose module has not evaluated. Node throws
+`ReferenceError: Cannot access 'x' before initialization`. This compiler used
+to emit it silently and answer the binding's *static initializer*, because a
+module-scope `let` is a global and its initial value is already in place before
+anything runs. A wrong answer with exit status 0:
+
+```ts
+// a.ts — evaluated second, because main imports a and a imports b
+import { echo } from "./b.js";
+export let seed = 7;
+
+// b.ts — evaluated first
+import { seed } from "./a.js";
+export let echo = 0;
+echo = seed;          // node: ReferenceError. nts, before this: echo === 7.
+```
+
+The evaluation order is known statically, so the answer is available without
+running the program — and for *every* path, not only the one an execution took.
+That is the advantage over node, and it is the reason the check belongs here
+rather than in a runtime guard: there is no runtime cost, because there is no
+runtime check. A read whose declaring module sits later in the evaluation order
+is `NTS1004`, and the message names both the binding and the module that has
+not run yet.
+
+The pair matters more than the rule. The same read moved inside a function is
+legal and stays legal — by the time anything calls it, every module has
+evaluated — and that is how the legal half of a cycle is written.
+`examples/module-cycle-late` is that program, and it agrees with node.
+
+### What made it reachable: imported bindings
+
+The check could not fire before, and not because cycles were refused. A read of
+an imported *value* was refused upstream as ``a name from an enclosing scope``,
+so no program could reach a dead zone. TypeScript gives `import { count } from
+"./state.js"` a local symbol declared at the import site whose whole content is
+a pointer to the other module's; module scope is keyed by the declaration, so
+the lookup found nothing.
+
+`SymbolRecord::aliased` records what an import means, resolved through the
+whole chain by the frontend so a re-export costs a reader one hop rather than
+as many as the program happens to have. A read now resolves the alias before
+consulting module scope, and an imported `let` is a load from the *same global*
+the declaring module writes — one cell, not a copy. `examples/module-bindings`
+reaches one value both ways and compares them.
+
+### Still open
+
+- A module-scope binding with a non-constant initializer is refused before this
+  check sees it (`a module-scope variable whose initializer is not constant`),
+  so `export const derived = imported + 1` — the most idiomatic way to write
+  the dead-zone bug — is currently refused for the wrong reason. The message is
+  honest but the refusal hides a divergence rather than reporting it.
+- Classes are dead-zone bindings too. The walk already descends into a heritage
+  clause, so `class X extends Imported` is on the path; the map it consults is
+  built from variable declarations, so nothing matches yet.
+- Instance property initializers are skipped deliberately: they run at
+  construction, and treating them as evaluation would refuse correct programs.
+  Static ones are skipped with them, which is a false negative.

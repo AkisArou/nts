@@ -29,7 +29,7 @@ let armed = 0;
 armed = 1;
 
 export function fromA(): number {
-  return 10;
+  return 10 + armed;
 }
 
 export function throughB(): number {

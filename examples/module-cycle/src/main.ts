@@ -1,10 +1,9 @@
 import { throughB } from "./a.js";
 
-// Deliberately reads no module-scope state. A refused initializer leaves the
-// program running *without* its module code rather than failing to build, so
-// an export that depended on `armed` or `seen` would disagree with node for a
-// second reason and hide the first. Both sides answer from the functions
-// alone, and the refusal is what this example is for -- see `nts hir`.
+// Reads through the cycle on purpose: `throughB()` is `fromB()`, which is
+// `fromA() + 100 + seen`, which is `(10 + armed) + 100 + seen`. Both of those
+// bindings are set by module-level code inside the cycle, so the answer is
+// 116 only if both modules evaluated -- node says 116, and so must this.
 export function value(n: number): number {
   return throughB() + n;
 }
