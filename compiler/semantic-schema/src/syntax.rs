@@ -90,6 +90,13 @@ pub const FOR_STATEMENT: u16 = 249;
 pub const FOR_OF_STATEMENT: u16 = 251;
 pub const TRY_STATEMENT: u16 = 259;
 pub const AWAIT_EXPRESSION: u16 = 224;
+/// `yield x` and `yield* xs`.
+///
+/// Sits immediately before `SpreadElement` in the checker's enum, which is how
+/// the number is arrived at. `module_evaluation::a_yield_is_refused_by_name`
+/// pins it: a wrong value here would leave `yield` reported as "this
+/// expression", which is what it was.
+pub const YIELD_EXPRESSION: u16 = 230;
 /// `typeof value`, the expression rather than the type query.
 ///
 /// Sits between `ArrowFunction` and `AwaitExpression` in the checker's own

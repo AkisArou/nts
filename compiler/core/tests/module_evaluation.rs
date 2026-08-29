@@ -300,6 +300,64 @@ fn one_unsupported_statement_does_not_darken_the_module() {
     );
 }
 
+/// A `yield` is refused by name, not as "this expression".
+///
+/// The expression lowering's fallthrough names nothing, and a refusal nobody
+/// can group by is a refusal nobody can rank: every `yield` landed in the same
+/// anonymous bucket as everything else unhandled, so a work-list built from
+/// these messages could not see generators at all.
+///
+/// This also pins `syntax::YIELD_EXPRESSION`, which is a bare number read off
+/// the checker's enum. If it were wrong the refusal would silently go back to
+/// being anonymous, which is exactly the failure it was added to fix.
+#[test]
+fn a_yield_is_refused_by_name() {
+    let Some(lowered) = lower_at("tests/programs/generators", true) else {
+        return;
+    };
+    assert!(
+        lowered
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("`yield`")),
+        "the refusal should name `yield`: {:?}",
+        refusals(&lowered),
+    );
+    assert!(
+        !lowered
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.starts_with("this expression")),
+        "and nothing here should be refused anonymously: {:?}",
+        refusals(&lowered),
+    );
+}
+
+/// `typeof` on an erased value is refused, and says why.
+///
+/// The counterpart to `examples/typeof`, and the restriction that makes the
+/// fold there correct. `typeof n` where `n: number` is a fact about the type,
+/// so it is a constant. `typeof value` where `value: unknown` is a fact about
+/// the *value*, and answering it needs a runtime tag -- which is the
+/// representation question `docs/records/0019` measures and does not decide.
+///
+/// A test on the refusal rather than only on the fold, because the fold is
+/// only sound while this stays refused.
+#[test]
+fn typeof_on_an_erased_value_is_refused() {
+    let Some(lowered) = lower_at("tests/programs/typeof-erased", true) else {
+        return;
+    };
+    assert!(
+        lowered
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("runtime tag")),
+        "the refusal should say what is missing: {:?}",
+        refusals(&lowered),
+    );
+}
+
 /// Module evaluation runs, and runs in the order the import graph says.
 ///
 /// `module-order` is a diamond whose answer is a four-digit number, one digit

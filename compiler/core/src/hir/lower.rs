@@ -3019,6 +3019,58 @@ impl<'a> FuncBuilder<'a> {
         Ok(func)
     }
 
+    /// `typeof x`, where `x` has one known primitive type.
+    ///
+    /// In a typed compiler this is a constant. If `value` is a `number` then
+    /// `typeof value` is `"number"` and there is nothing to evaluate -- the
+    /// operand is not read at all, which is why this folds rather than emitting
+    /// anything.
+    ///
+    /// Worth doing because real code is full of it. Node's validators open with
+    /// `if (typeof value !== "number") throw ...` on a parameter already
+    /// declared `number`, guarding against callers JavaScript allows and
+    /// TypeScript does not. Eight distinct sites across the node profile were
+    /// refused for it, each costing its module a statement or a function, and
+    /// all eight were reported as "this expression" -- an anonymous refusal
+    /// that no work-list could see.
+    ///
+    /// Restricted to a single known primitive, and the restriction is the whole
+    /// of the correctness argument. `typeof` on a union, an object, `any` or
+    /// `unknown` is a property of the *value* rather than of its type, and
+    /// answering it needs a runtime tag this compiler has not decided on. Those
+    /// stay refused, by name now.
+    fn lower_typeof(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let operand = *self
+            .children(id)
+            .first()
+            .ok_or_else(|| self.unsupported(id, "`typeof` with no operand"))?;
+        let answer = self
+            .snapshot
+            .node_types
+            .get(&operand)
+            .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
+            .and_then(|record| match &record.kind {
+                TypeKind::Number | TypeKind::Literal(LiteralValue::Number(_)) => Some("number"),
+                TypeKind::String | TypeKind::Literal(LiteralValue::String(_)) => Some("string"),
+                TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => Some("boolean"),
+                TypeKind::BigInt => Some("bigint"),
+                _ => None,
+            })
+            .ok_or_else(|| {
+                self.unsupported(
+                    id,
+                    "`typeof` on a value whose type is not a single primitive, which needs a \
+                     runtime tag",
+                )
+            })?;
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::ConstString(answer.to_owned()),
+            HirType::Managed(ManagedType::String),
+            origin,
+        ))
+    }
+
     /// A module-scope declaration, as the assignment it is.
     ///
     /// Not `lower_statement`: that would bind the name as a *local* of the
@@ -5582,6 +5634,22 @@ impl<'a> FuncBuilder<'a> {
                 ))
             }
             Some(syntax::TEMPLATE_EXPRESSION) => self.lower_template(id),
+            Some(syntax::TYPE_OF_EXPRESSION) => self.lower_typeof(id),
+            // Named, because the fallthrough below does not name anything and a
+            // refusal nobody can group by is a refusal nobody can rank. Every
+            // `yield` in the node profile was reported as "this expression",
+            // so a work-list built from these messages could not see generators
+            // at all -- and node's `readline` key decoder is one.
+            //
+            // Refusing it is the whole of what this compiler can say today.
+            // `function*` is a suspension like `async`, and `suspend.rs` builds
+            // exactly that machine for `await`; what is missing is not the
+            // transformation but a representation for the `Generator<T>` a call
+            // to one returns.
+            Some(syntax::YIELD_EXPRESSION) => Err(self.unsupported(
+                id,
+                "`yield`, which needs the generator object a call to `function*` returns",
+            )),
             _ => Err(self.unsupported(id, "this expression")),
         }
     }
