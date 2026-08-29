@@ -979,10 +979,18 @@ fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagno
             format!(
                 "{visibility}{ty} {} = {};",
                 c_identifier(&global.name),
-                if matches!(global.ty, HirType::Bool) {
-                    (global.initial != 0.0).to_string()
-                } else {
-                    float_literal(global.initial)
+                match global.ty {
+                    HirType::Bool => (global.initial != 0.0).to_string(),
+                    // A global's `initial` is one `f64`, which cannot spell a
+                    // tag beside a payload. It does not have to: an erased
+                    // global starts as `undefined`, and whatever the source
+                    // wrote is assigned by `module#init` -- which is where
+                    // every module-scope initializer that is not a constant
+                    // already runs.
+                    HirType::Erased => {
+                        "(NtsValue){ .tag = NTS_TAG_UNDEFINED, .as.number = 0 }".to_owned()
+                    }
+                    _ => float_literal(global.initial),
                 }
             ),
         );

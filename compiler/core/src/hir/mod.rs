@@ -168,6 +168,24 @@ impl HirType {
     pub const fn is_scalar(&self) -> bool {
         matches!(self, Self::Bool | Self::Int { .. } | Self::Float { .. })
     }
+
+    /// Whether a module-scope variable may hold this.
+    ///
+    /// Scalars, and an erased value. `docs/any-unknown.md` lists module state
+    /// among the places `unknown` may appear and says the compiler "must not
+    /// reject `unknown` merely because it requires an erased representation" --
+    /// and a global of erased type is representable: it starts as `undefined`
+    /// and `module#init` assigns the rest, which is already where every
+    /// non-constant module-scope initializer runs.
+    ///
+    /// Separate from [`Self::is_scalar`] rather than widening it, because the
+    /// two questions differ. An erased value is not a scalar: it is sixteen
+    /// bytes that may hold a reference, and the places that ask whether
+    /// something fits in a register still need the narrower answer.
+    #[must_use]
+    pub const fn can_be_global(&self) -> bool {
+        self.is_scalar() || matches!(self, Self::Erased)
+    }
 }
 
 /// A value produced by an operation.

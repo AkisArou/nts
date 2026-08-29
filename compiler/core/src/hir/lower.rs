@@ -766,7 +766,20 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
             continue;
         };
 
-        let constant = probe.constant_value(*initializer, &scope.constants);
+        // An erased global's initial value needs a *tag*, and `Global.initial`
+        // is one `f64` with no room for one. So a constant initializer is not
+        // taken as one here: the declaration is deferred to `module#init`,
+        // where lowering erases it and the tag comes from the value's own
+        // type. Folding it instead put `0` in the payload with the tag left at
+        // `undefined`, and `typeof` then answered "undefined" for a global the
+        // source initialised to a number -- which the differential caught
+        // against node.
+        let erased = probe.type_of(*name_node) == Some(HirType::Erased);
+        let constant = if erased {
+            None
+        } else {
+            probe.constant_value(*initializer, &scope.constants)
+        };
         if constant.is_none() {
             // Code, rather than data this file happens not to use. Reported
             // here because nothing downstream will: the methods of an object
@@ -790,7 +803,7 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
             );
             continue;
         };
-        if !ty.is_scalar() {
+        if !ty.can_be_global() {
             scope.unsupported.insert(
                 symbol.0,
                 "a module-scope variable holding a reference".to_owned(),
@@ -3339,6 +3352,11 @@ impl<'a> FuncBuilder<'a> {
                 continue;
             };
             let value = self.lower_expression(initializer)?;
+            // At the global's type, like every other slot a value meets. An
+            // erased global is the case that needs it: the initializer is a
+            // number and the global holds a tag beside a payload.
+            let want = self.module.types[global as usize].clone();
+            let value = self.coerce(value, &want, declaration)?;
             self.write_place(declaration, &Place::Global(global), value);
         }
         Ok(())
@@ -6556,6 +6574,97 @@ impl<'a> FuncBuilder<'a> {
             .collect()
     }
 
+    /// The field initializers a construction runs.
+    ///
+    /// `class Counter { value: number = 5 }` has no constructor, and the
+    /// allocation is zeroed -- so `new Counter().value` read `0`. Silently: a
+    /// zeroed field and an initialized one are the same bytes whenever the
+    /// initializer happens to be the zero value, which is why the only field
+    /// initializer in the whole example corpus (`code: string = ""`) never
+    /// disagreed with node and this survived.
+    ///
+    /// Base first, because a derived class's initializer may overwrite an
+    /// inherited field and the source order says which wins.
+    ///
+    /// # Where this is not yet node's order
+    ///
+    /// Node runs a derived class's initializers *after* `super()` returns.
+    /// These run before the constructor is entered at all, so a base
+    /// constructor that calls an overridden method which reads a derived field
+    /// sees the initialized value where node sees `undefined`. That is a real
+    /// difference and a narrow one; the shape it needs is a base constructor
+    /// calling a virtual method, which this compiler does not lower yet.
+    fn initialize_fields(
+        &mut self,
+        at: NodeId,
+        object: ValueId,
+        type_id: TypeId,
+    ) -> Result<(), Diagnostic> {
+        let mut chain = vec![type_id];
+        let mut ty = type_id;
+        while let Some(base) = self.snapshot.base_types.get(&ty).and_then(|b| b.first()) {
+            if chain.contains(base) {
+                break;
+            }
+            chain.push(*base);
+            ty = *base;
+        }
+        chain.reverse();
+
+        let layout = self.layout_of(at, type_id)?;
+        for class in chain {
+            let Some(declaration) = self
+                .snapshot
+                .types
+                .get(class.0 as usize)
+                .and_then(|record| record.symbol)
+                .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+                .and_then(|record| record.declarations.first().copied())
+            else {
+                continue;
+            };
+            for member in self.children(declaration) {
+                if self.kind_of(member) != Some(syntax::PROPERTY_DECLARATION) {
+                    continue;
+                }
+                // Slots rather than positions: a property declaration is
+                // `modifiers, name, ?/!, type, initializer`, and which of them
+                // are present is recorded in the node's `present` bitmask. A
+                // first version took the *last* child and checked it had a
+                // type, which matched the type annotation of `name: number;`
+                // and lowered `number` as an expression -- six functions in
+                // `examples/inheritance` vanished, and the refusal landed in
+                // the anonymous bucket that had just been emptied.
+                let Some([_, Some(name), _, _, initializer]) = self.child_slots::<5>(member) else {
+                    continue;
+                };
+                let Some(initializer) = initializer else {
+                    continue;
+                };
+                let Some(text) = self.node(name).text.clone() else {
+                    continue;
+                };
+                let Some(field) = layout.index_of(&text) else {
+                    continue;
+                };
+                let value = self.lower_expression(initializer)?;
+                let want = layout.fields[field as usize].ty.clone();
+                let value = self.coerce(value, &want, initializer)?;
+                let origin = self.origin(initializer);
+                self.push(
+                    OpKind::FieldSet {
+                        object,
+                        field,
+                        value,
+                    },
+                    HirType::Void,
+                    origin,
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn lower_new(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let children = self.children(id);
         let callee = *children
@@ -6629,11 +6738,15 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
 
+        // Field initializers, before any constructor runs, so a constructor
+        // that assigns the same field wins -- which is what source order says.
+        self.initialize_fields(id, object, type_id)?;
+
         // The nearest declared constructor, which may be a base's: a class
         // that declares none has an implicit one that forwards, and forwarding
         // to it directly is the same call with one frame fewer. A class with no
-        // constructor anywhere in its chain has nothing to run at all -- the
-        // allocation is zeroed and that is the whole of `new C()`.
+        // constructor anywhere in its chain has only its field initializers to
+        // run, which the line above emitted.
         let arguments = self.arguments_of(id);
         let Some(declaring) = self.hierarchy.constructor(type_id) else {
             // A provided error class, or one descending from one and declaring
