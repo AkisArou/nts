@@ -969,3 +969,86 @@ export class ERR_USE_AFTER_CLOSE extends NodeError {
     this.name = "Error";
   }
 }
+
+/* --- datagram sockets ------------------------------------------------------
+ *
+ * A UDP socket has more states than a TCP one and most of these name a
+ * transition it refused rather than a value it disliked -- which is why they
+ * are plain `Error`s: nothing was passed wrongly, it was passed at the wrong
+ * moment.
+ */
+
+/** `Socket is already bound` — `bind` on a socket that has one. */
+export class ERR_SOCKET_ALREADY_BOUND extends NodeError {
+  override readonly code = "ERR_SOCKET_ALREADY_BOUND";
+  override get ["constructor"](): unknown { return Error; }
+
+  constructor() {
+    super("Socket is already bound");
+    this.name = "Error";
+  }
+}
+
+/** `Already connected` — a second `connect` on a connected datagram socket. */
+export class ERR_SOCKET_DGRAM_IS_CONNECTED extends NodeError {
+  override readonly code = "ERR_SOCKET_DGRAM_IS_CONNECTED";
+  override get ["constructor"](): unknown { return Error; }
+
+  constructor() {
+    super("Already connected");
+    this.name = "Error";
+  }
+}
+
+/** `Not connected` — `remoteAddress` or a connected `send` without one. */
+export class ERR_SOCKET_DGRAM_NOT_CONNECTED extends NodeError {
+  override readonly code = "ERR_SOCKET_DGRAM_NOT_CONNECTED";
+  override get ["constructor"](): unknown { return Error; }
+
+  constructor() {
+    super("Not connected");
+    this.name = "Error";
+  }
+}
+
+/** `Not running` — an operation on a socket whose handle has been closed. */
+export class ERR_SOCKET_DGRAM_NOT_RUNNING extends NodeError {
+  override readonly code = "ERR_SOCKET_DGRAM_NOT_RUNNING";
+  override get ["constructor"](): unknown { return Error; }
+
+  constructor() {
+    super("Not running");
+    this.name = "Error";
+  }
+}
+
+/** `Bad socket type specified. Valid types are: udp4, udp6`. */
+export class ERR_SOCKET_BAD_TYPE extends NodeTypeError {
+  override readonly code = "ERR_SOCKET_BAD_TYPE";
+  override get ["constructor"](): unknown { return TypeError; }
+
+  constructor() {
+    super("Bad socket type specified. Valid types are: udp4, udp6");
+    this.name = "TypeError";
+  }
+}
+
+/**
+ * `Port should be >= 0 and < 65536. Received 70000.`
+ *
+ * A `RangeError`, and `allowZero` changes the operator rather than the
+ * sentence: zero means "any free port" where a socket may ask for one, and
+ * means nothing where it may not.
+ */
+export class ERR_SOCKET_BAD_PORT extends NodeRangeError {
+  override readonly code = "ERR_SOCKET_BAD_PORT";
+  override get ["constructor"](): unknown { return RangeError; }
+
+  constructor(name: string, port: unknown, allowZero = true) {
+    super(
+      `${name} should be ${allowZero ? ">=" : ">"} 0 and < 65536. ` +
+        `Received ${inspect(port)}.`,
+    );
+    this.name = "RangeError";
+  }
+}

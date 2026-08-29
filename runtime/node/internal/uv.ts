@@ -83,3 +83,51 @@ export function errnoException(code: number, syscall: string): UVError {
   error.syscall = syscall;
   return error;
 }
+
+export interface UVHostPortError extends Error {
+  code: string;
+  errno: number;
+  syscall: string;
+  address?: string;
+  port?: number;
+}
+
+/**
+ * A libuv failure that happened at an address, rather than at a path.
+ *
+ * A different sentence from `uvException`, and node writes it differently on
+ * purpose: `bind EADDRINUSE 0.0.0.0:8080` rather than
+ * `EADDRINUSE: address already in use, bind`. What a reader needs first for a
+ * socket is *where*, and the whole point of the error is usually that
+ * something else is already there.
+ *
+ * Port zero is omitted rather than printed, because zero does not name a port
+ * -- it is the request for any free one, and by the time this is thrown it is
+ * not the port anything was tried on.
+ *
+ * With neither an address nor a port this is node's `ErrnoException` -- plain
+ * `getsockname EBADF` -- which is what a socket operation that has no peer to
+ * name should throw. That is a third wording, distinct from both `uvException`
+ * above (the filesystem's, path first) and `errnoException` (the process
+ * credential calls'). Node has all three and its tests match on the text of
+ * each, so they stay three.
+ */
+export function exceptionWithHostPort(
+  code: number,
+  syscall: string,
+  address?: string,
+  port?: number,
+): UVHostPortError {
+  const name = nts_uv_err_name(code);
+  let details = "";
+  if (port !== undefined && port > 0) details = ` ${address}:${port}`;
+  else if (address) details = ` ${address}`;
+
+  const error = new Error(`${syscall} ${name}${details}`) as UVHostPortError;
+  error.code = name;
+  error.errno = code;
+  error.syscall = syscall;
+  if (address !== undefined) error.address = address;
+  if (port !== undefined && port > 0) error.port = port;
+  return error;
+}
