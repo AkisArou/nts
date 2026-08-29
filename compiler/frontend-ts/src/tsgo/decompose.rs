@@ -749,6 +749,17 @@ impl<'a> Decomposer<'a> {
                 if !is_member {
                     continue;
                 }
+                // A static member is not a member of the instance type, and
+                // this list is about the instance type. `Buffer` declares a
+                // static `byteLength` and inherits an instance `byteLength`
+                // from `Uint8Array`; marking the second `own` because of the
+                // first made the class look as though it declared storage.
+                if member_node
+                    .modifiers
+                    .contains(DeclarationModifiers::STATIC)
+                {
+                    continue;
+                }
                 if let Some(name) = member_node
                     .children
                     .iter()

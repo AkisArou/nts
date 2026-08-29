@@ -1900,6 +1900,50 @@ pub fn representation_with(
 ///
 /// The list is a path rather than a set: two sibling fields of the same array
 /// type are not a cycle, and treating them as one would refuse ordinary code.
+/// The element type of a typed array this type descends from.
+///
+/// By the same walk `provided_error_base` uses, and for the same reason: the
+/// checker's property list is flattened, so nothing in it says a member came
+/// from a base whose storage this compiler models itself.
+fn inherited_typed_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType> {
+    let mut stack = vec![(ty, 0u32)];
+    while let Some((at, depth)) = stack.pop() {
+        // A type that reaches itself through its bases is not a hierarchy.
+        if depth > 32 {
+            continue;
+        }
+        if at != ty
+            && let Some(name) = named(snapshot, at)
+            && let Some(element) = super::builtin::typed_array_element(name)
+        {
+            return Some(element);
+        }
+        for base in snapshot.base_types.get(&at).into_iter().flatten() {
+            stack.push((*base, depth + 1));
+        }
+    }
+    None
+}
+
+/// Whether a type declares storage of its own.
+///
+/// A method is a property whose type is a function, and an accessor is a call:
+/// neither is a field. `own` is what separates what the class wrote from what
+/// the flattened list inherited.
+fn declares_storage(
+    snapshot: &SemanticSnapshot,
+    properties: &[nts_semantic_schema::PropertyRecord],
+) -> bool {
+    properties.iter().any(|property| {
+        property.own
+            && property.accessor.is_none()
+            && !matches!(
+                snapshot.types.get(property.ty.0 as usize).map(|r| &r.kind),
+                Some(TypeKind::Function(_))
+            )
+    })
+}
+
 fn representation_within(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
@@ -1978,9 +2022,29 @@ fn representation_of(
             let payload = representation_within(snapshot, argument, path, subst)?;
             HirType::Managed(ManagedType::Promise(Box::new(payload)))
         }
-        TypeKind::Object { .. } | TypeKind::Function(_) => {
-            HirType::Managed(ManagedType::Object(ty))
+        // A class that extends a typed array and adds no storage of its own
+        // *is* that typed array. `Buffer extends Uint8Array` is the whole of
+        // this in the node profile -- it declares methods and not one field, so
+        // an instance is an `NtsArray` of bytes and nothing else.
+        //
+        // Giving it an object layout instead is what the refusal above
+        // `representable_bases` describes: `class Bytes extends Uint8Array {}`
+        // came out as five `int32_t` and no bytes, and `b.length` read the
+        // fifth field of a struct nothing allocates.
+        //
+        // A subclass that declares a field is a different type and stays
+        // refused. An array's items are inline and variable-length, so there is
+        // nowhere to put one -- that is a real layout question and not this
+        // one.
+        TypeKind::Object { properties } => {
+            match inherited_typed_array(snapshot, ty) {
+                Some(element) if !declares_storage(snapshot, properties) => {
+                    HirType::Managed(ManagedType::Array(Box::new(element)))
+                }
+                _ => HirType::Managed(ManagedType::Object(ty)),
+            }
         }
+        TypeKind::Function(_) => HirType::Managed(ManagedType::Object(ty)),
 
         // A tuple whose elements share a representation *is* an array of that
         // representation. `[number, number]` is two doubles in a row, which is
@@ -7104,7 +7168,25 @@ impl<'a> FuncBuilder<'a> {
         // about the element.
         // `new Uint8Array(n)` is the same allocation with the element width
         // written down instead of inferred.
-        if class == "Array" || super::builtin::typed_array_element(&class).is_some() {
+        // Or a class whose instances *are* an array: one that extends a typed
+        // array and adds no storage of its own. `new Buffer(n)` is
+        // `new Uint8Array(n)` with a different name on it, and asking the
+        // representation rather than the name is what makes that true without
+        // keeping a list of subclasses.
+        //
+        // A subclass that declares a constructor is not this: taking the
+        // allocation here would skip it silently, so it falls through to the
+        // object path and is refused there.
+        let is_an_array = matches!(
+            self.type_of(id),
+            Some(HirType::Managed(ManagedType::Array(_)))
+        ) && self
+            .snapshot
+            .node_types
+            .get(&id)
+            .is_none_or(|constructed| self.hierarchy.constructor(*constructed).is_none());
+        if class == "Array" || super::builtin::typed_array_element(&class).is_some() || is_an_array
+        {
             let ty = self
                 .type_of(id)
                 .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Array(_))))
@@ -7883,6 +7965,19 @@ impl<'a> FuncBuilder<'a> {
         if let HirType::Managed(ManagedType::Array(element)) =
             self.values[receiver.0 as usize].ty.clone()
         {
+            // A class whose instances *are* an array -- one extending a typed
+            // array and adding no storage -- still declares methods, and they
+            // are in the hierarchy under its own name. The representation says
+            // how the bytes are arranged and nothing about what declared them,
+            // so the member is resolved from the type the *checker* gives the
+            // receiver. Without this, `buf.fill(0)` asked the runtime's array
+            // helpers for a method the program wrote.
+            if let Some(declared) = self.snapshot.node_types.get(receiver_node).copied()
+                && let Some(name) = self.literal_name(*member)
+                && self.hierarchy.declaring(declared, &name).is_some()
+            {
+                return self.lower_object_method(id, receiver, declared, *member, arguments);
+            }
             return self.lower_array_method(id, receiver, &element, *member, arguments);
         }
 
