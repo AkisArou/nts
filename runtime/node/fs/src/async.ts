@@ -22,6 +22,18 @@ import { Buffer } from "../../buffer/src/main.ts";
 import { Dirent, Stats } from "./stats.ts";
 import { getOptions, type FileOptions } from "./options.ts";
 import { flagsOf } from "./flags.ts";
+import { AsyncContextFrame } from "../../internal/async-context.ts";
+import {
+  emitAfter,
+  emitBefore,
+  emitDestroy,
+  emitInit,
+  getDefaultTriggerAsyncId,
+  initHooksExist,
+  kAsyncId,
+  kTriggerAsyncId,
+  newAsyncId,
+} from "../../internal/async-hooks.ts";
 
 declare function nts_fs_open_async(
   path: string, flags: number, mode: number, callback: (errno: number, fd: number) => void,
@@ -133,9 +145,49 @@ function settle<T>(
   };
 }
 
-/** The last argument, checked to be a callback, as node checks it. */
-function requireCallback(callback: unknown): void {
+/**
+ * The last argument, checked to be a callback and wrapped as a request.
+ *
+ * Every asynchronous operation in this file is one filesystem request, and
+ * the request is the asynchronous resource: node calls it an FSReqCallback and
+ * so do the hooks. Wrapping happens here, at the one point every operation
+ * passes through, because the alternative is remembering it in thirty-odd
+ * places -- and the ones forgotten would be silently uninstrumented rather
+ * than broken, which is the kind of gap nothing reports.
+ *
+ * Returning the wrapper rather than mutating means the caller has to write
+ * `callback = asRequest(callback)`, which is the point: the callback the
+ * operation goes on to use is visibly the wrapped one.
+ */
+function asRequest<T>(callback: unknown, syscall: string): Callback<T> {
   validateFunction(callback, "cb");
+  const original = callback as Callback<T>;
+
+  const asyncId = newAsyncId();
+  const trigger = getDefaultTriggerAsyncId();
+  // Captured now, when the request is made, because that is when the caller is
+  // still on the stack. The thread pool answers much later and from nowhere in
+  // particular.
+  const frame = AsyncContextFrame.current();
+  const resource = { [kAsyncId]: asyncId, [kTriggerAsyncId]: trigger, syscall };
+  if (initHooksExist()) emitInit(asyncId, "FSREQCALLBACK", trigger, resource);
+
+  // Every argument forwarded, not just `(error, value)`: `read` answers with
+  // `(error, bytesRead, buffer)` and `write` with `(error, written, buffer)`,
+  // and a wrapper with a fixed arity would drop the last one silently.
+  return ((...args: unknown[]) => {
+    const prior = AsyncContextFrame.exchange(frame);
+    emitBefore(asyncId, trigger, resource);
+    try {
+      (original as (...a: unknown[]) => void)(...args);
+    } finally {
+      // A filesystem request answers once, so it is finished the moment its
+      // callback returns -- there is no repeating case as there is for a timer.
+      emitAfter(asyncId);
+      emitDestroy(asyncId);
+      AsyncContextFrame.setCurrent(prior);
+    }
+  }) as Callback<T>;
 }
 
 export function open(
@@ -154,7 +206,7 @@ export function open(
     mode = 0o666;
   }
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "open");
   nts_fs_open_async(
     path,
     flagsOf((flags as string | number | undefined) ?? "r"),
@@ -164,7 +216,7 @@ export function open(
 }
 
 export function close(fd: number, callback?: Callback): void {
-  requireCallback(callback);
+  callback = asRequest(callback, "close");
   nts_fs_close_async(fd, settle(callback as Callback, "close"));
 }
 
@@ -176,7 +228,7 @@ export function read(
   position: number | null,
   callback: (error: unknown, bytesRead?: number, buffer?: Buffer) => void,
 ): void {
-  requireCallback(callback);
+  callback = asRequest(callback, "read");
   nts_fs_read_async(
     fd,
     Array.from(buffer) as number[],
@@ -205,7 +257,7 @@ export function write(
   position: number | null,
   callback: (error: unknown, written?: number, buffer?: Buffer) => void,
 ): void {
-  requireCallback(callback);
+  callback = asRequest(callback, "write");
   nts_fs_write_async(
     fd,
     Array.from(buffer) as number[],
@@ -229,7 +281,7 @@ export function readFile(
     options = {};
   }
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "readFile");
   const { encoding } = getOptions(options);
 
   nts_fs_read_file_bytes_async(path, (errno: number, bytes: number[]) => {
@@ -256,7 +308,7 @@ export function writeFile(
     options = {};
   }
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "writeFile");
   const { encoding, mode, flag } = getOptions(options);
   const bytes = typeof data === "string"
     ? Array.from(Buffer.from(data, encoding ?? "utf8"))
@@ -289,7 +341,7 @@ export function appendFile(
 function statLike(follow: boolean, syscall: string) {
   return function statAsync(path: string, callback?: Callback<Stats>): void {
     validateString(path, "path");
-    requireCallback(callback);
+    callback = asRequest(callback, "appendFile");
     nts_fs_stat_async(path, follow, (errno: number, columns: number[]) => {
       if (errno < 0) (callback as Callback<Stats>)(uvException(errno, syscall, path));
       else (callback as Callback<Stats>)(null, new Stats(columns));
@@ -301,7 +353,7 @@ export const stat = statLike(true, "stat");
 export const lstat = statLike(false, "lstat");
 
 export function fstat(fd: number, callback?: Callback<Stats>): void {
-  requireCallback(callback);
+  callback = asRequest(callback, "fstat");
   nts_fs_fstat_async(fd, (errno: number, columns: number[]) => {
     if (errno < 0) (callback as Callback<Stats>)(uvException(errno, "fstat"));
     else (callback as Callback<Stats>)(null, new Stats(columns));
@@ -318,7 +370,7 @@ export function access(
     mode = 0;
   }
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "access");
   nts_fs_access_async(path, mode as number, settle(callback as Callback, "access", path));
 }
 
@@ -343,7 +395,7 @@ export function readdir(
     options = {};
   }
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "readdir");
   const withFileTypes = Boolean((options as { withFileTypes?: boolean }).withFileTypes);
 
   nts_fs_readdir_async(path, (errno: number, names: string[], types: number[]) => {
@@ -373,7 +425,7 @@ export function mkdir(
     options = {};
   }
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "mkdir");
 
   const recursive = typeof options === "object" && Boolean(options.recursive);
   const mode = typeof options === "number"
@@ -393,7 +445,7 @@ export function mkdir(
 
 export function rmdir(path: string, callback?: Callback): void {
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "rmdir");
   nts_fs_rmdir_async(path, settle(callback as Callback, "rmdir", path));
 }
 
@@ -407,21 +459,21 @@ export function rm(
     options = {};
   }
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "rm");
   const { recursive = false, force = false } = options as { recursive?: boolean; force?: boolean };
   nts_fs_rm_async(path, recursive, force, settle(callback as Callback, "rm", path));
 }
 
 export function unlink(path: string, callback?: Callback): void {
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "unlink");
   nts_fs_unlink_async(path, settle(callback as Callback, "unlink", path));
 }
 
 export function rename(from: string, to: string, callback?: Callback): void {
   validateString(from, "oldPath");
   validateString(to, "newPath");
-  requireCallback(callback);
+  callback = asRequest(callback, "rename");
   nts_fs_rename_async(from, to, settle(callback as Callback, "rename", from, to));
 }
 
@@ -437,14 +489,14 @@ export function copyFile(
   }
   validateString(from, "src");
   validateString(to, "dest");
-  requireCallback(callback);
+  callback = asRequest(callback, "copyFile");
   nts_fs_copyfile_async(from, to, flags as number, settle(callback as Callback, "copyfile", from, to));
 }
 
 export function link(from: string, to: string, callback?: Callback): void {
   validateString(from, "existingPath");
   validateString(to, "newPath");
-  requireCallback(callback);
+  callback = asRequest(callback, "link");
   nts_fs_link_async(from, to, settle(callback as Callback, "link", from, to));
 }
 
@@ -460,7 +512,7 @@ export function symlink(
   }
   validateString(target, "target");
   validateString(at, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "symlink");
   // The type only means anything on Windows, where a link to a directory and
   // a link to a file are different objects.
   const flags = type === "dir" ? 1 : type === "junction" ? 2 : 0;
@@ -469,7 +521,7 @@ export function symlink(
 
 export function readlink(path: string, callback?: Callback<string>): void {
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "readlink");
   nts_fs_readlink_async(path, (errno: number, resolved: string) => {
     if (errno < 0) (callback as Callback<string>)(uvException(errno, "readlink", path));
     else (callback as Callback<string>)(null, resolved);
@@ -485,7 +537,7 @@ export function realpath(
     callback = options as Callback<string>;
   }
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "realpath");
   nts_fs_realpath_async(path, (errno: number, resolved: string) => {
     if (errno < 0) (callback as Callback<string>)(uvException(errno, "realpath", path));
     else (callback as Callback<string>)(null, resolved);
@@ -494,13 +546,13 @@ export function realpath(
 
 export function chmod(path: string, mode: number, callback?: Callback): void {
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "chmod");
   nts_fs_chmod_async(path, mode, settle(callback as Callback, "chmod", path));
 }
 
 export function chown(path: string, uid: number, gid: number, callback?: Callback): void {
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "chown");
   nts_fs_chown_async(path, uid, gid, settle(callback as Callback, "chown", path));
 }
 
@@ -514,7 +566,7 @@ export function truncate(
     length = 0;
   }
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "truncate");
   nts_fs_truncate_async(path, length as number, settle(callback as Callback, "truncate", path));
 }
 
@@ -527,7 +579,7 @@ export function ftruncate(
     callback = length;
     length = 0;
   }
-  requireCallback(callback);
+  callback = asRequest(callback, "ftruncate");
   nts_fs_ftruncate_async(fd, length as number, settle(callback as Callback, "ftruncate"));
 }
 
@@ -538,7 +590,7 @@ export function utimes(
   callback?: Callback,
 ): void {
   validateString(path, "path");
-  requireCallback(callback);
+  callback = asRequest(callback, "utimes");
   const toSeconds = (t: number | Date): number =>
     t instanceof Date ? t.getTime() / 1000 : t;
   nts_fs_utimes_async(
@@ -550,12 +602,12 @@ export function utimes(
 }
 
 export function fsync(fd: number, callback?: Callback): void {
-  requireCallback(callback);
+  callback = asRequest(callback, "fsync");
   nts_fs_fsync_async(fd, settle(callback as Callback, "fsync"));
 }
 
 export function fdatasync(fd: number, callback?: Callback): void {
-  requireCallback(callback);
+  callback = asRequest(callback, "fdatasync");
   nts_fs_fdatasync_async(fd, settle(callback as Callback, "fdatasync"));
 }
 
@@ -568,7 +620,7 @@ export function mkdtemp(
     callback = options as Callback<string>;
   }
   validateString(prefix, "prefix");
-  requireCallback(callback);
+  callback = asRequest(callback, "mkdtemp");
   nts_fs_mkdtemp_async(`${prefix}XXXXXX`, (errno: number, created: string) => {
     if (errno < 0) (callback as Callback<string>)(uvException(errno, "mkdtemp", prefix));
     else (callback as Callback<string>)(null, created);
@@ -576,12 +628,12 @@ export function mkdtemp(
 }
 
 export function fchmod(fd: number, mode: number, callback?: Callback): void {
-  requireCallback(callback);
+  callback = asRequest(callback, "fchmod");
   nts_fs_fchmod_async(fd, mode, settle(callback as Callback, "fchmod"));
 }
 
 export function fchown(fd: number, uid: number, gid: number, callback?: Callback): void {
-  requireCallback(callback);
+  callback = asRequest(callback, "fchown");
   nts_fs_fchown_async(fd, uid, gid, settle(callback as Callback, "fchown"));
 }
 
@@ -591,7 +643,7 @@ export function futimes(
   mtime: number | Date,
   callback?: Callback,
 ): void {
-  requireCallback(callback);
+  callback = asRequest(callback, "futimes");
   const toSeconds = (t: number | Date): number =>
     t instanceof Date ? t.getTime() / 1000 : t;
   nts_fs_futimes_async(fd, toSeconds(atime), toSeconds(mtime), settle(callback as Callback, "futime"));
