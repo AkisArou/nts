@@ -153,8 +153,12 @@ mod tests {
         let json = report.to_pretty_json().expect("serialize report");
         // Ordered, not merely present: a report whose failures move between
         // runs is a report nobody can diff.
-        let first = json.find("test/a.js").expect("the first failure is reported");
-        let second = json.find("test/z.js").expect("the second failure is reported");
+        let first = json
+            .find("test/a.js")
+            .expect("the first failure is reported");
+        let second = json
+            .find("test/z.js")
+            .expect("the second failure is reported");
         assert!(first < second, "failures are reported in path order");
     }
 }

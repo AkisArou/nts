@@ -287,6 +287,29 @@ reading of one program, and it is evidence about the shape of the problem rather
 than an input to the algorithm. When this is built, the compiler should produce
 that table itself.
 
+### It does now — `nts erasure`, and where it disagrees
+
+`nts_core::erasure` produces the table, and `docs/records/0019` reports what it
+says. Over the whole profile compiled as one project, 566 `unknown` parameters:
+227 carried, 83 tested, 184 examined, 72 unclear.
+
+Two corrections to the reading above.
+
+**`tested` is 15%, not 6%.** The hand count treated it as too small to matter.
+The difference is that a read of a value *after* narrowing is not a read of the
+erased value: `value + 1` inside a `typeof` guard reads a `number`. Counting it
+as an examination of the `unknown` is what collapses the two categories, and the
+checker's own type at the use site already distinguishes them. So **55% of
+`unknown` parameters need only a pointer or a tag**, not the ~32% implied here.
+
+**The whole-program argument is stronger than stated, and in a different
+direction.** 99 of 566 parameters are answered differently once calls are
+followed, 34 of them by a use in another file — and every disagreement runs the
+same way, from carried to examined. A per-signature rule is not merely
+incomplete; it is *optimistic*, and a representation chosen from it would be too
+small. The `console`/`node:util` example is reproduced exactly by the pass,
+including `log(...args)` through its spread.
+
 ## Narrowing
 
 `unknown` supports ordinary TypeScript narrowing operations whose semantics Native TypeScript can implement statically and safely, including:

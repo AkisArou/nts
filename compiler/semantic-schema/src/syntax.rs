@@ -90,6 +90,14 @@ pub const FOR_STATEMENT: u16 = 249;
 pub const FOR_OF_STATEMENT: u16 = 251;
 pub const TRY_STATEMENT: u16 = 259;
 pub const AWAIT_EXPRESSION: u16 = 224;
+/// `typeof value`, the expression rather than the type query.
+///
+/// Sits between `ArrowFunction` and `AwaitExpression` in the checker's own
+/// enum, which is how the number is arrived at; `erasure::tests` pins it
+/// against a real program, because a wrong constant here would silently
+/// reclassify every type test as something else.
+pub const TYPE_OF_EXPRESSION: u16 = 222;
+pub const INSTANCEOF_KEYWORD: u16 = 104;
 pub const AWAIT_KEYWORD: u16 = 134;
 pub const PARAMETER: u16 = 170;
 pub const PROPERTY_DECLARATION: u16 = 173;
@@ -153,6 +161,10 @@ pub const FUNCTION_DECLARATION: u16 = 263;
 pub const INTERFACE_DECLARATION: u16 = 265;
 pub const ENUM_DECLARATION: u16 = 267;
 pub const EXPRESSION_WITH_TYPE_ARGUMENTS: u16 = 234;
+/// `value is string`, the return type of a type guard.
+pub const TYPE_PREDICATE: u16 = 183;
+/// `...values` in a call or an array literal.
+pub const SPREAD_ELEMENT: u16 = 231;
 pub const HERITAGE_CLAUSE: u16 = 299;
 pub const ENUM_MEMBER: u16 = 306;
 pub const SOURCE_FILE: u16 = 307;

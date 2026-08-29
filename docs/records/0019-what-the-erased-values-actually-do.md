@@ -1,0 +1,133 @@
+# 0019 — What the erased values actually do
+
+`docs/any-unknown.md` argues for whole-program representation analysis, and
+argues for it with a table: 174 `unknown` parameters across thirteen `node:*`
+modules, sorted by hand into *carried*, *examined* and *tested*. Its own closing
+caveat is the reason this record exists:
+
+> The table above is one person's reading of one program, and it is evidence
+> about the shape of the problem rather than an input to the algorithm. When
+> this is built, the compiler should produce that table itself.
+
+`nts erasure` produces it. Nothing in it decides a representation and nothing in
+it refuses a program — it is an instrument, built before the thing it is meant
+to inform, so that the design is checked against real code rather than against
+an intuition about real code.
+
+## What it measures
+
+Every declaration whose checker type is `any` or `unknown` — parameter,
+variable, or field — and what the program does with the value:
+
+- **carried** — only moved. Stored, passed on, thrown, assigned. Nothing reads
+  it on any reachable path. A pointer would do.
+- **tested** — narrowed by a type test, and everything that happens afterwards
+  happens to the narrowed type. A tag and a branch would do.
+- **examined** — read as a value: a property, a call, arithmetic, a coercion,
+  an equality against another erased value. This is the case that needs general
+  erasure.
+- **unclear** — a use the pass cannot follow. Reported rather than assumed,
+  because rounding it down to the cheap answer is how a measurement talks
+  itself into the representation it was hoping for.
+
+Each use is classified on its own and the site takes the strongest. A use that
+hands the value to another erased site is a *flow edge* rather than a verdict,
+and the set is iterated to a fixpoint — so a parameter that only passes its
+value on inherits whatever the receiver does with it.
+
+## The node profile, 566 `unknown` parameters
+
+The whole profile compiled as one project, so the analysis can see across
+modules the way the document says it must.
+
+| | whole-program | judged on its own uses |
+| --- | ---: | ---: |
+| carried | **227** (40%) | 320 |
+| tested | **83** (15%) | 58 |
+| examined | **184** (33%) | 126 |
+| unclear | **72** (13%) | 62 |
+
+**99 of 566 parameters get a different answer once calls are followed. 34 of
+them are decided by a use in another file.**
+
+## Three things the numbers say
+
+### 1. The architectural claim is right, and for a sharper reason than stated
+
+The document says a per-module or per-signature rule cannot find the cheapest
+representation. What the measurement shows is stronger: a local rule is not
+merely incomplete, it is *optimistic*. Every one of the 99 disagreements moves
+in the same direction — a site that looks carried on its own uses turns out to
+be examined once the value is followed. 93 parameters that a per-signature rule
+would have given a pointer actually need general erasure.
+
+So whole-program analysis is not first an optimization that finds cheaper
+representations. Its first job is soundness. A representation planner built on
+local evidence would be too small, and wrong in a way that only shows up at the
+receiving end.
+
+### 2. The document's own worked example reproduces, exactly
+
+It names `console`'s `unknown` as decided by `formatWithOptions` in `node:util`.
+The pass finds that edge without being told:
+
+```
+examined  unknown  * console/src/main.ts  dir.object   -- passed to `inspect`, which is examined
+examined  unknown  * util/src/format.ts   formatWithOptions.value -- passed to `inspect`, which is examined
+examined  unknown    console/src/main.ts  log.args[]   -- passed to `<anonymous>`, which is examined
+```
+
+`console.dir`'s parameter is carried within `console` and examined because a
+function in a different module reads it. `log(...args)` — the flagship case —
+reaches the same answer through its spread.
+
+### 3. The distribution is not the one the document assumed
+
+Its hand count put *tested* at 10 of 174, about 6%, and treated the category as
+too small to matter: "the closed-union case does not rescue even the
+validators". The compiler finds **83 of 566, about 15%** — two and a half times
+the share.
+
+The difference is not a disagreement about the validators. It is that a read of
+a value *after* narrowing is not a read of the erased value, and counting it as
+one collapses `tested` into `examined`. A first version of this pass made
+exactly that mistake and reported 236 examined; using the checker's own type at
+the use site — which the snapshot already carries — moved 52 parameters into
+`tested`.
+
+That matters for the representation decision. **55% of `unknown` parameters
+need only a pointer or a tag**, against the roughly 32% the document's table
+implies. The hard case is real and is a third of the population, not two
+thirds.
+
+## Where it is honest rather than complete
+
+The 72 unclear parameters, by reason:
+
+- an argument to a function outside the compiled set — the dominant one, and
+  the correct answer for a call into a declaration file;
+- a value returned to callers, which this pass does not follow back;
+- a spread into an array literal rather than a call;
+- an assignment into a target more complex than a name.
+
+Returns are the largest missing edge and the obvious next increment. Until it
+exists, "unclear" means unclear, and the table says so rather than guessing.
+
+## Two smaller findings
+
+**The examples corpus has no `any` or `unknown` at all.** Not one of the 60
+example programs contains either, so the differential gate exercises none of
+this. Whatever representation is chosen will need an example before it can be
+compared against node.
+
+**The checked-out TypeScript corpus has 29 erased sites** across 24 candidate
+files, and they are overwhelmingly `any` and overwhelmingly carried — a
+different population from real library code, and not evidence for a
+representation either way.
+
+## What this does not do
+
+It does not choose a representation, and it should not: the question of whether
+`unknown` becomes a tagged word, a boxed pointer, or a closed union per site is
+a decision about the RFC, not about this pass. What it removes is the excuse for
+making that decision from a table someone counted by hand.

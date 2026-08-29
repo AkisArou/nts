@@ -140,6 +140,17 @@ fn main() -> Result<()> {
             let rest: Vec<String> = args.collect();
             dump_modules(&project(&rest))
         }
+        // What a program does with its `any` and `unknown` values.
+        //
+        // `docs/any-unknown.md` argues for whole-program representation
+        // analysis from a table its author counted by hand, and says outright
+        // that the compiler should produce that table itself. This is the
+        // instrument that does, and it exists before the representation on
+        // purpose: the numbers decide whether the design is right.
+        Some("erasure") => {
+            let rest: Vec<String> = args.collect();
+            dump_erasure(&project(&rest), rest.iter().any(|a| a == "--sites"))
+        }
         Some("version") | None => {
             println!("nts {}", env!("CARGO_PKG_VERSION"));
             println!("snapshot schema v{SCHEMA_VERSION}");
@@ -364,6 +375,123 @@ fn hex(bytes: &[u8]) -> String {
 /// The kinds are printed as numbers on purpose: tsgo's `SyntaxKind` numbering is
 /// not TypeScript's, and every constant in `syntax.rs` was read off real output
 /// rather than taken from a table. This is the tool that reads them off.
+
+/// The `any`/`unknown` classification, as a table.
+fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
+    use nts_core::erasure::{Checker, Declaration, Verdict};
+
+    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let snapshot = source.snapshot(tsconfig)?;
+    let erasure = nts_core::erasure::classify(&snapshot);
+    // The control. Judging each site by its own uses alone is what a
+    // per-signature rule could do; the difference between the two columns is
+    // what following the value across calls is worth, as a number.
+    let local = nts_core::erasure::classify_as(&snapshot, nts_core::erasure::Analysis::Local);
+    let local_verdict: std::collections::HashMap<(u32, u32), Verdict> = local
+        .sites
+        .iter()
+        .map(|site| {
+            (
+                (site.location.file.0, site.location.span.start),
+                site.verdict,
+            )
+        })
+        .collect();
+
+    if per_site {
+        for site in &erasure.sites {
+            let file = snapshot
+                .sources
+                .get(site.location.file.0 as usize)
+                .map_or("?", |source| source.display_path.as_str());
+            println!(
+                "{:<9} {:<8} {}{}:{} {}.{}{} -- {}",
+                site.verdict.as_str(),
+                site.checker.as_str(),
+                if site.decided_elsewhere { "* " } else { "" },
+                file,
+                site.location.span.start,
+                site.owner,
+                site.name,
+                if site.in_container { "[]" } else { "" },
+                site.because,
+            );
+        }
+        println!();
+    }
+
+    // Split by what sort of declaration it is, because `docs/any-unknown.md`
+    // counts parameters and a total that folded fields in with them would not
+    // be the same measurement.
+    for checker in [Checker::Any, Checker::Unknown] {
+        for declaration in [
+            Declaration::Parameter,
+            Declaration::Variable,
+            Declaration::Property,
+        ] {
+            let sites: Vec<_> = erasure
+                .of(checker)
+                .filter(|site| site.declaration == declaration)
+                .collect();
+            if sites.is_empty() {
+                continue;
+            }
+            println!(
+                "{} {}: {}",
+                checker.as_str(),
+                declaration.as_str(),
+                sites.len()
+            );
+            for verdict in [
+                Verdict::Carried,
+                Verdict::Tested,
+                Verdict::Examined,
+                Verdict::Unclear,
+            ] {
+                let n = sites.iter().filter(|s| s.verdict == verdict).count();
+                let held = sites
+                    .iter()
+                    .filter(|s| s.verdict == verdict && s.in_container)
+                    .count();
+                let alone = sites
+                    .iter()
+                    .filter(|s| {
+                        local_verdict
+                            .get(&(s.location.file.0, s.location.span.start))
+                            .copied()
+                            == Some(verdict)
+                    })
+                    .count();
+                if n == 0 && alone == 0 {
+                    continue;
+                }
+                println!(
+                    "  {:<9} {n:>4}  ({held} in a container)   {alone:>4} without following calls",
+                    verdict.as_str()
+                );
+            }
+            let moved = sites
+                .iter()
+                .filter(|s| {
+                    local_verdict
+                        .get(&(s.location.file.0, s.location.span.start))
+                        .copied()
+                        != Some(s.verdict)
+                })
+                .count();
+            let across = sites.iter().filter(|s| s.decided_elsewhere).count();
+            println!(
+                "  -> {moved} answered differently once calls are followed, {across} decided by a use in another file"
+            );
+        }
+    }
+    if erasure.sites.is_empty() {
+        println!("no `any` or `unknown` declarations in this program");
+    }
+    Ok(())
+}
+
 fn dump_modules(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let mut source = TsgoApi::for_compilation(tsgo_binary);

@@ -29,6 +29,7 @@
 //! here, because MIR is what gets cached, diffed for incremental builds, and
 //! serialized into HMR generations.
 
+pub mod erasure;
 pub mod hir;
 /// Declaration reachability, which now lives in the schema crate: it is a pure
 /// query over a snapshot, and the *frontend* needs it to seed its deep passes.
