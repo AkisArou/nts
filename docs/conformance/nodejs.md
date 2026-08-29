@@ -167,13 +167,15 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**616 of node's own 1,341 applicable test files pass** across nineteen modules,
+**661 of node's own 1,341 applicable test files pass** across nineteen modules,
 of which 15 are hollow.
 
-`http`'s row was taken at `8d024b2`, before the `unref` fix in `96b1553`; its
-suite takes long enough that it has not completed since. The number is a floor
-rather than a stale figure -- the fix removed a hang -- but it is labelled here
-rather than quietly assumed to have improved.
+`http`'s row was 44 in the previous revision, taken at `8d024b2` before the
+`unref` fix in `96b1553` and labelled as a floor because its suite had not
+completed since. It has now: **89**, at `96b1553`. Fixing a no-op `unref`
+doubled it, which is what the label was there to allow for -- and the reason
+for labelling rather than guessing is that the guess would have been "somewhat
+better", not "twice".
 
 An earlier revision said 554 here, arrived at by adding each module's gain to
 the previous total as it landed; it had drifted by five. The totals are summed
@@ -227,7 +229,7 @@ headline as much as to the table.
 | `util` | 7 / 19 | 1 | 48 / 186 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `fs` | 72 / 214 | 2 | 98 / 603 | sync, callback and promise surfaces, the file streams and the watchers |
 | `zlib` | 30 / 64 | 0 | 58 / 532 | the streams, the one-shots, brotli and zstd |
-| `http` | 44 / 350 | ? | 70 / 585 | a complete HTTP/1.1 implementation, parser included; no HTTPS or HTTP/2 |
+| `http` | 89 / 350 | ? | 70 / 585 | a complete HTTP/1.1 implementation, parser included; no HTTPS or HTTP/2 |
 | `net` | 50 / 139 | 0 | 67 / 528 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
 | `stream` | 151 / 195 | 2 | 58 / 498 | the core is complete; `web`, `iter` and `consumers` are absent |
 
@@ -983,7 +985,7 @@ The module with no native half at all. Node's parser is llhttp, a C library;
 this profile's is TypeScript, so `node:http` here is a complete HTTP/1.1
 implementation rather than a wrapper around one. Once `net` supplies the
 socket, HTTP is a text protocol and there is nothing left that needs the
-operating system. 44 of 350 applicable files pass.
+operating system. 89 of 350 applicable files pass.
 
 Everything round-trips: this client against node's server, node's client
 against this server, and this against itself. Node's client is a strict reader
