@@ -158,7 +158,6 @@ impl Erasure {
             .count()
     }
 
-    #[must_use]
     pub fn of(&self, checker: Checker) -> impl Iterator<Item = &Site> {
         self.sites
             .iter()
@@ -580,7 +579,7 @@ impl Walk<'_> {
                 Use::Says(Verdict::Examined, "a unary operator".to_owned())
             }
             // Moved, and where it moves to decides.
-            syntax::VARIABLE_DECLARATION => self.into_declaration(parent, known),
+            syntax::VARIABLE_DECLARATION => self.lands_in_declaration(parent, known),
             syntax::RETURN_STATEMENT => Use::Says(
                 Verdict::Unclear,
                 "returned, and callers are not followed".to_owned(),
@@ -736,7 +735,7 @@ impl Walk<'_> {
             syntax::EQUALS_TOKEN if siblings.first().copied() != Some(id) => {
                 match siblings.first().copied() {
                     Some(target) if self.kind_of(target) == Some(syntax::IDENTIFIER) => {
-                        self.into_binding(target, known)
+                        self.lands_in_binding(target, known)
                     }
                     _ => Use::Says(
                         Verdict::Unclear,
@@ -755,7 +754,7 @@ impl Walk<'_> {
     }
 
     /// The value initialises a variable, and reaches that variable's uses.
-    fn into_declaration(&self, declaration: NodeId, known: &FxHashSet<u32>) -> Use {
+    fn lands_in_declaration(&self, declaration: NodeId, known: &FxHashSet<u32>) -> Use {
         let Some(name) = self
             .children(declaration)
             .into_iter()
@@ -763,11 +762,11 @@ impl Walk<'_> {
         else {
             return Use::Says(Verdict::Unclear, "a binding pattern".to_owned());
         };
-        self.into_binding(name, known)
+        self.lands_in_binding(name, known)
     }
 
     /// The value lands in the binding `name` denotes.
-    fn into_binding(&self, name: NodeId, known: &FxHashSet<u32>) -> Use {
+    fn lands_in_binding(&self, name: NodeId, known: &FxHashSet<u32>) -> Use {
         let Some(symbol) = self.snapshot.nodes[name.0 as usize].symbol else {
             return Use::Says(Verdict::Unclear, "a binding with no symbol".to_owned());
         };

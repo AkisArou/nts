@@ -109,6 +109,36 @@ fn a_read_in_its_dead_zone_is_refused() {
     );
 }
 
+/// The same dead zone, written as an initializer rather than a statement.
+///
+/// Worth its own test because the two reach the read by different paths. A
+/// module-scope initializer is nested under a declaration list, which the
+/// encoded AST wraps in a node list, and the first version of the walk stopped
+/// at the first list it met -- so it caught `echo = seed;` and missed `const
+/// derived = seed + 1`. The one it missed is the one people write.
+#[test]
+fn a_dead_zone_read_in_an_initializer_is_refused_too() {
+    let Some(lowered) = lower_at("tests/programs/module-cycle-tdz-initializer", true) else {
+        return;
+    };
+    let found: Vec<&nts_diagnostics::Diagnostic> = lowered
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code == "NTS1004")
+        .collect();
+    assert_eq!(
+        found.len(),
+        1,
+        "one dead-zone read, saw: {:?}",
+        refusals(&lowered),
+    );
+    assert!(
+        found[0].message.contains("`seed`"),
+        "the diagnostic should name the binding: {}",
+        found[0].message,
+    );
+}
+
 /// The same read, moved inside a function, is not refused.
 ///
 /// The pair is the point. A check that refused both would be a check that

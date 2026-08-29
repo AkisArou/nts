@@ -1031,6 +1031,14 @@ fn dead_zone_reads(snapshot: &SemanticSnapshot, order: &[usize]) -> Vec<Diagnost
 /// as a dead-zone read of itself.
 fn evaluated_reads(probe: &FuncBuilder, id: NodeId, visit: &mut impl FnMut(NodeId)) {
     let Some(kind) = probe.kind_of(id) else {
+        // A `NodeList` -- an argument list, a declaration list -- which has no
+        // syntax kind. Stopping here truncated the walk at the first one, and
+        // a variable declaration is reached through exactly one: the
+        // initializer of `export const derived = imported + 1` was never
+        // looked at, which is the shape the check exists for.
+        for child in &probe.node(id).children {
+            evaluated_reads(probe, *child, visit);
+        }
         return;
     };
     match kind {

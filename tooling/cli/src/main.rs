@@ -366,17 +366,37 @@ fn hex(bytes: &[u8]) -> String {
     })
 }
 
-/// Lower a project to HIR and print it.
-///
-/// A readable dump rather than a debug format: RFC §4.1 asks that every stage be
-/// inspectable, and the point of this layer is that its decisions are visible.
-/// Every module, what it imports, and what its file has at top level.
-///
-/// The kinds are printed as numbers on purpose: tsgo's `SyntaxKind` numbering is
-/// not TypeScript's, and every constant in `syntax.rs` was read off real output
-/// rather than taken from a table. This is the tool that reads them off.
+/// One line per site. `*` marks a verdict that came from another file.
+fn list_sites(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+    erasure: &nts_core::erasure::Erasure,
+) {
+    for site in &erasure.sites {
+        let file = snapshot
+            .sources
+            .get(site.location.file.0 as usize)
+            .map_or("?", |source| source.display_path.as_str());
+        println!(
+            "{:<9} {:<8} {}{}:{} {}.{}{} -- {}",
+            site.verdict.as_str(),
+            site.checker.as_str(),
+            if site.decided_elsewhere { "* " } else { "" },
+            file,
+            site.location.span.start,
+            site.owner,
+            site.name,
+            if site.in_container { "[]" } else { "" },
+            site.because,
+        );
+    }
+    println!();
+}
 
 /// The `any`/`unknown` classification, as a table.
+///
+/// Two columns: what the whole-program analysis says, and what each site's own
+/// uses say. The difference is what following a value across calls is worth,
+/// as a number rather than as an argument.
 fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
     use nts_core::erasure::{Checker, Declaration, Verdict};
 
@@ -400,25 +420,7 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
         .collect();
 
     if per_site {
-        for site in &erasure.sites {
-            let file = snapshot
-                .sources
-                .get(site.location.file.0 as usize)
-                .map_or("?", |source| source.display_path.as_str());
-            println!(
-                "{:<9} {:<8} {}{}:{} {}.{}{} -- {}",
-                site.verdict.as_str(),
-                site.checker.as_str(),
-                if site.decided_elsewhere { "* " } else { "" },
-                file,
-                site.location.span.start,
-                site.owner,
-                site.name,
-                if site.in_container { "[]" } else { "" },
-                site.because,
-            );
-        }
-        println!();
+        list_sites(&snapshot, &erasure);
     }
 
     // Split by what sort of declaration it is, because `docs/any-unknown.md`
@@ -492,6 +494,15 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
     Ok(())
 }
 
+/// Lower a project to HIR and print it.
+///
+/// A readable dump rather than a debug format: RFC §4.1 asks that every stage be
+/// inspectable, and the point of this layer is that its decisions are visible.
+/// Every module, what it imports, and what its file has at top level.
+///
+/// The kinds are printed as numbers on purpose: tsgo's `SyntaxKind` numbering is
+/// not TypeScript's, and every constant in `syntax.rs` was read off real output
+/// rather than taken from a table. This is the tool that reads them off.
 fn dump_modules(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let mut source = TsgoApi::for_compilation(tsgo_binary);

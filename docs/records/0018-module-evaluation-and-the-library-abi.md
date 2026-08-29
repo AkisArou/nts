@@ -1588,11 +1588,20 @@ reaches one value both ways and compares them.
 
 ### Still open
 
-- A module-scope binding with a non-constant initializer is refused before this
-  check sees it (`a module-scope variable whose initializer is not constant`),
-  so `export const derived = imported + 1` — the most idiomatic way to write
-  the dead-zone bug — is currently refused for the wrong reason. The message is
-  honest but the refusal hides a divergence rather than reporting it.
+- A module-scope binding with a non-constant initializer is still *refused*
+  (`a module-scope variable whose initializer is not constant`), so
+  `export const derived = imported + 1` does not compile. It is now correctly
+  *diagnosed* — the dead-zone check reports it as well, so the divergence is
+  named rather than hidden behind an unrelated refusal — but running it needs
+  module-scope initializers to become part of module evaluation, which they are
+  not: a `VariableStatement` is classified as a module *declaration*, so its
+  initializer never reaches `module#init`.
+
+  Finding this took a bug with it. The walk that finds evaluated reads stopped
+  at the first node list, and a module-scope initializer is reached through
+  exactly one — so the statement form (`echo = seed;`) was caught and the
+  initializer form was not. The shape that was missed is the shape people
+  write. Both are fixtures now.
 - Classes are dead-zone bindings too. The walk already descends into a heritage
   clause, so `class X extends Imported` is on the path; the map it consults is
   built from variable declarations, so nothing matches yet.
