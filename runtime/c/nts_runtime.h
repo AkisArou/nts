@@ -22,6 +22,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -156,18 +157,83 @@ typedef enum NtsTag {
     NTS_TAG_OBJECT = 4
 } NtsTag;
 
+/* The representation is *behind accessors*, and every reader in the runtime,
+ * the emitter and the tests goes through them.
+ *
+ * Not ceremony. Sixteen bytes of tag-beside-payload is one choice and NaN-boxing
+ * into eight is another, and the measurement says the difference is worth
+ * having: an erased array costs 11% against a typed one, of which 8.6 points is
+ * the memory traffic of the extra eight bytes and only 2.4 is the tag test.
+ * Swapping the representation should therefore be a change to this file, and it
+ * only is if nothing outside reaches past these functions. */
+/* Sixteen bytes: a tag beside a payload.
+ *
+ * NaN-boxing this into eight was tried and reverted, and the measurement is the
+ * reason. It halved the value -- an erased array back to a typed array's
+ * footprint, `NtsPromise` back to 56 bytes -- and bought **nothing**: the
+ * memory-bound benchmark did not move at all, and the tag-heavy one got 6%
+ * slower, because reading a tag went from a field load to a mask, a compare and
+ * a shift.
+ *
+ * That also corrected an earlier conclusion. An erased array costs about 11%
+ * against a typed one, and an experiment with a smaller array had suggested
+ * most of that was cache pressure from the extra eight bytes. It is not:
+ * halving the footprint changed the number by 0.1%. The 11% is the per-element
+ * tag test, which is why the thing that removes it -- specializing a site whose
+ * reaching values are all one kind -- is the work that pays rather than
+ * shrinking the value.
+ *
+ * The accessors below stay. They cost nothing (clang inlines them away) and
+ * they are what made the experiment a change to one file. */
 typedef struct NtsValue {
     uint32_t tag;
     union {
         double number;
         bool boolean;
         /* `NtsHeader *` and not `void *`: everything this member can hold that
-         * is reference-counted is one, and `nts_retain` takes one. A `void *`
-         * here would be cast back at every site that retains or releases it,
-         * and a cast repeated at every use reads as deliberate a week later. */
+         * is reference-counted is one, and `nts_retain` takes one. */
         NtsHeader *reference;
     } as;
 } NtsValue;
+
+/* Read a value's tag. */
+static inline uint32_t nts_value_tag(NtsValue value) { return value.tag; }
+
+/* Read a payload, at the kind the tag has already been checked to be. */
+static inline double nts_value_number(NtsValue value) { return value.as.number; }
+static inline bool nts_value_boolean(NtsValue value) { return value.as.boolean; }
+static inline NtsHeader *nts_value_reference(NtsValue value) {
+    return value.as.reference;
+}
+
+/* Build one. */
+static inline NtsValue nts_value_of_number(double number) {
+    NtsValue value;
+    value.tag = NTS_TAG_NUMBER;
+    value.as.number = number;
+    return value;
+}
+
+static inline NtsValue nts_value_of_boolean(bool boolean) {
+    NtsValue value;
+    value.tag = NTS_TAG_BOOLEAN;
+    value.as.boolean = boolean;
+    return value;
+}
+
+static inline NtsValue nts_value_of_undefined(void) {
+    NtsValue value;
+    value.tag = NTS_TAG_UNDEFINED;
+    value.as.number = 0.0;
+    return value;
+}
+
+static inline NtsValue nts_value_of_reference(NtsHeader *object, uint32_t tag) {
+    NtsValue value;
+    value.tag = tag;
+    value.as.reference = object;
+    return value;
+}
 
 /* `typeof` for a tag, as the interned string the language spells it with.
  *

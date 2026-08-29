@@ -987,9 +987,7 @@ fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagno
                     // wrote is assigned by `module#init` -- which is where
                     // every module-scope initializer that is not a constant
                     // already runs.
-                    HirType::Erased => {
-                        "(NtsValue){ .tag = NTS_TAG_UNDEFINED, .as.number = 0 }".to_owned()
-                    }
+                    HirType::Erased => "nts_value_of_undefined()".to_owned(),
                     _ => float_literal(global.initial),
                 }
             ),
@@ -1459,25 +1457,32 @@ fn erased_conversion(
             // the same one `nts_retain` needs and for the same reason: a class
             // instance is a header followed by its fields, so the two point at
             // the same address.
-            let cast = if field == "reference" {
-                "(NtsHeader *)"
-            } else {
-                ""
+            // Through the runtime's constructors rather than a struct literal:
+            // the representation is sixteen bytes of tag-beside-payload today
+            // and eight NaN-boxed ones tomorrow, and the emitter should not be
+            // the second place that has to know which.
+            let built = match field {
+                "reference" => format!(
+                    "nts_value_of_reference((NtsHeader *){}, {tag})",
+                    value_name(*value)
+                ),
+                "boolean" => format!("nts_value_of_boolean({})", value_name(*value)),
+                _ if tag == "NTS_TAG_UNDEFINED" => "nts_value_of_undefined()".to_owned(),
+                _ => format!("nts_value_of_number({})", value_name(*value)),
             };
-            Ok(format!(
-                "{name} = (NtsValue){{ .tag = {tag}, .as.{field} = {cast}{} }};",
-                value_name(*value)
-            ))
+            Ok(format!("{name} = {built};"))
         }
         OpKind::Unerase { value } => {
             let (_, field) = erased_tag(&op.ty).ok_or_else(|| refuse(&op.ty, "read back"))?;
-            let cast = if field == "reference" {
-                let ty = c_type_of(context.program, &op.ty, &op.origin)?;
-                format!("({ty})")
-            } else {
-                String::new()
+            let read = match field {
+                "reference" => {
+                    let ty = c_type_of(context.program, &op.ty, &op.origin)?;
+                    format!("({ty})nts_value_reference({})", value_name(*value))
+                }
+                "boolean" => format!("nts_value_boolean({})", value_name(*value)),
+                _ => format!("nts_value_number({})", value_name(*value)),
             };
-            Ok(format!("{name} = {cast}{}.as.{field};", value_name(*value)))
+            Ok(format!("{name} = {read};"))
         }
         _ => unreachable!("only the two conversions reach here"),
     }
@@ -2237,7 +2242,9 @@ fn emit_op(
         OpKind::Erase { .. } | OpKind::Unerase { .. } => {
             erased_conversion(func, op, &name, &op.kind, context)?
         }
-        OpKind::TagOf { value: operand } => format!("{name} = {}.tag;", value_name(*operand)),
+        OpKind::TagOf { value: operand } => {
+            format!("{name} = nts_value_tag({});", value_name(*operand))
+        }
         // The absent reference. Typed, because C distinguishes a null
         // `NtsString *` from a null `NtsObj_Point *` even though the address is
         // the same one.

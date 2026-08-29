@@ -343,3 +343,55 @@ cheaper one, and none of those three was apparent before the third row existed.
 collapse it to the typed case exactly, and the gap closing to zero is what will
 show that it worked -- which is a better test than any assertion about the pass.
 If it lands and the gap does not close, the pass is not doing what it claims.
+
+# NaN-boxing: tried, measured, reverted
+
+The plan put NaN-boxing before specialization, on the strength of the L1
+experiment above: an erased array cost 11% against a typed one, and shrinking
+the array to fit in cache took that to 2.4%, so most of the cost looked like the
+extra eight bytes.
+
+It was built. Every reader in the runtime, the emitter, the differential
+harness and four test suites went through accessors first, so the swap really
+was a change to one file. `sizeof(NtsValue)` went 16 to 8, an erased array
+reached a typed array's footprint exactly, and `NtsPromise` returned to 56 --
+removing the one cost typed async code was paying for erasure existing.
+
+**It bought nothing.**
+
+| | 16 bytes | 8 bytes, NaN-boxed |
+| --- | ---: | ---: |
+| stored in an array | 110.41 us | 110.29 us |
+| through small functions | 191.74 us | 203.10 us |
+
+The memory-bound case did not move — 0.1%, noise. The tag-heavy case got **6%
+slower**, because reading a tag went from a field load to a mask, a compare and
+a shift. Removing the NaN canonicalisation changed nothing (203.36), so the cost
+is the decode and not the encode.
+
+## The part that matters more than the result
+
+**It falsified the L1 experiment, and that experiment was mine.**
+
+If the 11% had been the extra eight bytes, halving the value would have removed
+it. The footprint is now identical to the typed array's and the gap is
+unchanged. So the 11% is the per-element tag test, and the earlier reading was
+confounded: that experiment changed the array size *and* the round count
+together, and attributed the difference to cache.
+
+Two variables, one conclusion, and the conclusion was wrong. It survived being
+written into this record and into a commit message, and what caught it was not
+review -- it was building the thing it recommended and finding the number did
+not move.
+
+## What it means for the plan
+
+Specialization comes back to the front, and for a better reason than it had
+before. The cost is the tag test; the only thing that removes a tag test is not
+having a tag, which is what specializing a homogeneous site does.
+`erasure-stored-unknown` holds nothing but numbers, so it should collapse to
+`erasure-stored-typed` exactly -- and the gap closing is the evidence.
+
+NaN-boxing is not ruled out forever. It is ruled out as a *performance* change:
+it is a space change, worth revisiting only where space is the constraint, and
+the accessors it required have been kept so that revisiting it is cheap.

@@ -57,13 +57,17 @@ const SABOTAGES: &[Sabotage] = &[
         suite: "erased",
         function: "nts_promise_fulfill",
         pattern: "promise->value = value;",
-        replacement: "promise->value = value; promise->value.tag = NTS_TAG_UNDEFINED;",
+        // Forces the tag to `number` while leaving the payload bits alone,
+        // which is the tightest way to isolate "the tag survives" now that the
+        // representation is NaN-boxed and the two are one word. Overwriting
+        // the whole value would guard the store as well and be coarser.
+        replacement: "promise->value = nts_value_of_number(nts_value_number(value));",
         guards: "that the tag survives, which is the whole point of the payload",
     },
     Sabotage {
         suite: "erased",
         function: "nts_promise_fulfill",
-        pattern: "nts_retain(value.as.reference);",
+        pattern: "nts_retain(nts_value_reference(value));",
         replacement: "(void)0;",
         guards: "that a settled reference is retained rather than aliased",
     },
@@ -71,7 +75,7 @@ const SABOTAGES: &[Sabotage] = &[
         suite: "erased",
         function: "nts_promise_value",
         pattern: "return promise->value;",
-        replacement: "{ NtsValue v = promise->value; v.tag = NTS_TAG_NUMBER; return v; }",
+        replacement: "return nts_value_of_number(nts_value_number(promise->value));",
         guards: "that the reader reports the tag it was given",
     },
     Sabotage {

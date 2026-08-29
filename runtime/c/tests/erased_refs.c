@@ -55,25 +55,17 @@ static const NtsDescriptor desc_values = {
     NTS_KIND_ARRAY, (uint32_t)sizeof(NtsValue), 0u, 1u, 0, 0, "unknown[]", 1u, 0,
 };
 
+/* Through the runtime's own constructors, like every other reader: the
+ * representation is meant to be swappable in one file, and a test that built
+ * the struct by hand would be the second place that knows its shape. */
 static NtsValue of_string(NtsString *s) {
-    NtsValue v;
-    v.tag = NTS_TAG_STRING;
-    v.as.reference = (NtsHeader *)s;
-    return v;
+    return nts_value_of_reference((NtsHeader *)s, NTS_TAG_STRING);
 }
 
-static NtsValue of_number(double d) {
-    NtsValue v;
-    v.tag = NTS_TAG_NUMBER;
-    v.as.number = d;
-    return v;
-}
+static NtsValue of_number(double d) { return nts_value_of_number(d); }
 
 static NtsValue of_object(NtsHeader *o) {
-    NtsValue v;
-    v.tag = NTS_TAG_OBJECT;
-    v.as.reference = o;
-    return v;
+    return nts_value_of_reference(o, NTS_TAG_OBJECT);
 }
 
 /* Every check is a live-object delta rather than a peek at a reference count.

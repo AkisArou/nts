@@ -54,32 +54,21 @@ static NtsArray *promise_array(NtsPromise **items, uint32_t count) {
     return array;
 }
 
-static NtsValue number(double n) {
-    NtsValue v;
-    v.tag = NTS_TAG_NUMBER;
-    v.as.number = n;
-    return v;
-}
+/* Through the runtime's own constructors and readers rather than the struct.
+ *
+ * Converted mechanically when the representation was put behind accessors --
+ * every assertion below is unchanged, and the point is that swapping sixteen
+ * bytes of tag-beside-payload for eight NaN-boxed ones is a change to the
+ * header alone. A test that built the struct by hand would be the second place
+ * that had to know its shape. */
+static NtsValue number(double n) { return nts_value_of_number(n); }
 
-static NtsValue boolean(bool b) {
-    NtsValue v;
-    v.tag = NTS_TAG_BOOLEAN;
-    v.as.boolean = b;
-    return v;
-}
+static NtsValue boolean(bool b) { return nts_value_of_boolean(b); }
 
-static NtsValue undefined(void) {
-    NtsValue v;
-    v.tag = NTS_TAG_UNDEFINED;
-    v.as.number = 0.0;
-    return v;
-}
+static NtsValue undefined(void) { return nts_value_of_undefined(); }
 
 static NtsValue reference(NtsHeader *r, uint32_t tag) {
-    NtsValue v;
-    v.tag = tag;
-    v.as.reference = r;
-    return v;
+    return nts_value_of_reference(r, tag);
 }
 
 int main(void) {
@@ -92,8 +81,8 @@ int main(void) {
         NtsPromise *p = nts_promise_new();
         nts_promise_fulfill_value(p, number(42.5));
         NtsValue out = nts_promise_value(p);
-        check("a number keeps its tag", out.tag == NTS_TAG_NUMBER);
-        check("a number keeps its value", out.as.number == 42.5);
+        check("a number keeps its tag", nts_value_tag(out) == NTS_TAG_NUMBER);
+        check("a number keeps its value", nts_value_number(out) == 42.5);
         nts_release((NtsHeader *)p);
     }
 
@@ -101,8 +90,8 @@ int main(void) {
         NtsPromise *p = nts_promise_new();
         nts_promise_fulfill_value(p, boolean(true));
         NtsValue out = nts_promise_value(p);
-        check("a boolean is not a number", out.tag == NTS_TAG_BOOLEAN);
-        check("a boolean keeps its value", out.as.boolean == true);
+        check("a boolean is not a number", nts_value_tag(out) == NTS_TAG_BOOLEAN);
+        check("a boolean keeps its value", nts_value_boolean(out) == true);
         nts_release((NtsHeader *)p);
     }
 
@@ -110,8 +99,8 @@ int main(void) {
         NtsPromise *p = nts_promise_new();
         nts_promise_fulfill_value(p, boolean(false));
         NtsValue out = nts_promise_value(p);
-        check("false is a boolean, not absent", out.tag == NTS_TAG_BOOLEAN);
-        check("false survives the double slot", out.as.boolean == false);
+        check("false is a boolean, not absent", nts_value_tag(out) == NTS_TAG_BOOLEAN);
+        check("false survives the double slot", nts_value_boolean(out) == false);
         nts_release((NtsHeader *)p);
     }
 
@@ -119,7 +108,7 @@ int main(void) {
         NtsPromise *p = nts_promise_new();
         nts_promise_fulfill_value(p, undefined());
         NtsValue out = nts_promise_value(p);
-        check("undefined keeps its tag", out.tag == NTS_TAG_UNDEFINED);
+        check("undefined keeps its tag", nts_value_tag(out) == NTS_TAG_UNDEFINED);
         nts_release((NtsHeader *)p);
     }
 
@@ -134,8 +123,8 @@ int main(void) {
         check("settling with a string retains it", rc(s) == before + 1);
 
         NtsValue out = nts_promise_value(p);
-        check("a string keeps its tag", out.tag == NTS_TAG_STRING);
-        check("a string keeps its identity", out.as.reference == (NtsHeader *)s);
+        check("a string keeps its tag", nts_value_tag(out) == NTS_TAG_STRING);
+        check("a string keeps its identity", nts_value_reference(out) == (NtsHeader *)s);
         check("reading does not retain again", rc(s) == before + 1);
 
         nts_release((NtsHeader *)p);
@@ -150,7 +139,7 @@ int main(void) {
         NtsPromise *p = nts_promise_new();
         nts_promise_fulfill_value(p, reference((NtsHeader *)s, NTS_TAG_OBJECT));
         NtsValue out = nts_promise_value(p);
-        check("an object is not a string", out.tag == NTS_TAG_OBJECT);
+        check("an object is not a string", nts_value_tag(out) == NTS_TAG_OBJECT);
         nts_release((NtsHeader *)p);
         nts_release((NtsHeader *)s);
     }
@@ -168,7 +157,7 @@ int main(void) {
         NtsPromise *p = nts_promise_new();
         nts_promise_fulfill_reference(p, (NtsHeader *)s);
         check("a string settled as a reference reads back a string",
-              nts_promise_value(p).tag == NTS_TAG_STRING);
+              nts_value_tag(nts_promise_value(p)) == NTS_TAG_STRING);
         nts_release((NtsHeader *)p);
         nts_release((NtsHeader *)s);
     }
@@ -180,7 +169,7 @@ int main(void) {
         NtsPromise *p = nts_promise_new();
         nts_promise_fulfill_reference(p, (NtsHeader *)payload);
         check("a non-string settled as a reference reads back an object",
-              nts_promise_value(p).tag == NTS_TAG_OBJECT);
+              nts_value_tag(nts_promise_value(p)) == NTS_TAG_OBJECT);
         nts_release((NtsHeader *)p);
         nts_release((NtsHeader *)payload);
     }
@@ -190,7 +179,7 @@ int main(void) {
         NtsPromise *p = nts_promise_new();
         nts_promise_fulfill_value(p, number(1.0));
         nts_promise_fulfill_value(p, number(2.0));
-        check("a promise settles once", nts_promise_value(p).as.number == 1.0);
+        check("a promise settles once", nts_value_number(nts_promise_value(p)) == 1.0);
         nts_release((NtsHeader *)p);
     }
 
@@ -206,8 +195,8 @@ int main(void) {
         nts_test_host_run(64);
 
         NtsValue out = nts_promise_value(result);
-        check("race forwards an erased payload", out.tag == NTS_TAG_BOOLEAN);
-        check("race forwards its value", out.as.boolean == true);
+        check("race forwards an erased payload", nts_value_tag(out) == NTS_TAG_BOOLEAN);
+        check("race forwards its value", nts_value_boolean(out) == true);
 
         nts_release((NtsHeader *)result);
         nts_release((NtsHeader *)array);

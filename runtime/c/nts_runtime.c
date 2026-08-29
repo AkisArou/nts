@@ -209,8 +209,9 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *)) {
     if (descriptor->erased) {
       NtsValue *slots = NTS_ITEMS((const NtsArray *)object, NtsValue);
       for (uint32_t index = 0; index < object->length; index++) {
-        if (NTS_TAG_IS_REFERENCE(slots[index].tag) && slots[index].as.reference) {
-          visit(slots[index].as.reference);
+        if (NTS_TAG_IS_REFERENCE(nts_value_tag(slots[index])) &&
+            nts_value_reference(slots[index])) {
+          visit(nts_value_reference(slots[index]));
         }
       }
       return;
@@ -240,23 +241,23 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *)) {
    * layout, array layout, globals and closure captures. */
   for (uint32_t index = 0; index < descriptor->erased; index++) {
     unsigned char *slot = (unsigned char *)object + descriptor->erased_offsets[index];
-    const NtsValue *value = (const NtsValue *)slot;
-    if (NTS_TAG_IS_REFERENCE(value->tag) && value->as.reference) {
-      visit(value->as.reference);
+    NtsValue value = *(const NtsValue *)slot;
+    if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) && nts_value_reference(value)) {
+      visit(nts_value_reference(value));
     }
   }
 }
 
 /* Claim and give up what an erased value holds. */
 void nts_value_retain(NtsValue value) {
-  if (NTS_TAG_IS_REFERENCE(value.tag) && value.as.reference) {
-    nts_retain(value.as.reference);
+  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) && nts_value_reference(value)) {
+    nts_retain(nts_value_reference(value));
   }
 }
 
 void nts_value_release(NtsValue value) {
-  if (NTS_TAG_IS_REFERENCE(value.tag) && value.as.reference) {
-    nts_release(value.as.reference);
+  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) && nts_value_reference(value)) {
+    nts_release(nts_value_reference(value));
   }
 }
 
@@ -1795,8 +1796,8 @@ uint32_t nts_tag_of_reference(const NtsHeader *object) {
  * know at compile time, and `nts_promise_fulfill_value` is the one that does
  * not know it and is told. */
 static void nts_promise_fulfill(NtsPromise *promise, NtsValue value) {
-  if (NTS_TAG_IS_REFERENCE(value.tag) && value.as.reference) {
-    nts_retain(value.as.reference);
+  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) && nts_value_reference(value)) {
+    nts_retain(nts_value_reference(value));
   }
   promise->value = value;
   nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
@@ -1807,10 +1808,7 @@ void nts_promise_fulfill_void(NtsPromise *promise) {
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  NtsValue value;
-  value.tag = NTS_TAG_UNDEFINED;
-  value.as.number = 0.0;
-  nts_promise_fulfill(promise, value);
+  nts_promise_fulfill(promise, nts_value_of_undefined());
 }
 
 void nts_promise_fulfill_number(NtsPromise *promise, double number) {
@@ -1818,10 +1816,7 @@ void nts_promise_fulfill_number(NtsPromise *promise, double number) {
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  NtsValue value;
-  value.tag = NTS_TAG_NUMBER;
-  value.as.number = number;
-  nts_promise_fulfill(promise, value);
+  nts_promise_fulfill(promise, nts_value_of_number(number));
 }
 
 void nts_promise_fulfill_tagged(NtsPromise *promise, NtsHeader *object,
@@ -1830,10 +1825,7 @@ void nts_promise_fulfill_tagged(NtsPromise *promise, NtsHeader *object,
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  NtsValue value;
-  value.tag = tag;
-  value.as.reference = object;
-  nts_promise_fulfill(promise, value);
+  nts_promise_fulfill(promise, nts_value_of_reference(object, tag));
 }
 
 /* For a caller that has a reference and does not know which kind.
@@ -1852,7 +1844,7 @@ void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value) {
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  if (value.tag > NTS_TAG_OBJECT) {
+  if (nts_value_tag(value) > NTS_TAG_OBJECT) {
     fprintf(stderr, "nts: settled a promise with an unknown value tag\n");
     abort();
   }
@@ -1888,21 +1880,21 @@ void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction) {
 
 double nts_promise_number(const NtsPromise *promise) {
   if (promise->state != NTS_PROMISE_FULFILLED ||
-      promise->value.tag != NTS_TAG_NUMBER) {
+      nts_value_tag(promise->value) != NTS_TAG_NUMBER) {
     fprintf(stderr, "nts: read a number from a promise holding something else\n");
     abort();
   }
-  return promise->value.as.number;
+  return nts_value_number(promise->value);
 }
 
 NtsHeader *nts_promise_reference(const NtsPromise *promise) {
   if (promise->state != NTS_PROMISE_FULFILLED ||
-      !NTS_TAG_IS_REFERENCE(promise->value.tag)) {
+      !NTS_TAG_IS_REFERENCE(nts_value_tag(promise->value))) {
     fprintf(stderr,
             "nts: read a reference from a promise holding something else\n");
     abort();
   }
-  return promise->value.as.reference;
+  return nts_value_reference(promise->value);
 }
 
 /* No assertion about *how* it was settled, only that it was.
@@ -2032,11 +2024,12 @@ static void nts_combinator_settled(void *state) {
     nts_promise_reject(all->result, slot->source->reason);
   } else {
     if (all->values->header.descriptor->references) {
-      NtsHeader *value = slot->source->value.as.reference;
+      NtsHeader *value = nts_value_reference(slot->source->value);
       nts_retain(value);
       NTS_ITEMS(all->values, NtsHeader *)[slot->index] = value;
     } else {
-      NTS_ITEMS(all->values, double)[slot->index] = slot->source->value.as.number;
+      NTS_ITEMS(all->values, double)[slot->index] =
+          nts_value_number(slot->source->value);
     }
     if (--all->remaining == 0) {
       nts_promise_fulfill_reference(all->result, (NtsHeader *)all->values);
