@@ -117,6 +117,46 @@ typedef struct NtsArray {
     void *elements;
 } NtsArray;
 
+/* A value carrying its own type: what a slot the checker typed `unknown` holds.
+ *
+ * A tag beside a payload, sixteen bytes. The alternative is NaN-boxing into
+ * eight, which is faster and smaller and much harder to be right about -- and
+ * the compiler's `HirType::Erased` deliberately names no layout, so swapping
+ * one for the other is a change to this header and the emitter rather than to
+ * every pass. Correct and debuggable first; the differential is what will make
+ * the second version safe to attempt.
+ *
+ * The tags are `typeof`'s answers, in `typeof`'s spelling, because reading the
+ * tag is what `typeof` on an erased value *is*. */
+typedef enum NtsTag {
+    NTS_TAG_UNDEFINED = 0,
+    NTS_TAG_BOOLEAN = 1,
+    NTS_TAG_NUMBER = 2,
+    NTS_TAG_STRING = 3,
+    NTS_TAG_OBJECT = 4
+} NtsTag;
+
+typedef struct NtsValue {
+    uint32_t tag;
+    union {
+        double number;
+        bool boolean;
+        /* `NtsHeader *` and not `void *`: everything this member can hold that
+         * is reference-counted is one, and `nts_retain` takes one. A `void *`
+         * here would be cast back at every site that retains or releases it,
+         * and a cast repeated at every use reads as deliberate a week later. */
+        NtsHeader *reference;
+    } as;
+} NtsValue;
+
+/* `typeof` for a tag, as the interned string the language spells it with.
+ *
+ * A comparison against a literal -- `typeof v === "number"`, which is what
+ * almost every use is -- does not need this: it is an integer compare once
+ * something folds it, and that folding is a peephole this does not yet have.
+ * Correct first. */
+NtsString *nts_tag_name(uint32_t tag);
+
 /* The inline elements of a string. */
 #define NTS_ELEMENTS(a, T) ((T *)((unsigned char *)(a) + sizeof(NtsHeader)))
 /* The elements of an array, wherever they are. */
@@ -808,7 +848,16 @@ enum {
 enum {
     NTS_PAYLOAD_NONE = 0,
     NTS_PAYLOAD_NUMBER = 1,
-    NTS_PAYLOAD_REFERENCE = 2
+    NTS_PAYLOAD_REFERENCE = 2,
+    /* Settled from an erased value. The payload still lives in one of the two
+     * slots above -- this says only that `tag` records which kind of JavaScript
+     * value it was, which the two slots cannot: they distinguish a double from
+     * a pointer, and `typeof` distinguishes five things.
+     *
+     * A fourth kind rather than a sentinel in `tag`, because every tag value is
+     * a real one -- `NTS_TAG_UNDEFINED` is zero -- so there is no spare bit
+     * pattern there to mean "not erased", and a reader has to be able to ask. */
+    NTS_PAYLOAD_VALUE = 3
 };
 
 /* One reaction, as a managed object.
@@ -835,6 +884,11 @@ typedef struct NtsPromise {
     NtsHeader header;
     uint32_t state;   /* NTS_PROMISE_* */
     uint32_t payload; /* NTS_PAYLOAD_* */
+    /* Which kind of JavaScript value the payload was, when it came from an
+     * erased one. Meaningful only under NTS_PAYLOAD_VALUE. Four bytes, and on
+     * every ABI we target they are the padding that already sat between these
+     * counters and the double below. */
+    uint32_t tag;     /* NTS_TAG_*, under NTS_PAYLOAD_VALUE */
     double number;
     /* The fulfilled value when it is a reference, or the rejection reason,
      * which always is one. */
@@ -853,6 +907,16 @@ NtsPromise *nts_promise_new(void);
 void nts_promise_fulfill_void(NtsPromise *promise);
 void nts_promise_fulfill_number(NtsPromise *promise, double value);
 void nts_promise_fulfill_reference(NtsPromise *promise, NtsHeader *value);
+/* Settle with a value whose kind is not known until run time.
+ *
+ * It decomposes rather than storing the union: the tag chooses which of the two
+ * slots above receives the payload, and is itself recorded so that `typeof`
+ * still answers on the far side of an `await`. Storing an `NtsValue` whole
+ * would put a reference in a slot that holds one only sometimes, and the
+ * collector reaches a promise's references through a descriptor of fixed
+ * offsets that it visits unconditionally -- so that slot would have to become
+ * conditional, for every erased field anywhere and not just this one. */
+void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value);
 void nts_promise_reject(NtsPromise *promise, NtsHeader *reason);
 
 /* Run `reaction` when it settles, or on the microtask queue if it already has.
@@ -868,6 +932,11 @@ void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction);
  * guess. */
 double nts_promise_number(const NtsPromise *promise);
 NtsHeader *nts_promise_reference(const NtsPromise *promise);
+/* The erased reader, for the case the sentence above does not cover: when the
+ * awaited type is `unknown` the compiler cannot know which of the two readers
+ * to call, which is exactly why neither of them will do. Asserts that the
+ * promise was settled through `nts_promise_fulfill_value`. */
+NtsValue nts_promise_value(const NtsPromise *promise);
 
 /* Whether the resumed state machine has to propagate a rejection rather than
  * read a value. A rejected promise has no payload and both readers above

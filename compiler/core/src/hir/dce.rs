@@ -88,8 +88,12 @@ pub fn eliminate(func: &mut Func) -> usize {
 ///
 /// A list of what has effects has to be added to. A list of what does not has
 /// to be *decided* about, which is the difference.
+#[allow(clippy::match_same_arms)]
 fn has_effects(kind: &OpKind) -> bool {
     match kind {
+        // Erasing, reading a tag and unerasing are all pure: they read one
+        // value and produce another. Dead ones go, like any other computation.
+        OpKind::Erase { .. } | OpKind::TagOf { .. } | OpKind::Unerase { .. } => false,
         // A call may do anything. A store certainly does. A suspension hands
         // the frame to the runtime, which is both.
         OpKind::Call { .. }

@@ -1894,6 +1894,7 @@ fn representation_of(
 ) -> Option<HirType> {
     let record = snapshot.types.get(ty.0 as usize)?;
     Some(match &record.kind {
+        TypeKind::Unknown => HirType::Erased,
         TypeKind::Void | TypeKind::Undefined => HirType::Void,
         TypeKind::Never => HirType::Never,
         // A literal shares its widened type's representation. The literal *value*
@@ -3094,6 +3095,107 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// A read of an erased binding at the type the checker narrowed it to.
+    ///
+    /// This is the whole of `Unerase`, and it is one function on purpose. The
+    /// binding is `unknown`; the *use* inside `if (typeof v === "number")` has
+    /// static type `number`, because the checker narrowed it. Lowering notices
+    /// that disagreement and reads the payload.
+    ///
+    /// Unchecked, and safe for one reason: the checker only narrows on a path
+    /// where the test succeeded. Emitting it anywhere the checker did not
+    /// narrow would read a payload the tag does not describe -- a double out of
+    /// a pointer -- which is silent. So the licence comes from `node_types` and
+    /// from nothing else, and there is exactly one call site.
+    fn narrowed(&mut self, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+        if self.values[value.0 as usize].ty != HirType::Erased {
+            return Ok(value);
+        }
+        let Some(want) = self.type_of(id) else {
+            return Ok(value);
+        };
+        if want == HirType::Erased {
+            return Ok(value);
+        }
+        if !matches!(
+            want,
+            HirType::Float { .. } | HirType::Int { .. } | HirType::Bool
+        ) {
+            return Err(self.unsupported(
+                id,
+                "an `unknown` narrowed to a reference, whose payload needs retain and release",
+            ));
+        }
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::Unerase { value }, want, origin))
+    }
+
+    /// A value where a slot of a possibly different type expects it.
+    ///
+    /// Only erasure today. Every other pair either already matches or is a
+    /// mismatch the verifier now reports -- it checks call argument types as of
+    /// this change, which is how the missing conversion was found rather than
+    /// compiled: a `NtsString *` passed into a `NtsValue` parameter is a struct
+    /// initialised from a pointer, and C accepts it.
+    ///
+    /// References are refused by name rather than erased. A payload that is
+    /// sometimes a pointer needs retain and release that switch on the tag, and
+    /// reference counting that is subtly wrong does not announce itself.
+    fn coerce(
+        &mut self,
+        value: ValueId,
+        want: &HirType,
+        id: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let have = self.values[value.0 as usize].ty.clone();
+        if have == *want {
+            return Ok(value);
+        }
+        if *want != HirType::Erased {
+            return Ok(value);
+        }
+        if !matches!(
+            have,
+            HirType::Float { .. } | HirType::Int { .. } | HirType::Bool | HirType::Void
+        ) {
+            return Err(self.unsupported(
+                id,
+                "a reference where `unknown` is expected; erasing one needs retain and release \
+                 that switch on the tag",
+            ));
+        }
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::Erase { value }, HirType::Erased, origin))
+    }
+
+    /// One argument, at the type the callee's parameter declares.
+    ///
+    /// The parameter type comes from the checker's resolved signature rather
+    /// than from the callee's lowered `Func`, because the callee may not be
+    /// lowered yet: `lower` walks declarations in index order and a call can
+    /// precede its target.
+    fn coerce_to_parameter(
+        &mut self,
+        call: NodeId,
+        at: usize,
+        value: ValueId,
+        argument: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let Some(target) = self.snapshot.call_targets.get(&call) else {
+            return Ok(value);
+        };
+        let Some(signature) = self.snapshot.signatures.get(target.signature.0 as usize) else {
+            return Ok(value);
+        };
+        let Some(parameter) = signature.parameters.get(at) else {
+            return Ok(value);
+        };
+        let Some(want) = self.represent(parameter.ty) else {
+            return Ok(value);
+        };
+        self.coerce(value, &want, argument)
+    }
+
     /// `typeof x`, where `x` has one known primitive type.
     ///
     /// In a typed compiler this is a constant. If `value` is a `number` then
@@ -3137,7 +3239,38 @@ impl<'a> FuncBuilder<'a> {
                     "`typeof` on a value whose type is not a single primitive, which needs a \
                      runtime tag",
                 )
-            })?;
+            });
+        // An erased value *has* the runtime tag the message above asks for, and
+        // reading it is what `typeof` means. The tag is an integer and the
+        // expression's type is a string, so it goes through `nts_tag_name`.
+        //
+        // Almost every use is `typeof v === "number"`, which this turns into a
+        // string allocation and a string comparison where an integer compare
+        // would do. That fold is a peephole -- match the comparison, replace it
+        // with `TagOf == constant` -- and it is deliberately not here: it is an
+        // optimization over correct code rather than a special case inside the
+        // lowering, and doing it here would put the tag table in two places.
+        if answer.is_err() {
+            let value = self.lower_expression(operand)?;
+            if self.values[value.0 as usize].ty == HirType::Erased {
+                let origin = self.origin(id);
+                let tag = self.push(
+                    OpKind::TagOf { value },
+                    HirType::Int {
+                        bits: 32,
+                        signed: false,
+                    },
+                    origin.clone(),
+                );
+                return Ok(self.runtime_call(
+                    "nts_tag_name",
+                    vec![tag],
+                    HirType::Managed(ManagedType::String),
+                    origin,
+                ));
+            }
+        }
+        let answer = answer?;
         let origin = self.origin(id);
         Ok(self.push(
             OpKind::ConstString(answer.to_owned()),
@@ -3537,10 +3670,12 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<Vec<ValueId>, Diagnostic> {
         let mut args = Vec::new();
         for argument in arguments {
-            args.push(self.lower_expression(*argument)?);
+            let value = self.lower_expression(*argument)?;
+            args.push(self.coerce_to_parameter(call, args.len(), value, *argument)?);
         }
         for default in self.defaults_after(call, arguments.len())? {
-            args.push(self.lower_expression(default)?);
+            let value = self.lower_expression(default)?;
+            args.push(self.coerce_to_parameter(call, args.len(), value, default)?);
         }
         Ok(args)
     }
@@ -4575,6 +4710,14 @@ impl<'a> FuncBuilder<'a> {
             }
             (HirType::Never, Some(_)) => {
                 return Err(self.unrepresentable(id, "an `async` function returning `never`"));
+            }
+            // The runtime settles a promise with a number or with a reference,
+            // and an erased value is neither: it is a tag beside a payload, so
+            // fulfilling with one needs a third helper that knows the layout.
+            // Refused rather than settled through whichever arm looks closest,
+            // which is how a reference payload would have gone out as a double.
+            (HirType::Erased, Some(_)) => {
+                return Err(self.unsupported(id, "an `async` function settling with `unknown`"));
             }
         };
         self.runtime_call(helper, args, HirType::Void, origin);
@@ -8567,9 +8710,9 @@ impl<'a> FuncBuilder<'a> {
         // `NaN` would shadow them, and is caught before this by the binding
         // lookup below coming first.
         if let Some(symbol) = self.node(id).symbol
-            && self.bindings.contains_key(&symbol.0)
+            && let Some(value) = self.bindings.get(&symbol.0).copied()
         {
-            return Ok(self.bindings[&symbol.0]);
+            return self.narrowed(id, value);
         }
         let origin = self.origin(id);
         match self.node(id).text.as_deref() {
@@ -8591,8 +8734,8 @@ impl<'a> FuncBuilder<'a> {
             .node(id)
             .symbol
             .ok_or_else(|| self.unsupported(id, "an unresolved name"))?;
-        if let Some(value) = self.bindings.get(&symbol.0) {
-            return Ok(*value);
+        if let Some(value) = self.bindings.get(&symbol.0).copied() {
+            return self.narrowed(id, value);
         }
         // An imported name, resolved to what it imports. Below the local
         // lookup because an import binds nothing a function body can shadow.

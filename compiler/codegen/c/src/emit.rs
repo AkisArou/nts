@@ -1386,10 +1386,64 @@ fn coercion_is_free(func: &Func, coercion: UnOp, operand: ValueId) -> bool {
     }
 }
 
+/// `Erase` and `Unerase`, which are a tag-and-store and a load.
+///
+/// Both fail the same way and for the same reason, so they answer together:
+/// there is no tag for a reference yet, in either direction.
+fn erased_conversion(
+    func: &Func,
+    op: &nts_core::hir::Op,
+    name: &str,
+    kind: &OpKind,
+) -> Result<String, Diagnostic> {
+    let refuse = |ty: &HirType, direction: &str| {
+        Diagnostic::error(
+            "NTS2008",
+            format!(
+                "a value of type {ty:?} cannot be {direction} yet; a reference payload needs \
+                 retain and release that switch on the tag, and getting that subtly wrong is \
+                 silent"
+            ),
+            op.origin.location,
+        )
+    };
+    match kind {
+        OpKind::Erase { value } => {
+            let from = &func.value(*value).ty;
+            let (tag, field) = erased_tag(from).ok_or_else(|| refuse(from, "erased"))?;
+            Ok(format!(
+                "{name} = (NtsValue){{ .tag = {tag}, .as.{field} = {} }};",
+                value_name(*value)
+            ))
+        }
+        OpKind::Unerase { value } => {
+            let (_, field) = erased_tag(&op.ty).ok_or_else(|| refuse(&op.ty, "read back"))?;
+            Ok(format!("{name} = {}.as.{field};", value_name(*value)))
+        }
+        _ => unreachable!("only the two conversions reach here"),
+    }
+}
+
+/// The tag and union member an erased value uses for a concrete type.
+///
+/// `None` for anything this cannot erase yet, which today is every reference:
+/// a payload that is sometimes a pointer needs retain and release that switch
+/// on the tag, and reference counting that is subtly wrong does not announce
+/// itself. Refused by name rather than stored and hoped for.
+fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
+    match ty {
+        HirType::Float { .. } | HirType::Int { .. } => Some(("NTS_TAG_NUMBER", "number")),
+        HirType::Bool => Some(("NTS_TAG_BOOLEAN", "boolean")),
+        HirType::Void => Some(("NTS_TAG_UNDEFINED", "number")),
+        _ => None,
+    }
+}
+
 fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
     Ok(match ty {
         HirType::Void => "void",
         HirType::Bool => "bool",
+        HirType::Erased => "NtsValue",
         HirType::Float { bits: 32 } => "float",
         HirType::Float { .. } => "double",
         HirType::Int {
@@ -2107,6 +2161,13 @@ fn emit_op(
         // a return is spelled by the terminator.
         OpKind::Param(_) | OpKind::BlockParam(_) | OpKind::Return(_) => return Ok(()),
         OpKind::ConstInt(v) => format!("{name} = {v};"),
+        // A concrete value becomes an erased one, and reading one back. Both
+        // are one line and both can fail, so they live together in
+        // `erased_conversion` rather than growing this match by twenty.
+        OpKind::Erase { .. } | OpKind::Unerase { .. } => {
+            erased_conversion(func, op, &name, &op.kind)?
+        }
+        OpKind::TagOf { value: operand } => format!("{name} = {}.tag;", value_name(*operand)),
         // The absent reference. Typed, because C distinguishes a null
         // `NtsString *` from a null `NtsObj_Point *` even though the address is
         // the same one.

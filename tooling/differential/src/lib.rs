@@ -159,6 +159,10 @@ fn c_type(ty: &HirType) -> &'static str {
     match ty {
         HirType::Managed(nts_core::hir::ManagedType::String) => "NtsString *",
         HirType::Bool => "bool",
+        // The runtime's struct. The differential never drives one directly --
+        // it generates calls from scalar signatures -- so this appears only
+        // where an erased value is somewhere else in a compiled program.
+        HirType::Erased => "NtsValue",
         HirType::Int { bits: 8, signed } => {
             if *signed {
                 "int8_t"

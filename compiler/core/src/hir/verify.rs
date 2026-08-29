@@ -14,13 +14,38 @@
 
 use rustc_hash::FxHashSet;
 
-use super::{Block, BlockId, Callee, Func, OpKind, Program, Terminator, ValueId};
+use super::{Block, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, ValueId};
 
 /// A way the IR was malformed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Invalid {
     /// A branch names a block that does not exist.
     DanglingSuccessor { func: String, target: BlockId },
+    /// A direct call passed an argument of an incompatible *representation*.
+    ///
+    /// Representation and not type, and the distinction is the whole of what
+    /// this checks. Passing a `Square` where a `Shape` is expected is an
+    /// upcast, which base-first layout makes a no-op pointer cast -- both are
+    /// one pointer, and whether the upcast is legal was the typechecker's
+    /// question, not this pass's. A first version compared types exactly and
+    /// reported five of those in `examples/inheritance` alone.
+    ///
+    /// What it does catch is a value reaching a parameter that cannot hold it:
+    ///
+    /// The verifier checked arity and not types, which meant a value could be
+    /// passed into a parameter of a different representation and reach the
+    /// a `NtsString *` into a `double` is a diagnostic in C, but a
+    /// `NtsString *` into a `NtsValue` is a struct initialised from a pointer,
+    /// and the compiler that emitted it was never asked. Found while adding
+    /// `HirType::Erased`, whose whole purpose is that concrete values must be
+    /// *converted* into it.
+    CallArgumentType {
+        func: String,
+        callee: String,
+        at: usize,
+        expected: HirType,
+        found: HirType,
+    },
     /// A jump passed a different number of arguments than the target takes.
     ///
     /// The arguments *are* the edge's contribution to the target's parameters, so
@@ -107,10 +132,13 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
 /// receiver, and every override of a method has the signature the base declares,
 /// so the question this asks is answered by the typechecker rather than here.
 fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
-    let mut arity: rustc_hash::FxHashMap<&str, usize> = rustc_hash::FxHashMap::default();
+    let mut arity: rustc_hash::FxHashMap<&str, Vec<HirType>> = rustc_hash::FxHashMap::default();
     for func in &program.funcs {
         if arity
-            .insert(func.name.as_str(), func.params.len())
+            .insert(
+                func.name.as_str(),
+                func.params.iter().map(|p| p.ty.clone()).collect(),
+            )
             .is_some()
         {
             problems.push(Invalid::DuplicateFunction {
@@ -128,23 +156,63 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
             else {
                 continue;
             };
-            let Some(&expected) = arity.get(name.as_str()) else {
+            let Some(expected) = arity.get(name.as_str()) else {
                 problems.push(Invalid::MissingCallee {
                     func: func.name.clone(),
                     callee: name.clone(),
                 });
                 continue;
             };
-            if args.len() != expected {
+            if args.len() != expected.len() {
                 problems.push(Invalid::CallArgumentCount {
                     func: func.name.clone(),
                     callee: name.clone(),
-                    expected,
+                    expected: expected.len(),
                     found: args.len(),
                 });
+                continue;
+            }
+            for (at, (arg, want)) in args.iter().zip(expected).enumerate() {
+                let Some(found) = func.values.get(arg.0 as usize).map(|op| &op.ty) else {
+                    continue;
+                };
+                if !compatible(found, want) {
+                    problems.push(Invalid::CallArgumentType {
+                        func: func.name.clone(),
+                        callee: name.clone(),
+                        at,
+                        expected: want.clone(),
+                        found: found.clone(),
+                    });
+                }
             }
         }
     }
+}
+
+/// Whether a value of one type can be passed where another is expected.
+///
+/// Not assignability -- the typechecker answered that. This asks whether the
+/// backend can emit the call at all, so two object pointers are compatible
+/// however their classes are related: base-first layout makes an upcast a no-op
+/// cast, and a derived pointer in a base parameter is what every `super` call
+/// in the program already is.
+///
+/// Deliberately strict everywhere else, including between arrays of different
+/// elements. An array is one pointer too, so that pair could be allowed -- and
+/// is not, because nothing has produced one and a rule with no case behind it
+/// is a guess about which mismatches are safe.
+fn compatible(found: &HirType, want: &HirType) -> bool {
+    if found == want {
+        return true;
+    }
+    matches!(
+        (found, want),
+        (
+            HirType::Managed(super::ManagedType::Object(_)),
+            HirType::Managed(super::ManagedType::Object(_))
+        )
+    )
 }
 
 fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
@@ -384,6 +452,9 @@ fn check_dominance(func: &Func, reachable: &FxHashSet<BlockId>, problems: &mut V
 
 pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
     match kind {
+        OpKind::Erase { value } | OpKind::TagOf { value } | OpKind::Unerase { value } => {
+            vec![*value]
+        }
         OpKind::Await { promise } => vec![*promise],
         OpKind::Suspend { promise, frame, .. } => vec![*promise, *frame],
         OpKind::Param(_)

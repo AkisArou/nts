@@ -1321,6 +1321,33 @@ NtsString *nts_number_to_string(double x) {
     return nts_string_from_utf8(out, (size_t)(at - out));
 }
 
+/* `typeof` for a tag.
+ *
+ * Allocates, because a string in this runtime is a heap object and there is no
+ * static one to hand back. That cost is why the common shape -- comparing
+ * against a literal -- wants folding to an integer compare rather than going
+ * through here, and why `NtsTag`'s values are the spellings rather than an
+ * arbitrary numbering: the fold is then a table lookup at compile time.
+ *
+ * An unrecognised tag answers "undefined" rather than aborting. A tag this
+ * function does not know is a compiler bug, and a program that prints the wrong
+ * word is a better place to find one than a program that dies without saying
+ * which value it died on. */
+NtsString *nts_tag_name(uint32_t tag) {
+    switch (tag) {
+        case NTS_TAG_BOOLEAN:
+            return nts_string_from_utf8("boolean", 7);
+        case NTS_TAG_NUMBER:
+            return nts_string_from_utf8("number", 6);
+        case NTS_TAG_STRING:
+            return nts_string_from_utf8("string", 6);
+        case NTS_TAG_OBJECT:
+            return nts_string_from_utf8("object", 6);
+        default:
+            return nts_string_from_utf8("undefined", 9);
+    }
+}
+
 NtsString *nts_string_from_utf8(const char *bytes, size_t length) {
   /* At most one code unit per byte for the BMP, two for a supplementary
    * character -- which is also at most one per byte, since those take four. */
@@ -1738,6 +1765,45 @@ void nts_promise_fulfill_reference(NtsPromise *promise, NtsHeader *value) {
   nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
 }
 
+/* Settle with a value whose kind is not known until run time.
+ *
+ * The tag chooses the slot. A number or a boolean is a double in `number`; a
+ * string or an object is a pointer in `reference`, retained exactly as
+ * `nts_promise_fulfill_reference` retains -- which is what keeps the tracer
+ * honest, because `reference` stays a slot that always holds a reference or
+ * null and the descriptor never learns a new rule.
+ *
+ * A boolean stored as a double is not a loss: the tag says it was a boolean,
+ * and `nts_promise_value` reads it back through the same tag. Only the two
+ * slots are closed; `typeof` is not. */
+void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value) {
+  nts_promise_require_owner("nts_promise_fulfill_value");
+  if (promise->state != NTS_PROMISE_PENDING) {
+    return;
+  }
+  promise->payload = NTS_PAYLOAD_VALUE;
+  promise->tag = value.tag;
+  switch (value.tag) {
+  case NTS_TAG_NUMBER:
+    promise->number = value.as.number;
+    break;
+  case NTS_TAG_BOOLEAN:
+    promise->number = value.as.boolean ? 1.0 : 0.0;
+    break;
+  case NTS_TAG_STRING:
+  case NTS_TAG_OBJECT:
+    nts_retain(value.as.reference);
+    promise->reference = value.as.reference;
+    break;
+  case NTS_TAG_UNDEFINED:
+    break;
+  default:
+    fprintf(stderr, "nts: settled a promise with an unknown value tag\n");
+    abort();
+  }
+  nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
+}
+
 void nts_promise_reject(NtsPromise *promise, NtsHeader *reason) {
   nts_promise_require_owner("nts_promise_reject");
   if (promise->state != NTS_PROMISE_PENDING) {
@@ -1783,6 +1849,35 @@ NtsHeader *nts_promise_reference(const NtsPromise *promise) {
     abort();
   }
   return promise->reference;
+}
+
+NtsValue nts_promise_value(const NtsPromise *promise) {
+  if (promise->state != NTS_PROMISE_FULFILLED ||
+      promise->payload != NTS_PAYLOAD_VALUE) {
+    fprintf(stderr,
+            "nts: read an erased value from a promise holding something else\n");
+    abort();
+  }
+  NtsValue value;
+  value.tag = promise->tag;
+  switch (promise->tag) {
+  case NTS_TAG_NUMBER:
+    value.as.number = promise->number;
+    break;
+  case NTS_TAG_BOOLEAN:
+    value.as.boolean = promise->number != 0.0;
+    break;
+  case NTS_TAG_STRING:
+  case NTS_TAG_OBJECT:
+    value.as.reference = promise->reference;
+    break;
+  default:
+    /* `undefined` carries nothing, and the union is written rather than left
+     * alone so that a caller copying the whole struct copies a known value. */
+    value.as.number = 0.0;
+    break;
+  }
+  return value;
 }
 
 /* Whether an `await` has to propagate a rejection instead of reading a value.
@@ -1884,6 +1979,15 @@ static void nts_promise_forward(NtsPromise *to, const NtsPromise *from) {
   case NTS_PAYLOAD_REFERENCE:
     nts_promise_fulfill_reference(to, from->reference);
     return;
+  case NTS_PAYLOAD_VALUE: {
+    /* Reassembled and re-settled rather than copied field by field, so the
+     * retain happens on the way in exactly as it did the first time. Without
+     * this arm an erased payload would reach `default` and `race` would
+     * quietly fulfil with `undefined`. */
+    NtsValue value = nts_promise_value(from);
+    nts_promise_fulfill_value(to, value);
+    return;
+  }
   default:
     nts_promise_fulfill_void(to);
     return;

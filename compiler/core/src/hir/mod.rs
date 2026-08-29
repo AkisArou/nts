@@ -78,6 +78,20 @@ pub enum HirType {
     Float {
         bits: u8,
     },
+    /// A value carrying its own type, for a slot the checker typed `unknown`.
+    ///
+    /// One machine value that can hold anything reachable, together with a tag
+    /// saying what it currently holds. `TypeKind::Any` deliberately does *not*
+    /// map here: `docs/any-unknown.md` forbids an `any` from reaching HIR at
+    /// all, because it is the checker announcing it has stopped providing
+    /// safety, and giving it a representation would accept the escape hatch
+    /// that rule exists to close.
+    ///
+    /// The *layout* is the backend's, not this type's. A tagged struct and a
+    /// NaN-boxed word are the same three operations at different sizes, and
+    /// naming a layout here would make changing it a refactor of every pass
+    /// rather than of one emitter.
+    Erased,
     /// A garbage-collected reference.
     ///
     /// The distinction that decides whether a store needs a write barrier and
@@ -321,6 +335,32 @@ pub enum OpKind {
     ConstFloat(f64),
     ConstBool(bool),
     ConstString(String),
+    /// A concrete value becomes an erased one, tagged with what it was.
+    ///
+    /// The tag is not stored here: it is a function of the operand's type,
+    /// which every pass already has. Storing it would create a second answer
+    /// to one question and a way for the two to disagree.
+    Erase {
+        value: ValueId,
+    },
+    /// The tag an erased value currently carries.
+    ///
+    /// `typeof` on an erased value is exactly this, which is why
+    /// [`crate::hir::HirType::Erased`]'s tags are spelled as `typeof`'s
+    /// answers.
+    TagOf {
+        value: ValueId,
+    },
+    /// An erased value becomes a concrete one, at the type the checker
+    /// narrowed it to.
+    ///
+    /// Unchecked by construction: it is emitted only where narrowing licensed
+    /// it, and the tag was tested on the path that reaches it. That is the one
+    /// place in this feature where being wrong is silent rather than loud, so
+    /// it is emitted from one function and nowhere else.
+    Unerase {
+        value: ValueId,
+    },
     Binary {
         op: BinOp,
         lhs: ValueId,

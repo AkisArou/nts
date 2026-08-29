@@ -714,6 +714,7 @@ fn render(ty: &HirType) -> String {
         HirType::Void => "void".to_owned(),
         HirType::Never => "never".to_owned(),
         HirType::Bool => "bool".to_owned(),
+        HirType::Erased => "erased".to_owned(),
         HirType::Int { bits, signed } => format!("{}{bits}", if *signed { 'i' } else { 'u' }),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "managed<str>".to_owned(),
@@ -754,6 +755,38 @@ fn render_callee(
 }
 
 /// A call, with where its result lives when that is not the heap.
+/// `retain` and `release`, which differ only in the verb.
+fn render_refcount(kind: &OpKind, object: nts_core::hir::ValueId) -> String {
+    let verb = if matches!(kind, OpKind::Retain(_)) {
+        "retain"
+    } else {
+        "release"
+    };
+    format!("{verb} %{}", object.0)
+}
+
+/// The four constants, which differ only in how the value is spelled.
+fn render_constant(index: usize, ty: &str, kind: &OpKind) -> String {
+    let value = match kind {
+        OpKind::ConstInt(v) => v.to_string(),
+        OpKind::ConstFloat(v) => v.to_string(),
+        OpKind::ConstBool(v) => v.to_string(),
+        OpKind::ConstString(v) => format!("{v:?}"),
+        _ => unreachable!("only the constants reach here"),
+    };
+    format!("%{index} = const {value} : {ty}")
+}
+
+/// The three erasure operations, which differ only in their verb.
+fn render_erasure(index: usize, ty: &str, kind: &OpKind, value: nts_core::hir::ValueId) -> String {
+    let verb = match kind {
+        OpKind::Erase { .. } => "erase",
+        OpKind::TagOf { .. } => "tag.of",
+        _ => "unerase",
+    };
+    format!("%{index} = {verb} %{} : {ty}", value.0)
+}
+
 fn render_call(
     index: usize,
     ty: &str,
@@ -793,10 +826,13 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     match &op.kind {
         OpKind::Param(n) => format!("%{index} = param {n} : {ty}"),
         OpKind::BlockParam(n) => format!("%{index} = blockparam {n} : {ty}"),
-        OpKind::ConstInt(v) => format!("%{index} = const {v} : {ty}"),
-        OpKind::ConstFloat(v) => format!("%{index} = const {v} : {ty}"),
-        OpKind::ConstBool(v) => format!("%{index} = const {v} : {ty}"),
-        OpKind::ConstString(v) => format!("%{index} = const {v:?} : {ty}"),
+        OpKind::ConstInt(_)
+        | OpKind::ConstFloat(_)
+        | OpKind::ConstBool(_)
+        | OpKind::ConstString(_) => render_constant(index, &ty, &op.kind),
+        OpKind::Erase { value } | OpKind::TagOf { value } | OpKind::Unerase { value } => {
+            render_erasure(index, &ty, &op.kind, *value)
+        }
         OpKind::ConstNull => format!("%{index} = const null : {ty}"),
         OpKind::Binary { op: bin, lhs, rhs } => {
             format!(
@@ -832,8 +868,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             let where_ = if *frame { "frame" } else { "heap" };
             format!("%{index} = object.new {where_} : {ty}")
         }
-        OpKind::Retain(object) => format!("retain %{}", object.0),
-        OpKind::Release(object) => format!("release %{}", object.0),
+        OpKind::Retain(object) | OpKind::Release(object) => render_refcount(&op.kind, *object),
         OpKind::FieldGet { object, field } => {
             format!("%{index} = field.get %{}.{field} : {ty}", object.0)
         }
@@ -886,8 +921,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             args,
             frame,
         } => render_call(index, &ty, callee, args, *frame),
-        OpKind::Return(Some(v)) => format!("ret %{}", v.0),
-        OpKind::Return(None) => "ret".to_owned(),
+        OpKind::Return(v) => v.map_or_else(|| "ret".to_owned(), |v| format!("ret %{}", v.0)),
     }
 }
 

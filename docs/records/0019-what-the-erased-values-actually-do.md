@@ -146,3 +146,62 @@ It does not choose a representation, and it should not: the question of whether
 `unknown` becomes a tagged word, a boxed pointer, or a closed union per site is
 a decision about the RFC, not about this pass. What it removes is the excuse for
 making that decision from a table someone counted by hand.
+
+# The representation, decided from the measurement
+
+Written before reading `~/Projects/scriptc`, deliberately. The risk in reading
+another compiler is not adopting its answer, it is *skipping the derivation* —
+and a position recorded first turns that reading into a comparison rather than a
+default.
+
+## Scope: `unknown`, and not `any`
+
+`unknown` gets a representation. `any` does not, and that is the document's own
+rule rather than a limitation: "no `any` type, unresolved representation
+variable, or generic dynamic operation may reach HIR or MIR". `any` is the
+checker announcing it has stopped providing safety, and giving it a runtime
+representation would quietly accept the escape hatch the rule exists to close.
+An `any` value is legalized from evidence or refused, as before.
+
+## One representation now, specialized later
+
+The measurement says 55% of `unknown` parameters are carried or tested — a
+pointer or a tag would do — and 31% are examined. The document concludes from
+that: "programs that never require general erased storage should not pay for a
+general erased-value runtime."
+
+That is right and it is the *second* step. A per-site representation is chosen
+by comparing against a fallback, so the fallback has to exist and be correct
+first. Building the cheap cases before the general one means every specialized
+site is validated against nothing.
+
+So: one general erased value now, and `nts erasure`'s verdicts drive
+specialization afterwards. The order is not a compromise — a specialization that
+cannot be checked against a working general case is a guess.
+
+## `HirType::Erased`, and the layout is the backend's business
+
+The IR gains one type and three operations:
+
+- `Erase` — a concrete value becomes an erased one, tagged with what it was.
+- `TagOf` — the tag, which is exactly what `typeof` needs and what the current
+  refusal (`which needs a runtime tag`) names.
+- `Unerase` — an erased value becomes a concrete one, at a type the checker has
+  already narrowed to.
+
+**The layout is not in the IR.** A tagged struct and a NaN-boxed word are the
+same three operations with different sizes, and putting the choice in the IR
+would make changing it a refactor of every pass rather than of one emitter.
+Sixteen bytes of `{tag, payload}` first, because it is correct and debuggable
+and interacts with nothing; NaN-boxing later is then a backend change with the
+differential already in place to catch it. "No compat shims across refactors"
+is the requirement, and this is what satisfies it.
+
+## Where the correctness actually lives
+
+Not in `Erase` — that is a store. It is in `Unerase`: the checker narrows
+`typeof x === "number"` and the *use* inside the branch has static type
+`number`, while the declaration is `unknown`. Lowering has to notice that
+disagreement and insert the unerase, and it has to be impossible to reach an
+unerase the narrowing did not license. That is the one place a wrong answer
+would be silent rather than loud, so it is where the examples point.
