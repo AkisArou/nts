@@ -76,6 +76,13 @@ const SABOTAGES: &[Sabotage] = &[
     },
     Sabotage {
         suite: "erased",
+        function: "nts_promise_fulfill_reference",
+        pattern: "value.tag = nts_tag_of_reference(object);",
+        replacement: "value.tag = NTS_TAG_OBJECT;",
+        guards: "that a string settled through the typed helper still says it is a string",
+    },
+    Sabotage {
+        suite: "erased",
         function: "nts_promise_forward",
         pattern: "nts_promise_fulfill_value(to, from->value);",
         replacement: "nts_promise_fulfill_void(to);",

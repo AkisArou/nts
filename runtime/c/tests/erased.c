@@ -155,6 +155,36 @@ int main(void) {
         nts_release((NtsHeader *)s);
     }
 
+    /* A payload settled through a *typed* helper still answers `typeof`.
+     *
+     * `nts_promise_fulfill_reference` knows it holds a reference and not which
+     * kind, so the tag is derived from the header rather than assumed. Assuming
+     * `object` is invisible until someone races a string into an erased `await`
+     * and asks what it is -- a wrong answer that no typed reader could ever
+     * see, because a typed reader already knew.
+     */
+    {
+        NtsString *s = nts_string_from_utf8("typed", 5);
+        NtsPromise *p = nts_promise_new();
+        nts_promise_fulfill_reference(p, (NtsHeader *)s);
+        check("a string settled as a reference reads back a string",
+              nts_promise_value(p).tag == NTS_TAG_STRING);
+        nts_release((NtsHeader *)p);
+        nts_release((NtsHeader *)s);
+    }
+
+    {
+        /* Any non-string managed object; a promise is the one this file can
+         * build without a descriptor of its own. */
+        NtsPromise *payload = nts_promise_new();
+        NtsPromise *p = nts_promise_new();
+        nts_promise_fulfill_reference(p, (NtsHeader *)payload);
+        check("a non-string settled as a reference reads back an object",
+              nts_promise_value(p).tag == NTS_TAG_OBJECT);
+        nts_release((NtsHeader *)p);
+        nts_release((NtsHeader *)payload);
+    }
+
     /* Settling twice is ignored, as it is for every other payload. */
     {
         NtsPromise *p = nts_promise_new();

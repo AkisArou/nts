@@ -126,8 +126,8 @@ fn an_erased_value_keeps_its_tag_across_a_promise() {
     // `await` is only right because the tag is recorded beside them.
     let report = run_suite("erased", &["-DNTS_PROVIDER_RC"]);
     assert!(
-        checks(&report) >= 18,
-        "expected at least 18 erased-value checks, saw {}:\n{report}",
+        checks(&report) >= 20,
+        "expected at least 20 erased-value checks, saw {}:\n{report}",
         checks(&report)
     );
 }
