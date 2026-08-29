@@ -108,6 +108,24 @@ fn promises_resolve_in_the_order_node_resolves_them() {
 }
 
 #[test]
+fn an_erased_value_keeps_its_tag_across_a_promise() {
+    // Reference counting, because half the suite is about what a promise
+    // retains: under NoGC nothing is ever released and the counts it compares
+    // would all be trivially equal.
+    //
+    // What it is really checking is that the tag survives. Five tags share two
+    // payload slots, so a boolean and a number are both a double and a string
+    // and an object are both a pointer -- and `typeof` on the far side of an
+    // `await` is only right because the tag is recorded beside them.
+    let report = run_suite("erased", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 18,
+        "expected at least 18 erased-value checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}
+
+#[test]
 fn combinators_settle_in_the_order_node_settles_them() {
     // Reference counting, and the suite collects cycles before it measures:
     // a combinator, its slots and its result promise form one.
