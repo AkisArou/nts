@@ -270,7 +270,9 @@ fn edges(block: &Block) -> Vec<(usize, &[ValueId])> {
             (then_target.0 as usize, then_args.as_slice()),
             (else_target.0 as usize, else_args.as_slice()),
         ],
-        super::Terminator::Return(_) | super::Terminator::Unreachable => Vec::new(),
+        super::Terminator::Return(_)
+        | super::Terminator::Unreachable
+        | super::Terminator::FellThrough => Vec::new(),
     }
 }
 

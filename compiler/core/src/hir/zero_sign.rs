@@ -191,7 +191,7 @@ fn edges(terminator: &Terminator) -> Vec<(u32, &[ValueId])> {
             else_args,
             ..
         } => vec![(then_target.0, then_args), (else_target.0, else_args)],
-        Terminator::Return(_) | Terminator::Unreachable => Vec::new(),
+        Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => Vec::new(),
     }
 }
 

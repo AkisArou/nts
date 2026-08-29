@@ -317,11 +317,7 @@ fn collect_hierarchy(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> H
                         Some(syntax::SET_ACCESSOR) => "set ",
                         _ => return None,
                     };
-                    let name = probe
-                        .children(child)
-                        .into_iter()
-                        .find(|part| probe.kind_of(*part) == Some(syntax::IDENTIFIER))
-                        .and_then(|part| probe.node(part).text.clone())?;
+                    let name = probe.member_name(child)?;
                     Some(format!("{prefix}{name}"))
                 })
                 .collect();
@@ -2556,13 +2552,20 @@ impl<'a> FuncBuilder<'a> {
             .into_iter()
             .rev()
             .find(|child| self.kind_of(*child) == Some(syntax::BLOCK));
+        // Whatever is neither the name, a parameter, nor the body. By node
+        // rather than by kind: `set ["size"](n: number)` has no return
+        // annotation at all, and reading its name as one gave the setter a
+        // `number` return it never produces -- which the emitter honestly
+        // rendered as a store followed by `__builtin_unreachable()`, and the C
+        // compiler then took as a licence to compute anything at all in the
+        // caller.
+        let name = self.name_node(id);
         self.children(id)
             .into_iter()
             .filter(|child| {
-                !matches!(
-                    self.kind_of(*child),
-                    Some(syntax::PARAMETER | syntax::IDENTIFIER)
-                ) && Some(*child) != body
+                self.kind_of(*child) != Some(syntax::PARAMETER)
+                    && Some(*child) != body
+                    && Some(*child) != name
             })
             .find_map(|child| self.type_of(child))
     }
@@ -2962,11 +2965,9 @@ impl<'a> FuncBuilder<'a> {
         let member_name = if is_constructor {
             "constructor".to_owned()
         } else {
-            self.children(member)
-                .into_iter()
-                .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
-                .and_then(|child| self.node(child).text.clone())
-                .ok_or_else(|| self.unsupported(member, "a method with a computed name"))?
+            self.member_name(member).ok_or_else(|| {
+                self.unsupported(member, "a member whose name the program computes")
+            })?
         };
 
         // Neither `#` nor `.` can appear in a TypeScript identifier, so a
@@ -3040,7 +3041,16 @@ impl<'a> FuncBuilder<'a> {
         // object it is already holding. Under reference counting that is a
         // retain and a release per construction for no gain, and under any
         // provider it is a copy the C compiler has to see through.
-        let return_type = if is_constructor {
+        //
+        // A setter likewise, and by the language's rule rather than by reading
+        // the declaration: `set x(v)` may not annotate a return type and may
+        // not return a value, so there is nothing to look up and nothing a
+        // lookup could get wrong. Deriving it once gave `set ["size"](n:
+        // number)` an `f64` return it never produces, and the emitter rendered
+        // that honestly as a store followed by `__builtin_unreachable()` --
+        // which the C compiler reads as a licence to compute anything at all
+        // in the caller.
+        let return_type = if is_constructor || self.kind_of(member) == Some(syntax::SET_ACCESSOR) {
             HirType::Void
         } else {
             self.declared_return(member).unwrap_or(HirType::Void)
@@ -3179,6 +3189,126 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::Unerase { value }, want, origin))
     }
 
+    /// The name a declaration or a key node spells.
+    ///
+    /// One function, because a name is asked for in a dozen places that must
+    /// agree -- most sharply for a class member, where the name decides both
+    /// the function a member is *emitted* as and the table a call site *finds*
+    /// it through. Fixing one and not the other produces a method the emitter
+    /// names and nothing can reach.
+    ///
+    /// Three spellings resolve to the same name. `record`, `"record"` and
+    /// `["record"]` are one member; the quotes and the brackets are how a
+    /// program writes a name the bare grammar will not take. Node's own
+    /// `internal/errors` writes `get ["constructor"]()` for exactly that
+    /// reason, since `get constructor()` is a type error.
+    ///
+    /// Only a literal. `[kSymbol]` and `[prefix + n]` are names the program
+    /// decides at run time; both want a property map rather than a field, and
+    /// reading one as a name would collide two members into a single slot.
+    fn literal_name(&self, name: NodeId) -> Option<String> {
+        if let Some(text) = self.node(name).text.clone() {
+            return Some(text);
+        }
+        match self.kind_of(name) {
+            // The decoder carries no text on a literal. The checker does carry
+            // the *symbol* the name binds, and its name is the answer for every
+            // spelling -- `"quoted"`, `["bracketed"]` and `[0]` all name a
+            // symbol called what they say. That is also the name TypeScript
+            // itself does property lookup by, so taking it here means the
+            // compiler and the checker cannot disagree about which member a
+            // call site meant.
+            Some(syntax::STRING_LITERAL | syntax::NUMERIC_LITERAL) => self
+                .node(name)
+                .symbol
+                .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+                .map(|record| record.name.clone())
+                // No symbol: a literal in an index position, where the type is
+                // the constant. Read from the same place `lower_string` reads.
+                .or_else(|| {
+                    match &self
+                        .snapshot
+                        .types
+                        .get(self.snapshot.node_types.get(&name)?.0 as usize)?
+                        .kind
+                    {
+                        TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+                        TypeKind::Literal(LiteralValue::Number(value)) => Some(value.to_string()),
+                        _ => None,
+                    }
+                }),
+            // A *literal* child only, and checked here rather than by
+            // recursing: an identifier in brackets is a variable, not a name.
+            // Reading `[kTag]` as the name `kTag` would put it in the same slot
+            // as `["kTag"]`, which is the collision this whole refusal exists
+            // to prevent.
+            Some(syntax::COMPUTED_PROPERTY_NAME) => match self.children(name).as_slice() {
+                [only]
+                    if matches!(
+                        self.kind_of(*only),
+                        Some(syntax::STRING_LITERAL | syntax::NUMERIC_LITERAL)
+                    ) =>
+                {
+                    self.literal_name(*only)
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Which child of a declaration is spelling its name.
+    ///
+    /// A declaration's children are its name, its parameters, its return
+    /// annotation and its body, and more than one reader has to tell them
+    /// apart. Answering by kind alone is what put `["size"]` in the return
+    /// annotation's place, so callers exclude the node this found rather than
+    /// the kinds it accepts.
+    fn name_node(&self, declaration: NodeId) -> Option<NodeId> {
+        self.children(declaration).into_iter().find(|child| {
+            matches!(
+                self.kind_of(*child),
+                Some(
+                    syntax::IDENTIFIER
+                        | syntax::STRING_LITERAL
+                        | syntax::NUMERIC_LITERAL
+                        | syntax::COMPUTED_PROPERTY_NAME
+                )
+            )
+        })
+    }
+
+    /// The name a class member is declared under, from the member itself.
+    fn member_name(&self, member: NodeId) -> Option<String> {
+        self.literal_name(self.name_node(member)?)
+    }
+
+    /// Whether an expression names a property of an object.
+    ///
+    /// `o.x` and `o["x"]` are one thing said two ways, and their node shapes
+    /// already agree: an object beside a name. What separates them is the kind
+    /// of the name node, which [`Self::literal_name`] resolves either way.
+    ///
+    /// The object's type is what keeps `xs[0]` out. An array index is also a
+    /// literal in brackets, and it means something else entirely -- so this
+    /// asks the checker what the receiver is rather than what the brackets
+    /// contain.
+    fn names_a_property(&self, id: NodeId) -> bool {
+        match self.kind_of(id) {
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION) => true,
+            Some(syntax::ELEMENT_ACCESS_EXPRESSION) => match self.children(id).as_slice() {
+                [object, index] => {
+                    matches!(
+                        self.type_of(*object),
+                        Some(HirType::Managed(ManagedType::Object(_)))
+                    ) && self.literal_name(*index).is_some()
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
     /// A value where a slot of a possibly different type expects it.
     ///
     /// Only erasure today. Every other pair either already matches or is a
@@ -3199,6 +3329,16 @@ impl<'a> FuncBuilder<'a> {
         let have = self.values[value.0 as usize].ty.clone();
         if have == *want {
             return Ok(value);
+        }
+        // A slot of type `never` cannot receive a value, and one is arriving.
+        // `{ from: "x" as never }` is how a program gets here: the assertion
+        // typechecks and is false, so the field's declared type says nothing
+        // can be stored where a string is being stored. Refusing is the honest
+        // answer -- the alternative is to represent the field by whatever the
+        // first store happens to be, and a layout is shared by every value of
+        // the type.
+        if *want == HirType::Never {
+            return Err(self.unsupported(id, "a value asserted to be `never`"));
         }
         if *want != HirType::Erased {
             return Ok(value);
@@ -3235,19 +3375,18 @@ impl<'a> FuncBuilder<'a> {
         value: ValueId,
         argument: NodeId,
     ) -> Result<ValueId, Diagnostic> {
-        let Some(target) = self.snapshot.call_targets.get(&call) else {
-            return Ok(value);
-        };
-        let Some(signature) = self.snapshot.signatures.get(target.signature.0 as usize) else {
-            return Ok(value);
-        };
-        let Some(parameter) = signature.parameters.get(at) else {
-            return Ok(value);
-        };
-        let Some(want) = self.represent(parameter.ty) else {
+        let Some(want) = self.parameter_representation(call, at) else {
             return Ok(value);
         };
         self.coerce(value, &want, argument)
+    }
+
+    /// How a call's `at`th parameter is represented, from the resolved
+    /// signature rather than from the argument.
+    fn parameter_representation(&self, call: NodeId, at: usize) -> Option<HirType> {
+        let target = self.snapshot.call_targets.get(&call)?;
+        let signature = self.snapshot.signatures.get(target.signature.0 as usize)?;
+        self.represent(signature.parameters.get(at)?.ty)
     }
 
     /// `typeof x`, where `x` has one known primitive type.
@@ -3733,48 +3872,104 @@ impl<'a> FuncBuilder<'a> {
             let value = self.lower_expression(*argument)?;
             args.push(self.coerce_to_parameter(call, args.len(), value, *argument)?);
         }
-        for default in self.defaults_after(call, arguments.len())? {
-            let value = self.lower_expression(default)?;
-            args.push(self.coerce_to_parameter(call, args.len(), value, default)?);
+        for omitted in self.omitted_after(call, arguments.len())? {
+            let value = match omitted {
+                Omitted::Default(node) => {
+                    let value = self.lower_expression(node)?;
+                    self.coerce_to_parameter(call, args.len(), value, node)?
+                }
+                Omitted::Absent => self.absent_argument(call, args.len())?,
+            };
+            args.push(value);
         }
         Ok(args)
     }
 
-    /// The default expressions for the parameters a call did not supply.
+    /// The value a call passes for an optional parameter it did not reach.
+    ///
+    /// `f(a?: T)` called as `f()` still calls a function of one parameter, so
+    /// the absence has to be a value -- and it is the same `undefined` the
+    /// program could have written there, needing the same thing: a home in
+    /// `T`'s representation. A reference has one, the null pointer; an erased
+    /// value has one, its `undefined` tag; an `f64` has none.
+    ///
+    /// Before this the argument was simply not passed, and the call went out
+    /// one short. That is only visible once `a?: string` has a representation
+    /// at all: while the union was refused the declaration never lowered, so
+    /// no call to it existed to be wrong.
+    fn absent_argument(&mut self, call: NodeId, at: usize) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(call);
+        match self.parameter_representation(call, at) {
+            Some(HirType::Erased) => Ok(self.push(OpKind::ConstNull, HirType::Erased, origin)),
+            Some(ty) if ty.is_managed() => Ok(self.push(OpKind::ConstNull, ty, origin)),
+            _ => Err(self.unsupported(
+                call,
+                "an omitted argument for a parameter with nowhere to put `undefined`",
+            )),
+        }
+    }
+
+    /// What a call has to supply for a parameter its argument list did not
+    /// reach.
+    ///
+    /// Both are work at the *call* rather than a note on the declaration: a
+    /// default has to be evaluated once per call that omits it, and an absence
+    /// has to be a value in the argument list because the callee has a
+    /// parameter for it either way.
     ///
     /// Refuses the same default `lower_param` refuses, in the same words. The
     /// declaration is not always lowered before the call -- and when it is, the
     /// call would otherwise fail here on the *parameter name*, reporting `a` as
     /// a name from an enclosing scope, which is true of the expression as this
     /// site sees it and says nothing about the cause.
-    fn defaults_after(&self, call: NodeId, provided: usize) -> Result<Vec<NodeId>, Diagnostic> {
-        let Some(callee) = self
-            .snapshot
-            .call_targets
-            .get(&call)
-            .and_then(|target| target.callee)
-        else {
+    fn omitted_after(&self, call: NodeId, provided: usize) -> Result<Vec<Omitted>, Diagnostic> {
+        let Some(target) = self.snapshot.call_targets.get(&call) else {
             return Ok(Vec::new());
         };
-        let mut defaults = Vec::new();
-        for param in self
-            .children(callee)
-            .into_iter()
-            .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
-            .skip(provided)
-        {
-            let Some(default) = self.default_of(param) else {
-                continue;
-            };
-            if let Some(read) = self.reads_a_parameter(default, callee) {
-                return Err(self.unsupported(
-                    call,
-                    &format!("a parameter default that reads `{read}`, another parameter"),
-                ));
+        let Some(signature) = self.snapshot.signatures.get(target.signature.0 as usize) else {
+            return Ok(Vec::new());
+        };
+        // The declaration's parameter list, where there is one. The signature
+        // is what the verifier counts against, but the *default expression*
+        // only exists in the syntax.
+        let declared: Vec<NodeId> = target
+            .callee
+            .map(|callee| {
+                self.children(callee)
+                    .into_iter()
+                    .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut omitted = Vec::new();
+        for (at, parameter) in signature.parameters.iter().enumerate().skip(provided) {
+            // A rest parameter is refused at the declaration, so its call sites
+            // are refused with it. Filling one here would build the argument it
+            // is supposed to collect.
+            if parameter.rest {
+                break;
             }
-            defaults.push(default);
+            let declaration = declared.get(at).copied();
+            if let Some(default) = declaration.and_then(|param| self.default_of(param)) {
+                let callee = target.callee.unwrap_or(call);
+                if let Some(read) = self.reads_a_parameter(default, callee) {
+                    return Err(self.unsupported(
+                        call,
+                        &format!("a parameter default that reads `{read}`, another parameter"),
+                    ));
+                }
+                omitted.push(Omitted::Default(default));
+                continue;
+            }
+            // Only where the declaration agrees there is a parameter here. An
+            // overload's signature and the implementation's parameter list are
+            // two different lists, and passing against the wrong one would put
+            // the arity out in the other direction.
+            if parameter.optional && (target.callee.is_none() || declaration.is_some()) {
+                omitted.push(Omitted::Absent);
+            }
         }
-        Ok(defaults)
+        Ok(omitted)
     }
 
     fn lower_param(&mut self, id: NodeId, index: u32) -> Result<Param, Diagnostic> {
@@ -4377,6 +4572,24 @@ impl<'a> FuncBuilder<'a> {
 
     /// Into the body, or out of the loop with what the header holds.
     fn test_loop(&mut self, cond: ValueId, record: &Loop) {
+        // A condition that is constantly true is `for (;;)` written another
+        // way, and lowers the same way. The difference is not cosmetic: the
+        // *test* is what creates the exit block, and a loop nothing leaves must
+        // not have one -- `Breakable::exit` is lazy for exactly that reason,
+        // and branching to it here defeats it. A `break` still makes one, which
+        // is the only thing that should.
+        //
+        // Without this, `while (true)` left the function falling out of a block
+        // it could never reach: `FellThrough` in a body that owes a value,
+        // which the verifier rejects because nothing about the block tells it
+        // apart from a wrong return type. It also emitted the dead branch.
+        if matches!(self.values[cond.0 as usize].kind, OpKind::ConstBool(true)) {
+            self.terminate(Terminator::Jump {
+                target: record.body,
+                args: Vec::new(),
+            });
+            return;
+        }
         let (exit, _) = self.exit_of(record.depth);
         self.terminate(Terminator::Branch {
             cond,
@@ -4481,7 +4694,9 @@ impl<'a> FuncBuilder<'a> {
         if matches!(return_type, HirType::Void) {
             self.terminate(Terminator::Return(None));
         } else {
-            self.terminate(Terminator::Unreachable);
+            // Not `Unreachable`: this is an absence rather than a claim, and
+            // the verifier holds it to being dead.
+            self.terminate(Terminator::FellThrough);
         }
     }
 
@@ -5214,9 +5429,7 @@ impl<'a> FuncBuilder<'a> {
                 };
                 let layout = self.layout_of(element, type_id)?;
                 let name = self
-                    .node(property)
-                    .text
-                    .clone()
+                    .literal_name(property)
                     .ok_or_else(|| self.unsupported(element, "a computed property name"))?;
                 let Some(field) = layout.index_of(&name) else {
                     return Err(self.absent_member(element, type_id, &name));
@@ -5265,7 +5478,7 @@ impl<'a> FuncBuilder<'a> {
     /// JavaScript, so the index cannot be lowered again for the store -- and a
     /// compound assignment that re-lowered its target would call it twice.
     fn place_of(&mut self, target: NodeId) -> Result<Place, Diagnostic> {
-        if self.kind_of(target) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+        if self.names_a_property(target) {
             let children = self.children(target);
             let [object_node, member] = children.as_slice() else {
                 return Err(self.unsupported(target, "a property of unexpected shape"));
@@ -5278,9 +5491,7 @@ impl<'a> FuncBuilder<'a> {
             };
             let layout = self.layout_of(target, type_id)?;
             let name = self
-                .node(*member)
-                .text
-                .clone()
+                .literal_name(*member)
                 .ok_or_else(|| self.unsupported(*member, "a computed property name"))?;
             let Some(field) = layout.index_of(&name) else {
                 // A setter, for the same reason.
@@ -5329,7 +5540,14 @@ impl<'a> FuncBuilder<'a> {
         if self.module.constants.contains_key(&symbol.0) {
             return Err(self.unsupported(target, "assigning to a `const`"));
         }
-        Ok(Place::Binding(symbol.0))
+        // From the target, which is where the checker gives the *declared*
+        // type: the left of an assignment is not narrowed by what came before
+        // it, because the assignment is what does the narrowing.
+        let ty = self.type_of(target);
+        Ok(Place::Binding {
+            symbol: symbol.0,
+            ty,
+        })
     }
 
     /// What a place currently holds. Only a compound assignment and a step ask.
@@ -5376,7 +5594,7 @@ impl<'a> FuncBuilder<'a> {
                 let ty = self.module.types[global as usize].clone();
                 self.push(OpKind::GlobalGet(global), ty, origin)
             }
-            Place::Binding(symbol) => *self
+            Place::Binding { symbol, .. } => *self
                 .bindings
                 .get(&symbol)
                 .ok_or_else(|| self.unsupported(id, "reading a name before it is bound"))?,
@@ -5560,8 +5778,49 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// Put a value into a place.
+    /// A store converts, and which conversion it is depends on the *slot*.
+    ///
+    /// One function for every kind of place, because doing it per site is how
+    /// this kept going wrong: an erased array element, then an erased field,
+    /// then an erased global were each found separately, one C compile error
+    /// or one rejected SSA form at a time. A store is the only thing that
+    /// reaches a slot, and this is the only thing a store goes through.
+    ///
+    /// A setter is not a slot -- it is a call, and its parameter is converted
+    /// where every other argument is.
+    fn coerce_to_slot(&mut self, id: NodeId, place: &Place, value: ValueId) -> ValueId {
+        let want = match *place {
+            Place::Element { array, .. } => return self.coerce_element(id, array, value),
+            Place::Field { object, field } => {
+                let HirType::Managed(ManagedType::Object(ty)) =
+                    self.values[object.0 as usize].ty.clone()
+                else {
+                    return value;
+                };
+                match self.layout_of(id, ty) {
+                    Ok(layout) => layout.fields.get(field as usize).map(|slot| slot.ty.clone()),
+                    Err(_) => None,
+                }
+            }
+            Place::Global(global) => self.module.types.get(global as usize).cloned(),
+            // A binding is an SSA value rather than a slot, and it still has a
+            // declared type that every assignment has to keep: `let held:
+            // unknown = "text"; held = n` rebound `held` to an `f64`, and a
+            // later `typeof held` then had no tag to read.
+            Place::Binding { ref ty, .. } => ty.clone(),
+            Place::Setter { .. } => None,
+        };
+        let Some(want) = want else {
+            return value;
+        };
+        // Unchanged where there is nothing to do, which is every store in a
+        // program with no erased values in it.
+        self.coerce(value, &want, id).unwrap_or(value)
+    }
+
     fn write_place(&mut self, id: NodeId, place: &Place, value: ValueId) {
         let origin = self.origin(id);
+        let value = self.coerce_to_slot(id, place, value);
         match *place {
             Place::Field { object, field } => {
                 self.push(
@@ -5586,7 +5845,6 @@ impl<'a> FuncBuilder<'a> {
                 );
             }
             Place::Element { array, index } => {
-                let value = self.coerce_element(id, array, value);
                 self.push(
                     OpKind::ArraySet {
                         array,
@@ -5601,7 +5859,7 @@ impl<'a> FuncBuilder<'a> {
             Place::Global(global) => {
                 self.push(OpKind::GlobalSet { global, value }, HirType::Void, origin);
             }
-            Place::Binding(symbol) => {
+            Place::Binding { symbol, .. } => {
                 self.bindings.insert(symbol, value);
             }
         }
@@ -5989,7 +6247,17 @@ impl<'a> FuncBuilder<'a> {
                 id,
                 "`yield`, which needs the generator object a call to `function*` returns",
             )),
-            _ => Err(self.unsupported(id, "this expression")),
+            // Carrying the kind, for the same reason `yield` got a name of its
+            // own: a refusal nobody can group by is a refusal nobody can rank.
+            // The number is not an explanation, but it is enough to sort a
+            // work-list by and to find the one case that is worth naming next.
+            kind => Err(self.unsupported(
+                id,
+                &format!(
+                    "an expression of kind {}",
+                    kind.map_or_else(|| "a node list".to_owned(), |kind| kind.to_string())
+                ),
+            )),
         }
     }
 
@@ -6132,9 +6400,7 @@ impl<'a> FuncBuilder<'a> {
                     return Err(self.unsupported(id, "a property of unexpected shape"));
                 };
                 let text = self
-                    .node(*name)
-                    .text
-                    .clone()
+                    .literal_name(*name)
                     .ok_or_else(|| self.unsupported(*name, "a computed property name"))?;
                 let value = self.lower_expression(*initializer)?;
                 Ok((text, value))
@@ -6259,7 +6525,21 @@ impl<'a> FuncBuilder<'a> {
                 id,
                 &format!("`{member}`, which this compiler's `Error` does not have — {reason}"),
             ),
-            None => self.unsupported(id, "a property the type does not declare"),
+            // Named, and named with the type it was looked for on. It is the
+            // largest refusal in the node profile, and as `a property the type
+            // does not declare` it was one bucket holding every cause at once:
+            // a member of a library type this compiler does not model, a
+            // property of a type whose decomposition stopped short, and an
+            // actual absence all read the same. A refusal nobody can group by
+            // is a refusal nobody can rank.
+            None => self.unsupported(
+                id,
+                &format!(
+                    "`{member}`, which `{}` does not declare",
+                    named(self.snapshot, ty)
+                        .map_or_else(|| "an anonymous type".to_owned(), ToOwned::to_owned)
+                ),
+            ),
         }
     }
 
@@ -6878,6 +7158,9 @@ impl<'a> FuncBuilder<'a> {
 
     /// `xs[i]`, as a read. Writes are handled by the assignment lowering.
     fn lower_element_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        if self.names_a_property(id) {
+            return self.lower_property_access(id);
+        }
         let (array, index) = self.element_access_parts(id)?;
         // The element's representation comes from the *array*, not from the
         // access node's type. Under `noUncheckedIndexedAccess` — which is what
@@ -6941,9 +7224,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a property access of unexpected shape"));
         };
         let member_name = self
-            .node(*member)
-            .text
-            .clone()
+            .literal_name(*member)
             .ok_or_else(|| self.unsupported(id, "a computed property name"))?;
 
         // The constants `Math` and `Number` hold, taken before the object is
@@ -7397,9 +7678,7 @@ impl<'a> FuncBuilder<'a> {
                 };
                 let layout = self.layout_of(element, type_id)?;
                 let name = self
-                    .node(property)
-                    .text
-                    .clone()
+                    .literal_name(property)
                     .ok_or_else(|| self.unsupported(element, "a computed property name"))?;
                 let Some(field) = layout.index_of(&name) else {
                     return Err(self.absent_member(element, type_id, &name));
@@ -7640,7 +7919,7 @@ impl<'a> FuncBuilder<'a> {
 
         // `c.advance()` — a method call. The receiver becomes the first
         // argument, which is what a method is once it is explicit.
-        if self.kind_of(callee_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+        if self.names_a_property(callee_node) {
             return self.lower_method_call(id, callee_node, &arguments);
         }
 
@@ -9719,6 +9998,18 @@ enum Intrinsic {
     NotANumber,
 }
 
+/// What a call has to supply for a parameter its argument list did not reach.
+///
+/// Two different absences. `f(a = 1)` has an expression to evaluate; `f(a?: T)`
+/// has nothing written down at all, and the value is `undefined`.
+#[derive(Debug, Clone, Copy)]
+enum Omitted {
+    /// The declaration's initializer, evaluated at this call.
+    Default(NodeId),
+    /// `undefined`, in whatever representation the parameter has.
+    Absent,
+}
+
 /// Where an assignment writes.
 ///
 /// Named rather than re-derived, because a compound assignment reads and writes
@@ -9741,7 +10032,14 @@ enum Place {
         index: ValueId,
     },
     Global(u32),
-    Binding(u32),
+    /// A name bound in the function, with the type its declaration gives it.
+    ///
+    /// A binding is an SSA value rather than a slot, so nothing else records
+    /// what it is supposed to hold -- and an assignment has to keep it. The
+    /// type is carried here because the *declaration* is where it is written
+    /// and the symbol table does not have it: a local's `SymbolRecord.ty` is
+    /// `None`.
+    Binding { symbol: u32, ty: Option<HirType> },
 }
 
 /// One side of a branching expression.

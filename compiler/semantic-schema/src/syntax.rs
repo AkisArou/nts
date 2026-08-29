@@ -113,6 +113,13 @@ pub const YIELD_EXPRESSION: u16 = 230;
 pub const TYPE_OF_EXPRESSION: u16 = 222;
 pub const INSTANCEOF_KEYWORD: u16 = 104;
 pub const AWAIT_KEYWORD: u16 = 134;
+/// `["name"]` in a member position.
+///
+/// Named for what the grammar allows rather than for what programs put there:
+/// the brackets are how a class declares a member whose name is a reserved word
+/// (`get ["constructor"]()`), and a string literal inside them is not computed
+/// in any run-time sense.
+pub const COMPUTED_PROPERTY_NAME: u16 = 168;
 pub const PARAMETER: u16 = 170;
 pub const PROPERTY_DECLARATION: u16 = 173;
 pub const METHOD_DECLARATION: u16 = 175;

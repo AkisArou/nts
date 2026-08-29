@@ -88,6 +88,21 @@ pub enum Invalid {
     EntryHasParams { func: String },
     /// A block cannot be reached from the entry.
     Unreachable { func: String, block: BlockId },
+    /// A function that owes a value fell out of the end of its body.
+    ///
+    /// [`super::Terminator::FellThrough`] is sound only where the block is
+    /// dead, and no dead block reaches this point: the check above rejects
+    /// every block the entry cannot reach, and the loop `while (true) { }` --
+    /// the one shape that legally falls out of a body owing a value -- has its
+    /// constant condition folded and its exit removed before this runs.
+    ///
+    /// So one here means the function's *return type* is wrong. The emitter
+    /// renders the fall-through as `__builtin_unreachable()`, which is not a
+    /// crash: it is a licence for the C compiler to compute anything at all in
+    /// the caller. A setter that read its own name as a return annotation did
+    /// exactly that -- it compiled, every test passed, and the answer was
+    /// wrong by a constant.
+    FellThrough { func: String, block: BlockId },
     /// A direct call passed a different number of arguments than the function
     /// it names takes.
     ///
@@ -344,6 +359,15 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
                 func: func.name.clone(),
                 block: id,
             });
+            // One report per block. A dead block that also fell through is
+            // dead first, and that is the thing to fix.
+            continue;
+        }
+        if matches!(func.blocks[index].terminator, Terminator::FellThrough) {
+            problems.push(Invalid::FellThrough {
+                func: func.name.clone(),
+                block: id,
+            });
         }
     }
 
@@ -376,7 +400,7 @@ fn check_arguments(func: &Func, block: &Block, problems: &mut Vec<Invalid>) {
             check(*then_target, then_args);
             check(*else_target, else_args);
         }
-        Terminator::Return(_) | Terminator::Unreachable => {}
+        Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {}
     }
 }
 
@@ -597,7 +621,7 @@ pub(crate) fn terminator_operands(terminator: &Terminator) -> Vec<ValueId> {
             all.extend(else_args);
             all
         }
-        Terminator::Unreachable => Vec::new(),
+        Terminator::Unreachable | Terminator::FellThrough => Vec::new(),
     }
 }
 
@@ -820,6 +844,36 @@ mod tests {
                 .iter()
                 .any(|p| matches!(p, Invalid::EntryHasParams { .. })),
         );
+    }
+
+    /// A reachable `FellThrough` is the wrong return type, and nothing else.
+    ///
+    /// The distinction this rests on: `Unreachable` in the same position is
+    /// legitimate -- a `throw`, or a resumed generator's state dispatch -- so
+    /// the check cannot be a rule about blocks that end without returning.
+    #[test]
+    fn falling_out_of_a_body_that_owes_a_value_is_caught() {
+        let program = func(
+            vec![op(OpKind::Param(0))],
+            vec![block(Vec::new(), vec![ValueId(0)], Terminator::FellThrough)],
+        );
+        let problems = verify(&program).expect_err("the entry owes a value and returns none");
+        assert!(
+            problems
+                .iter()
+                .any(|p| matches!(p, Invalid::FellThrough { .. })),
+            "{problems:?}",
+        );
+    }
+
+    /// The same block, claiming rather than falling: nothing to report.
+    #[test]
+    fn a_claimed_unreachable_in_the_entry_is_allowed() {
+        let program = func(
+            vec![op(OpKind::Param(0))],
+            vec![block(Vec::new(), vec![ValueId(0)], Terminator::Unreachable)],
+        );
+        assert!(verify(&program).is_ok());
     }
 
     #[test]

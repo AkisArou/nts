@@ -290,6 +290,176 @@ pub fn narrow_parameters(program: &mut Program) -> usize {
     chosen.len()
 }
 
+/// Specialize an erased *return* whose every `return` produces the same kind.
+///
+/// The third face of one idea. [`narrow_arrays`] fires when every store into a
+/// slot agrees; [`narrow_parameters`] when every caller agrees about what goes
+/// in; this when the function agrees with itself about what comes out.
+///
+/// The two conditions swap ends. For a parameter the producers are the callers
+/// and the consumer is the body; for a return the producer is the body and the
+/// consumers are the callers. So this asks the same two questions of the
+/// opposite sides:
+///
+/// - every `return` gives a **fresh erasure of one representation**, and
+/// - every use of the result, at every call site, is an **unerase or a tag
+///   read**.
+///
+/// And the same three things make it a wrong answer rather than a missed one:
+/// an exported function has callers this pass cannot see, a dispatched one is
+/// reached through a table whose signature belongs to the class that declared
+/// the method, and a call that is not direct is not one this pass can rewrite.
+///
+/// `docs/records/0019` measures why it is worth having: a returned `unknown`
+/// in the node profile is almost always a value the caller immediately tests
+/// and unwraps, which is the shape where the tag is written and read and never
+/// otherwise looked at.
+pub fn narrow_returns(program: &mut Program) -> usize {
+    let dispatched: FxHashSet<&str> = program
+        .layouts
+        .iter()
+        .flat_map(|layout| layout.methods.iter().flatten())
+        .map(String::as_str)
+        .collect();
+
+    // What each candidate returns, where that is one thing.
+    let mut agreed: FxHashMap<usize, HirType> = FxHashMap::default();
+    for (at, func) in program.funcs.iter().enumerate() {
+        if func.exported
+            || dispatched.contains(func.name.as_str())
+            || func.return_type != HirType::Erased
+        {
+            continue;
+        }
+        if let Some(representation) = returned_representation(func) {
+            agreed.insert(at, representation);
+        }
+    }
+    if agreed.is_empty() {
+        return 0;
+    }
+
+    let by_name: FxHashMap<&str, usize> = program
+        .funcs
+        .iter()
+        .enumerate()
+        .map(|(index, func)| (func.name.as_str(), index))
+        .collect();
+
+    // And every call site has to be one that would unwrap the result anyway.
+    let mut sunk: FxHashSet<usize> = FxHashSet::default();
+    for caller in &program.funcs {
+        for index in 0..caller.values.len() {
+            let OpKind::Call {
+                callee: Callee::Direct(name),
+                ..
+            } = &caller.values[index].kind
+            else {
+                continue;
+            };
+            let Some(&at) = by_name.get(name.as_str()) else {
+                continue;
+            };
+            if agreed.contains_key(&at)
+                && !only_unwrapped_value(caller, ValueId(u32::try_from(index).unwrap_or(0)))
+            {
+                sunk.insert(at);
+            }
+        }
+    }
+
+    let chosen: Vec<(usize, HirType)> = agreed
+        .into_iter()
+        .filter(|(at, _)| !sunk.contains(at))
+        .collect();
+    if chosen.is_empty() {
+        return 0;
+    }
+
+    for (at, representation) in &chosen {
+        retype_return(&mut program.funcs[*at], representation);
+    }
+    let targets: FxHashMap<String, HirType> = chosen
+        .iter()
+        .map(|(at, representation)| (program.funcs[*at].name.clone(), representation.clone()))
+        .collect();
+    for caller in &mut program.funcs {
+        unwrap_results(caller, &targets);
+    }
+    chosen.len()
+}
+
+/// The one representation a function returns, where there is one.
+///
+/// Every `return` has to be returning something it erased *here*: a value
+/// erased somewhere else carries a tag this pass did not choose, and dropping
+/// the erasure would hand the caller a payload under the wrong one.
+///
+/// A function with no `return` of a value is not a candidate. It cannot be
+/// wrong, but there is nothing to narrow and saying so keeps the caller-side
+/// rewrite from having to ask.
+fn returned_representation(func: &Func) -> Option<HirType> {
+    let mut found: Option<HirType> = None;
+    for block in &func.blocks {
+        let super::Terminator::Return(Some(returned)) = block.terminator else {
+            continue;
+        };
+        let OpKind::Erase { value } = func.value(returned).kind else {
+            return None;
+        };
+        let representation = func.value(value).ty.clone();
+        if representation == HirType::Erased {
+            return None;
+        }
+        match &found {
+            None => found = Some(representation),
+            Some(seen) if *seen == representation => {}
+            Some(_) => return None,
+        }
+    }
+    found
+}
+
+/// Return the value that was about to be erased, rather than the erasure.
+fn retype_return(func: &mut Func, representation: &HirType) {
+    func.return_type = representation.clone();
+    for block in &mut func.blocks {
+        let super::Terminator::Return(Some(returned)) = block.terminator else {
+            continue;
+        };
+        if let OpKind::Erase { value } = func.values[returned.0 as usize].kind {
+            block.terminator = super::Terminator::Return(Some(value));
+        }
+    }
+}
+
+/// Take the result of a narrowed call as what it now is.
+fn unwrap_results(caller: &mut Func, targets: &FxHashMap<String, HirType>) {
+    let mut narrowed: FxHashMap<ValueId, HirType> = FxHashMap::default();
+    for index in 0..caller.values.len() {
+        let OpKind::Call {
+            callee: Callee::Direct(name),
+            ..
+        } = &caller.values[index].kind
+        else {
+            continue;
+        };
+        if let Some(representation) = targets.get(name.as_str()) {
+            narrowed.insert(
+                ValueId(u32::try_from(index).unwrap_or(0)),
+                representation.clone(),
+            );
+        }
+    }
+    if narrowed.is_empty() {
+        return;
+    }
+    for (id, representation) in &narrowed {
+        caller.values[id.0 as usize].ty = representation.clone();
+    }
+    unwrap_uses(caller, &narrowed);
+}
+
 /// What every direct caller passes to each candidate's erased parameters.
 ///
 /// Fills `agreed` with the one representation a position sees, and `sunk` with
@@ -356,12 +526,23 @@ fn only_unwrapped(func: &Func, position: usize) -> bool {
     else {
         return false;
     };
-    let parameter = ValueId(u32::try_from(parameter).unwrap_or(0));
+    only_unwrapped_value(func, ValueId(u32::try_from(parameter).unwrap_or(0)))
+}
+
+/// Whether every use of one value would unwrap it anyway.
+///
+/// Keyed on the value rather than on where it came from, because the question
+/// is asked at both ends: of a *parameter* inside the callee, and of a *call's
+/// result* inside each caller. It is the same question either way -- does
+/// anything here want the general representation -- and having it in one place
+/// is what makes the return pass the parameter pass read backwards rather than
+/// a second implementation of it.
+fn only_unwrapped_value(func: &Func, value: ValueId) -> bool {
     for op in &func.values {
         match &op.kind {
-            OpKind::Unerase { value } | OpKind::TagOf { value } if *value == parameter => {}
+            OpKind::Unerase { value: used } | OpKind::TagOf { value: used } if *used == value => {}
             other => {
-                if super::verify::operands(other).contains(&parameter) {
+                if super::verify::operands(other).contains(&value) {
                     return false;
                 }
             }
@@ -370,12 +551,11 @@ fn only_unwrapped(func: &Func, position: usize) -> bool {
     !func
         .blocks
         .iter()
-        .any(|block| super::verify::terminator_operands(&block.terminator).contains(&parameter))
+        .any(|block| super::verify::terminator_operands(&block.terminator).contains(&value))
 }
 
 /// Give a parameter its concrete representation and unwrap its uses.
 fn retype_parameter(func: &mut Func, position: usize, representation: &HirType) {
-    let tag = super::tags::of_representation(representation);
     func.params[position].ty = representation.clone();
 
     let mut parameter = None;
@@ -386,16 +566,31 @@ fn retype_parameter(func: &mut Func, position: usize, representation: &HirType) 
         }
     }
     let Some(parameter) = parameter else { return };
+    unwrap_uses(func, &FxHashMap::from_iter([(parameter, representation.clone())]));
+}
 
+/// Rewrite the uses of values that have stopped being erased.
+///
+/// An unerase of one is now the identity and a tag read of one is now a
+/// constant. Neither is removed here: that is `simplify`'s job and `fold`'s,
+/// and a pass that swept up after itself would be two passes wearing one name.
+///
+/// Batched over every narrowed value at once, because the substitution walks
+/// the whole function and doing it per value made the pass quadratic in the
+/// number of calls a function makes.
+fn unwrap_uses(func: &mut Func, narrowed: &FxHashMap<ValueId, HirType>) {
     let mut replacements: FxHashMap<ValueId, ValueId> = FxHashMap::default();
     for index in 0..func.values.len() {
         let id = ValueId(u32::try_from(index).unwrap_or(0));
         match func.values[index].kind {
-            OpKind::Unerase { value } if value == parameter => {
-                replacements.insert(id, parameter);
+            OpKind::Unerase { value } if narrowed.contains_key(&value) => {
+                replacements.insert(id, value);
             }
-            OpKind::TagOf { value } if value == parameter => {
-                func.values[index].kind = OpKind::ConstInt(i64::from(tag));
+            OpKind::TagOf { value } => {
+                if let Some(representation) = narrowed.get(&value) {
+                    let tag = super::tags::of_representation(representation);
+                    func.values[index].kind = OpKind::ConstInt(i64::from(tag));
+                }
             }
             _ => {}
         }

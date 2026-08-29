@@ -45,3 +45,54 @@ function addOne(value: unknown): number {
 export function unerased(n: number): number {
   return addOne(n);
 }
+
+// A module-scope `unknown`, which is a static in C.
+//
+// Worth an example of its own because the *initializer* is the part that goes
+// wrong: an erased global starts as `undefined`, and writing that as a call to
+// `nts_value_of_undefined()` is not a constant expression, so the translation
+// unit did not compile. Nothing about the HIR was wrong and no test noticed.
+let held: unknown = 7;
+
+export function fromAGlobal(n: number): number {
+  held = n;
+  return typeof held === "number" ? n + 1 : -1;
+}
+
+// An optional parameter, which the caller has to supply as `undefined`.
+//
+// The call goes out with the same number of arguments the callee declares —
+// `f()` and `f(x)` both reach a function of one parameter — so the absence is
+// a value like any other.
+function tag(label?: string): number {
+  return label === undefined ? 0 : label.length;
+}
+
+export function omitted(n: number): number {
+  return tag() + tag("abc") + n;
+}
+
+// Reassigning a name whose declaration says `unknown`.
+//
+// A binding is an SSA value rather than a slot, so nothing but the declaration
+// records what it is meant to hold — and an assignment has to keep it. Binding
+// the raw double instead left the declared type and the stored representation
+// disagreeing, and `typeof held` then matched neither the primitive path nor
+// the erased one.
+export function reassigned(n: number): number {
+  let held: unknown = "text";
+  held = n;
+  return typeof held === "number" ? n + 1 : -1;
+}
+
+// The same thing where the two assignments are in different branches, which is
+// where disagreeing representations meet: the join has one type or it has none.
+export function acrossABranch(n: number): number {
+  let held: unknown = 0;
+  if (n > 0) {
+    held = "positive";
+  } else {
+    held = n;
+  }
+  return typeof held === "string" ? 1 : 2;
+}

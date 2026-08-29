@@ -316,7 +316,9 @@ fn edges_of(terminator: &super::Terminator) -> Vec<(BlockId, Vec<ValueId>)> {
             (*then_target, then_args.clone()),
             (*else_target, else_args.clone()),
         ],
-        super::Terminator::Return(_) | super::Terminator::Unreachable => Vec::new(),
+        super::Terminator::Return(_)
+        | super::Terminator::Unreachable
+        | super::Terminator::FellThrough => Vec::new(),
     }
 }
 
@@ -710,7 +712,9 @@ fn retarget(terminator: &mut super::Terminator, slot: usize, to: BlockId) -> Vec
                 std::mem::take(else_args)
             }
         }
-        super::Terminator::Return(_) | super::Terminator::Unreachable => Vec::new(),
+        super::Terminator::Return(_)
+        | super::Terminator::Unreachable
+        | super::Terminator::FellThrough => Vec::new(),
     }
 }
 

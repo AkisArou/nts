@@ -987,7 +987,11 @@ fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagno
                     // wrote is assigned by `module#init` -- which is where
                     // every module-scope initializer that is not a constant
                     // already runs.
-                    HirType::Erased => "nts_value_of_undefined()".to_owned(),
+                    //
+                    // The macro rather than the accessor, because this is a
+                    // static's initializer and C wants a constant expression
+                    // there. The call compiled everywhere else and not here.
+                    HirType::Erased => "NTS_VALUE_UNDEFINED".to_owned(),
                     _ => float_literal(global.initial),
                 }
             ),
@@ -2395,9 +2399,16 @@ fn emit_terminator(
             writer.line(origin, format!("return {cast}{};", value_name(*value)));
         }
         Terminator::Return(None) => writer.line(origin, "return;"),
-        Terminator::Unreachable => {
+        Terminator::Unreachable | Terminator::FellThrough => {
             // A claim the compiler made. Saying so lets the C compiler optimize on
             // it, and makes a violated claim a crash rather than a fall-through.
+            //
+            // The same code for both, and safe for the second only because the
+            // verifier has already established that a `FellThrough` block is
+            // unreachable. It is what this rendered before that check existed
+            // that made the check worth having: a setter with a wrong return
+            // type came out as a store followed by this line, which the C
+            // compiler read as a licence to compute anything at all.
             writer.line(origin, "__builtin_unreachable();");
         }
         Terminator::Jump { target, args } => {

@@ -234,6 +234,17 @@ static inline NtsValue nts_value_of_boolean(bool boolean) {
     return value;
 }
 
+/* The undefined value as an *initializer*, for a static.
+ *
+ * C requires a static's initializer to be a constant expression and a call is
+ * not one, so `nts_value_of_undefined()` cannot be written in that position --
+ * a module-scope `unknown` emitted a translation unit that did not compile.
+ * The same value, spelled the way C requires where it is needed. The first
+ * union member is the one an initializer reaches, so the payload is the
+ * `double`. */
+#define NTS_VALUE_UNDEFINED                                                    \
+    { NTS_TAG_UNDEFINED, { 0.0 } }
+
 static inline NtsValue nts_value_of_undefined(void) {
     NtsValue value;
     value.tag = NTS_TAG_UNDEFINED;

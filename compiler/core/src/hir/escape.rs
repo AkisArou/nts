@@ -215,7 +215,7 @@ fn analyze(
                 escapes.values.extend(then_args.iter().copied());
                 escapes.values.extend(else_args.iter().copied());
             }
-            Terminator::Return(None) | Terminator::Unreachable => {}
+            Terminator::Return(None) | Terminator::Unreachable | Terminator::FellThrough => {}
         }
     }
     escapes

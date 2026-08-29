@@ -168,7 +168,7 @@ fn worth_guarding(func: &Func) -> bool {
                 else_target,
                 ..
             } => then_target.0 as usize <= at || else_target.0 as usize <= at,
-            Terminator::Return(_) | Terminator::Unreachable => false,
+            Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => false,
         });
     recurses || loops
 }
@@ -396,6 +396,6 @@ fn retarget(terminator: &mut Terminator, from: BlockId, to: BlockId) {
                 *else_target = to;
             }
         }
-        Terminator::Return(_) | Terminator::Unreachable => {}
+        Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {}
     }
 }

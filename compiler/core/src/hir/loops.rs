@@ -128,7 +128,7 @@ fn predecessors(func: &Func) -> Vec<Vec<(BlockId, Vec<ValueId>)>> {
                 incoming[then_target.0 as usize].push((from, then_args.clone()));
                 incoming[else_target.0 as usize].push((from, else_args.clone()));
             }
-            Terminator::Return(_) | Terminator::Unreachable => {}
+            Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {}
         }
     }
     incoming

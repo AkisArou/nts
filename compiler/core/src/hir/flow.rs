@@ -798,7 +798,7 @@ fn transfer_block(
     }
 
     match &record.terminator {
-        Terminator::Return(_) | Terminator::Unreachable => {}
+        Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {}
         Terminator::Jump { target, args } => {
             changed |= send(func, *target, args, &refinements, values, entry);
         }

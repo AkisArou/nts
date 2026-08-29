@@ -960,6 +960,11 @@ fn render_terminator(terminator: &nts_core::hir::Terminator) -> String {
             args(else_args),
         ),
         Terminator::Unreachable => "unreachable".to_owned(),
+        // Printed apart from `unreachable`, because the difference is the
+        // whole point of the two: this one is an absence the verifier has
+        // to prove dead, and reading a dump is where you would first
+        // notice one where it does not belong.
+        Terminator::FellThrough => "fell through".to_owned(),
     }
 }
 

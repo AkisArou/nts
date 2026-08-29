@@ -148,7 +148,9 @@ pub fn outgoing(
 ) -> Vec<(nts_core::hir::BlockId, Vec<ValueId>)> {
     use nts_core::hir::Terminator;
     match terminator {
-        Terminator::Return(_) | Terminator::Unreachable => Vec::new(),
+        Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {
+            Vec::new()
+        }
         Terminator::Jump { target, args } => vec![(*target, args.clone())],
         Terminator::Branch {
             then_target,

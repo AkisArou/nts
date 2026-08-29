@@ -848,6 +848,7 @@ fn reload_terminator(
             else_args: else_args.into_iter().map(swap).collect(),
         },
         Terminator::Unreachable => Terminator::Unreachable,
+        Terminator::FellThrough => Terminator::FellThrough,
     }
 }
 
@@ -881,6 +882,7 @@ fn retarget(
             else_args: else_args.iter().map(|value| shift(*value)).collect(),
         },
         Terminator::Unreachable => Terminator::Unreachable,
+        Terminator::FellThrough => Terminator::FellThrough,
     }
 }
 

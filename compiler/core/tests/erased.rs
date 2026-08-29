@@ -368,3 +368,113 @@ fn a_parameter_with_one_kind_of_caller_is_not_erased() {
         "a number and an already-erased value reach this one",
     );
 }
+
+/// A returned `unknown` every caller only tests stops being erased.
+///
+/// The mirror of [`a_parameter_with_one_kind_of_caller_is_not_erased`]: the
+/// producer is the body and the consumers are the callers, so the two
+/// conditions are asked of the opposite ends. All four outcomes are in the one
+/// example, because three of them are the ones that would be *wrong* rather
+/// than merely missed.
+#[test]
+fn a_return_of_one_kind_every_caller_unwraps_is_not_erased() {
+    let Some(prepared) = prepared_at("../../examples/unknown-returns") else {
+        return;
+    };
+    let returns = |name: &str| {
+        prepared
+            .program
+            .funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("no function {name}"))
+            .return_type
+            .clone()
+    };
+    assert_eq!(
+        returns("pick"),
+        HirType::Float { bits: 64 },
+        "both returns erase a number and the one caller only tests it",
+    );
+    assert_eq!(
+        returns("mixed"),
+        HirType::Erased,
+        "a number and a string, so there is no one representation to pick",
+    );
+    assert_eq!(
+        returns("open"),
+        HirType::Erased,
+        "exported, so this pass cannot see every caller",
+    );
+    assert_eq!(
+        returns("agreeing"),
+        HirType::Erased,
+        "the returns agree, but the caller hands the result on rather than \
+         unwrapping it",
+    );
+}
+
+/// And the caller stops paying for the tag it no longer needs.
+///
+/// The signature changing is only half of it. If the call site kept unerasing
+/// a value that is no longer erased, the pass would have moved the cost rather
+/// than removed it -- which is what the first placement of `narrow_arrays` did,
+/// after the peepholes instead of before them.
+#[test]
+fn the_caller_stops_unwrapping_a_narrowed_result() {
+    let Some(prepared) = prepared_at("../../examples/unknown-returns") else {
+        return;
+    };
+    let unwrapped = prepared
+        .program
+        .funcs
+        .iter()
+        .find(|f| f.name == "unwrapped")
+        .expect("`unwrapped` is in the program");
+    // Ops the blocks still hold, not entries in the value table: `dce` prunes
+    // the first and leaves the second, so counting values would count the
+    // orphan the narrowing just made.
+    let live = |want: fn(&OpKind) -> bool| {
+        unwrapped
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .filter(|value| want(&unwrapped.value(**value).kind))
+            .count()
+    };
+    assert_eq!(
+        live(|kind| matches!(kind, OpKind::Unerase { .. })),
+        0,
+        "nothing left to unerase",
+    );
+    assert_eq!(
+        live(|kind| matches!(kind, OpKind::TagOf { .. })),
+        0,
+        "and no tag to read",
+    );
+}
+
+/// Every kind of narrowing, counted where the compiler counts it.
+///
+/// `Prepared::narrowed` is what a measurement reads, so it has to agree with
+/// what the passes actually did. Two here: `pick`'s return, and `addOne`'s
+/// parameter is in the other example — this one has one array, one parameter
+/// and one return between them.
+#[test]
+fn the_narrowing_count_matches_what_changed() {
+    let Some(prepared) = prepared_at("../../examples/unknown-returns") else {
+        return;
+    };
+    let narrowed_returns = prepared
+        .program
+        .funcs
+        .iter()
+        .filter(|f| f.name == "pick")
+        .count();
+    assert_eq!(narrowed_returns, 1, "`pick` survives to be narrowed");
+    assert!(
+        prepared.narrowed >= 1,
+        "the count should include `pick`'s return, got {}",
+        prepared.narrowed,
+    );
+}

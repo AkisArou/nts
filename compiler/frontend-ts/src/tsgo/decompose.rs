@@ -41,16 +41,51 @@ use super::types::{self, flags, syntax};
 use super::{Client, TsgoError};
 
 /// How much traffic one decomposition may spend.
+///
+/// # Why this is not a constant
+///
+/// It was, and the constant was 4,096. The node profile has 7,459 distinct
+/// types, so the walk stopped two thirds of the way through and left half the
+/// type graph as placeholders -- and every one of those became a refusal
+/// naming the construct that happened to mention the type rather than the
+/// truncation that caused it. `a class of unrepresentable type` was the
+/// largest refusal in the profile at 160 instances, and it was this.
+///
+/// Lifting the bound took the profile from **171 lowered functions to 391**
+/// for about 3% more frontend time. That is the whole cost of the thing that
+/// was the single largest blocker in the compiler.
+///
+/// So the bound follows the program instead of guessing at it. The walk's job
+/// is the transitive closure of the *reachable* types, and for a program that
+/// does not generate types the closure is proportional to its seeds; a
+/// multiple of the seed count is therefore generous for every program that
+/// terminates naturally, and still a bound for the ones that do not.
 #[derive(Debug, Clone, Copy)]
 pub struct Budget {
-    /// Maximum distinct types to decompose. Reaching it stops the walk.
-    pub max_types: usize,
+    /// Types the walk may decompose per reachable seed.
+    ///
+    /// A backstop rather than a working limit. What it is protecting against
+    /// is generation without end: `PromiseLike<T>` has a `then` returning a
+    /// `PromiseLike` of two fresh type parameters, whose `then` returns
+    /// another, forever. Every step is a genuinely new type, so `done` never
+    /// stops it -- one module reached 2,022 type parameters and 1,011
+    /// instantiations before the cutoff.
+    pub per_seed: usize,
 }
 
 impl Budget {
-    /// Enough for a small program; a placeholder until reachability sets the
-    /// seeds and the bound stops mattering.
-    pub const DEFAULT: Self = Self { max_types: 4096 };
+    /// Enough for a program with almost no types of its own, so that a small
+    /// input is not bounded by a multiple of nearly nothing.
+    pub const FLOOR: usize = 4096;
+
+    pub const DEFAULT: Self = Self { per_seed: 16 };
+
+    /// The absolute ceiling this budget implies for a walk over `seeds`.
+    #[must_use]
+    pub const fn allowance(self, seeds: usize) -> usize {
+        let scaled = seeds.saturating_mul(self.per_seed);
+        if scaled > Self::FLOOR { scaled } else { Self::FLOOR }
+    }
 }
 
 /// The mutable state a decomposition walk carries.
@@ -74,10 +109,14 @@ pub struct DecomposeStats {
     pub discovered: u32,
     /// Round trips spent.
     pub round_trips: u64,
-    /// True when the walk stopped on [`Budget::max_types`] with work outstanding.
+    /// True when the walk stopped on its allowance with work outstanding.
     ///
     /// A partial type graph is legitimate; presenting it as complete is not.
     pub exhausted: bool,
+    /// What the allowance worked out to, for the message that reports hitting
+    /// it. Reporting the *per-seed* figure instead would name a number the
+    /// walk never compared anything against.
+    pub allowance: usize,
     /// Types the checker could not answer for, and which therefore stay
     /// placeholders.
     ///
@@ -165,12 +204,16 @@ impl<'a> Decomposer<'a> {
 
         let mut worklist: Vec<u32> = seeds.into_iter().collect();
         let seeded: FxHashSet<u32> = worklist.iter().copied().collect();
+        // From the seeds this walk was actually given, so that a bigger
+        // program gets a bigger allowance rather than a truncated graph.
+        let allowance = budget.allowance(seeded.len());
+        stats.allowance = allowance;
 
         while let Some(ty) = worklist.pop() {
             if !self.done.insert(ty) {
                 continue;
             }
-            if stats.decomposed as usize >= budget.max_types {
+            if stats.decomposed as usize >= allowance {
                 stats.exhausted = true;
                 break;
             }
@@ -531,12 +574,12 @@ impl<'a> Decomposer<'a> {
                     // where no declaration carries the keyword — and misses a plain
                     // `readonly host: string`. The modifier covers the opposite case.
                     readonly: symbol.check_flags & check_flags::READONLY != 0
-                        || Self::declared_readonly(snapshot, &symbol.name),
+                        || Self::declared_readonly(snapshot, written_name(&symbol.name)),
                     optional: symbol.flags & symbol_flags::OPTIONAL != 0,
                     // A getter is a call, not a load.
                     accessor: accessor_of(symbol.flags),
-                    own: own.contains(&symbol.name),
-                    name: symbol.name.clone(),
+                    own: own.contains(written_name(&symbol.name)),
+                    name: written_name(&symbol.name).to_owned(),
                     ty,
                 })
                 .collect(),
@@ -581,9 +624,11 @@ impl<'a> Decomposer<'a> {
 
         let mut worklist = Vec::new();
         let seeded = FxHashSet::default();
+        let allowance = budget.allowance(sites.len());
+        stats.allowance = allowance;
 
         for (node, handle) in sites {
-            if stats.decomposed as usize >= budget.max_types {
+            if stats.decomposed as usize >= allowance {
                 stats.exhausted = true;
                 break;
             }
@@ -821,8 +866,11 @@ impl<'a> Decomposer<'a> {
             })
             .collect();
 
+        let allowance = budget.allowance(candidates.len());
+        stats.allowance = allowance;
+
         for (node, handle) in candidates {
-            if stats.decomposed as usize >= budget.max_types {
+            if stats.decomposed as usize >= allowance {
                 stats.exhausted = true;
                 break;
             }
@@ -1091,6 +1139,34 @@ fn to_constant(value: &serde_json::Value) -> Option<ConstantValue> {
 }
 
 /// Classify a member symbol as a field or an accessor pair.
+/// The name a member is written under, from the one the checker interned.
+///
+/// A private member is mangled: `#count` declared in the first class of a file
+/// becomes `__#1@#count`. The number is there because a file's private names
+/// share one symbol table and two classes may both declare `#count`; a layout
+/// is per type, so nothing downstream needs it and everything downstream is
+/// looking for what the program wrote.
+///
+/// Carrying the mangled form through meant every read of a private field was
+/// refused — as `a property the type does not declare`, which named neither
+/// the property nor the cause. It was 102 of the node profile's 133 instances
+/// of that refusal and the largest single blocker in it. It also made `own`
+/// false for every private member, because that is decided by comparing
+/// against the *declaration's* name, which is never mangled.
+fn written_name(interned: &str) -> &str {
+    let Some(rest) = interned.strip_prefix("__#") else {
+        return interned;
+    };
+    match rest.split_once('@') {
+        Some((id, written))
+            if !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
+            written
+        }
+        _ => interned,
+    }
+}
+
 fn accessor_of(flags: u32) -> Option<nts_semantic_schema::Accessor> {
     let get = flags & symbol_flags::GET_ACCESSOR != 0;
     let set = flags & symbol_flags::SET_ACCESSOR != 0;
@@ -1156,11 +1232,19 @@ fn mentions_a_type_parameter(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32
 mod tests {
     use super::*;
 
-    // Finite matters more than the number: an unbounded walk over a cyclic type
+    // Bounded matters more than the number: an unbounded walk over a cyclic type
     // graph with a bug in `done` would hang a build rather than fail it. Enforced
-    // at compile time, since both sides are constants.
-    const _: () = assert!(Budget::DEFAULT.max_types > 1000);
-    const _: () = assert!(Budget::DEFAULT.max_types < usize::MAX);
+    // at compile time, since all of it is constant.
+    //
+    // A program with no types of its own still gets room to work in.
+    const _: () = assert!(Budget::DEFAULT.allowance(0) >= Budget::FLOOR);
+    // And the bound grows with the program rather than staying where a guess
+    // put it, which is the whole reason it is a multiple and not a constant.
+    const _: () = assert!(Budget::DEFAULT.allowance(1_000_000) > Budget::FLOOR);
+    // Saturating *up*. The failure this rules out is a seed count large enough
+    // to wrap the multiplication and hand the walk a tiny allowance, which
+    // would look exactly like the truncation this replaced.
+    const _: () = assert!(Budget::DEFAULT.allowance(usize::MAX) == usize::MAX);
 
     #[test]
     fn stats_default_to_nothing_done() {

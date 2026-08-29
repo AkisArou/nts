@@ -320,7 +320,33 @@ pub enum Terminator {
     ///
     /// Distinct from a missing terminator, which is a malformed function. This is
     /// a claim the compiler is making, and a backend may rely on it.
+    ///
+    /// A claim it can *back*: after a `throw`, and on the default arm of a
+    /// resumed generator's state dispatch, control genuinely does not arrive.
+    /// Where the lowering merely has nothing to say, see [`Self::FellThrough`].
     Unreachable,
+    /// Control fell out of the end of a function that owes a value.
+    ///
+    /// Not a claim — an absence. The lowering reached the end of a body with
+    /// nothing to return, and unlike [`Self::Unreachable`] it has no reason of
+    /// its own to believe the block is dead.
+    ///
+    /// It is sound exactly when the block *is* unreachable, which TypeScript
+    /// guarantees for a body it accepted: `while (true) { }` is the shape that
+    /// reaches here legally, and folding the constant condition makes the block
+    /// dead. So the two are separated here rather than checked by a heuristic
+    /// on shape: a reachable `Unreachable` is legitimate and a reachable
+    /// `FellThrough` is not, and nothing about the block itself tells them
+    /// apart.
+    ///
+    /// If one survives to the verifier still reachable, the function's *return
+    /// type* is wrong. That mattered once already: `set ["size"](n: number)`
+    /// read its own name as a return annotation, came out returning `f64` from
+    /// a body that returns nothing, and the emitter rendered the fall-through
+    /// as `__builtin_unreachable()` — a store followed by a licence for the C
+    /// compiler to compute anything at all in the caller. It compiled, every
+    /// test passed, and the answer was wrong by a constant.
+    FellThrough,
 }
 
 impl Terminator {
@@ -328,7 +354,7 @@ impl Terminator {
     #[must_use]
     pub fn successors(&self) -> Vec<BlockId> {
         match self {
-            Self::Return(_) | Self::Unreachable => Vec::new(),
+            Self::Return(_) | Self::Unreachable | Self::FellThrough => Vec::new(),
             Self::Jump { target, .. } => vec![*target],
             Self::Branch {
                 then_target,
@@ -1072,6 +1098,14 @@ pub struct Prepared {
     pub framed: usize,
     /// Operations that turned out to return one of their own operands.
     pub simplified: usize,
+    /// Sites that stopped being erased.
+    ///
+    /// An array whose every store agreed, a parameter whose every caller
+    /// agreed, a return whose every `return` agreed. Each one is a tag that is
+    /// no longer written and no longer tested, which is the whole of what the
+    /// erased representation costs -- `docs/records/0019` measured it at 11%
+    /// on an array and proved it was the tag rather than the size.
+    pub narrowed: usize,
     /// Functions cloned for the closure they are called with.
     pub cloned: usize,
 }
@@ -1405,14 +1439,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // representations: `x | 0` is a coercion until `x` is known to be an `i32`,
     // and then it is nothing. Removing them here keeps every pass below from
     // tracking values that are copies of other values.
-    narrow_erased_arrays(&mut program);
-
-    // `typeof v === "number"` on an erased value, before anything else looks
-    // at it: lowering emits a string allocation and a string compare where the
-    // tag the comparison is really about is already in hand.
-    for func in &mut program.funcs {
-        tags::fold_comparisons(func);
-    }
+    let narrowed = shed_erasure(&mut program);
 
     let mut simplified = 0;
     for func in &mut program.funcs {
@@ -1478,25 +1505,58 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         counting,
         framed,
         simplified,
+        narrowed,
     }
 }
 
-/// Retype every erased array whose stores agree and which never escapes.
+/// Take erasure off every site that never needed it, then fold what that left.
+///
+/// Two steps rather than one pass, because the second is true whether or not
+/// the first fired: `typeof v === "number"` lowers to a string allocation and
+/// a string compare, and the tag the comparison is really about is already in
+/// hand either way.
+fn shed_erasure(program: &mut Program) -> usize {
+    let narrowed = narrow_erasure(program);
+    for func in &mut program.funcs {
+        tags::fold_comparisons(func);
+    }
+    narrowed
+}
+
+/// Take erasure off every site that never needed it.
 ///
 /// Run before the peepholes rather than after: narrowing leaves an unerase that
 /// is now the identity and a tag read that is now a constant, and removing
 /// those is `simplify`'s job and `fold`'s. A pass that also swept up after
 /// itself would be two passes wearing one name -- and the first placement of
 /// this one *was* after them, which left the dead unerase in the emitted C.
-fn narrow_erased_arrays(program: &mut Program) {
-    // Parameters first: a function whose erased parameter becomes a `double`
-    // may then store that `double` into an array, which is what lets the array
-    // narrow too. The other order narrows nothing on the second pass.
-    unerase::narrow_parameters(program);
+fn narrow_erasure(program: &mut Program) -> usize {
+    // Returns and parameters feed each other in both directions. A narrowed
+    // return is a narrowed argument at the next call, which is what lets that
+    // callee's parameter narrow; a narrowed parameter is a narrowed value to
+    // return, which is what lets this function's return narrow. So both to a
+    // fixpoint rather than in whichever order catches most of it.
+    //
+    // It terminates on its own -- every round strictly removes erasure and no
+    // round adds any -- and the bound is there so that a later pass joining
+    // this loop without that property cannot hang the compiler instead of
+    // being noticed.
+    let mut narrowed = 0;
+    for _ in 0..8 {
+        let round = unerase::narrow_returns(program) + unerase::narrow_parameters(program);
+        narrowed += round;
+        if round == 0 {
+            break;
+        }
+    }
+    // Arrays last: a parameter or a result that has become a `double` is a
+    // `double` stored into an array, which is what lets the array narrow too.
+    // The other order narrows nothing on the second pass.
     let escapes = escape::analyze_program(program);
     for (func, escapes) in program.funcs.iter_mut().zip(&escapes) {
-        unerase::narrow_arrays(func, escapes);
+        narrowed += unerase::narrow_arrays(func, escapes);
     }
+    narrowed
 }
 /// Move every allocation that can be in the frame into it.
 ///

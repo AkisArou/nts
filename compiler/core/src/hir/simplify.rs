@@ -187,7 +187,9 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
 pub fn substitute_terminator(terminator: &mut super::Terminator, of: impl Fn(ValueId) -> ValueId) {
     match terminator {
         super::Terminator::Return(Some(value)) => *value = of(*value),
-        super::Terminator::Return(None) | super::Terminator::Unreachable => {}
+        super::Terminator::Return(None)
+        | super::Terminator::Unreachable
+        | super::Terminator::FellThrough => {}
         super::Terminator::Jump { args, .. } => {
             for arg in args {
                 *arg = of(*arg);

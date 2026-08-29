@@ -1075,7 +1075,7 @@ impl TsgoApi {
                     code: "NTS0002".to_owned(),
                     message: format!(
                         "the type graph is partial: decomposition stopped at its budget of {budget_types} types, so any refusal below may be a consequence of the truncation rather than of the construct it names",
-                        budget_types = budget.max_types,
+                        budget_types = run.allowance,
                     ),
                     // The whole compilation rather than a place in it: the
                     // truncation is a property of the program's type graph, and
