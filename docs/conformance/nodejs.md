@@ -151,6 +151,60 @@ now, and the two properties fight: the programs sensitive enough to expose a
 re-arm bug are the racy ones the filter most wants to drop, so that sabotage is
 caught on two seeds in six rather than on all of them. Run several.
 
+**The harness had promises of its own, and no module could see them until one
+could watch promises.** Two: the test body was wrapped in `await new
+Promise(...)`, so a promise continuation ran immediately after every file, and
+`drain` stepped through microtasks with `Promise.resolve().then(...)`, which is
+one microtask either way but allocates a promise on the way. An `async_hooks`
+test with a `before` hook failed on a callback it never scheduled; another
+counted the harness's promise as its own. Node runs `test/parallel` as
+CommonJS with nothing of its own outstanding, so neither promise exists there.
+The body now runs with nothing awaiting it and the drain uses
+`queueMicrotask`. This is the same finding as the module-system one above, one
+level deeper: **the harness is a hidden parameter of any assertion about what
+ran.**
+
+**A sibling module that owns globals has to install them.** Modules name their
+dependencies in a `uses` file, and those were being made available to
+`require` but not installed as globals. An `async_hooks` test calling
+`setImmediate` reached *node's* timers and its result was reported as ours. The
+sabotage run cannot catch this class at all — it blanks our module, and node's
+globals were never ours to blank.
+
+**An allow-list that silently drops a flag turns "this test needs a
+capability" into "this test fails".** Node's tests declare flags in a
+`// Flags:` line, and four of them write `--expose_gc` where the allow-list had
+only `--expose-gc`. V8 takes either spelling and node's own harness passes the
+line through untouched. Those four failed on `globalThis.gc is not a function`,
+which is a statement about how they were run rather than about the module.
+Same disease as a no-op `unref`: a fact about the instrument wearing the
+costume of a fact about the code.
+
+**The binary can change underneath a measurement that takes two hours.** This
+tree is shared with the session that works on the compiler, and `target/release`
+is shared with it too. A full sweep of both axes takes about two hours; a
+compiler commit landed and was rebuilt in the middle of one, so modules measured
+before it used one compiler and modules measured after it used another. The
+resulting `compiles` column was a mixture and has been discarded. Nothing about
+it looked wrong.
+
+It was caught only because three runs of the same runtime commit reported 1,309,
+1,320 and 1,323 lowered functions with `git diff HEAD` empty. What the wrong
+answers cost, in order: three more runs to establish it was not
+nondeterministic; a per-module diff, which showed only `buffer` +1 and `fs` +2
+with their refused counts falling by the same amount; moving the newly added
+files out of the tree to rule them out; and checking `fs` for the
+type-decomposition budget diagnostic — after checking the string was in the
+binary at all, so that its absence meant something. Then `stat` on
+`target/release/nts`, which said 10:04 against the 05:18 recorded earlier.
+
+So the rule for the `compiles` column is now: **`stat` the binary before and
+after the run, and discard the run if the mtime moved.** The test column does
+not need it, because node's tests run TypeScript on node and never touch `nts`.
+This is the same disease as a stale binary reporting no change from changes that
+have landed, and the same as a diagnostic counted out of a tool that never ran:
+an instrument that was not what it was assumed to be, reporting confidently.
+
 ## Modules
 
 Counts are `passed / applicable`. Two kinds of file are outside that.
@@ -167,15 +221,28 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**661 of node's own 1,341 applicable test files pass** across nineteen modules,
-of which 20 are hollow.
+**716 of node's own 1,394 applicable test files pass** across twenty-one
+modules, of which 22 are hollow. **1,435 functions lower.**
 
-`http`'s row was 44 in the previous revision, taken at `8d024b2` before the
-`unref` fix in `96b1553` and labelled as a floor because its suite had not
-completed since. It has now: **89**, at `96b1553`. Fixing a no-op `unref`
-doubled it, which is what the label was there to allow for -- and the reason
-for labelling rather than guessing is that the guess would have been "somewhat
-better", not "twice".
+The two columns come from two runs and are anchored separately, which is worth
+saying rather than hiding behind one number: the test columns from a sweep at
+runtime `d20ad6f`, the `compiles` column from a run at compiler `9bb54c1` with
+the binary's mtime checked before and after and unchanged across it. That
+sweep's own `compiles` column *failed* that check — a compiler rebuild landed
+while it ran — and was discarded, which is what the check is for.
+
+**One caveat on `http`, recorded rather than smoothed over.** The same tree read
+93 in one run and 94 in another twenty minutes apart. At least one file there is
+timing-sensitive, so the row is a number from one anchored run and not a
+constant. The honest reading of that column is 93–94, and the reason for saying
+so is that picking the higher of two disagreeing runs is how a table stops being
+a measurement.
+
+`http`'s row was 44 two revisions ago, taken at `8d024b2` before the `unref`
+fix in `96b1553` and labelled as a floor because its suite had not completed
+since. Fixing a no-op `unref` doubled it, which is what the label was there to
+allow for -- and the reason for labelling rather than guessing is that the
+guess would have been "somewhat better", not "twice".
 
 An earlier revision said 554 here, arrived at by adding each module's gain to
 the previous total as it landed; it had drifted by five. The totals are summed
@@ -213,25 +280,27 @@ headline as much as to the table.
 
 | module | node's tests | hollow | compiles | note |
 | --- | :---: | :---: | :---: | --- |
-| `console` | **22 / 22** | 2 | 49 / 264 | complete |
-| `os` | **4 / 4** | 1 | 56 / 88 | complete |
-| `punycode` | **1 / 1** | 0 | 7 / 9 | complete |
-| `querystring` | **4 / 4** | 0 | 48 / 183 | complete |
-| `timers` | 52 / 54 | 2 | 46 / 156 | complete but for `async_hooks` and the `domain` integration built on it |
-| `path` | **15 / 16** | 0 | 40 / 122 | complete but for `matchesGlob`; the skip is Windows-only |
-| `events` | **28 / 33** | 1 | 42 / 131 | complete but for domains, `EventTarget` and the promise forms |
-| `process` | 43 / 63 | 2 | 77 / 219 | complete but for `process.binding`, `stdin` and workers |
-| `url` | 26 / 36 | 1 | 75 / 367 | complete; exact on the Web Platform Tests corpus |
-| `string_decoder` | **2 / 3** | 0 | 49 / 184 | complete; the failure is the class-vs-function difference |
-| `buffer` | 33 / 60 | 1 | 47 / 172 | the read/write surface is complete and validated |
-| `diagnostics_channel` | 23 / 45 | 0 | 39 / 123 | complete; the failures need node's own publishers |
-| `assert` | 9 / 19 | 0 | 44 / 220 | complete, including `CallTracker` and node's Myers diff |
-| `util` | 7 / 19 | 1 | 48 / 186 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `fs` | 72 / 214 | 2 | 98 / 603 | sync, callback and promise surfaces, the file streams and the watchers |
-| `zlib` | 30 / 64 | 0 | 58 / 532 | the streams, the one-shots, brotli and zstd |
-| `http` | 89 / 350 | 5 | 70 / 585 | a complete HTTP/1.1 implementation, parser included; no HTTPS or HTTP/2 |
-| `net` | 50 / 139 | 0 | 67 / 528 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
-| `stream` | 151 / 195 | 2 | 58 / 498 | the core is complete; `web`, `iter` and `consumers` are absent |
+| `console` | **22 / 22** | 2 | 66 / 381 | complete |
+| `os` | **4 / 4** | 1 | 62 / 141 | complete |
+| `punycode` | **1 / 1** | 0 | 9 / 7 | complete |
+| `querystring` | **4 / 4** | 0 | 54 / 240 | complete |
+| `async_hooks` | 37 / 38 | 1 | 56 / 204 | `AsyncLocalStorage` complete; hooks rest on four primitives nts does not have yet |
+| `timers` | 52 / 54 | 2 | 62 / 249 | complete; the two failures are `domain`, which is a module of its own |
+| `path` | 15 / 16 | 0 | 61 / 159 | complete but for `matchesGlob`; the skip is Windows-only |
+| `readline` | 13 / 15 | 0 | 85 / 569 | the line editor and the splitter; the REPL's history file is the REPL's |
+| `events` | 28 / 33 | 1 | 59 / 230 | complete but for domains, `EventTarget` and the promise forms |
+| `stream` | 151 / 195 | 2 | 76 / 611 | the core is complete; `web`, `iter` and `consumers` are absent |
+| `url` | 26 / 36 | 1 | 99 / 414 | complete; exact on the Web Platform Tests corpus |
+| `process` | 43 / 63 | 2 | 95 / 328 | complete but for `process.binding`, `stdin` and workers |
+| `string_decoder` | 2 / 3 | 0 | 55 / 241 | complete; the failure is the class-vs-function difference |
+| `buffer` | 33 / 60 | 1 | 53 / 229 | the read/write surface is complete and validated |
+| `diagnostics_channel` | 23 / 45 | 0 | 55 / 209 | complete; the failures need node's own publishers |
+| `assert` | 9 / 19 | 0 | 61 / 323 | complete, including `CallTracker` and node's Myers diff |
+| `zlib` | 30 / 64 | 0 | 76 / 650 | the streams, the one-shots, brotli and zstd |
+| `util` | 7 / 19 | 1 | 65 / 284 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `net` | 50 / 139 | 0 | 83 / 646 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
+| `fs` | 72 / 214 | 2 | 117 / 714 | sync, callback and promise surfaces, the file streams and the watchers |
+| `http` | 94 / 350 | 6 | 86 / 820 | a complete HTTP/1.1 implementation, parser included; no HTTPS or HTTP/2 |
 
 The first two columns are what
 
@@ -647,7 +716,7 @@ comparisons, `inherits`, `deprecate`, `debuglog`, `promisify`, `callbackify`,
 `styleText`, `parseEnv`, `stripVTControlCharacters`, `toUSVString`, and the
 `getSystemError*` family.
 
-7 of 18 applicable files pass, which understates it: `util`'s tests compare
+7 of 19 applicable files pass, which understates it: `util`'s tests compare
 `inspect` output character for character, so a single spacing difference fails
 a file that is otherwise entirely correct. The measures that say more:
 
@@ -895,17 +964,155 @@ caller's object and `apply` is one of its properties. `fn.apply = 'not a
 function'` is a strange thing to write and a real thing to receive; node has a
 regression test for it.
 
-What is absent is `async_hooks`. Node emits an init/before/after/destroy
-quartet around every timer and threads an async context frame through it, and
-`domain` is built on that. The two remaining failures are both domain tests:
-`process.domain` is not restored across a timer callback because nothing here
-emits the events `domain` listens for. That is an absent module rather than an
-incomplete one — the timer semantics are whole without it — and those two will
-pass when `async_hooks` exists, not before.
+`async_hooks` is no longer absent, and this is where the prediction in this
+paragraph turned out to be half right. Timers now emit the
+init/before/after/destroy quartet and carry an async context frame across the
+gap they span, so an `AsyncLocalStorage` set before `setTimeout` is readable
+inside it. The two remaining failures did **not** move, because they are
+`domain` tests and `domain` is a module of its own built on top of these
+events, not a consequence of them. "Those two will pass when `async_hooks`
+exists" was wrong in a specific and useful way: it named a dependency and
+assumed it was the only one.
 
 Eight files skip. Three want `NodeEventTarget` to count listeners on a
 non-`AbortSignal` event target, which is `events`' to provide; three want
 `internal/test/binding`; two want child-process helpers.
+
+## `async_hooks`
+
+Two audiences, and the module reads oddly until they are separated.
+`AsyncLocalStorage` is for programs — it answers "which request is this?" and
+is very nearly the only part of this module used in the wild. `createHook` is
+for tools: a callback on every asynchronous resource the process creates,
+enters, leaves and discards, which is enough to reconstruct a causal graph of
+everything that happened. All eleven `AsyncLocalStorage` files pass.
+
+**The two mechanisms underneath are different and easy to conflate.**
+Asynchronous *context* propagates by itself across a promise: V8 attaches it to
+the continuation, so `await` needs no help and there is exactly one seam.
+Asynchronous *identity* propagates nowhere by itself, and neither does context
+across a gap the engine does not bridge — a timer, an immediate, a tick, a
+socket read, a filesystem request. Those are captured when the work is
+scheduled and restored when it runs, by hand, at each site. Which is why this
+module is not self-contained: the machinery lives in `internal/`, as node has
+it, because a program that never mentions `async_hooks` still schedules timers
+and those report themselves.
+
+**Four primitives are declared for the compiled runtime**, and all four are
+things the language cannot express:
+
+| | |
+| --- | --- |
+| `nts_async_context_get` / `_set` | the continuation-preserved slot |
+| `nts_promise_hook_install` / `_uninstall` | watching promises created, entered, left, settled |
+| `nts_on_collected` | a resource became unreachable |
+| `nts_enqueue_microtask` | a microtask that is not a promise |
+
+A value cannot be made to survive an `await` from inside JavaScript, and a
+promise cannot be watched from inside JavaScript, because both are things the
+engine does between one piece of user code and the next. On the node host they
+stand on V8's, through `AsyncLocalStorage` and `v8.promiseHooks`. **A passing
+test therefore says the logic is right given working primitives, and says
+nothing about whether nts has them** — which is a weaker claim than any other
+module's row in this document makes.
+
+**What is instrumented**, each at every callback the runtime hands it:
+`nextTick` (`TickObject`), `Timeout` and `Immediate`, `fs` (`FSREQCALLBACK`, at
+all thirty-one operations), `net.Socket` (`TCPWRAP`) and `net.Server`
+(`TCPSERVERWRAP`), and the HTTP parser (`HTTPINCOMINGMESSAGE` on the server
+side, `HTTPCLIENTREQUEST` on the client side).
+
+**The subtle one is `asyncReset`.** A keep-alive socket handed to a second
+request is doing new work for a new caller, so it takes a new identity and the
+old one is reported destroyed. Without it a connection reused fifty times looks
+to a leak hunter like fifty resources still open, and a hook attributes the
+second request to whichever request happened to release the socket. Node keeps
+the real id on the handle and a mirror on the socket, which `http.Agent` sets
+to `-1` while the connection sits in the pool; the split matters, because if
+the `-1` were the only copy there would be nothing left to report destroyed on
+reuse. Both of node's regression tests for this date from a 2018 bug.
+
+Eight files are not applicable, with the reason recorded per file: four spawn a
+real `node` and assert on the child, and four run the whole test inside a
+`worker_threads` Worker on node's own `async_hooks` from an `eval` string. The
+Worker four were **passing**, and the sabotage run is what found them — they
+pass with this module blanked, because it was never loaded in there.
+
+One hollow pass remains and is being kept rather than explained away: the test
+wraps `runInAsyncScope` in its own `try/catch`, so a blanked `AsyncResource`
+throws a `TypeError` the test swallows. What it actually checks is a native
+abort on mismatched async ids, which nothing here can observe.
+
+## `readline`
+
+Two quite different programs share one class, and the `terminal` flag chooses
+between them.
+
+Without a terminal it is a line splitter: bytes arrive, a `StringDecoder` turns
+them into characters, and every line ending produces a `line` event. That is
+what a program gets when its input is a pipe or a file, and it is nearly all of
+what runs anywhere outside an interactive session.
+
+With a terminal it is an editor. The terminal is in raw mode, so nothing
+arrives pre-assembled — every keystroke is delivered as it happens, and the
+class owns the cursor, the visible line, the history, the kill ring and the
+undo stack. Everything a user believes their terminal is doing, from the left
+arrow to Ctrl+W to meta+y, happens here.
+
+They are one class rather than two because a program cannot know which it will
+get. `createInterface({ input: process.stdin })` is the same call whether stdin
+is a terminal or a pipe, and the `line` events have to mean the same thing.
+
+**The key decoder is a generator, and it will not compile.** A terminal does not
+say which key was pressed; it sends bytes, and for anything that is not a
+printable character those bytes are an escape sequence whose spelling depends
+on which terminal is at the other end — xterm, rxvt, Cygwin and putty disagree,
+and several spell the same key more than one way. Node's decoder is a generator
+driven one character at a time, so the parser's position *is* the program
+counter rather than a set of hand-named states, and this is a transcription of
+it. `nts` reports exactly that:
+
+```
+`yield`, which needs the generator object a call to `function*` returns
+an async generator
+```
+
+Which is the intended order of events. Writing it as an explicit state machine
+would lower today and would not be node's algorithm, and the standing rule here
+is that a refusal naming the real construct is worth more than a workaround
+that hides it.
+
+**`events.on` arrived with it**, because the async iterator over `line` belongs
+in `node:events` and not here. The part that makes it more than three lines is
+backpressure: events arrive whether or not anyone is consuming them, so an
+iterator over a busy emitter is a queue that grows without bound — which is how
+a program that reads lines slower than they arrive runs out of memory rather
+than slowing down. There are high and low water marks, two queues (either
+events are waiting for consumers or consumers are waiting for events, never
+both), and the emitter is paused and resumed across them. Its own test file
+still skips for `internal/event_target`, so it is exercised through `readline`
+rather than directly — worth knowing before trusting it.
+
+The cursor functions are not here. `cursorTo`, `moveCursor`, `clearLine` and
+`clearScreenDown` live in `internal/` because `console.clear()` needs two of
+them, and loading a line editor in order to clear a screen would be absurd;
+node splits them for the same reason. `CSI` is a template tag rather than a
+table of constants, again as node has it, so a sequence reads as
+`` CSI`${row};${col}H` `` at the point of use and the escape and bracket appear
+once.
+
+**Two bugs the suite found that reading had not**, both the same kind. The
+line-ending pattern had U+2028 and U+2029 written as themselves; U+2028 *is* a
+line terminator in JavaScript source, so the regular expression literal ended
+mid-line and every file in the module failed to load with `Invalid regular
+expression: missing /`, pointing at a line that looks perfectly correct. And
+the history object read `context.historySize` to default its own size — node's
+line, but circular here, because the interface's `historySize` *is* the history
+object's `size` and the object does not exist yet when it asks.
+
+Absent: the REPL's history-file persistence, which is the REPL's and not a line
+editor's — a `readline` that read a dotfile in a user's home directory because
+it was constructed would be doing something node does not.
 
 ## `process`
 
@@ -969,6 +1176,15 @@ load. They are in `internal/` now, whose own header had already written down
 why: *a binding defined twice with two slightly different bodies is a bug that
 only shows up in whichever module is tested second.*
 
+**Two `nextTick`s, and only one of them was a tick anybody could observe.**
+`process.nextTick` called the binding directly while `internal/tick.ts` called
+it through the shared implementation, so the same operation under two names did
+two different things: one reported itself to `async_hooks` and carried the
+caller's context to its callback, and the public one — the one programs
+actually use — did neither. Node has one implementation and so does this. It is
+the same finding as the duplicated `nts_uv_err_*` bindings above, one level up:
+not two definitions of a binding, but two callers of one.
+
 43 of 63 applicable files pass, 2 of them hollow; 7 skip and 24 are not
 applicable.
 
@@ -985,7 +1201,7 @@ The module with no native half at all. Node's parser is llhttp, a C library;
 this profile's is TypeScript, so `node:http` here is a complete HTTP/1.1
 implementation rather than a wrapper around one. Once `net` supplies the
 socket, HTTP is a text protocol and there is nothing left that needs the
-operating system. 89 of 350 applicable files pass, 5 of them hollow.
+operating system. 94 of 350 applicable files pass, 6 of them hollow.
 
 Everything round-trips: this client against node's server, node's client
 against this server, and this against itself. Node's client is a strict reader
@@ -1019,6 +1235,22 @@ is empty. Treating it as until-close made every bodiless request send
 **The server refuses to reuse a connection whose request body was never read.**
 Those bytes are still in the socket and would be parsed as the start of the
 next request, which is how a server ends up answering a message nobody sent.
+
+**`IncomingMessage` was constructed with `autoDestroy: false`, and that was a
+guess.** Node uses the stream's default, and destroying a finished readable is
+what emits `close` — so `req.on('close')`, which is how a server learns a
+request is over and how it learns a client hung up mid-request, was never
+firing. The comment beside the option explained the high water mark, which the
+constructor did not set; an unexplained option with a comment about something
+else is worth re-deriving rather than trusting.
+
+The parser is an asynchronous resource, and which one depends on what it is
+parsing: `HTTPINCOMINGMESSAGE` for a request parser, `HTTPCLIENTREQUEST` for a
+response parser. They are the two ends of one connection and a tool watching a
+proxy has to tell them apart. It is freed when the connection goes, which is
+the only moment anyone can say a parser is finished — one sitting between
+messages on a keep-alive socket looks exactly like one that will never be used
+again.
 
 Absent: HTTPS, HTTP/2, `http.OutgoingMessage`'s legacy `_headers` accessors,
 and the informational-response paths beyond `100-continue`.
@@ -1069,6 +1301,22 @@ listener before `connect` resolves — it was found by building `node:http` on
 top, where a client is handed a socket and immediately starts parsing what
 comes back. That is the argument for building the consumer rather than more
 tests for the provider.
+
+A socket and a server are each asynchronous resources now, and every callback
+the runtime hands them — connect, data, end-of-file, read error, write
+completion, shutdown, accept — runs in the owner's scope. This is the case
+`AsyncLocalStorage` exists for: a server that sets a request id and reads it
+back after a socket read, which without this finds whatever the most recent
+connection to arrive had set. The callbacks arrive from the loop with no
+context at all, because the code that opened the connection returned long ago.
+
+The subtle part is `asyncReset`. A keep-alive socket handed to a second request
+is doing new work for a new caller, so it takes a new identity and the old one
+is reported destroyed; a connection reused fifty times would otherwise look to
+a leak hunter like fifty resources still open. Node keeps the real id on the
+handle and a mirror on the socket that `http.Agent` sets to `-1` while the
+connection is pooled, and the split is load-bearing — if the `-1` were the only
+copy there would be nothing left to retire on reuse.
 
 Absent: `BlockList`, `SocketAddress`, the auto-select-family connection
 strategy, and the IPC/child-process paths.
@@ -1151,7 +1399,7 @@ in the numbers said so. The compiler now says that outright when it happens.
 ## `fs`, the asynchronous half
 
 The callback surface, `fs/promises` with `FileHandle`, and
-`createReadStream`/`createWriteStream`. 54 of 214 applicable files pass, up
+`createReadStream`/`createWriteStream`. 72 of 214 applicable files pass, up
 from 11.
 
 The module's own header used to say the callback forms were absent because
@@ -1165,6 +1413,21 @@ One binding per operation, mirroring `uv_fs_*`, rather than a single generic
 dispatch. The generic form would be less code and would have to name operations
 with strings, which moves a mistake the compiler could catch into a place where
 it becomes "no such operation" at run time.
+
+**Every operation here is one filesystem request, which is one asynchronous
+resource** — node calls it an FSReqCallback. Each reports itself to the hooks
+and carries the caller's context to its callback, so an `AsyncLocalStorage` set
+before `fs.readFile` is still set inside it. The wrapping happens where the
+callback is validated, because that is the only line all thirty-one operations
+share: the error-conversion helper looked like the choke point and is not, since
+half the operations use an inline closure instead in order to build a `Stats` or
+a `Dirent` or a `Buffer` first. Instrumenting there would have covered half the
+module and left the other half silently uninstrumented rather than broken.
+
+That wrapper cost a test on its first attempt, and the number is why it was
+found: `fs` went 72 to 71. It forwarded `(error, value)`, and `read` answers
+with `(error, bytesRead, buffer)`. **A fixed arity in a place everything funnels
+through drops arguments silently.**
 
 **The promise forms wrap the callback forms**, where node implements both
 directly on its binding. The only difference that makes is one microtask, which
@@ -1546,6 +1809,75 @@ choice. Within `node:console`, `log(...args: unknown[])` only moves the value �
 a boxed pointer would do. It is `formatWithOptions`, in `node:util`, that
 examines it. The cheapest representation for `console`'s `unknown` is decided
 by a use that is not in `console`.
+
+### Module evaluation, and what a refusal count is a count *of*
+
+A module-scope statement that cannot lower no longer takes the rest of the
+module's initialization with it. Each is tried on its own and skipped alone, so
+a module is not dark because of one line — the other session's work, and the
+difference between "this module does not initialise" and "this line does not".
+
+**111 statements are skipped across the twenty modules**, at `f1c6959`.
+
+The first count of these was 187, and reporting it that way was a mistake worth
+keeping. `internal/errors.ts` is compiled into all twenty programs, so one line
+in it reports twenty times; ranked by *refusals* the top entry was "a class used
+as a value" at 114, which deduplicated to **nine lines**. The ranking inverts
+when you deduplicate — by distinct lines the largest entry is `Object`, which is
+a missing builtin table rather than a representation decision. **A count is only
+a count if you know what its unit is**, and the two units disagree about what to
+do next:
+
+- **by blast radius**, nine lines that wire up prototypes across many modules
+  each;
+- **by distinct work**, fourteen sites wanting one builtin.
+
+Four of those nine lines were `internal/errors.ts`'s
+`reportBaseConstructor(NodeTypeError.prototype, TypeError)` and its siblings —
+76 refusals from four lines — and going to look at them found something the
+refusal count could not have: **they never worked.** The getter went on the
+*base* prototype, and every concrete error class shadows it with the
+`constructor` that class syntax gives it. `err.constructor` had been returning
+`ERR_INVALID_ARG_TYPE` where the comment promised `TypeError` since the file was
+written. It is on all 48 concrete classes now, as node has it, and works.
+
+The way that surfaced is the part to keep. The rewrite was meant to be
+behaviour-preserving, so the check was written to confirm nothing broke; it
+failed, and the same check against the previous commit failed identically.
+**A test written to confirm a refactor is safe is also a test of whether the
+thing was ever working** — and it was nearly not written, for exactly the reason
+that makes it valuable.
+
+Per-module *refused* counts rose as a result — `buffer` 187 to 229 — because 48
+accessors that did not exist are now 48 honest refusals, while lowered stayed at
+1,309. That is the right direction: a refused accessor costs `err.constructor`
+in a compiled build, where a refused module-scope statement cost every value the
+line would have computed.
+
+**And the ranking inverted, because four lines were deleted rather than
+lowered.** What remains, deduplicated, is 39 distinct lines:
+
+| refusals | lines | construct |
+| ---: | ---: | --- |
+| 38 | 5 | a class used as a value |
+| 30 | 14 | `Object` — a global with no definition here |
+| 13 | 7 | a function used as a value |
+| 13 | 2 | a `for...of` of unexpected shape |
+| 7 | 3 | a `for...of` binding of this shape |
+| 5 | 5 | a module-scope variable holding a reference |
+| 3 | 1 | a name from an enclosing scope |
+| 2 | 2 | a closure over a name from more than one scope up |
+
+`Object` is now the largest by distinct lines, 14 to 5, and it is the entry that
+is a missing builtin table rather than a representation decision. The five
+remaining class-as-value lines are `EventEmitter.prototype.on =
+EventEmitter.prototype.addListener` and two beside it in `events` (ten modules
+each), plus one in `stream/main.ts` and one in `stream/transform.ts` (four
+each). Unlike the four that went, those are node's own shape and cannot be
+written away.
+
+Both counts were reproduced independently from the other session's tree at
+`d728129`, which is the only reason they are stated without hedging.
 
 ## What stops `path` compiling
 
