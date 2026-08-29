@@ -56,8 +56,8 @@ import {
 } from "../../internal/errors.ts";
 import { validateArray, validateObject, validateString } from "../../internal/validators.ts";
 import { uvException } from "../../internal/uv.ts";
+import { nextTick } from "../../internal/tick.ts";
 
-declare function nts_next_tick(callback: (...args: never) => void, args: unknown[]): void;
 declare function nts_process_pid(): number;
 declare function nts_process_ppid(): number;
 declare function nts_platform(): string;
@@ -275,7 +275,12 @@ class Process extends EventEmitter {
     if (typeof callback !== "function") {
       throw new ERR_INVALID_ARG_TYPE("callback", "Function", callback);
     }
-    nts_next_tick(callback as unknown as (...a: never) => void, args);
+    // Through the shared implementation rather than the binding, because a
+    // tick is an asynchronous resource: it reports itself to `async_hooks` and
+    // it carries the current context to its callback. Calling the binding here
+    // made `process.nextTick` and the internal one two different things, and
+    // only one of them was a tick anybody could observe.
+    nextTick(callback, ...args);
   }
 
   cwd(): string {

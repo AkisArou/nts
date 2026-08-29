@@ -140,7 +140,17 @@ const PASSED_THROUGH_FLAGS = new Set([
 function nodeFlags(path) {
   const first = readFileSync(path, "utf8").split("\n", 20).find((l) => l.startsWith("// Flags:"));
   if (!first) return [];
-  return first.slice("// Flags:".length).trim().split(/\s+/).filter((f) => PASSED_THROUGH_FLAGS.has(f));
+  return first
+    .slice("// Flags:".length)
+    .trim()
+    .split(/\s+/)
+    // V8's flags take either spelling and node's own harness passes the line
+    // through untouched, so `--expose_gc` and `--expose-gc` are one flag.
+    // Matching only the hyphen spelling silently dropped it for four files,
+    // which then failed on `globalThis.gc is not a function` -- a statement
+    // about how they were run, not about the module.
+    .map((f) => f.replaceAll("_", "-"))
+    .filter((f) => PASSED_THROUGH_FLAGS.has(f));
 }
 
 const rows = [];
