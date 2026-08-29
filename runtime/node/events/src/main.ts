@@ -17,12 +17,14 @@
 // case.
 
 import {
+  AbortError,
   ERR_INVALID_ARG_TYPE,
   ERR_UNHANDLED_ERROR,
 } from "../../internal/errors.ts";
 import {
-  validateBoolean, validateFunction, validateNumberRange,
+  validateBoolean, validateFunction, validateInteger, validateNumberRange, validateObject,
 } from "../../internal/validators.ts";
+import type { AbortSignalLike } from "../../internal/abort.ts";
 import { nextTick } from "../../internal/tick.ts";
 import { inspect } from "../../util/src/inspect.ts";
 
@@ -682,6 +684,181 @@ export function once(
 
     emitter.once(name, eventListener);
   });
+}
+
+/**
+ * Hand the listener the first argument rather than the whole array.
+ *
+ * `on(emitter, "line")` yields `["a line"]`, because an event can carry any
+ * number of arguments and the general answer is the list. A `line` event never
+ * carries more than one, and `for await (const line of rl)` should yield the
+ * line rather than a one-element array -- so `node:readline` asks for this.
+ * Node has the same escape hatch under the same name.
+ */
+export const kFirstEventParam: unique symbol = Symbol("nodejs.kFirstEventParam");
+
+export interface OnOptions {
+  signal?: AbortSignalLike | undefined;
+  /** Pause the emitter once this many events are waiting. */
+  highWaterMark?: number | undefined;
+  /** Resume it once fewer than this many are. */
+  lowWaterMark?: number | undefined;
+  [kFirstEventParam]?: boolean | undefined;
+}
+
+interface PausableEmitter extends EventEmitter {
+  pause?(): unknown;
+  resume?(): unknown;
+}
+
+/**
+ * An event, as an async iterable.
+ *
+ * The interesting part is the backpressure, and it is the reason this cannot
+ * be three lines. Events arrive whether or not anyone is consuming them, so an
+ * iterator over a busy emitter is a queue that grows without bound -- which is
+ * how a program that reads lines slower than they arrive runs out of memory
+ * rather than slowing down. So the queue has a high-water mark: cross it and
+ * the emitter is paused; drain below the low mark and it is resumed.
+ *
+ * Two queues, not one. Either events are waiting for a consumer or consumers
+ * are waiting for an event, never both, and keeping them apart means `next`
+ * never has to ask which situation it is in -- it looks at the one that could
+ * have something in it.
+ */
+export function on(
+  emitter: PausableEmitter,
+  event: string | symbol,
+  options: OnOptions = {},
+): AsyncIterableIterator<unknown> {
+  validateObject(options, "options");
+  const signal = options.signal;
+  if (signal !== undefined && signal !== null) {
+    if (typeof (signal as AbortSignalLike).addEventListener !== "function") {
+      throw new ERR_INVALID_ARG_TYPE("options.signal", "AbortSignal", signal);
+    }
+    if (signal.aborted) throw new AbortError();
+  }
+
+  // Unbounded by default, because `on` is also used on emitters that cannot be
+  // paused and pausing one that cannot would be worse than queueing.
+  const highWaterMark = options.highWaterMark ?? Number.MAX_SAFE_INTEGER;
+  validateInteger(highWaterMark, "options.highWaterMark", 1);
+  const lowWaterMark = options.lowWaterMark ?? 1;
+  validateInteger(lowWaterMark, "options.lowWaterMark", 1);
+
+  // Index-based rather than `shift`, which is linear: this queue is drained
+  // one element at a time and the whole point of it is to hold many.
+  const unconsumedEvents: unknown[] = [];
+  let eventsHead = 0;
+  const unconsumedPromises: {
+    resolve(r: IteratorResult<unknown>): void;
+    reject(e: unknown): void;
+  }[] = [];
+  let promisesHead = 0;
+
+  let paused = false;
+  let error: unknown = null;
+  let finished = false;
+
+  const pendingEvents = (): number => unconsumedEvents.length - eventsHead;
+  const pendingPromises = (): number => unconsumedPromises.length - promisesHead;
+
+  const done = (): IteratorResult<unknown> => ({ value: undefined, done: true });
+
+  function closeHandler(): Promise<IteratorResult<unknown>> {
+    if (signal) signal.removeEventListener("abort", abortListener);
+    emitter.removeListener(event, listener);
+    emitter.removeListener("error", errorHandler);
+    for (const name of closeEvents) emitter.removeListener(name, closeHandler);
+    finished = true;
+    paused = false;
+    while (pendingPromises() > 0) {
+      (unconsumedPromises[promisesHead++] as { resolve(r: IteratorResult<unknown>): void })
+        .resolve(done());
+    }
+    return Promise.resolve(done());
+  }
+
+  function eventHandler(value: unknown): void {
+    if (pendingPromises() === 0) {
+      unconsumedEvents.push(value);
+      if (!paused && pendingEvents() > highWaterMark && typeof emitter.pause === "function") {
+        paused = true;
+        emitter.pause();
+      }
+      return;
+    }
+    (unconsumedPromises[promisesHead++] as { resolve(r: IteratorResult<unknown>): void })
+      .resolve({ value, done: false });
+  }
+
+  function errorHandler(err: unknown): void {
+    if (pendingPromises() === 0) error = err;
+    else (unconsumedPromises[promisesHead++] as { reject(e: unknown): void }).reject(err);
+    void closeHandler();
+  }
+
+  function abortListener(): void {
+    errorHandler(new AbortError());
+  }
+
+  const first = options[kFirstEventParam] === true;
+  const listener = first
+    ? (value: unknown): void => eventHandler(value)
+    : (...args: unknown[]): void => eventHandler(args);
+
+  emitter.on(event, listener as Listener);
+  if (event !== "error") emitter.on("error", errorHandler as Listener);
+  const closeEvents: string[] = ["close"];
+  for (const name of closeEvents) emitter.on(name, closeHandler as unknown as Listener);
+  if (signal) signal.addEventListener("abort", abortListener, { once: true });
+
+  const iterator: AsyncIterableIterator<unknown> = {
+    next(): Promise<IteratorResult<unknown>> {
+      if (pendingEvents() > 0) {
+        const value = unconsumedEvents[eventsHead++];
+        // Released only once the backlog is genuinely small, not at the first
+        // free slot: resuming at the high mark would pause and resume on every
+        // single event.
+        if (paused && pendingEvents() < lowWaterMark && typeof emitter.resume === "function") {
+          paused = false;
+          emitter.resume();
+        }
+        return Promise.resolve({ value, done: false });
+      }
+
+      if (error !== null) {
+        const rejected = Promise.reject(error);
+        error = null;
+        return rejected;
+      }
+
+      if (finished) return closeHandler();
+
+      return new Promise((resolve, reject) => {
+        unconsumedPromises.push({ resolve, reject });
+      });
+    },
+
+    return(): Promise<IteratorResult<unknown>> {
+      return closeHandler();
+    },
+
+    throw(err: unknown): Promise<IteratorResult<unknown>> {
+      if (!err || !(err instanceof Error)) {
+        throw new ERR_INVALID_ARG_TYPE("EventEmitter.AsyncIterator", "Error", err);
+      }
+      errorHandler(err);
+      return Promise.resolve(done());
+    },
+
+    [Symbol.asyncIterator](): AsyncIterableIterator<unknown> {
+      return iterator;
+    },
+  };
+
+  return iterator;
 }
 
 export default EventEmitter;

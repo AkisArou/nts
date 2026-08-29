@@ -11,17 +11,45 @@ import { validateFunction } from "./validators.ts";
 import { nextTick } from "./tick.ts";
 import type { WritableLike } from "./stdio.ts";
 
-/** Control Sequence Introducer: ESC followed by `[`. */
-const CSI_ = "\u001b[";
+const ESCAPE = "\u001b";
 
-/** The sequences node names, `lib/internal/readline/utils.js`. */
-export const CSI = {
-  kEscape: "\u001b",
-  kClearToLineBeginning: `${CSI_}1K`,
-  kClearToLineEnd: `${CSI_}0K`,
-  kClearLine: `${CSI_}2K`,
-  kClearScreenDown: `${CSI_}0J`,
-} as const;
+/**
+ * Build a Control Sequence Introducer sequence: ESC, `[`, and the body.
+ *
+ * A template tag, which is node's shape and worth keeping: the sequences are
+ * written as ``CSI`${row};${col}H` `` at the point of use, so the escape and
+ * the bracket appear once here rather than in every caller, and what is left
+ * at each call site is the part that differs.
+ *
+ * The named constants below hang off it because node hangs them off it, and
+ * because a program that has the function usually wants the common ones too.
+ */
+interface CSITag {
+  (strings: TemplateStringsArray | readonly string[], ...args: unknown[]): string;
+  kEscape: string;
+  kClearToLineBeginning: string;
+  kClearToLineEnd: string;
+  kClearLine: string;
+  kClearScreenDown: string;
+}
+
+export const CSI = ((
+  strings: TemplateStringsArray | readonly string[],
+  ...args: unknown[]
+): string => {
+  let ret = `${ESCAPE}[`;
+  for (let n = 0; n < strings.length; n++) {
+    ret += strings[n];
+    if (n < args.length) ret += String(args[n]);
+  }
+  return ret;
+}) as CSITag;
+
+CSI.kEscape = ESCAPE;
+CSI.kClearToLineBeginning = CSI`1K`;
+CSI.kClearToLineEnd = CSI`0K`;
+CSI.kClearLine = CSI`2K`;
+CSI.kClearScreenDown = CSI`0J`;
 
 type Callback = (err?: Error | null) => void;
 
@@ -60,7 +88,7 @@ export function cursorTo(
   if (typeof x !== "number") throw new ERR_INVALID_CURSOR_POS();
 
   // Terminal coordinates are one-based; node's API is zero-based.
-  const data = typeof y !== "number" ? `${CSI_}${x + 1}G` : `${CSI_}${y + 1};${x + 1}H`;
+  const data = typeof y !== "number" ? `${ESCAPE}[${x + 1}G` : `${ESCAPE}[${y + 1};${x + 1}H`;
   return stream.write(data, callback);
 }
 
@@ -83,15 +111,15 @@ export function moveCursor(
   let data = "";
 
   if (dx < 0) {
-    data += `${CSI_}${-dx}D`;
+    data += `${ESCAPE}[${-dx}D`;
   } else if (dx > 0) {
-    data += `${CSI_}${dx}C`;
+    data += `${ESCAPE}[${dx}C`;
   }
 
   if (dy < 0) {
-    data += `${CSI_}${-dy}A`;
+    data += `${ESCAPE}[${-dy}A`;
   } else if (dy > 0) {
-    data += `${CSI_}${dy}B`;
+    data += `${ESCAPE}[${dy}B`;
   }
 
   return stream.write(data, callback);

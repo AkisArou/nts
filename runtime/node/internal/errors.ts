@@ -953,3 +953,19 @@ export class ERR_INVALID_ASYNC_ID extends NodeRangeError {
     this.name = "RangeError";
   }
 }
+
+/**
+ * `readline was closed` — an operation on an interface that is finished.
+ *
+ * An `Error` rather than a `TypeError`, because the arguments were fine: the
+ * mistake is when it was called, not what with.
+ */
+export class ERR_USE_AFTER_CLOSE extends NodeError {
+  override readonly code = "ERR_USE_AFTER_CLOSE";
+  override get ["constructor"](): unknown { return Error; }
+
+  constructor(name: string) {
+    super(`${name} was closed`);
+    this.name = "Error";
+  }
+}
