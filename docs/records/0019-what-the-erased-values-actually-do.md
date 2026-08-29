@@ -499,3 +499,55 @@ is the genuinely polymorphic population -- the 31% the measurement calls
   duplication would give each its own specialization instead of sinking the
   site. That is the version the document calls polymorphic recovery, and it is
   strictly more than this.
+
+# A union is a closed erased value
+
+Heterogeneous unions were unimplemented -- `number | string`,
+`number | undefined` and a union of object types all refused, and only a union
+whose members shared one representation (`"on" | "off"`) worked. They are
+implemented now, and almost nothing was built for them.
+
+A union and `unknown` want the same machine value. The difference is what the
+checker knows, not what the machine holds:
+
+| | tag domain |
+| --- | --- |
+| `unknown` | any of five |
+| `number \| string` | one of two |
+| `number \| undefined` | one of two |
+
+So a union lowers to `HirType::Erased`, and `Erase`, `TagOf`, `Unerase`, the
+collector's erased slots, the `typeof` fold and both specialization passes all
+apply to it unchanged.
+
+## `number | undefined` is why a union needs a tag
+
+A nullable *reference* has always worked here: the absence is a null pointer.
+A nullable number cannot be, because a double has no spare bit pattern to be
+absent in — which is exactly the situation a tag exists for. The old code said
+so, in the line that refused it: "nowhere to put the absence."
+
+`undefined` reaching an erased slot is `ConstNull` with an erased type, and
+`v === undefined` is a tag test in which neither operand is ever built.
+
+## Naming: kept, and the prose corrected instead
+
+`NtsValue` and `HirType::Erased` both keep their names, deliberately.
+
+Naming the mechanism after either source construct would be wrong for the
+other, and both produce it. `Erased` is accurate for a union too: the
+*specific* type is erased at compile time and recovered from the tag, which is
+the same fact with a smaller domain. What was wrong was a dozen comments
+written when `unknown` was the only source; those say what the thing is now.
+
+## What is still refused, and it is a different problem
+
+A union of object types — `{kind: "circle"} | {kind: "square"}`. Every member is
+a pointer, so the *value* is representable; what is missing is that a field
+lives at a different offset in each member, so reading `v.kind` needs the
+layouts reconciled or the discriminant tested first. Discriminated unions are
+not the same feature as this one and should not be assumed to fall out of it.
+
+The refusal says so now. It used to say "`kind`, a property of a value with no
+fields", which is the wrong sentence about something that has several sets of
+them.

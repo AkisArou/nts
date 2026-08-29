@@ -166,7 +166,20 @@ typedef enum NtsTag {
  * the memory traffic of the extra eight bytes and only 2.4 is the tag test.
  * Swapping the representation should therefore be a change to this file, and it
  * only is if nothing outside reaches past these functions. */
-/* Sixteen bytes: a tag beside a payload.
+/* A value that carries its own type: a tag beside a payload, sixteen bytes.
+ *
+ * Not named for either thing that produces one. `unknown` lowers to this, and
+ * so does a heterogeneous union like `number | string` or `number | undefined`
+ * -- the difference between them is what the *checker* knows, not what the
+ * machine holds, and a name saying "unknown" or "union" would be wrong for the
+ * other half. What it is, is the representation a value takes when its static
+ * type does not decide one.
+ *
+ * A `number | undefined` is the case that makes the tag unavoidable. A nullable
+ * reference can be a null pointer, which is what this compiler has always done;
+ * a nullable number cannot, because a double has no spare bit pattern to be
+ * absent in.
+ *
  *
  * NaN-boxing this into eight was tried and reverted, and the measurement is the
  * reason. It halved the value -- an erased array back to a typed array's

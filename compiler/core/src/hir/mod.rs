@@ -80,7 +80,16 @@ pub enum HirType {
     Float {
         bits: u8,
     },
-    /// A value carrying its own type, for a slot the checker typed `unknown`.
+    /// A value carrying its own type, where the static type does not decide one.
+    ///
+    /// Two source constructs reach here. `unknown` is the open case -- the tag
+    /// may be any of them. A heterogeneous union is the *closed* case:
+    /// `number | string` is the same value with the tag restricted to two, and
+    /// `number | undefined` is why a union needs a tag at all, since a double
+    /// has no spare bit pattern to be absent in the way a pointer has null.
+    ///
+    /// Still called `Erased` for both, and accurately: in either case the
+    /// *specific* type is erased at compile time and recovered from the tag.
     ///
     /// One machine value that can hold anything reachable, together with a tag
     /// saying what it currently holds. `TypeKind::Any` deliberately does *not*

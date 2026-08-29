@@ -2248,6 +2248,12 @@ fn emit_op(
         // The absent reference. Typed, because C distinguishes a null
         // `NtsString *` from a null `NtsObj_Point *` even though the address is
         // the same one.
+        // The absent value in an erased slot is a tag, not a null pointer:
+        // there is nothing to point at and `undefined` is a kind of value here
+        // rather than the absence of one.
+        OpKind::ConstNull if op.ty == HirType::Erased => {
+            format!("{name} = nts_value_of_undefined();")
+        }
         OpKind::ConstNull => {
             let ty = c_type_of(context.program, &op.ty, &op.origin)?;
             format!("{name} = ({ty})0;")

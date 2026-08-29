@@ -2003,24 +2003,44 @@ fn representation_of(
         TypeKind::Union(members) => {
             let mut shared: Option<HirType> = None;
             let mut absent = false;
+            let mut mixed = false;
             for member in members {
                 if is_absent(snapshot, *member) {
                     absent = true;
                     continue;
                 }
+                // Each member still has to have a representation of its own:
+                // erasing something is putting it in a payload, and a member
+                // with no representation has nothing to put there.
                 let member = representation_within(snapshot, *member, path, subst)?;
                 match &shared {
-                    Some(existing) if *existing != member => return None,
+                    Some(existing) if *existing != member => mixed = true,
                     _ => shared = Some(member),
                 }
             }
+            // Nothing left to be: `null | undefined` on its own.
             let shared = shared?;
-            // `null | undefined` on its own, or `number | undefined`: nothing
-            // left to be, or nowhere to put the absence.
-            if absent && !shared.is_managed() {
-                return None;
+            // One representation, and any absence has a null to live in.
+            let absence_has_a_home = !absent || shared.is_managed();
+            if !mixed && absence_has_a_home {
+                return Some(shared);
             }
-            shared
+            // Otherwise a tag says which -- two representations, or an absence
+            // a scalar has no room for.
+            //
+            // This is the same value `unknown` lowers to, and deliberately: a
+            // heterogeneous union is a *closed* erased value where `unknown` is
+            // the open one, and the difference is what the checker knows rather
+            // than what the machine holds. `Erase`, `TagOf`, `Unerase`, the
+            // collector's erased slots and both specialization passes apply
+            // unchanged -- so `number | undefined` costs what it costs and
+            // nothing new had to be built for it.
+            //
+            // The tag domain being smaller than five is not exploited yet. It
+            // is what would let `number | undefined` be a double and a bit
+            // rather than a double and a word, and it is the same question
+            // specialization asks.
+            HirType::Erased
         }
 
         // A type parameter has no representation of its own -- that is what
@@ -6954,6 +6974,18 @@ impl<'a> FuncBuilder<'a> {
                 id,
                 &if sequence {
                     format!("`{member_name}`, where an array has only `length`")
+                } else if self.values[value.0 as usize].ty == HirType::Erased {
+                    // A union of object types. Every member is a pointer, so
+                    // the value is representable -- what is missing is that a
+                    // field lives at a different offset in each member, so
+                    // reading one needs the layouts reconciled or the
+                    // discriminant tested first. Saying "a value with no
+                    // fields" of something that has several sets of them is
+                    // the wrong sentence entirely.
+                    format!(
+                        "`{member_name}` on a union, whose members lay their fields out \
+                         differently"
+                    )
                 } else {
                     format!("`{member_name}`, a property of a value with no fields")
                 },
@@ -8955,8 +8987,16 @@ impl<'a> FuncBuilder<'a> {
     fn lower_absent(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let ty = self
             .contextual_type(id, 0)
-            .or_else(|| self.expecting.clone())
-            .filter(HirType::is_managed);
+            .or_else(|| self.expecting.clone());
+        // An erased slot has a tag for absence, so `undefined` reaching one is
+        // an erased `undefined`. `ConstNull` rather than a new operation: the
+        // absent value is what it has always been, and only its representation
+        // is different here.
+        if ty.as_ref() == Some(&HirType::Erased) {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::ConstNull, HirType::Erased, origin));
+        }
+        let ty = ty.filter(HirType::is_managed);
         let Some(ty) = ty else {
             return Err(self.unsupported(
                 id,
@@ -9136,10 +9176,17 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_assignment(id, *lhs_node, *rhs_node);
         }
 
+        let token = self.kind_of(*operator).unwrap_or(0);
+        // `v === undefined` on an erased value is a tag test, and neither
+        // operand is ever built -- `undefined` has no representation of its
+        // own, only a tag.
+        if let Some(result) = self.erased_absence_test(id, token, *lhs_node, *rhs_node) {
+            return result;
+        }
+
         // `&&` and `||` must not evaluate their right operand unless the left
         // one requires it, so they are taken before the ordinary path lowers
         // both.
-        let token = self.kind_of(*operator).unwrap_or(0);
         if token == syntax::AMPERSAND_AMPERSAND_TOKEN || token == syntax::BAR_BAR_TOKEN {
             return self.lower_logical(
                 id,
@@ -9255,6 +9302,86 @@ impl<'a> FuncBuilder<'a> {
 
         let origin = self.origin(id);
         Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))
+    }
+
+    /// `v === undefined` where `v` is erased, as the tag test it is.
+    ///
+    /// A `number | undefined` is one erased value, and its absence is the
+    /// `undefined` tag rather than a null -- a double has no spare bit pattern
+    /// to be absent in, which is exactly why the union needs a tag at all. So
+    /// the comparison is between a tag and a constant, and neither operand is
+    /// ever built.
+    ///
+    /// Handled here rather than in `lower_absent`, because `undefined` on its
+    /// own has no representation to produce: it is only ever *compared*, and
+    /// the comparison is the thing that means something.
+    fn erased_absence_test(
+        &mut self,
+        id: NodeId,
+        operator: u16,
+        lhs: NodeId,
+        rhs: NodeId,
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        if !matches!(
+            operator,
+            syntax::EQUALS_EQUALS_TOKEN
+                | syntax::EQUALS_EQUALS_EQUALS_TOKEN
+                | syntax::EXCLAMATION_EQUALS_TOKEN
+                | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
+        ) {
+            return None;
+        }
+        let absent = |builder: &Self, node: NodeId| {
+            builder.node(node).text.as_deref() == Some("undefined")
+                || builder.kind_of(node) == Some(syntax::NULL_KEYWORD)
+        };
+        let value = if absent(self, rhs) {
+            lhs
+        } else if absent(self, lhs) {
+            rhs
+        } else {
+            return None;
+        };
+        if self.type_of(value) != Some(HirType::Erased) {
+            return None;
+        }
+        Some((|| {
+            let value = self.lower_expression(value)?;
+            let origin = self.origin(id);
+            let tag = self.push(
+                OpKind::TagOf { value },
+                HirType::Int {
+                    bits: 32,
+                    signed: false,
+                },
+                origin.clone(),
+            );
+            let wanted = self.push(
+                OpKind::ConstInt(i64::from(super::tags::UNDEFINED)),
+                HirType::Int {
+                    bits: 32,
+                    signed: false,
+                },
+                origin.clone(),
+            );
+            let op = if matches!(
+                operator,
+                syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN
+            ) {
+                BinOp::Eq
+            } else {
+                BinOp::Ne
+            };
+            Ok(self.push(
+                OpKind::Binary {
+                    op,
+                    lhs: tag,
+                    rhs: wanted,
+                },
+                HirType::Bool,
+                origin,
+            ))
+        })())
     }
 }
 
