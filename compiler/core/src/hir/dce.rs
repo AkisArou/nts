@@ -89,11 +89,32 @@ pub fn eliminate(func: &mut Func) -> usize {
 /// A list of what has effects has to be added to. A list of what does not has
 /// to be *decided* about, which is the difference.
 #[allow(clippy::match_same_arms)]
+/// Runtime functions with no effect but their result.
+///
+/// A list that has to be *argued* into rather than added to: a name here is a
+/// promise that calling it and throwing the answer away is the same as not
+/// calling it. Allocation counts as no effect only because a dead allocation
+/// is unreachable and reclaimed.
+const PURE_RUNTIME_CALLS: &[&str] = &["nts_tag_name"];
+
+// Several arms answer `false` and each answers it for its own reason. Merged
+// they would be a list rather than a set of decisions, and the next operation
+// to arrive would join the list instead of being thought about.
+#[allow(clippy::match_same_arms)]
 fn has_effects(kind: &OpKind) -> bool {
     match kind {
         // Erasing, reading a tag and unerasing are all pure: they read one
         // value and produce another. Dead ones go, like any other computation.
         OpKind::Erase { .. } | OpKind::TagOf { .. } | OpKind::Unerase { .. } => false,
+        // Named runtime functions that compute and do nothing else. A call is
+        // assumed to have effects because it may, and these provably do not:
+        // `nts_tag_name` allocates a string and returns it, so a dead one is a
+        // dead allocation and removing it is the whole point of folding the
+        // comparison that used to read it.
+        OpKind::Call {
+            callee: super::Callee::External(name),
+            ..
+        } if PURE_RUNTIME_CALLS.contains(&name.as_str()) => false,
         // A call may do anything. A store certainly does. A suspension hands
         // the frame to the runtime, which is both.
         OpKind::Call { .. }

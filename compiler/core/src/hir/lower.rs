@@ -4745,8 +4745,25 @@ impl<'a> FuncBuilder<'a> {
             (HirType::Float { .. } | HirType::Int { .. } | HirType::Bool, Some(value)) => {
                 ("nts_promise_fulfill_number", vec![result.promise, value])
             }
-            (HirType::Managed(_), Some(value)) => {
-                ("nts_promise_fulfill_reference", vec![result.promise, value])
+            // The tag, supplied rather than derived. The compiler emitted the
+            // type, so it knows whether this is a string; making the runtime
+            // read the header back to find out is asking a question that was
+            // already answered.
+            (HirType::Managed(managed), Some(value)) => {
+                let tag = super::tags::of_reference(managed);
+                let origin = self.origin(id);
+                let tag = self.push(
+                    OpKind::ConstInt(i64::from(tag)),
+                    HirType::Int {
+                        bits: 32,
+                        signed: false,
+                    },
+                    origin,
+                );
+                (
+                    "nts_promise_fulfill_tagged",
+                    vec![result.promise, value, tag],
+                )
             }
             (HirType::Never, Some(_)) => {
                 return Err(self.unrepresentable(id, "an `async` function returning `never`"));

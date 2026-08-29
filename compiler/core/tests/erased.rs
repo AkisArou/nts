@@ -182,3 +182,74 @@ fn a_reference_survives_being_erased() {
         "and the string is erased where it meets the parameter",
     );
 }
+
+/// `typeof v === "number"` is an integer compare, not a string allocation.
+///
+/// Lowering emits `TagOf` and then `nts_tag_name`, which **allocates a
+/// string**, and compares strings. Almost every `typeof` in real code compares
+/// against a literal, so that allocation sits on the common path — and the tag
+/// the comparison is really about is already in hand.
+///
+/// The fold is a peephole rather than a case inside lowering, because doing it
+/// there means matching on the *parent* of the `typeof` while lowering it, and
+/// the shape of that parent is not lowering's business. Here the pattern is
+/// already in the IR.
+///
+/// Asserted after `prepare`, which is where the optimisation pipeline runs —
+/// `nts hir` dumps the lowering's output and would show the unfolded form.
+#[test]
+fn a_typeof_comparison_is_folded_to_an_integer_compare() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let tsconfig = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/unknown")
+        .join("tsconfig.json")
+        .canonicalize_utf8()
+        .expect("examples/unknown is checked in");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed");
+    let prepared = nts_core::hir::prepare(&snapshot).expect("valid HIR");
+
+    // Through the *blocks*, not the value arena. Dead-code elimination drops a
+    // value from the block that held it and leaves the definition behind, so
+    // the arena still contains what nothing emits -- and the emitter walks
+    // blocks. Checking the arena passes for the wrong reason and fails for the
+    // wrong reason, which this test did on its first run.
+    let names: Vec<&str> = prepared
+        .program
+        .funcs
+        .iter()
+        .flat_map(|f| {
+            f.blocks
+                .iter()
+                .flat_map(move |b| b.ops.iter().map(move |v| f.value(*v)))
+        })
+        .filter_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: nts_core::hir::Callee::External(name),
+                ..
+            } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !names.contains(&"nts_tag_name"),
+        "the string allocation should be gone, saw calls: {names:?}",
+    );
+
+    // And the tag is still read -- the comparison was rewritten, not deleted.
+    let reads = prepared
+        .program
+        .funcs
+        .iter()
+        .flat_map(|f| {
+            f.blocks
+                .iter()
+                .flat_map(move |b| b.ops.iter().map(move |v| f.value(*v)))
+        })
+        .filter(|op| matches!(op.kind, OpKind::TagOf { .. }))
+        .count();
+    assert!(reads > 0, "the tag is still what the comparison asks about");
+}

@@ -77,8 +77,12 @@ const SABOTAGES: &[Sabotage] = &[
     Sabotage {
         suite: "erased",
         function: "nts_promise_fulfill_reference",
-        pattern: "value.tag = nts_tag_of_reference(object);",
-        replacement: "value.tag = NTS_TAG_OBJECT;",
+        // The derivation moved when the compiler stopped needing it: a caller
+        // that knows the tag now calls `nts_promise_fulfill_tagged` directly,
+        // and this helper is the one-line wrapper for callers that do not. The
+        // property is the same and so is the sabotage.
+        pattern: "nts_tag_of_reference(object)",
+        replacement: "NTS_TAG_OBJECT",
         guards: "that a string settled through the typed helper still says it is a string",
     },
     Sabotage {

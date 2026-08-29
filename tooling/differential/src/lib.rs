@@ -642,13 +642,13 @@ const HARNESS_PRELUDE: &str =
          \x20       return;\n\
          \x20   }\n\
          \x20   if (p->state == NTS_PROMISE_FULFILLED\n\
-         \x20       && p->payload == NTS_PAYLOAD_NUMBER) {\n\
-         \x20       show(name, at, p->number);\n\
+         \x20       && p->value.tag == NTS_TAG_NUMBER) {\n\
+         \x20       show(name, at, p->value.as.number);\n\
          \x20       return;\n\
          \x20   }\n\
          \x20   if (p->state == NTS_PROMISE_FULFILLED\n\
-         \x20       && p->payload == NTS_PAYLOAD_REFERENCE) {\n\
-         \x20       show_string(name, at, (const NtsString *)p->reference);\n\
+         \x20       && NTS_TAG_IS_REFERENCE(p->value.tag)) {\n\
+         \x20       show_string(name, at, (const NtsString *)p->value.as.reference);\n\
          \x20       return;\n\
          \x20   }\n\
          \x20   if (p->state == NTS_PROMISE_PENDING) {\n\

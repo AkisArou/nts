@@ -1824,18 +1824,27 @@ void nts_promise_fulfill_number(NtsPromise *promise, double number) {
   nts_promise_fulfill(promise, value);
 }
 
-void nts_promise_fulfill_reference(NtsPromise *promise, NtsHeader *object) {
-  nts_promise_require_owner("nts_promise_fulfill_reference");
+void nts_promise_fulfill_tagged(NtsPromise *promise, NtsHeader *object,
+                                uint32_t tag) {
+  nts_promise_require_owner("nts_promise_fulfill_tagged");
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
   NtsValue value;
-  /* Derived rather than assumed: this helper knows it has a reference and not
-   * whether it is a string, and a promise raced into an erased `await` would
-   * otherwise answer `typeof` with "object" for a string. */
-  value.tag = nts_tag_of_reference(object);
+  value.tag = tag;
   value.as.reference = object;
   nts_promise_fulfill(promise, value);
+}
+
+/* For a caller that has a reference and does not know which kind.
+ *
+ * The derivation is two comparisons and it is here rather than in the fulfil
+ * path, so a caller that *does* know -- the compiler, always -- calls
+ * `nts_promise_fulfill_tagged` and pays nothing. Without deriving somewhere, a
+ * promise fulfilled with a string, raced, then awaited as `unknown` would
+ * answer `typeof` with "object". */
+void nts_promise_fulfill_reference(NtsPromise *promise, NtsHeader *object) {
+  nts_promise_fulfill_tagged(promise, object, nts_tag_of_reference(object));
 }
 
 void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value) {

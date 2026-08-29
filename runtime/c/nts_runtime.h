@@ -938,6 +938,14 @@ NtsPromise *nts_promise_new(void);
 void nts_promise_fulfill_void(NtsPromise *promise);
 void nts_promise_fulfill_number(NtsPromise *promise, double value);
 void nts_promise_fulfill_reference(NtsPromise *promise, NtsHeader *value);
+/* The same, with the tag supplied rather than derived.
+ *
+ * What the compiler calls, because the compiler already knows: it emitted the
+ * type. `nts_promise_fulfill_reference` derives the tag by reading the
+ * header's descriptor, which is two comparisons that only exist because its
+ * caller did not say. A caller that knows should not pay to be asked. */
+void nts_promise_fulfill_tagged(NtsPromise *promise, NtsHeader *value,
+                                uint32_t tag);
 /* Settle with a value whose kind is not known until run time.
  *
  * The plain case of storing what it is given: every other fulfilment helper is

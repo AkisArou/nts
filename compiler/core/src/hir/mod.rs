@@ -39,6 +39,7 @@ pub mod interprocedural;
 pub mod liveness;
 pub mod loops;
 pub mod suspend;
+pub mod tags;
 
 pub mod lower;
 pub mod monomorphize;
@@ -1394,6 +1395,13 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // representations: `x | 0` is a coercion until `x` is known to be an `i32`,
     // and then it is nothing. Removing them here keeps every pass below from
     // tracking values that are copies of other values.
+    // `typeof v === "number"` on an erased value, before anything else looks
+    // at it: lowering emits a string allocation and a string compare where the
+    // tag the comparison is really about is already in hand.
+    for func in &mut program.funcs {
+        tags::fold_comparisons(func);
+    }
+
     let mut simplified = 0;
     for func in &mut program.funcs {
         simplified += simplify::simplify(func);
