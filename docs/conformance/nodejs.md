@@ -221,13 +221,14 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**716 of node's own 1,394 applicable test files pass** across twenty-one
+**719 of node's own 1,398 applicable test files pass** across twenty-one
 modules, of which 22 are hollow. **1,435 functions lower.**
 
 The two columns come from two runs and are anchored separately, which is worth
 saying rather than hiding behind one number: the test columns from a sweep at
-runtime `d20ad6f`, the `compiles` column from a run at compiler `9bb54c1` with
-the binary's mtime checked before and after and unchanged across it. That
+runtime `d20ad6f`, with `readline`'s row re-measured directly after the work
+that followed; the `compiles` column from a run at compiler `9bb54c1` with the
+binary's mtime checked before and after and unchanged across it. That
 sweep's own `compiles` column *failed* that check — a compiler rebuild landed
 while it ran — and was discarded, which is what the check is for.
 
@@ -280,27 +281,27 @@ headline as much as to the table.
 
 | module | node's tests | hollow | compiles | note |
 | --- | :---: | :---: | :---: | --- |
-| `console` | **22 / 22** | 2 | 66 / 381 | complete |
+| `console` | **22 / 22** | 2 | 66 / 385 | complete |
 | `os` | **4 / 4** | 1 | 62 / 141 | complete |
 | `punycode` | **1 / 1** | 0 | 9 / 7 | complete |
 | `querystring` | **4 / 4** | 0 | 54 / 240 | complete |
 | `async_hooks` | 37 / 38 | 1 | 56 / 204 | `AsyncLocalStorage` complete; hooks rest on four primitives nts does not have yet |
 | `timers` | 52 / 54 | 2 | 62 / 249 | complete; the two failures are `domain`, which is a module of its own |
 | `path` | 15 / 16 | 0 | 61 / 159 | complete but for `matchesGlob`; the skip is Windows-only |
-| `readline` | 13 / 15 | 0 | 85 / 569 | the line editor and the splitter; the REPL's history file is the REPL's |
-| `events` | 28 / 33 | 1 | 59 / 230 | complete but for domains, `EventTarget` and the promise forms |
-| `stream` | 151 / 195 | 2 | 76 / 611 | the core is complete; `web`, `iter` and `consumers` are absent |
+| `readline` | 16 / 19 | 0 | 85 / 581 | the line editor and the splitter; the REPL's history file is the REPL's |
+| `events` | 28 / 33 | 1 | 59 / 234 | complete but for domains, `EventTarget` and the promise forms |
+| `stream` | 151 / 195 | 2 | 76 / 615 | the core is complete; `web`, `iter` and `consumers` are absent |
 | `url` | 26 / 36 | 1 | 99 / 414 | complete; exact on the Web Platform Tests corpus |
-| `process` | 43 / 63 | 2 | 95 / 328 | complete but for `process.binding`, `stdin` and workers |
+| `process` | 43 / 63 | 2 | 95 / 333 | complete but for `process.binding`, `stdin` and workers |
 | `string_decoder` | 2 / 3 | 0 | 55 / 241 | complete; the failure is the class-vs-function difference |
 | `buffer` | 33 / 60 | 1 | 53 / 229 | the read/write surface is complete and validated |
 | `diagnostics_channel` | 23 / 45 | 0 | 55 / 209 | complete; the failures need node's own publishers |
-| `assert` | 9 / 19 | 0 | 61 / 323 | complete, including `CallTracker` and node's Myers diff |
-| `zlib` | 30 / 64 | 0 | 76 / 650 | the streams, the one-shots, brotli and zstd |
-| `util` | 7 / 19 | 1 | 65 / 284 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `net` | 50 / 139 | 0 | 83 / 646 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
-| `fs` | 72 / 214 | 2 | 117 / 714 | sync, callback and promise surfaces, the file streams and the watchers |
-| `http` | 94 / 350 | 6 | 86 / 820 | a complete HTTP/1.1 implementation, parser included; no HTTPS or HTTP/2 |
+| `assert` | 9 / 19 | 0 | 61 / 327 | complete, including `CallTracker` and node's Myers diff |
+| `zlib` | 30 / 64 | 0 | 76 / 654 | the streams, the one-shots, brotli and zstd |
+| `util` | 7 / 19 | 1 | 65 / 288 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `net` | 50 / 139 | 0 | 83 / 650 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
+| `fs` | 72 / 214 | 2 | 117 / 719 | sync, callback and promise surfaces, the file streams and the watchers |
+| `http` | 94 / 350 | 6 | 86 / 824 | a complete HTTP/1.1 implementation, parser included; no HTTPS or HTTP/2 |
 
 The first two columns are what
 
@@ -1109,6 +1110,27 @@ expression: missing /`, pointing at a line that looks perfectly correct. And
 the history object read `context.historySize` to default its own size — node's
 line, but circular here, because the interface's `historySize` *is* the history
 object's `size` and the object does not exist yet when it asks.
+
+**The completer took three attempts, and the wrong two say what the problem
+is.** A two-argument completer is given a callback; anything else is awaited —
+and that is a difference in *timing*, not in spelling. A completer that answers
+immediately has to complete the line immediately, because node's own tests emit
+a keystroke and assert on the output on the very next line with no turn of the
+loop between them. Promisifying the callback form put a microtask in the way and
+made a synchronous completer indistinguishable from one that never ran. Making
+everything synchronous unless it returned a thenable fixed those and broke the
+promise tests, which require that `readline/promises` *does* take a turn. Node
+resolves it by having two `Interface` classes — the callback module wraps a
+one-argument completer into the callback form before constructing, the promises
+module does not — so the choice belongs to whoever hands the completer over.
+One class and one normalisation at the module boundary puts it in the same
+place.
+
+Four of the passes came from wiring `internal/util/inspect` into the module's
+`internals`: four of node's tests measure the width of what they expect on
+screen using the same helper `Interface` uses to place the cursor, and handing
+them ours rather than node's is the difference between checking our arithmetic
+and checking that two copies of node's agree.
 
 Absent: the REPL's history-file persistence, which is the REPL's and not a line
 editor's — a `readline` that read a dotfile in a user's home directory because
