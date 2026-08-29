@@ -395,3 +395,56 @@ having a tag, which is what specializing a homogeneous site does.
 NaN-boxing is not ruled out forever. It is ruled out as a *performance* change:
 it is a space change, worth revisiting only where space is the constraint, and
 the accessors it required have been kept so that revisiting it is cheap.
+
+# Specialization: an `unknown[]` of one kind stops being erased
+
+The prediction this record made was that `erasure-stored-unknown` -- an
+`unknown[]` holding nothing but numbers -- should collapse onto its typed
+control exactly, and that the gap closing would be the evidence.
+
+| | typed | erased | gap |
+| --- | ---: | ---: | ---: |
+| before | 98.01 us | 110.41 us | 11% |
+| after | 98.01 us | **97.11 us** | none |
+
+The emitted C contains no `NtsValue` and no tag read at all. `unknown[]`
+compiles to what `number[]` compiles to.
+
+## What the pass is allowed to do
+
+An array whose element type is erased, allocated in this function, that never
+escapes, and every store of which erases a value of the same representation:
+the element becomes that representation, the erasures before the stores go, and
+the reads come back concrete.
+
+## What it must not do, which is most of it
+
+**Aliasing is the whole risk.** If the array escapes, another function may
+store a string into it, and an element typed `f64` would then read a pointer as
+a double -- silently, because nothing at run time would notice. So
+`escape::is_frame_local` decides, and anything it cannot prove is left alone.
+
+Conservative three times over, and each one is a case that would otherwise be
+wrong rather than merely missed:
+
+- stores that disagree sink the array, because it genuinely needs a tag;
+- a store of a value that was erased *elsewhere* sinks it, because that tag was
+  chosen by another site and unwrapping it asserts something about that site;
+- a read used as anything but an unerase or a tag read sinks it, because such a
+  use wants the general representation.
+
+`compiler/core/tests/programs/erased-mixed` is the negative case and matters
+more than the positive one: half numbers and half strings, and the tags stay.
+
+## Where this leaves the plan
+
+The 41% of `unknown` parameters that are *carried* and the 14% that are
+*tested* still pay the general representation, because this pass covers arrays
+inside one function and not parameters across them. That is the next increment
+and it is monomorphization: a function whose erased parameter is only ever
+reached by one representation gets a copy taking that representation, which is
+what `generics.rs` already does for type arguments.
+
+What this one establishes is that the win is real and the measurement can see
+it, which was not certain before -- NaN-boxing looked equally promising and
+bought nothing.

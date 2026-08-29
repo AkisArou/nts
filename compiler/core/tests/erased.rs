@@ -253,3 +253,80 @@ fn a_typeof_comparison_is_folded_to_an_integer_compare() {
         .count();
     assert!(reads > 0, "the tag is still what the comparison asks about");
 }
+
+fn prepared_at(relative: &str) -> Option<nts_core::hir::Prepared> {
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
+    let tsconfig = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(relative)
+        .join("tsconfig.json")
+        .canonicalize_utf8()
+        .unwrap_or_else(|_| panic!("{relative} is checked in"));
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed");
+    Some(nts_core::hir::prepare(&snapshot).expect("valid HIR"))
+}
+
+fn erased_arrays(prepared: &nts_core::hir::Prepared) -> usize {
+    use nts_core::hir::{HirType, ManagedType};
+    prepared
+        .program
+        .funcs
+        .iter()
+        .flat_map(|f| &f.values)
+        .filter(|op| {
+            matches!(&op.ty, HirType::Managed(ManagedType::Array(element))
+                if **element == HirType::Erased)
+        })
+        .count()
+}
+
+/// An `unknown[]` holding one kind of value stops being erased at all.
+///
+/// The measurement this pass exists for: an erased array cost 11% against a
+/// typed one, and the cost was the per-element tag test -- NaN-boxing the value
+/// to half its size moved the number by 0.1%, which is what proved it. So the
+/// win is not a smaller tag, it is no tag.
+///
+/// `benches/cases/erasure-stored-unknown` is the same program as
+/// `erasure-stored-typed` but for `unknown`, and its gap closed to nothing.
+#[test]
+fn an_array_of_one_kind_is_not_erased() {
+    let Some(prepared) = prepared_at("../../benches/cases/erasure-stored-unknown") else {
+        return;
+    };
+    assert_eq!(
+        erased_arrays(&prepared),
+        0,
+        "every store is a number, so the array should hold numbers",
+    );
+    let tags = prepared
+        .program
+        .funcs
+        .iter()
+        .flat_map(|f| {
+            f.blocks
+                .iter()
+                .flat_map(move |b| b.ops.iter().map(move |v| f.value(*v)))
+        })
+        .filter(|op| matches!(op.kind, OpKind::TagOf { .. }))
+        .count();
+    assert_eq!(tags, 0, "and there is no tag left to read");
+}
+
+/// A mixed one keeps its tags, and this is the more important half.
+///
+/// Narrowing an array that really does hold two kinds would read a string's
+/// pointer as a double -- silently, since nothing at run time would notice.
+/// The pass declines when the stores disagree, when the array escapes, and
+/// when a read is used as anything but an unerase or a tag read.
+#[test]
+fn an_array_of_two_kinds_keeps_its_tags() {
+    let Some(prepared) = prepared_at("tests/programs/erased-mixed") else {
+        return;
+    };
+    assert!(
+        erased_arrays(&prepared) > 0,
+        "numbers and strings share this array, so it needs a tag per element",
+    );
+}

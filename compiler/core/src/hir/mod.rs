@@ -40,6 +40,7 @@ pub mod liveness;
 pub mod loops;
 pub mod suspend;
 pub mod tags;
+pub mod unerase;
 
 pub mod lower;
 pub mod monomorphize;
@@ -1395,6 +1396,8 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // representations: `x | 0` is a coercion until `x` is known to be an `i32`,
     // and then it is nothing. Removing them here keeps every pass below from
     // tracking values that are copies of other values.
+    narrow_erased_arrays(&mut program);
+
     // `typeof v === "number"` on an erased value, before anything else looks
     // at it: lowering emits a string allocation and a string compare where the
     // tag the comparison is really about is already in hand.
@@ -1469,6 +1472,20 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     }
 }
 
+
+/// Retype every erased array whose stores agree and which never escapes.
+///
+/// Run before the peepholes rather than after: narrowing leaves an unerase that
+/// is now the identity and a tag read that is now a constant, and removing
+/// those is `simplify`'s job and `fold`'s. A pass that also swept up after
+/// itself would be two passes wearing one name -- and the first placement of
+/// this one *was* after them, which left the dead unerase in the emitted C.
+fn narrow_erased_arrays(program: &mut Program) {
+    let escapes = escape::analyze_program(program);
+    for (func, escapes) in program.funcs.iter_mut().zip(&escapes) {
+        unerase::narrow_arrays(func, escapes);
+    }
+}
 /// Move every allocation that can be in the frame into it.
 ///
 /// Returns how many moved, which is worth reporting: it is the difference

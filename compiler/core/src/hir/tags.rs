@@ -32,6 +32,22 @@ pub const fn of_reference(managed: &ManagedType) -> u32 {
     }
 }
 
+/// The tag a value of this machine type carries once erased.
+///
+/// The inverse of what `Erase` emits, and it is here rather than beside that
+/// emission for the reason the rest of this module exists: one table.
+#[must_use]
+pub fn of_representation(ty: &super::HirType) -> u32 {
+    use super::{HirType, ManagedType};
+    match ty {
+        HirType::Bool => BOOLEAN,
+        HirType::Managed(ManagedType::String) => STRING,
+        HirType::Managed(_) => OBJECT,
+        HirType::Void => UNDEFINED,
+        _ => NUMBER,
+    }
+}
+
 /// The tag a `typeof` comparison against this literal is asking about.
 ///
 /// `None` for a spelling no tag can produce — `"function"`, `"bigint"`,
