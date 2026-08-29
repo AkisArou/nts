@@ -1712,14 +1712,22 @@ static const NtsDescriptor nts_desc_reaction = {
     nts_reaction_offsets, 0, "Reaction", 0u, 0,
 };
 
+/* The fulfilled payload is *not* here: it is an erased slot, listed below, and
+ * listing it in both tables would make `nts_each_reference` visit it twice --
+ * doubling every retain and release, with the second release freeing something
+ * still in use. */
+static const uint32_t nts_promise_erased[] = {
+    (uint32_t)offsetof(NtsPromise, value),
+};
+
 static const uint32_t nts_promise_offsets[] = {
-    (uint32_t)offsetof(NtsPromise, reference),
+    (uint32_t)offsetof(NtsPromise, reason),
     (uint32_t)offsetof(NtsPromise, reactions),
 };
 
 static const NtsDescriptor nts_desc_promise = {
     NTS_KIND_OBJECT, (uint32_t)sizeof(NtsPromise), 2u, 1u,
-    nts_promise_offsets, 0, "Promise", 0u, 0,
+    nts_promise_offsets, 0, "Promise", 1u, nts_promise_erased,
 };
 
 NtsPromise *nts_promise_new(void) {
@@ -1774,73 +1782,72 @@ static void nts_promise_settle(NtsPromise *promise, uint32_t state) {
   nts_promise_schedule(promise);
 }
 
+/* The tag a reference should carry, read from what it actually is. */
+uint32_t nts_tag_of_reference(const NtsHeader *object) {
+  if (!object) {
+    return NTS_TAG_OBJECT;
+  }
+  return object->descriptor->kind == NTS_KIND_STRING ? NTS_TAG_STRING
+                                                     : NTS_TAG_OBJECT;
+}
+
+/* Every fulfilment is the same store. The helpers differ only in the tag they
+ * know at compile time, and `nts_promise_fulfill_value` is the one that does
+ * not know it and is told. */
+static void nts_promise_fulfill(NtsPromise *promise, NtsValue value) {
+  if (NTS_TAG_IS_REFERENCE(value.tag) && value.as.reference) {
+    nts_retain(value.as.reference);
+  }
+  promise->value = value;
+  nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
+}
+
 void nts_promise_fulfill_void(NtsPromise *promise) {
   nts_promise_require_owner("nts_promise_fulfill_void");
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  promise->payload = NTS_PAYLOAD_NONE;
-  nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
+  NtsValue value;
+  value.tag = NTS_TAG_UNDEFINED;
+  value.as.number = 0.0;
+  nts_promise_fulfill(promise, value);
 }
 
-void nts_promise_fulfill_number(NtsPromise *promise, double value) {
+void nts_promise_fulfill_number(NtsPromise *promise, double number) {
   nts_promise_require_owner("nts_promise_fulfill_number");
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  promise->payload = NTS_PAYLOAD_NUMBER;
-  promise->number = value;
-  nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
+  NtsValue value;
+  value.tag = NTS_TAG_NUMBER;
+  value.as.number = number;
+  nts_promise_fulfill(promise, value);
 }
 
-void nts_promise_fulfill_reference(NtsPromise *promise, NtsHeader *value) {
+void nts_promise_fulfill_reference(NtsPromise *promise, NtsHeader *object) {
   nts_promise_require_owner("nts_promise_fulfill_reference");
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  promise->payload = NTS_PAYLOAD_REFERENCE;
-  nts_retain(value);
-  promise->reference = value;
-  nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
+  NtsValue value;
+  /* Derived rather than assumed: this helper knows it has a reference and not
+   * whether it is a string, and a promise raced into an erased `await` would
+   * otherwise answer `typeof` with "object" for a string. */
+  value.tag = nts_tag_of_reference(object);
+  value.as.reference = object;
+  nts_promise_fulfill(promise, value);
 }
 
-/* Settle with a value whose kind is not known until run time.
- *
- * The tag chooses the slot. A number or a boolean is a double in `number`; a
- * string or an object is a pointer in `reference`, retained exactly as
- * `nts_promise_fulfill_reference` retains -- which is what keeps the tracer
- * honest, because `reference` stays a slot that always holds a reference or
- * null and the descriptor never learns a new rule.
- *
- * A boolean stored as a double is not a loss: the tag says it was a boolean,
- * and `nts_promise_value` reads it back through the same tag. Only the two
- * slots are closed; `typeof` is not. */
 void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value) {
   nts_promise_require_owner("nts_promise_fulfill_value");
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  promise->payload = NTS_PAYLOAD_VALUE;
-  promise->tag = value.tag;
-  switch (value.tag) {
-  case NTS_TAG_NUMBER:
-    promise->number = value.as.number;
-    break;
-  case NTS_TAG_BOOLEAN:
-    promise->number = value.as.boolean ? 1.0 : 0.0;
-    break;
-  case NTS_TAG_STRING:
-  case NTS_TAG_OBJECT:
-    nts_retain(value.as.reference);
-    promise->reference = value.as.reference;
-    break;
-  case NTS_TAG_UNDEFINED:
-    break;
-  default:
+  if (value.tag > NTS_TAG_OBJECT) {
     fprintf(stderr, "nts: settled a promise with an unknown value tag\n");
     abort();
   }
-  nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
+  nts_promise_fulfill(promise, value);
 }
 
 void nts_promise_reject(NtsPromise *promise, NtsHeader *reason) {
@@ -1848,9 +1855,8 @@ void nts_promise_reject(NtsPromise *promise, NtsHeader *reason) {
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  promise->payload = NTS_PAYLOAD_REFERENCE;
   nts_retain(reason);
-  promise->reference = reason;
+  promise->reason = reason;
   nts_promise_settle(promise, NTS_PROMISE_REJECTED);
 }
 
@@ -1873,50 +1879,36 @@ void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction) {
 
 double nts_promise_number(const NtsPromise *promise) {
   if (promise->state != NTS_PROMISE_FULFILLED ||
-      promise->payload != NTS_PAYLOAD_NUMBER) {
+      promise->value.tag != NTS_TAG_NUMBER) {
     fprintf(stderr, "nts: read a number from a promise holding something else\n");
     abort();
   }
-  return promise->number;
+  return promise->value.as.number;
 }
 
 NtsHeader *nts_promise_reference(const NtsPromise *promise) {
   if (promise->state != NTS_PROMISE_FULFILLED ||
-      promise->payload != NTS_PAYLOAD_REFERENCE) {
+      !NTS_TAG_IS_REFERENCE(promise->value.tag)) {
     fprintf(stderr,
             "nts: read a reference from a promise holding something else\n");
     abort();
   }
-  return promise->reference;
+  return promise->value.as.reference;
 }
 
+/* No assertion about *how* it was settled, only that it was.
+ *
+ * The typed readers above assert because the compiler claimed to know which
+ * kind it was and a mismatch is a compiler bug. This one is called exactly
+ * when the compiler does not know, so there is nothing to check beyond the
+ * tag being present -- and every fulfilment writes one. */
 NtsValue nts_promise_value(const NtsPromise *promise) {
-  if (promise->state != NTS_PROMISE_FULFILLED ||
-      promise->payload != NTS_PAYLOAD_VALUE) {
+  if (promise->state != NTS_PROMISE_FULFILLED) {
     fprintf(stderr,
-            "nts: read an erased value from a promise holding something else\n");
+            "nts: read an erased value from a promise that is not fulfilled\n");
     abort();
   }
-  NtsValue value;
-  value.tag = promise->tag;
-  switch (promise->tag) {
-  case NTS_TAG_NUMBER:
-    value.as.number = promise->number;
-    break;
-  case NTS_TAG_BOOLEAN:
-    value.as.boolean = promise->number != 0.0;
-    break;
-  case NTS_TAG_STRING:
-  case NTS_TAG_OBJECT:
-    value.as.reference = promise->reference;
-    break;
-  default:
-    /* `undefined` carries nothing, and the union is written rather than left
-     * alone so that a caller copying the whole struct copies a known value. */
-    value.as.number = 0.0;
-    break;
-  }
-  return value;
+  return promise->value;
 }
 
 /* Whether an `await` has to propagate a rejection instead of reading a value.
@@ -1940,7 +1932,7 @@ void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source) {
     fprintf(stderr, "nts: forwarded a rejection from a promise that has none\n");
     abort();
   }
-  nts_promise_reject(result, source->reference);
+  nts_promise_reject(result, source->reason);
 }
 
 /* --- Combinators: `Promise.all` and `Promise.race` --------------------------
@@ -2008,29 +2000,14 @@ static const NtsDescriptor nts_desc_combinator_slot = {
  * this, and `all`'s rejection is the same thing for the rejected case. */
 static void nts_promise_forward(NtsPromise *to, const NtsPromise *from) {
   if (from->state == NTS_PROMISE_REJECTED) {
-    nts_promise_reject(to, from->reference);
+    nts_promise_reject(to, from->reason);
     return;
   }
-  switch (from->payload) {
-  case NTS_PAYLOAD_NUMBER:
-    nts_promise_fulfill_number(to, from->number);
-    return;
-  case NTS_PAYLOAD_REFERENCE:
-    nts_promise_fulfill_reference(to, from->reference);
-    return;
-  case NTS_PAYLOAD_VALUE: {
-    /* Reassembled and re-settled rather than copied field by field, so the
-     * retain happens on the way in exactly as it did the first time. Without
-     * this arm an erased payload would reach `default` and `race` would
-     * quietly fulfil with `undefined`. */
-    NtsValue value = nts_promise_value(from);
-    nts_promise_fulfill_value(to, value);
-    return;
-  }
-  default:
-    nts_promise_fulfill_void(to);
-    return;
-  }
+  /* One arm, because there is one payload. `undefined` needs no case of its
+   * own -- it is a tag like any other -- which is what the old `default:`
+   * quietly stood in for, and what made an erased payload fulfil with
+   * `undefined` when its arm was missing. */
+  nts_promise_fulfill_value(to, from->value);
 }
 
 /* One element settled. */
@@ -2043,14 +2020,14 @@ static void nts_combinator_settled(void *state) {
      * an already-settled promise, which ignores it. */
     nts_promise_forward(all->result, slot->source);
   } else if (slot->source->state == NTS_PROMISE_REJECTED) {
-    nts_promise_reject(all->result, slot->source->reference);
+    nts_promise_reject(all->result, slot->source->reason);
   } else {
     if (all->values->header.descriptor->references) {
-      NtsHeader *value = slot->source->reference;
+      NtsHeader *value = slot->source->value.as.reference;
       nts_retain(value);
       NTS_ITEMS(all->values, NtsHeader *)[slot->index] = value;
     } else {
-      NTS_ITEMS(all->values, double)[slot->index] = slot->source->number;
+      NTS_ITEMS(all->values, double)[slot->index] = slot->source->value.as.number;
     }
     if (--all->remaining == 0) {
       nts_promise_fulfill_reference(all->result, (NtsHeader *)all->values);

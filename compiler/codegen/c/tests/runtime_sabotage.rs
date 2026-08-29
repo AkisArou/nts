@@ -48,16 +48,21 @@ struct Sabotage {
 }
 
 const SABOTAGES: &[Sabotage] = &[
+    // The four below were written against a promise that decomposed an erased
+    // value into a tag beside two typed slots. The payload is one `NtsValue`
+    // now, stored whole and listed in the descriptor's erased table, so each
+    // pattern moved -- but every one guards the property it guarded before,
+    // which is the only thing that had to survive the change.
     Sabotage {
         suite: "erased",
-        function: "nts_promise_fulfill_value",
-        pattern: "promise->tag = value.tag;",
-        replacement: "(void)0;",
+        function: "nts_promise_fulfill",
+        pattern: "promise->value = value;",
+        replacement: "promise->value = value; promise->value.tag = NTS_TAG_UNDEFINED;",
         guards: "that the tag survives, which is the whole point of the payload",
     },
     Sabotage {
         suite: "erased",
-        function: "nts_promise_fulfill_value",
+        function: "nts_promise_fulfill",
         pattern: "nts_retain(value.as.reference);",
         replacement: "(void)0;",
         guards: "that a settled reference is retained rather than aliased",
@@ -65,15 +70,15 @@ const SABOTAGES: &[Sabotage] = &[
     Sabotage {
         suite: "erased",
         function: "nts_promise_value",
-        pattern: "value.tag = promise->tag;",
-        replacement: "value.tag = NTS_TAG_NUMBER;",
+        pattern: "return promise->value;",
+        replacement: "{ NtsValue v = promise->value; v.tag = NTS_TAG_NUMBER; return v; }",
         guards: "that the reader reports the tag it was given",
     },
     Sabotage {
         suite: "erased",
         function: "nts_promise_forward",
-        pattern: "case NTS_PAYLOAD_VALUE: {",
-        replacement: "case 0x7fffffff: {",
+        pattern: "nts_promise_fulfill_value(to, from->value);",
+        replacement: "nts_promise_fulfill_void(to);",
         guards: "that `race` forwards an erased payload instead of `undefined`",
     },
 ];

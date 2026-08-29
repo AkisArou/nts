@@ -76,11 +76,12 @@ static void step_run(void *state) {
     } else if (step->source->state == NTS_PROMISE_REJECTED) {
         snprintf(line, sizeof(line), "%s rejected", step->label);
         note(line);
-    } else if (step->source->payload == NTS_PAYLOAD_NUMBER) {
-        snprintf(line, sizeof(line), "%s %g", step->label, step->source->number);
+    } else if (step->source->value.tag == NTS_TAG_NUMBER) {
+        snprintf(line, sizeof(line), "%s %g", step->label,
+                 step->source->value.as.number);
         note(line);
     } else {
-        NtsArray *values = (NtsArray *)step->source->reference;
+        NtsArray *values = (NtsArray *)step->source->value.as.reference;
         size_t used = (size_t)snprintf(line, sizeof(line), "%s ", step->label);
         for (uint32_t i = 0; i < values->header.length && used < sizeof(line); i++) {
             used += (size_t)snprintf(line + used, sizeof(line) - used, "%s%g",

@@ -880,20 +880,6 @@ enum {
     NTS_PROMISE_REJECTED = 2
 };
 
-enum {
-    NTS_PAYLOAD_NONE = 0,
-    NTS_PAYLOAD_NUMBER = 1,
-    NTS_PAYLOAD_REFERENCE = 2,
-    /* Settled from an erased value. The payload still lives in one of the two
-     * slots above -- this says only that `tag` records which kind of JavaScript
-     * value it was, which the two slots cannot: they distinguish a double from
-     * a pointer, and `typeof` distinguishes five things.
-     *
-     * A fourth kind rather than a sentinel in `tag`, because every tag value is
-     * a real one -- `NTS_TAG_UNDEFINED` is zero -- so there is no spare bit
-     * pattern there to mean "not erased", and a reader has to be able to ask. */
-    NTS_PAYLOAD_VALUE = 3
-};
 
 /* One reaction, as a managed object.
  *
@@ -917,17 +903,27 @@ typedef struct NtsReaction {
 
 typedef struct NtsPromise {
     NtsHeader header;
-    uint32_t state;   /* NTS_PROMISE_* */
-    uint32_t payload; /* NTS_PAYLOAD_* */
-    /* Which kind of JavaScript value the payload was, when it came from an
-     * erased one. Meaningful only under NTS_PAYLOAD_VALUE. Four bytes, and on
-     * every ABI we target they are the padding that already sat between these
-     * counters and the double below. */
-    uint32_t tag;     /* NTS_TAG_*, under NTS_PAYLOAD_VALUE */
-    double number;
-    /* The fulfilled value when it is a reference, or the rejection reason,
-     * which always is one. */
-    NtsHeader *reference;
+    uint32_t state; /* NTS_PROMISE_* */
+    /* What it settled with, whatever that turned out to be.
+     *
+     * One representation for every fulfilment path: a number, a reference and
+     * an erased value are the same sixteen bytes with different tags, so there
+     * is no payload-kind enum beside this and no way for the two to disagree.
+     * The descriptor lists this slot in its *erased* table, which is what lets
+     * the collector follow it only when the tag says there is something to
+     * follow.
+     *
+     * Exactly one home. A fulfilled reference lives here and nowhere else --
+     * if it also lived in a plain reference slot, `nts_each_reference` would
+     * visit it through both tables, every retain and release would be doubled,
+     * and the second release would free something still in use. */
+    NtsValue value;
+    /* Why it rejected, which is always a reference.
+     *
+     * Separate from `value` because a rejection is not a fulfilment: the two
+     * are distinguished by `state`, and giving each its own slot means neither
+     * reader has to ask what the other would have meant. */
+    NtsHeader *reason;
     /* Newest first; reversed into subscription order when it settles, so the
      * chain holds exactly one strong reference to each reaction and there is
      * no aliasing tail pointer for the collector to double-count. */
@@ -944,13 +940,9 @@ void nts_promise_fulfill_number(NtsPromise *promise, double value);
 void nts_promise_fulfill_reference(NtsPromise *promise, NtsHeader *value);
 /* Settle with a value whose kind is not known until run time.
  *
- * It decomposes rather than storing the union: the tag chooses which of the two
- * slots above receives the payload, and is itself recorded so that `typeof`
- * still answers on the far side of an `await`. Storing an `NtsValue` whole
- * would put a reference in a slot that holds one only sometimes, and the
- * collector reaches a promise's references through a descriptor of fixed
- * offsets that it visits unconditionally -- so that slot would have to become
- * conditional, for every erased field anywhere and not just this one. */
+ * The plain case of storing what it is given: every other fulfilment helper is
+ * this one with the tag known at compile time, so a promise's payload is not a
+ * special shape and the readers below differ only in what they assert. */
 void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value);
 void nts_promise_reject(NtsPromise *promise, NtsHeader *reason);
 
@@ -969,9 +961,18 @@ double nts_promise_number(const NtsPromise *promise);
 NtsHeader *nts_promise_reference(const NtsPromise *promise);
 /* The erased reader, for the case the sentence above does not cover: when the
  * awaited type is `unknown` the compiler cannot know which of the two readers
- * to call, which is exactly why neither of them will do. Asserts that the
- * promise was settled through `nts_promise_fulfill_value`. */
+ * to call, which is exactly why neither of them will do. Asserts only that the
+ * promise is fulfilled: whatever it holds, the tag says what it is, and that
+ * is true whichever helper settled it. */
 NtsValue nts_promise_value(const NtsPromise *promise);
+
+/* The tag a reference should carry, read from what it actually is.
+ *
+ * Derived rather than passed, so a typed fulfilment cannot record the wrong
+ * one: `nts_promise_fulfill_reference` knows it has a reference and not
+ * whether it is a string, and a promise raced into an erased `await` would
+ * then answer `typeof` with "object" for a string. The header knows. */
+uint32_t nts_tag_of_reference(const NtsHeader *object);
 
 /* Whether the resumed state machine has to propagate a rejection rather than
  * read a value. A rejected promise has no payload and both readers above

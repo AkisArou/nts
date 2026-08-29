@@ -171,7 +171,7 @@ static void the_payload_carries_its_tag(void) {
     reset();
     NtsPromise *number = nts_promise_new();
     nts_promise_fulfill_number(number, 42.5);
-    if (number->payload != NTS_PAYLOAD_NUMBER || number->number != 42.5) {
+    if (number->value.tag != NTS_TAG_NUMBER || number->value.as.number != 42.5) {
         printf("FAIL a number payload did not survive\n");
         failures++;
     } else {
@@ -179,7 +179,7 @@ static void the_payload_carries_its_tag(void) {
     }
     NtsPromise *empty = nts_promise_new();
     nts_promise_fulfill_void(empty);
-    if (empty->payload != NTS_PAYLOAD_NONE) {
+    if (empty->value.tag != NTS_TAG_UNDEFINED) {
         printf("FAIL a void payload claimed a slot\n");
         failures++;
     } else {
