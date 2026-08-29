@@ -448,3 +448,54 @@ what `generics.rs` already does for type arguments.
 What this one establishes is that the win is real and the measurement can see
 it, which was not certain before -- NaN-boxing looked equally promising and
 bought nothing.
+
+# Specialization, part two: parameters
+
+The array pass covered one function. This one covers the boundary between them,
+which is where the measurement said most of the population lives: 41% of
+`unknown` parameters carried, 14% tested.
+
+A function that is not exported, is not in any method table, whose every call is
+direct, and whose every caller passes a fresh erasure of the same
+representation, gets that representation as its parameter type. Inside, the
+unerase becomes the identity and the tag read becomes a constant.
+
+It is monomorphization with a different driver. `generics.rs` copies a function
+per set of type arguments; this retypes one per reaching representation, and it
+can retype rather than copy precisely because it only fires when every caller
+agrees -- there is one copy to make.
+
+## Both benchmarks are now at parity
+
+| | typed | erased |
+| --- | ---: | ---: |
+| through small functions | 191.90 us | 191.73 us |
+| stored in an array | 97.98 us | 97.88 us |
+
+`unknown` costs nothing in either shape. That was not true four hours ago and it
+is not true of the general representation -- what changed is that neither
+benchmark needs the general representation any more, which is the whole point.
+
+## Which is also the honest limit of it
+
+Both benchmarks are homogeneous by construction. The pass declines on
+`examples/unknown`'s `kind`, which sees a number from one caller and an
+already-erased value from another, and on
+`tests/programs/erased-mixed`, whose array holds numbers and strings. Those
+still pay the general representation, and should: they need it.
+
+So the claim is not "erasure is free". It is that **erasure is free where it was
+not needed**, and the compiler can now tell the difference. What remains paying
+is the genuinely polymorphic population -- the 31% the measurement calls
+*examined*, plus every site two kinds reach.
+
+## What is left on this axis
+
+- **Fields and globals.** An erased class field or module-scope binding gets the
+  same treatment an array element now gets, and by the same argument.
+- **Returns.** `keeps(value: unknown): unknown` stays erased because its return
+  type does, even where every caller unwraps it immediately.
+- **Copies rather than retypes.** Where callers disagree, `generics.rs`-style
+  duplication would give each its own specialization instead of sinking the
+  site. That is the version the document calls polymorphic recovery, and it is
+  strictly more than this.

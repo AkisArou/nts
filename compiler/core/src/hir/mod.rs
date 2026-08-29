@@ -1472,7 +1472,6 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     }
 }
 
-
 /// Retype every erased array whose stores agree and which never escapes.
 ///
 /// Run before the peepholes rather than after: narrowing leaves an unerase that
@@ -1481,6 +1480,10 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
 /// itself would be two passes wearing one name -- and the first placement of
 /// this one *was* after them, which left the dead unerase in the emitted C.
 fn narrow_erased_arrays(program: &mut Program) {
+    // Parameters first: a function whose erased parameter becomes a `double`
+    // may then store that `double` into an array, which is what lets the array
+    // narrow too. The other order narrows nothing on the second pass.
+    unerase::narrow_parameters(program);
     let escapes = escape::analyze_program(program);
     for (func, escapes) in program.funcs.iter_mut().zip(&escapes) {
         unerase::narrow_arrays(func, escapes);

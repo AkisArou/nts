@@ -330,3 +330,41 @@ fn an_array_of_two_kinds_keeps_its_tags() {
         "numbers and strings share this array, so it needs a tag per element",
     );
 }
+
+/// A parameter every caller reaches with the same kind stops being erased.
+///
+/// The cross-function half. `addOne` in `examples/unknown` is called once, with
+/// a number, so its parameter becomes a `double` and the tag it read becomes a
+/// constant.
+///
+/// `kind` in the same file must *not*: it is called both with a number and with
+/// the result of `keeps`, which is erased and carries a tag chosen elsewhere.
+/// Two callers disagreeing is the case that would be wrong rather than missed,
+/// and it is the reason this pass surveys every call site before deciding.
+#[test]
+fn a_parameter_with_one_kind_of_caller_is_not_erased() {
+    let Some(prepared) = prepared_at("../../examples/unknown") else {
+        return;
+    };
+    let parameter = |name: &str| {
+        prepared
+            .program
+            .funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("no function {name}"))
+            .params[0]
+            .ty
+            .clone()
+    };
+    assert_eq!(
+        parameter("addOne"),
+        nts_core::hir::HirType::Float { bits: 64 },
+        "one caller, one kind, so no tag",
+    );
+    assert_eq!(
+        parameter("kind"),
+        nts_core::hir::HirType::Erased,
+        "a number and an already-erased value reach this one",
+    );
+}
