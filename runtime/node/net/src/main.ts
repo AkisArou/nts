@@ -28,6 +28,19 @@ import { isIP, isIPv4, isIPv6 } from "./address.ts";
 // on every byte one pointer write rather than a new timer per byte.
 import { clearTimeout, setTimeout } from "../../timers/src/main.ts";
 import type { Timeout } from "../../timers/src/main.ts";
+import { AsyncContextFrame } from "../../internal/async-context.ts";
+import {
+  emitAfter,
+  emitBefore,
+  emitDestroy,
+  emitInit,
+  getDefaultTriggerAsyncId,
+  initHooksExist,
+  kAsyncId,
+  kContextFrame,
+  kTriggerAsyncId,
+  newAsyncId,
+} from "../../internal/async-hooks.ts";
 
 export { isIP, isIPv4, isIPv6 };
 
@@ -155,6 +168,10 @@ export class Socket extends Duplex {
   #remoteAddress: AddressInfo | Record<string, never> = {};
   #readingStarted = false;
 
+  declare [kAsyncId]: number;
+  declare [kTriggerAsyncId]: number;
+  declare [kContextFrame]: AsyncContextFrame | undefined;
+
   constructor(options: SocketOptions = {}) {
     super({
       // A socket carries bytes. Object mode would be a category error and node
@@ -178,6 +195,10 @@ export class Socket extends Duplex {
       writable: options.writable ?? true,
     });
 
+    // Before the handle is touched, because taking an existing one starts
+    // reading and a read can complete before the constructor returns.
+    this.asyncReset();
+
     if (options.handle !== undefined) {
       this._handle = options.handle;
       this.pending = false;
@@ -193,6 +214,52 @@ export class Socket extends Duplex {
       // other end has gone: the `FIN` arrives, `push(null)` records it, and
       // nothing ever asks, so `end` and `close` are never emitted.
       if (options.readable !== false) this.read(0);
+    }
+  }
+
+  /**
+   * Give this socket a fresh identity and the context of whoever is asking.
+   *
+   * Called at construction, and again when a pooled socket is handed to a new
+   * request. The second case is the point: a keep-alive connection reused for
+   * a second request is doing new work for a new caller, and a hook that saw
+   * the first request's id -- or a store that saw its context -- would
+   * attribute the second request to the first.
+   */
+  asyncReset(): void {
+    // The previous identity is finished before the new one begins. Without
+    // this a pooled socket accumulates ids that nothing ever reports done, and
+    // a leak hunter watching `init` against `destroy` sees a connection that
+    // was reused fifty times as fifty resources still open.
+    const previous = this[kAsyncId] as number | undefined;
+    if (previous !== undefined && previous > 0) emitDestroy(previous);
+
+    const asyncId = newAsyncId();
+    const trigger = getDefaultTriggerAsyncId();
+    this[kAsyncId] = asyncId;
+    this[kTriggerAsyncId] = trigger;
+    this[kContextFrame] = AsyncContextFrame.current();
+    if (initHooksExist()) emitInit(asyncId, "TCPWRAP", trigger, this);
+  }
+
+  /**
+   * Run `fn` as this socket's own asynchronous work.
+   *
+   * Every callback the runtime hands this socket goes through here. They
+   * arrive from the loop with no context at all -- the code that opened the
+   * connection returned long ago -- so the context is put back from what the
+   * socket captured, and the ids are pushed so a hook can see which connection
+   * the work belongs to.
+   */
+  #inScope<R>(fn: () => R): R {
+    const asyncId = this[kAsyncId];
+    const prior = AsyncContextFrame.exchange(this[kContextFrame]);
+    emitBefore(asyncId, this[kTriggerAsyncId], this);
+    try {
+      return fn();
+    } finally {
+      emitAfter(asyncId);
+      AsyncContextFrame.setCurrent(prior);
     }
   }
 
@@ -242,7 +309,7 @@ export class Socket extends Duplex {
     const port = options.port ?? 0;
     const path = options.path ?? "";
 
-    const handle = nts_net_connect(host, port, path, (errno) => {
+    const handle = nts_net_connect(host, port, path, (errno) => this.#inScope(() => {
       this.connecting = false;
       if (errno < 0) {
         this.destroy(uvException(errno, "connect", path || `${host}:${port}`));
@@ -259,7 +326,7 @@ export class Socket extends Duplex {
       this.emit("ready");
       // The same first read as above, for the same reason.
       if (!this.isPaused()) this.read(0);
-    });
+    }));
 
     if (handle < 0) {
       nextTick(() => this.destroy(uvException(handle, "connect", path || `${host}:${port}`)));
@@ -276,7 +343,7 @@ export class Socket extends Duplex {
 
     nts_net_read_start(
       this._handle,
-      (bytes: number[]) => {
+      (bytes: number[]) => this.#inScope(() => {
         this.bytesRead += bytes.length;
         this.#refreshTimeout();
         // `push` returning false is the socket's backpressure: stop reading
@@ -286,8 +353,8 @@ export class Socket extends Duplex {
           nts_net_read_stop(this._handle);
           this.#readingStarted = false;
         }
-      },
-      () => {
+      }),
+      () => this.#inScope(() => {
         // `FIN` from the other end: no more data is coming, but this end may
         // still write.
         //
@@ -298,10 +365,10 @@ export class Socket extends Duplex {
         // that only writes. Node does the same two calls in the same order.
         this.push(null);
         this.read(0);
-      },
-      (errno: number) => {
+      }),
+      (errno: number) => this.#inScope(() => {
         this.destroy(uvException(errno, "read"));
-      },
+      }),
     );
   }
 
@@ -326,14 +393,14 @@ export class Socket extends Duplex {
     const buffer = typeof chunk === "string" ? Buffer.from(chunk, encoding) : (chunk as Buffer);
     this.#refreshTimeout();
 
-    nts_net_write(this._handle, Array.from(buffer) as number[], (errno) => {
+    nts_net_write(this._handle, Array.from(buffer) as number[], (errno) => this.#inScope(() => {
       if (errno < 0) {
         callback(uvException(errno, "write"));
         return;
       }
       this.bytesWritten += buffer.length;
       callback();
-    });
+    }));
   }
 
   override _final(callback: (error?: unknown) => void): void {
@@ -343,9 +410,9 @@ export class Socket extends Duplex {
     }
     // A shutdown rather than a close: the read side stays open, which is what
     // makes a half-open connection possible at all.
-    nts_net_shutdown(this._handle, (errno) => {
+    nts_net_shutdown(this._handle, (errno) => this.#inScope(() => {
       callback(errno < 0 ? uvException(errno, "shutdown") : undefined);
-    });
+    }));
   }
 
   override _destroy(error: unknown, callback: (error?: unknown) => void): void {
@@ -356,6 +423,9 @@ export class Socket extends Duplex {
     }
     this.connecting = false;
     this.readyState = "closed";
+    // The connection is gone, so the resource is finished. Nothing else will
+    // say so: a socket has no last callback the way a timer's batch does.
+    emitDestroy(this[kAsyncId]);
     callback(error);
     // `close` carries whether the socket is being closed because of an error,
     // which a listener needs in order to know whether to reconnect.
@@ -457,17 +527,49 @@ export class Server extends EventEmitter {
   #connections = 0;
   #options: ServerOptions;
 
+  declare [kAsyncId]: number;
+  declare [kTriggerAsyncId]: number;
+  declare [kContextFrame]: AsyncContextFrame | undefined;
+
   constructor(
     options?: ServerOptions | ((socket: Socket) => void),
     connectionListener?: (socket: Socket) => void,
   ) {
     super();
+    const asyncId = newAsyncId();
+    const trigger = getDefaultTriggerAsyncId();
+    this[kAsyncId] = asyncId;
+    this[kTriggerAsyncId] = trigger;
+    this[kContextFrame] = AsyncContextFrame.current();
+    if (initHooksExist()) emitInit(asyncId, "TCPSERVERWRAP", trigger, this);
+
     if (typeof options === "function") {
       connectionListener = options;
       options = {};
     }
     this.#options = options ?? {};
     if (connectionListener) this.on("connection", connectionListener as never);
+  }
+
+  /**
+   * Run `fn` as this server's own asynchronous work.
+   *
+   * Accepting a connection is the server's work, not the connection's: the
+   * socket does not exist yet when the callback starts. So a hook watching a
+   * server sees its accepts, and a store set before `listen` is readable
+   * inside them -- which is how an accepted connection inherits the context
+   * the server was started in.
+   */
+  #inScope<R>(fn: () => R): R {
+    const asyncId = this[kAsyncId];
+    const prior = AsyncContextFrame.exchange(this[kContextFrame]);
+    emitBefore(asyncId, this[kTriggerAsyncId], this);
+    try {
+      return fn();
+    } finally {
+      emitAfter(asyncId);
+      AsyncContextFrame.setCurrent(prior);
+    }
   }
 
   listen(...args: unknown[]): this {
@@ -482,11 +584,11 @@ export class Server extends EventEmitter {
       port,
       options.path ?? "",
       options.backlog ?? 511,
-      () => {
+      () => this.#inScope(() => {
         this.listening = true;
         this.emit("listening");
-      },
-      (connection: number) => {
+      }),
+      (connection: number) => this.#inScope(() => {
         const socket = new Socket({
           handle: connection,
           allowHalfOpen: this.#options.allowHalfOpen,
@@ -511,11 +613,11 @@ export class Server extends EventEmitter {
 
         if (!this.#options.pauseOnConnect) socket.resume();
         this.emit("connection", socket);
-      },
-      (errno: number) => {
+      }),
+      (errno: number) => this.#inScope(() => {
         this.listening = false;
         this.emit("error", listenError(errno, host, port, options.path));
-      },
+      }),
     );
 
     if (handle < 0) {

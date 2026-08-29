@@ -18,6 +18,7 @@
 import { EventEmitter } from "../../events/src/main.ts";
 import { Socket, connect as netConnect } from "../../net/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
+import { kAsyncId } from "../../internal/async-hooks.ts";
 
 export interface AgentOptions {
   /** Keep idle sockets for reuse. Off by default, as node's is. */
@@ -95,6 +96,10 @@ export class Agent extends EventEmitter {
       const socket = this.scheduling === "fifo" ? free.shift() : free.pop();
       if (free.length === 0) delete this.freeSockets[name];
       if (socket) {
+        // A reused connection is doing new work for a new caller, so it gets a
+        // new identity. Keeping the old one would attribute this request to
+        // whichever request happened to release the socket.
+        socket.asyncReset();
         (this.sockets[name] ??= []).push(socket);
         nextTick(() => request.onSocket(socket));
         return;
@@ -184,6 +189,10 @@ export class Agent extends EventEmitter {
       return;
     }
     free.push(socket);
+    // Idle in the pool, belonging to no request. Node marks it -1 rather than
+    // leaving the finished request's id on it, so that anything reading the
+    // socket's id sees "not currently anyone's" instead of a stale answer.
+    (socket as unknown as Record<symbol, number>)[kAsyncId] = -1;
     this.keepSocketAlive(socket);
   }
 
