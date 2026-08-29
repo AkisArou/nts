@@ -394,6 +394,45 @@ fn every_refused_expression_names_its_construct() {
     }
 }
 
+/// A `function` expression is told whether an arrow would do, not asked.
+///
+/// The refusal is the same either way -- neither lowers -- but which one it is
+/// decides whether the suggestion is *safe*. `util.deprecate` wraps a method by
+/// writing `function (this: unknown, ...args)` and forwarding the caller's
+/// receiver; an arrow there would silently rebind `this` to the module scope,
+/// and a deprecated method quietly operating on the wrong object is worse than
+/// a refusal by a wide margin.
+///
+/// Three cases, and the third is the one a simpler check gets wrong: a nested
+/// *arrow* inherits `this` from the function expression around it, so a body
+/// whose only `this` is a level down still uses one. Nested `function`s,
+/// methods and accessors bind their own and do not count.
+#[test]
+fn a_function_expression_says_whether_an_arrow_would_do() {
+    let Some(lowered) = lower_at("tests/programs/unnamed-expressions", true) else {
+        return;
+    };
+    let says = |what: &str| {
+        lowered
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.message.contains(what))
+            .count()
+    };
+    assert_eq!(
+        says("it uses no `this`"),
+        1,
+        "one function expression is convertible: {:?}",
+        refusals(&lowered),
+    );
+    assert_eq!(
+        says("uses its own `this`"),
+        2,
+        "two are not -- one by its `this` parameter, one through a nested arrow: {:?}",
+        refusals(&lowered),
+    );
+}
+
 /// Module evaluation runs, and runs in the order the import graph says.
 ///
 /// `module-order` is a diamond whose answer is a four-digit number, one digit

@@ -8,11 +8,35 @@
 //
 // If one of those constants is wrong the construct silently rejoins the
 // anonymous bucket, which is the failure this fixture exists to catch.
-export function functionExpression(n: number): number {
+
+// No `this`: an arrow with the same body would lower, and the diagnostic says
+// so.
+export function plainFunctionExpression(n: number): number {
   const f = function (k: number): number {
     return k + 1;
   };
   return f(n);
+}
+
+// Uses its own `this`, so an arrow is *not* equivalent -- it would rebind to
+// the enclosing scope. This is `util.deprecate`'s shape, which forwards the
+// caller's receiver, and suggesting the rewrite here would turn a refusal into
+// a method quietly operating on the wrong object.
+export function usesThis(n: number): number {
+  const f = function (this: { base: number }, k: number): number {
+    return this.base + k;
+  };
+  return f.call({ base: 1 }, n);
+}
+
+// A nested *arrow* inherits `this` from the function expression around it, so
+// this one uses `this` too even though the keyword is a level down.
+export function usesThisThroughAnArrow(n: number): number {
+  const f = function (this: { base: number }, k: number): number {
+    const inner = (): number => this.base;
+    return inner() + k;
+  };
+  return f.call({ base: 1 }, n);
 }
 
 export function regularExpression(n: number): number {

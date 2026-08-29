@@ -3019,6 +3019,81 @@ impl<'a> FuncBuilder<'a> {
         Ok(func)
     }
 
+    /// Whether a `function` expression could have been an arrow, and why not.
+    ///
+    /// The refusal is the same either way -- neither lowers -- but which one it
+    /// is decides whether the suggestion is safe, and that is a question the
+    /// compiler can answer rather than one a reader should have to. `function`
+    /// and `=>` differ in `this`: `util.deprecate` wraps a method by writing
+    /// `function (this: unknown, ...args)` and forwarding the caller's receiver
+    /// into `Reflect.apply`, and an arrow there would silently rebind `this` to
+    /// the module scope. A deprecated method quietly operating on the wrong
+    /// object is worse than a refusal by a wide margin, so a diagnostic that
+    /// suggested the rewrite unconditionally would be actively harmful.
+    ///
+    /// An explicit `this` parameter or any `this` in the body settles it. The
+    /// walk descends into nested *arrows*, which inherit `this` from here, and
+    /// stops at anything that binds its own -- a nested `function`, a method,
+    /// an accessor, a class.
+    fn why_not_arrow(&self, id: NodeId) -> String {
+        if self.binds_this(id) {
+            return "a `function` expression that uses its own `this`, which an arrow function \
+                    does not have"
+                .to_owned();
+        }
+        "a `function` expression; it uses no `this`, so an arrow function with the same body \
+         lowers today"
+            .to_owned()
+    }
+
+    /// Whether a function expression's own `this` is reachable from its body.
+    fn binds_this(&self, id: NodeId) -> bool {
+        // `function (this: T, ...)` declares the receiver explicitly, which is
+        // how a wrapper says it forwards one.
+        if self.children(id).into_iter().any(|child| {
+            self.kind_of(child) == Some(syntax::PARAMETER)
+                && self
+                    .children(child)
+                    .into_iter()
+                    .any(|part| self.node(part).text.as_deref() == Some("this"))
+        }) {
+            return true;
+        }
+        let mut found = false;
+        for child in &self.node(id).children {
+            self.mentions_this(*child, &mut found);
+        }
+        found
+    }
+
+    /// `this` in a subtree, not counting one that rebinds it.
+    fn mentions_this(&self, id: NodeId, found: &mut bool) {
+        if *found {
+            return;
+        }
+        match self.kind_of(id) {
+            Some(syntax::THIS_KEYWORD) => {
+                *found = true;
+                return;
+            }
+            // Binds its own `this`, so anything inside is not about ours.
+            // `ARROW_FUNCTION` is deliberately absent: an arrow inherits.
+            Some(
+                syntax::FUNCTION_EXPRESSION
+                | syntax::FUNCTION_DECLARATION
+                | syntax::METHOD_DECLARATION
+                | syntax::CONSTRUCTOR
+                | syntax::GET_ACCESSOR
+                | syntax::SET_ACCESSOR
+                | syntax::CLASS_DECLARATION,
+            ) => return,
+            _ => {}
+        }
+        for child in &self.node(id).children {
+            self.mentions_this(*child, found);
+        }
+    }
+
     /// `typeof x`, where `x` has one known primitive type.
     ///
     /// In a typed compiler this is a constant. If `value` is a `number` then
@@ -5645,11 +5720,7 @@ impl<'a> FuncBuilder<'a> {
             // two differ in `this` and `arguments`, and
             // `internal/deprecate.ts` is a case that genuinely needs the
             // first -- which is why this says "when" rather than "so".
-            Some(syntax::FUNCTION_EXPRESSION) => Err(self.unsupported(
-                id,
-                "a `function` expression; an arrow function with the same body lowers, when it \
-                 does not need its own `this`",
-            )),
+            Some(syntax::FUNCTION_EXPRESSION) => Err(self.unsupported(id, &self.why_not_arrow(id))),
             Some(syntax::REGULAR_EXPRESSION_LITERAL) => Err(self.unsupported(
                 id,
                 "a regular expression literal, which needs a regular expression engine",
