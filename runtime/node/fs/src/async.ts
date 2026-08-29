@@ -339,14 +339,23 @@ export function appendFile(
 }
 
 function statLike(follow: boolean, syscall: string) {
-  return function statAsync(path: string, callback?: Callback<Stats>): void {
+  // A `const` arrow rather than a named function expression: the name is
+  // inferred from the binding, so `statAsync` survives in a stack trace, and
+  // an arrow needs no `this` of its own -- which this body never uses.
+  const statAsync = (path: string, callback?: Callback<Stats>): void => {
     validateString(path, "path");
-    callback = asRequest(callback, "appendFile");
+    // The syscall this factory was built for. It read "appendFile" until now,
+    // because the label was generated from the nearest enclosing `export
+    // function` and this one is not exported -- so every asynchronous `stat`,
+    // `lstat` and `fstat` reported itself to `async_hooks` under the name of
+    // whichever function happened to precede it in the file.
+    callback = asRequest(callback, syscall);
     nts_fs_stat_async(path, follow, (errno: number, columns: number[]) => {
       if (errno < 0) (callback as Callback<Stats>)(uvException(errno, syscall, path));
       else (callback as Callback<Stats>)(null, new Stats(columns));
     });
   };
+  return statAsync;
 }
 
 export const stat = statLike(true, "stat");

@@ -70,12 +70,16 @@ function createWarning(
  * spelled less clearly.
  */
 export function emitWarningFor(target: WarningTarget) {
-  return function emitWarning(
+  // A `const` arrow rather than a named function expression: the name is
+  // inferred from the binding, so `process.emitWarning.name` is still
+  // `emitWarning`, and an arrow needs no `this` of its own -- which this body
+  // never uses.
+  const emitWarning = (
     warning: string | Error,
     type?: string | WarningOptions | Function,
     code?: string | Function,
     ctor?: Function,
-  ): void {
+  ): void => {
     // Before any allocation: a suppressed deprecation in a hot path should
     // cost a comparison, not an `Error`.
     if (target.noDeprecation && type === "DeprecationWarning") return;
@@ -133,6 +137,7 @@ export function emitWarningFor(target: WarningTarget) {
       target.emit("warning", w);
     }) as never, built);
   };
+  return emitWarning;
 }
 
 /**
@@ -167,7 +172,7 @@ function describe(warning: Warning): string {
 export function onWarningFor(target: WarningTarget) {
   let helperShown = false;
 
-  return function onWarning(warning: unknown): void {
+  const onWarning = (warning: unknown): void => {
     if (!(warning instanceof Error)) return;
     const w = warning as Warning;
 
@@ -195,4 +200,5 @@ export function onWarningFor(target: WarningTarget) {
     // and a captured reference would write past them.
     target.stderr.write(`${message}\n`);
   };
+  return onWarning;
 }
