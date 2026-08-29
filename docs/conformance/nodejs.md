@@ -167,14 +167,18 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**559 of node's own 991 applicable test files pass** across eighteen modules,
+**569 of node's own 991 applicable test files pass** across eighteen modules,
 of which 15 are hollow.
 
-This total was 554 in the previous revision, arrived at by adding each module's
-gain to the last number as it landed. It drifted by five. `sweep.mjs` prints
-the sum precisely so that nobody has to do that, and the rule this document
-already states about the per-module rows — a hand-copied number is a claim
-nobody can check — applies to the headline as much as to the table.
+`node:http` is not in that count yet: its 398-file suite has not finished a
+run since the client landed, and a number nobody has measured does not go in
+the table.
+
+An earlier revision said 554 here, arrived at by adding each module's gain to
+the previous total as it landed; it had drifted by five. The totals are summed
+from the rows now. The rule this document already states about the per-module
+numbers — a hand-copied number is a claim nobody can check — applies to the
+headline as much as to the table.
 
 > **The `compiles` column means something again.** For most of this document's
 > life it did not. The frontend decomposed types under a fixed budget, and
