@@ -752,8 +752,16 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
         let Some(symbol) = probe.node(*name_node).symbol else {
             continue;
         };
+        // The last child that is neither the name nor the type annotation.
+        //
+        // By what it *is*, not by what it is not: skipping identifiers took
+        // `let held: Box | undefined = undefined` to mean the type annotation,
+        // which `module#init` then tried to lower as an expression -- and it
+        // made `let x = y` a declaration with no initializer at all, because
+        // `y` is an identifier too.
         let Some(initializer) = children.iter().rev().find(|child| {
-            **child != *name_node && probe.kind_of(**child) != Some(syntax::IDENTIFIER)
+            **child != *name_node
+                && !syntax::is_type_node(probe.kind_of(**child).unwrap_or_default())
         }) else {
             scope.unsupported.insert(
                 symbol.0,
@@ -3539,11 +3547,18 @@ impl<'a> FuncBuilder<'a> {
             let Some(global) = self.module.variables.get(&symbol.0).copied() else {
                 continue;
             };
-            let value = self.lower_expression(initializer)?;
             // At the global's type, like every other slot a value meets. An
-            // erased global is the case that needs it: the initializer is a
-            // number and the global holds a tag beside a payload.
+            // erased global is the case that needs the coercion: the
+            // initializer is a number and the global holds a tag beside a
+            // payload.
+            //
+            // Lowered *expecting* that type rather than lowered and then
+            // converted, because some literals decide nothing on their own and
+            // take their shape from the slot. `[]` is the one: its element type
+            // is `never`, and inside a function the declaration supplies the
+            // real one while a module-scope initializer had nothing to ask.
             let want = self.module.types[global as usize].clone();
+            let value = self.lower_expecting(initializer, &want)?;
             let value = self.coerce(value, &want, declaration)?;
             self.write_place(declaration, &Place::Global(global), value);
         }
@@ -6295,6 +6310,20 @@ impl<'a> FuncBuilder<'a> {
     fn lower_array_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let ty = self
             .type_of(id)
+            // `[]` is typed `never[]`, which is the checker saying the literal
+            // decides nothing -- the slot it goes into does. So the expected
+            // type wins over it, and only over it: a literal with elements
+            // knows what it holds.
+            .filter(|ty| {
+                !matches!(ty, HirType::Managed(ManagedType::Array(element))
+                    if **element == HirType::Never)
+            })
+            // Unfiltered, and the line below is why: a non-array expected type
+            // is rejected there, with a message that names what went wrong.
+            // Filtering it here refused the same programs one step earlier and
+            // called them unrepresentable instead, which cost four functions in
+            // the node profile to the cascade that followed.
+            .or_else(|| self.expecting.clone())
             .ok_or_else(|| self.unrepresentable(id, "an array literal"))?;
         if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
             return Err(self.unsupported(id, "an array literal that is not an array"));

@@ -972,7 +972,9 @@ fn global_name(program: &Program, global: u32) -> String {
 /// which is the same reachability argument `--gc-sections` makes for functions.
 fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagnostic> {
     for global in &program.globals {
-        let ty = c_type(&global.ty, &global.origin)?;
+        // `c_type_of` rather than `c_type`: an object type is named per
+        // program, so a global holding one cannot be spelled without it.
+        let ty = c_type_of(program, &global.ty, &global.origin)?;
         let visibility = if global.exported { "" } else { "static " };
         writer.line(
             &global.origin,
@@ -992,6 +994,12 @@ fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagno
                     // static's initializer and C wants a constant expression
                     // there. The call compiled everywhere else and not here.
                     HirType::Erased => "NTS_VALUE_UNDEFINED".to_owned(),
+                    // A reference global starts null, and `module#init`
+                    // assigns whatever the source wrote -- the same place every
+                    // non-constant module-scope initializer already runs.
+                    // `initial` is one `f64` and cannot spell a pointer, so
+                    // emitting it here would declare `NtsString *s = 0.0;`.
+                    ref ty if ty.may_hold_a_reference() => "0".to_owned(),
                     _ => float_literal(global.initial),
                 }
             ),

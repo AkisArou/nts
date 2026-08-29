@@ -209,7 +209,7 @@ impl HirType {
     /// something fits in a register still need the narrower answer.
     #[must_use]
     pub const fn can_be_global(&self) -> bool {
-        self.is_scalar() || matches!(self, Self::Erased)
+        self.is_scalar() || self.may_hold_a_reference()
     }
 }
 

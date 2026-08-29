@@ -351,8 +351,9 @@ fn count_ops(
         // A store writing over a zero skips the load and the release: there is
         // nothing in the slot to give up. Every store an object literal or a
         // constructor makes is one of those.
-        if let OpKind::FieldSet { value: stored, .. } | OpKind::ArraySet { value: stored, .. } =
-            &kind
+        if let OpKind::FieldSet { value: stored, .. }
+        | OpKind::ArraySet { value: stored, .. }
+        | OpKind::GlobalSet { value: stored, .. } = &kind
             && counted(func, layouts, *stored)
         {
             let previous = if fresh.initializing(func, &kind) {
@@ -421,8 +422,15 @@ struct Counted {
 }
 
 /// Reading a reference out of a slot.
+///
+/// A global is a slot like a field is, and the strongest case of the rule: it
+/// outlives every function, so a reference read out of one is owned by the
+/// global and not by the reader.
 fn is_load(kind: &OpKind) -> bool {
-    matches!(kind, OpKind::FieldGet { .. } | OpKind::ArrayGet { .. })
+    matches!(
+        kind,
+        OpKind::FieldGet { .. } | OpKind::ArrayGet { .. } | OpKind::GlobalGet(_)
+    )
 }
 
 /// Whether a load can read the slot rather than take a reference of its own.
@@ -642,6 +650,17 @@ fn load_slot(func: &mut Func, ops: &mut Vec<ValueId>, store: &OpKind) -> Option<
                 object: *object,
                 field: *field,
             },
+            func.values[value.0 as usize].ty.clone(),
+            func.values[value.0 as usize].origin.clone(),
+        ),
+        // A global is never "initializing": `module#init` writes over the
+        // static's initial value, and every later store writes over whatever
+        // the last one left. So the load and the release always happen, and
+        // giving up an absent value has to be free -- which it is, because
+        // releasing a null pointer and releasing an `undefined` tag are both
+        // defined to do nothing.
+        OpKind::GlobalSet { global, value } => (
+            OpKind::GlobalGet(*global),
             func.values[value.0 as usize].ty.clone(),
             func.values[value.0 as usize].origin.clone(),
         ),
