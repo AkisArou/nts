@@ -205,3 +205,29 @@ Not in `Erase` — that is a store. It is in `Unerase`: the checker narrows
 disagreement and insert the unerase, and it has to be impossible to reach an
 unerase the narrowing did not license. That is the one place a wrong answer
 would be silent rather than loud, so it is where the examples point.
+
+## Correction: what `919efb0` actually contains
+
+That commit's message describes about a third of it. It carries 174 lines of
+`runtime/c/nts_runtime.{c,h}` that are the **NodeJS session's** work, not mine:
+`nts_promise_fulfill_value`, `nts_promise_value`, `NTS_PAYLOAD_VALUE`, the
+promise's `tag` field, and the forwarder arm — the design they proposed and I
+agreed to in preference to my own. The comment on the union member is their
+wording. Their test for it is `6748d06`, eighteen checks, sabotaged five ways.
+
+Recorded here rather than by rewriting the commit: their commit sits on top of
+mine and they have cited its SHA, so rewriting mine to tidy my message would
+rewrite theirs to pay for my mistake.
+
+**The mechanism, because it has now happened twice in these same two files and
+in both directions.** A private `GIT_INDEX_FILE` protects against staging the
+other session's *files*. It does nothing about the other session's changes to a
+file *you* are also staging, because `git add -- <path>` takes the whole file as
+it stands on disk. Saying which files you hold edits in is necessary and was not
+sufficient — neither of us said it, either time.
+
+What would have caught it, and needs no coordination: `git diff HEAD -- <file>`
+before staging any file the other session might be in, and `git show --stat` on
+your own commit immediately after making it. Both times the line count was the
+tell. A commit that claims to add a type and adds 174 lines of runtime is
+visibly wrong at a glance, and neither of us looked.
