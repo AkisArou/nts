@@ -50,6 +50,9 @@ pub const BAR_TOKEN: u16 = 51;
 pub const CARET_TOKEN: u16 = 52;
 pub const EXCLAMATION_TOKEN: u16 = 53;
 pub const AMPERSAND_AMPERSAND_TOKEN: u16 = 55;
+/// `??`, which differs from `||` in what it treats as absent: only `null` and
+/// `undefined`, where `||` takes any falsy value.
+pub const QUESTION_QUESTION_TOKEN: u16 = 60;
 pub const BAR_BAR_TOKEN: u16 = 56;
 pub const QUESTION_TOKEN: u16 = 57;
 /// `...`, on a rest parameter or a spread element.

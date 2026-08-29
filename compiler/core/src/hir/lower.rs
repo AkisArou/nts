@@ -7531,11 +7531,19 @@ impl<'a> FuncBuilder<'a> {
         let else_tail = self.current;
         let else_bindings = std::mem::replace(&mut self.bindings, entry.clone());
 
-        // The two arms must agree about representation, since one parameter
-        // receives both. They do whenever the checker gave the expression a type
-        // at all; a `number | string` would not be lowerable in the first place.
+        // The two arms have to agree about representation, since one parameter
+        // receives both -- and they are made to agree rather than assumed to.
+        //
+        // The assumption held while a union had no representation: `number |
+        // string` was not lowerable, so a conditional that produced one was
+        // refused before reaching here. Now it is an erased value, and
+        // `n > 0 ? n : undefined` has a `double` on one arm and a tagged value
+        // on the other. The join took the erased type and the first arm passed
+        // the double straight through, which the C compiler reported as
+        // assigning a `double` to an `NtsValue` -- with no source location and
+        // nothing naming the join.
         let merge = self.new_block();
-        let result = self.push_block_param(merge, ty, origin.clone());
+        let result = self.push_block_param(merge, ty.clone(), origin.clone());
 
         let mut merged = Vec::new();
         for (symbol, entering) in &entry {
@@ -7557,6 +7565,7 @@ impl<'a> FuncBuilder<'a> {
         }
 
         self.switch_to(then_tail);
+        let then_value = self.coerce(then_value, &ty, id)?;
         let mut args = vec![then_value];
         args.extend(merged.iter().map(|(_, from_then, _)| *from_then));
         self.terminate(Terminator::Jump {
@@ -7565,6 +7574,7 @@ impl<'a> FuncBuilder<'a> {
         });
 
         self.switch_to(else_tail);
+        let else_value = self.coerce(else_value, &ty, id)?;
         let mut args = vec![else_value];
         args.extend(merged.iter().map(|(_, _, from_else)| *from_else));
         self.terminate(Terminator::Jump {
@@ -9570,6 +9580,19 @@ impl<'a> FuncBuilder<'a> {
                         let other = if *left == id { *right } else { *left };
                         self.type_of(other)
                     }
+                    // `a || undefined`, `a ?? null`. Neither operator chooses a
+                    // type: the result is one side or the other, so the whole
+                    // expression's type is what each operand is heading for.
+                    // Without this an `undefined` written as the right of a
+                    // `||` had nothing to ask and was refused for standing in
+                    // for something that is not a reference.
+                    Some(
+                        syntax::BAR_BAR_TOKEN
+                        | syntax::AMPERSAND_AMPERSAND_TOKEN
+                        | syntax::QUESTION_QUESTION_TOKEN,
+                    ) => self
+                        .type_of(parent)
+                        .or_else(|| self.contextual_type(parent, depth + 1)),
                     _ => None,
                 }
             }

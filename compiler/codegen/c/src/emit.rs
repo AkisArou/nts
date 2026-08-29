@@ -1992,6 +1992,13 @@ fn unary_text(
                 HirType::Int { .. } | HirType::Managed(_) => {
                     format!("{name} = {} != 0;", value_name(operand))
                 }
+                // An erased value carries which of those it is, so the rule is
+                // a switch on the tag rather than a comparison. In the runtime,
+                // because spelling it inline would put the whole of JavaScript
+                // truthiness at every site that tests one.
+                HirType::Erased => {
+                    format!("{name} = nts_value_truthy({});", value_name(operand))
+                }
                 _ => format!("{name} = ({0} != 0.0) && !isnan({0});", value_name(operand)),
             }
         }

@@ -245,6 +245,33 @@ static inline NtsValue nts_value_of_boolean(bool boolean) {
 #define NTS_VALUE_UNDEFINED                                                    \
     { NTS_TAG_UNDEFINED, { 0.0 } }
 
+/* Whether an erased value is truthy, by JavaScript's rule.
+ *
+ * `undefined` and `null` are falsy, a boolean is itself, a number is falsy at
+ * zero and at NaN, a string is falsy when empty however present it is, and an
+ * object or an array is truthy whatever it holds -- `if ([])` runs.
+ *
+ * Here rather than in the emitter because it is one rule over a tag, and the
+ * emitter would have to spell the whole switch inline at every site that tests
+ * one. */
+static inline bool nts_value_truthy(NtsValue value) {
+    switch (value.tag) {
+    case NTS_TAG_UNDEFINED:
+        return false;
+    case NTS_TAG_BOOLEAN:
+        return value.as.boolean;
+    case NTS_TAG_NUMBER:
+        return value.as.number != 0.0 && !(value.as.number != value.as.number);
+    case NTS_TAG_STRING:
+        return value.as.reference != 0 && ((NtsString *)value.as.reference)->length != 0;
+    default:
+        /* An object, an array: present is enough. A reference tag with a null
+         * payload is not a value this compiler produces, and testing for it
+         * costs nothing. */
+        return value.as.reference != 0;
+    }
+}
+
 static inline NtsValue nts_value_of_undefined(void) {
     NtsValue value;
     value.tag = NTS_TAG_UNDEFINED;

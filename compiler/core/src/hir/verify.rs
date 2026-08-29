@@ -88,6 +88,18 @@ pub enum Invalid {
     EntryHasParams { func: String },
     /// A block cannot be reached from the entry.
     Unreachable { func: String, block: BlockId },
+    /// An edge hands a block parameter a value of another representation.
+    ///
+    /// A block parameter is where two paths agree about what a name holds, so
+    /// this is the two paths disagreeing. `n > 0 ? n : undefined` produced one:
+    /// the join took an erased value and the first arm passed a bare `double`.
+    EdgeType {
+        func: String,
+        target: BlockId,
+        at: usize,
+        expected: HirType,
+        found: HirType,
+    },
     /// A function that owes a value fell out of the end of its body.
     ///
     /// [`super::Terminator::FellThrough`] is sound only where the block is
@@ -374,7 +386,15 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
     check_dominance(func, &reachable, problems);
 }
 
-/// Every jump must supply exactly the parameters its target declares.
+/// Every jump must supply exactly the parameters its target declares, of the
+/// types it declares them.
+///
+/// The count was checked and the types were not, and the difference is what an
+/// edge is *for*: a block parameter is where two paths agree about what a name
+/// holds, so an edge handing it something of another shape is the two paths
+/// disagreeing. It reached the backend as C assigning a `double` to an
+/// `NtsValue` -- caught, but by the C compiler, with no source location and
+/// nothing naming the join.
 fn check_arguments(func: &Func, block: &Block, problems: &mut Vec<Invalid>) {
     let mut check = |target: BlockId, args: &[ValueId]| {
         let expected = func.blocks[target.0 as usize].params.len();
@@ -385,6 +405,24 @@ fn check_arguments(func: &Func, block: &Block, problems: &mut Vec<Invalid>) {
                 expected,
                 found: args.len(),
             });
+            return;
+        }
+        for (at, (argument, parameter)) in args
+            .iter()
+            .zip(&func.blocks[target.0 as usize].params)
+            .enumerate()
+        {
+            let found = &func.values[argument.0 as usize].ty;
+            let want = &func.values[parameter.0 as usize].ty;
+            if !compatible(found, want) {
+                problems.push(Invalid::EdgeType {
+                    func: func.name.clone(),
+                    target,
+                    at,
+                    expected: want.clone(),
+                    found: found.clone(),
+                });
+            }
         }
     };
 
