@@ -195,6 +195,8 @@ export class ClientRequest extends OutgoingMessage {
     socket.on("error", ((error: unknown) => this.#fail(error)) as never);
 
     socket.on("close", (() => {
+      // The response parser is finished with the connection.
+      parser.free();
       if (!this.res && !this.aborted) {
         // The connection went before any response arrived, which is the one
         // case a client cannot recover from on its own.

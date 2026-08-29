@@ -19,6 +19,14 @@
 // stream. RFC 9112 §6.1 says the length must be rejected in that case, and
 // this rejects the message.
 
+import {
+  emitDestroy,
+  emitInit,
+  getDefaultTriggerAsyncId,
+  initHooksExist,
+  newAsyncId,
+} from "../../internal/async-hooks.ts";
+
 const CR = 13;
 const LF = 10;
 const SP = 32;
@@ -133,6 +141,8 @@ function isValidFieldValue(value: string): boolean {
   return true;
 }
 
+const HTTP_PARSER_TYPES = ["HTTPINCOMINGMESSAGE", "HTTPCLIENTREQUEST"] as const;
+
 export class HTTPParser {
   static readonly REQUEST = REQUEST;
   static readonly RESPONSE = RESPONSE;
@@ -173,11 +183,42 @@ export class HTTPParser {
 
   #error: ParserError | null = null;
   #bytesParsed = 0;
+  #asyncId = 0;
 
   initialize(type: number, maxHeaderSize?: number): void {
     this.#type = type;
     this.#maxHeaderSize = maxHeaderSize ?? 80 * 1024;
+
+    // A parser is an asynchronous resource, and which one depends on what it
+    // is parsing: node calls a request parser an HTTPINCOMINGMESSAGE and a
+    // response parser an HTTPCLIENTREQUEST. They are the two ends of the same
+    // connection, and a tool watching a proxy needs to tell them apart.
+    //
+    // Reset rather than assigned, because parsers are reused: node keeps a
+    // free list, and one taken off it is starting new work under a new
+    // identity with the old one reported finished.
+    if (this.#asyncId > 0) emitDestroy(this.#asyncId);
+    const asyncId = newAsyncId();
+    const trigger = getDefaultTriggerAsyncId();
+    this.#asyncId = asyncId;
+    if (initHooksExist()) {
+      emitInit(asyncId, HTTP_PARSER_TYPES[type === REQUEST ? 0 : 1] as string, trigger, this);
+    }
+
     this.reset();
+  }
+
+  /**
+   * This parser is finished.
+   *
+   * Called when the connection it was parsing goes, which is the only moment
+   * anyone can say so -- a parser between messages on a keep-alive connection
+   * looks exactly like one that will never be used again.
+   */
+  free(): void {
+    if (this.#asyncId <= 0) return;
+    emitDestroy(this.#asyncId);
+    this.#asyncId = 0;
   }
 
   /** Back to the start of a message, keeping the callbacks. */

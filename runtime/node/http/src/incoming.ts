@@ -75,16 +75,25 @@ export class IncomingMessage extends Readable {
   socket: IncomingSocket | null;
   complete = false;
 
+  /**
+   * Whether the message ended before it was complete.
+   *
+   * Set when the message is destroyed with bytes still outstanding, which is
+   * how a program tells a client that hung up from one that finished.
+   */
+  aborted = false;
+
   /** Whether the sender said it wanted the connection kept open. */
   #keepAlive = true;
   #inTrailers = false;
 
   constructor(socket?: IncomingSocket) {
-    super({
-      // A message body is bytes. Its high water mark is the socket's, because
-      // buffering more here than the socket would is buffering for nobody.
-      autoDestroy: false,
-    });
+    // The stream's own defaults, which is what node uses here. `autoDestroy`
+    // in particular: a message that has been read to the end is finished, and
+    // destroying it is what emits `close`. Programs listen for that to learn
+    // that a request is over -- including that a client hung up mid-request --
+    // so suppressing it removes the event most servers rely on.
+    super();
     this.socket = socket ?? null;
   }
 
@@ -185,6 +194,8 @@ export class IncomingMessage extends Readable {
       // Destroyed mid-message: the connection cannot be reused, because the
       // rest of this message is still coming and would be read as the next
       // one.
+      this.aborted = true;
+      this.emit("aborted");
       this.socket?.destroy(error);
     }
     callback(error);

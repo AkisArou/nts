@@ -98,13 +98,19 @@ export class Server extends NetServer {
 
   #serve(socket: Socket): void {
     this.#connections.add(socket);
-    socket.once("close", (() => {
-      this.#connections.delete(socket);
-      this.#idle.delete(socket);
-    }) as never);
+
 
     const parser = new HTTPParser();
     parser.initialize(REQUEST, this.#maxHeaderSize);
+
+    socket.once("close", (() => {
+      this.#connections.delete(socket);
+      this.#idle.delete(socket);
+      // The parser belongs to the connection, not to a message: on a
+      // keep-alive socket it survives between requests, so the connection
+      // ending is the only moment it is finished.
+      parser.free();
+    }) as never);
 
     let incoming: IncomingMessage | null = null;
     let response: ServerResponse | null = null;

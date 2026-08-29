@@ -168,6 +168,18 @@ export class Socket extends Duplex {
   #remoteAddress: AddressInfo | Record<string, never> = {};
   #readingStarted = false;
 
+  /**
+   * This socket's real identity.
+   *
+   * Separate from `[kAsyncId]` because that one is a mirror an owner may
+   * overwrite: `http.Agent` sets it to -1 while the socket sits in the pool,
+   * meaning "not currently anyone's work". Node keeps the same two, the truth
+   * on the handle and the mirror on the socket, and the split matters -- if
+   * the -1 were the only copy there would be nothing left to report destroyed
+   * when the socket is next reused.
+   */
+  #asyncId = 0;
+
   declare [kAsyncId]: number;
   declare [kTriggerAsyncId]: number;
   declare [kContextFrame]: AsyncContextFrame | undefined;
@@ -231,11 +243,11 @@ export class Socket extends Duplex {
     // this a pooled socket accumulates ids that nothing ever reports done, and
     // a leak hunter watching `init` against `destroy` sees a connection that
     // was reused fifty times as fifty resources still open.
-    const previous = this[kAsyncId] as number | undefined;
-    if (previous !== undefined && previous > 0) emitDestroy(previous);
+    if (this.#asyncId > 0) emitDestroy(this.#asyncId);
 
     const asyncId = newAsyncId();
     const trigger = getDefaultTriggerAsyncId();
+    this.#asyncId = asyncId;
     this[kAsyncId] = asyncId;
     this[kTriggerAsyncId] = trigger;
     this[kContextFrame] = AsyncContextFrame.current();
@@ -252,7 +264,7 @@ export class Socket extends Duplex {
    * the work belongs to.
    */
   #inScope<R>(fn: () => R): R {
-    const asyncId = this[kAsyncId];
+    const asyncId = this.#asyncId;
     const prior = AsyncContextFrame.exchange(this[kContextFrame]);
     emitBefore(asyncId, this[kTriggerAsyncId], this);
     try {
@@ -425,7 +437,8 @@ export class Socket extends Duplex {
     this.readyState = "closed";
     // The connection is gone, so the resource is finished. Nothing else will
     // say so: a socket has no last callback the way a timer's batch does.
-    emitDestroy(this[kAsyncId]);
+    emitDestroy(this.#asyncId);
+    this.#asyncId = 0;
     callback(error);
     // `close` carries whether the socket is being closed because of an error,
     // which a listener needs in order to know whether to reconnect.
