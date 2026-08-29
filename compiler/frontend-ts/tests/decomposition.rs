@@ -138,24 +138,90 @@ fn a_mixed_union_keeps_both_primitives() {
 }
 
 #[test]
-fn nothing_structured_is_left_where_the_fixture_has_a_shape() {
+fn every_shape_something_references_is_opened() {
     let Some(snapshot) = decomposed_types() else {
         return;
     };
-    // Objects, unions and arrays are all modelled now. Anything still Structured
-    // in this fixture would mean a shape silently skipped rather than resolved.
+    // Objects, unions and arrays are all modelled, so a `Structured` left in
+    // this fixture would ordinarily mean a shape silently skipped. Two are
+    // left deliberately, and the invariant worth asserting is not "none" but
+    // "none that anything can reach".
+    //
+    // The first is the fix for the decomposition budget: a *generic*
+    // signature's return type is recorded by id and never opened.
+    // `Array<string>.map<U>(): U[]` is reached from `names: string[]` here,
+    // and opening it opens `U[]`, whose element opens as another form of `U`,
+    // for ever. The instantiation a program actually calls is decomposed on
+    // its own, from the call site.
+    //
+    // The second is the module's own namespace object, which reachability
+    // seeds in order to walk the exports. Its members are reached through
+    // their own symbols, so nothing ever reads it as a shape -- until
+    // `import * as ns` or a re-export needs exactly that, which is why it is
+    // asserted rather than merely tolerated.
+    let mut generic_returns: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    let mut referenced: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    for signature in &snapshot.signatures {
+        if signature.type_parameters.is_empty() {
+            referenced.insert(signature.return_type.0);
+        } else {
+            generic_returns.insert(signature.return_type.0);
+        }
+        for parameter in &signature.parameters {
+            referenced.insert(parameter.ty.0);
+        }
+    }
+    for record in &snapshot.types {
+        match &record.kind {
+            TypeKind::Object { properties } => {
+                referenced.extend(properties.iter().map(|property| property.ty.0));
+            }
+            TypeKind::Array(element) => {
+                referenced.insert(element.0);
+            }
+            TypeKind::Union(members)
+            | TypeKind::Intersection(members)
+            | TypeKind::Tuple(members) => {
+                referenced.extend(members.iter().map(|member| member.0));
+            }
+            _ => {}
+        }
+    }
+
     let leftover: Vec<u32> = snapshot
         .types
         .iter()
-        .filter_map(|record| match record.kind {
-            TypeKind::Structured { flags } => Some(flags),
-            _ => None,
-        })
+        .enumerate()
+        .filter(|(_, record)| matches!(record.kind, TypeKind::Structured { .. }))
+        .map(|(at, _)| u32::try_from(at).expect("type index fits"))
+        .collect();
+
+    let reachable: Vec<u32> = leftover
+        .iter()
+        .copied()
+        .filter(|id| referenced.contains(id))
         .collect();
     assert!(
-        leftover.is_empty(),
-        "structured types left undecomposed with flags {leftover:?}",
+        reachable.is_empty(),
+        "shapes left unopened that a property, parameter or plain return reaches: {reachable:?}",
     );
+
+    // What is left is unreferenced, and every one should be a module.
+    for id in leftover
+        .iter()
+        .copied()
+        .filter(|id| !generic_returns.contains(id))
+    {
+        let name = snapshot.types[id as usize]
+            .symbol
+            .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
+            .map(|record| record.name.clone())
+            .unwrap_or_default();
+        assert!(
+            name.contains("/src/"),
+            "an unopened shape that is neither a generic return nor a module: {id} ({name})",
+        );
+    }
 }
 
 fn decomposed_signatures() -> Option<SemanticSnapshot> {
