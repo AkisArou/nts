@@ -59,6 +59,16 @@ struct ModuleScope {
     types: Vec<HirType>,
     /// The globals themselves, handed to the program once collection is done.
     globals: Vec<super::Global>,
+    /// Symbols whose initializer is not a constant, and the expression that
+    /// computes it.
+    ///
+    /// A module-scope binding is a global, and a global's `initial` has to be a
+    /// number the artifact can carry. `let total = bump(41)` is not one -- so
+    /// the whole declaration used to be refused, which is why `export const
+    /// derived = imported + 1`, the most ordinary line in a module, did not
+    /// compile. It is a global whose initial value is zero and whose real value
+    /// is assigned by `module#init`, in evaluation order with everything else.
+    deferred: rustc_hash::FxHashMap<u32, NodeId>,
     /// Symbols this declares but cannot represent, and why.
     ///
     /// Kept rather than refused on sight. A module-scope variable no function
@@ -441,6 +451,9 @@ fn is_module_statement(kind: u16) -> bool {
             | syntax::EMPTY_STATEMENT
             | syntax::THROW_STATEMENT
             | syntax::EXPRESSION_STATEMENT
+            // A declaration whose initializer is code runs at evaluation time,
+            // and its position among the other statements is observable.
+            | syntax::VARIABLE_STATEMENT
     )
 }
 
@@ -456,7 +469,6 @@ fn is_module_declaration(kind: u16) -> bool {
             | syntax::CLASS_DECLARATION
             | syntax::INTERFACE_DECLARATION
             | syntax::ENUM_DECLARATION
-            | syntax::VARIABLE_STATEMENT
             | syntax::END_OF_FILE_TOKEN
     )
 }
@@ -481,6 +493,19 @@ fn carries_code(probe: &FuncBuilder, id: NodeId) -> bool {
         }
         carries_code(probe, *child)
     })
+}
+
+/// Every descendant of one syntax kind, in source order.
+fn collect_kind(snapshot: &SemanticSnapshot, id: NodeId, kind: u16, into: &mut Vec<NodeId>) {
+    let Some(node) = snapshot.nodes.get(id.0 as usize) else {
+        return;
+    };
+    if node.kind == NodeKind::Syntax(kind) {
+        into.push(id);
+    }
+    for child in &node.children {
+        collect_kind(snapshot, *child, kind, into);
+    }
 }
 
 fn closure_names(index: usize) -> (String, String) {
@@ -741,7 +766,8 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
             continue;
         };
 
-        let Some(value) = probe.constant_value(*initializer, &scope.constants) else {
+        let constant = probe.constant_value(*initializer, &scope.constants);
+        if constant.is_none() {
             // Code, rather than data this file happens not to use. Reported
             // here because nothing downstream will: the methods of an object
             // literal are not walked, so they are not lowered and not refused.
@@ -749,13 +775,14 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
                 scope
                     .refusals
                     .push(probe.unsupported(member, "a method on an object literal"));
+                scope.unsupported.insert(
+                    symbol.0,
+                    "a module-scope variable whose initializer is not constant".to_owned(),
+                );
+                continue;
             }
-            scope.unsupported.insert(
-                symbol.0,
-                "a module-scope variable whose initializer is not constant".to_owned(),
-            );
-            continue;
-        };
+        }
+        let value = constant.unwrap_or(0.0);
         let Some(ty) = probe.type_of(*name_node) else {
             scope.unsupported.insert(
                 symbol.0,
@@ -780,7 +807,11 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
             .map_or(nts_semantic_schema::VariableKind::Var, |list| {
                 nts_semantic_schema::VariableKind::from_flags(probe.node(list).flags)
             });
-        if kind == nts_semantic_schema::VariableKind::Const {
+        // A `const` whose initializer folds is a value rather than storage: the
+        // reader gets the number and nothing is allocated. One whose
+        // initializer is code is storage like any other, written once by
+        // `module#init`.
+        if kind == nts_semantic_schema::VariableKind::Const && constant.is_some() {
             scope.constants.insert(symbol.0, value);
             continue;
         }
@@ -799,6 +830,9 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
         });
         scope.variables.insert(symbol.0, global);
         scope.types.push(ty);
+        if constant.is_none() {
+            scope.deferred.insert(symbol.0, *initializer);
+        }
     }
     scope
 }
@@ -1256,9 +1290,78 @@ fn lower_module_initializer(
     // joins the worklist below rather than missing it.
     let (initializer, refusals) = module_statements(snapshot);
     lowered.diagnostics.extend(refusals);
-    if let Some((file, statements)) = initializer {
+
+    // Each deferred initializer, tried in a builder of its own first.
+    //
+    // A module-scope declaration whose initializer cannot lower has to be
+    // refused *by itself*. It used to be, because it was never part of module
+    // evaluation; now that it is, one unrepresentable declaration would take
+    // the whole initializer with it -- every other module's evaluation
+    // included -- and `url` has one, so this is not hypothetical. Trying it
+    // apart costs lowering these expressions twice and buys a refusal that
+    // names the declaration rather than the program.
+    //
+    // Apart is also *equivalent*: a module-scope initializer reads globals and
+    // constants, never a local, so it lowers the same alone as in sequence.
+    let mut refused: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
+    for (symbol, initializer) in &shared.module.deferred {
+        let mut probe = shared.builder(snapshot, Substitution::default(), String::new());
+        if let Err(diagnostic) = probe.lower_expression(*initializer) {
+            lowered.diagnostics.push(diagnostic);
+            refused.insert(*symbol);
+        }
+    }
+
+    if let Some((file, mut statements)) = initializer {
+        // And the same for whole statements, for the same reason at a larger
+        // scale. One unsupported top-level statement used to cost the program
+        // *every* top-level statement -- and it was not hypothetical either:
+        // eighteen of the nineteen node profile modules lost all module
+        // evaluation to a single `for...of` in `util/inspect`. When that one
+        // was fixed the number stayed at eighteen, because the next
+        // unsupported statement in the same file took over. It is a queue, and
+        // one line of it darkens eighteen modules at a time.
+        //
+        // Statement-level granularity turns "this module is dark" into "this
+        // line is dark", which is worth more than any individual lowering: it
+        // is the difference between a diagnostic that names a construct and
+        // one that names a program.
+        //
+        // Sound apart for the reason a declaration is: a module-scope
+        // statement reads and writes *globals*, never a local of the
+        // initializer, because a module-scope binding is a global. A block
+        // that declares its own local also consumes it.
+        let mut lost = Vec::new();
+        statements.retain(|statement| {
+            let mut probe = shared.builder(snapshot, Substitution::default(), String::new());
+            let attempt = if probe.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
+                probe.lower_module_binding(*statement, &refused)
+            } else {
+                probe.lower_statement(*statement)
+            };
+            match attempt {
+                Ok(()) => true,
+                Err(diagnostic) => {
+                    lost.push(diagnostic);
+                    false
+                }
+            }
+        });
+        for diagnostic in lost {
+            let origin = diagnostic.primary;
+            lowered.diagnostics.push(diagnostic);
+            lowered.diagnostics.push(Diagnostic::error(
+                "NTS1001",
+                "this statement, which module evaluation therefore skips; the rest of the \
+                 module's evaluation still runs, and every value this line would have \
+                 computed keeps whatever it held before it"
+                    .to_owned(),
+                origin,
+            ));
+        }
+
         let mut builder = shared.builder(snapshot, Substitution::default(), String::new());
-        match builder.lower_module_init(file, &statements) {
+        match builder.lower_module_init(file, &statements, &refused) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => {
                 // The consequence, said out loud. One refused statement loses
@@ -2916,6 +3019,60 @@ impl<'a> FuncBuilder<'a> {
         Ok(func)
     }
 
+    /// A module-scope declaration, as the assignment it is.
+    ///
+    /// Not `lower_statement`: that would bind the name as a *local* of the
+    /// initializer function, and every function that reads the name reads the
+    /// global -- so the value would be computed, stored in a local, and thrown
+    /// away, leaving the global at zero. The declaration and the store are the
+    /// same line here.
+    ///
+    /// Declarations whose initializer folded to a constant are skipped: their
+    /// value is already in the artifact, either as the global's `initial` or,
+    /// for a `const`, inlined at every read. `deferred` is exactly the set that
+    /// needs code, which is why the decision is made once in
+    /// `collect_module_scope` rather than re-derived here.
+    fn lower_module_binding(
+        &mut self,
+        statement: NodeId,
+        refused: &rustc_hash::FxHashSet<u32>,
+    ) -> Result<(), Diagnostic> {
+        let mut declarations = Vec::new();
+        collect_kind(
+            self.snapshot,
+            statement,
+            syntax::VARIABLE_DECLARATION,
+            &mut declarations,
+        );
+        for declaration in declarations {
+            let children = self.children(declaration);
+            let Some(name) = children
+                .iter()
+                .find(|child| self.kind_of(**child) == Some(syntax::IDENTIFIER))
+            else {
+                continue;
+            };
+            let Some(symbol) = self.node(*name).symbol else {
+                continue;
+            };
+            // Already refused on its own, above. Its global keeps the zero it
+            // was given, and the program is missing one value rather than all
+            // of them.
+            if refused.contains(&symbol.0) {
+                continue;
+            }
+            let Some(initializer) = self.module.deferred.get(&symbol.0).copied() else {
+                continue;
+            };
+            let Some(global) = self.module.variables.get(&symbol.0).copied() else {
+                continue;
+            };
+            let value = self.lower_expression(initializer)?;
+            self.write_place(declaration, &Place::Global(global), value);
+        }
+        Ok(())
+    }
+
     /// A module's top-level statements, as one function.
     ///
     /// Module evaluation is itself a job (`docs/async.md` §3), so what this
@@ -2926,9 +3083,14 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         file: NodeId,
         statements: &[NodeId],
+        refused: &rustc_hash::FxHashSet<u32>,
     ) -> Result<Func, Diagnostic> {
         let origin = self.origin(file);
         for statement in statements {
+            if self.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
+                self.lower_module_binding(*statement, refused)?;
+                continue;
+            }
             self.lower_statement(*statement)?;
         }
         self.terminate(Terminator::Return(None));

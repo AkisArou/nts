@@ -189,6 +189,117 @@ fn an_imported_binding_is_the_declaring_module_s_global() {
     );
 }
 
+/// A module-scope binding whose initializer is code becomes a global that
+/// `module#init` writes.
+///
+/// A global's `initial` has to be a number the artifact can carry, and
+/// `scale(3)` is not one -- so the whole declaration was refused, and
+/// `export const base = scale(3)` did not compile. It is the most ordinary
+/// line in a module: 78 of them across the nineteen node profile modules,
+/// present in every single one, `punycode` included.
+#[test]
+fn a_computed_module_binding_is_a_global_the_initializer_writes() {
+    let Some(lowered) = example("module-computed") else {
+        return;
+    };
+    assert!(
+        lowered.diagnostics.is_empty(),
+        "module-computed should lower clean, refused: {:?}",
+        refusals(&lowered),
+    );
+    let init = lowered
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name.contains("#init"))
+        .expect("the module has an initializer");
+    // Three: `base`, `doubled`, and `once`. `scale` and `bump` are functions
+    // and `counter` folds, so nothing else needs a store.
+    let stores = init
+        .values
+        .iter()
+        .filter(|op| matches!(op.kind, OpKind::GlobalSet { .. }))
+        .count();
+    assert_eq!(
+        stores, 3,
+        "each computed binding is one store into its global",
+    );
+}
+
+/// A binding whose initializer cannot lower is refused by itself.
+///
+/// It used to be, because it was never part of module evaluation. Now that it
+/// is, folding the refusal into the initializer would let one unrepresentable
+/// declaration take every other module's evaluation with it -- and `node:url`
+/// has one, so this is not hypothetical. The pass tries each deferred
+/// initializer in a builder of its own first, and refuses the declaration
+/// rather than the program.
+#[test]
+fn a_binding_that_cannot_lower_does_not_cost_the_others_theirs() {
+    let Some(lowered) = example("module-computed") else {
+        return;
+    };
+    assert!(
+        !lowered
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("loses in full")),
+        "nothing here should cost the program its evaluation: {:?}",
+        refusals(&lowered),
+    );
+}
+
+/// One unsupported statement loses that statement, not the module's evaluation.
+///
+/// The blast radius was the bug, not any individual lowering gap. Eighteen of
+/// the nineteen node profile modules lost *all* module evaluation to a single
+/// `for...of` in `util/inspect`; when that line was fixed the number stayed at
+/// eighteen, because the next unsupported statement in the same file took
+/// over. Statement-level granularity took it to zero, and 183 named statements
+/// took its place.
+#[test]
+fn one_unsupported_statement_does_not_darken_the_module() {
+    let Some(lowered) = lower_at("tests/programs/module-partial", true) else {
+        return;
+    };
+    assert!(
+        !lowered
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("loses in full")),
+        "one statement should not cost the module its evaluation: {:?}",
+        refusals(&lowered),
+    );
+    assert_eq!(
+        lowered
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic
+                .message
+                .contains("module evaluation therefore skips"))
+            .count(),
+        1,
+        "exactly the one statement is skipped, and it is named: {:?}",
+        refusals(&lowered),
+    );
+    // The statements on either side of it still run: `before = 1` and
+    // `after = 2`, and nothing for the one in between.
+    let init = lowered
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name.contains("#init"))
+        .expect("the module still has an initializer");
+    assert_eq!(
+        init.values
+            .iter()
+            .filter(|op| matches!(op.kind, OpKind::GlobalSet { .. }))
+            .count(),
+        2,
+        "the good statements on either side still run",
+    );
+}
+
 /// Module evaluation runs, and runs in the order the import graph says.
 ///
 /// `module-order` is a diamond whose answer is a four-digit number, one digit

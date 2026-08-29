@@ -1608,3 +1608,73 @@ reaches one value both ways and compares them.
 - Instance property initializers are skipped deliberately: they run at
   construction, and treating them as evaluation would refuse correct programs.
   Static ones are skipped with them, which is a false negative.
+
+## A9. A computed module binding, and the blast radius of one bad statement
+
+Two changes, and the second is the one that mattered.
+
+### `export const derived = compute()` compiles
+
+A module-scope binding is a global, and a global's `initial` has to be a number
+the artifact can carry. `scale(3)` is not one, so the whole declaration was
+refused — which meant the most ordinary line in a module did not compile. The
+NodeJS session counted **78 of them across the nineteen profile modules, present
+in every single one**, `punycode` included. That last part is what made it a
+category rather than a case: `punycode` imports nothing, so this was never about
+module size.
+
+A `VariableStatement` is a module *statement* now, not a declaration the rest of
+lowering walks. A binding whose initializer folds keeps its constant; one whose
+initializer is code becomes a global initialised to zero, assigned by
+`module#init` in evaluation order with everything else. All 78 are gone.
+
+### One unsupported statement used to darken the whole module
+
+Making declarations part of module evaluation raised the obvious question — can
+one bad declaration now cost the program every other one? — and checking it
+found something already true and much worse.
+
+**Eighteen of the nineteen modules were losing their entire module evaluation**,
+and all eighteen to the same line: a `for...of` with a destructuring binding in
+`util/inspect`. Measured both ways before reporting, because a number that
+appears while you are changing the thing it measures is not evidence: 18 with
+the change, 18 without it, at the same commit, by building the previous
+`lower.rs` aside and re-taking the count.
+
+Then the NodeJS session removed that line — it turned out to be a transcription
+shortening rather than node's shape — and the number **stayed at eighteen**,
+because the next unsupported statement in the same file took over. It is a
+queue. One line of it darkens eighteen modules at a time, and fixing individual
+lowering gaps only reveals the next.
+
+So each module-scope statement is now tried in a builder of its own. One that
+cannot lower is refused *by itself* and skipped; the rest of the module's
+evaluation still runs. **Eighteen became zero**, and 183 individually named
+statements took their place.
+
+Sound apart for the same reason a declaration is: a module-scope statement reads
+and writes *globals*, never a local of the initializer, because a module-scope
+binding is a global. A block that declares its own local also consumes it.
+
+### What this does not settle
+
+Skipping a statement is still a wrong program run quietly — the value it would
+have computed keeps whatever it held before. That is unchanged, and it is
+question #32, which is the user's: whether a refusal should stop the build at
+all. What changed is only the blast radius, and in the direction that costs
+nothing to prefer: the diagnostic now names a line instead of a program.
+
+### A measurement error worth recording
+
+The profile's lowered-function count is produced by `tooling/conformance/sweep.mjs`,
+which runs `target/release/nts`. Every figure quoted from it during this work
+was taken after building `target/debug` — so it was reading a stale release
+binary, and reported no change from changes that had already landed. The two
+instruments agreed the moment the release binary was rebuilt: 1,087 functions
+lower, matching the per-module sum exactly — and **1,123 with statement-level
+granularity**, from 1,050 at the start of this work.
+
+The same lesson as the NodeJS session's `http` row, from the other direction.
+Theirs was an unlabelled number that nothing prompted a re-check of; this was a
+labelled number measuring the wrong thing. A number is not evidence until you
+can say which binary produced it.
