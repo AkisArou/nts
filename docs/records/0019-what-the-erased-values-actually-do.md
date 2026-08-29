@@ -551,3 +551,56 @@ not the same feature as this one and should not be assumed to fall out of it.
 The refusal says so now. It used to say "`kind`, a property of a value with no
 fields", which is the wrong sentence about something that has several sets of
 them.
+
+# Optional properties, which were the top blocker
+
+`x?: T` was refused outright, and the reason given was right when it was
+written: "an optional field needs a presence bit, which changes the layout
+rather than adding to it." A tag *is* a presence bit, and erased values have
+one now.
+
+It was the largest single refusal in the node profile: **286 distinct sites,
+1,017 instances**. Both are zero.
+
+An optional field holds `T | undefined`, which is the closed erased value a
+union already lowers to. The checker records optionality *beside* the property
+type rather than in it -- `property.ty` is `T`, not `T | undefined` -- so the
+union is reconstructed at the layout. Two things then fall out, and both
+matter: a fresh allocation is zeroed, and zero is the `undefined` tag, so a
+property the literal omits is already correct with no store at all.
+
+## Three things it needed that were not obvious
+
+**An object literal takes its declared type, not its own.** `const o: Options =
+{}` gives the literal the type `{}`, which has no fields, so a later `o.limit`
+was refused as a property the type does not declare -- when `Options` declares
+it and the literal merely omitted it. Safe in the other direction too: a
+literal missing a *required* property is a type error the checker reported
+first.
+
+**A field read narrows.** The same rule as a binding read, at the site that
+actually lowers a property access -- which is not the site I first put it in.
+The edit compiled, passed, and did nothing, and what found that was a debug
+print rather than a test.
+
+**A store into a field coerces.** The sixth such site, after arguments,
+declarations, returns, globals and array elements -- and the first one the
+*verifier* caught rather than a C error or a differential, because the store
+check added two commits ago covers the class rather than the case.
+
+## The honest part: nothing new compiles
+
+Lowered functions across the profile: 1,604 before, 1,604 after. Removing the
+largest refusal by count unlocked no function at all, because the functions
+holding those sites are blocked by something else as well.
+
+That is worth stating plainly, because "the top blocker is gone" and "more
+compiles" are different claims and only the first one is true. Distinct
+refusals fell from 1,426 to 1,382 -- the 286 sites did not each cost a
+separate 1.
+
+What is left, ranked by distinct sites: a method with a computed name (145 --
+attempted once and reverted, because a name is a name in two places and a
+layout in a third), a base class of unrepresentable type (103), `Object` (65),
+and unions in parameter and property position that are still refused for
+reasons other than being unions (43 and 90).

@@ -5342,7 +5342,12 @@ impl<'a> FuncBuilder<'a> {
                     _ => return Err(self.unsupported(id, "reading a field of something else")),
                 };
                 let ty = layout.fields[field as usize].ty.clone();
-                self.push(OpKind::FieldGet { object, field }, ty, origin)
+                // An erased field read where the checker narrowed is the same
+                // question an erased *binding* read is, and gets the same
+                // answer: `if (o.limit !== undefined) o.limit * 2` reads a
+                // number, and the declaration says `number | undefined`.
+                let read = self.push(OpKind::FieldGet { object, field }, ty, origin);
+                self.narrowed(id, read)?
             }
             // `o.x += 1` where `x` is an accessor reads through the *getter*
             // and writes through the setter, and this place knows only the
@@ -6069,8 +6074,21 @@ impl<'a> FuncBuilder<'a> {
     /// same stores — which is what lets a later pass recognize them as the same
     /// shape.
     fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        // The *declared* type where there is one, not the literal's own.
+        //
+        // `const o: Options = {}` gives the literal type `{}`, which has no
+        // fields -- so a later `o.limit` was refused as a property the type
+        // does not declare, when `Options` declares it and the literal simply
+        // omitted it. A literal may omit a property only when it is optional,
+        // and an optional property is `T | undefined`, whose absent value is
+        // the zero a fresh allocation already holds.
+        //
+        // Safe in the other direction too: a literal missing a *required*
+        // property is a type error the checker reported before this ran.
         let ty = self
-            .type_of(id)
+            .contextual_type(id, 0)
+            .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Object(_))))
+            .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "an object literal"))?;
         let HirType::Managed(ManagedType::Object(type_id)) = ty else {
             return Err(self.unsupported(id, "an object literal that is not an object"));
@@ -6087,6 +6105,11 @@ impl<'a> FuncBuilder<'a> {
             let Some(field) = layout.index_of(&name) else {
                 return Err(self.unsupported(property, "a property the type does not declare"));
             };
+            // At the field's type, like every other slot a value meets. An
+            // optional field is erased -- its absence is a tag -- so a literal
+            // that supplies one erases on the way in.
+            let want = layout.fields[field as usize].ty.clone();
+            let value = self.coerce(value, &want, property)?;
             self.push(
                 OpKind::FieldSet {
                     object,
@@ -6416,11 +6439,6 @@ impl<'a> FuncBuilder<'a> {
             ) {
                 continue;
             }
-            if property.optional {
-                // An optional field needs a presence bit, which changes the
-                // layout rather than adding to it.
-                return Err(self.unsupported(id, "an object with an optional property"));
-            }
             // A reference field is a pointer. Under NoGC nothing is ever freed,
             // so it costs neither a write barrier nor a trace; which fields are
             // references is recorded on the layout for the collector that comes
@@ -6429,6 +6447,22 @@ impl<'a> FuncBuilder<'a> {
             let field_ty = self.represent(property.ty).ok_or_else(|| {
                 self.unrepresentable_member(id, "a property", &property.name, property.ty)
             })?;
+            // An optional field's absence has to live somewhere, and a tag is
+            // where. This used to be refused outright -- "an optional field
+            // needs a presence bit, which changes the layout rather than adding
+            // to it" -- and the tag *is* that presence bit, now that there is
+            // one.
+            //
+            // The property's own type is `T` rather than `T | undefined`: the
+            // checker records optionality beside the type instead of in it, so
+            // the union has to be reconstructed here. A fresh allocation is
+            // zeroed and zero is the `undefined` tag, which is what makes an
+            // omitted property already correct.
+            let field_ty = if property.optional && field_ty != HirType::Erased {
+                HirType::Erased
+            } else {
+                field_ty
+            };
             fields.push(Field {
                 name: property.name.clone(),
                 ty: field_ty,
@@ -6952,14 +6986,19 @@ impl<'a> FuncBuilder<'a> {
             };
             let ty = layout.fields[field as usize].ty.clone();
             let origin = self.origin(id);
-            return Ok(self.push(
+            // An erased field read where the checker narrowed is the same
+            // question an erased *binding* read is, and takes the same answer.
+            // `if (o.limit !== undefined) o.limit * 2` reads a number, while
+            // the declaration says the field may be absent.
+            let read = self.push(
                 OpKind::FieldGet {
                     object: value,
                     field,
                 },
                 ty,
                 origin,
-            ));
+            );
+            return self.narrowed(id, read);
         }
 
         let sequence = matches!(

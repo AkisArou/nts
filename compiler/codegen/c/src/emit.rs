@@ -2091,7 +2091,20 @@ fn start_frame_object(
         format!("{name}_frame.header.reserved = NTS_IMMORTAL;"),
     );
     for field in layout.reference_fields() {
-        writer.line(origin, format!("{name}_frame.{} = 0;", c_identifier(field)));
+        // An erased field's zero is `undefined`, and it has to be spelled --
+        // the tag is a struct member, not a pointer, so `= 0` is not C. That
+        // this *is* the zero is what makes an omitted optional property
+        // already correct without a store.
+        let zero = layout
+            .fields
+            .iter()
+            .find(|candidate| candidate.name == field)
+            .filter(|candidate| candidate.ty == HirType::Erased)
+            .map_or("0", |_| "nts_value_of_undefined()");
+        writer.line(
+            origin,
+            format!("{name}_frame.{} = {zero};", c_identifier(field)),
+        );
     }
 }
 
