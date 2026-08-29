@@ -58,6 +58,18 @@ export class Server extends NetServer {
    */
   #connections = new Set<Socket>();
 
+  /**
+   * Connections that have finished a response and are waiting for the next
+   * request.
+   *
+   * "Idle" is narrower than "not currently answering". A connection that has
+   * never sent a request is not idle -- it is still being waited on, and a
+   * `close` that dropped it would cut off a client that is merely slow.
+   * Idle means the server has done what was asked and the client has not asked
+   * again, which is the state a graceful shutdown is allowed to end.
+   */
+  #idle = new Set<Socket>();
+
   #maxHeaderSize: number;
   #IncomingMessage: typeof IncomingMessage;
   #ServerResponse: typeof ServerResponse;
@@ -86,7 +98,10 @@ export class Server extends NetServer {
 
   #serve(socket: Socket): void {
     this.#connections.add(socket);
-    socket.once("close", (() => this.#connections.delete(socket)) as never);
+    socket.once("close", (() => {
+      this.#connections.delete(socket);
+      this.#idle.delete(socket);
+    }) as never);
 
     const parser = new HTTPParser();
     parser.initialize(REQUEST, this.#maxHeaderSize);
@@ -141,8 +156,9 @@ export class Server extends NetServer {
       response.shouldKeepAlive = info.shouldKeepAlive;
 
       // A request has arrived, so this connection matters again until it is
-      // answered.
+      // answered, and it is no longer idle.
       socket.ref();
+      this.#idle.delete(socket);
 
       const finished = response;
       finished.once("finish", (() => this.#afterResponse(socket, parser, message, finished)) as never);
@@ -224,6 +240,7 @@ export class Server extends NetServer {
     // for the process to stay alive. A keep-alive server that refed its idle
     // connections would never let a program exit, which is not what keeping
     // them open is for.
+    this.#idle.add(socket);
     socket.unref();
 
     // And if the server has stopped accepting, there will be no next request
@@ -238,9 +255,39 @@ export class Server extends NetServer {
     return this;
   }
 
+  /**
+   * End every connection that is between requests.
+   *
+   * Only the idle ones. A connection that has never sent a request is not
+   * idle -- it is still being waited on, and dropping it would cut off a
+   * client that is merely slow. A connection in the middle of a response is
+   * not idle either.
+   */
+  override closeIdleConnections(): void {
+    for (const socket of this.#idle) {
+      if (!socket.destroyed) socket.destroy();
+    }
+    this.#idle.clear();
+  }
+
   closeAllConnections(): void {
     for (const socket of this.#connections) socket.destroy();
     this.#connections.clear();
+    this.#idle.clear();
+  }
+
+  /**
+   * Stop accepting, and release the connections that are only waiting.
+   *
+   * Node ends the idle ones here rather than waiting for them, because a
+   * keep-alive client has no reason to close a connection it may want again --
+   * so a `close` that waited for every connection would, for exactly the
+   * servers that keep-alive is for, never finish.
+   */
+  override close(callback?: (error?: unknown) => void): this {
+    super.close(callback);
+    this.closeIdleConnections();
+    return this;
   }
 }
 
