@@ -38,14 +38,17 @@ value on inherits whatever the receiver does with it.
 ## The node profile, 566 `unknown` parameters
 
 The whole profile compiled as one project, so the analysis can see across
-modules the way the document says it must.
+modules the way the document says it must. Taken at `a347b67`, `runtime/node`
+clean — named because the NodeJS session lost a factor of two to an unlabelled
+number and the label is what got it corrected: a plausible figure does not
+invite a second look.
 
 | | whole-program | judged on its own uses |
 | --- | ---: | ---: |
 | carried | **227** (40%) | 320 |
 | tested | **83** (15%) | 58 |
-| examined | **184** (33%) | 126 |
-| unclear | **72** (13%) | 62 |
+| examined | **185** (33%) | 127 |
+| unclear | **71** (13%) | 61 |
 
 **99 of 566 parameters get a different answer once calls are followed. 34 of
 them are decided by a use in another file.**
@@ -106,12 +109,24 @@ The 72 unclear parameters, by reason:
 
 - an argument to a function outside the compiled set — the dominant one, and
   the correct answer for a call into a declaration file;
-- a value returned to callers, which this pass does not follow back;
-- a spread into an array literal rather than a call;
-- an assignment into a target more complex than a name.
+- a value passed to something the pass has not yet decided about, which is the
+  fixpoint reporting its own incompleteness rather than hiding it;
+- an assignment into a target more complex than a name;
+- a return from a function nothing in the program calls.
 
-Returns are the largest missing edge and the obvious next increment. Until it
-exists, "unclear" means unclear, and the table says so rather than guessing.
+Returns *are* followed now, to the call sites of the function returning them.
+It was expected to be the largest missing edge and it was not: it moved one
+parameter out of unclear. Worth recording, because the reason is the shape of
+the code rather than the analysis — a returned `unknown` in this profile is
+almost always returned from a function whose callers are outside the compiled
+set, so following the return arrives at the same wall from the other side.
+
+What is left is dominated by one thing: **59 of the 71 unclear parameters are
+arguments to a function outside the compiled set.** That is the correct answer
+rather than a gap — the callee is a declaration file, and there is no body to
+look at. It bounds what any whole-program analysis can conclude about a program
+that links against something it cannot see, which is a fact about the
+representation decision and not about this pass.
 
 ## Two smaller findings
 

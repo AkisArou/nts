@@ -195,7 +195,13 @@ pub fn classify(snapshot: &SemanticSnapshot) -> Erasure {
 /// Classify, following uses as far as `analysis` says.
 #[must_use]
 pub fn classify_as(snapshot: &SemanticSnapshot, analysis: Analysis) -> Erasure {
-    let walk = Walk { snapshot };
+    let mut callers: FxHashMap<u32, Vec<NodeId>> = FxHashMap::default();
+    for (site, target) in &snapshot.call_targets {
+        if let Some(callee) = target.callee {
+            callers.entry(callee.0).or_default().push(*site);
+        }
+    }
+    let walk = Walk { snapshot, callers };
     let sites = walk.sites();
     if sites.is_empty() {
         return Erasure::default();
@@ -310,6 +316,12 @@ struct Declared {
 
 struct Walk<'a> {
     snapshot: &'a SemanticSnapshot,
+    /// Call sites, indexed by the declaration they call.
+    ///
+    /// The frontend records the other direction -- a call site's target -- and
+    /// following a returned value needs this one: what happens to `f(...)`
+    /// wherever `f` is called is what happens to whatever `f` returns.
+    callers: FxHashMap<u32, Vec<NodeId>>,
 }
 
 impl Walk<'_> {
@@ -580,10 +592,9 @@ impl Walk<'_> {
             }
             // Moved, and where it moves to decides.
             syntax::VARIABLE_DECLARATION => self.lands_in_declaration(parent, known),
-            syntax::RETURN_STATEMENT => Use::Says(
-                Verdict::Unclear,
-                "returned, and callers are not followed".to_owned(),
-            ),
+            // Returned. The value goes to every call site, and what happens
+            // to `f(...)` there is what happens to it.
+            syntax::RETURN_STATEMENT => self.returned(id, known, depth),
             // The value passes through unchanged, so the question is what
             // happens to the expression that now holds it.
             syntax::PARENTHESIZED_EXPRESSION
@@ -632,6 +643,73 @@ impl Walk<'_> {
             }
             other => Use::Says(Verdict::Unclear, format!("a use of kind {other}")),
         }
+    }
+
+    /// A returned value, followed to the call sites of the function returning it.
+    ///
+    /// This was the largest bucket the pass could not classify, and it is the
+    /// other half of the argument the document makes: a value's representation
+    /// is decided by uses that are not where it is written, and a return
+    /// crosses that boundary in the opposite direction from an argument.
+    fn returned(&self, id: NodeId, known: &FxHashSet<u32>, depth: u32) -> Use {
+        let Some(function) = self.enclosing_function(id) else {
+            return Use::Says(
+                Verdict::Unclear,
+                "returned from no enclosing function".to_owned(),
+            );
+        };
+        let Some(sites) = self.callers.get(&function.0) else {
+            return Use::Says(
+                Verdict::Unclear,
+                "returned, and nothing in this program calls it".to_owned(),
+            );
+        };
+        // The strongest thing any caller does with the result. A `Reaches` from
+        // one call site cannot be returned alongside a verdict from another, so
+        // an edge is taken only when it is the sole answer; otherwise the
+        // verdict wins, which is the conservative direction.
+        let mut verdict = Verdict::Carried;
+        let mut because = "returned, and no caller reads the result".to_owned();
+        let mut edge = None;
+        for site in sites {
+            match self.classify_value_at(*site, known, depth + 1) {
+                Use::Says(said, why) => {
+                    if said > verdict {
+                        verdict = said;
+                        because = format!("returned, and the result is {why}");
+                    }
+                }
+                Use::Reaches(target, why) => edge = Some((target, why)),
+            }
+        }
+        match edge {
+            Some((target, why)) if verdict == Verdict::Carried => {
+                Use::Reaches(target, format!("returned, and the result is {why}"))
+            }
+            _ => Use::Says(verdict, because),
+        }
+    }
+
+    /// The function whose body contains a node.
+    fn enclosing_function(&self, id: NodeId) -> Option<NodeId> {
+        let mut at = self.parent(id);
+        while let Some(node) = at {
+            if matches!(
+                self.kind_of(node),
+                Some(
+                    syntax::FUNCTION_DECLARATION
+                        | syntax::METHOD_DECLARATION
+                        | syntax::ARROW_FUNCTION
+                        | syntax::CONSTRUCTOR
+                        | syntax::GET_ACCESSOR
+                        | syntax::SET_ACCESSOR
+                )
+            ) {
+                return Some(node);
+            }
+            at = self.parent(node);
+        }
+        None
     }
 
     /// The value is an argument. It reaches the callee's parameter, if the

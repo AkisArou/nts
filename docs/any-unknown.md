@@ -290,8 +290,8 @@ that table itself.
 ### It does now — `nts erasure`, and where it disagrees
 
 `nts_core::erasure` produces the table, and `docs/records/0019` reports what it
-says. Over the whole profile compiled as one project, 566 `unknown` parameters:
-227 carried, 83 tested, 184 examined, 72 unclear.
+says. Over the whole profile compiled as one project, at `a347b67`, 566 `unknown`
+parameters: 227 carried, 83 tested, 185 examined, 71 unclear.
 
 Two corrections to the reading above.
 
