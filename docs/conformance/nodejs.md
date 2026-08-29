@@ -222,7 +222,7 @@ nobody can check — applies to the headline as much as to the table.
 | `util` | 7 / 19 | 1 | 48 / 186 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `fs` | 72 / 214 | 2 | 98 / 603 | sync, callback and promise surfaces, the file streams and the watchers |
 | `zlib` | 30 / 64 | 0 | 58 / 532 | the streams, the one-shots, brotli and zstd |
-| `net` | 37 / 139 | 0 | 65 / 531 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
+| `net` | 47 / 139 | 0 | 67 / 528 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
 | `stream` | 151 / 195 | 2 | 58 / 498 | the core is complete; `web`, `iter` and `consumers` are absent |
 
 The first two columns are what
@@ -974,7 +974,7 @@ one. Both sets are listed with reasons in `not-applicable`.
 ## `net`
 
 `Socket` as a `Duplex`, `Server`, the address predicates, and a seam of one
-handle per connection and per listener. 37 of 139 applicable files pass, none hollow.
+handle per connection and per listener. 47 of 139 applicable files pass, none hollow.
 
 A TCP socket's two halves are genuinely independent: the direction you write
 and the direction you read are separate streams over one connection, and either
@@ -1002,6 +1002,21 @@ a program which of its listeners collided.
 The socket turns the stream's own `close` off and emits its own. A stream's
 carries nothing; a socket's carries whether it is closing because of an error,
 which is what a listener deciding whether to reconnect needs.
+
+**A read deferred is not a read dropped.** `Socket._read` returned early while
+the connection was still being established, which looks harmless and is not:
+the early return leaves the readable's `reading` flag set with nothing on the
+way to clear it, so the *next* read declines as redundant and the socket never
+starts reading at all. Any consumer that attaches a `data` listener before the
+connection completes gets nothing, forever.
+
+Nothing about that failure looks like a socket failure. The request goes out,
+the server replies, and the bytes arrive at the kernel and stop one layer
+above it. None of the 139 tests here caught it, because none attaches a `data`
+listener before `connect` resolves — it was found by building `node:http` on
+top, where a client is handed a socket and immediately starts parsing what
+comes back. That is the argument for building the consumer rather than more
+tests for the provider.
 
 Absent: `BlockList`, `SocketAddress`, the auto-select-family connection
 strategy, and the IPC/child-process paths.
