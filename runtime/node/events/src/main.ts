@@ -697,6 +697,15 @@ export function once(
  */
 export const kFirstEventParam: unique symbol = Symbol("nodejs.kFirstEventParam");
 
+/**
+ * Where the queue's state is visible from outside.
+ *
+ * `Symbol.for` rather than `Symbol`, because it is a cross-realm agreement:
+ * anything that wants to see whether an iterator is holding events back has to
+ * be able to name the slot without importing this module.
+ */
+export const kWatermarkData: symbol = Symbol.for("nodejs.watermarkData");
+
 export interface OnOptions {
   signal?: AbortSignalLike | undefined;
   /** Pause the emitter once this many events are waiting. */
@@ -856,7 +865,18 @@ export function on(
     [Symbol.asyncIterator](): AsyncIterableIterator<unknown> {
       return iterator;
     },
-  };
+
+    // Observable rather than private, because backpressure that cannot be
+    // seen cannot be tested: whether the emitter is currently held back is a
+    // fact about the queue, and the only way to check it from outside is to
+    // ask.
+    [kWatermarkData]: {
+      get size(): number { return pendingEvents(); },
+      get low(): number { return lowWaterMark; },
+      get high(): number { return highWaterMark; },
+      get isPaused(): boolean { return paused; },
+    },
+  } as AsyncIterableIterator<unknown>;
 
   return iterator;
 }

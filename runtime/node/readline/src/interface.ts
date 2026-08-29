@@ -934,12 +934,42 @@ export class Interface extends EventEmitter {
 
   // -- completion -----------------------------------------------------------
 
+  /**
+   * Run the completer and apply what it returns.
+   *
+   * Two conventions, and the difference between them is *timing* rather than
+   * spelling. A two-argument completer is given a callback and is not deferred
+   * at all, so one that answers immediately completes the line immediately --
+   * node's tests emit a keystroke and assert on the output on the very next
+   * line, with no turn of the loop between them. Anything else is awaited.
+   *
+   * That is why `node:readline` normalises a one-argument completer into the
+   * callback form before it ever gets here, and `node:readline/promises` does
+   * not: the promise interface is allowed to take a turn, and the callback one
+   * is not. Node splits this across two `Interface` classes; here it is one
+   * class and one normalisation at the module boundary, which puts the choice
+   * in the same place -- with whoever handed the completer over.
+   */
   async #tabComplete(lastKeypressWasTab: boolean): Promise<void> {
     this.pause();
     const string = this.line.slice(0, this.cursor);
+    const completer = this.completer as (
+      line: string,
+      callback?: (err: unknown, result?: Completion) => void,
+    ) => Completion | Promise<Completion> | void;
+
+    if (completer.length === 2) {
+      completer(string, (err, value) => {
+        this.resume();
+        if (err) this.#writeToOutput(`Tab completion error: ${String(err)}`);
+        else this.#tabCompleter(lastKeypressWasTab, value as Completion);
+      });
+      return;
+    }
+
     let value: Completion;
     try {
-      value = await (this.completer as (line: string) => Completion | Promise<Completion>)(string);
+      value = (await completer(string)) as Completion;
     } catch (err) {
       this.#writeToOutput(`Tab completion error: ${String(err)}`);
       return;
@@ -952,10 +982,9 @@ export class Interface extends EventEmitter {
   /**
    * Apply a completion.
    *
-   * One match completes it. Several complete as far as they agree and, on a
-   * second Tab, list themselves -- which is readline's behaviour everywhere
-   * and the reason the first Tab must not print anything: a single Tab is
-   * usually a request to finish typing, not to be shown a menu.
+   * One Tab completes as far as the matches agree. A second Tab lists them --
+   * and the first must not, because a single Tab is a request to finish
+   * typing, not to be shown a menu.
    */
   #tabCompleter(lastKeypressWasTab: boolean, value: Completion): void {
     if (!value) return;
@@ -964,35 +993,65 @@ export class Interface extends EventEmitter {
     if (!completions || completions.length === 0) return;
 
     const prefix = commonPrefix(completions.filter((e) => e !== ""));
-    if (prefix.length > completeOn.length) {
+
+    if (prefix.startsWith(completeOn) && prefix.length > completeOn.length) {
       this.#insertString(prefix.slice(completeOn.length));
+      return;
+    }
+
+    if (!completeOn.startsWith(prefix)) {
+      // The completer answered with something that is not an extension of what
+      // was typed -- a corrected spelling, or a different casing. What was
+      // typed is replaced rather than appended to.
+      this.#setLine(
+        this.line.slice(0, this.cursor - completeOn.length) +
+          prefix +
+          this.line.slice(this.cursor),
+      );
+      this.cursor = this.cursor - completeOn.length + prefix.length;
+      this.#refreshLine();
       return;
     }
 
     if (!lastKeypressWasTab) return;
 
-    this.#writeToOutput("\r\n");
-    // Laid out in columns wide enough for the longest entry, which is what
-    // makes a long list readable rather than a wall.
-    const width = completions.reduce((a, b) => (a.length > b.length ? a : b), "").length + 2;
+    this.#beforeEdit(this.line, this.cursor);
+
+    // Laid out in columns as wide as the widest entry plus two. Measured with
+    // `getStringWidth` rather than `.length`, because a completion containing
+    // anything double-width would otherwise be given a column too narrow for
+    // it and the whole table would step sideways.
+    const widths = completions.map((e) => getStringWidth(e));
+    const width = Math.max(...widths) + 2;
     let maxColumns = Math.floor(this.columns / width) || 1;
+    // An output with no width -- a pipe -- has no columns to fit into.
     if (maxColumns === Infinity) maxColumns = 1;
 
-    let output = "";
-    let column = 0;
-    for (const completion of completions) {
-      if (completion === "") {
+    let output = "\r\n";
+    let lineIndex = 0;
+    let whitespace = 0;
+    for (let i = 0; i < completions.length; i++) {
+      const completion = completions[i] as string;
+      if (completion === "" || lineIndex === maxColumns) {
         output += "\r\n";
-        column = 0;
-        continue;
+        lineIndex = 0;
+        whitespace = 0;
+      } else {
+        // The padding is written *before* the next entry rather than after the
+        // previous one, so the last entry on a line has no trailing spaces.
+        output += " ".repeat(whitespace);
       }
-      output += completion.padEnd(width, " ");
-      if (++column >= maxColumns) {
+      if (completion !== "") {
+        output += completion;
+        whitespace = width - (widths[i] as number);
+        lineIndex++;
+      } else {
+        // An empty string is the completer asking for a break in the list.
         output += "\r\n";
-        column = 0;
       }
     }
-    if (column !== 0) output += "\r\n";
+    if (lineIndex !== 0) output += "\r\n\r\n";
+
     this.#writeToOutput(output);
     this.#refreshLine();
   }

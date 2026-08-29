@@ -8,6 +8,9 @@
 
 import * as utils from "./src/utils.ts";
 import * as callbacks from "../internal/readline-callbacks.ts";
+import { getStringWidth } from "../util/src/width.ts";
+import { inspect } from "../util/src/inspect.ts";
+import { stripVTControlCharacters } from "../util/src/main.ts";
 
 export function shape(exports) {
   return {
@@ -41,6 +44,16 @@ export function internals() {
       emitKeys: utils.emitKeys,
       reverseString: utils.reverseString,
       kSubstringSearch: utils.kSubstringSearch,
+    },
+    // Four of node's readline tests measure the width of what they expect to
+    // be on screen, and reach for the same helper `Interface` uses to decide
+    // where the cursor goes. Handing them ours rather than node's is the
+    // difference between the test checking our arithmetic and checking that
+    // two copies of node's agree.
+    "internal/util/inspect": {
+      getStringWidth,
+      stripVTControlCharacters,
+      inspect,
     },
     "internal/readline/callbacks": {
       clearLine: callbacks.clearLine,
