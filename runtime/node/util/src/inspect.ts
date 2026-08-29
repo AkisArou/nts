@@ -86,16 +86,7 @@ export const inspectColors: Record<string, [number, number] | undefined> = {
  * not list each one three times. `styleText` validates against
  * `getOwnPropertyNames`, which sees them regardless.
  */
-for (const [target, alias] of [
-  ["gray", "grey"], ["gray", "blackBright"],
-  ["bgGray", "bgGrey"], ["bgGray", "bgBlackBright"],
-  ["dim", "faint"],
-  ["strikethrough", "crossedout"], ["strikethrough", "strikeThrough"],
-  ["strikethrough", "crossedOut"],
-  ["hidden", "conceal"],
-  ["inverse", "swapColors"], ["inverse", "swapcolors"],
-  ["doubleunderline", "doubleUnderline"],
-] as const) {
+function defineColorAlias(target: string, alias: string): void {
   Object.defineProperty(inspectColors, alias, {
     __proto__: null,
     get(this: Record<string, [number, number] | undefined>) { return this[target]; },
@@ -106,6 +97,23 @@ for (const [target, alias] of [
     enumerable: false,
   } as PropertyDescriptor);
 }
+
+// A function and twelve calls, which is node's own shape here. This was a
+// `for...of` over a table of pairs -- shorter to read and a departure from the
+// source being transcribed, which is the only reason it was ever written that
+// way.
+defineColorAlias("gray", "grey");
+defineColorAlias("gray", "blackBright");
+defineColorAlias("bgGray", "bgGrey");
+defineColorAlias("bgGray", "bgBlackBright");
+defineColorAlias("dim", "faint");
+defineColorAlias("strikethrough", "crossedout");
+defineColorAlias("strikethrough", "strikeThrough");
+defineColorAlias("strikethrough", "crossedOut");
+defineColorAlias("hidden", "conceal");
+defineColorAlias("inverse", "swapColors");
+defineColorAlias("inverse", "swapcolors");
+defineColorAlias("doubleunderline", "doubleUnderline");
 
 /** What every piece of output goes through. The colourless one is the default. */
 export type Stylize = (str: string, styleType: StyleType) => string;
