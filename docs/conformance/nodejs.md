@@ -168,7 +168,7 @@ counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
 **661 of node's own 1,341 applicable test files pass** across nineteen modules,
-of which 15 are hollow.
+of which 20 are hollow.
 
 `http`'s row was 44 in the previous revision, taken at `8d024b2` before the
 `unref` fix in `96b1553` and labelled as a floor because its suite had not
@@ -229,7 +229,7 @@ headline as much as to the table.
 | `util` | 7 / 19 | 1 | 48 / 186 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `fs` | 72 / 214 | 2 | 98 / 603 | sync, callback and promise surfaces, the file streams and the watchers |
 | `zlib` | 30 / 64 | 0 | 58 / 532 | the streams, the one-shots, brotli and zstd |
-| `http` | 89 / 350 | ? | 70 / 585 | a complete HTTP/1.1 implementation, parser included; no HTTPS or HTTP/2 |
+| `http` | 89 / 350 | 5 | 70 / 585 | a complete HTTP/1.1 implementation, parser included; no HTTPS or HTTP/2 |
 | `net` | 50 / 139 | 0 | 67 / 528 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
 | `stream` | 151 / 195 | 2 | 58 / 498 | the core is complete; `web`, `iter` and `consumers` are absent |
 
@@ -985,7 +985,7 @@ The module with no native half at all. Node's parser is llhttp, a C library;
 this profile's is TypeScript, so `node:http` here is a complete HTTP/1.1
 implementation rather than a wrapper around one. Once `net` supplies the
 socket, HTTP is a text protocol and there is nothing left that needs the
-operating system. 89 of 350 applicable files pass.
+operating system. 89 of 350 applicable files pass, 5 of them hollow.
 
 Everything round-trips: this client against node's server, node's client
 against this server, and this against itself. Node's client is a strict reader
