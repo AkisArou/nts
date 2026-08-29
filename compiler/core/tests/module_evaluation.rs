@@ -358,6 +358,42 @@ fn typeof_on_an_erased_value_is_refused() {
     );
 }
 
+/// Nothing is refused as "this expression" any more.
+///
+/// The expression lowering's fallthrough names no construct, and a refusal
+/// nobody can group by is a refusal nobody can rank. Across the node profile
+/// that bucket held 49 refusals at twelve distinct sites, and it was
+/// structurally invisible: an entire language feature could sit in it -- and
+/// `yield` did.
+///
+/// Each name here pins a syntax constant read off the checker's enum. A wrong
+/// one puts the construct silently back in the bucket, which is exactly the
+/// failure this guards.
+#[test]
+fn every_refused_expression_names_its_construct() {
+    let Some(lowered) = lower_at("tests/programs/unnamed-expressions", true) else {
+        return;
+    };
+    assert!(
+        !lowered
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.starts_with("this expression")),
+        "nothing should be refused anonymously: {:?}",
+        refusals(&lowered),
+    );
+    for expected in ["`function` expression", "regular expression literal"] {
+        assert!(
+            lowered
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains(expected)),
+            "expected a refusal naming {expected}, saw: {:?}",
+            refusals(&lowered),
+        );
+    }
+}
+
 /// Module evaluation runs, and runs in the order the import graph says.
 ///
 /// `module-order` is a diamond whose answer is a four-digit number, one digit

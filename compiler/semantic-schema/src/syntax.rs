@@ -9,6 +9,7 @@
 //! list, and pinned by a test against a checked-in fixture — a tsgo bump that
 //! renumbers a kind should fail loudly rather than silently mis-identify nodes.
 pub const NUMERIC_LITERAL: u16 = 8;
+pub const REGULAR_EXPRESSION_LITERAL: u16 = 13;
 pub const STRING_LITERAL: u16 = 10;
 
 // Operator tokens. Note 42 is absent: it is `**`, not `*`.
@@ -64,6 +65,12 @@ pub const EXPORT_KEYWORD: u16 = 94;
 pub const NULL_KEYWORD: u16 = 105;
 pub const SUPER_KEYWORD: u16 = 107;
 /// Also determined empirically.
+/// `function (…) { … }` as a value, named or not.
+///
+/// Distinct from [`ARROW_FUNCTION`], which lowers: the two differ in `this` and
+/// `arguments`, so they are not interchangeable even though most uses of the
+/// first could be written as the second.
+pub const FUNCTION_EXPRESSION: u16 = 219;
 pub const ARROW_FUNCTION: u16 = 220;
 pub const THIS_KEYWORD: u16 = 109;
 pub const PRIVATE_KEYWORD: u16 = 122;

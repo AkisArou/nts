@@ -5635,6 +5635,25 @@ impl<'a> FuncBuilder<'a> {
             }
             Some(syntax::TEMPLATE_EXPRESSION) => self.lower_template(id),
             Some(syntax::TYPE_OF_EXPRESSION) => self.lower_typeof(id),
+            // Named rather than left to the fallthrough below, for the reason
+            // `yield` is: an unlabelled refusal cannot be grouped, ranked or
+            // counted, so a construct that lands there is invisible to anyone
+            // deciding what to implement next.
+            //
+            // The suggestion is a real one and is checked: an arrow function
+            // with the same body lowers today. It is not a rewrite rule -- the
+            // two differ in `this` and `arguments`, and
+            // `internal/deprecate.ts` is a case that genuinely needs the
+            // first -- which is why this says "when" rather than "so".
+            Some(syntax::FUNCTION_EXPRESSION) => Err(self.unsupported(
+                id,
+                "a `function` expression; an arrow function with the same body lowers, when it \
+                 does not need its own `this`",
+            )),
+            Some(syntax::REGULAR_EXPRESSION_LITERAL) => Err(self.unsupported(
+                id,
+                "a regular expression literal, which needs a regular expression engine",
+            )),
             // Named, because the fallthrough below does not name anything and a
             // refusal nobody can group by is a refusal nobody can rank. Every
             // `yield` in the node profile was reported as "this expression",
