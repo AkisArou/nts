@@ -70,13 +70,13 @@ question.
 
 | outcome | files |
 | --- | ---: |
-| lowered completely | **63** |
-| refused a construct | 33 |
+| lowered completely | **44** |
+| refused a construct | 53 |
 | rejected by the typechecker | 86 |
-| **the frontend fell over** | **2** |
+| **the frontend fell over** | **1** |
 | **invalid HIR or a panic** | **0** |
 
-Of the 96 that typecheck, **65%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
+Of the 97 that typecheck, **45%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
 
 The last two rows are the ones that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do, and so is a query this compiler makes that the typechecker cannot answer.
 
@@ -88,18 +88,18 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 
 | refused | files |
 | --- | ---: |
-| a function declaration outside every walk | 12 |
+| this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it | 38 |
+| a module-scope variable with no initializer | 13 |
+| `console`, a global with no definition here | 7 |
+| a closure over a name from more than one scope up | 6 |
+| a module-scope construct of kind 268, which has code in it | 6 |
 | `MyEnum`, an enum | 4 |
-| `console`, a global with no definition here | 4 |
-| a module-scope variable whose initializer is not constant | 4 |
-| a module-scope variable with no initializer | 4 |
 | a property `timestamp` of unrepresentable type (a structured type (flags 0x100000)) | 4 |
 | a rest parameter | 4 |
-| a method on an object literal | 3 |
-| a parameter of unrepresentable type (any) | 3 |
-| `x`, a name from an enclosing scope | 2 |
-| a parameter of unrepresentable type (a union of a structured type (flags 0x100000) | null | number | undefined) | 2 |
-| a parameter of unrepresentable type (a union of a structured type (flags 0x100000) | null | number) | 2 |
+| an expression of kind 216 | 4 |
+| `A`, a function used as a value | 3 |
+| `Foo`, a function used as a value | 3 |
+| a `for...of` binding of this shape | 3 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->
