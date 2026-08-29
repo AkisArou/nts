@@ -231,3 +231,59 @@ before staging any file the other session might be in, and `git show --stat` on
 your own commit immediately after making it. Both times the line count was the
 tell. A commit that claims to add a type and adds 174 lines of runtime is
 visibly wrong at a glance, and neither of us looked.
+
+# Deferred work, so it is findable
+
+Written down because the alternative is a comment at one call site and a
+sentence in a commit message, and neither is somewhere you would look when
+asking "what is left to do here". Ordered by what the measurement says they are
+worth, not by effort.
+
+## 1. Specialize by verdict — the reason the measurement exists
+
+Every erased site pays the general sixteen-byte representation today. The
+measurement says **41% of `unknown` parameters are carried and 14% are tested**,
+and `docs/any-unknown.md` is explicit that "programs that never require general
+erased storage should not pay for a general erased-value runtime".
+
+`nts erasure` already computes the verdicts. The work is consuming them: a
+carried-only site whose reaching values are all references can be a plain
+pointer; a tested-only site can be a tag with no payload. This is the largest
+single win available and it is the one the whole record was written for.
+
+## 2. Fold `typeof v === "number"` to an integer compare
+
+Today it calls `nts_tag_name`, which **allocates a string**, and then compares
+strings. Almost every use of `typeof` in real code is exactly this shape —
+compared against a literal — so the allocation is on the common path.
+
+The fix is a peephole: match a comparison whose operand is a `TagOf` and whose
+other side is a string literal, and replace the whole thing with `TagOf ==
+constant`. Deliberately *not* done inside lowering, because that would put the
+tag-to-spelling table in two places and the two could disagree; as a peephole
+over correct code it reads one table.
+
+Nothing in the profile is affected yet — none of the erased code lowers — so
+this is cheap to defer and should not be deferred past the first program that
+uses `typeof` in a loop.
+
+## 3. References in an erased value
+
+Refused in both directions: erasing a string or an object, and unerasing to
+one. A payload that is sometimes a pointer needs retain and release that switch
+on the tag, and refcounting that is subtly wrong frees something still in use,
+later, somewhere else.
+
+The promise half of this is already solved, by the NodeJS session, and their
+answer generalises: **decompose at the boundary rather than storing the union**.
+A fixed-offset descriptor cannot express a slot that is a reference only when
+its tag says so, so anywhere an erased value is *stored* — a field, an array
+element, a promise payload — wants the tag beside an existing typed slot rather
+than the struct whole.
+
+## 4. `any`, which is not on this list
+
+`any` gets no representation, now or later. That is the document's rule and not
+a gap: it is the checker announcing it has stopped providing safety, and a
+representation would accept the escape hatch the rule exists to close. An `any`
+is legalized from evidence or refused.

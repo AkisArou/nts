@@ -2230,6 +2230,15 @@ struct FuncBuilder<'a> {
     /// The receiver, in a method.
     this: Option<ValueId>,
     /// What this copy's name carries, for one instantiation of a generic
+    /// The type this function's `return` statements must produce.
+    ///
+    /// Kept on the builder because a `return` needs it while the body is being
+    /// lowered, and until now it was only known at `close_body`. A returned
+    /// value is coerced to it -- `function f(): unknown { return n }` returns
+    /// an erased value -- and without that the mismatch lowered with nothing
+    /// refused and failed in C, because the verifier checks call arguments and
+    /// not returns.
+    returns: HirType,
     /// function. Empty for everything else.
     suffix: String,
     /// What each function declaration is emitted as, where its plain name is
@@ -2321,6 +2330,7 @@ impl<'a> FuncBuilder<'a> {
             }],
             current: BlockId(0),
             bindings: rustc_hash::FxHashMap::default(),
+            returns: HirType::Void,
             layouts: Vec::new(),
             this: None,
             suffix: String::new(),
@@ -3004,6 +3014,7 @@ impl<'a> FuncBuilder<'a> {
         };
         self.materialize(member, &return_type)?;
 
+        self.returns = return_type.clone();
         self.lower_block(body)?;
         self.close_body(&return_type);
 
@@ -3403,6 +3414,7 @@ impl<'a> FuncBuilder<'a> {
         // happens once rather than on each path out.
         let asynchronous = self.begin_async(id, &return_type)?;
 
+        self.returns = return_type.clone();
         self.lower_block(body)?;
 
         if let Some(result) = asynchronous {
@@ -5743,7 +5755,8 @@ impl<'a> FuncBuilder<'a> {
     fn lower_statement(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         match self.kind_of(id) {
             Some(syntax::RETURN_STATEMENT) => {
-                let value = match self.children(id).first().copied() {
+                let expression = self.children(id).first().copied();
+                let value = match expression {
                     Some(expression) => Some(self.lower_expression(expression)?),
                     None => None,
                 };
@@ -5753,6 +5766,20 @@ impl<'a> FuncBuilder<'a> {
                 if let Some(result) = self.async_result.clone() {
                     return self.settle_and_return(id, &result, value);
                 }
+                // At the type the *signature* declares, and only on this path:
+                // a callback return and an `async` settle both hand the value
+                // somewhere else, at a type of their own. `function f():
+                // unknown { return n }` returns an erased value, and returning
+                // the raw double instead lowered with nothing refused and then
+                // failed in C -- the verifier checks call arguments and not
+                // returns, so this had nothing watching it.
+                let value = match (value, expression) {
+                    (Some(value), Some(expression)) => {
+                        let want = self.returns.clone();
+                        Some(self.coerce(value, &want, expression)?)
+                    }
+                    (value, _) => value,
+                };
                 self.terminate(Terminator::Return(value));
                 Ok(())
             }
@@ -7073,6 +7100,15 @@ impl<'a> FuncBuilder<'a> {
                 .node(name)
                 .symbol
                 .ok_or_else(|| self.unsupported(name, "an unresolved declaration"))?;
+            // At the type the declaration *says*, not the one the initializer
+            // happens to have. `let held: unknown = n` binds an erased value;
+            // binding the raw double instead left the declared type and the
+            // stored representation disagreeing, and `typeof held` then matched
+            // neither the primitive path nor the erased one.
+            let value = match self.type_of(name) {
+                Some(declared) => self.coerce(value, &declared, declaration)?,
+                None => value,
+            };
             self.bindings.insert(symbol.0, value);
         }
         Ok(())
