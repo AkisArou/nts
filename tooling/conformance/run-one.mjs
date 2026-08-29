@@ -175,7 +175,10 @@ function drain(times, then) {
     return;
   }
   hostProcess.nextTick(() => {
-    Promise.resolve().then(() => drain(times - 1, then));
+    // `queueMicrotask`, not `Promise.resolve().then` -- both are one microtask,
+    // but the second allocates a promise, and a test watching promises counts
+    // the harness's as its own.
+    queueMicrotask(() => drain(times - 1, then));
   });
 }
 
@@ -446,14 +449,19 @@ try {
   // A module system is a hidden parameter of every ordering assertion, and
   // this harness was silently supplying the wrong one.
   capturingLoadWarnings = false;
-  await new Promise((resolve, reject) => hostSetImmediate(() => {
+  // Not awaited, and that is the point: an `await` here put a promise
+  // continuation immediately after the test body, and a test that had enabled
+  // promise hooks saw it. Node runs these files as CommonJS with nothing of
+  // its own outstanding, so there is no such promise to see. Everything after
+  // the body therefore happens inside this callback, and the harness owns no
+  // promise while the test is running.
+  hostSetImmediate(() => {
     try {
       // `globalThis.process`, not the captured one: node hands the CJS wrapper
       // the real global, so when `node:process` has installed itself the test
       // must see the installed object under both names.
       run(shimmedRequire, module, module.exports, file, dirname(file),
           globalThis.process, globalThis, globalThis);
-      resolve();
     } catch (e) {
       // A module that owns uncaught-exception dispatch gets first refusal.
       //
@@ -463,11 +471,13 @@ try {
       // make every such test fail for the one reason the test is about. Only
       // a module that declares the hook can claim one -- for everything else
       // an escaped exception is exactly the failure it looks like.
-      if (uncaughtHandler?.(underTest, e)) resolve();
-      else reject(e);
+      if (!uncaughtHandler?.(underTest, e)) {
+        reportFailure(e);
+        return;
+      }
     }
-  }));
-  judgeWhenQuiet();
+    judgeWhenQuiet();
+  });
 } catch (e) {
   reportFailure(e);
 }
