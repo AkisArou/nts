@@ -130,6 +130,8 @@ export class Agent extends EventEmitter {
    */
   keepSocketAlive(socket: Socket): boolean {
     socket.setKeepAlive(true, this.keepAliveMsecs);
+    // Unrefed while idle: a pooled connection should not be the reason a
+    // program cannot exit.
     socket.unref();
     return true;
   }

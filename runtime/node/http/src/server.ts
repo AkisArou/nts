@@ -49,6 +49,15 @@ export class Server extends NetServer {
   maxHeadersCount: number | null = null;
   maxRequestsPerSocket = 0;
 
+  /**
+   * Every accepted connection, so `close` can end the idle ones.
+   *
+   * A keep-alive server holds connections open on purpose, and a `close` that
+   * only stopped accepting would wait for clients that may never speak again
+   * -- which reads as a process that will not exit.
+   */
+  #connections = new Set<Socket>();
+
   #maxHeaderSize: number;
   #IncomingMessage: typeof IncomingMessage;
   #ServerResponse: typeof ServerResponse;
@@ -76,6 +85,9 @@ export class Server extends NetServer {
   }
 
   #serve(socket: Socket): void {
+    this.#connections.add(socket);
+    socket.once("close", (() => this.#connections.delete(socket)) as never);
+
     const parser = new HTTPParser();
     parser.initialize(REQUEST, this.#maxHeaderSize);
 
@@ -127,6 +139,10 @@ export class Server extends NetServer {
       response = new this.#ServerResponse(message);
       response.socket = socket as unknown as OutgoingSocket;
       response.shouldKeepAlive = info.shouldKeepAlive;
+
+      // A request has arrived, so this connection matters again until it is
+      // answered.
+      socket.ref();
 
       const finished = response;
       finished.once("finish", (() => this.#afterResponse(socket, parser, message, finished)) as never);
@@ -203,6 +219,16 @@ export class Server extends NetServer {
 
     parser.continueAfterMessage();
     socket.resume();
+
+    // Idle now: usable if the client sends another request, but not a reason
+    // for the process to stay alive. A keep-alive server that refed its idle
+    // connections would never let a program exit, which is not what keeping
+    // them open is for.
+    socket.unref();
+
+    // And if the server has stopped accepting, there will be no next request
+    // on it worth waiting for.
+    if (!this.listening) socket.end();
   }
 
   /** Node's name for the idle timeout on accepted connections. */
@@ -212,16 +238,10 @@ export class Server extends NetServer {
     return this;
   }
 
-  /**
-   * Close idle connections but let in-flight requests finish.
-   *
-   * The distinction from `close` is the point: `close` stops accepting and
-   * waits for every connection, which for a keep-alive server means waiting
-   * for clients that may never send anything again.
-   */
-  closeIdleConnections(): void {}
-
-  closeAllConnections(): void {}
+  closeAllConnections(): void {
+    for (const socket of this.#connections) socket.destroy();
+    this.#connections.clear();
+  }
 }
 
 export function createServer(

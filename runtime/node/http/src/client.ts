@@ -217,9 +217,14 @@ export class ClientRequest extends OutgoingMessage {
         socket,
         reusable,
       );
-    } else if (!reusable) {
-      socket.destroy();
+      return;
     }
+    // No agent means nothing owns this socket. Keeping it open because both
+    // ends agreed to keep-alive would leave it open forever with nobody to
+    // reuse it -- and, because a socket holds the loop, would stop the process
+    // from ever exiting. `agent: false` means "this connection is mine and it
+    // ends with this request".
+    socket.destroy();
   }
 
   #fail(error: unknown): void {

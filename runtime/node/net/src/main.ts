@@ -64,6 +64,16 @@ declare function nts_net_close(handle: number): void;
 declare function nts_net_address(handle: number, remote: boolean): (string | number)[];
 declare function nts_net_set_no_delay(handle: number, enable: boolean): void;
 declare function nts_net_set_keepalive(handle: number, enable: boolean, delay: number): void;
+/**
+ * Whether this connection should keep the process alive.
+ *
+ * Separate from whether it is open. An unrefed socket still works -- it can be
+ * read and written and will deliver events -- it just stops counting as a
+ * reason for the loop to keep running. That distinction is what lets a server
+ * hold keep-alive connections open without preventing the program from ever
+ * exiting.
+ */
+declare function nts_net_ref(handle: number, keepProcessAlive: boolean): void;
 
 /**
  * Start listening. Binding is not complete when this returns.
@@ -84,6 +94,7 @@ declare function nts_net_listen(
 ): number;
 declare function nts_net_server_address(handle: number): (string | number)[];
 declare function nts_net_server_close(handle: number, callback: () => void): void;
+declare function nts_net_server_ref(handle: number, keepProcessAlive: boolean): void;
 
 export interface SocketOptions {
   fd?: number | undefined;
@@ -403,11 +414,22 @@ export class Socket extends Duplex {
     }
   }
 
+  /**
+   * Let this connection keep the process alive again.
+   *
+   * The pair is not decoration. An HTTP server holding keep-alive connections
+   * open has, by design, sockets that nothing is waiting on -- and a process
+   * whose only remaining work is a connection nobody will speak on again
+   * should exit. `unref` is how a socket stays usable without being a reason
+   * to keep running, and a no-op version of it is why such a program hangs.
+   */
   ref(): this {
+    if (this._handle !== null) nts_net_ref(this._handle, true);
     return this;
   }
 
   unref(): this {
+    if (this._handle !== null) nts_net_ref(this._handle, false);
     return this;
   }
 
@@ -548,12 +570,17 @@ export class Server extends EventEmitter {
   }
 
   ref(): this {
+    if (this._handle !== null) nts_net_server_ref(this._handle, true);
     return this;
   }
 
   unref(): this {
+    if (this._handle !== null) nts_net_server_ref(this._handle, false);
     return this;
   }
+
+  /** Overridden by `http.Server`, which knows which connections are idle. */
+  closeIdleConnections(): void {}
 }
 
 /**

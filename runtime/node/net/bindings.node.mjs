@@ -134,3 +134,20 @@ globalThis.nts_net_server_close = (handle, cb) => {
   servers.delete(handle);
   server.close(() => cb());
 };
+
+// Whether a handle keeps the process alive. Node's own `ref`/`unref`, which
+// map to libuv's -- an unrefed handle still works, it just no longer counts as
+// a reason for the loop to keep running.
+globalThis.nts_net_ref = (handle, keepProcessAlive) => {
+  const entry = sockets.get(handle);
+  if (!entry) return;
+  if (keepProcessAlive) entry.socket.ref();
+  else entry.socket.unref();
+};
+
+globalThis.nts_net_server_ref = (handle, keepProcessAlive) => {
+  const server = servers.get(handle);
+  if (!server) return;
+  if (keepProcessAlive) server.ref();
+  else server.unref();
+};
