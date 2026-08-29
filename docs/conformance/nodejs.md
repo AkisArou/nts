@@ -118,6 +118,22 @@ afterwards is ticks and microtasks only, which deliver a pending warning
 without giving the loop another turn. Both of these were the runner
 manufacturing the behaviour it was measuring, in opposite directions.
 
+**The pass count and the hollow count can point in opposite directions, and
+when they do the hollow count is right.** `buffer/shape.mjs` installs our
+`Buffer` as a global, under a comment that said it did not — the comment had
+been wrong about the code for some time. Measured: removing the installation
+takes `buffer` from **33 files passing to 54**. Twenty-one files, for deleting
+three lines that contradicted their own comment.
+
+Forty-six of those 54 are hollow. Without the global, a test writing
+`Buffer.alloc(...)` unqualified gets *node's* `Buffer` and never touches ours;
+it passes and measures nothing. Real coverage is 32 with the global and 8
+without — **the higher number is the worse measurement by a factor of four.**
+
+Worth stating plainly because every part of it looked right: a number went up,
+by a lot, for a change with a written rationale, and it was a large regression.
+Nothing except the sabotage run could have distinguished the two.
+
 **A module that owns uncaught-exception dispatch gets first refusal.** Node's
 runtime hands an escaped exception to `process`, which runs a capture callback
 or emits `uncaughtException`, and a program with either carries on. A runner
@@ -221,8 +237,8 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**719 of node's own 1,398 applicable test files pass** across twenty-one
-modules, of which 22 are hollow. **1,435 functions lower.**
+**766 of node's own 1,462 applicable test files pass** across twenty-two
+modules, of which 22 are hollow. **1,509 functions lower.**
 
 The two columns come from two runs and are anchored separately, which is worth
 saying rather than hiding behind one number: the test columns from a sweep at
@@ -299,6 +315,7 @@ headline as much as to the table.
 | `assert` | 9 / 19 | 0 | 61 / 327 | complete, including `CallTracker` and node's Myers diff |
 | `zlib` | 30 / 64 | 0 | 76 / 654 | the streams, the one-shots, brotli and zstd |
 | `util` | 7 / 19 | 1 | 65 / 288 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `dgram` | 47 / 64 | 0 | 74 / 371 | UDP; `bindSync`, the send-queue accessors and `cluster` paths absent |
 | `net` | 50 / 139 | 0 | 83 / 650 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
 | `fs` | 72 / 214 | 2 | 117 / 719 | sync, callback and promise surfaces, the file streams and the watchers |
 | `http` | 94 / 350 | 6 | 86 / 824 | a complete HTTP/1.1 implementation, parser included; no HTTPS or HTTP/2 |
@@ -1276,6 +1293,37 @@ again.
 
 Absent: HTTPS, HTTP/2, `http.OutgoingMessage`'s legacy `_headers` accessors,
 and the informational-response paths beyond `100-continue`.
+
+## `dgram`
+
+UDP, which is a different shape from TCP rather than a simpler one. There is no
+connection, so there is nothing to accept and nothing to end: a socket is bound
+to a port and receives whatever arrives at it, from anyone. That is why
+`message` carries the sender and TCP's `data` does not — on a connection the
+peer is a property of the socket, and here it is a property of each packet.
+`connect` is not a handshake either; for a datagram socket it means "remember
+this address and refuse the others".
+
+**The bug worth recording is that node's `bind` is asynchronous and the seam
+was built as though it were not.** Reporting success from the call meant
+`listening` was emitted before the socket had a port, so `address()` inside a
+bind callback threw. That was 25 of the failures — 15 passing became 40 on the
+one change — and `connect` had the identical shape. Both report through a
+callback now, which is what `net`'s `listen` already did: the precedent was one
+directory away and unread.
+
+Three smaller ones. A function in first position is a callback and not a port,
+so `bind(cb)` was rejected with "Port should be >= 0 and < 65536. Received
+[Function]". `address()` threw a stand-in errno, saying `EPERM` where an
+unbound socket should say `EBADF` — for these errors the reason *is* the
+message. And the socket operations were using the filesystem's error wording:
+node has three of these sentences and its tests match the text of each, so
+`uvException` puts the path first, `errnoException` names no syscall for the
+process credential calls, and `exceptionWithHostPort` reads `getsockname
+EBADF`. A fourth was nearly added under a name the second already had.
+
+Absent: `bindSync` and `connectSync`, the send-queue accessors, the deprecated
+`sendto`, and anything needing `cluster` or `net.BlockList`.
 
 ## `net`
 
