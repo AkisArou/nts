@@ -111,6 +111,11 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // A `never` return means the call does not come back, so there is
         // nothing for a wrapper to hand back.
         HirType::Never => None,
+        // An erased value is a tag beside a payload, and crossing it would mean
+        // building whichever JS value the tag currently names -- a switch, not
+        // a conversion. Answering `None` keeps that decision out of this file
+        // until an erased value can actually reach a boundary.
+        HirType::Erased => None,
     }
 }
 
@@ -118,6 +123,7 @@ fn spell(ty: &HirType) -> String {
     match ty {
         HirType::Void => "void".to_owned(),
         HirType::Bool => "bool".to_owned(),
+        HirType::Erased => "unknown".to_owned(),
         HirType::Int { bits, signed } => format!("{}{bits}", if *signed { 'i' } else { 'u' }),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "string".to_owned(),
@@ -140,6 +146,19 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         // nothing, `never` one that did not return.
         HirType::Void | HirType::Never => "void".to_owned(),
         HirType::Bool => "bool".to_owned(),
+        // By value, and not a pointer as every managed type above is. Those
+        // carry an `NtsHeader` and are reference-counted, so what crosses is a
+        // handle; an `NtsValue` is sixteen bytes with no header, so what
+        // crosses is the value. The promise is the closest thing to it in this
+        // list and is the wrong precedent for exactly that reason.
+        //
+        // Nothing reaches this arm today: all three call sites run after
+        // `cross`, which refuses an erased type, so a struct field or a
+        // parameter of one is skipped before it is spelled. Whoever teaches
+        // `cross` to cross an erased value should check this spelling against
+        // what the C emitter actually produces rather than inherit it -- it is
+        // reasoned, but it has never been compiled.
+        HirType::Erased => "NtsValue".to_owned(),
         HirType::Managed(ManagedType::String) => "NtsString *".to_owned(),
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *".to_owned(),
         // The fixed runtime layout, not a generated struct: the payload's
