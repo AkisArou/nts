@@ -441,7 +441,7 @@ mod tests {
 
     #[test]
     fn parses_execution_metadata_in_both_list_styles() {
-        let yaml = r#"
+        let yaml = r"
 description: >
   strict runtime failure
 flags:
@@ -451,7 +451,7 @@ includes: [a.js, b.js]
 negative:
   phase: runtime
   type: ReferenceError
-"#;
+";
         let parsed = parse_yaml(yaml).expect("valid metadata").expect("mapping");
         assert_eq!(
             parsed.get("flags"),
@@ -482,7 +482,7 @@ negative:
 
     #[test]
     fn extracts_a_typed_record_and_removes_protocol_headers() {
-        let source = r#"// Copyright 2026 Example.  All rights reserved.
+        let source = r"// Copyright 2026 Example.  All rights reserved.
 // This code is governed by the BSD license found in the LICENSE file.
 
 /*---
@@ -493,7 +493,7 @@ negative:
 ---*/
 
 $DONOTEVALUATE();
-"#;
+";
         let record = parse_test_record("language/example.js", source).expect("valid record");
         assert!(record.flags.contains("onlyStrict"));
         assert_eq!(

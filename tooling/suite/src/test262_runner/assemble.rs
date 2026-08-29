@@ -251,7 +251,7 @@ mod tests {
         let (_, records) =
             discover_suite(&root, TEST262_PIN).expect("the pinned suite must parse completely");
         let assembler = SuiteAssembler::new(&root).expect("create suite assembler");
-        let mut assembled = 0;
+        let mut count = 0;
         for record in &records {
             if let super::super::model::ScheduleOutcome::Planned { plan } =
                 schedule_strict_script(record)
@@ -259,9 +259,9 @@ mod tests {
                 assembler
                     .assemble(record, plan)
                     .unwrap_or_else(|error| panic!("assembling {}: {error}", record.path));
-                assembled += 1;
+                count += 1;
             }
         }
-        assert_eq!(assembled, 46_661);
+        assert_eq!(count, 46_661);
     }
 }

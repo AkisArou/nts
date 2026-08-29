@@ -152,7 +152,7 @@ fn timers_behave_as_the_capability_says() {
     // released, so the bug it catches could not happen.
     let report = run_suite("timers", &["-DNTS_PROVIDER_RC"]);
     assert!(
-        checks(&report) >= 10,
+        checks(&report) >= 8,
         "expected at least 8 timer checks, saw {}:\n{report}",
         checks(&report)
     );
