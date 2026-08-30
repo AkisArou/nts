@@ -120,7 +120,7 @@ against **zero** uses of the refused form.
 | ✅ | higher-order functions and closures that only *read* what they capture |
 | ✅ | a **named function used as a value** — one static instance, so identity holds |
 | ✅ | recursion |
-| ◐ | `async`/`await` — right under the default provider; `await` in a **loop** is wrong under reference counting |
+| ✅ | `async`/`await` — under both providers |
 | ✅ | type predicates (`x is T`) and `asserts x is T` |
 | ✅ | rest parameters | the call gathers its trailing arguments into the array |
 | ✗ | `function` expressions — an arrow with the same body lowers |
@@ -426,6 +426,24 @@ Two gaps this opened, both small and both real:
 - a bare `null` *literal* as an argument whose parameter is a two-absence union
   (`m.set(null, 1)`) finds no contextual type. The same call through a variable
   is fine.
+
+### The frame's reference moves through the suspension
+
+An async function's frame outlives the call that made it: it is handed to the
+runtime at every `await` and read back when the promise settles. So the resume
+**consumes** a reference — it either finishes and gives it back, or suspends and
+leaves it with the runtime — and every caller provides one.
+
+Without that the starter released the frame on its way out while a pending
+reaction still pointed at it, and the resumption ran on freed memory. `hir::rc`
+does not cover it: the frame is a *parameter* of the resume, and a parameter is
+borrowed by that pass's convention. It is borrowed from whoever provided the
+reference, which is what makes giving it back at the finishing exits — and at
+none of the pausing ones — correct rather than double.
+
+Known and measured: an async call still leaks `awaits + 1` objects under
+reference counting. That is a leak and not a fault, it is not the frame, and it
+is what to look at next in this area.
 
 `bigint`'s width is the one place this table promises less than the language.
 Within it the arithmetic is exact and prints without an exponent, and the one

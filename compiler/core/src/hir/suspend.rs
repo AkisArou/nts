@@ -353,6 +353,16 @@ fn entry_function(
         build.set(frame, slot, *value);
     }
 
+    // The resume *consumes* a reference to the frame: it either finishes and
+    // gives it back, or suspends and leaves it with the runtime, which holds it
+    // until the resumption runs. So every caller provides one, and this is the
+    // first caller.
+    //
+    // Without it the frame was released here -- `hir::rc` gives back what the
+    // allocation above took -- while a pending reaction still pointed at it,
+    // and the resumption ran on freed memory. Invisible under a provider that
+    // frees nothing, which is every provider this was ever tested under.
+    build.push(OpKind::Retain(frame), HirType::Void);
     build.push(
         OpKind::Call {
             callee: super::Callee::Direct(resume.to_owned()),
@@ -621,16 +631,29 @@ fn resume_function(
     }
 
     let mut blocks = dispatch_chain(&mut build, frame, &resume_at);
-    // The shared rejection exit. It reads the awaited promise out of the frame
-    // rather than taking it as a parameter, so every resumption can share one
-    // block: the field holds whichever promise this resumption was waiting on.
     blocks.push(rejection_exit(&mut build, frame));
     blocks.extend(body);
+    give_the_frame_back(&mut build, &mut blocks, frame, &func.origin);
+    assembled_resume(name, func, frame_ty.clone(), build, blocks)
+}
+
+/// The resumption, as a function.
+///
+/// One parameter and no result: everything it reads is in the frame and
+/// everything it produces goes into the frame's promise. Not exported -- it is
+/// reached through the subscription the suspension left behind, never by name.
+fn assembled_resume(
+    name: &str,
+    func: &Func,
+    frame_ty: HirType,
+    build: Build,
+    blocks: Vec<super::Block>,
+) -> Func {
     Func {
         name: name.to_owned(),
         params: vec![super::Param {
             name: "frame".to_owned(),
-            ty: frame_ty.clone(),
+            ty: frame_ty,
             origin: func.origin.clone(),
             known: super::facts::Facts::TOP,
         }],
@@ -641,6 +664,42 @@ fn resume_function(
         exported: false,
         initializes_receiver: false,
         async_result: None,
+    }
+}
+
+/// Give the frame back at every exit that is *finishing*, and at none that
+/// is pausing. A block whose last operation is the suspension is handing the
+/// frame to the runtime and its reference with it; every other `return` is
+/// the end of the resumption, and the reference it was called with dies
+/// there.
+///
+/// `hir::rc` does not do this: the frame is a *parameter*, and a parameter
+/// is borrowed by that pass's convention. It is borrowed from whoever
+/// provided the reference, which is exactly what makes giving it back here
+/// correct rather than double.
+    fn give_the_frame_back(
+    build: &mut Build,
+    blocks: &mut [super::Block],
+    frame: super::ValueId,
+    origin: &nts_semantic_schema::Origin,
+) {
+    for block in blocks.iter_mut() {
+        if !matches!(block.terminator, Terminator::Return(_)) {
+            continue;
+        }
+        let pausing = block.ops.last().is_some_and(|last| {
+            matches!(build.values[last.0 as usize].kind, OpKind::Suspend { .. })
+        });
+        if pausing {
+            continue;
+        }
+        let id = super::ValueId(u32::try_from(build.values.len()).unwrap_or(u32::MAX));
+        build.values.push(super::Op {
+            kind: OpKind::Release(frame),
+            ty: HirType::Void,
+            origin: origin.clone(),
+        });
+        block.ops.push(id);
     }
 }
 
@@ -754,6 +813,11 @@ fn rejection_check(
 /// one this resumption was waiting on. With no `try`/`catch` across an `await`,
 /// rejecting this function's own promise is the whole of what a rejection can
 /// do.
+/// The shared rejection exit.
+///
+/// It reads the awaited promise out of the frame rather than taking it as a
+/// parameter, so every resumption can share one block: the field holds
+/// whichever promise this resumption was waiting on.
 fn rejection_exit(build: &mut Build, frame: ValueId) -> super::Block {
     let promise = HirType::Managed(ManagedType::Promise(Box::new(HirType::Void)));
     let result = build.get(frame, FIELD_RESULT, promise.clone());

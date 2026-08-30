@@ -17,14 +17,10 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # Known to fail, and each for a stated reason. The list is a ratchet: a new
 # failure breaks the gate, and fixing one of these tightens it.
 #
-#   async  `await` inside a loop answers wrongly and then aborts. A single
-#          `await` is right and two in sequence are right, so it is the
-#          suspension frame resumed *again* that something releases too early.
-#          Found the first time the examples were run this way.
-#
 # `invalid` and `unsupported` are not oracle cases under any provider: one does
-# not typecheck and the other refuses on purpose.
-known_failing="async invalid unsupported"
+# not typecheck and the other refuses on purpose. Nothing else is expected to
+# fail -- `async` was, and is not any more.
+known_failing="invalid unsupported"
 
 crowded=8
 cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )
