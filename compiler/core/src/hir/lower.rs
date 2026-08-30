@@ -1799,6 +1799,22 @@ fn short(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
     }
 }
 
+/// How an operator token is written, for a refusal that has to name it.
+///
+/// By kind, because a token node carries no text. The number is the fallback
+/// rather than the answer: a refusal nobody can group by is a refusal nobody
+/// can rank, and "this operator" was twenty-eight of them at once.
+fn spelling(kind: u16) -> String {
+    let named = match kind {
+        syntax::QUESTION_QUESTION_TOKEN => "??",
+        syntax::AMPERSAND_AMPERSAND_TOKEN => "&&",
+        syntax::BAR_BAR_TOKEN => "||",
+        syntax::INSTANCEOF_KEYWORD => "instanceof",
+        _ => return format!("of kind {kind}"),
+    };
+    format!("`{named}`")
+}
+
 #[must_use]
 pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
     let Some(record) = snapshot.types.get(ty.0 as usize) else {
@@ -5813,7 +5829,7 @@ impl<'a> FuncBuilder<'a> {
                 let HirType::Managed(ManagedType::Array(element)) =
                     self.values[array.0 as usize].ty.clone()
                 else {
-                    return Err(self.unsupported(id, "indexing something that is not an array"));
+                    return Err(self.not_an_array(id));
                 };
                 self.push(
                     OpKind::ArrayGet {
@@ -7438,7 +7454,7 @@ impl<'a> FuncBuilder<'a> {
         let HirType::Managed(ManagedType::Array(element)) =
             self.values[array.0 as usize].ty.clone()
         else {
-            return Err(self.unsupported(id, "indexing something that is not an array"));
+            return Err(self.not_an_array(id));
         };
         let ty = *element;
         let origin = self.origin(id);
@@ -7478,17 +7494,41 @@ impl<'a> FuncBuilder<'a> {
             self.values[array_value.0 as usize].ty,
             HirType::Managed(ManagedType::Array(_))
         ) {
-            return Err(self.unsupported(id, "indexing something that is not an array"));
+            return Err(self.not_an_array(id));
         }
         let index_value = self.lower_expression(*index)?;
         Ok((array_value, index_value))
+    }
+
+    /// `xs[i]` where `xs` is not an array, named by what it is.
+    ///
+    /// From the checker rather than from the lowered value: a receiver with no
+    /// representation has no lowered type to report, and those are most of
+    /// these. Thirty-two instances read `indexing something that is not an
+    /// array`, which says nothing about which thirty-two.
+    fn not_an_array(&self, id: NodeId) -> Diagnostic {
+        let described = self
+            .children(id)
+            .first()
+            .and_then(|object| self.snapshot.node_types.get(object))
+            .map_or_else(
+                || "an untyped receiver".to_owned(),
+                |ty| describe(self.snapshot, *ty),
+            );
+        self.unsupported(id, &format!("indexing {described}, which is not an array"))
     }
 
     /// `xs.length`. Other members are not lowered yet.
     fn lower_property_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let children = self.children(id);
         let [object, member] = children.as_slice() else {
-            return Err(self.unsupported(id, "a property access of unexpected shape"));
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "a property access of {} parts rather than an object and a name",
+                    children.len()
+                ),
+            ));
         };
         // `C.x` where `C` is a module: the checker resolved the member to the
         // export's own symbol, so this is a name and lowers as one -- through
@@ -8852,7 +8892,13 @@ impl<'a> FuncBuilder<'a> {
             "slice" => ("nts_str_slice", 2, string.clone()),
             "substring" => ("nts_str_substring", 2, string.clone()),
             "concat" => ("nts_concat", 1, string),
-            _ => return Err(self.unsupported(member, "this string method")),
+            // Named, because twenty-eight instances of "this string method"
+            // in the node profile is a bucket and not a work item.
+            other => {
+                return Err(
+                    self.unsupported(member, &format!("`{other}`, which a string does not have here"))
+                );
+            }
         };
 
         let mut args = vec![receiver];
@@ -9931,7 +9977,12 @@ impl<'a> FuncBuilder<'a> {
             // the checker rejects it under `strict`.
             syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN => BinOp::Eq,
             syntax::EXCLAMATION_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN => BinOp::Ne,
-            _ => return Err(self.unsupported(*operator, "this operator")),
+            kind => {
+                return Err(self.unsupported(
+                    *operator,
+                    &format!("the operator {}", spelling(kind)),
+                ));
+            }
         };
 
         let origin = self.origin(id);
