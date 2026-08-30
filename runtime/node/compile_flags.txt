@@ -1,6 +1,6 @@
 -std=c11
+-D_GNU_SOURCE
 -I.
 -I../c
 -Wall
 -Wextra
--DNTS_PROVIDER_RC
