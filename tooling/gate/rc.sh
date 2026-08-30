@@ -18,9 +18,31 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # failure breaks the gate, and fixing one of these tightens it.
 #
 # `invalid` and `unsupported` are not oracle cases under any provider: one does
-# not typecheck and the other refuses on purpose. Nothing else is expected to
-# fail -- `async` was, and is not any more.
-known_failing="invalid unsupported"
+# not typecheck and the other refuses on purpose.
+#
+# The rest hold objects they should have given back, which the run now measures:
+# the driver records what is live after the first case and again at the end,
+# forcing a collection at both so that what is merely awaiting the cycle
+# collector is not counted as held. Growth between the two is a leak.
+#
+# One mechanism, found by isolating `captured-by-reference` down to five lines:
+#
+#     let text = "a";                                  a *managed* value
+#     const grow = () => { text = text + "b"; };       captured and written
+#
+# The cell is frame-allocated -- escape analysis proved it does not escape --
+# so it is `NTS_IMMORTAL`, and the closure's own frame-release loads the field
+# and calls `nts_release` on it, which returns immediately for an immortal
+# object. Nothing then releases the *cell's* string. A number in the same cell
+# is fine, because a number is not a reference.
+#
+# `release_value` in `hir::rc` already knows a frame object must give up its
+# fields rather than itself. What is missing is that a frame object reached
+# *through another frame object's field* never gets that treatment.
+#
+# Not a regression from the counting itself: before escape analysis learned to
+# put a cell in the frame, the cell was on the heap and released normally.
+known_failing="arith captured-by-reference invalid module-state signatures strings timers unsupported"
 
 crowded=8
 cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )

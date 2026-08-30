@@ -790,6 +790,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
              \x20   nts_leave();\n",
         );
     }
+    let mut baselined = false;
     for (one, at, tuple) in interleaved(testable) {
         {
             let args: Vec<String> = tuple
@@ -807,17 +808,54 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
                 nts_codegen_c::c_identifier(&one.name),
                 args.join(", ")
             );
+            // A returned reference is the caller's, and this driver is the
+            // caller. Releasing it is not tidiness: the liveness check at the
+            // end measures what the *program* still holds, and a harness that
+            // kept every string it printed would report its own hoard as the
+            // program's leak. It did, until this line existed.
             let show = if settles_with(&one.returns).is_some() {
-                format!("show_settled(\"{}\", {at}, {call});", one.name)
+                format!(
+                    "{{ NtsPromise *held = {call}; show_settled(\"{}\", {at}, held); \
+                     nts_release((NtsHeader *)held); }}",
+                    one.name
+                )
             } else if is_string(&one.returns) {
-                format!("show_string(\"{}\", {at}, {call});", one.name)
+                format!(
+                    "{{ NtsString *held = {call}; show_string(\"{}\", {at}, held); \
+                     nts_release((NtsHeader *)held); }}",
+                    one.name
+                )
             } else {
                 format!("show(\"{}\", {at}, (double){call});", one.name)
             };
             let _ = writeln!(main, "    if (++at_case >= from) {{ {show} }}");
+            // The baseline, taken after the first case rather than before it:
+            // whatever a module sets up on the way to answering once is state
+            // it is entitled to keep, and the question is only whether the
+            // rest of the run adds to it.
+            if !baselined {
+                baselined = true;
+                main.push_str(
+                    "#ifdef NTS_PROVIDER_RC\n                     \x20   nts_collect_cycles();\n                     \x20   fprintf(stderr, \"nts-live-first %zu\\n\", nts_live_count());\n                     #endif\n",
+                );
+            }
         }
     }
-    main.push_str("    return 0;\n}\n");
+    // What the program still holds, once and again.
+    //
+    // Agreement cannot see a leak: a function that never gives an object back
+    // answers exactly as well as one that does, and under the default provider
+    // nothing is freed anyway so there is nothing to see. This is the other
+    // half of the question, and it is only asked under a provider that frees.
+    //
+    // Two points rather than one, because "zero at the end" is the wrong
+    // expectation: a module may legitimately hold state for the whole run. What
+    // must not happen is *growth* between one case and the last, and a
+    // collection is forced at each point so that what is merely awaiting the
+    // cycle collector is not counted as held.
+    main.push_str(
+        "#ifdef NTS_PROVIDER_RC\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count());\n         #endif\n         \x20   return 0;\n}\n",
+    );
     main
 }
 
@@ -1020,10 +1058,19 @@ fn run_native(
         let produced = lines(&run.stdout);
         let reached = produced.len();
         collected.extend(produced);
+        let complaint = String::from_utf8_lossy(&run.stderr);
+        // What the program still held, once and at the end. Only under a
+        // provider that frees, and on stderr because stdout is the comparison.
+        //
+        // Growth between the two is a leak: agreement cannot see one -- a
+        // function that never gives an object back answers exactly as well as
+        // one that does -- and this is the only place that asks.
+        if let Some(grew) = growth(&complaint) {
+            aborts.push(grew);
+        }
         if reached == total - from {
             break;
         }
-        let complaint = String::from_utf8_lossy(&run.stderr);
         if let Some(line) = complaint
             .lines()
             .find(|line| {
@@ -1041,6 +1088,31 @@ fn run_native(
         restarts += 1;
     }
     Ok(collected)
+}
+
+/// What the program still held, once and at the end, and whether it grew.
+///
+/// Only under a provider that frees, and read from stderr because stdout is the
+/// comparison. Agreement cannot see a leak -- a function that never gives an
+/// object back answers exactly as well as one that does -- so this is the only
+/// place that asks.
+fn growth(complaint: &str) -> Option<String> {
+    let held = |marker: &str| {
+        complaint
+            .lines()
+            .filter_map(|line| line.strip_prefix(marker))
+            .filter_map(|rest| rest.trim().parse::<u64>().ok())
+            .next_back()
+    };
+    let first = held("nts-live-first ")?;
+    let end = held("nts-live-end ")?;
+    (end > first).then(|| {
+        format!(
+            "held {first} object(s) after the first case and {end} at the end, so {} were \
+             never given back",
+            end - first
+        )
+    })
 }
 
 fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<Vec<String>> {

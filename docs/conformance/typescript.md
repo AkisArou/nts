@@ -441,6 +441,32 @@ borrowed by that pass's convention. It is borrowed from whoever provided the
 reference, which is what makes giving it back at the finishing exits — and at
 none of the pausing ones — correct rather than double.
 
+### A frame object's contents, reached through another frame object
+
+Six examples hold objects they never give back, and one mechanism explains the
+one that was isolated:
+
+```ts
+let text = "a";                                // a *managed* value
+const grow = () => { text = text + "b"; };     // captured and written
+```
+
+The cell is frame-allocated — escape analysis proved it does not escape — so it
+carries `NTS_IMMORTAL`, and the closure's own frame-release loads the field and
+calls `nts_release` on it, which returns immediately for an immortal object.
+Nothing then releases the *cell's* string. The same cell holding a number is
+fine, because a number is not a reference.
+
+`hir::rc`'s `release_value` already knows a frame object gives up its **fields**
+rather than itself. What is missing is that a frame object reached through
+*another* frame object's field never gets that treatment.
+
+Not a cost of reference counting: before escape analysis learned to put a cell
+in the frame, the cell was on the heap and released normally. It is the two
+changes meeting.
+
+Named in `tooling/gate/rc.sh`, which is a ratchet — a new one breaks the gate.
+
 I first reported an async call as leaking `awaits + 1` objects under counting.
 It does not, and the correction is worth keeping: what accumulates is
 **promises**, which are cyclic-capable, so at a count of zero they go to the
