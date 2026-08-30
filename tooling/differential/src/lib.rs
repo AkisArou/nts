@@ -205,6 +205,10 @@ fn c_type(ty: &HirType) -> &'static str {
         // it generates calls from scalar signatures -- so this appears only
         // where an erased value is somewhere else in a compiled program.
         HirType::Erased => "NtsValue",
+        // The harness drives scalar signatures and a `bigint` is not one it can
+        // generate a value for, so this is here to be right rather than to be
+        // reached.
+        HirType::BigInt => "__int128",
         HirType::Int { bits: 8, signed } => {
             if *signed {
                 "int8_t"

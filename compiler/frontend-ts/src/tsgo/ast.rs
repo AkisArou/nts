@@ -319,10 +319,16 @@ fn decode_nodes(
         // of sixteen nines is above 2^53 and rounds up before the division by a
         // power of ten. The literal's own text is the authority on what it says,
         // and it is already here.
+        // A `bigint` joins the numeric literal here for the same reason and a
+        // stronger one: its value is exact and arbitrarily long, and the
+        // checker's `ConstantValue` can only hold a `f64` or a string -- so the
+        // digits as written are not merely the best source, they are the only
+        // one that has not already lost precision.
         if !is_list
             && matches!(
                 u16::try_from(raw.kind),
-                Ok(nts_semantic_schema::syntax::NUMERIC_LITERAL)
+                Ok(nts_semantic_schema::syntax::NUMERIC_LITERAL
+                    | nts_semantic_schema::syntax::BIGINT_LITERAL)
             )
             && text.is_none()
         {

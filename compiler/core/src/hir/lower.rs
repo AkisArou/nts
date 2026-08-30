@@ -2224,6 +2224,14 @@ fn representation_of(
         // representation narrower than the type it widens to.
         TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => HirType::Bool,
         TypeKind::Number | TypeKind::Literal(LiteralValue::Number(_)) => HirType::NUMBER,
+        // `bigint` is an exact integer, and TypeScript keeps it apart from
+        // `number` for us: mixing the two is a type error the checker has
+        // already rejected, so nothing here has to guard the arithmetic against
+        // a double turning up in it.
+        //
+        // 128 bits, which is not what the specification says. See
+        // `lower_bigint`, where the boundary is drawn and made visible.
+        TypeKind::BigInt | TypeKind::Literal(LiteralValue::BigInt(_)) => HirType::BigInt,
         TypeKind::String | TypeKind::Literal(LiteralValue::String(_)) => {
             HirType::Managed(ManagedType::String)
         }
@@ -5725,6 +5733,18 @@ impl<'a> FuncBuilder<'a> {
             (HirType::Float { .. } | HirType::Int { .. } | HirType::Bool, Some(value)) => {
                 ("nts_promise_fulfill_number", vec![result.promise, value])
             }
+            // A promise settles through a two-slot union of a double and a
+            // pointer, and a `bigint` is 128 bits of neither. Refused rather
+            // than narrowed: settling one through the number slot would keep
+            // the low 53 bits of a value whose whole reason for existing is
+            // that 53 are not enough.
+            (HirType::BigInt, Some(_)) => {
+                return Err(self.unsupported(
+                    id,
+                    "an `async` function settling with a `bigint`, which does not fit the \
+                     promise's payload",
+                ));
+            }
             // The tag, supplied rather than derived. The compiler emitted the
             // type, so it knows whether this is a string; making the runtime
             // read the header back to find out is asking a question that was
@@ -5733,7 +5753,7 @@ impl<'a> FuncBuilder<'a> {
                 let tag = super::tags::of_reference(managed);
                 let origin = self.origin(id);
                 let tag = self.push(
-                    OpKind::ConstInt(i64::from(tag)),
+                    OpKind::ConstInt(i128::from(tag)),
                     HirType::Int {
                         bits: 32,
                         signed: false,
@@ -7021,6 +7041,17 @@ impl<'a> FuncBuilder<'a> {
         ty: HirType,
         origin: &Origin,
     ) -> ValueId {
+        // A `bigint`'s bitwise operators are not JavaScript's. `1n << 40n` is
+        // 2^40, where `1 << 40` is 256 -- a number's shift count is masked to
+        // five bits and its operands are truncated to int32, and a `bigint` has
+        // neither rule. TypeScript will not let the two mix, so the operand type
+        // is enough to tell which set applies.
+        //
+        // Caught by the differential: `x <<= 40n` came back as 1 where node said
+        // 2^32, because 40 & 31 is 8.
+        if matches!(ty, HirType::BigInt) {
+            return self.push(OpKind::Binary { op, lhs, rhs }, ty, origin.clone());
+        }
         let left_coercion = if matches!(op, BinOp::UShr) {
             UnOp::ToUint32
         } else {
@@ -7322,6 +7353,7 @@ impl<'a> FuncBuilder<'a> {
         match self.kind_of(id) {
             Some(syntax::IDENTIFIER) => self.lower_identifier(id),
             Some(syntax::NUMERIC_LITERAL) => self.lower_number(id),
+            Some(syntax::BIGINT_LITERAL) => self.lower_bigint(id),
             Some(syntax::STRING_LITERAL) => self.lower_string(id),
             Some(syntax::BINARY_EXPRESSION) => self.lower_binary(id),
             Some(syntax::CALL_EXPRESSION) => self.lower_call(id),
@@ -9097,7 +9129,7 @@ impl<'a> FuncBuilder<'a> {
                 };
                 let tag = self.push(OpKind::TagOf { value }, unsigned.clone(), origin.clone());
                 let undefined = self.push(
-                    OpKind::ConstInt(i64::from(super::tags::UNDEFINED)),
+                    OpKind::ConstInt(i128::from(super::tags::UNDEFINED)),
                     unsigned,
                     origin.clone(),
                 );
@@ -10091,7 +10123,14 @@ impl<'a> FuncBuilder<'a> {
             let origin = self.origin(id);
             return Some(match self.values[value.0 as usize].ty {
                 HirType::Float { .. } | HirType::Int { .. } => Ok(value),
-                HirType::Bool => Ok(self.push(OpKind::Convert(value), HirType::NUMBER, origin)),
+                // One conversion, two reasons. A boolean is `ToNumber`, which
+                // the specification gives as 1 and 0. A `bigint` rounds to the
+                // nearest double -- lossy above 2^53 in node and here alike,
+                // deliberately, because that is what asking for a `number`
+                // means. C's own conversion is both of those.
+                HirType::Bool | HirType::BigInt => {
+                    Ok(self.push(OpKind::Convert(value), HirType::NUMBER, origin))
+                }
                 _ => Err(self.unsupported(id, "a conversion to number from this type")),
             });
         }
@@ -11358,6 +11397,63 @@ impl<'a> FuncBuilder<'a> {
         None
     }
 
+    /// `123n`, `0xffn`, `0b1010n` -- a `bigint` literal.
+    ///
+    /// # The boundary, and why it is here
+    ///
+    /// A `bigint` is arbitrary precision in the specification. This compiler
+    /// gives it 128 bits, and that is a real difference rather than an
+    /// implementation detail -- so it is drawn where it can be *seen*: a
+    /// literal that does not fit is refused at the place it is written, with
+    /// its own digits in the message, and arithmetic that leaves the range
+    /// aborts at run time rather than wrapping into a wrong answer.
+    ///
+    /// The trade is measured rather than assumed. Every `bigint` in the node
+    /// profile is a 64-bit quantity -- `readBigUInt64BE`, an hrtime timestamp,
+    /// `0xffffffffffffffffn` -- and the comment above the first of them says
+    /// why: "`bigint` rather than `number`, because a `double` holds only 53
+    /// bits". A true bignum would put a heap allocation in each of those,
+    /// which is the opposite of what they are reaching for. 128 bits covers
+    /// every one of them with 63 to spare, at the cost of one C type.
+    ///
+    /// What replaces it, when something needs it: the representation engines
+    /// use, which is a small-integer fast path beside a heap bignum. That is a
+    /// strictly larger piece of work than either half, and it belongs to the
+    /// program that needs `2n ** 200n` rather than to this one.
+    fn lower_bigint(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        // The literal's own text, for the reason `lower_number` reads it: the
+        // spelling is the authority on what the literal is.
+        let text = self
+            .node(id)
+            .text
+            .clone()
+            // No fallback to `snapshot.constants`: it holds a `Number` or a
+            // `String`, and a `bigint` is neither -- folding one into a double
+            // is exactly the precision this literal exists to avoid.
+            .ok_or_else(|| self.unsupported(id, "a `bigint` literal with no digits"))?;
+
+        let digits = text.trim().trim_end_matches('n');
+        let (radix, body) = match digits.get(..2) {
+            Some("0x" | "0X") => (16, &digits[2..]),
+            Some("0o" | "0O") => (8, &digits[2..]),
+            Some("0b" | "0B") => (2, &digits[2..]),
+            _ => (10, digits),
+        };
+        let cleaned: String = body.chars().filter(|c| *c != '_').collect();
+        let Ok(value) = i128::from_str_radix(&cleaned, radix) else {
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "the `bigint` literal `{digits}`, which needs more than the 128 bits this \
+                     compiler gives one"
+                ),
+            ));
+        };
+
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::ConstInt(value), HirType::BigInt, origin))
+    }
+
     fn lower_number(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         // The source text first, parsed here.
         //
@@ -11559,7 +11655,7 @@ impl<'a> FuncBuilder<'a> {
                 origin.clone(),
             );
             let wanted = self.push(
-                OpKind::ConstInt(i64::from(super::tags::UNDEFINED)),
+                OpKind::ConstInt(i128::from(super::tags::UNDEFINED)),
                 HirType::Int {
                     bits: 32,
                     signed: false,

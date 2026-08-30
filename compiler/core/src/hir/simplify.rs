@@ -106,7 +106,7 @@ fn identity(func: &Func, value: ValueId) -> Option<ValueId> {
 }
 
 /// A value's integer constant, if it is one.
-fn constant(func: &Func, value: ValueId) -> Option<i64> {
+fn constant(func: &Func, value: ValueId) -> Option<i128> {
     match func.values[value.0 as usize].kind {
         OpKind::ConstInt(literal) => Some(literal),
         _ => None,

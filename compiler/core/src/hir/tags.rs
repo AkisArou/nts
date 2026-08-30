@@ -132,7 +132,7 @@ pub fn fold_comparisons(func: &mut super::Func) -> usize {
         let constant = super::ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
         let ty = func.values[tag.0 as usize].ty.clone();
         func.values.push(super::Op {
-            kind: OpKind::ConstInt(i64::from(wanted)),
+            kind: OpKind::ConstInt(i128::from(wanted)),
             ty,
             origin: origin.clone(),
         });

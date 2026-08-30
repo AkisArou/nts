@@ -1636,6 +1636,15 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
             bits: 32,
             signed: false,
         } => "uint32_t",
+        // `bigint`. `__int128` is a clang extension rather than a C type, which
+        // is fine here: this backend emits for clang and the runtime is built
+        // with it.
+        //
+        // 128 bits is not arbitrary precision, and the difference is a
+        // deliberate, visible boundary rather than a silent one -- a literal
+        // that does not fit is refused where it is written. See `lower_bigint`
+        // for the whole argument.
+        HirType::BigInt => "__int128",
         HirType::Int { signed: true, .. } => "int64_t",
         HirType::Int { signed: false, .. } => "uint64_t",
         // `never` reaching a value position means control got somewhere the type
@@ -1933,7 +1942,13 @@ fn binary_text(
     // where C leaves a shift by 32 or more undefined; `<<` on a negative signed
     // operand is undefined in C and defined in JavaScript. Each goes through a
     // helper that spells the real rule.
+    // The shift helpers spell JavaScript's rule for a *number*: the count is
+    // masked to five bits and the operands are int32. A `bigint` shift has
+    // neither rule, so it is C's own operator on a 128-bit integer -- which is
+    // also what the lowering left here, having skipped the `ToInt32` pair.
+    let wide = matches!(func.values[lhs.0 as usize].ty, HirType::BigInt);
     let helper = match bin {
+        _ if wide => None,
         BinOp::Shl => Some("nts_shl"),
         BinOp::Shr => Some("nts_shr"),
         BinOp::UShr => Some("nts_ushr"),

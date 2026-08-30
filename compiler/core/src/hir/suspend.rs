@@ -271,7 +271,7 @@ impl Build {
 
     fn constant(&mut self, value: i64) -> ValueId {
         self.push(
-            OpKind::ConstInt(value),
+            OpKind::ConstInt(i128::from(value)),
             HirType::Int {
                 bits: 32,
                 signed: true,

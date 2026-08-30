@@ -170,7 +170,7 @@ fn rewrite(func: &mut Func, array: ValueId, element: &HirType) {
                 replacements.insert(id, value);
             }
             OpKind::TagOf { value } if reads.contains(&value) => {
-                func.values[index].kind = OpKind::ConstInt(i64::from(tag));
+                func.values[index].kind = OpKind::ConstInt(i128::from(tag));
             }
             _ => {}
         }
@@ -589,7 +589,7 @@ fn unwrap_uses(func: &mut Func, narrowed: &FxHashMap<ValueId, HirType>) {
             OpKind::TagOf { value } => {
                 if let Some(representation) = narrowed.get(&value) {
                     let tag = super::tags::of_representation(representation);
-                    func.values[index].kind = OpKind::ConstInt(i64::from(tag));
+                    func.values[index].kind = OpKind::ConstInt(i128::from(tag));
                 }
             }
             _ => {}

@@ -79,6 +79,11 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // it when the promise settles, which is a threadsafe-function design
         // rather than a marshalling rule.
         HirType::Managed(ManagedType::Promise(_)) => None,
+        // Node-API has `napi_create_bigint_words`, so a `bigint` *can* cross --
+        // but it crosses as an arbitrary-precision value, and this compiler's
+        // is 128 bits. Answering `None` keeps the boundary honest until the two
+        // agree about what a `bigint` is.
+        HirType::BigInt => None,
         // A `Map` or a `Set` crossing is a copy, not a handle: JavaScript's are
         // engine objects with their own storage, so there is no wrapping a
         // runtime table in one. Every entry would have to be built on the other
@@ -133,6 +138,7 @@ fn spell(ty: &HirType) -> String {
         HirType::Void => "void".to_owned(),
         HirType::Bool => "bool".to_owned(),
         HirType::Erased => "unknown".to_owned(),
+        HirType::BigInt => "bigint".to_owned(),
         HirType::Int { bits, signed } => format!("{}{bits}", if *signed { 'i' } else { 'u' }),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "string".to_owned(),
@@ -172,6 +178,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         // what the C emitter actually produces rather than inherit it -- it is
         // reasoned, but it has never been compiled.
         HirType::Erased => "NtsValue".to_owned(),
+        HirType::BigInt => "__int128".to_owned(),
         HirType::Managed(ManagedType::String) => "NtsString *".to_owned(),
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *".to_owned(),
         // The fixed runtime layout, not a generated struct: the payload's

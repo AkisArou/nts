@@ -9,6 +9,10 @@
 //! list, and pinned by a test against a checked-in fixture — a tsgo bump that
 //! renumbers a kind should fail loudly rather than silently mis-identify nodes.
 pub const NUMERIC_LITERAL: u16 = 8;
+/// `123n`. Its own kind, because a `bigint` is its own type: TypeScript refuses
+/// to mix one with a `number` at all, which is what lets the lowering treat the
+/// two as different machine types without guarding every operation.
+pub const BIGINT_LITERAL: u16 = 9;
 pub const REGULAR_EXPRESSION_LITERAL: u16 = 13;
 pub const STRING_LITERAL: u16 = 10;
 

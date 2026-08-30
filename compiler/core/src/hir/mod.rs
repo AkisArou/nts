@@ -80,6 +80,25 @@ pub enum HirType {
     Float {
         bits: u8,
     },
+    /// An exact integer with no upper bound in the language, and 128 bits here.
+    ///
+    /// # Why it is not `Int { bits: 128 }`
+    ///
+    /// It was, for an afternoon, and the differential took it apart. A `bigint`
+    /// is not a number that happens to be integral: `1n << 40n` is 2^40 where
+    /// `1 << 40` is 256, because a *number*'s shift masks its count to five bits
+    /// and truncates its operands to int32. Constant folding, `**`, and the
+    /// specializer all know the number rules, and every one of them applied
+    /// itself to a `bigint` the moment it wore an integer's type -- silently,
+    /// and correctly by their own lights.
+    ///
+    /// A type of its own turns each of those into a compile error at the match
+    /// that has to decide, which is the only way a second numeric semantics
+    /// arrives without a search for every pass that assumed the first.
+    ///
+    /// TypeScript refuses to mix the two at all, so nothing here has to guard
+    /// against a `double` reaching a `bigint` operator: the checker did it.
+    BigInt,
     /// A value carrying its own type, where the static type does not decide one.
     ///
     /// Two source constructs reach here. `unknown` is the open case -- the tag
@@ -416,7 +435,13 @@ pub enum OpKind {
     Param(u32),
     /// The nth parameter of the block that defines it.
     BlockParam(u32),
-    ConstInt(i64),
+    /// An exact integer of any width this compiler has.
+    ///
+    /// `i128` rather than `i64` because `bigint` is one of them, and the
+    /// largest value the node profile writes is `0xffffffffffffffffn` -- 2^64-1,
+    /// which is not an `i64`. Every narrower width still fits, so nothing that
+    /// used this before had to change.
+    ConstInt(i128),
     ConstFloat(f64),
     ConstBool(bool),
     ConstString(String),

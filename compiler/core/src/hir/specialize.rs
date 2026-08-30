@@ -201,7 +201,7 @@ pub fn specialize(
         // as a float it would be converted back on every use.
         if let OpKind::ConstFloat(value) = func.values[index].kind {
             #[allow(clippy::cast_possible_truncation)]
-            let exact = value as i64;
+            let exact = value as i128;
             func.values[index].kind = OpKind::ConstInt(exact);
         }
     }
@@ -728,7 +728,7 @@ fn convert(
         (OpKind::ConstFloat(value), HirType::Int { .. }) =>
         {
             #[allow(clippy::cast_possible_truncation)]
-            OpKind::ConstInt(*value as i64)
+            OpKind::ConstInt(*value as i128)
         }
         #[allow(clippy::cast_precision_loss)]
         (OpKind::ConstInt(value), HirType::Float { .. }) => OpKind::ConstFloat(*value as f64),

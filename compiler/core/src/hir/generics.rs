@@ -305,6 +305,7 @@ fn spell(ty: &super::HirType) -> String {
         HirType::Never => "never".to_owned(),
         HirType::Bool => "bool".to_owned(),
         HirType::Erased => "erased".to_owned(),
+        HirType::BigInt => "bigint".to_owned(),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Int { bits, signed } => {
             format!("{}{bits}", if *signed { 'i' } else { 'u' })
