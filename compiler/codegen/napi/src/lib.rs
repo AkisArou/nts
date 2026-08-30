@@ -273,6 +273,34 @@ fn wrapper(
         })
         .collect::<Result<_, _>>()?;
 
+    // `cross` answers for a *type*, and the two directions differ. Reading an
+    // object out of a call needs no descriptor; building one to pass *in* does,
+    // and `program.c` keeps the descriptors -- so `unmarshal` has nothing to
+    // emit for an object parameter and returns an empty string.
+    //
+    // The loop below pushed `a{index}` into the call regardless, so a wrapper
+    // came out as `setCompose(a0)` with no `a0` anywhere: uncompilable C from a
+    // wrapper the emitter believed it had written, and the first thing the
+    // conformance build hits once it can find its headers. Three exports in
+    // `fs` alone, each taking a closure.
+    //
+    // Refused here rather than repaired, because the repair is the descriptor
+    // question and that is a design rather than a patch. `void` joins it: a
+    // parameter with no value to read has no name to give either.
+    if let Some(parameter) = func
+        .params
+        .iter()
+        .zip(&crossings)
+        .find_map(|(parameter, crossing)| {
+            matches!(crossing, Cross::Object(_) | Cross::Void).then_some(parameter)
+        })
+    {
+        return Err(Skipped {
+            function: func.name.clone(),
+            reason: format!("takes {}, which crosses outward only", spell(&parameter.ty)),
+        });
+    }
+
     let symbol = c_identifier(&func.name);
     let params: Vec<String> = func.params.iter().map(|p| c_type(&p.ty, layouts)).collect();
     let signature = if params.is_empty() {
