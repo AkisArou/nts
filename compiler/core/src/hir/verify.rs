@@ -667,6 +667,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
         | OpKind::ConstNull
+        | OpKind::ConstUndefined
         | OpKind::ObjectNew { .. }
         | OpKind::GlobalGet(_) => Vec::new(),
         OpKind::GlobalSet { value, .. } => vec![*value],

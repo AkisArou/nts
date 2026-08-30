@@ -203,11 +203,43 @@ of the surface therefore costs nothing.
 | ✅ | objects — a flat struct with a layout |
 | ✅ | typed arrays: all eight kinds, as `NtsArray` with a narrow element |
 | ✅ | `unknown`, `any` sites, unions, optional properties — one 16-byte tagged value |
-| ✅ | `null`/`undefined` where a reference can hold them |
+| ✅ | `null` and `undefined`, as two values — see below for what a pointer can hold |
 | ✅ | `Map`, `Set` — one insertion-ordered table, keys and values as tagged values |
 | ✅ | the polymorphic `this` — the receiver's own pointer, which costs nothing |
 | ◐ | `bigint` — exact, and **128 bits** rather than arbitrary precision |
 | ✗ | `symbol` |
+
+### `null` is not `undefined`, and a pointer holds one of them
+
+A reference has exactly one spare bit pattern, so `T | null` and `T | undefined`
+each cost nothing — the null pointer *is* the tag, and the common case pays
+nothing for the distinction.
+
+`T | null | undefined` has two absences and a pointer has room for one. It was
+given the pointer representation anyway, and the compiler answered
+
+```ts
+const v: string | null | undefined = …;
+(v === null ? 1 : 0) + (v === undefined ? 10 : 0)   // 11, which JavaScript cannot produce
+```
+
+Two absences now select the erased representation, where each has a tag of its
+own — `NTS_TAG_NULL` beside `NTS_TAG_UNDEFINED`. The two tags are adjacent to
+`NTS_TAG_OBJECT` on purpose, because `typeof null` is `"object"`: it keeps
+`typeof x === "object"` a single comparison rather than a pair.
+
+Measured before and after across the node profile: 1,155 refusal sites either
+way, three moving in each direction. The correctness cost nothing in reach.
+
+Two gaps this opened, both small and both real:
+
+- `v?.length` directly on a two-absence union is refused — the receiver is
+  erased and the present branch does not unerase it. Narrowing first works, in
+  all three forms: `v !== null && v !== undefined`, `typeof v === "string"`, and
+  plain truthiness.
+- a bare `null` *literal* as an argument whose parameter is a two-absence union
+  (`m.set(null, 1)`) finds no contextual type. The same call through a variable
+  is fine.
 
 `bigint`'s width is the one place this table promises less than the language.
 The boundary is deliberate and visible: a literal too large is refused where it

@@ -1827,13 +1827,26 @@ pub fn parse_number(text: &str) -> Option<f64> {
 /// All three spellings, because TypeScript uses them interchangeably at a
 /// boundary: `void` is what a function returns when it returns nothing, and it
 /// appears in a union for the same reason `undefined` does.
-fn is_absent(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    snapshot.types.get(ty.0 as usize).is_some_and(|record| {
-        matches!(
-            record.kind,
-            TypeKind::Undefined | TypeKind::Null | TypeKind::Void
-        )
-    })
+/// Which absent value a union member is, where it is one.
+///
+/// The distinction matters for exactly one decision -- whether a union's
+/// absences fit in a pointer -- but it matters absolutely there: `null` and
+/// `undefined` are different values and a program can compare them.
+///
+/// `void` is `undefined`. It is the type of an expression that produced no
+/// value, and the value it did not produce is `undefined`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Absence {
+    Null,
+    Undefined,
+}
+
+fn absence_of_member(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Absence> {
+    match snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Null => Some(Absence::Null),
+        TypeKind::Undefined | TypeKind::Void => Some(Absence::Undefined),
+        _ => None,
+    }
 }
 
 /// A union member's name, short enough to put several on one line.
@@ -2346,7 +2359,14 @@ fn representation_of(
         // `T | undefined` and `T | null` are what real TypeScript is made of,
         // and for a managed `T` they cost nothing: a reference already has a
         // value that is not an object, and the null pointer is it. So the
-        // absent members are dropped and what is left has to agree.
+        // absent member is dropped and what is left has to agree.
+        //
+        // *One* absent member. `T | null | undefined` has two, and a pointer
+        // has one spare value to spend on them -- so representing it as one
+        // made `null === undefined` answer `true`, which is a wrong answer
+        // rather than a missing feature, and the profile writes that union
+        // thirty-eight times. Two absent members go to an erased value, where
+        // each has a tag of its own.
         //
         // A number has no spare value. `number | undefined` needs a tag beside
         // it or a NaN payload inside it, and both change the representation of
@@ -2354,12 +2374,23 @@ fn representation_of(
         // guessed at, as is any union whose members genuinely disagree.
         TypeKind::Union(members) => {
             let mut shared: Option<HirType> = None;
-            let mut absent = false;
+            // Which absences are present, not how many members carry them:
+            // `void` and `undefined` are the same value, so a union with both
+            // still has one.
+            let mut has_null = false;
+            let mut has_undefined = false;
             let mut mixed = false;
             for member in members {
-                if is_absent(snapshot, *member) {
-                    absent = true;
-                    continue;
+                match absence_of_member(snapshot, *member) {
+                    Some(Absence::Null) => {
+                        has_null = true;
+                        continue;
+                    }
+                    Some(Absence::Undefined) => {
+                        has_undefined = true;
+                        continue;
+                    }
+                    None => {}
                 }
                 // Each member still has to have a representation of its own:
                 // erasing something is putting it in a payload, and a member
@@ -2372,8 +2403,10 @@ fn representation_of(
             }
             // Nothing left to be: `null | undefined` on its own.
             let shared = shared?;
-            // One representation, and any absence has a null to live in.
-            let absence_has_a_home = !absent || shared.is_managed();
+            // One representation, and at most one absence for the null pointer
+            // to stand for. Two absences need two values and a pointer has one.
+            let absences = usize::from(has_null) + usize::from(has_undefined);
+            let absence_has_a_home = absences == 0 || (absences == 1 && shared.is_managed());
             if !mixed && absence_has_a_home {
                 return Some(shared);
             }
@@ -4564,8 +4597,10 @@ impl<'a> FuncBuilder<'a> {
     fn absent_argument(&mut self, call: NodeId, at: usize) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(call);
         match self.parameter_representation(call, at) {
-            Some(HirType::Erased) => Ok(self.push(OpKind::ConstNull, HirType::Erased, origin)),
-            Some(ty) if ty.is_managed() => Ok(self.push(OpKind::ConstNull, ty, origin)),
+            Some(HirType::Erased) => {
+                Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin))
+            }
+            Some(ty) if ty.is_managed() => Ok(self.push(OpKind::ConstUndefined, ty, origin)),
             _ => Err(self.unsupported(
                 call,
                 "an omitted argument for a parameter with nowhere to put `undefined`",
@@ -9242,7 +9277,7 @@ impl<'a> FuncBuilder<'a> {
                     .type_of(id)
                     .ok_or_else(|| self.unrepresentable(id, "an optional access"))?;
                 let origin = self.origin(id);
-                Ok(self.push(OpKind::ConstNull, ty, origin))
+                Ok(self.push(OpKind::ConstUndefined, ty, origin))
             }
             Branch::Member(receiver, member) => {
                 let name = self
@@ -9372,8 +9407,10 @@ impl<'a> FuncBuilder<'a> {
     /// `None` where the type has no room for either, which is not a refusal:
     /// a `double` is never absent and there is nothing to compare it against.
     ///
-    /// `null` and `undefined` are one value in a compiled program -- see
-    /// [`Self::lower_absent`] -- so one test answers for both.
+    /// This is the *loose* question -- what `?.` and `??` ask, and what
+    /// `== null` means. Both absent values answer it, which for an erased value
+    /// is two tags. `===` is a different question and is answered by
+    /// [`Self::erased_absence_test`].
     fn absence_of(&mut self, at: NodeId, value: ValueId) -> Option<ValueId> {
         let ty = self.values[value.0 as usize].ty.clone();
         let origin = self.origin(at);
@@ -9385,16 +9422,41 @@ impl<'a> FuncBuilder<'a> {
                     signed: false,
                 };
                 let tag = self.push(OpKind::TagOf { value }, unsigned.clone(), origin.clone());
+                // `undefined` is tag 0 and `null` is the highest tag, so
+                // "either absence" is two comparisons however it is spelled.
                 let undefined = self.push(
                     OpKind::ConstInt(i128::from(super::tags::UNDEFINED)),
-                    unsigned,
+                    unsigned.clone(),
                     origin.clone(),
                 );
-                Some(self.push(
+                let is_undefined = self.push(
                     OpKind::Binary {
                         op: BinOp::Eq,
                         lhs: tag,
                         rhs: undefined,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                );
+                let null = self.push(
+                    OpKind::ConstInt(i128::from(super::tags::NULL)),
+                    unsigned,
+                    origin.clone(),
+                );
+                let is_null = self.push(
+                    OpKind::Binary {
+                        op: BinOp::Eq,
+                        lhs: tag,
+                        rhs: null,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                );
+                Some(self.push(
+                    OpKind::Binary {
+                        op: BinOp::BitOr,
+                        lhs: is_undefined,
+                        rhs: is_null,
                     },
                     HirType::Bool,
                     origin,
@@ -11544,13 +11606,18 @@ impl<'a> FuncBuilder<'a> {
         let ty = self
             .contextual_type(id, 0)
             .or_else(|| self.expecting.clone());
-        // An erased slot has a tag for absence, so `undefined` reaching one is
-        // an erased `undefined`. `ConstNull` rather than a new operation: the
-        // absent value is what it has always been, and only its representation
-        // is different here.
+        // Which of the two was written. An erased slot has a tag for each, so
+        // the distinction survives into the emitted value; a pointer has room
+        // for one, and a type carrying both is erased rather than a pointer
+        // precisely so that this can never be lost.
+        let literal = if self.kind_of(id) == Some(syntax::NULL_KEYWORD) {
+            OpKind::ConstNull
+        } else {
+            OpKind::ConstUndefined
+        };
         if ty.as_ref() == Some(&HirType::Erased) {
             let origin = self.origin(id);
-            return Ok(self.push(OpKind::ConstNull, HirType::Erased, origin));
+            return Ok(self.push(literal, HirType::Erased, origin));
         }
         let ty = ty.filter(HirType::is_managed);
         let Some(ty) = ty else {
@@ -11560,7 +11627,7 @@ impl<'a> FuncBuilder<'a> {
             ));
         };
         let origin = self.origin(id);
-        Ok(self.push(OpKind::ConstNull, ty, origin))
+        Ok(self.push(literal, ty, origin))
     }
 
     /// The type an expression is expected to have, from where it sits.
@@ -11928,15 +11995,19 @@ impl<'a> FuncBuilder<'a> {
             return None;
         }
         let absent = |builder: &Self, node: NodeId| {
-            builder.node(node).text.as_deref() == Some("undefined")
-                || builder.kind_of(node) == Some(syntax::NULL_KEYWORD)
+            if builder.kind_of(node) == Some(syntax::NULL_KEYWORD) {
+                Some(super::tags::NULL)
+            } else if builder.node(node).text.as_deref() == Some("undefined") {
+                Some(super::tags::UNDEFINED)
+            } else {
+                None
+            }
         };
-        let value = if absent(self, rhs) {
-            lhs
-        } else if absent(self, lhs) {
-            rhs
-        } else {
-            return None;
+        // Either order: `x === null` and `null === x` are the same question.
+        let (value, written) = match (absent(self, rhs), absent(self, lhs)) {
+            (Some(tag), _) => (lhs, tag),
+            (None, Some(tag)) => (rhs, tag),
+            (None, None) => return None,
         };
         if self.type_of(value) != Some(HirType::Erased) {
             return None;
@@ -11944,7 +12015,7 @@ impl<'a> FuncBuilder<'a> {
         Some((|| {
             let value = self.lower_expression(value)?;
             let origin = self.origin(id);
-            let tag = self.push(
+            let tag_value = self.push(
                 OpKind::TagOf { value },
                 HirType::Int {
                     bits: 32,
@@ -11952,27 +12023,58 @@ impl<'a> FuncBuilder<'a> {
                 },
                 origin.clone(),
             );
-            let wanted = self.push(
-                OpKind::ConstInt(i128::from(super::tags::UNDEFINED)),
-                HirType::Int {
-                    bits: 32,
-                    signed: false,
-                },
-                origin.clone(),
-            );
-            let op = if matches!(
+            let unsigned = HirType::Int {
+                bits: 32,
+                signed: false,
+            };
+            let positive = matches!(
                 operator,
                 syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN
-            ) {
-                BinOp::Eq
+            );
+            let strict = matches!(
+                operator,
+                syntax::EQUALS_EQUALS_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
+            );
+            let op = if positive { BinOp::Eq } else { BinOp::Ne };
+
+            // One comparison per tag the operator asks about. `===` asks about
+            // the one that was written; `==` asks about both, because `null ==
+            // undefined` is true and is the whole reason the loose operator is
+            // still worth writing.
+            let against = |builder: &mut Self, tag: u32| {
+                let wanted = builder.push(
+                    OpKind::ConstInt(i128::from(tag)),
+                    unsigned.clone(),
+                    origin.clone(),
+                );
+                builder.push(
+                    OpKind::Binary {
+                        op,
+                        lhs: tag_value,
+                        rhs: wanted,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                )
+            };
+            if strict {
+                return Ok(against(self, written));
+            }
+            let undefined = against(self, super::tags::UNDEFINED);
+            let null = against(self, super::tags::NULL);
+            // De Morgan rather than a negation: `x == null` is "either", and
+            // `x != null` is "neither", so the same two comparisons combine
+            // one way or the other.
+            let join = if positive {
+                BinOp::BitOr
             } else {
-                BinOp::Ne
+                BinOp::BitAnd
             };
             Ok(self.push(
                 OpKind::Binary {
-                    op,
-                    lhs: tag,
-                    rhs: wanted,
+                    op: join,
+                    lhs: undefined,
+                    rhs: null,
                 },
                 HirType::Bool,
                 origin,

@@ -585,14 +585,28 @@ pub enum OpKind {
     /// that made it does not need to be anywhere a collector can see. A frame
     /// object is not reference counted, because there is nothing to count -- it
     /// goes away when the frame does.
-    /// The absent reference: `null` and `undefined`, which are one value here.
+    /// `null`.
     ///
-    /// A reference has a value that is not an object, so `T | undefined` needs
-    /// no tag beside it -- this *is* the tag. The op's type is the managed type
-    /// the absence stands in for, because a null `NtsString *` and a null
-    /// `NtsObj_Point *` are different types to C even though they are the same
-    /// address.
+    /// A reference has a value that is not an object, so `T | null` needs no
+    /// tag beside it -- the null pointer *is* the tag. The op's type is the
+    /// managed type the absence stands in for, because a null `NtsString *` and
+    /// a null `NtsObj_Point *` are different types to C even though they are
+    /// the same address.
+    ///
+    /// Separate from [`OpKind::ConstUndefined`] because `null === undefined` is
+    /// **false**, and a program can observe the difference. They were one op
+    /// once, and the compiler answered that comparison with `true`.
+    ///
+    /// A pointer has room for only one of the two, which is why a union
+    /// carrying both is represented as [`HirType::Erased`] instead -- see the
+    /// union arm of the representation decision. So when this op's type *is* a
+    /// pointer, it and `ConstUndefined` emit the same thing and cannot be
+    /// confused; when it is erased, they carry different tags.
     ConstNull,
+    /// `undefined`, and `void`'s value.
+    ///
+    /// See [`OpKind::ConstNull`] for why the two are separate.
+    ConstUndefined,
     ObjectNew {
         frame: bool,
     },

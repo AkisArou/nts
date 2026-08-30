@@ -137,6 +137,7 @@ fn has_effects(kind: &OpKind) -> bool {
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
         | OpKind::ConstNull
+        | OpKind::ConstUndefined
         | OpKind::Binary { .. }
         | OpKind::Unary { .. }
         | OpKind::Convert(_)

@@ -135,6 +135,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
         | OpKind::ConstNull
+        | OpKind::ConstUndefined
         | OpKind::ObjectNew { .. }
         | OpKind::GlobalGet(_) => {}
         OpKind::GlobalSet { value, .. } => *value = of(*value),

@@ -912,8 +912,22 @@ fn null_comparison(
     lhs: ValueId,
     rhs: ValueId,
 ) -> Option<String> {
-    let absent = |value: ValueId| matches!(func.values[value.0 as usize].kind, OpKind::ConstNull);
+    let absent = |value: ValueId| {
+        matches!(
+            func.values[value.0 as usize].kind,
+            OpKind::ConstNull | OpKind::ConstUndefined
+        )
+    };
     if !matches!(bin, BinOp::Eq | BinOp::Ne) || !(absent(lhs) || absent(rhs)) {
+        return None;
+    }
+    // Addresses, so both sides have to *be* addresses. An erased operand is a
+    // struct: `==` on it is not C, and its absence is a tag rather than a null
+    // anyway. Guarded here rather than relied on from the lowering, because
+    // this function cannot see what routed the comparison to it.
+    if matches!(func.values[lhs.0 as usize].ty, HirType::Erased)
+        || matches!(func.values[rhs.0 as usize].ty, HirType::Erased)
+    {
         return None;
     }
     let operator = if matches!(bin, BinOp::Ne) { "!=" } else { "==" };
@@ -2414,10 +2428,17 @@ fn emit_op(
         // The absent value in an erased slot is a tag, not a null pointer:
         // there is nothing to point at and `undefined` is a kind of value here
         // rather than the absence of one.
+        // Erased, the two are different values and carry different tags --
+        // which is the whole reason a union holding both cannot be a pointer.
         OpKind::ConstNull if op.ty == HirType::Erased => {
+            format!("{name} = nts_value_of_null();")
+        }
+        OpKind::ConstUndefined if op.ty == HirType::Erased => {
             format!("{name} = nts_value_of_undefined();")
         }
-        OpKind::ConstNull => {
+        // As a pointer, they are the same address -- and only one of them can
+        // reach a given pointer, because a type holding both is erased instead.
+        OpKind::ConstNull | OpKind::ConstUndefined => {
             let ty = c_type_of(context.program, &op.ty, &op.origin)?;
             format!("{name} = ({ty})0;")
         }

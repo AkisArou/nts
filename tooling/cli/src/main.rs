@@ -867,6 +867,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             render_erasure(index, &ty, &op.kind, *value)
         }
         OpKind::ConstNull => format!("%{index} = const null : {ty}"),
+        OpKind::ConstUndefined => format!("%{index} = const undefined : {ty}"),
         OpKind::Binary { op: bin, lhs, rhs } => {
             format!(
                 "%{index} = {} %{}, %{} : {ty}",

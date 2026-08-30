@@ -149,13 +149,25 @@ typedef struct NtsArray {
  * the second version safe to attempt.
  *
  * The tags are `typeof`'s answers, in `typeof`'s spelling, because reading the
- * tag is what `typeof` on an erased value *is*. */
+ * tag is what `typeof` on an erased value *is* -- with one exception the
+ * language itself made: `typeof null` is `"object"`, not `"null"`. So the last
+ * two tags share a spelling.
+ *
+ * They are adjacent, and `NTS_TAG_NULL` is last, deliberately: it makes
+ * `typeof x === "object"` the single comparison `tag >= NTS_TAG_OBJECT`
+ * rather than a pair, which is what the peephole in `hir::tags` emits.
+ *
+ * `null` needs a tag of its own at all because `null` and `undefined` are
+ * *different values* -- `null === undefined` is false -- and an erased slot is
+ * the only representation here with room to say which. A pointer has one
+ * absent value, so a union carrying both cannot be a pointer. */
 typedef enum NtsTag {
   NTS_TAG_UNDEFINED = 0,
   NTS_TAG_BOOLEAN = 1,
   NTS_TAG_NUMBER = 2,
   NTS_TAG_STRING = 3,
-  NTS_TAG_OBJECT = 4
+  NTS_TAG_OBJECT = 4,
+  NTS_TAG_NULL = 5
 } NtsTag;
 
 /* The representation is *behind accessors*, and every reader in the runtime,
@@ -261,6 +273,7 @@ static inline NtsValue nts_value_of_boolean(bool boolean) {
 static inline bool nts_value_truthy(NtsValue value) {
   switch (value.tag) {
   case NTS_TAG_UNDEFINED:
+  case NTS_TAG_NULL:
     return false;
   case NTS_TAG_BOOLEAN:
     return value.as.boolean;
@@ -281,6 +294,17 @@ static inline NtsValue nts_value_of_undefined(void) {
   NtsValue value;
   value.tag = NTS_TAG_UNDEFINED;
   value.as.number = 0.0;
+  return value;
+}
+
+/* `null`, which is not `undefined`: the two are separate values in JavaScript
+ * and comparing them with `===` is false. The payload is zeroed rather than
+ * left alone so that two nulls compare equal through the reference case in
+ * `nts_value_strict_eq` even if it is reached. */
+static inline NtsValue nts_value_of_null(void) {
+  NtsValue value;
+  value.tag = NTS_TAG_NULL;
+  value.as.reference = 0;
   return value;
 }
 

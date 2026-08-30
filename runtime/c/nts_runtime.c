@@ -1609,6 +1609,9 @@ NtsString *nts_tag_name(uint32_t tag) {
   case NTS_TAG_STRING:
     return nts_string_from_utf8("string", 6);
   case NTS_TAG_OBJECT:
+  /* `typeof null` is `"object"`. A famous wart, and the specification's, so
+   * the two tags answer with one spelling. */
+  case NTS_TAG_NULL:
     return nts_string_from_utf8("object", 6);
   default:
     return nts_string_from_utf8("undefined", 9);
@@ -2147,6 +2150,10 @@ static uint32_t nts_hash_key(NtsValue key, uint32_t kind) {
     return nts_hash_mix(nts_value_boolean(key) ? 1u : 0u) ^ 1u;
   case NTS_TAG_UNDEFINED:
     return nts_hash_mix(0x9e3779b97f4a7c15ULL);
+  /* A different constant from `undefined`'s, because they are different keys:
+   * `new Map([[null, 1], [undefined, 2]])` has size 2. */
+  case NTS_TAG_NULL:
+    return nts_hash_mix(0xc2b2ae3d27d4eb4fULL);
   default:
     return nts_hash_mix((uint64_t)(uintptr_t)nts_value_reference(key)) ^ 4u;
   }
@@ -2183,6 +2190,7 @@ static bool nts_key_eq(NtsValue a, NtsValue b, uint32_t kind) {
   case NTS_TAG_BOOLEAN:
     return nts_value_boolean(a) == nts_value_boolean(b);
   case NTS_TAG_UNDEFINED:
+  case NTS_TAG_NULL:
     return true;
   default:
     return nts_value_reference(a) == nts_value_reference(b);

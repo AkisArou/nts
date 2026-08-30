@@ -17,6 +17,13 @@ pub const BOOLEAN: u32 = 1;
 pub const NUMBER: u32 = 2;
 pub const STRING: u32 = 3;
 pub const OBJECT: u32 = 4;
+/// `null`, which is a different *value* from `undefined` and needs a tag to say
+/// so — `null === undefined` is false.
+///
+/// Last, and adjacent to [`OBJECT`], on purpose: `typeof null` is `"object"`,
+/// so the two tags share a spelling and `typeof x === "object"` stays the one
+/// comparison `tag >= OBJECT` instead of becoming a pair.
+pub const NULL: u32 = 5;
 
 /// The tag a reference of this type carries.
 ///
@@ -55,15 +62,30 @@ pub fn of_representation(ty: &super::HirType) -> u32 {
 /// a string the runtime never returns and are correctly false, where folding
 /// them to a tag this compiler does not have would be inventing one.
 #[must_use]
-pub fn of_spelling(text: &str) -> Option<u32> {
+pub fn of_spelling(text: &str) -> Option<TagTest> {
     match text {
-        "undefined" => Some(UNDEFINED),
-        "boolean" => Some(BOOLEAN),
-        "number" => Some(NUMBER),
-        "string" => Some(STRING),
-        "object" => Some(OBJECT),
+        "undefined" => Some(TagTest::Is(UNDEFINED)),
+        "boolean" => Some(TagTest::Is(BOOLEAN)),
+        "number" => Some(TagTest::Is(NUMBER)),
+        "string" => Some(TagTest::Is(STRING)),
+        // Two tags, because `typeof null` is `"object"` as well. They are
+        // adjacent so that this stays one comparison.
+        "object" => Some(TagTest::AtLeast(OBJECT)),
         _ => None,
     }
+}
+
+/// What a `typeof` comparison against a spelling actually tests.
+///
+/// Every spelling but one names a single tag. `"object"` names two — a
+/// reference's and `null`'s — and they are numbered adjacently so the test is
+/// still a single comparison rather than a disjunction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagTest {
+    /// Exactly this tag.
+    Is(u32),
+    /// This tag or any above it.
+    AtLeast(u32),
 }
 
 /// Rewrite `typeof v === "number"` into an integer compare, and report how
@@ -126,6 +148,16 @@ pub fn fold_comparisons(func: &mut super::Func) -> usize {
             .or_else(|| tag_of(func, rhs).zip(spelling(func, lhs)))
         else {
             continue;
+        };
+
+        // `!=` against a range is the complement of the range, not a `>=` with
+        // the operands kept: `typeof x !== "object"` is `tag < OBJECT`.
+        let (op, wanted) = match (op, wanted) {
+            (BinOp::Eq, TagTest::Is(tag)) => (BinOp::Eq, tag),
+            (BinOp::Ne, TagTest::Is(tag)) => (BinOp::Ne, tag),
+            (BinOp::Eq, TagTest::AtLeast(tag)) => (BinOp::Ge, tag),
+            (BinOp::Ne, TagTest::AtLeast(tag)) => (BinOp::Lt, tag),
+            _ => continue,
         };
 
         let origin = func.values[index].origin.clone();

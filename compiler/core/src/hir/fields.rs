@@ -435,7 +435,7 @@ fn allocated_length(func: &super::Func, analysis: &Analysis, value: super::Value
             // constructor writing `this.rows = null` before the real array
             // arrives is otherwise enough to make every index into that field
             // checked forever.
-            OpKind::ConstNull => return Facts::BOTTOM,
+            OpKind::ConstNull | OpKind::ConstUndefined => return Facts::BOTTOM,
             OpKind::Call {
                 callee: super::Callee::External(name),
                 args,
