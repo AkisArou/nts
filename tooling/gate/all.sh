@@ -50,17 +50,18 @@ corpus() {
   bad=$(awk '/invalid HIR/ { print $NF + 0 }' "$root/target/suite-report.txt")
   [ "${bad:-1}" = "0" ] || { echo "  ^ invalid HIR must be zero"; return 1; }
 
-  # `uncompilable C` is *also* meant to be zero and is not: fifteen files lower
-  # with no diagnostic at all and then cannot be emitted, every one of them
-  # `NTS2006 an object type with no layout`. It is counted here rather than
-  # enforced because it is a standing defect rather than a regression, and a
-  # gate that is red before anyone touches anything is a gate nobody reads.
+  # `uncompilable C` is *also* meant to be zero and is not quite. It was 15 --
+  # every one of them caused by module-scope variables being allowed to hold a
+  # reference, which is a feature that landed without this row being visible,
+  # because `report` did not print it. Two remain:
   #
-  # It was invisible until now -- the counter existed and `report` never
-  # printed it -- and it means the headline overstates: a file is counted as
-  # "lowered completely" *and* uncompilable, so some of the 44 cannot be built.
-  # Fixing it makes this a hard row like the other.
-  known=15
+  #   an `as const` nested object literal, whose inner layout is built by no
+  #   function and is not reached by materializing the outer type either
+  #   a quoted key on a generic function's returned object
+  #
+  # Ratcheted rather than enforced, so that it can only go down. When it is
+  # zero this becomes a hard row like `invalid HIR`.
+  known=2
   now=$(awk '/uncompilable C/ { print $NF + 0 }' "$root/target/suite-report.txt")
   if [ "${now:-0}" -gt "$known" ]; then
     echo "  ^ uncompilable C rose from $known to $now"

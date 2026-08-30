@@ -77,6 +77,14 @@ struct ModuleScope {
     /// Reporting them eagerly took the share of TypeScript's own test cases that
     /// lower completely from 54 files to 25.
     unsupported: rustc_hash::FxHashMap<u32, String>,
+    /// The layouts the globals need.
+    ///
+    /// A global of object type is a `struct` in the emitted C, and naming one
+    /// requires its layout. Every other layout is built by the *function* that
+    /// uses the type -- so a global whose initializer was refused had none
+    /// built for it by anybody, and the backend failed with `an object type
+    /// with no layout` on a program the lowering had called clean.
+    layouts: Vec<Layout>,
     /// Declarations refused on sight rather than on use.
     ///
     /// The laziness above is right for *data* — a constant nothing reads is not
@@ -728,9 +736,39 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
     naming
 }
 
+/// Whether a module-scope variable can be a global, and why not.
+///
+/// One decision in three questions, together because the walk that asks them is
+/// long enough without them and because each is a way the same thing goes
+/// wrong: a global whose type the backend cannot emit.
+fn storable(probe: &mut FuncBuilder<'_>, name: NodeId, ty: &HirType) -> Result<(), String> {
+    if !ty.can_be_global() {
+        return Err("a module-scope variable holding a reference".to_owned());
+    }
+    // A function type is `Managed(Object(..))` like any other object, and a
+    // global of one holds a *closure* -- a different object, with its own
+    // layout. Both are references, so nothing between here and the backend
+    // objected: `coerce_to_slot` converts representations and the verifier asks
+    // the same question. It surfaced as clang refusing to assign an
+    // `NtsObj_Closure0 *` to an `NtsObj_Fn2 *`.
+    //
+    // Module state holding a closure is a feature rather than an oversight, so
+    // it is refused in those words until it is one.
+    if probe.is_function_typed(name) {
+        return Err("a module-scope variable holding a function".to_owned());
+    }
+    // The layout, here, because nothing else will build it: every other one is
+    // built by a function that uses the type, and a global whose initializer
+    // was refused is used by no function at all. That left the backend with
+    // `an object type with no layout` on a program the lowering called clean.
+    probe
+        .materialize(name, ty)
+        .map_err(|diagnostic| diagnostic.message)
+}
+
 fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
     let mut scope = ModuleScope::default();
-    let probe = FuncBuilder::new(snapshot);
+    let mut probe = FuncBuilder::new(snapshot);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::VARIABLE_DECLARATION) {
@@ -743,9 +781,19 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
         }
 
         let children = probe.children(id);
+        // The *first* child, and only when it is a name. A declaration's name
+        // comes before everything else in it, so searching for "the first
+        // identifier" instead found the initializer whenever the name was a
+        // pattern: `export const [a, b] = arr` declared a global called `arr`,
+        // beside the real one, and the emitted C said `redefinition of 'arr'`.
+        //
+        // A destructuring declaration is left alone rather than half-handled.
+        // Its names are the pattern's, and binding them is `bind_pattern`'s job
+        // inside a function -- at module scope there is nothing here that does
+        // it, and inventing one name for several is worse than declaring none.
         let Some(name_node) = children
-            .iter()
-            .find(|child| probe.kind_of(**child) == Some(syntax::IDENTIFIER))
+            .first()
+            .filter(|child| probe.kind_of(**child) == Some(syntax::IDENTIFIER))
         else {
             continue;
         };
@@ -807,14 +855,6 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
             );
             continue;
         };
-        if !ty.can_be_global() {
-            scope.unsupported.insert(
-                symbol.0,
-                "a module-scope variable holding a reference".to_owned(),
-            );
-            continue;
-        }
-
         // `const` is a value, not storage. The kind lives on the enclosing
         // `VariableDeclarationList`, which is the declaration's parent -- except
         // when the encoder wraps the list in a `VariableStatement`, so the flags
@@ -833,6 +873,10 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
             continue;
         }
 
+        if let Err(reason) = storable(&mut probe, *name_node, &ty) {
+            scope.unsupported.insert(symbol.0, reason);
+            continue;
+        }
         let global = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
         scope.globals.push(super::Global {
             name: probe
@@ -851,6 +895,9 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
             scope.deferred.insert(symbol.0, *initializer);
         }
     }
+    // What materializing the globals' types produced. Nothing else collects
+    // from this walk, which is why they were missing.
+    scope.layouts = probe.layouts;
     scope
 }
 
@@ -1425,6 +1472,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let closures = collect_closures(snapshot);
     let hierarchy = collect_hierarchy(snapshot, &closures);
     lowered.program.globals.clone_from(&module.globals);
+    collect_layouts(&mut lowered.program, module.layouts.clone());
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
     let generic = generic_classes(snapshot);
@@ -1591,11 +1639,17 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
 /// mention it first.
 fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
     for layout in layouts {
-        if let Some(existing) = program
-            .layouts
-            .iter_mut()
-            .find(|known| known.same_shape(&layout.fields, &layout.methods))
-        {
+        if let Some(existing) = program.layouts.iter_mut().find(|known| {
+            // The same type, however the two were built. A layout is named
+            // after its type, so two of them for one type emit two `struct`s
+            // of the same name -- which is what happened once the module scope
+            // started contributing layouts as well as the functions, and it
+            // was `redefinition of NtsObj_A` rather than anything the merge
+            // below would have noticed: it compares *shape*, and the two
+            // disagreed about their method tables while describing one type.
+            known.types.iter().any(|ty| layout.types.contains(ty))
+                || known.same_shape(&layout.fields, &layout.methods)
+        }) {
             for ty in layout.types {
                 if !existing.types.contains(&ty) {
                     existing.types.push(ty);
@@ -2661,8 +2715,44 @@ impl<'a> FuncBuilder<'a> {
     /// function type is the case that made this visible: no program ever
     /// constructs a signature, only closures that have it as their base.
     fn materialize(&mut self, at: NodeId, ty: &HirType) -> Result<(), Diagnostic> {
-        if let HirType::Managed(ManagedType::Object(object)) = ty {
-            self.layout_of(at, *object)?;
+        self.materialize_within(at, ty, 0)
+    }
+
+    /// Every layout a type needs, not only its own.
+    ///
+    /// `{ $and: [{ $expr: true }] }` needs one for the element of `$and` as
+    /// much as for the object, and building only the outer one left the backend
+    /// with an object type it could not name -- on a program the lowering had
+    /// called clean, because the layout it was missing belonged to a type no
+    /// *function* mentioned.
+    ///
+    /// Bounded rather than tracked: a field may hold the type it belongs to,
+    /// and a list node is the ordinary case rather than a strange one. The
+    /// depth is a backstop, not a limit -- the work is idempotent, so a type
+    /// reached twice is a lookup and not a rebuild.
+    fn materialize_within(
+        &mut self,
+        at: NodeId,
+        ty: &HirType,
+        depth: u32,
+    ) -> Result<(), Diagnostic> {
+        if depth > 16 {
+            return Ok(());
+        }
+        match ty {
+            HirType::Managed(ManagedType::Object(object)) => {
+                let layout = self.layout_of(at, *object)?;
+                for field in layout.fields {
+                    self.materialize_within(at, &field.ty, depth + 1)?;
+                }
+            }
+            HirType::Managed(ManagedType::Array(element)) => {
+                self.materialize_within(at, element, depth + 1)?;
+            }
+            HirType::Managed(ManagedType::Promise(payload)) => {
+                self.materialize_within(at, payload, depth + 1)?;
+            }
+            _ => {}
         }
         Ok(())
     }
