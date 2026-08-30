@@ -706,6 +706,29 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
             format!("{} construct(s) refused", diagnostics.len())
         },
     );
+    // And whether that number means anything. Lowering is not emitting: a
+    // function can lower with no diagnostic and still be rejected before the
+    // backend, and a count of the first read as a count of the second for as
+    // long as nobody asked.
+    //
+    // The *prepared* program, not this one. Verifying the raw lowering reports
+    // 280 problems in the node profile and almost none of them are real --
+    // reachability pruning drops the functions with missing callees and `dce`
+    // drops the dead blocks, so what matters is what survives the passes.
+    if !want_passes {
+        match hir::prepare(&snapshot) {
+            Ok(prepared) => println!(
+                "  {} survive the passes and verify",
+                prepared.program.funcs.len()
+            ),
+            Err(problems) => {
+                println!("  the prepared program does NOT verify:");
+                for problem in problems.iter().take(10) {
+                    println!("    {problem:?}");
+                }
+            }
+        }
+    }
     Ok(())
 }
 

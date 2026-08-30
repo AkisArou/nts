@@ -97,7 +97,7 @@ a backlog.
 | ✅ | recursion |
 | ✅ | `async`/`await` |
 | ✅ | type predicates (`x is T`) and `asserts x is T` |
-| ✗ | rest parameters |
+| ✅ | rest parameters | the call gathers its trailing arguments into the array |
 | ✗ | `function` expressions — an arrow with the same body lowers |
 | ✗ | closures over a variable something **assigns to** — this captures by value and JavaScript by reference |
 | ✗ | generators (`function*`, `yield`) — needs the `Generator<T>` object |
@@ -366,7 +366,7 @@ questions:
 
 | | what it says | today |
 |---|---|---|
-| examples | the compiled program agrees with node, case by case | 75 of 75 |
+| examples | the compiled program agrees with node, case by case | 76 of 76 |
 | corpus | arbitrary input produces no invalid IR and no C that will not compile | 47 lower cleanly; `invalid HIR` 0, `uncompilable C` 2 |
 | profile | how much of a real standard library lowers | 535 functions |
 

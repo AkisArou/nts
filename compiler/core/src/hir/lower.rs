@@ -692,16 +692,72 @@ struct Naming {
 /// Overload signatures share a name legitimately and only the implementation
 /// has a body, so a declaration without one does not count. Methods are spelled
 /// `Class#method` and cannot collide with a plain function.
+/// The shortest tail of a file's path that tells it from the others in a group.
+///
+/// One component if that is enough -- `posix` against `win32` -- and more where
+/// it is not: `dgram/src/main.ts` and `net/src/main.ts` share every component
+/// but the third from the end.
+fn distinguishing_tail(snapshot: &SemanticSnapshot, group: &[NodeId], id: NodeId) -> String {
+    let components = |at: NodeId| -> Vec<String> {
+        let file = snapshot
+            .nodes
+            .get(at.0 as usize)
+            .map_or(nts_diagnostics::SourceId(0), |node| {
+                node.origin.location.file
+            });
+        snapshot.sources.get(file.0 as usize).map_or_else(
+            Vec::new,
+            |source| {
+                source
+                    .display_path
+                    .as_str()
+                    .trim_end_matches(".ts")
+                    .split('/')
+                    .filter(|part| !part.is_empty())
+                    .map(|part| part.replace(['.', '-'], "_"))
+                    .collect()
+            },
+        )
+    };
+    let mine = components(id);
+    let others: Vec<Vec<String>> = group
+        .iter()
+        .filter(|other| **other != id)
+        .map(|other| components(*other))
+        .collect();
+    let tail = |parts: &[String], take: usize| -> String {
+        parts[parts.len().saturating_sub(take)..].join("_")
+    };
+    for take in 1..=mine.len().max(1) {
+        let candidate = tail(&mine, take);
+        if others.iter().all(|other| tail(other, take) != candidate) {
+            return candidate;
+        }
+    }
+    tail(&mine, mine.len())
+}
+
 fn naming(snapshot: &SemanticSnapshot) -> Naming {
     let probe = FuncBuilder::new(snapshot);
     let mut declarations: rustc_hash::FxHashMap<String, Vec<NodeId>> =
         rustc_hash::FxHashMap::default();
     for (index, node) in snapshot.nodes.iter().enumerate() {
-        if node.kind != NodeKind::Syntax(syntax::FUNCTION_DECLARATION) {
+        // Classes as well as functions. A method is spelled `Class#method`, so
+        // it cannot collide with a plain function -- but it collides happily
+        // with a method of *another class of the same name*, and `dgram` and
+        // `net` both export a `Socket`. That emitted two `Socket#ref`, which
+        // is one C function defined twice and whichever the linker picked.
+        let is_named_declaration = matches!(
+            node.kind,
+            NodeKind::Syntax(syntax::FUNCTION_DECLARATION | syntax::CLASS_DECLARATION)
+        );
+        if !is_named_declaration {
             continue;
         }
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        if !probe.has_a_body(id) {
+        // A body is what separates an implementation from an overload
+        // signature. A class always has one.
+        if node.kind == NodeKind::Syntax(syntax::FUNCTION_DECLARATION) && !probe.has_a_body(id) {
             continue;
         }
         if let Some(name) = probe.declared_name(id) {
@@ -725,11 +781,15 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
                 naming.ambiguous.insert(*id);
                 continue;
             }
-            let module = snapshot
-                .sources
-                .get(file.0 as usize)
-                .and_then(|source| source.display_path.file_stem())
-                .unwrap_or("module");
+            // The shortest tail of the path that tells this declaration from
+            // the others of its name. The stem alone is not enough:
+            // `path/posix.ts` and `path/win32.ts` differ by it, and
+            // `dgram/src/main.ts` and `net/src/main.ts` do not -- both are
+            // `main`, so qualifying by the stem produced the same name twice
+            // and fixed nothing. The whole path always works and reads like a
+            // machine wrote it, so this takes components from the end until
+            // they are distinct: `dgram_src_main`, not `_home_akisarou_...`.
+            let module = distinguishing_tail(snapshot, &ids, *id);
             naming.qualified.insert(*id, format!("{name}@{module}"));
         }
     }
@@ -3117,12 +3177,21 @@ impl<'a> FuncBuilder<'a> {
             // The layout's name rather than the declaration's, because two
             // instantiations of one class must not produce one function.
             Some(ty) => self.layout_of(class, ty)?.name,
-            None => self
-                .children(class)
-                .into_iter()
-                .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
-                .and_then(|child| self.node(child).text.clone())
-                .ok_or_else(|| self.unsupported(class, "an anonymous class"))?,
+            // Through the same naming that keeps two functions of one name
+            // apart. A method is spelled `Class#method`, which cannot collide
+            // with a plain function and collides readily with a method of
+            // another class of the same name: `dgram` and `net` both export a
+            // `Socket`, and both emitted `Socket#ref`.
+            None => self.qualified.get(&class).cloned().map_or_else(
+                || {
+                    self.children(class)
+                        .into_iter()
+                        .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+                        .and_then(|child| self.node(child).text.clone())
+                        .ok_or_else(|| self.unsupported(class, "an anonymous class"))
+                },
+                Ok,
+            )?,
         };
 
         // A static method has no receiver: it is a namespaced function, and its
@@ -4118,10 +4187,31 @@ impl<'a> FuncBuilder<'a> {
         call: NodeId,
         arguments: &[NodeId],
     ) -> Result<Vec<ValueId>, Diagnostic> {
+        // Where the callee's rest parameter starts, if it has one. Everything
+        // from there is one array rather than one argument each.
+        let rest = self
+            .snapshot
+            .call_targets
+            .get(&call)
+            .and_then(|target| self.snapshot.signatures.get(target.signature.0 as usize))
+            .and_then(|signature| signature.parameters.iter().position(|p| p.rest));
+
         let mut args = Vec::new();
-        for argument in arguments {
+        for (at, argument) in arguments.iter().enumerate() {
+            if rest == Some(at) {
+                let gathered = self.gather_rest(call, at, &arguments[at..])?;
+                args.push(gathered);
+                return Ok(args);
+            }
             let value = self.lower_expression(*argument)?;
             args.push(self.coerce_to_parameter(call, args.len(), value, *argument)?);
+        }
+        // A rest the call gave nothing to still takes an array, an empty one.
+        // `f()` and `f(1)` reach the same function and it reads `xs.length`.
+        if rest == Some(args.len()) {
+            let gathered = self.gather_rest(call, args.len(), &[])?;
+            args.push(gathered);
+            return Ok(args);
         }
         for omitted in self.omitted_after(call, arguments.len())? {
             let value = match omitted {
@@ -4134,6 +4224,60 @@ impl<'a> FuncBuilder<'a> {
             args.push(value);
         }
         Ok(args)
+    }
+
+    /// The trailing arguments of a call, as the array its callee declared.
+    ///
+    /// Built here rather than at the declaration because that is where the
+    /// values are: `f(1, 2, 3)` and `f()` reach the same one-parameter function
+    /// and differ only in what this puts in the array.
+    fn gather_rest(
+        &mut self,
+        call: NodeId,
+        at: usize,
+        elements: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let ty = self
+            .parameter_representation(call, at)
+            .ok_or_else(|| self.unsupported(call, "a rest parameter of unrepresentable type"))?;
+        let HirType::Managed(ManagedType::Array(element)) = ty.clone() else {
+            return Err(self.unsupported(call, "a rest parameter that is not an array"));
+        };
+        let origin = self.origin(call);
+        #[allow(clippy::cast_precision_loss)]
+        let count = elements.len() as f64;
+        let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
+        let array = self.push(
+            OpKind::ArrayNew {
+                length,
+                zeroed: true,
+            },
+            ty,
+            origin.clone(),
+        );
+        for (index, node) in elements.iter().enumerate() {
+            let value = self.lower_expression(*node)?;
+            // At the element's type, like every other store into a slot.
+            let value = self.coerce(value, &element, *node)?;
+            #[allow(clippy::cast_precision_loss)]
+            let position = index as f64;
+            let index = self.push(
+                OpKind::ConstFloat(position),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            self.push(
+                OpKind::ArraySet {
+                    array,
+                    index,
+                    value,
+                    checked: true,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        Ok(array)
     }
 
     /// The value a call passes for an optional parameter it did not reach.
@@ -4253,11 +4397,26 @@ impl<'a> FuncBuilder<'a> {
         // A default needs the initializer evaluated at every call that omits
         // it, and a rest needs an array built there, so both are real work at
         // the *call* rather than a note on the declaration.
+        // A rest parameter *is* an ordinary parameter of array type. What was
+        // missing was never the declaration -- it is the call, which has to
+        // gather its trailing arguments into that array; `lower_arguments` is
+        // the other half of this.
+        //
+        // What is still refused is a rest whose element has no representation:
+        // `...args: A` where `A extends unknown[]` has none until an
+        // instantiation supplies one.
         if children
             .iter()
             .any(|child| self.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN))
+            && !matches!(
+                self.type_of(name_node),
+                Some(HirType::Managed(ManagedType::Array(_)))
+            )
         {
-            return Err(self.unsupported(id, "a rest parameter"));
+            return Err(self.unsupported(
+                id,
+                "a rest parameter whose element type has no representation",
+            ));
         }
         // `constructor(private x: number)` declares a field and assigns it, and
         // is not a default at all. It was counted as one until the two were
@@ -6387,7 +6546,22 @@ impl<'a> FuncBuilder<'a> {
                 let Some(expression) = self.children(id).first().copied() else {
                     return Ok(());
                 };
-                self.lower_expression(expression)?;
+                let value = self.lower_expression(expression)?;
+                // A call to something declared `never` does not come back, and
+                // saying so is what makes the rest of the block dead rather
+                // than merely unreached. `boundsError(offset, last)` is the
+                // last statement of `Buffer#at8`, which is declared `: number`
+                // and returns from every other path -- TypeScript accepts it
+                // *because* the call cannot return, and without that fact the
+                // function looked like one that falls out of its end owing a
+                // value.
+                //
+                // `Unreachable` and not `FellThrough`: this is a claim the
+                // lowering can back, which is the whole difference between the
+                // two terminators.
+                if self.values[value.0 as usize].ty == HirType::Never {
+                    self.terminate(Terminator::Unreachable);
+                }
                 Ok(())
             }
             Some(syntax::VARIABLE_STATEMENT) => self.lower_variable_statement(id),
