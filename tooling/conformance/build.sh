@@ -17,10 +17,18 @@ work="$out/$module.build"
 [ -d "$src" ] || { echo "no such module: runtime/node/$module" >&2; exit 2; }
 
 # Node's headers are a build dependency of the *test harness*, not of anything
-# we ship. `node-api-headers` from npm, or an installed node's include dir.
+# we ship.
+#
+# `third_party/node-headers` first, because it is the only candidate that is
+# *pinned*: `tooling/bootstrap` fetches the official headers tarball for the
+# version in `.tool-versions`, so `uv.h` there is the one node's own libuv was
+# built from. The addon calls `uv_*` directly and libuv is not ABI-stable, so
+# any other candidate is a version match by luck. `node-api-headers` does not
+# carry `uv.h` at all, which is how the system one used to get in.
 napi="${NTS_NAPI_INCLUDE:-}"
 if [ -z "$napi" ]; then
   for candidate in \
+    "$root/third_party/node-headers/include/node" \
     "$root/node_modules/node-api-headers/include" \
     "/tmp/napi-hdrs/node_modules/node-api-headers/include" \
     "/usr/include/node"; do
