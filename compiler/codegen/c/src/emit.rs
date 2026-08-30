@@ -1171,6 +1171,29 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) 
     }
 }
 
+/// A 128-bit integer as C source.
+///
+/// C has no literal wider than `long long`, so a `bigint` past 64 bits cannot
+/// be written as digits: clang rejects `170141183460469231731687303715884105727`
+/// with "integer literal is too large to be represented in any integer type",
+/// which is what every `bigint` literal above 2^63 emitted.
+///
+/// Built from halves instead, which every C compiler accepts and constant-folds
+/// away. The low half is taken as unsigned so its top bit is not a sign.
+// Both casts reinterpret rather than convert, which is the whole job: the sign
+// is carried by the top bit of the high half and the halves are put back
+// together by the shift below.
+#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+fn integer_literal(value: i128) -> String {
+    if let Ok(narrow) = i64::try_from(value) {
+        return format!("{narrow}");
+    }
+    let bits = value as u128;
+    let high = (bits >> 64) as u64;
+    let low = bits as u64;
+    format!("(((__int128)0x{high:x}ULL << 64) | 0x{low:x}ULL)")
+}
+
 /// The name of the single instance a named function's closure has.
 fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
     format!("nts_fnval_{}", object_type_name(layout))
@@ -2472,7 +2495,7 @@ fn emit_op(
         // parameter; a block parameter is written by the edges that jump here;
         // a return is spelled by the terminator.
         OpKind::Param(_) | OpKind::BlockParam(_) | OpKind::Return(_) => return Ok(()),
-        OpKind::ConstInt(v) => format!("{name} = {v};"),
+        OpKind::ConstInt(v) => format!("{name} = {};", integer_literal(*v)),
         // A concrete value becomes an erased one, and reading one back. Both
         // are one line and both can fail, so they live together in
         // `erased_conversion` rather than growing this match by twenty.

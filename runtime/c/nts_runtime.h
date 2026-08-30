@@ -398,6 +398,10 @@ __int128 nts_bigint_as_uintn(double bits, __int128 value);
  * which is a `ReferenceError` in JavaScript and has nothing to throw here. */
 void nts_cell_unready(const char *name);
 
+/* `String(x)` for the two kinds a double's formatter cannot take. */
+NtsString *nts_bool_to_string(bool value);
+NtsString *nts_bigint_to_string(__int128 value);
+
 __int128 nts_bigint_shl(__int128 value, __int128 count);
 __int128 nts_bigint_shr(__int128 value, __int128 count);
 

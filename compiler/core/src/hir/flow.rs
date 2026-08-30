@@ -642,6 +642,15 @@ fn transfer_op(
     refinements: &Refinements,
     values: &[Facts],
 ) -> Facts {
+    // Every fact in this lattice is a fact about a *double*: a range, whether the
+    // value is whole, whether it could be `-0`. A `bigint` is none of those. It
+    // is exact to 128 bits, its shift count is not masked to five, and its
+    // operands are not truncated to int32 -- so folding `1n << 100n` here
+    // answered 16, because 100 & 31 is 4. Nothing true of a double is true of it,
+    // so nothing is claimed.
+    if matches!(op.ty, super::HirType::BigInt) {
+        return Facts::TOP;
+    }
     match &op.kind {
         OpKind::ConstFloat(v) => Facts::constant(*v),
         #[allow(clippy::cast_precision_loss)]

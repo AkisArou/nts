@@ -7872,11 +7872,19 @@ impl<'a> FuncBuilder<'a> {
         let text = HirType::Managed(ManagedType::String);
         match self.values[value.0 as usize].ty {
             HirType::Managed(ManagedType::String) => Ok(value),
-            HirType::Float { .. } | HirType::Int { .. } => {
+            // A `bool` and a `bigint` each have an exact spelling of their
+            // own: two words, and decimal with no exponent however large.
+            // Neither is something a double's formatter can be handed.
+            HirType::Float { .. } | HirType::Int { .. } | HirType::Bool | HirType::BigInt => {
+                let helper = match self.values[value.0 as usize].ty {
+                    HirType::Bool => "nts_bool_to_string",
+                    HirType::BigInt => "nts_bigint_to_string",
+                    _ => "nts_number_to_string",
+                };
                 let origin = self.origin(id);
                 Ok(self.push(
                     OpKind::Call {
-                        callee: Callee::External("nts_number_to_string".to_owned()),
+                        callee: Callee::External(helper.to_owned()),
                         args: vec![value],
                         frame: None,
                     },

@@ -1634,6 +1634,39 @@ NtsString *nts_tag_name(uint32_t tag) {
   }
 }
 
+/* `String(true)`. Two answers and no formatting. */
+NtsString *nts_bool_to_string(bool value) {
+  return value ? nts_string_from_utf8("true", 4)
+               : nts_string_from_utf8("false", 5);
+}
+
+/* `String(2n)`, in decimal and exact.
+ *
+ * A `bigint` prints with no exponent and no rounding however large it is, which
+ * is the whole reason it is not a double -- so this is repeated division rather
+ * than anything `printf` offers, C having no conversion for a 128-bit integer.
+ *
+ * The magnitude is taken on the *unsigned* twin: the most negative value of a
+ * two's-complement type has no positive counterpart, and negating it in the
+ * signed type is undefined. */
+NtsString *nts_bigint_to_string(__int128 value) {
+  /* 2^127 is 39 digits; one more for the sign. */
+  char digits[40];
+  size_t at = sizeof digits;
+  bool negative = value < 0;
+  unsigned __int128 magnitude =
+      negative ? (unsigned __int128)0 - (unsigned __int128)value
+               : (unsigned __int128)value;
+  do {
+    digits[--at] = (char)('0' + (unsigned)(magnitude % 10u));
+    magnitude /= 10u;
+  } while (magnitude != 0);
+  if (negative) {
+    digits[--at] = '-';
+  }
+  return nts_string_from_utf8(digits + at, sizeof digits - at);
+}
+
 NtsString *nts_string_from_utf8(const char *bytes, size_t length) {
   /* At most one code unit per byte for the BMP, two for a supplementary
    * character -- which is also at most one per byte, since those take four. */
