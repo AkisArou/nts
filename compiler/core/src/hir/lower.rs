@@ -1939,6 +1939,16 @@ pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
         TypeKind::Intersection(_) => "an intersection".to_owned(),
         TypeKind::Tuple(_) => "a tuple".to_owned(),
         TypeKind::Function(_) => "a function type".to_owned(),
+        // TypeScript models the polymorphic `this` as a type parameter named
+        // after its class and constrained to it, so "the type parameter `Box`"
+        // is what a reader of `ref(): this` was told -- which sends them
+        // looking for a generic they never wrote.
+        TypeKind::TypeParameter {
+            name,
+            constraint: Some(constraint),
+        } if named(snapshot, *constraint) == Some(name.as_str()) => {
+            format!("`this`, which stands for `{name}` here")
+        }
         TypeKind::TypeParameter { name, .. } => format!("the type parameter `{name}`"),
         TypeKind::Conditional { .. } => "a conditional type".to_owned(),
         TypeKind::IndexedAccess { .. } => "an indexed access".to_owned(),
@@ -2830,6 +2840,64 @@ impl<'a> FuncBuilder<'a> {
     /// the generated C and in every analysis. TypeScript infers a return type
     /// whether or not one is written down, and the inferred one is in the
     /// snapshot exactly like the written one.
+    /// What a function returns, or a refusal naming what it declares.
+    ///
+    /// `declared_return` answers `None` to two different questions -- "declares
+    /// nothing" and "declares something with no representation" -- and the
+    /// callers used to default both to `void`. Only the first is void.
+    ///
+    /// The second built a function whose HIR said it returned nothing and whose
+    /// body returned a value. `ref(): this` is the shape: TypeScript models the
+    /// polymorphic `this` as a type parameter constrained to the class, which
+    /// has no representation here, so the method lowered as `-> void` with `ret
+    /// %0` in it and the C came out as `void FSWatcher__ref(...)` returning a
+    /// pointer. Nothing caught it: the lowering reported the function as
+    /// complete, and the verifier runs on the *pruned* program while an addon
+    /// emits every export.
+    fn return_type_of(&mut self, id: NodeId) -> Result<HirType, Diagnostic> {
+        if let Some(ty) = self.declared_return(id) {
+            return Ok(ty);
+        }
+        // Nothing representable came back. A function that genuinely returns
+        // nothing is void; anything else is refused, and named.
+        if let Some(ty) = self.snapshot.node_types.get(&id).copied()
+            && let Some(record) = self.snapshot.types.get(ty.0 as usize)
+            && let TypeKind::Function(signature) = record.kind
+            && let Some(signature) = self.snapshot.signatures.get(signature.0 as usize)
+        {
+            let returned = signature.return_type;
+            let is_nothing = matches!(
+                self.snapshot.types.get(returned.0 as usize).map(|r| &r.kind),
+                Some(TypeKind::Void | TypeKind::Undefined)
+            );
+            // A generator returns a `Generator<...>`, which has no
+            // representation -- but refusing it here names the *consequence*
+            // and buries the cause. The body's `yield` is the cause, it is
+            // refused by name, and its message is the one a work-list can
+            // group by. So this defers, and the `void` below never survives:
+            // the `yield` refuses the function before anything reads it.
+            if !is_nothing && !self.mentions(id, syntax::YIELD_EXPRESSION) {
+                let what = describe(self.snapshot, returned);
+                return Err(self.unsupported(id, &format!("a function returning {what}")));
+            }
+        }
+        Ok(HirType::Void)
+    }
+
+    /// Whether a node's subtree contains one of a kind.
+    ///
+    /// Bounded by the subtree rather than by depth: a function body is the only
+    /// thing this is asked about, and it is asked once, on a path that is about
+    /// to refuse anyway.
+    fn mentions(&self, id: NodeId, kind: u16) -> bool {
+        if self.kind_of(id) == Some(kind) {
+            return true;
+        }
+        self.children(id)
+            .into_iter()
+            .any(|child| self.mentions(child, kind))
+    }
+
     fn declared_return(&self, id: NodeId) -> Option<HirType> {
         if let Some(ty) = self.snapshot.node_types.get(&id)
             && let Some(record) = self.snapshot.types.get(ty.0 as usize)
@@ -3395,7 +3463,7 @@ impl<'a> FuncBuilder<'a> {
         let return_type = if is_constructor || self.kind_of(member) == Some(syntax::SET_ACCESSOR) {
             HirType::Void
         } else {
-            self.declared_return(member).unwrap_or(HirType::Void)
+            self.return_type_of(member)?
         };
         self.materialize(member, &return_type)?;
 
@@ -3996,7 +4064,7 @@ impl<'a> FuncBuilder<'a> {
             .copied()
             .ok_or_else(|| self.unsupported(id, "a function without a body"))?;
 
-        let return_type = self.declared_return(id).unwrap_or(HirType::Void);
+        let return_type = self.return_type_of(id)?;
         self.materialize(id, &return_type)?;
 
         // An `async` function allocates its promise before the body runs, so
@@ -4119,7 +4187,7 @@ impl<'a> FuncBuilder<'a> {
         }
         self.layouts.push(self.closure_layout(index, fields));
 
-        let return_type = self.declared_return(id).unwrap_or(HirType::Void);
+        let return_type = self.return_type_of(id)?;
         self.materialize(id, &return_type)?;
 
         // `x => x * 2` and `x => { return x * 2; }` are the same function, and
@@ -4130,13 +4198,37 @@ impl<'a> FuncBuilder<'a> {
             .last()
             .copied()
             .ok_or_else(|| self.unsupported(id, "an arrow function with no body"))?;
-        if self.kind_of(body) == Some(syntax::BLOCK) {
-            self.lower_block(body)?;
-            self.terminate(Terminator::Return(None));
+        // A closure's `return` is its own. This was never set here, so a
+        // `return x` inside a closure coerced to whatever the function *around*
+        // it returned -- latent for as long as the two agreed, and immediate
+        // once a void function's `return f()` learned to drop its value: a
+        // closure returning an array, inside a void function, dropped it.
+        //
+        // Saved and restored rather than assigned, because closures nest.
+        let enclosing = std::mem::replace(&mut self.returns, return_type.clone());
+        let lowered = if self.kind_of(body) == Some(syntax::BLOCK) {
+            let outcome = self.lower_block(body);
+            if outcome.is_ok() {
+                // `close_body` rather than an unconditional `Return(None)`: a
+                // block reaching its end returns nothing only when nothing is
+                // what it owes, and `FellThrough` is what says the difference
+                // has not been proven. The unconditional form built closures
+                // that promised an array and returned none.
+                self.close_body(&return_type);
+            }
+            outcome
         } else {
-            let value = self.lower_expression(body)?;
-            self.terminate(Terminator::Return(Some(value)));
-        }
+            self.lower_expression(body).map(|value| {
+                // `x => f(x)` where `f` returns nothing. The call happens and
+                // there is no value to carry: C cannot `return` one from a
+                // void function, and the emitter declares no variable for a
+                // void-typed value to live in.
+                let carried = (!matches!(return_type, HirType::Void)).then_some(value);
+                self.terminate(Terminator::Return(carried));
+            })
+        };
+        self.returns = enclosing;
+        lowered?;
 
         // Not exported: a closure has no name to import. It stays only because
         // something dispatches through its slot, which `hir::reachable` decides
@@ -6943,6 +7035,17 @@ impl<'a> FuncBuilder<'a> {
                 // failed in C -- the verifier checks call arguments and not
                 // returns, so this had nothing watching it.
                 let value = match (value, expression) {
+                    // `return f();` where the function returns nothing. Legal
+                    // JavaScript -- the result is `undefined` either way -- and
+                    // the expression has already been lowered, so its effects
+                    // happen and its value is dropped.
+                    //
+                    // Keeping it produced `Return(Some(v))` on a function whose
+                    // C signature says `void`, and `v` was a call typed void,
+                    // which the emitter declares no variable for. `return v4;`
+                    // with no `v4`: uncompilable C from a function the lowering
+                    // called complete.
+                    (Some(_), _) if matches!(self.returns, HirType::Void) => None,
                     (Some(value), Some(expression)) => {
                         let want = self.returns.clone();
                         Some(self.coerce(value, &want, expression)?)

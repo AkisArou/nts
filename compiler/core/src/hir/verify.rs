@@ -115,6 +115,20 @@ pub enum Invalid {
     /// exactly that -- it compiled, every test passed, and the answer was
     /// wrong by a constant.
     FellThrough { func: String, block: BlockId },
+    /// A `return` whose value does not match what the function returns.
+    ///
+    /// Nothing checked this, and it is not a theoretical shape: `ref(): this`
+    /// lowered to a function typed `void` that returned a `Box`, because a
+    /// return type with no representation defaulted to void rather than
+    /// refusing. The C said `void f(...)` and returned a pointer, which clang
+    /// rejects -- so the only thing that noticed was a compiler that never ran,
+    /// because nothing in the gate builds an addon.
+    ReturnType {
+        func: String,
+        block: BlockId,
+        expected: HirType,
+        found: Option<HirType>,
+    },
     /// A direct call passed a different number of arguments than the function
     /// it names takes.
     ///
@@ -345,7 +359,7 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
 
     // Edges first: dominance is meaningless over a graph with dangling successors.
     let mut edges_sound = true;
-    for block in &func.blocks {
+    for (at, block) in func.blocks.iter().enumerate() {
         for target in block.terminator.successors() {
             if (target.0 as usize) >= func.blocks.len() {
                 problems.push(Invalid::DanglingSuccessor {
@@ -356,7 +370,12 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
             }
         }
         if edges_sound {
-            check_arguments(func, block, problems);
+            check_arguments(
+                func,
+                BlockId(u32::try_from(at).unwrap_or(u32::MAX)),
+                block,
+                problems,
+            );
         }
     }
     if !edges_sound {
@@ -395,7 +414,7 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
 /// disagreeing. It reached the backend as C assigning a `double` to an
 /// `NtsValue` -- caught, but by the C compiler, with no source location and
 /// nothing naming the join.
-fn check_arguments(func: &Func, block: &Block, problems: &mut Vec<Invalid>) {
+fn check_arguments(func: &Func, id: BlockId, block: &Block, problems: &mut Vec<Invalid>) {
     let mut check = |target: BlockId, args: &[ValueId]| {
         let expected = func.blocks[target.0 as usize].params.len();
         if args.len() != expected {
@@ -438,7 +457,35 @@ fn check_arguments(func: &Func, block: &Block, problems: &mut Vec<Invalid>) {
             check(*then_target, then_args);
             check(*else_target, else_args);
         }
-        Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {}
+        Terminator::Return(value) => {
+            // `never` is what a function that does not come back returns, and
+            // it may carry a value or not -- a `throw` lowers to one either way.
+            let found = value.map(|v| func.values[v.0 as usize].ty.clone());
+            let agrees = match (&func.return_type, &found) {
+                // A function that does not come back may carry a value or not:
+                // a `throw` lowers to either shape.
+                (HirType::Never, _) => true,
+                // A `void` function returns nothing *at all* -- not even a
+                // void-typed value, because C cannot spell one in a `return`
+                // and the emitter declares no variable to hold it.
+                (HirType::Void, carried) => carried.is_none(),
+                // Otherwise the same rule a store and a call argument get: two
+                // references are two pointers however their types relate, which
+                // is what lets a function declared to return a function type
+                // return the closure class that implements it.
+                (wanted, Some(got)) => compatible(got, wanted),
+                (_, None) => false,
+            };
+            if !agrees {
+                problems.push(Invalid::ReturnType {
+                    func: func.name.clone(),
+                    block: id,
+                    expected: func.return_type.clone(),
+                    found,
+                });
+            }
+        }
+        Terminator::Unreachable | Terminator::FellThrough => {}
     }
 }
 
