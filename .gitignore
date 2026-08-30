@@ -45,3 +45,6 @@ node_modules/
 #     https://github.com/denoland/deno.git third_party/deno
 #   cd third_party/deno && git sparse-checkout set ext core
 /third_party/deno
+
+# Fetched by tooling/bootstrap: node headers pinned by .tool-versions
+/third_party/node-headers
