@@ -98,7 +98,7 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | an expression of kind 216 | 4 |
 | `A`, a function used as a value | 3 |
 | `Foo`, a function used as a value | 3 |
-| a `for...of` binding of this shape | 3 |
+| a `for...of` binding by property name, which is object destructuring | 3 |
 | a method on an object literal | 3 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
