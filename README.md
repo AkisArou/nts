@@ -89,7 +89,7 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | refused | files |
 | --- | ---: |
 | this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it | 38 |
-| a module-scope variable with no initializer | 13 |
+| a module-scope variable with no initializer | 14 |
 | `console.log`, a global member with no definition here | 7 |
 | a module-scope construct of kind 268, which has code in it | 6 |
 | `MyEnum`, an enum | 4 |

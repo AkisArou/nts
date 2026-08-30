@@ -111,3 +111,35 @@ function make(base: number): (x: number) => number {
 export function byValueIsUnchanged(n: number): number {
   return make(n)(1);
 }
+
+// A module-scope name is not captured at all. There is one of it for the whole
+// program and every function reaches it by name, so a closure carries no copy —
+// the same reason a function, a class or an import is not captured. Getting
+// this wrong did not produce a wrong answer, it produced a refusal that blamed
+// the wrong thing: twelve sites reported a name "from more than one scope up"
+// when the name was simply at module scope.
+const SCALE = 3;
+const TAG = "ab";
+
+function measure(f: () => number): number {
+  return f();
+}
+
+export function readsModuleScope(n: number): number {
+  const local = n * 0;
+  return (
+    measure((): number => SCALE * 100) +
+    measure((): number => TAG.length) +
+    measure((): number => SCALE + local)
+  );
+}
+
+// ...including from a closure inside a closure, which is the case the row was
+// named after and which works.
+export function readsItFromTwoScopesIn(n: number): number {
+  const outer = (): number => {
+    const inner = (): number => SCALE + 1;
+    return inner();
+  };
+  return measure(outer) + n * 0;
+}

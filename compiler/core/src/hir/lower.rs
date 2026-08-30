@@ -705,6 +705,17 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             {
                 continue;
             }
+            // A module-scope name, for the same reason: one of it for the whole
+            // program, reached by name. `const BASE64 = "..."` and `const
+            // weakSetHas = WeakSet.prototype.has` are not things a closure
+            // carries a copy of.
+            if record
+                .declarations
+                .iter()
+                .all(|declaration| probe.is_module_scope(*declaration))
+            {
+                continue;
+            }
             // A name something writes to is captured by reference: it moves
             // into a cell, and the cell pointer is what the closure holds.
             //
@@ -3463,6 +3474,40 @@ impl<'a> FuncBuilder<'a> {
         }
         // Declared in this program, in a scope between here and module scope.
         format!("`{}`, a name from an enclosing scope", record.name)
+    }
+
+    /// Whether a declaration sits at module scope.
+    ///
+    /// A module-scope name is never captured. There is one of it for the whole
+    /// program and every function already reaches it by name, so copying it
+    /// into a closure would be storage for nothing -- the same reason a
+    /// function, a class and an import are skipped.
+    ///
+    /// It also puts the refusal in the right place when the module scope cannot
+    /// represent the name. At the arrow all that can be said is how far away it
+    /// was declared; at the read, `lower_identifier` can say what it *is* --
+    /// a module-scope variable holding a function, an enum, a builtin this
+    /// compiler does not provide.
+    fn is_module_scope(&self, declaration: NodeId) -> bool {
+        let mut at = self.node(declaration).parent;
+        for _ in 0..64 {
+            // No parent left is the file itself, which is module scope.
+            let Some(node) = at else { return true };
+            match self.kind_of(node) {
+                Some(syntax::SOURCE_FILE) => return true,
+                Some(
+                    syntax::FUNCTION_DECLARATION
+                    | syntax::FUNCTION_EXPRESSION
+                    | syntax::ARROW_FUNCTION
+                    | syntax::METHOD_DECLARATION
+                    | syntax::CONSTRUCTOR
+                    | syntax::GET_ACCESSOR
+                    | syntax::SET_ACCESSOR,
+                ) => return false,
+                _ => at = self.node(node).parent,
+            }
+        }
+        false
     }
 
     /// Whether a symbol's binding is created afresh on every loop iteration.
@@ -8985,10 +9030,22 @@ impl<'a> FuncBuilder<'a> {
             // outside the arrow and never assigned -- so by the time the arrow
             // is reached, the binding exists and is final.
             let value = *self.bindings.get(&capture.symbol).ok_or_else(|| {
+                // Every name that is reached *by* name -- a function, a class,
+                // an import, a type, anything at module scope -- is excluded
+                // from captures before this. So a miss here is a local that has
+                // no value at the point the closure is built, which in practice
+                // means the closure was written above the declaration:
+                //
+                //     const onListening = () => { ...cleanup... };
+                //     const cleanup = ...;
+                //
+                // Legal, because the body runs later. Capturing it here would
+                // capture nothing, so it is refused rather than answered.
                 self.unsupported(
                     capture.at,
                     &format!(
-                        "`{}`, a closure over a name from more than one scope up",
+                        "`{}`, captured above its own declaration, where it has \
+                         no value yet",
                         capture.name
                     ),
                 )

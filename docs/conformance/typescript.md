@@ -102,6 +102,7 @@ a backlog.
 | ✗ | `function` expressions — an arrow with the same body lowers |
 | ✅ | closures over a variable something **assigns to** — the variable moves into a cell |
 | ✗ | a closure over a `for` loop's own variable, which JavaScript rebinds per iteration |
+| ✗ | a closure written *above* the declaration of a local it reads |
 | ✗ | generators (`function*`, `yield`) — needs the `Generator<T>` object |
 
 ### A written variable moves into a cell, and only then
@@ -130,6 +131,36 @@ that turn's value; one cell for the whole loop hands every closure the value the
 loop ended on. Verified wrong against node before it was refused. A `let` in the
 loop *body* is a different declaration each time round and gets a cell each time
 round, which is right without special handling.
+
+### What a closure does not capture
+
+A name that is reached *by name* is never captured, because there is one of it
+for the whole program and copying it into a closure would be storage for
+nothing: a function, a class, an import, a type, and anything at **module
+scope**.
+
+The last two were missing and it cost a whole row. `(callback as
+Callback<Stats>)` mentions a type alias inside an arrow; `const BASE64 = "..."`
+and `const weakSetHas = WeakSet.prototype.has` are module-scope constants. All
+of them have symbols and are declared outside the arrow, so all of them looked
+like captures, and the closure was refused for finding no value for a name that
+never had one.
+
+The refusal said *"a name from more than one scope up"* — 41 sites of it, and
+27 were nothing to do with scope depth. It is 1 now, and what replaced the rest
+are refusals at the *read* that say what the thing is: a module-scope variable
+holding a function, an enum, a builtin this compiler does not provide. A refusal
+belongs where it can name the cause.
+
+The one that remains is real, and is its own row above:
+
+```ts
+const onListening = () => { ...cleanup...; };
+const cleanup = ...;
+```
+
+Legal, because the body runs later. There is nothing to capture at the point the
+closure is built, so it is refused rather than answered with an empty value.
 
 ### A function as a value costs one static object, and nothing where it is not used
 
