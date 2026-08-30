@@ -36,6 +36,7 @@
 #define NTS_KIND_ARRAY 0u
 #define NTS_KIND_STRING 1u
 #define NTS_KIND_OBJECT 2u
+#define NTS_KIND_MAP 3u
 
 typedef struct NtsDescriptor {
     uint32_t kind;
@@ -300,6 +301,47 @@ NtsString *nts_tag_name(uint32_t tag);
  * emitter cannot disagree about it. */
 #define NTS_TAG_IS_REFERENCE(tag) ((tag) == NTS_TAG_STRING || (tag) == NTS_TAG_OBJECT)
 
+/* A `Map`, and a `Set`, which is one that stores no values.
+ *
+ * Insertion-ordered, because JavaScript's are and it is observable: a dense
+ * array of entries in the order they arrived, plus a sparse index of slots
+ * pointing into it. Iteration walks the entries and skips holes; lookup hashes
+ * into the index and follows a linear probe.
+ *
+ * Keys and values are `NtsValue`s -- the same sixteen bytes an erased value
+ * already is -- so `map.get(k)`, whose type is `V | undefined`, hands back the
+ * slot with no conversion and an absent key reads as `undefined`. What a
+ * uniform table would otherwise cost is a tag test on every probe, and `kind`
+ * is what removes it: the static key type picks the hash and the comparison
+ * once, at construction, so a `Map<string, V>` compares strings and never
+ * looks at a tag. */
+typedef struct NtsMap {
+    /* `length` is the live entry count, which is `map.size` -- the same field
+     * an array's `length` uses, so `size` lowers to the same operation. */
+    NtsHeader header;
+    /* Entries written, holes included. `header.length` is how many are live. */
+    uint32_t used;
+    uint32_t capacity;
+    /* Index slots, a power of two, kept at twice `capacity` so that at least
+     * half are empty and a probe always terminates. */
+    uint32_t slots;
+    /* Which hash and comparison: one of `NTS_KEY_*`. */
+    uint32_t kind;
+    /* A Map does; a Set does not, and pays nothing for the values it has. */
+    bool holds_values;
+    int32_t *index;
+    NtsValue *keys;
+    NtsValue *values;
+} NtsMap;
+
+/* How to hash and compare this map's keys, decided from the static key type.
+ * `ERASED` is the only one that reads a tag, and only a genuinely
+ * heterogeneous key type gets it. */
+#define NTS_KEY_ERASED 0u
+#define NTS_KEY_STRING 1u
+#define NTS_KEY_NUMBER 2u
+#define NTS_KEY_REFERENCE 3u
+
 /* Claim and give up what an erased value holds.
  *
  * A no-op for a scalar tag, which is why the compiler can emit these wherever
@@ -423,6 +465,18 @@ bool nts_string_eq(const NtsString *a, const NtsString *b);
 #else
 #define NTS_READS_ONLY
 #endif
+
+/* `new Map()` and `new Set()`. `kind` is one of `NTS_KEY_*`, a double because
+ * that is how this ABI passes a number the compiler knew all along. */
+NtsMap *nts_map_new(double kind);
+NtsMap *nts_set_new(double kind);
+NTS_READS_ONLY NtsValue nts_map_get(const NtsMap *map, NtsValue key);
+NTS_READS_ONLY bool nts_map_has(const NtsMap *map, NtsValue key);
+/* Returns the collection, which is what `set` and `add` evaluate to. */
+NtsMap *nts_map_set(NtsMap *map, NtsValue key, NtsValue value);
+NtsMap *nts_set_add(NtsMap *map, NtsValue key);
+bool nts_map_delete(NtsMap *map, NtsValue key);
+void nts_map_clear(NtsMap *map);
 
 NTS_READS_ONLY double nts_str_code_point_at(const NtsString *s, double at);
 NTS_READS_ONLY double nts_str_index_of(const NtsString *s, const NtsString *needle);

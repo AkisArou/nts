@@ -190,6 +190,23 @@ static bool nts_array_is_inline(const NtsArray *array) {
  * Called from `nts_free` rather than from the two death paths, so that a third
  * one cannot be added without it. */
 static void nts_free_storage(NtsHeader *object) {
+  /* A map owns three of them, and a Set two -- the same question the array
+   * above answers, asked of the type that made the question worth asking. */
+  if (object->descriptor->kind == NTS_KIND_MAP) {
+    NtsMap *map = (NtsMap *)object;
+    nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
+    nts_bytes_held -= (size_t)map->slots * sizeof(int32_t);
+    if (map->values) {
+      nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
+    }
+    free(map->keys);
+    free(map->values);
+    free(map->index);
+    map->keys = 0;
+    map->values = 0;
+    map->index = 0;
+    return;
+  }
   if (object->descriptor->kind != NTS_KIND_ARRAY) {
     return;
   }
@@ -246,6 +263,27 @@ void nts_retain(NtsHeader *object) {
 static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *)) {
   const NtsDescriptor *descriptor = object->descriptor;
   if (descriptor->references == 0 && descriptor->erased == 0) {
+    return;
+  }
+  /* A map's references are in two heap arrays rather than at fixed offsets,
+   * so it gets a case here for the same reason an array does. Holes carry a
+   * tag that is not a reference, so skipping them needs no test of its own. */
+  if (descriptor->kind == NTS_KIND_MAP) {
+    const NtsMap *map = (const NtsMap *)object;
+    for (uint32_t at = 0; at < map->used; at++) {
+      NtsValue key = map->keys[at];
+      if (NTS_TAG_IS_REFERENCE(nts_value_tag(key)) && nts_value_reference(key)) {
+        visit(nts_value_reference(key));
+      }
+      if (!map->values) {
+        continue;
+      }
+      NtsValue value = map->values[at];
+      if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&
+          nts_value_reference(value)) {
+        visit(nts_value_reference(value));
+      }
+    }
     return;
   }
   if (descriptor->kind == NTS_KIND_ARRAY) {
@@ -1530,6 +1568,432 @@ bool nts_string_eq(const NtsString *a, const NtsString *b) {
     }
   }
   return true;
+}
+
+/* --- Map and Set (one table) ----------------------------------------------
+ *
+ * JavaScript's `Map` and `Set` iterate in insertion order, which is observable
+ * and therefore not negotiable: `for (const k of map.keys())` yields what was
+ * inserted first, and a plain open-addressed table yields whatever the hash
+ * decided. So this is the compact-dict shape -- a dense, insertion-ordered
+ * array of entries, plus a sparse index of slots pointing into it.
+ *
+ *   index[]   slots, a power of two.  EMPTY, DELETED, or an entry number.
+ *   keys[]    entries, in insertion order.  A removed one is a hole.
+ *   values[]  the same length, or null for a Set.
+ *
+ * Iteration walks `keys` and skips holes: contiguous, in order, one array.
+ * Lookup hashes into `index` and follows a linear probe. Deletion punches a
+ * hole and marks the slot DELETED, so the entry numbers everything else holds
+ * stay valid; the holes are compacted away when the table next grows.
+ *
+ * # Why one structure for both
+ *
+ * A Set is a Map that stores no values, and `values` being null is the whole
+ * of the difference. Interleaving `{key, value}` pairs would have been better
+ * for `entries()` and would have cost a Set sixteen bytes per element for a
+ * slot it can never read -- and `has`, which is the most common operation on
+ * both, only ever touches keys. Parallel arrays make the Set free and keep the
+ * scan dense for the operation that matters.
+ *
+ * # Why the key kind is a field
+ *
+ * Keys are stored as `NtsValue`, which is what an erased value already is, so
+ * `get` hands back the slot with no conversion: `map.get(k)` is typed `V |
+ * undefined`, an absent key reads as `NTS_TAG_UNDEFINED`, and those are the
+ * same sixteen bytes. What a uniform table would otherwise cost is a tag
+ * dispatch on every probe.
+ *
+ * It does not, because the *static* key type decides the hash and the
+ * comparison once, at construction, and `kind` records which. A
+ * `Map<string, V>` compares strings in its probe loop and never looks at a
+ * tag. Only a genuinely heterogeneous key type pays for being one.
+ */
+
+/* A removed entry.
+ *
+ * Not `undefined`, because `map.set(undefined, 1)` is legal JavaScript and the
+ * hole has to be a value no key can be. This tag is produced nowhere else and
+ * leaves the runtime nowhere: `NTS_TAG_IS_REFERENCE` is false for it, so the
+ * collector walks straight past a hole without being taught about holes. */
+#define NTS_TAG_HOLE 0xFFFFFFFFu
+
+#define NTS_MAP_EMPTY (-1)
+#define NTS_MAP_DELETED (-2)
+
+/* Load factor 1/2, so a probe chain stays short. */
+#define NTS_MAP_SLOTS_FOR(entries) ((entries) * 2u)
+
+static bool nts_map_is_hole(NtsValue key) {
+  return nts_value_tag(key) == NTS_TAG_HOLE;
+}
+
+/* A 64-bit avalanche, so that a power-of-two mask sees the whole hash rather
+ * than its low bits. Pointers, which are aligned and therefore have none of
+ * interest down there, are the reason this is not just a truncation. */
+static uint32_t nts_hash_mix(uint64_t x) {
+  x ^= x >> 33;
+  x *= 0xff51afd7ed558ccdULL;
+  x ^= x >> 33;
+  x *= 0xc4ceb9fe1a85ec53ULL;
+  x ^= x >> 33;
+  return (uint32_t)x;
+}
+
+/* Over code units rather than bytes.
+ *
+ * A narrow and a wide string holding the same text are `===` -- that is what
+ * `nts_string_eq` says -- so they have to hash alike, and their bytes do not
+ * match. Widening as it goes costs a branch per unit and allocates nothing. */
+static uint32_t nts_hash_string(const NtsString *s) {
+  uint64_t h = 0xcbf29ce484222325ULL;
+  uint32_t units = s->length;
+  if (s->flags & NTS_TWO_BYTE) {
+    const uint16_t *text = NTS_ELEMENTS(s, uint16_t);
+    for (uint32_t i = 0; i < units; i++) {
+      h = (h ^ text[i]) * 0x100000001b3ULL;
+    }
+  } else {
+    const unsigned char *text = NTS_ELEMENTS(s, unsigned char);
+    for (uint32_t i = 0; i < units; i++) {
+      h = (h ^ (uint16_t)text[i]) * 0x100000001b3ULL;
+    }
+  }
+  return nts_hash_mix(h);
+}
+
+/* SameValueZero's two exceptions, both of them here rather than in the
+ * comparison: `-0` and `+0` are one key, and every `NaN` is one key. Hashing
+ * them together is what lets the comparison stay a plain `==`. */
+static uint32_t nts_hash_number(double number) {
+  if (number != number) {
+    return nts_hash_mix(0x7ff8000000000000ULL);
+  }
+  if (number == 0.0) {
+    number = 0.0;
+  }
+  uint64_t bits;
+  memcpy(&bits, &number, sizeof bits);
+  return nts_hash_mix(bits);
+}
+
+static uint32_t nts_hash_key(NtsValue key, uint32_t kind) {
+  switch (kind) {
+  case NTS_KEY_STRING:
+    return nts_hash_string((const NtsString *)nts_value_reference(key));
+  case NTS_KEY_NUMBER:
+    return nts_hash_number(nts_value_number(key));
+  case NTS_KEY_REFERENCE:
+    return nts_hash_mix((uint64_t)(uintptr_t)nts_value_reference(key));
+  default:
+    break;
+  }
+  /* Heterogeneous keys. The tag joins the hash so that the number 3 and the
+   * string "3" -- which are different keys -- do not collide by construction. */
+  switch (nts_value_tag(key)) {
+  case NTS_TAG_STRING:
+    return nts_hash_string((const NtsString *)nts_value_reference(key)) ^ 3u;
+  case NTS_TAG_NUMBER:
+    return nts_hash_number(nts_value_number(key)) ^ 2u;
+  case NTS_TAG_BOOLEAN:
+    return nts_hash_mix(nts_value_boolean(key) ? 1u : 0u) ^ 1u;
+  case NTS_TAG_UNDEFINED:
+    return nts_hash_mix(0x9e3779b97f4a7c15ULL);
+  default:
+    return nts_hash_mix((uint64_t)(uintptr_t)nts_value_reference(key)) ^ 4u;
+  }
+}
+
+/* SameValueZero. `==` on doubles already answers `+0 === -0` with true, and
+ * the only thing it gets wrong for this purpose is NaN, which is unequal to
+ * itself and which a Map treats as one key. */
+static bool nts_same_value_zero(double a, double b) {
+  return a == b || (a != a && b != b);
+}
+
+static bool nts_key_eq(NtsValue a, NtsValue b, uint32_t kind) {
+  switch (kind) {
+  case NTS_KEY_STRING:
+    return nts_string_eq((const NtsString *)nts_value_reference(a),
+                         (const NtsString *)nts_value_reference(b));
+  case NTS_KEY_NUMBER:
+    return nts_same_value_zero(nts_value_number(a), nts_value_number(b));
+  case NTS_KEY_REFERENCE:
+    return nts_value_reference(a) == nts_value_reference(b);
+  default:
+    break;
+  }
+  if (nts_value_tag(a) != nts_value_tag(b)) {
+    return false;
+  }
+  switch (nts_value_tag(a)) {
+  case NTS_TAG_STRING:
+    return nts_string_eq((const NtsString *)nts_value_reference(a),
+                         (const NtsString *)nts_value_reference(b));
+  case NTS_TAG_NUMBER:
+    return nts_same_value_zero(nts_value_number(a), nts_value_number(b));
+  case NTS_TAG_BOOLEAN:
+    return nts_value_boolean(a) == nts_value_boolean(b);
+  case NTS_TAG_UNDEFINED:
+    return true;
+  default:
+    return nts_value_reference(a) == nts_value_reference(b);
+  }
+}
+
+/* Cyclic: a map can hold the object that holds it, which is an ordinary cycle
+ * and one the collector has to be able to see. The erased count is 1 in the
+ * same sense an array's is -- "the elements are `NtsValue`s" -- and where they
+ * are is a walk rather than a fixed offset, so `nts_each_reference` has a case
+ * for this kind. */
+static const NtsDescriptor nts_desc_map = {
+    NTS_KIND_MAP, (uint32_t)sizeof(NtsMap), 0u, 1u, 0, 0, "Map", 1u, 0,
+};
+
+static NtsMap *nts_map_alloc(uint32_t kind, bool holds_values) {
+  NtsMap *map = (NtsMap *)nts_alloc(sizeof(NtsMap));
+  map->header.descriptor = &nts_desc_map;
+  map->header.reserved = 1;
+  map->header.flags = 0;
+  map->header.length = 0;
+  nts_allocated++;
+  map->used = 0;
+  map->capacity = 0;
+  map->slots = 0;
+  map->kind = kind;
+  map->holds_values = holds_values;
+  map->index = 0;
+  map->keys = 0;
+  /* The three arrays are allocated on the first insertion rather than here, so
+   * that a map nothing is ever put into costs one header. */
+  map->values = 0;
+  return map;
+}
+
+NtsMap *nts_map_new(double kind) { return nts_map_alloc((uint32_t)kind, true); }
+NtsMap *nts_set_new(double kind) { return nts_map_alloc((uint32_t)kind, false); }
+
+/* Where `key` lives, or -1.
+ *
+ * `insert_at` receives the slot a fresh key would take: the first DELETED slot
+ * on the chain if there was one, so that deleting and reinserting does not
+ * make the table grow, and the terminating EMPTY otherwise. */
+static int32_t nts_map_find(const NtsMap *map, NtsValue key, uint32_t hash,
+                            uint32_t *insert_at) {
+  if (map->slots == 0) {
+    if (insert_at) {
+      *insert_at = 0;
+    }
+    return -1;
+  }
+  uint32_t mask = map->slots - 1u;
+  uint32_t slot = hash & mask;
+  uint32_t reuse = map->slots; /* none seen */
+  for (uint32_t step = 0; step < map->slots; step++) {
+    int32_t at = map->index[slot];
+    if (at == NTS_MAP_EMPTY) {
+      if (insert_at) {
+        *insert_at = reuse < map->slots ? reuse : slot;
+      }
+      return -1;
+    }
+    if (at == NTS_MAP_DELETED) {
+      if (reuse == map->slots) {
+        reuse = slot;
+      }
+    } else if (nts_key_eq(map->keys[at], key, map->kind)) {
+      if (insert_at) {
+        *insert_at = slot;
+      }
+      return at;
+    }
+    slot = (slot + 1u) & mask;
+  }
+  if (insert_at) {
+    *insert_at = reuse < map->slots ? reuse : 0;
+  }
+  return -1;
+}
+
+/* Grow the entry arrays, drop the holes, and rebuild the index.
+ *
+ * Compaction and growth are one operation because they are one decision: a
+ * table that is half holes needs its entries moved either way, and doing it
+ * twice would move them twice. */
+static void nts_map_rehash(NtsMap *map) {
+  uint32_t live = map->header.length;
+  uint32_t wanted = live * 2u;
+  if (wanted < 8u) {
+    wanted = 8u;
+  }
+
+  NtsValue *keys = (NtsValue *)malloc((size_t)wanted * sizeof(NtsValue));
+  NtsValue *values =
+      map->holds_values ? (NtsValue *)malloc((size_t)wanted * sizeof(NtsValue))
+                        : 0;
+  uint32_t slots = 8u;
+  while (slots < NTS_MAP_SLOTS_FOR(wanted)) {
+    slots *= 2u;
+  }
+  int32_t *index = (int32_t *)malloc((size_t)slots * sizeof(int32_t));
+  if (!keys || (map->holds_values && !values) || !index) {
+    fprintf(stderr, "nts: out of memory growing a map\n");
+    abort();
+  }
+  for (uint32_t slot = 0; slot < slots; slot++) {
+    index[slot] = NTS_MAP_EMPTY;
+  }
+
+  /* Copy the live entries in order, which is what keeps insertion order
+   * through a growth. */
+  uint32_t out = 0;
+  for (uint32_t at = 0; at < map->used; at++) {
+    if (nts_map_is_hole(map->keys[at])) {
+      continue;
+    }
+    keys[out] = map->keys[at];
+    if (values) {
+      values[out] = map->values[at];
+    }
+    out++;
+  }
+
+  nts_bytes_held += (size_t)wanted * sizeof(NtsValue);
+  nts_bytes_held += (size_t)slots * sizeof(int32_t);
+  if (map->holds_values) {
+    nts_bytes_held += (size_t)wanted * sizeof(NtsValue);
+  }
+  if (map->keys) {
+    nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
+    nts_bytes_held -= (size_t)map->slots * sizeof(int32_t);
+    if (map->values) {
+      nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
+    }
+    free(map->keys);
+    free(map->values);
+    free(map->index);
+  }
+  map->keys = keys;
+  map->values = values;
+  map->index = index;
+  map->capacity = wanted;
+  map->slots = slots;
+  map->used = out;
+
+  uint32_t mask = slots - 1u;
+  for (uint32_t at = 0; at < out; at++) {
+    uint32_t slot = nts_hash_key(keys[at], map->kind) & mask;
+    while (index[slot] != NTS_MAP_EMPTY) {
+      slot = (slot + 1u) & mask;
+    }
+    index[slot] = (int32_t)at;
+  }
+}
+
+/* `map.get(k)`, and `undefined` when there is no such key.
+ *
+ * The slot is returned whole. A map may legitimately hold `undefined` as a
+ * value, so this cannot distinguish "absent" from "present and undefined" --
+ * and neither can JavaScript's, which is why `has` exists. */
+NtsValue nts_map_get(const NtsMap *map, NtsValue key) {
+  int32_t at = nts_map_find(map, key, nts_hash_key(key, map->kind), 0);
+  if (at < 0 || !map->values) {
+    return nts_value_of_undefined();
+  }
+  return map->values[at];
+}
+
+bool nts_map_has(const NtsMap *map, NtsValue key) {
+  return nts_map_find(map, key, nts_hash_key(key, map->kind), 0) >= 0;
+}
+
+/* `map.set(k, v)` / `set.add(v)`, returning the collection, which is what both
+ * evaluate to in JavaScript. */
+/* `Map.prototype.set` step 6: "If key is -0, set key to +0."
+ *
+ * The normalization is at *insertion*, not at comparison, and the difference
+ * is observable -- `m.set(-0, 1)` then `[...m.keys()][0]` is `+0` in node, so
+ * storing the key as written would be wrong even though every lookup would
+ * still find it. Transcribed from the oracle rather than reasoned about: the
+ * first version kept the key it was given and node disagreed. */
+static NtsValue nts_map_normalize(NtsValue key) {
+  if (nts_value_tag(key) == NTS_TAG_NUMBER && nts_value_number(key) == 0.0) {
+    return nts_value_of_number(0.0);
+  }
+  return key;
+}
+
+NtsMap *nts_map_set(NtsMap *map, NtsValue key, NtsValue value) {
+  key = nts_map_normalize(key);
+  uint32_t hash = nts_hash_key(key, map->kind);
+  uint32_t slot = 0;
+  int32_t at = nts_map_find(map, key, hash, &slot);
+  if (at >= 0) {
+    /* Present: the key stays as it was -- `set` replaces the value and not the
+     * key, which is observable for `-0` against `+0`. */
+    if (map->values) {
+      nts_value_retain(value);
+      nts_value_release(map->values[at]);
+      map->values[at] = value;
+    }
+    return map;
+  }
+  if (map->used == map->capacity) {
+    nts_map_rehash(map);
+    nts_map_find(map, key, hash, &slot);
+  }
+  nts_value_retain(key);
+  if (map->values) {
+    nts_value_retain(value);
+    map->values[map->used] = value;
+  }
+  map->keys[map->used] = key;
+  map->index[slot] = (int32_t)map->used;
+  map->used++;
+  map->header.length++;
+  return map;
+}
+
+bool nts_map_delete(NtsMap *map, NtsValue key) {
+  uint32_t hash = nts_hash_key(key, map->kind);
+  uint32_t slot = 0;
+  int32_t at = nts_map_find(map, key, hash, &slot);
+  if (at < 0) {
+    return false;
+  }
+  nts_value_release(map->keys[at]);
+  map->keys[at].tag = NTS_TAG_HOLE;
+  map->keys[at].as.reference = 0;
+  if (map->values) {
+    nts_value_release(map->values[at]);
+    map->values[at] = nts_value_of_undefined();
+  }
+  /* DELETED rather than EMPTY: a key further along the probe chain was placed
+   * past this slot and would become unreachable if the chain ended here. */
+  map->index[slot] = NTS_MAP_DELETED;
+  map->header.length--;
+  return true;
+}
+
+void nts_map_clear(NtsMap *map) {
+  for (uint32_t at = 0; at < map->used; at++) {
+    if (nts_map_is_hole(map->keys[at])) {
+      continue;
+    }
+    nts_value_release(map->keys[at]);
+    if (map->values) {
+      nts_value_release(map->values[at]);
+    }
+  }
+  for (uint32_t slot = 0; slot < map->slots; slot++) {
+    map->index[slot] = NTS_MAP_EMPTY;
+  }
+  map->used = 0;
+  map->header.length = 0;
+}
+
+NtsMap *nts_set_add(NtsMap *map, NtsValue key) {
+  return nts_map_set(map, key, nts_value_of_undefined());
 }
 
 /* --- Tasks, the host seam, and the checkpoint (RFC 12.1) -------------------

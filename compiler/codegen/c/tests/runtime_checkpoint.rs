@@ -217,3 +217,20 @@ fn a_grown_array_gives_its_elements_back() {
         checks(&report)
     );
 }
+
+#[test]
+fn the_map_table_agrees_with_node() {
+    // Reference counting: half the suite is what the table retains and gives
+    // back, and NoGC releases nothing.
+    //
+    // Every expected answer in it was transcribed from node rather than from
+    // this implementation, which earned its keep immediately: `set` stored the
+    // key it was given, and the spec normalizes `-0` to `+0` at insertion. Every
+    // lookup still found it, so only the oracle could have said so.
+    let report = run_suite("hashmap", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 30,
+        "expected at least 30 map checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}
