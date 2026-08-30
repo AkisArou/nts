@@ -6,6 +6,12 @@ Companion to [`nodejs.md`](nodejs.md), which tracks the Node API surface, and to
 [`test262.md`](test262.md), which tracks the numeric slice of the ECMAScript
 suite. This file is the *language* and the *runtime under it*.
 
+Two things it is deliberately not. It is not a conformance claim against
+ECMA-262: this compiles a *typed* language ahead of time, and §13 sets out the
+part of the specification that is a non-goal rather than a gap. And it is not a
+plan — §15 is the plan, and it is ordered by what real code is refused for
+rather than by what looks incomplete.
+
 ## How this was derived
 
 From probes, not from memory. Each row below was compiled by `nts hir` as one
@@ -30,7 +36,12 @@ case), and the node profile (110 files, measured for *reach* — nothing runs it
 |---|---|
 | ✅ | lowers, and where it is observable the examples agree with node |
 | ◐ | partial — the shape works, some of the surface does not |
-| ✗ | refused with a diagnostic |
+| ✗ | a **gap**: refused today, wanted eventually |
+| ∅ | **not a goal** — see §13, and the reason it is there |
+
+`✗` and `∅` are both refusals at the compiler. The difference is whether
+anybody should ever fix it, and conflating them turns a list of decisions into
+a backlog.
 
 ---
 
@@ -158,23 +169,44 @@ of the surface therefore costs nothing.
 
 ## 8. ECMAScript globals
 
-The complete global object, host additions excluded.
+The whole global object, host additions excluded. `∅` rows are §13, not backlog.
 
-| group | ✅ | ✗ |
-|---|---|---|
-| value properties | `Infinity`, `NaN`, `undefined` | `globalThis` |
-| function properties | `isNaN`, `isFinite` | `parseInt`, `parseFloat`, `eval`, `encodeURI(Component)`, `decodeURI(Component)` |
-| fundamental | `String` (as a function), `Number` | `Object`, `Function`, `Boolean`, `Symbol` |
-| errors | `Error`, `TypeError`, `RangeError`, `URIError` | `ReferenceError`, `SyntaxError`, `EvalError`, `AggregateError`, `SuppressedError` |
-| numbers, dates | `Math` ◐, `Number` ◐ | `BigInt`, `Date` |
-| text | `String.prototype` ◐ | `RegExp` |
-| indexed | `Array` ◐, eight typed arrays ◐ | `Array` statics, `Uint8ClampedArray`, `Float16Array`, `BigInt64Array`, `BigUint64Array` |
-| keyed | — | `Map`, `Set`, `WeakMap`, `WeakSet` |
-| structured | — | `ArrayBuffer`, `SharedArrayBuffer`, `DataView`, `Atomics`, `JSON` |
-| memory | — | `WeakRef`, `FinalizationRegistry` |
-| control | `Promise` | `Iterator`, `Proxy`, generator objects |
-| reflection | — | `Reflect` |
-| internationalization | — | `Intl` |
+| group | ✅ | ✗ gap | ∅ not a goal |
+|---|---|---|---|
+| value properties | `Infinity`, `NaN`, `undefined` | | `globalThis` |
+| function properties | `isNaN`, `isFinite` | `parseInt`, `parseFloat`, `encodeURI(Component)`, `decodeURI(Component)` | `eval` |
+| fundamental | `String` (as a function), `Number` | `Object` ◐, `Boolean`, `Symbol` | `Function`, `Proxy`, `Reflect` |
+| errors | `Error`, `TypeError`, `RangeError`, `URIError` | `ReferenceError`, `SyntaxError`, `EvalError`, `AggregateError`, `SuppressedError` | |
+| numbers, dates | `Math` ◐, `Number` ◐ | `BigInt`, `Date` | |
+| text | `String.prototype` ◐ | `RegExp` | |
+| indexed | `Array` ◐, eight typed arrays ◐ | `Array` statics, `Uint8ClampedArray`, `Float16Array`, `BigInt64Array`, `BigUint64Array` | |
+| keyed | | `Map`, `Set`, `WeakMap`, `WeakSet` | |
+| structured | | `ArrayBuffer`, `DataView`, `JSON`, `Atomics`, `SharedArrayBuffer` | |
+| memory | | `WeakRef`, `FinalizationRegistry` | |
+| control | `Promise` ◐ | `Iterator`, generator objects | |
+| internationalization | | | `Intl` — ECMA-402, a separate specification |
+
+### `Object` is two halves
+
+They belong in different columns and putting them in one is what made this
+table read as a backlog:
+
+- **A gap.** `keys values entries assign fromEntries hasOwn is groupBy` — these
+  want a hash table and a defined enumeration order, both of which a compiled
+  program can have.
+- **Not a goal.** `defineProperty getOwnPropertyDescriptor(s) create
+  getPrototypeOf setPrototypeOf freeze seal preventExtensions isFrozen isSealed
+  isExtensible`, and `Object.prototype`'s methods. Each needs a property map
+  and a prototype chain at run time; see §13.
+
+### ES2026 additions, and the oracle's ceiling
+
+The examples gate compares against node, so an addition node does not have is
+one this compiler cannot differentially test. Measured against node 24:
+
+| in node, testable | not in node yet |
+|---|---|
+| `Error.isError`, `RegExp.escape`, `Iterator.from`, `Map.groupBy`, `Object.groupBy`, `Promise.try`, `Promise.withResolvers`, `Math.f16round`, `Set` composition (`union` and the rest), `Array.fromAsync`, `Array.prototype.with`/`toSorted`/`toSpliced`/`toReversed`, `JSON.rawJSON`, `Float16Array`, `String.prototype.isWellFormed` | `Iterator.concat`, `Map.prototype.getOrInsert(Computed)`, `Math.sumPrecise`, `Uint8Array.fromBase64`/`toHex` |
 
 ### What ◐ covers
 
@@ -199,7 +231,64 @@ Measured, not assumed — three of these rows were wrong on the first pass.
   indexOf`, `buffer byteLength byteOffset` — 49 refusals in the node profile,
   reachable only since `extends Uint8Array` began lowering.
 
-## 9. The runtime
+## 9. Abstract operations
+
+The conversions and comparisons every operator rests on. They are implemented
+where they are reachable rather than as a library, so this is a list of what
+the lowering can currently produce — and the gaps here are why some operators
+above are refused.
+
+| | |
+|---|---|
+| ✅ | `ToBoolean` — including the tag switch for an erased value |
+| ✅ | `ToString` on a number (`nts_number_to_string`) |
+| ✅ | `ToInt32`, `ToUint32` — the bitwise operators |
+| ✅ | `ToIntegerOrInfinity`, `ToLength`, `ToIndex` — array bounds |
+| ✅ | `ToUint8`/`ToInt8`/`ToUint16`… — storing into a typed array |
+| ✅ | strict equality, relational comparison on numbers and strings |
+| ◐ | `ToNumber` — from a numeric string is refused (`Number("1")`) |
+| ✗ | `ToPrimitive`, `OrdinaryToPrimitive` — `valueOf`/`toString` dispatch |
+| ✗ | `SameValue`, `SameValueZero` — wanted by `Object.is`, `Map`, `Set`, `includes` |
+| ✗ | loose equality (`==`) — legal in strict code and still specified |
+| ✗ | `ToBigInt`, `ToBigInt64`, `ToBigUint64` |
+| ∅ | `ToObject`, `ToPropertyKey` — need boxing and a property map |
+
+## 10. The iteration protocol
+
+What `for...of`, spread, destructuring and the combinators are all specified in
+terms of. Today each of those is lowered *directly* for the shapes it supports
+— `for...of` over an array is a counted loop — so the protocol itself does not
+exist yet, and that is why the shapes that are not arrays are refused.
+
+| | |
+|---|---|
+| ✅ | `for...of` over an array, array destructuring — lowered as counted loops |
+| ✗ | `[Symbol.iterator]()`, `.next()`, `{ value, done }` |
+| ✗ | iterator **closing** (`.return()` on abrupt completion) — a correctness detail, not a convenience |
+| ✗ | `for...of` over a string, a `Map`, a `Set`, a generator |
+| ✗ | spread over an iterable |
+| ✗ | `yield`, `yield*`, generator objects |
+| ✗ | the async iterator protocol, `for await...of` |
+| ✗ | iterator helpers (`map`, `filter`, `take`, …) |
+
+## 11. Evaluation order and completions
+
+The obligations most likely to be silently wrong in a compiler, because
+nothing fails loudly when they are.
+
+| | |
+|---|---|
+| ✅ | left-to-right operand evaluation, callee before arguments |
+| ✅ | short-circuit `&&`, `\|\|`, `?:` |
+| ✅ | an assignment target evaluated **once** — `xs[next()] += 1` calls `next` once, which is what `place_of` exists for |
+| ✅ | normal, `return`, `break`, `continue` and `throw` completions |
+| ✅ | module evaluation order, and the temporal dead zone as an error |
+| ✗ | abrupt completion through `finally` — no `try` at all |
+| ✗ | iterator closing on an abrupt completion |
+| ✗ | conversion side effects (`valueOf`, `toString`) in operand position |
+| ∅ | getter, setter and `Proxy` side effects in operand position — §13 |
+
+## 12. The runtime
 
 `runtime/c`, about 3,300 lines and 130 entry points, provider-swappable.
 
@@ -211,12 +300,64 @@ Measured, not assumed — three of these rows were wrong on the first pass.
 | ✅ | promises, microtasks, the tick queue |
 | ✅ | timers: `setTimeout`, `setInterval`, `clearInterval` |
 | ✅ | host loop, task posting, thread-ownership assertions |
-| ✗ | a hash table — what `Map`, `Set` and `Object` statics all need |
+| ✗ | a hash table — what `Map`, `Set` and `Object`'s enumeration statics all need |
 | ✗ | a regular-expression engine |
 | ✗ | date and time |
-| ✗ | `Atomics`/`SharedArrayBuffer` — the threading primitives above are the runtime's own task posting, not shared memory |
+| ✗ | shared memory and an agent model — the threading primitives above are the runtime's own task posting, and `Atomics` needs more than they provide |
+| ∅ | a property map, a prototype chain, a metaobject protocol — §13 |
 
-## 10. Where the numbers come from
+## 13. What this compiler is not
+
+Every row here is refused, and none of them is a backlog item. They are one
+decision made once, and it is the decision the whole compiler is built on.
+
+### The metaobject protocol
+
+An object in this compiler is a flat C struct: a header of
+`descriptor + refcount + flags + length`, then fields at fixed offsets. The
+descriptor carries the size, which offsets hold references, and a method table.
+**There is no prototype pointer and no property map.**
+
+So the following are not unimplemented — they are incompatible with that
+representation, and implementing them means giving it up:
+
+| | why |
+|---|---|
+| `Proxy`, `Reflect` | every trap is a property operation dispatched at run time |
+| property descriptors | `[[Value]]`/`[[Writable]]`/`[[Enumerable]]`/`[[Configurable]]` per property, on an object with no per-property storage |
+| `Object.defineProperty`, `freeze`, `seal`, `preventExtensions` | the same |
+| `getPrototypeOf`, `setPrototypeOf`, `__proto__` | there is no chain to read or rewrite |
+| exotic object kinds, the intrinsic graph, realms | an engine's object model; a compiled program has one static layout per type |
+| `Symbol.species`, `Symbol.hasInstance`, `Symbol.toPrimitive`, `Symbol.unscopables` | hooks that redirect built-in operations at run time |
+| `Function.prototype.toString`, observable `.name`/`.length` | a function here is a C function, not an object with properties |
+| `Function("source")`, `eval` | a compiler is not in the program |
+
+**TypeScript is what earns the right to omit them.** In a typed program the
+dynamic property surface is largely unreachable: `defineProperty`, descriptor
+manipulation and prototype mutation are not things typed code does, and where
+it does them TypeScript types the result `any` — which is refused, deliberately
+and separately.
+
+This is not "a subset of JavaScript". It is the observation that a *typed*
+program does not need the machinery an untyped one is compiled against.
+
+### Free by construction
+
+Excluded by the source language rather than by choice — a TypeScript module is
+always strict, so none of this can reach the compiler:
+
+`with`, sloppy mode, `arguments`, legacy octal, Annex B, `escape`/`unescape`,
+`String.prototype.substr` and the HTML-wrapper methods, `Date.prototype.getYear`,
+`RegExp.prototype.compile`, `Object.prototype.__defineGetter__` and friends.
+
+### Deferred rather than rejected
+
+Wanted, and not soon: `Atomics` and `SharedArrayBuffer` need an agent model and
+a memory model on top of the threading the runtime already has, and they are the
+one part of §13's neighbourhood that a native compiler could do *better* than an
+engine rather than not at all.
+
+## 14. Where the numbers come from
 
 `tooling/gate/all.sh` runs all of it. Three measures, and they answer different
 questions:
@@ -233,7 +374,7 @@ that compiles rather than one known to be right — and until recently it counte
 functions that could not even be emitted, because the row that would have said
 so was collected and never printed.
 
-## 11. What to do next, ordered by evidence
+## 15. What to do next, ordered by evidence
 
 From the node profile's refusals, which is the only list ordered by what real
 code actually needs rather than by what looks incomplete.
@@ -246,9 +387,16 @@ code actually needs rather than by what looks incomplete.
 | `Object` statics, `JSON` | 39 | the same hash table as `Map` |
 | a class as a value | `instanceof`, static access through a variable | a class needs a runtime representation of itself |
 | rest, spread, `??`, `?.` | scattered, common in ordinary code | each is small and independent |
-| generators | node's `readline` among others | the suspension machine exists for `async`; what is missing is the `Generator<T>` object |
+| generators | node's `readline` among others | the suspension machine exists for `async`; what is missing is the `Generator<T>` object and §10's protocol |
+| the iteration protocol | `for...of` over anything but an array, spread, generators, `Map`/`Set` iteration | §10 — one protocol that several of the rows above are each waiting on separately |
 
 Two rows in the corpus are meant to be zero and one is not: `uncompilable C` is
 2, both narrow — an `as const` nested object literal whose inner layout is
 built by nothing, and a quoted key on a generic function's result. They are
 ratcheted in `tooling/gate/all.sh` so they can only go down.
+
+### What is *not* on this list, and why
+
+`Proxy`, `Reflect`, property descriptors, prototype manipulation, realms — §13.
+They are refused, they will stay refused, and a checklist that files them beside
+`Map` turns one decision into a hundred open items.
