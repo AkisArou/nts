@@ -15,7 +15,7 @@
 use nts_diagnostics::{Diagnostic, Location};
 use nts_semantic_schema::{
     DeclarationModifiers, LiteralValue, NodeData, NodeId, NodeKind, Origin, SemanticSnapshot,
-    SymbolFlags, SymbolId, TypeId, TypeKind, syntax,
+    SymbolFlags, SymbolId, TypeId, TypeKind, TypeRecord, syntax,
 };
 
 use super::facts::Facts;
@@ -1875,6 +1875,21 @@ fn spelling(kind: u16) -> String {
     format!("`{named}`")
 }
 
+/// A type's declared name, or `fallback` where it has none.
+///
+/// Anonymous shapes -- an inline `{ a: number }`, a synthesized instantiation --
+/// genuinely have no name to give, and the category is then all there is.
+fn named_or(snapshot: &SemanticSnapshot, record: &TypeRecord, fallback: &str) -> String {
+    let Some(symbol) = record.symbol else {
+        return fallback.to_owned();
+    };
+    snapshot
+        .symbols
+        .get(symbol.0 as usize)
+        .filter(|declared| !declared.name.is_empty())
+        .map_or_else(|| fallback.to_owned(), |declared| format!("`{}`", declared.name))
+}
+
 #[must_use]
 pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
     let Some(record) = snapshot.types.get(ty.0 as usize) else {
@@ -1906,7 +1921,7 @@ pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
         TypeKind::Conditional { .. } => "a conditional type".to_owned(),
         TypeKind::IndexedAccess { .. } => "an indexed access".to_owned(),
         TypeKind::TemplateLiteral { .. } => "a template literal type".to_owned(),
-        TypeKind::Object { .. } => "an object type".to_owned(),
+        TypeKind::Object { .. } => named_or(snapshot, record, "an object type"),
         // Worth distinguishing, because the two are refused for entirely
         // different reasons and only one of them is about *this* type. An
         // ordinary array is refused when its element is; `type Tree = Tree[]`
@@ -1918,7 +1933,16 @@ pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
                 "an array type".to_owned()
             }
         }
-        TypeKind::Structured { flags } => format!("a structured type (flags {flags:#x})"),
+        // A placeholder the decomposition did not open. The flags say which
+        // checker category it fell in, which no reader can rank; the symbol
+        // says `Set` or `AsyncIterableIterator`, which is the whole question.
+        // Three rows totalling 223 in the node profile were unreadable until
+        // this named them, and they turned out to be two features.
+        TypeKind::Structured { flags } => named_or(
+            snapshot,
+            record,
+            &format!("a structured type (flags {flags:#x})"),
+        ),
         TypeKind::Unsupported { rendered, .. } => format!("`{rendered}`"),
         TypeKind::Void
         | TypeKind::Undefined
