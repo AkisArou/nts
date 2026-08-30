@@ -100,8 +100,36 @@ a backlog.
 | ✅ | type predicates (`x is T`) and `asserts x is T` |
 | ✅ | rest parameters | the call gathers its trailing arguments into the array |
 | ✗ | `function` expressions — an arrow with the same body lowers |
-| ✗ | closures over a variable something **assigns to** — this captures by value and JavaScript by reference |
+| ✅ | closures over a variable something **assigns to** — the variable moves into a cell |
+| ✗ | a closure over a `for` loop's own variable, which JavaScript rebinds per iteration |
 | ✗ | generators (`function*`, `yield`) — needs the `Generator<T>` object |
+
+### A written variable moves into a cell, and only then
+
+JavaScript closures capture the *binding*. For a name nothing writes to that is
+the same thing as capturing the value, capturing the value is free, and that is
+still what happens — it is the common case by a wide margin and it allocates
+nothing.
+
+For a name something writes to the two differ, and a program can see it:
+
+```ts
+let called = false;
+const onDestroy = () => { if (called) return; called = true; };
+```
+
+Both sides have to see one `called`. So it moves into a one-slot cell, the
+function and the closure both hold a pointer to it, and every read and write
+goes through it. Parameters too — `callback = asRequest(callback)` before a
+closure reads it is common in the profile, and missing that case emitted C that
+did not compile rather than a refusal.
+
+Refused, by name: a closure over a **`for` loop's own variable**. JavaScript
+gives each iteration a fresh binding, so a closure made in the body captures
+that turn's value; one cell for the whole loop hands every closure the value the
+loop ended on. Verified wrong against node before it was refused. A `let` in the
+loop *body* is a different declaration each time round and gets a cell each time
+round, which is right without special handling.
 
 ### A function as a value costs one static object, and nothing where it is not used
 

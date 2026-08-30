@@ -1,0 +1,113 @@
+// A closure over a variable something writes to.
+//
+// JavaScript closures capture the *binding*, not the value. For a name nothing
+// writes to those are the same thing and capturing the value is free, which is
+// why that is what happens and why it stays the common case. For a name
+// something does write to they differ, and a program can see the difference:
+// the variable moves into a one-slot cell on the heap, the enclosing function
+// and the closure both hold a pointer to it, and every read and write goes
+// through the cell.
+
+function once(f: () => void): void {
+  f();
+}
+
+function twice(f: () => void): void {
+  f();
+  f();
+}
+
+// The shape the node profile is full of: a guard the callback sets, read by
+// the callback and by the function around it.
+export function calledOnce(n: number): number {
+  let called = false;
+  let hits = 0;
+  const guard = (): void => {
+    if (called) return;
+    called = true;
+    hits = hits + n;
+  };
+  twice(guard);
+  return hits + (called ? 1000 : 0);
+}
+
+// Two closures over one variable, which is the test that the cell is shared
+// rather than copied into each.
+export function sharedBetweenTwo(n: number): number {
+  let total = 0;
+  const up = (): void => {
+    total = total + 1;
+  };
+  const down = (): void => {
+    total = total - 2;
+  };
+  once(up);
+  once(down);
+  once(up);
+  return total + n * 0;
+}
+
+// ...and that the enclosing function writes the same cell the closure reads.
+export function writtenFromBothSides(n: number): number {
+  let total = 0;
+  const add = (): void => {
+    total = total + 10;
+  };
+  once(add);
+  total = total + 1;
+  once(add);
+  return total + n * 0;
+}
+
+// A managed value in the cell, so the cell is a reference field and the
+// collector has to walk it.
+export function aStringInTheCell(n: number): number {
+  let text = "a";
+  const grow = (): void => {
+    text = text + "b";
+  };
+  twice(grow);
+  return text.length + n * 0;
+}
+
+// A parameter, which is a name like any other. `callback = asRequest(callback)`
+// before a closure reads it is common enough in the profile that missing this
+// emitted C that did not compile.
+function throughAParameter(x: number): number {
+  x = x + 1;
+  let out = 0;
+  once((): void => {
+    out = out + x;
+  });
+  return out;
+}
+
+export function parameterAssignedThenCaptured(n: number): number {
+  return throughAParameter(n);
+}
+
+// A `let` in a loop body is a fresh declaration every time round, so it gets a
+// fresh cell every time round -- which is what makes `seen` start at zero on
+// each iteration while `sum` accumulates across them.
+export function aCellPerIteration(n: number): number {
+  let sum = 0;
+  for (let i = 0; i < 3; i = i + 1) {
+    let seen = 0;
+    const step = (): void => {
+      seen = seen + 1;
+      sum = sum + seen;
+    };
+    twice(step);
+  }
+  return sum + n * 0;
+}
+
+// Capture by *value* is untouched and still allocates no cell: `base` is never
+// written, so there is nothing for the two sides to disagree about.
+function make(base: number): (x: number) => number {
+  return (x) => x + base;
+}
+
+export function byValueIsUnchanged(n: number): number {
+  return make(n)(1);
+}

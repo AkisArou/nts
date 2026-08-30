@@ -15,7 +15,7 @@
 use nts_diagnostics::{Diagnostic, Location};
 use nts_semantic_schema::{
     DeclarationModifiers, LiteralValue, NodeData, NodeId, NodeKind, Origin, SemanticSnapshot,
-    SymbolFlags, SymbolId, TypeId, TypeKind, TypeRecord, syntax,
+    SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind, TypeRecord, syntax,
 };
 
 use super::facts::Facts;
@@ -417,6 +417,61 @@ struct Capture {
     name: String,
     /// A node that reads it, for the type and for a diagnostic's location.
     at: NodeId,
+    /// Whether the closure captures the *binding* rather than its value.
+    ///
+    /// JavaScript closures always capture the binding. For a name nothing
+    /// writes to that is the same thing as capturing the value, and capturing
+    /// the value is free -- so that is what happens, and it is the common case
+    /// by a wide margin.
+    ///
+    /// For a name something *does* write to the two differ, and observably:
+    ///
+    /// ```ts
+    /// let called = false;
+    /// const onDestroy = () => { if (called) return; called = true; };
+    /// ```
+    ///
+    /// Both the enclosing function and the closure have to see one `called`.
+    /// So the variable moves into a one-slot cell on the heap, both hold a
+    /// pointer to it, and every read and write goes through the cell. The
+    /// pointer is what gets captured, still by value.
+    by_reference: bool,
+}
+
+/// The symbols a program captures *by reference*, in a stable order.
+///
+/// Each one becomes a cell, and its position here is the cell's identity. A
+/// sorted list rather than a set because that position is baked into a type id
+/// and a struct name, and two runs of one compiler have to agree.
+fn boxed_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
+    let mut found: Vec<u32> = closures
+        .iter()
+        .filter(|closure| closure.refusal.is_none())
+        .flat_map(|closure| &closure.captures)
+        .filter(|capture| capture.by_reference)
+        .map(|capture| capture.symbol)
+        .collect();
+    found.sort_unstable();
+    found.dedup();
+    found
+}
+
+/// The type id of the `n`th cell, and the name of its struct.
+///
+/// Synthetic like a closure's, and from the *bottom* of the synthetic band
+/// rather than the top: closures count down from `u32::MAX` and the suspension
+/// machine takes the half above `FLOOR + 2^19`, so this is the space left.
+fn cell_type(index: usize) -> TypeId {
+    let id = super::SYNTHETIC_TYPE_FLOOR + u32::try_from(index).unwrap_or(0);
+    debug_assert!(
+        id < super::SYNTHETIC_TYPE_FLOOR + (1 << 19),
+        "more captured-by-reference variables than the synthetic id space holds"
+    );
+    TypeId(id)
+}
+
+fn cell_name(index: usize) -> String {
+    format!("Cell{index}")
 }
 
 /// The type id of the `n`th closure class.
@@ -621,11 +676,49 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             }) {
                 continue;
             }
-            if assigned.contains(&symbol.0) {
+            // The same, for a name that arrived through an import -- whose
+            // declaration is an import specifier rather than the thing itself
+            // -- and for a name that is not a value at all.
+            //
+            // `(callback as Callback<Stats>)` mentions `Callback`, a type
+            // alias, inside an arrow. It has a symbol and it is declared
+            // outside, so without this it looked like something to capture, and
+            // the closure was refused for failing to find a value for a name
+            // that never had one. `Buffer`, `Stats` and `uvException` are the
+            // same mistake one step further out: imported, so the declaration
+            // test above does not see what they are.
+            let denoted = probe.denoted_symbol(symbol);
+            let record = snapshot
+                .symbols
+                .get(denoted.0 as usize)
+                .unwrap_or(record);
+            if [
+                SymbolFlags::FUNCTION,
+                SymbolFlags::CLASS,
+                SymbolFlags::INTERFACE,
+                SymbolFlags::TYPE_ALIAS,
+                SymbolFlags::ENUM,
+                SymbolFlags::MODULE,
+            ]
+            .iter()
+            .any(|flag| record.flags.contains(*flag))
+            {
+                continue;
+            }
+            // A name something writes to is captured by reference: it moves
+            // into a cell, and the cell pointer is what the closure holds.
+            //
+            // Except when the binding is per-iteration. `for (let i = 0; ...)`
+            // gives each turn of the loop its own `i` -- a closure made in the
+            // body captures that turn's value, and JavaScript is explicit about
+            // it. One cell for the whole loop would hand every closure the
+            // value the loop ended on, so it is named and refused rather than
+            // answered wrongly.
+            let by_reference = assigned.contains(&symbol.0);
+            if by_reference && probe.is_per_iteration(record) {
                 info.refusal = Some(
-                    "a closure over a variable something assigns to; this captures \
-                     by value and JavaScript captures by reference, and for a name \
-                     something writes to those differ",
+                    "a closure over a `for` loop's own variable, which JavaScript \
+                     rebinds on every iteration",
                 );
                 break;
             }
@@ -633,6 +726,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
                 symbol: symbol.0,
                 name: record.name.clone(),
                 at: *read,
+                by_reference,
             });
         }
         closures.push(info);
@@ -2796,6 +2890,12 @@ struct FuncBuilder<'a> {
     /// Every arrow function in the program, so that one written here can be
     /// matched to the class that was collected for it.
     closures: Vec<ClosureInfo>,
+    /// Every symbol some closure captures by reference, sorted.
+    ///
+    /// Derived from `closures` rather than passed alongside it, so the two
+    /// cannot disagree. A symbol's position here is its cell's identity, and
+    /// every function that mentions the variable resolves to the same one.
+    boxed: Vec<u32>,
     /// What each type parameter stands for, while lowering one instantiation of
     /// a generic class. Empty everywhere else, which is every function that is
     /// not one of those copies.
@@ -2850,6 +2950,7 @@ impl<'a> FuncBuilder<'a> {
     fn new(snapshot: &'a SemanticSnapshot) -> Self {
         Self {
             snapshot,
+            boxed: Vec::new(),
             values: Vec::new(),
             blocks: vec![PartialBlock {
                 params: Vec::new(),
@@ -2889,6 +2990,7 @@ impl<'a> FuncBuilder<'a> {
         Self {
             module,
             hierarchy,
+            boxed: boxed_symbols(&closures),
             closures,
             ..Self::new(snapshot)
         }
@@ -3361,6 +3463,32 @@ impl<'a> FuncBuilder<'a> {
         }
         // Declared in this program, in a scope between here and module scope.
         format!("`{}`, a name from an enclosing scope", record.name)
+    }
+
+    /// Whether a symbol's binding is created afresh on every loop iteration.
+    ///
+    /// True only for a `for` statement's *own* variable -- `for (let i = 0;
+    /// ...)`. A `let` in the body is a different declaration each time round
+    /// anyway, so it needs nothing special; this is about the one the loop
+    /// header owns, which JavaScript rebinds per iteration even though it is
+    /// written once.
+    fn is_per_iteration(&self, record: &SymbolRecord) -> bool {
+        record.declarations.iter().any(|declaration| {
+            // Up from the declaration to the loop that owns it, stopping at the
+            // first block. A loop's *header* has no block between it and the
+            // declaration; a `let` in the body is inside one, and that one is a
+            // fresh declaration every time round anyway.
+            let mut at = self.node(*declaration).parent;
+            for _ in 0..8 {
+                let Some(node) = at else { return false };
+                match self.kind_of(node) {
+                    Some(syntax::FOR_STATEMENT | syntax::FOR_OF_STATEMENT) => return true,
+                    Some(syntax::BLOCK) => return false,
+                    _ => at = self.node(node).parent,
+                }
+            }
+            false
+        })
     }
 
     /// Whether this name is the thing being *called* rather than a value.
@@ -4386,29 +4514,7 @@ impl<'a> FuncBuilder<'a> {
         // The captures, read back and bound to the names the body writes. A
         // field read rather than a copy into a local: the value is already
         // there, and `FieldGet` is what every other object read is.
-        let mut fields = Vec::new();
-        for (at, capture) in info.captures.iter().enumerate() {
-            let ty = self
-                .type_of(capture.at)
-                .ok_or_else(|| self.unrepresentable(capture.at, "a captured variable"))?;
-            let field = u32::try_from(at).unwrap_or(0);
-            let value = self.push(
-                OpKind::FieldGet {
-                    object: receiver,
-                    field,
-                },
-                ty.clone(),
-                origin.clone(),
-            );
-            self.bindings.insert(capture.symbol, value);
-            // Captured by value and never written again -- that is the whole
-            // condition `collect_closures` checked before allowing the capture.
-            fields.push(Field {
-                name: capture.name.clone(),
-                ty,
-                readonly: true,
-            });
-        }
+        let fields = self.bind_captures(receiver, info, &origin)?;
         self.layouts.push(self.closure_layout(index, fields));
 
         let return_type = self.return_type_of(id)?;
@@ -4501,6 +4607,133 @@ impl<'a> FuncBuilder<'a> {
             .iter()
             .position(|op| matches!(op.kind, OpKind::Param(at) if at == index))
             .map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX)))
+    }
+
+    /// Read a closure's captures back out of its object and bind them.
+    ///
+    /// Returns the fields, which the layout is then built from -- and the
+    /// creation side builds the same list, so the two are checked against each
+    /// other by `collect_layouts` merging them into one layout rather than two.
+    fn bind_captures(
+        &mut self,
+        receiver: ValueId,
+        info: &ClosureInfo,
+        origin: &Origin,
+    ) -> Result<Vec<Field>, Diagnostic> {
+        let mut fields = Vec::new();
+        for (at, capture) in info.captures.iter().enumerate() {
+            let held = self
+                .type_of(capture.at)
+                .ok_or_else(|| self.unrepresentable(capture.at, "a captured variable"))?;
+            // By reference, the field holds the *cell* rather than the value,
+            // and the binding below is the cell -- so every read and write of
+            // the name in this body goes through it, exactly as it does in the
+            // function that opened it.
+            let ty = match self.cell_of(capture.symbol) {
+                Some(index) => {
+                    self.layouts.push(self.cell_layout(index, held));
+                    HirType::Managed(ManagedType::Object(cell_type(index)))
+                }
+                None => held,
+            };
+            let field = u32::try_from(at).unwrap_or(0);
+            let value = self.push(
+                OpKind::FieldGet {
+                    object: receiver,
+                    field,
+                },
+                ty.clone(),
+                origin.clone(),
+            );
+            self.bindings.insert(capture.symbol, value);
+            // The field itself is never reassigned either way: by value it is
+            // the captured value, and by reference it is a pointer to storage
+            // that is written *through* rather than replaced.
+            fields.push(Field {
+                name: capture.name.clone(),
+                ty,
+                readonly: true,
+            });
+        }
+        Ok(fields)
+    }
+
+    /// The cell a symbol lives in, where something captures it by reference.
+    ///
+    /// `None` is the ordinary case: the name is an SSA value like any other and
+    /// costs nothing. That is what keeps a program full of locals free of cells.
+    fn cell_of(&self, symbol: u32) -> Option<usize> {
+        self.boxed.iter().position(|held| *held == symbol)
+    }
+
+    /// The one-field object a captured-and-written variable lives in.
+    fn cell_layout(&self, index: usize, ty: HirType) -> Layout {
+        Layout {
+            types: vec![cell_type(index)],
+            name: cell_name(index),
+            fields: vec![Field {
+                name: "value".to_owned(),
+                ty,
+                // Written by definition -- being written is why it exists.
+                readonly: false,
+            }],
+            methods: vec![None; self.hierarchy.table_size()],
+        }
+    }
+
+    /// Move a name into its cell, and bind the name to the cell.
+    ///
+    /// Everything afterwards reads and writes through the cell, in this
+    /// function and in every closure that captured it.
+    fn open_cell(&mut self, symbol: u32, value: ValueId, at: NodeId) -> ValueId {
+        let Some(index) = self.cell_of(symbol) else {
+            return value;
+        };
+        let ty = self.values[value.0 as usize].ty.clone();
+        let origin = self.origin(at);
+        let cell_ty = HirType::Managed(ManagedType::Object(cell_type(index)));
+        self.layouts.push(self.cell_layout(index, ty));
+        let cell = self.push(
+            OpKind::ObjectNew { frame: false },
+            cell_ty,
+            origin.clone(),
+        );
+        self.push(
+            OpKind::FieldSet {
+                object: cell,
+                field: 0,
+                value,
+            },
+            HirType::Void,
+            origin,
+        );
+        cell
+    }
+
+    /// Read a name that lives in a cell.
+    fn read_cell(&mut self, symbol: u32, cell: ValueId, at: NodeId) -> Option<ValueId> {
+        let index = self.cell_of(symbol)?;
+        let ty = self
+            .program_layout_field(index)
+            .or_else(|| self.type_of(at))?;
+        let origin = self.origin(at);
+        Some(self.push(
+            OpKind::FieldGet {
+                object: cell,
+                field: 0,
+            },
+            ty,
+            origin,
+        ))
+    }
+
+    /// The type a cell holds, from the layout this function already pushed.
+    fn program_layout_field(&self, index: usize) -> Option<HirType> {
+        self.layouts
+            .iter()
+            .find(|layout| layout.types.contains(&cell_type(index)))
+            .and_then(|layout| layout.fields.first())
+            .map(|field| field.ty.clone())
     }
 
     /// The class a closure allocates, with its one method in the shared slot.
@@ -4923,6 +5156,10 @@ impl<'a> FuncBuilder<'a> {
         ) {
             self.bind_pattern(name_node, value)?;
         } else if let Some(symbol) = self.node(name_node).symbol {
+            // A parameter is a name like any other, and `callback =
+            // asRequest(callback)` before a closure reads it is common enough
+            // in the profile that missing this emitted C that did not compile.
+            let value = self.open_cell(symbol.0, value, name_node);
             self.bindings.insert(symbol.0, value);
         }
 
@@ -7172,10 +7409,13 @@ impl<'a> FuncBuilder<'a> {
                 let ty = self.module.types[global as usize].clone();
                 self.push(OpKind::GlobalGet(global), ty, origin)
             }
-            Place::Binding { symbol, .. } => *self
-                .bindings
-                .get(&symbol)
-                .ok_or_else(|| self.unsupported(id, "reading a name before it is bound"))?,
+            Place::Binding { symbol, .. } => {
+                let bound = *self
+                    .bindings
+                    .get(&symbol)
+                    .ok_or_else(|| self.unsupported(id, "reading a name before it is bound"))?;
+                self.read_cell(symbol, bound, id).unwrap_or(bound)
+            }
         })
     }
 
@@ -7438,7 +7678,24 @@ impl<'a> FuncBuilder<'a> {
                 self.push(OpKind::GlobalSet { global, value }, HirType::Void, origin);
             }
             Place::Binding { symbol, .. } => {
-                self.bindings.insert(symbol, value);
+                // A cell is storage, so the write is a store rather than a new
+                // binding: the closure holding the same cell has to see it.
+                match self.cell_of(symbol).and(self.bindings.get(&symbol).copied()) {
+                    Some(cell) => {
+                        self.push(
+                            OpKind::FieldSet {
+                                object: cell,
+                                field: 0,
+                                value,
+                            },
+                            HirType::Void,
+                            origin,
+                        );
+                    }
+                    None => {
+                        self.bindings.insert(symbol, value);
+                    }
+                }
             }
         }
     }
@@ -8730,7 +8987,10 @@ impl<'a> FuncBuilder<'a> {
             let value = *self.bindings.get(&capture.symbol).ok_or_else(|| {
                 self.unsupported(
                     capture.at,
-                    "a closure over a name from more than one scope up",
+                    &format!(
+                        "`{}`, a closure over a name from more than one scope up",
+                        capture.name
+                    ),
                 )
             })?;
             let field_ty = self.values[value.0 as usize].ty.clone();
@@ -9795,6 +10055,10 @@ impl<'a> FuncBuilder<'a> {
                 Some(declared) => self.coerce(value, &declared, declaration)?,
                 None => value,
             };
+            // A name some closure writes to lives in a cell from here on, and
+            // the binding is the cell. Every read and write below goes through
+            // it, in this function and in the closure.
+            let value = self.open_cell(symbol.0, value, declaration);
             self.bindings.insert(symbol.0, value);
         }
         Ok(())
@@ -11687,6 +11951,9 @@ impl<'a> FuncBuilder<'a> {
         if let Some(symbol) = self.node(id).symbol
             && let Some(value) = self.bindings.get(&symbol.0).copied()
         {
+            // A name something captured *and* writes to is bound to its cell,
+            // so reading it is a load rather than the binding itself.
+            let value = self.read_cell(symbol.0, value, id).unwrap_or(value);
             return self.narrowed(id, value);
         }
         let origin = self.origin(id);
@@ -11710,6 +11977,7 @@ impl<'a> FuncBuilder<'a> {
             .symbol
             .ok_or_else(|| self.unsupported(id, "an unresolved name"))?;
         if let Some(value) = self.bindings.get(&symbol.0).copied() {
+            let value = self.read_cell(symbol.0, value, id).unwrap_or(value);
             return self.narrowed(id, value);
         }
         // An imported name, resolved to what it imports. Below the local
