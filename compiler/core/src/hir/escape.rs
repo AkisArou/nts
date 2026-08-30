@@ -164,22 +164,53 @@ fn analyze(
     escaping_params: &[FxHashSet<u32>],
 ) -> Escapes {
     let mut escapes = Escapes::default();
+    // What each store makes reachable, and from where. Deferred rather than
+    // decided here, because whether it escapes is a question about the
+    // *container*, and the container can be shown to escape further down the
+    // function than the store that filled it.
+    let mut reachable_from: Vec<(ValueId, ValueId)> = Vec::new();
 
     for block in &func.blocks {
         for value in &block.ops {
             match &func.values[value.0 as usize].kind {
                 // Into a container, which is written through rather than
-                // handed anywhere: what goes in is now reachable from wherever
-                // the container is. A *global* is the same statement with the
-                // strongest possible container -- one that outlives every
-                // function -- and it reached the catch-all below exactly the
-                // way `Suspend` did, with the same consequence: `{ tag: n }`
-                // assigned to a module-scope `unknown` was placed in the
-                // caller's frame, and the global pointed at dead stack from the
-                // moment that function returned. Nothing failed loudly.
-                OpKind::FieldSet { value: stored, .. }
-                | OpKind::ArraySet { value: stored, .. }
-                | OpKind::GlobalSet { value: stored, .. } => {
+                // handed anywhere: what goes in is reachable from wherever the
+                // container is -- and *no further*. If the container stays in
+                // this frame, so does what went into it.
+                //
+                // This used to escape the stored value outright, which is safe
+                // and costs a heap allocation for every cell a non-escaping
+                // closure holds. The reachability question is answered below,
+                // once it is known what the containers do.
+                OpKind::FieldSet {
+                    object: container,
+                    value: stored,
+                    ..
+                }
+                | OpKind::ArraySet {
+                    array: container,
+                    value: stored,
+                    ..
+                } => {
+                    // Only an allocation *this function made* can confine what
+                    // goes into it. A parameter is already reachable by the
+                    // caller, so `a.field = b` inside `keeper(a, b)` puts `b`
+                    // somewhere the caller can see it however local `a` looks
+                    // from in here -- and the same goes for a call's result, a
+                    // block parameter and anything read back out of a field.
+                    if matches!(
+                        func.values[container.0 as usize].kind,
+                        OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
+                    ) {
+                        reachable_from.push((*container, *stored));
+                    } else {
+                        escaped(&mut escapes, func, *stored);
+                    }
+                }
+                // A global is the same statement with the strongest possible
+                // container -- one that outlives every function -- so there is
+                // no question to defer.
+                OpKind::GlobalSet { value: stored, .. } => {
                     escaped(&mut escapes, func, *stored);
                 }
                 OpKind::Call { callee, args, .. } => match callee {
@@ -256,6 +287,27 @@ fn analyze(
                 escapes.values.extend(else_args.iter().copied());
             }
             Terminator::Return(None) | Terminator::Unreachable | Terminator::FellThrough => {}
+        }
+    }
+
+    // Now the stores, once every other reason to escape is known.
+    //
+    // A value stored into a container is reachable from that container, so it
+    // escapes exactly when the container does. To a fixpoint, because
+    // containers nest -- a cell inside a closure inside an array -- and because
+    // a container can be shown to escape below the store that filled it.
+    //
+    // Monotone and bounded: the set only grows, and it is bounded by the values
+    // in the function, so this terminates without a round cap.
+    loop {
+        let before = escapes.values.len();
+        for (container, stored) in &reachable_from {
+            if escapes.escapes(*container) {
+                escaped(&mut escapes, func, *stored);
+            }
+        }
+        if escapes.values.len() == before {
+            break;
         }
     }
     escapes
@@ -559,5 +611,79 @@ mod tests {
         };
         let escapes = analyze_program(&program);
         assert!(escapes[0].is_frame_local(ValueId(0)));
+    }
+
+    /// What a local container holds is reachable from that container and no
+    /// further, so both stay in the frame. This is the closure-and-cell case:
+    /// before it, every cell a non-escaping closure held was a heap
+    /// allocation.
+    #[test]
+    fn what_a_frame_local_container_holds_stays_in_the_frame() {
+        let program = Program {
+            funcs: vec![func(
+                "make",
+                0,
+                vec![
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(
+                        OpKind::FieldSet {
+                            object: ValueId(0),
+                            field: 0,
+                            value: ValueId(1),
+                        },
+                        HirType::Void,
+                    ),
+                ],
+                vec![Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                    terminator: Terminator::Return(None),
+                }],
+            )],
+            layouts: Vec::new(),
+            globals: Vec::new(),
+        };
+        let escapes = analyze_program(&program);
+        assert!(escapes[0].is_frame_local(ValueId(0)));
+        assert!(escapes[0].is_frame_local(ValueId(1)));
+    }
+
+    /// ...and when the container leaves, what it holds leaves with it. The
+    /// fixpoint is what carries the answer backwards from the `return` to a
+    /// store written above it.
+    #[test]
+    fn what_an_escaping_container_holds_escapes_with_it() {
+        let program = Program {
+            funcs: vec![func(
+                "make",
+                0,
+                vec![
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(
+                        OpKind::FieldSet {
+                            object: ValueId(0),
+                            field: 0,
+                            value: ValueId(1),
+                        },
+                        HirType::Void,
+                    ),
+                ],
+                vec![Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                    terminator: Terminator::Return(Some(ValueId(0))),
+                }],
+            )],
+            layouts: Vec::new(),
+            globals: Vec::new(),
+        };
+        let escapes = analyze_program(&program);
+        assert!(escapes[0].escapes(ValueId(0)));
+        assert!(
+            escapes[0].escapes(ValueId(1)),
+            "a returned container carries what was stored into it"
+        );
     }
 }

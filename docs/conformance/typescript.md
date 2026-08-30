@@ -105,6 +105,28 @@ a backlog.
 | ✅ | a closure written *above* the declaration of a local it reads |
 | ✗ | generators (`function*`, `yield`) — needs the `Generator<T>` object |
 
+### A written variable moves into a cell, and the cell is usually not on the heap
+
+Escape analysis answers a store by asking about the *container*: what goes into
+one is reachable from it and no further. So a cell held only by a closure that
+does not escape does not escape either, and the whole pattern allocates nothing:
+
+```c
+NtsObj_Cell0 v2_frame;        /* the cell */
+NtsObj_Closure0 v4_frame;     /* the closure holding it */
+v4->total = v2;               /* 0 calls to nts_object_new */
+```
+
+Only a container **this function allocated** can confine what goes into it. A
+parameter is already reachable by the caller, so `h.b = new Box()` inside
+`fill(h)` puts the box where the caller can see it however local `h` looks from
+in here. A unit test holds that case, because getting it wrong is a pointer into
+a dead frame rather than a slow program.
+
+Measured: 225 → 209 heap allocation sites across the examples. Across the node
+profile it is 120 → 120, and that is the honest number — the profile's objects
+are callbacks it registers and results it returns, which escape for real.
+
 ### A written variable moves into a cell, and only then
 
 JavaScript closures capture the *binding*. For a name nothing writes to that is
