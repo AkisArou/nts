@@ -149,12 +149,14 @@ fn u32_at(bytes: &[u8], offset: usize) -> Option<u32> {
 pub fn decode(payload: &[u8], file: SourceId) -> Result<EncodedSourceFile, AstError> {
     let header = Header::parse(payload)?;
 
+    let data = &payload[header.string_data_at..];
     let strings = StringTable {
+        utf16: utf16_offsets(data),
         offsets: &payload[header.string_offsets_at..header.string_data_at],
         // To the end of the payload, not to `extended_at`. tsgo's decoder slices
         // `data[strData:]` and lets offsets reach past the extended-data
         // boundary; strings appended after the file text live there.
-        data: &payload[header.string_data_at..],
+        data,
     };
 
     let mut nodes = decode_nodes(
@@ -464,6 +466,44 @@ struct RawNode {
 struct StringTable<'a> {
     offsets: &'a [u8],
     data: &'a [u8],
+    /// The byte offset of each UTF-16 code unit in `data`.
+    ///
+    /// Empty when `data` is ASCII, where the two numbers are equal and the
+    /// table would be a copy of its own index. That is nearly every file, so
+    /// the common case allocates nothing.
+    utf16: Vec<u32>,
+}
+
+/// Byte offsets indexed by UTF-16 code unit.
+///
+/// A TypeScript node's `pos` and `end` count UTF-16 code units, because that is
+/// what a JavaScript string index is. The payload holds UTF-8. For ASCII the
+/// two agree, which is why slicing bytes with them was right for every file
+/// this compiler had ever been given -- and wrong, silently, for the first one
+/// with an em dash in a comment.
+///
+/// One entry per code unit plus a terminator, so an `end` at the very end of
+/// the data maps. A character outside the basic plane occupies two units and
+/// both map to its first byte; positions only ever land on token boundaries, so
+/// no caller can tell.
+fn utf16_offsets(data: &[u8]) -> Vec<u32> {
+    if data.is_ascii() {
+        return Vec::new();
+    }
+    // The valid prefix rather than nothing on bad input: the file text comes
+    // first, so a malformed string appended after it must not cost every
+    // literal in the file its value.
+    let text = std::str::from_utf8(data).unwrap_or_else(|broken| {
+        std::str::from_utf8(&data[..broken.valid_up_to()]).unwrap_or("")
+    });
+    let mut offsets = Vec::with_capacity(text.len() + 1);
+    for (at, character) in text.char_indices() {
+        for _ in 0..character.len_utf16() {
+            offsets.push(u32::try_from(at).unwrap_or(u32::MAX));
+        }
+    }
+    offsets.push(u32::try_from(text.len()).unwrap_or(u32::MAX));
+    offsets
 }
 
 impl StringTable<'_> {
@@ -511,7 +551,15 @@ impl StringTable<'_> {
     /// `pos` in a TypeScript AST includes leading trivia, so the result is
     /// trimmed.
     fn source(&self, pos: u32, end: u32) -> Option<&str> {
-        let slice = self.data.get(pos as usize..end as usize)?;
+        let (pos, end) = if self.utf16.is_empty() {
+            (pos as usize, end as usize)
+        } else {
+            (
+                *self.utf16.get(pos as usize)? as usize,
+                *self.utf16.get(end as usize)? as usize,
+            )
+        };
+        let slice = self.data.get(pos..end)?;
         Some(std::str::from_utf8(slice).ok()?.trim())
     }
 }
