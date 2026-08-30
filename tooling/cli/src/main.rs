@@ -950,6 +950,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             field,
             value,
         } => format!("field.set %{}.{field} = %{}", object.0, value.0),
+        OpKind::CellReady { cell, name } => {
+            format!("cell.ready %{} `{name}`", cell.0)
+        }
         OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
             render_element(index, &ty, &op.kind)
         }
