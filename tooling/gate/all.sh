@@ -55,6 +55,24 @@ step() {
 }
 
 lint() { cargo clippy --workspace --all-targets 2>&1 | grep -E '^(warning|error)' && return 1; return 0; }
+# The C half of the same question. A whole-file reformat once arrived mixed
+# into an unrelated change, which is what an editor formatting on save does to
+# a tree that has never said which format it wants. `.clang-format` says, and
+# this is what keeps it true.
+#
+# Skipped rather than failed where clang-format is absent: it is not a build
+# dependency, and a contributor without it should still be able to run the gate.
+format() {
+  command -v clang-format >/dev/null || { echo "  clang-format absent, skipped"; return 0; }
+  bad=$(for f in runtime/c/*.c runtime/c/*.h runtime/c/tests/*.c; do
+          clang-format --style=file "$f" | cmp -s - "$f" || echo "$f"
+        done)
+  [ -z "$bad" ] && return 0
+  echo "  not formatted:"
+  echo "$bad" | sed 's/^/    /'
+  echo "  run: clang-format --style=file -i runtime/c/*.c runtime/c/*.h runtime/c/tests/*.c"
+  return 1
+}
 tests() { cargo test --workspace >/dev/null 2>&1; }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
@@ -104,6 +122,7 @@ fi
 
 step "build"   cargo build --release
 step "clippy"  lint
+step "format"  format
 step "tests"   tests
 step "corpus"  corpus
 step "examples" ./tooling/gate/gate.sh
