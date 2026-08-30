@@ -70,13 +70,13 @@ question.
 
 | outcome | files |
 | --- | ---: |
-| lowered completely | **44** |
-| refused a construct | 53 |
+| lowered completely | **47** |
+| refused a construct | 50 |
 | rejected by the typechecker | 86 |
 | **the frontend fell over** | **1** |
 | **invalid HIR or a panic** | **0** |
 
-Of the 97 that typecheck, **45%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
+Of the 97 that typecheck, **48%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
 
 The last two rows are the ones that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do, and so is a query this compiler makes that the typechecker cannot answer.
 
@@ -91,15 +91,15 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it | 38 |
 | a module-scope variable with no initializer | 13 |
 | `console`, a global with no definition here | 7 |
-| a closure over a name from more than one scope up | 6 |
 | a module-scope construct of kind 268, which has code in it | 6 |
 | `MyEnum`, an enum | 4 |
-| a property `timestamp` of unrepresentable type (a structured type (flags 0x100000)) | 4 |
-| a rest parameter | 4 |
+| a property `timestamp` of unrepresentable type (`Date`) | 4 |
+| a rest parameter whose element type has no representation | 4 |
 | an expression of kind 216 | 4 |
 | `A`, a function used as a value | 3 |
 | `Foo`, a function used as a value | 3 |
 | a `for...of` binding of this shape | 3 |
+| a method on an object literal | 3 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->
