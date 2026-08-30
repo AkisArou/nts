@@ -939,6 +939,31 @@ impl Layout {
 /// like a bug where `closure#0` reads like what it is.
 pub const SYNTHETIC_TYPE_FLOOR: u32 = u32::MAX - (1 << 20);
 
+/// The synthetic space, in named parts.
+///
+/// Three kinds of type have no id from the checker and need one of their own: a
+/// cell's class, a suspended frame's, and a closure's. They used to be told
+/// apart by "closures count down from the top, frames count up from halfway",
+/// which holds only while there are fewer than 2^19 of each — and, worse, gives
+/// no way to *ask* what kind an id is.
+///
+/// `typeof` has to ask. A closure answers `"function"` where every other object
+/// answers `"object"`, and the three places that decide a tag see a `TypeId`
+/// and no program to look it up in. So the space is partitioned rather than
+/// merely arranged.
+pub const SYNTHETIC_CELLS: u32 = SYNTHETIC_TYPE_FLOOR;
+pub const SYNTHETIC_FRAMES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18);
+pub const SYNTHETIC_CLOSURES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 19);
+
+/// Whether a type id names a closure's class.
+///
+/// The one question about a synthetic id that is asked outside the module that
+/// invented it, which is why the partition above exists.
+#[must_use]
+pub const fn is_closure_type(ty: TypeId) -> bool {
+    ty.0 >= SYNTHETIC_CLOSURES
+}
+
 /// A lowered program.
 #[derive(Debug, Clone, Default)]
 pub struct Program {

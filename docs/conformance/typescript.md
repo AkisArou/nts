@@ -329,6 +329,7 @@ of the surface therefore costs nothing.
 | ✅ | typed arrays: all eight kinds, as `NtsArray` with a narrow element |
 | ✅ | `unknown`, `any` sites, unions, optional properties — one 16-byte tagged value |
 | ✅ | `null` and `undefined`, as two values — see below for what a pointer can hold |
+| ✅ | `typeof` — including `"function"` for a closure and `"object"` for `null` |
 | ✅ | `Map`, `Set` — one insertion-ordered table, keys and values as tagged values |
 | ✅ | the polymorphic `this` — the receiver's own pointer, which costs nothing |
 | ◐ | `bigint` — exact, and **128 bits** rather than arbitrary precision |
@@ -355,6 +356,18 @@ own — `NTS_TAG_NULL` beside `NTS_TAG_UNDEFINED`. The two tags are adjacent to
 
 Measured before and after across the node profile: 1,155 refusal sites either
 way, three moving in each direction. The correctness cost nothing in reach.
+
+And a pointer carries *one* absence, so comparing it strictly against the other
+absent literal cannot be true however the pointer is set:
+
+```ts
+const v: string | null = …;
+v === undefined      // false, always. It used to answer yes to the null.
+v == undefined       // true for a null — the loose one asks about either
+```
+
+The representation cannot tell them apart; the **type** still can, and that is
+what answers it.
 
 Two gaps this opened, both small and both real:
 

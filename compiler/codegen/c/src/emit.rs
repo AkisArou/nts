@@ -1648,6 +1648,13 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
         // An array answers "object" to `typeof`, like any other object, and it
         // carries the same header -- so the collector and the refcount reach it
         // through the payload exactly as they reach a class instance.
+        // A closure answers `"function"` to `typeof`, so it carries its own
+        // tag. Told apart by the id rather than by the layout, because that is
+        // all this sees -- see `hir::is_closure_type` for why the synthetic id
+        // space is partitioned to make the question answerable here.
+        HirType::Managed(ManagedType::Object(ty)) if nts_core::hir::is_closure_type(*ty) => {
+            Some(("NTS_TAG_FUNCTION", "reference"))
+        }
         HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
             Some(("NTS_TAG_OBJECT", "reference"))
         }

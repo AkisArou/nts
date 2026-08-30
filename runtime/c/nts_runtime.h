@@ -153,9 +153,13 @@ typedef struct NtsArray {
  * language itself made: `typeof null` is `"object"`, not `"null"`. So the last
  * two tags share a spelling.
  *
- * They are adjacent, and `NTS_TAG_NULL` is last, deliberately: it makes
- * `typeof x === "object"` the single comparison `tag >= NTS_TAG_OBJECT`
- * rather than a pair, which is what the peephole in `hir::tags` emits.
+ * The order is not arbitrary. `NTS_TAG_OBJECT` and `NTS_TAG_NULL` are adjacent
+ * and last, which makes `typeof x === "object"` the single comparison
+ * `tag >= NTS_TAG_OBJECT` rather than a pair, and is what the peephole in
+ * `hir::tags` emits. `NTS_TAG_FUNCTION` sits *below* them for the same reason
+ * inverted: a closure answers `"function"`, so it has to fall outside that
+ * range. A closure is still a reference, which is why the macro below is a
+ * range over the middle three rather than a pair of equalities.
  *
  * `null` needs a tag of its own at all because `null` and `undefined` are
  * *different values* -- `null === undefined` is false -- and an erased slot is
@@ -166,8 +170,9 @@ typedef enum NtsTag {
   NTS_TAG_BOOLEAN = 1,
   NTS_TAG_NUMBER = 2,
   NTS_TAG_STRING = 3,
-  NTS_TAG_OBJECT = 4,
-  NTS_TAG_NULL = 5
+  NTS_TAG_FUNCTION = 4,
+  NTS_TAG_OBJECT = 5,
+  NTS_TAG_NULL = 6
 } NtsTag;
 
 /* The representation is *behind accessors*, and every reader in the runtime,
@@ -275,6 +280,9 @@ static inline bool nts_value_truthy(NtsValue value) {
   case NTS_TAG_UNDEFINED:
   case NTS_TAG_NULL:
     return false;
+  /* A function is an object as far as truth goes: present is enough. */
+  case NTS_TAG_FUNCTION:
+    return value.as.reference != 0;
   case NTS_TAG_BOOLEAN:
     return value.as.boolean;
   case NTS_TAG_NUMBER:
@@ -328,7 +336,7 @@ NtsString *nts_tag_name(uint32_t tag);
  * The one place that knows, so that the tracer, retain, release and the
  * emitter cannot disagree about it. */
 #define NTS_TAG_IS_REFERENCE(tag)                                              \
-  ((tag) == NTS_TAG_STRING || (tag) == NTS_TAG_OBJECT)
+  ((tag) >= NTS_TAG_STRING && (tag) <= NTS_TAG_OBJECT)
 
 /* A `Map`, and a `Set`, which is one that stores no values.
  *

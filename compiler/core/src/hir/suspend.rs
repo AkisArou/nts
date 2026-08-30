@@ -65,11 +65,17 @@ const FIXED_FIELDS: u32 = 3;
 
 /// The synthetic type id for the `n`th frame.
 ///
-/// Below the closure ids and above the floor, so the two cannot collide: a
-/// closure counts up from `u32::MAX` and a frame counts up from halfway into
-/// the synthetic space.
+/// In the frames' own part of the synthetic space -- see `SYNTHETIC_FRAMES`.
+///
+/// It used to start where the closures' part now begins, which was safe only
+/// because neither ever ran to 2^19 entries, and left no way to tell a frame's
+/// id from a closure's.
 fn frame_type(index: usize) -> TypeId {
-    let id = super::SYNTHETIC_TYPE_FLOOR + (1 << 19) + u32::try_from(index).unwrap_or(0);
+    let id = super::SYNTHETIC_FRAMES + u32::try_from(index).unwrap_or(0);
+    debug_assert!(
+        id < super::SYNTHETIC_CLOSURES,
+        "more suspended frames than the synthetic id space holds"
+    );
     TypeId(id)
 }
 

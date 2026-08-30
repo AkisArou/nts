@@ -137,3 +137,63 @@ export function asMapKeys(n: number): number {
     n * 0
   );
 }
+
+// `typeof` answers `"function"` for a closure. It carries a tag of its own,
+// placed *below* the object tag: "object" is the range test `tag >= OBJECT`
+// and a function has to fall outside it.
+//
+// This was a wrong answer, not a missing one — the comparison used to be left
+// alone on the grounds that no tag could produce "function", which stopped
+// being true the moment a function became a value something could erase.
+export function whatAFunctionIs(n: number): number {
+  const f: unknown = (x: number): number => x + 1;
+  const g: unknown = named;
+  const o: unknown = { a: 1 };
+  return (
+    (typeof f === "function" ? 1 : 0) +
+    (typeof f === "object" ? 2 : 0) +
+    (typeof g === "function" ? 4 : 0) +
+    (typeof o === "object" ? 8 : 0) +
+    (typeof o === "function" ? 16 : 0) +
+    (f ? 32 : 0) +
+    n * 0
+  );
+}
+
+function named(x: number): number {
+  return x + 1;
+}
+
+// A pointer carries one absence. Comparing it strictly against the *other*
+// absent literal cannot be true however the pointer is set, and it used to
+// answer yes to both — the null pointer cannot tell them apart, but the type
+// still can.
+function orNothing(n: number): string | null {
+  return n < 10 ? null : "x";
+}
+
+export function theOtherAbsence(n: number): number {
+  const v = orNothing(n);
+  return (
+    (v === null ? 1 : 0) +
+    (v === undefined ? 2 : 0) +
+    // ...while the loose one asks about either, and is true for a null.
+    (v == undefined ? 4 : 0) +
+    (v != null ? 8 : 0)
+  );
+}
+
+// The same value, reached through a conditional whose own type is narrower
+// than the declaration it flows into. This produced invalid HIR: the arm took
+// the declaration's erased type while the conditional's type is a pointer.
+export function throughAConditional(n: number): number {
+  const v: string | null | undefined = n < 10 ? null : "x";
+  const w: string | null | undefined = n < 10 ? null : n < 20 ? undefined : "x";
+  return (
+    (v === null ? 1 : 0) +
+    (v === undefined ? 2 : 0) +
+    (w === null ? 4 : 0) +
+    (w === undefined ? 8 : 0) +
+    (typeof w === "object" ? 16 : 0)
+  );
+}

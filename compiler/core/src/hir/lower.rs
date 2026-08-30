@@ -572,9 +572,9 @@ fn boxed_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
 /// rather than the top: closures count down from `u32::MAX` and the suspension
 /// machine takes the half above `FLOOR + 2^19`, so this is the space left.
 fn cell_type(index: usize) -> TypeId {
-    let id = super::SYNTHETIC_TYPE_FLOOR + u32::try_from(index).unwrap_or(0);
+    let id = super::SYNTHETIC_CELLS + u32::try_from(index).unwrap_or(0);
     debug_assert!(
-        id < super::SYNTHETIC_TYPE_FLOOR + (1 << 19),
+        id < super::SYNTHETIC_FRAMES,
         "more captured-by-reference variables than the synthetic id space holds"
     );
     TypeId(id)
@@ -593,7 +593,7 @@ fn cell_name(index: usize) -> String {
 fn closure_type(index: usize) -> TypeId {
     let id = u32::MAX - u32::try_from(index).unwrap_or(0);
     debug_assert!(
-        id >= super::SYNTHETIC_TYPE_FLOOR,
+        id >= super::SYNTHETIC_CLOSURES,
         "more closures than the synthetic id space holds",
     );
     TypeId(id)
@@ -4277,6 +4277,37 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a value asserted to be `never`"));
         }
         if *want != HirType::Erased {
+            // The absent constant is the one value that can be re-made at
+            // another representation without asking what it holds: `null` is a
+            // null pointer as a reference and a tag as an erased value, and it
+            // is the same `null` either way.
+            //
+            // It arrives here because a conditional's own type can be narrower
+            // than the declaration it flows into. `const v: string | null |
+            // undefined = n < 10 ? null : "x"` types the conditional `string |
+            // null` -- one absence, so a pointer -- while the literal took the
+            // declaration's two-absence type, which is erased.
+            if have == HirType::Erased
+                && want.is_managed()
+                && matches!(
+                    self.values[value.0 as usize].kind,
+                    OpKind::ConstNull | OpKind::ConstUndefined
+                )
+            {
+                let kind = self.values[value.0 as usize].kind.clone();
+                let origin = self.origin(id);
+                return Ok(self.push(kind, want.clone(), origin));
+            }
+            // Anything else erased, arriving where something concrete is
+            // wanted, is refused rather than passed through. Passing it through
+            // is what put an `NtsValue` on a block edge declared as a pointer:
+            // the verifier caught it, and nothing before the verifier did.
+            if have == HirType::Erased {
+                return Err(self.unsupported(
+                    id,
+                    "an erased value where a concrete representation is wanted",
+                ));
+            }
             return Ok(value);
         }
         if !matches!(
@@ -10045,6 +10076,29 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// The absent values a node's *type* admits, as tags.
+    ///
+    /// The representation has forgotten which: a `string | null` and a `string
+    /// | undefined` are both one pointer. The type has not, and it is what says
+    /// whether `v === undefined` can ever be true.
+    fn absences_of(&self, node: NodeId) -> Option<Vec<u32>> {
+        let ty = *self.snapshot.node_types.get(&node)?;
+        let record = self.snapshot.types.get(ty.0 as usize)?;
+        let members: Vec<TypeId> = match &record.kind {
+            TypeKind::Union(members) => members.clone(),
+            _ => vec![ty],
+        };
+        Some(
+            members
+                .iter()
+                .filter_map(|member| match absence_of_member(self.snapshot, *member)? {
+                    Absence::Null => Some(super::tags::NULL),
+                    Absence::Undefined => Some(super::tags::UNDEFINED),
+                })
+                .collect(),
+        )
+    }
+
     /// Whether a lowered value is `null` or `undefined`.
     ///
     /// `None` where the type has no room for either, which is not a refusal:
@@ -12679,6 +12733,30 @@ impl<'a> FuncBuilder<'a> {
             (None, None) => return None,
         };
         if self.type_of(value) != Some(HirType::Erased) {
+            // A *pointer* carries one absence, and comparing it against the
+            // other absent literal is a question its representation cannot be
+            // asked -- the null pointer would answer yes to both.
+            //
+            //     const v: string | null = ...;
+            //     v === null        the pointer test
+            //     v === undefined   false, whatever the pointer holds
+            //
+            // Strictly, because `v == undefined` is the loose question and is
+            // true for a null. Answered from the *type*, which still knows
+            // which absence it has even though the representation does not.
+            if strict_operator(operator)
+                && let Some(carried) = self.absences_of(value)
+                && !carried.is_empty()
+                && !carried.contains(&written)
+            {
+                let origin = self.origin(id);
+                let answer = operator == syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN;
+                return Some(Ok(self.push(
+                    OpKind::ConstBool(answer),
+                    HirType::Bool,
+                    origin,
+                )));
+            }
             return None;
         }
         Some((|| {
@@ -12750,6 +12828,14 @@ impl<'a> FuncBuilder<'a> {
             ))
         })())
     }
+}
+
+/// Whether a comparison token is the strict one.
+const fn strict_operator(token: u16) -> bool {
+    matches!(
+        token,
+        syntax::EQUALS_EQUALS_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
+    )
 }
 
 /// The bitwise operator a token spells, if it spells one.

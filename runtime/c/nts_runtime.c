@@ -1622,6 +1622,8 @@ NtsString *nts_tag_name(uint32_t tag) {
     return nts_string_from_utf8("number", 6);
   case NTS_TAG_STRING:
     return nts_string_from_utf8("string", 6);
+  case NTS_TAG_FUNCTION:
+    return nts_string_from_utf8("function", 8);
   case NTS_TAG_OBJECT:
   /* `typeof null` is `"object"`. A famous wart, and the specification's, so
    * the two tags answer with one spelling. */

@@ -16,14 +16,18 @@ pub const UNDEFINED: u32 = 0;
 pub const BOOLEAN: u32 = 1;
 pub const NUMBER: u32 = 2;
 pub const STRING: u32 = 3;
-pub const OBJECT: u32 = 4;
+/// A closure. `typeof` answers `"function"` for one, so it has a tag of its
+/// own — and it sits *below* [`OBJECT`] because "object" is the range test
+/// `tag >= OBJECT` and a function must fall outside it.
+pub const FUNCTION: u32 = 4;
+pub const OBJECT: u32 = 5;
 /// `null`, which is a different *value* from `undefined` and needs a tag to say
 /// so — `null === undefined` is false.
 ///
 /// Last, and adjacent to [`OBJECT`], on purpose: `typeof null` is `"object"`,
 /// so the two tags share a spelling and `typeof x === "object"` stays the one
 /// comparison `tag >= OBJECT` instead of becoming a pair.
-pub const NULL: u32 = 5;
+pub const NULL: u32 = 6;
 
 /// The tag a reference of this type carries.
 ///
@@ -35,6 +39,7 @@ pub const NULL: u32 = 5;
 pub const fn of_reference(managed: &ManagedType) -> u32 {
     match managed {
         ManagedType::String => STRING,
+        ManagedType::Object(ty) if super::is_closure_type(*ty) => FUNCTION,
         _ => OBJECT,
     }
 }
@@ -45,11 +50,10 @@ pub const fn of_reference(managed: &ManagedType) -> u32 {
 /// emission for the reason the rest of this module exists: one table.
 #[must_use]
 pub fn of_representation(ty: &super::HirType) -> u32 {
-    use super::{HirType, ManagedType};
+    use super::HirType;
     match ty {
         HirType::Bool => BOOLEAN,
-        HirType::Managed(ManagedType::String) => STRING,
-        HirType::Managed(_) => OBJECT,
+        HirType::Managed(managed) => of_reference(managed),
         HirType::Void => UNDEFINED,
         _ => NUMBER,
     }
@@ -57,10 +61,10 @@ pub fn of_representation(ty: &super::HirType) -> u32 {
 
 /// The tag a `typeof` comparison against this literal is asking about.
 ///
-/// `None` for a spelling no tag can produce — `"function"`, `"bigint"`,
-/// `"symbol"`. Those comparisons are *not* rewritten: left alone they compare
-/// a string the runtime never returns and are correctly false, where folding
-/// them to a tag this compiler does not have would be inventing one.
+/// `None` for a spelling no tag can produce — `"bigint"`, `"symbol"`. Those
+/// comparisons are *not* rewritten: left alone they compare a string the
+/// runtime never returns and are correctly false, where folding them to a tag
+/// this compiler does not have would be inventing one.
 #[must_use]
 pub fn of_spelling(text: &str) -> Option<TagTest> {
     match text {
@@ -71,6 +75,11 @@ pub fn of_spelling(text: &str) -> Option<TagTest> {
         // Two tags, because `typeof null` is `"object"` as well. They are
         // adjacent so that this stays one comparison.
         "object" => Some(TagTest::AtLeast(OBJECT)),
+        // A closure carries its own tag, so this is answerable now. It used to
+        // be left alone deliberately -- comparing against a spelling no tag
+        // could produce is correctly false -- and that stopped being true the
+        // moment a function became a value something could erase.
+        "function" => Some(TagTest::Is(FUNCTION)),
         _ => None,
     }
 }
