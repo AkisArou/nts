@@ -7666,12 +7666,12 @@ impl<'a> FuncBuilder<'a> {
 
         let entry = self.bindings.clone();
         self.switch_to(then_block);
-        let then_value = self.evaluate(then_branch)?;
+        let then_value = self.evaluate(id, then_branch)?;
         let then_tail = self.current;
         let then_bindings = std::mem::replace(&mut self.bindings, entry.clone());
 
         self.switch_to(else_block);
-        let else_value = self.evaluate(else_branch)?;
+        let else_value = self.evaluate(id, else_branch)?;
         let else_tail = self.current;
         let else_bindings = std::mem::replace(&mut self.bindings, entry.clone());
 
@@ -7736,10 +7736,15 @@ impl<'a> FuncBuilder<'a> {
 
     /// Produce a branch's value: either an expression to lower here, or one
     /// already computed before the branch.
-    fn evaluate(&mut self, branch: Branch) -> Result<ValueId, Diagnostic> {
+    fn evaluate(&mut self, id: NodeId, branch: Branch) -> Result<ValueId, Diagnostic> {
         match branch {
             Branch::Expression(node) => self.lower_expression(node),
             Branch::Value(value) => Ok(value),
+            // At the type the whole expression has, which is what `id` is.
+            // Without this, `const chosen: number = limit || 1` handed a
+            // `number` block parameter an erased value -- rejected by the
+            // verifier, and before that check existed, by clang.
+            Branch::Present(value) => self.narrowed(id, value),
         }
     }
 
@@ -7762,6 +7767,149 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// `x += e`, which is `x = x + e` with the target evaluated once.
+    ///
+    /// Spelled out rather than desugared, so that one place knows a bitwise
+    /// operator needs its coercions and `+=` on strings is concatenation. The
+    /// target goes through [`Self::place_of`], which is what makes
+    /// `xs[next()] += 1` call `next` once rather than twice.
+    fn lower_compound(
+        &mut self,
+        id: NodeId,
+        compound: Compound,
+        lhs_node: NodeId,
+        rhs_node: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let place = self.place_of(lhs_node)?;
+        let current = self.read_place(lhs_node, &place)?;
+        let addend = self.lower_expression(rhs_node)?;
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unsupported(id, "a compound assignment of unrepresentable type"))?;
+        let updated = match compound {
+            Compound::Exponentiate => self.exponentiate(id, ty, current, addend),
+            Compound::Op(op) => {
+                // `s += t` on strings is concatenation, not addition, and the
+                // two lower to nothing alike -- `Add` on two `NtsString *`
+                // reaches the backend as pointer arithmetic. `lower_binary`
+                // resolves `+` against the result type for exactly this reason;
+                // the compound form has to ask the same question rather than
+                // assume the answer.
+                let (op, current, addend) = if matches!(op, BinOp::Add) && ty.is_managed() {
+                    (
+                        BinOp::Concat,
+                        self.as_string(id, current)?,
+                        self.as_string(id, addend)?,
+                    )
+                } else {
+                    (op, current, addend)
+                };
+                let origin = self.origin(id);
+                if bitwise_operator_of(op) {
+                    self.push_bitwise(op, current, addend, ty, &origin)
+                } else {
+                    self.push(
+                        OpKind::Binary {
+                            op,
+                            lhs: current,
+                            rhs: addend,
+                        },
+                        ty,
+                        origin,
+                    )
+                }
+            }
+        };
+        self.write_place(id, &place, updated);
+        Ok(updated)
+    }
+
+    /// `a ?? b` -- `a` unless `a` is absent.
+    ///
+    /// The same shape as [`Self::lower_logical`] and deliberately not the same
+    /// test. `||` asks whether the left operand is *truthy*, so `0 || 1` is
+    /// `1`; `??` asks whether it is `null` or `undefined`, so `0 ?? 1` is `0`.
+    /// Telling those apart is the whole reason the operator exists, which is
+    /// why this is its own lowering rather than a desugaring to `||`.
+    ///
+    /// The left operand is lowered once, before the branch, so it is evaluated
+    /// once however the test goes.
+    fn lower_nullish(
+        &mut self,
+        id: NodeId,
+        left: NodeId,
+        right: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let first = self.lower_expression(left)?;
+        let Some(absent) = self.absence_of(left, first) else {
+            // Nothing to test. A value with no room for an absence is never
+            // absent, so the result is the left operand and the right one is
+            // never evaluated -- which is what the specification says happens,
+            // rather than an optimization of it. TypeScript permits the shape
+            // and reports it as unnecessary.
+            return self.narrowed(id, first);
+        };
+        self.lower_branching_value(
+            id,
+            absent,
+            Branch::Expression(right),
+            Branch::Present(first),
+        )
+    }
+
+    /// Whether a lowered value is `null` or `undefined`.
+    ///
+    /// `None` where the type has no room for either, which is not a refusal:
+    /// a `double` is never absent and there is nothing to compare it against.
+    ///
+    /// `null` and `undefined` are one value in a compiled program -- see
+    /// [`Self::lower_absent`] -- so one test answers for both.
+    fn absence_of(&mut self, at: NodeId, value: ValueId) -> Option<ValueId> {
+        let ty = self.values[value.0 as usize].ty.clone();
+        let origin = self.origin(at);
+        match ty {
+            // The tag is the answer, and it is already there.
+            HirType::Erased => {
+                let unsigned = HirType::Int {
+                    bits: 32,
+                    signed: false,
+                };
+                let tag = self.push(OpKind::TagOf { value }, unsigned.clone(), origin.clone());
+                let undefined = self.push(
+                    OpKind::ConstInt(i64::from(super::tags::UNDEFINED)),
+                    unsigned,
+                    origin.clone(),
+                );
+                Some(self.push(
+                    OpKind::Binary {
+                        op: BinOp::Eq,
+                        lhs: tag,
+                        rhs: undefined,
+                    },
+                    HirType::Bool,
+                    origin,
+                ))
+            }
+            // A reference has one absent value and it is the null pointer. The
+            // emitter compares addresses for this rather than reading through
+            // them, which for a string is the difference between an answer and
+            // a fault.
+            HirType::Managed(_) => {
+                let null = self.push(OpKind::ConstNull, ty, origin.clone());
+                Some(self.push(
+                    OpKind::Binary {
+                        op: BinOp::Eq,
+                        lhs: value,
+                        rhs: null,
+                    },
+                    HirType::Bool,
+                    origin,
+                ))
+            }
+            _ => None,
+        }
+    }
+
     /// `a && b` and `a || b`, which do not evaluate `b` unless they have to.
     fn lower_logical(
         &mut self,
@@ -7774,10 +7922,12 @@ impl<'a> FuncBuilder<'a> {
         let condition = self.truthy(id, first);
         // `a && b` is `b` when `a` is truthy and `a` otherwise; `a || b` is the
         // other way round. Neither yields a bool in general — `0 || 5` is `5`.
+        // `&&` keeps its first operand where it is *falsy*, and `undefined` is
+        // falsy -- so that arm is `Value` and not `Present`.
         let (then_branch, else_branch) = if and {
             (Branch::Expression(right), Branch::Value(first))
         } else {
-            (Branch::Value(first), Branch::Expression(right))
+            (Branch::Present(first), Branch::Expression(right))
         };
         self.lower_branching_value(id, condition, then_branch, else_branch)
     }
@@ -9876,52 +10026,17 @@ impl<'a> FuncBuilder<'a> {
             );
         }
 
+        // `??` short-circuits for the same reason and on a different question.
+        if token == syntax::QUESTION_QUESTION_TOKEN {
+            return self.lower_nullish(id, *lhs_node, *rhs_node);
+        }
+
         // `x += e` is `x = x + e`: the operator applies, and the name rebinds.
         // Spelling it out here rather than in a desugaring keeps one place that
         // knows a bitwise operator needs its coercions.
-        if let Some(compound) = compound_operator(self.kind_of(*operator).unwrap_or(0)) {
-            let place = self.place_of(*lhs_node)?;
-            let current = self.read_place(*lhs_node, &place)?;
-            let addend = self.lower_expression(*rhs_node)?;
-            let ty = self.type_of(id).ok_or_else(|| {
-                self.unsupported(id, "a compound assignment of unrepresentable type")
-            })?;
-            let updated = match compound {
-                Compound::Exponentiate => self.exponentiate(id, ty, current, addend),
-                Compound::Op(op) => {
-                    // `s += t` on strings is concatenation, not addition, and
-                    // the two lower to nothing alike -- `Add` on two
-                    // `NtsString *` reaches the backend as pointer arithmetic.
-                    // `lower_binary` resolves `+` against the result type for
-                    // exactly this reason; the compound form has to ask the
-                    // same question rather than assume the answer.
-                    let (op, current, addend) = if matches!(op, BinOp::Add) && ty.is_managed() {
-                        (
-                            BinOp::Concat,
-                            self.as_string(id, current)?,
-                            self.as_string(id, addend)?,
-                        )
-                    } else {
-                        (op, current, addend)
-                    };
-                    let origin = self.origin(id);
-                    if bitwise_operator_of(op) {
-                        self.push_bitwise(op, current, addend, ty, &origin)
-                    } else {
-                        self.push(
-                            OpKind::Binary {
-                                op,
-                                lhs: current,
-                                rhs: addend,
-                            },
-                            ty,
-                            origin,
-                        )
-                    }
-                }
-            };
-            self.write_place(id, &place, updated);
-            return Ok(updated);
+        // `x += e` is `x = x + e`: the operator applies, and the name rebinds.
+        if let Some(compound) = compound_operator(token) {
+            return self.lower_compound(id, compound, *lhs_node, *rhs_node);
         }
 
         let lhs = self.lower_expression(*lhs_node)?;
@@ -10311,6 +10426,7 @@ fn math_constant(name: &str) -> Option<f64> {
 /// Two variants rather than one, because `**=` is the only compound assignment
 /// whose operator is not an operator: exponentiation is a runtime call, so it
 /// cannot be spelled as a [`BinOp`].
+#[derive(Clone, Copy)]
 enum Compound {
     Op(BinOp),
     Exponentiate,
@@ -10418,6 +10534,15 @@ enum Place {
 enum Branch {
     Expression(NodeId),
     Value(ValueId),
+    /// A value the branch has established is neither `null` nor `undefined`.
+    ///
+    /// Distinct from [`Self::Value`] because the distinction is a soundness
+    /// one. `a || b` takes its first arm when `a` is *truthy*, and truthy
+    /// excludes both absences -- so an erased `a` may be read back at the type
+    /// the whole expression has. `a && b` takes its second arm when `a` is
+    /// *falsy*, and `undefined` is falsy, so the same read there would be a
+    /// payload that is not present.
+    Present(ValueId),
 }
 
 #[cfg(test)]
