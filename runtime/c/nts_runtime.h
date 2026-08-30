@@ -386,6 +386,10 @@ __int128 nts_bigint_as_uintn(double bits, __int128 value);
  * a count past 128 saturates -- both undefined behaviour for C's operators,
  * which is why these are calls. `>>>` is a TypeError on a bigint and so has no
  * counterpart here. */
+/* Ends the program: a name read through a closure before its declaration ran,
+ * which is a `ReferenceError` in JavaScript and has nothing to throw here. */
+void nts_cell_unready(const char *name);
+
 __int128 nts_bigint_shl(__int128 value, __int128 count);
 __int128 nts_bigint_shr(__int128 value, __int128 count);
 

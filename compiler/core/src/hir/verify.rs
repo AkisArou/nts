@@ -659,6 +659,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
             vec![*value]
         }
         OpKind::Await { promise } => vec![*promise],
+        OpKind::CellReady { cell, .. } => vec![*cell],
         OpKind::Suspend { promise, frame, .. } => vec![*promise, *frame],
         OpKind::Param(_)
         | OpKind::BlockParam(_)

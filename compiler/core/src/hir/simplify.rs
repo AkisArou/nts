@@ -124,6 +124,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
             *value = of(*value);
         }
         OpKind::Await { promise } => *promise = of(*promise),
+        OpKind::CellReady { cell, .. } => *cell = of(*cell),
         OpKind::Suspend { promise, frame, .. } => {
             *promise = of(*promise);
             *frame = of(*frame);

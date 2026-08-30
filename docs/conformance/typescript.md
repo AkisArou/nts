@@ -165,11 +165,20 @@ and the cell is opened in the function's **entry block** — it has to dominate
 both the closure that reads it and the declaration that fills it, and those can
 be in different branches, so that is the one placement that always holds.
 
-One divergence, stated rather than hidden: the cell is zeroed until the
-declaration runs, and a read in that window answers with the zero where
-JavaScript throws a `ReferenceError`. The two differ only for a program that
-would throw, which is the same bargain the rest of this compiler makes with
-exceptions.
+The cell is empty until the declaration runs, and a body that runs in that
+window would read a zero where JavaScript throws a `ReferenceError`. Nothing
+here throws — `nts_thrown` prints and aborts — so such a cell carries a `ready`
+flag and stops the program instead:
+
+```
+nts: `later` was read before its declaration ran
+```
+
+Only a *closure* can reach that window: TypeScript rejects a direct use before
+declaration in the same scope. So the flag exists only on cells that are read
+from above their declaration, the check appears only inside closure bodies, and
+an ordinary captured-and-written variable carries neither — its struct is the
+header and the value, as before.
 
 ### A function as a value costs one static object, and nothing where it is not used
 

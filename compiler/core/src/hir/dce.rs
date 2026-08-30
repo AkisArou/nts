@@ -117,7 +117,10 @@ fn has_effects(kind: &OpKind) -> bool {
         } if PURE_RUNTIME_CALLS.contains(&name.as_str()) => false,
         // A call may do anything. A store certainly does. A suspension hands
         // the frame to the runtime, which is both.
-        OpKind::Call { .. }
+        // The guard's whole purpose is to end the program, which is the
+        // strongest effect there is.
+        OpKind::CellReady { .. }
+        | OpKind::Call { .. }
         | OpKind::ArraySet { .. }
         | OpKind::FieldSet { .. }
         | OpKind::GlobalSet { .. }

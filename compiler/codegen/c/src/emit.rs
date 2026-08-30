@@ -2343,6 +2343,13 @@ fn managed_op(
     let op = func.value(value);
     let name = value_name(value);
     let text = match &op.kind {
+        // One predictable branch. The string is compile-time text and is only
+        // touched on the path that ends the program.
+        OpKind::CellReady { cell, name } => format!(
+            "if (!{}->ready) nts_cell_unready(\"{}\");",
+            value_name(*cell),
+            name.escape_default()
+        ),
         // One instance, emitted once beside its descriptor. No allocation and
         // no reference counting: it is immortal, and there is nothing in it.
         OpKind::ClosureStatic => {
@@ -2533,6 +2540,7 @@ fn emit_op(
         }
         OpKind::ObjectNew { .. }
         | OpKind::ClosureStatic
+        | OpKind::CellReady { .. }
         | OpKind::FieldGet { .. }
         | OpKind::FieldSet { .. }
         | OpKind::ArrayNew { .. }

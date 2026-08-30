@@ -417,6 +417,16 @@ struct Capture {
     name: String,
     /// A node that reads it, for the type and for a diagnostic's location.
     at: NodeId,
+    /// Whether the name is declared *below* the closure that reads it.
+    ///
+    /// The cell then exists before it holds anything, and a body that runs in
+    /// that window would read a zero where JavaScript throws a
+    /// `ReferenceError`. Such a cell carries a `ready` flag and its reads are
+    /// guarded, so the program stops instead of answering.
+    ///
+    /// Only a *closure* can reach that window: TypeScript rejects a direct use
+    /// before declaration in the same scope, so there is no other way in.
+    forward: bool,
     /// Whether the closure captures the *binding* rather than its value.
     ///
     /// JavaScript closures always capture the binding. For a name nothing
@@ -523,6 +533,26 @@ fn reached_by_name(
 /// Each one becomes a cell, and its position here is the cell's identity. A
 /// sorted list rather than a set because that position is baked into a type id
 /// and a struct name, and two runs of one compiler have to agree.
+fn guarded_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
+    let mut found: Vec<u32> = closures
+        .iter()
+        .filter(|closure| closure.refusal.is_none())
+        .flat_map(|closure| &closure.captures)
+        .filter(|capture| capture.forward)
+        .map(|capture| capture.symbol)
+        .collect();
+    found.sort_unstable();
+    found.dedup();
+    found
+}
+
+/// The symbols whose cell has to say whether it has been filled in yet.
+///
+/// A cell for a name declared *below* the closure that reads it exists before
+/// the declaration runs. Reading it then is a `ReferenceError` in JavaScript
+/// and would be a zero here, so those cells carry a flag and their reads inside
+/// a closure are guarded. Every other cell has no such window and carries
+/// nothing.
 fn boxed_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
     let mut found: Vec<u32> = closures
         .iter()
@@ -775,6 +805,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
                 name: record.name.clone(),
                 at: *read,
                 by_reference,
+                forward: below,
             });
         }
         closures.push(info);
@@ -2938,6 +2969,17 @@ struct FuncBuilder<'a> {
     /// Every arrow function in the program, so that one written here can be
     /// matched to the class that was collected for it.
     closures: Vec<ClosureInfo>,
+    /// The symbols whose cell needs a `ready` flag, sorted.
+    ///
+    /// A subset of `boxed`: only a name declared below the closure that reads
+    /// it has a window in which the cell exists and holds nothing.
+    guarded: Vec<u32>,
+    /// Whether the body being lowered is a closure's.
+    ///
+    /// The guard above is needed there and nowhere else: a direct read before a
+    /// declaration in the same scope is rejected by the typechecker, so a
+    /// closure body is the only way into that window.
+    in_closure: bool,
     /// Every symbol some closure captures by reference, sorted.
     ///
     /// Derived from `closures` rather than passed alongside it, so the two
@@ -2999,6 +3041,8 @@ impl<'a> FuncBuilder<'a> {
         Self {
             snapshot,
             boxed: Vec::new(),
+            guarded: Vec::new(),
+            in_closure: false,
             values: Vec::new(),
             blocks: vec![PartialBlock {
                 params: Vec::new(),
@@ -3039,6 +3083,7 @@ impl<'a> FuncBuilder<'a> {
             module,
             hierarchy,
             boxed: boxed_symbols(&closures),
+            guarded: guarded_symbols(&closures),
             closures,
             ..Self::new(snapshot)
         }
@@ -4572,6 +4617,7 @@ impl<'a> FuncBuilder<'a> {
 
         let receiver = self.push(OpKind::Param(0), receiver_ty.clone(), origin.clone());
         self.this = Some(receiver);
+        self.in_closure = true;
         let mut params = vec![Param {
             name: "this".to_owned(),
             ty: receiver_ty,
@@ -4750,17 +4796,34 @@ impl<'a> FuncBuilder<'a> {
 
     /// The one-field object a captured-and-written variable lives in.
     fn cell_layout(&self, index: usize, ty: HirType) -> Layout {
+        let mut fields = vec![Field {
+            name: "value".to_owned(),
+            ty,
+            // Written by definition -- being written is why it exists.
+            readonly: false,
+        }];
+        // Zero until the declaration runs, which is what the guard reads. Only
+        // on a cell that has the window; every other one carries nothing.
+        if self.is_guarded(index) {
+            fields.push(Field {
+                name: "ready".to_owned(),
+                ty: HirType::Bool,
+                readonly: false,
+            });
+        }
         Layout {
             types: vec![cell_type(index)],
             name: cell_name(index),
-            fields: vec![Field {
-                name: "value".to_owned(),
-                ty,
-                // Written by definition -- being written is why it exists.
-                readonly: false,
-            }],
+            fields,
             methods: vec![None; self.hierarchy.table_size()],
         }
+    }
+
+    /// Whether the cell at `index` carries a `ready` flag.
+    fn is_guarded(&self, index: usize) -> bool {
+        self.boxed
+            .get(index)
+            .is_some_and(|symbol| self.guarded.contains(symbol))
     }
 
     /// Move a name into its cell, and bind the name to the cell.
@@ -4783,8 +4846,22 @@ impl<'a> FuncBuilder<'a> {
                     value,
                 },
                 HirType::Void,
-                origin,
+                origin.clone(),
             );
+            // The cell was opened empty, above. This is the moment it stops
+            // being, and the flag is what a closure's read consults.
+            if self.is_guarded(index) {
+                let ready = self.push(OpKind::ConstBool(true), HirType::Bool, origin.clone());
+                self.push(
+                    OpKind::FieldSet {
+                        object: cell,
+                        field: 1,
+                        value: ready,
+                    },
+                    HirType::Void,
+                    origin,
+                );
+            }
             return cell;
         }
         let ty = self.values[value.0 as usize].ty.clone();
@@ -4853,6 +4930,21 @@ impl<'a> FuncBuilder<'a> {
             .program_layout_field(index)
             .or_else(|| self.type_of(at))?;
         let origin = self.origin(at);
+        // Inside a closure only. A read before the declaration is the one thing
+        // the typechecker cannot catch here, because the body runs later; a
+        // direct one in the same scope it rejects itself.
+        if self.in_closure && self.is_guarded(index) {
+            let name = self
+                .node(at)
+                .text
+                .clone()
+                .unwrap_or_else(|| "a name".to_owned());
+            self.push(
+                OpKind::CellReady { cell, name },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
         Some(self.push(
             OpKind::FieldGet {
                 object: cell,

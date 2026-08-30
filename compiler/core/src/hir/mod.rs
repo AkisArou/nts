@@ -610,6 +610,24 @@ pub enum OpKind {
     ObjectNew {
         frame: bool,
     },
+    /// Stop if a cell is read before its declaration filled it.
+    ///
+    /// Only on a cell for a name declared *below* the closure that reads it,
+    /// and only on reads inside a closure body -- TypeScript rejects a direct
+    /// use before declaration in the same scope, so a closure is the only way
+    /// into that window.
+    ///
+    /// JavaScript throws a `ReferenceError` there. Nothing in this compiler
+    /// throws -- `nts_thrown` prints and aborts -- so this stops the program
+    /// with the name rather than answering with the zero the cell still holds.
+    /// One predictable branch, on the cells that have the window and no others.
+    CellReady {
+        cell: ValueId,
+        /// The variable's name, for the message. Compile-time text: the check
+        /// costs a load and a branch, and the string is only touched on the
+        /// path that ends the program.
+        name: String,
+    },
     /// The one instance of a closure that stands for a named function.
     ///
     /// `nextTick(finish, stream)` needs `finish` as a value, and JavaScript's

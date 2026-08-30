@@ -798,6 +798,20 @@ void nts_thrown(const NtsString *message) {
   abort();
 }
 
+/* A `const` read through a closure before its declaration ran.
+ *
+ *     const read = () => later;   // the cell exists, holding nothing
+ *     run(read);                  // <- here
+ *     const later = 1;
+ *
+ * JavaScript throws a `ReferenceError`. Nothing here throws, so this stops the
+ * program and names the variable rather than letting the read answer with the
+ * zero the cell still holds. */
+void nts_cell_unready(const char *name) {
+  fprintf(stderr, "nts: `%s` was read before its declaration ran\n", name);
+  abort();
+}
+
 void nts_bounds(double index, uint32_t length) {
   fprintf(stderr, NTS_REFUSED "index %g is outside [0, %u)\n", index, length);
   abort();
