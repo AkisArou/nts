@@ -1634,6 +1634,12 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         // `nts_promise_fulfill_*` to emit -- and the C sees a tagged union, so
         // there is nothing per payload to name here.
         HirType::Managed(ManagedType::Promise(_)) => "NtsPromise *",
+        // Likewise one runtime type for both, and for both type arguments. The
+        // table stores `NtsValue`s whatever the key and value represent as, so
+        // a `Map<string, number>` and a `Map<Socket, Buffer>` are the same C
+        // type -- what differs is the hash it was built with, which is an
+        // argument to the constructor rather than part of the type.
+        HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_)) => "NtsMap *",
         // An object type is named per program, so it has no `&'static str`
         // spelling. `c_type_of` answers for those; reaching here means a caller
         // asked the question that cannot be answered without the program.
@@ -2262,12 +2268,15 @@ fn managed_op(
         }
         OpKind::Length(array) => {
             let target = c_type(&op.ty, &op.origin)?;
-            // A string keeps its length in the header; an array has a header of
-            // its own inside a larger struct, because it can grow and a string
-            // cannot.
+            // A string *is* a header, so its length is a direct member.
+            // Everything else here has one as its first field and reaches
+            // through it -- an array because it can grow and a string cannot, a
+            // table because it owns three arrays besides.
             let of = if matches!(
                 func.values[array.0 as usize].ty,
-                HirType::Managed(ManagedType::Array(_))
+                HirType::Managed(
+                    ManagedType::Array(_) | ManagedType::Map(_, _) | ManagedType::Set(_)
+                )
             ) {
                 format!("{}->header.length", value_name(*array))
             } else {

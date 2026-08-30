@@ -756,6 +756,12 @@ fn render(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Promise(payload)) => {
             format!("managed<promise<{}>>", render(payload))
         }
+        HirType::Managed(ManagedType::Map(key, value)) => {
+            format!("managed<map<{}, {}>>", render(key), render(value))
+        }
+        HirType::Managed(ManagedType::Set(element)) => {
+            format!("managed<set<{}>>", render(element))
+        }
     }
 }
 

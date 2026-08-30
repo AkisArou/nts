@@ -247,13 +247,13 @@ impl<'a> Decomposer<'a> {
             // this, every `Promise<T>` reached the lowering with no arguments
             // at all and became `Promise<void>` -- silently, and for every
             // payload alike.
-            if Self::is_promise(snapshot, slot) {
+            if Self::is_natively_represented(snapshot, slot) {
                 let mut walk = Walk {
                     worklist: &mut worklist,
                     stats: &mut stats,
                     seeded: &seeded,
                 };
-                self.record_promise_arguments(snapshot, ty, slot, &mut walk)?;
+                self.record_type_arguments(snapshot, ty, slot, &mut walk)?;
                 continue;
             }
 
@@ -782,7 +782,7 @@ impl<'a> Decomposer<'a> {
     /// The same guard `resolve_members` uses: `getTypeArguments` dereferences a
     /// nil when the type is not a reference, and a type that is not a reference
     /// has no arguments to lose.
-    fn record_promise_arguments(
+    fn record_type_arguments(
         &mut self,
         snapshot: &mut SemanticSnapshot,
         ty: u32,
@@ -808,13 +808,25 @@ impl<'a> Decomposer<'a> {
         Ok(())
     }
 
-    /// Whether this is the standard library's `Promise`.
+    /// The library types this compiler represents natively.
+    ///
+    /// Each is across the library boundary and each would pull the standard
+    /// library's whole type graph in if decomposed -- and none of them needs
+    /// decomposing, because the representation is the compiler's own. What is
+    /// wanted from the checker is only the *arguments*: the payload that says
+    /// which `nts_promise_fulfill_*` to emit, the key type that picks a hash,
+    /// the value type a `get` unerases to.
+    ///
+    /// `WeakMap` and `WeakSet` are deliberately not here. A `WeakMap` is not a
+    /// `Map` with another name -- it is one whose keys do not keep their values
+    /// alive -- and representing it as this table would turn a documented
+    /// weakness into a silent leak. They stay refused, which is honest.
     ///
     /// By name, which is the same approximation the lowering makes for `Math`
     /// and for the same reason: a program declaring its own `Promise` would be
     /// mis-read, and the principled version is a profile tying a trusted
     /// declaration identity to compiler-owned semantics.
-    fn is_promise(snapshot: &SemanticSnapshot, slot: TypeId) -> bool {
+    fn is_natively_represented(snapshot: &SemanticSnapshot, slot: TypeId) -> bool {
         let Some(record) = snapshot.types.get(slot.0 as usize) else {
             return false;
         };
@@ -824,7 +836,9 @@ impl<'a> Decomposer<'a> {
         snapshot
             .symbols
             .get(symbol.0 as usize)
-            .is_some_and(|declared| declared.name == "Promise")
+            .is_some_and(|declared| {
+                matches!(declared.name.as_str(), "Promise" | "Map" | "Set")
+            })
     }
 
     fn is_ours(snapshot: &SemanticSnapshot, slot: TypeId) -> bool {

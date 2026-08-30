@@ -194,6 +194,12 @@ fn inputs(ty: &HirType, known: Facts) -> Vec<f64> {
 fn c_type(ty: &HirType) -> &'static str {
     match ty {
         HirType::Managed(nts_core::hir::ManagedType::String) => "NtsString *",
+        // As with the promise below: the harness never drives one, because it
+        // generates calls from scalar signatures, so this is here to be right
+        // rather than to be reached.
+        HirType::Managed(
+            nts_core::hir::ManagedType::Map(_, _) | nts_core::hir::ManagedType::Set(_),
+        ) => "NtsMap *",
         HirType::Bool => "bool",
         // The runtime's struct. The differential never drives one directly --
         // it generates calls from scalar signatures -- so this appears only

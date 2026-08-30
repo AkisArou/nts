@@ -315,6 +315,10 @@ fn spell(ty: &super::HirType) -> String {
         HirType::Managed(ManagedType::Promise(payload)) => {
             format!("promise{}", spell(payload))
         }
+        HirType::Managed(ManagedType::Map(key, value)) => {
+            format!("map{}_{}", spell(key), spell(value))
+        }
+        HirType::Managed(ManagedType::Set(element)) => format!("set{}", spell(element)),
     }
 }
 

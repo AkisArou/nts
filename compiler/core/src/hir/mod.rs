@@ -136,6 +136,22 @@ pub enum ManagedType {
     /// generated one, and it would have had a "layout" with no field anyone may
     /// read.
     Promise(Box<HirType>),
+    /// A `Map`, carrying what its keys and values represent as.
+    ///
+    /// Here for the compiler, not for the runtime, in the same way
+    /// [`ManagedType::Promise`]'s payload is: there is one `NtsMap` and it
+    /// stores `NtsValue`s, so the layout does not vary with either. What they
+    /// decide is which hash and comparison the table is built with -- a
+    /// `Map<string, V>` compares strings and never reads a tag -- and what a
+    /// `get` hands back. So this is not a monomorphization.
+    ///
+    /// A distinct managed type rather than an object with a provided layout,
+    /// for the reason written above `Promise`: its C type is a fixed runtime
+    /// struct rather than a generated one, and giving it a layout would mean a
+    /// shape with fields that nothing may read.
+    Map(Box<HirType>, Box<HirType>),
+    /// A `Set`: the same table, with no values stored at all.
+    Set(Box<HirType>),
 }
 
 impl HirType {

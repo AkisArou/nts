@@ -79,6 +79,15 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // it when the promise settles, which is a threadsafe-function design
         // rather than a marshalling rule.
         HirType::Managed(ManagedType::Promise(_)) => None,
+        // A `Map` or a `Set` crossing is a copy, not a handle: JavaScript's are
+        // engine objects with their own storage, so there is no wrapping a
+        // runtime table in one. Every entry would have to be built on the other
+        // side -- and each key and value is an `NtsValue`, so it is the erased
+        // case below repeated per entry.
+        //
+        // Answering `None` leaves that decision where the erased one is, rather
+        // than half-making it here.
+        HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_)) => None,
         HirType::Managed(ManagedType::Object(id)) => {
             let at = layouts.iter().position(|l| l.types.contains(id))?;
             // A class instance is more than its fields: its methods are how it
@@ -132,6 +141,10 @@ fn spell(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Promise(payload)) => {
             format!("Promise<{}>", spell(payload))
         }
+        HirType::Managed(ManagedType::Map(key, value)) => {
+            format!("Map<{}, {}>", spell(key), spell(value))
+        }
+        HirType::Managed(ManagedType::Set(element)) => format!("Set<{}>", spell(element)),
         HirType::Never => "never".to_owned(),
     }
 }
@@ -165,6 +178,12 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         // representation is in the type for the compiler's benefit, and the C
         // sees one tagged union whatever it carries.
         HirType::Managed(ManagedType::Promise(_)) => "NtsPromise *".to_owned(),
+        // One runtime struct for both, and whatever the key and value
+        // represent as: the table stores `NtsValue`s, so nothing about the type
+        // arguments reaches the C spelling.
+        HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_)) => {
+            "NtsMap *".to_owned()
+        }
         HirType::Managed(ManagedType::Object(id)) => {
             layouts.iter().find(|l| l.types.contains(id)).map_or_else(
                 || "void *".to_owned(),

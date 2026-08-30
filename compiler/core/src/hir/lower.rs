@@ -1890,6 +1890,28 @@ fn named_or(snapshot: &SemanticSnapshot, record: &TypeRecord, fallback: &str) ->
         .map_or_else(|| fallback.to_owned(), |declared| format!("`{}`", declared.name))
 }
 
+/// Which hash and comparison a table of these keys is built with.
+///
+/// The whole of what a `Map`'s key type costs at run time: a `Map<string, V>`
+/// gets the string hash and compares with `nts_string_eq`, and its probe loop
+/// never reads a tag. Only a key type that is genuinely several things gets
+/// `ERASED`, which is the one that dispatches.
+///
+/// These are `NTS_KEY_*` in the runtime header; the two are a pair and neither
+/// is meaningful alone.
+fn key_kind_of(key: &HirType) -> u32 {
+    match key {
+        HirType::Managed(ManagedType::String) => 1,
+        HirType::Float { .. } | HirType::Int { .. } => 2,
+        // Every other managed value is a pointer, and identity is what
+        // JavaScript compares objects by, so one entry serves them all.
+        HirType::Managed(_) => 3,
+        // A boolean key is rare enough not to be worth a hash of its own, and
+        // an erased one has to read its tag by definition.
+        _ => 0,
+    }
+}
+
 #[must_use]
 pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
     let Some(record) = snapshot.types.get(ty.0 as usize) else {
@@ -2175,6 +2197,31 @@ fn representation_of(
                 .and_then(|arguments| arguments.first())?;
             let payload = representation_within(snapshot, argument, path, subst)?;
             HirType::Managed(ManagedType::Promise(Box::new(payload)))
+        }
+        // `Map<K, V>` and `Set<T>`, recognized the same way and stopping at the
+        // library boundary for the same reason -- decomposing one would pull in
+        // `forEach`, `entries` and the rest of a type this compiler represents
+        // itself.
+        //
+        // Both arguments are required, and a missing one refuses rather than
+        // defaulting, exactly as the promise above does. A `Map` whose key
+        // representation was guessed would hash with the wrong function and
+        // find nothing, which is the kind of wrong that looks like an empty
+        // table rather than like a bug.
+        TypeKind::Object { .. } | TypeKind::Structured { .. }
+            if named(snapshot, ty) == Some("Map") =>
+        {
+            let arguments = snapshot.type_arguments.get(&ty)?;
+            let key = representation_within(snapshot, *arguments.first()?, path, subst)?;
+            let value = representation_within(snapshot, *arguments.get(1)?, path, subst)?;
+            HirType::Managed(ManagedType::Map(Box::new(key), Box::new(value)))
+        }
+        TypeKind::Object { .. } | TypeKind::Structured { .. }
+            if named(snapshot, ty) == Some("Set") =>
+        {
+            let arguments = snapshot.type_arguments.get(&ty)?;
+            let element = representation_within(snapshot, *arguments.first()?, path, subst)?;
+            HirType::Managed(ManagedType::Set(Box::new(element)))
         }
         // A class that extends a typed array and adds no storage of its own
         // *is* that typed array. `Buffer extends Uint8Array` is the whole of
@@ -7659,6 +7706,12 @@ impl<'a> FuncBuilder<'a> {
         let ty = self
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "a `new`"))?;
+
+        if let HirType::Managed(ManagedType::Map(key, _) | ManagedType::Set(key)) = &ty {
+            let key = key.clone();
+            return self.lower_new_table(id, &ty, &key);
+        }
+
         let HirType::Managed(ManagedType::Object(type_id)) = ty else {
             return Err(self.unsupported(id, "a `new` that does not produce an object"));
         };
@@ -7940,6 +7993,23 @@ impl<'a> FuncBuilder<'a> {
                 origin,
             );
             return self.narrowed(id, read);
+        }
+
+        // A table's `size` is its live entry count, which the header already
+        // holds in the field an array's `length` uses -- so it is the same
+        // operation, not a call.
+        if matches!(
+            self.values[value.0 as usize].ty,
+            HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_))
+        ) {
+            if member_name != "size" {
+                return Err(self.unsupported(
+                    id,
+                    &format!("`{member_name}`, where a `Map` or a `Set` has only `size`"),
+                ));
+            }
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::Length(value), HirType::NUMBER, origin));
         }
 
         let sequence = matches!(
@@ -8682,6 +8752,12 @@ impl<'a> FuncBuilder<'a> {
                 return self.lower_object_method(id, receiver, declared, *member, arguments);
             }
             return self.lower_array_method(id, receiver, &element, *member, arguments);
+        }
+
+        if let table @ HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_)) =
+            self.values[receiver.0 as usize].ty.clone()
+        {
+            return self.lower_table_method(id, receiver, &table, *member, arguments);
         }
 
         let HirType::Managed(ManagedType::Object(type_id)) =
@@ -9577,6 +9653,137 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         ))
+    }
+
+    /// `new Map()` and `new Set()`.
+    ///
+    /// The table is one runtime struct, so what the constructor carries is
+    /// which hash and comparison to build it with -- decided here, from the
+    /// static key type, and never asked again.
+    fn lower_new_table(
+        &mut self,
+        id: NodeId,
+        ty: &HirType,
+        key: &HirType,
+    ) -> Result<ValueId, Diagnostic> {
+        let is_a_map = matches!(ty, HirType::Managed(ManagedType::Map(_, _)));
+        let what = if is_a_map { "Map" } else { "Set" };
+        // An argument is an initializer -- `new Map([[k, v]])` or
+        // `new Set(xs)` -- which is iteration, and the protocol that would serve
+        // it does not exist. Refused rather than dropped: a `new Set(existing)`
+        // that silently produced an empty one is the kind of wrong that reads as
+        // a logic bug in the caller.
+        if let Some(argument) = self.arguments_of(id).first() {
+            return Err(self.unsupported(
+                *argument,
+                &format!("a `new {what}` with contents, which needs the iteration protocol"),
+            ));
+        }
+        let origin = self.origin(id);
+        let kind = self.push(
+            OpKind::ConstFloat(f64::from(key_kind_of(key))),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::External(
+                    if is_a_map { "nts_map_new" } else { "nts_set_new" }.to_owned(),
+                ),
+                args: vec![kind],
+                frame: None,
+            },
+            ty.clone(),
+            origin,
+        ))
+    }
+
+    /// A method on a `Map` or a `Set`.
+    ///
+    /// Keys and values cross as `NtsValue`s, which is what the table stores, so
+    /// each one is erased at the call. That is a tag write beside a payload the
+    /// caller already had -- and for `get` there is nothing to undo on the way
+    /// back, because `V | undefined` *is* an erased value and the slot is
+    /// returned whole.
+    ///
+    /// The iterating half -- `keys`, `values`, `entries`, `forEach` -- is
+    /// absent, and refused by name rather than by silence: each needs the
+    /// iteration protocol, which does not exist yet.
+    fn lower_table_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        table: &HirType,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let Some(name) = self.literal_name(member) else {
+            return Err(self.unsupported(member, "a table method whose name the program computes"));
+        };
+        let is_a_map = matches!(table, HirType::Managed(ManagedType::Map(_, _)));
+        let what = if is_a_map { "Map" } else { "Set" };
+
+        if matches!(name.as_str(), "keys" | "values" | "entries" | "forEach") {
+            return Err(self.unsupported(
+                member,
+                &format!("`{what}#{name}`, which needs the iteration protocol"),
+            ));
+        }
+
+        // (runtime function, arguments after the receiver, result)
+        let (helper, arity, ty) = match (name.as_str(), is_a_map) {
+            ("get", true) => ("nts_map_get", 1, HirType::Erased),
+            ("set", true) => ("nts_map_set", 2, table.clone()),
+            ("add", false) => ("nts_set_add", 1, table.clone()),
+            ("has", _) => ("nts_map_has", 1, HirType::Bool),
+            ("delete", _) => ("nts_map_delete", 1, HirType::Bool),
+            ("clear", _) => ("nts_map_clear", 0, HirType::Void),
+            _ => {
+                return Err(
+                    self.unsupported(member, &format!("`{what}#{name}`, which this table has not"))
+                );
+            }
+        };
+        if arguments.len() != arity {
+            return Err(self.unsupported(
+                id,
+                &format!("`{what}#{name}` with {} argument(s)", arguments.len()),
+            ));
+        }
+
+        let origin = self.origin(id);
+        let mut args = vec![receiver];
+        for argument in arguments {
+            let value = self.lower_expression(*argument)?;
+            args.push(self.erased_for_table(value, &origin));
+        }
+        let call = self.push(
+            OpKind::Call {
+                callee: Callee::External(helper.to_owned()),
+                args,
+                frame: None,
+            },
+            ty,
+            origin,
+        );
+        // A `get` whose result the checker has already narrowed -- through an
+        // assertion, or a guard -- unerases here rather than staying erased for
+        // the rest of the function.
+        if helper == "nts_map_get" {
+            return self.narrowed(id, call);
+        }
+        Ok(call)
+    }
+
+    /// A value at the width the table stores, which is erased.
+    ///
+    /// Already-erased values pass through: erasing one twice would build a
+    /// value whose payload is a value.
+    fn erased_for_table(&mut self, value: ValueId, origin: &Origin) -> ValueId {
+        if self.values[value.0 as usize].ty == HirType::Erased {
+            return value;
+        }
+        self.push(OpKind::Erase { value }, HirType::Erased, origin.clone())
     }
 
     /// A method call on an object, once the receiver is lowered.
