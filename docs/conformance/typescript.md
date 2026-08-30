@@ -27,7 +27,7 @@ Two mistakes are easy here and both were made while writing this:
   statement`; the same class at the top level lowers. Probe at the top level.
 
 The independent measures are `tooling/gate/all.sh`: the corpus (184 files of
-TypeScript's own tests), the examples (73 programs run against node case by
+TypeScript's own tests), the examples (84 programs run against node case by
 case), and the node profile (110 files, measured for *reach* — nothing runs it).
 
 ## Legend
@@ -161,13 +161,28 @@ of the surface therefore costs nothing.
 |---|---|
 | ✅ | `number` (f64, narrowed to `i32`/`u8`… where proven) |
 | ✅ | `boolean`, `string` |
-| ✅ | arrays, tuples that share an element type |
+| ✅ | arrays; a tuple whose elements agree *is* an array of them |
+| ✅ | heterogeneous tuples — a struct with positional fields, `_0` and `_1` |
 | ✅ | objects — a flat struct with a layout |
 | ✅ | typed arrays: all eight kinds, as `NtsArray` with a narrow element |
 | ✅ | `unknown`, `any` sites, unions, optional properties — one 16-byte tagged value |
 | ✅ | `null`/`undefined` where a reference can hold them |
-| ✗ | `bigint`, `symbol` |
-| ✗ | heterogeneous tuples — need positional layout |
+| ✅ | `Map`, `Set` — one insertion-ordered table, keys and values as tagged values |
+| ✅ | the polymorphic `this` — the receiver's own pointer, which costs nothing |
+| ◐ | `bigint` — exact, and **128 bits** rather than arbitrary precision |
+| ✗ | `symbol` |
+
+`bigint`'s width is the one place this table promises less than the language.
+The boundary is deliberate and visible: a literal too large is refused where it
+is written. Every `bigint` in the node profile is a 64-bit quantity —
+`readBigUInt64BE`, an hrtime timestamp, `0xffffffffffffffffn` — and a true
+bignum would put a heap allocation into each of them. What replaces it, when
+something needs `2n ** 200n`, is a small-integer fast path beside a heap bignum.
+
+It is also its own `HirType` rather than a wide integer, and that is not
+bookkeeping: `1n << 40n` is 2^40 where `1 << 40` is 256, because a *number*'s
+shift masks its count to five bits. Sharing the integer type let constant
+folding answer the number's question, silently and correctly by its own lights.
 
 ## 8. ECMAScript globals
 
@@ -193,9 +208,17 @@ The whole global object, host additions excluded. `∅` rows are §13, not backl
 They belong in different columns and putting them in one is what made this
 table read as a backlog:
 
-- **A gap.** `keys values entries assign fromEntries hasOwn is groupBy` — these
-  want a hash table and a defined enumeration order, both of which a compiled
-  program can have.
+- **Done, and without a hash table.** `keys` and `hasOwn` are answered by the
+  *layout*: the field names in declaration order, which is what a base-first
+  layout is, and a constant `true`/`false` for a key the compiler can see.
+  `Array.isArray` is the same idea one type over — and the reason it is not a
+  one-liner is that it must ask the **checker's** type, not the
+  representation: a `Uint8Array` is an `NtsArray` here and
+  `Array.isArray(new Uint8Array(4))` is `false` in node.
+- **Still a gap.** `entries values assign fromEntries is groupBy`. `entries`
+  wants the tuple representation (which now exists) plus an array of them;
+  `is` wants `SameValue`, which is `===` with the `NaN` and `±0` rules
+  inverted.
 - **Not a goal.** `defineProperty getOwnPropertyDescriptor(s) create
   getPrototypeOf setPrototypeOf freeze seal preventExtensions isFrozen isSealed
   isExtensible`, and `Object.prototype`'s methods. Each needs a property map
@@ -258,20 +281,37 @@ above are refused.
 ## 10. The iteration protocol
 
 What `for...of`, spread, destructuring and the combinators are all specified in
-terms of. Today each of those is lowered *directly* for the shapes it supports
-— `for...of` over an array is a counted loop — so the protocol itself does not
-exist yet, and that is why the shapes that are not arrays are refused.
+terms of. The protocol object still does not exist — and most of what was
+waiting on it no longer is, because a `for...of` over a *known* shape never
+needed one.
+
+One walk serves all three shapes: a cursor and three questions — where it
+starts, whether it is still going, what it reads. That is what let `break`,
+`continue` and the loop-carried names be solved once instead of three times.
 
 | | |
 |---|---|
-| ✅ | `for...of` over an array, array destructuring — lowered as counted loops |
-| ✗ | `[Symbol.iterator]()`, `.next()`, `{ value, done }` |
+| ✅ | `for...of` over an array — a counted loop, unchanged |
+| ✅ | over a `Set`, and over `map.keys()` / `map.values()` — the table read directly, no iterator allocated |
+| ✅ | over a `Map` and `map.entries()`, bound as `[key, value]` — two names, two reads, no pair built |
+| ✅ | over a string, **by code point**: `"a\u{1F600}b"` yields three items, not four |
+| ✅ | array and object destructuring, including nested and renamed |
+| ✅ | mutation during a walk: an entry appended is visited, one deleted ahead is not |
+| ✗ | `[Symbol.iterator]()`, `.next()`, `{ value, done }` — the object itself |
 | ✗ | iterator **closing** (`.return()` on abrupt completion) — a correctness detail, not a convenience |
-| ✗ | `for...of` over a string, a `Map`, a `Set`, a generator |
-| ✗ | spread over an iterable |
+| ✗ | `for...of` over a generator, or over a user type with `[Symbol.iterator]` |
+| ✗ | spread over an iterable; `new Map([[k, v]])`, `Array.from` |
+| ✗ | `Map`/`Set` `forEach` |
+| ✗ | a default in a destructuring pattern (`{ a = 1 }`) |
 | ✗ | `yield`, `yield*`, generator objects |
 | ✗ | the async iterator protocol, `for await...of` |
 | ✗ | iterator helpers (`map`, `filter`, `take`, …) |
+
+The mutation row is the one worth keeping honest about. A walk's whole state is
+an entry index, so a rehash that compacted the table's holes would move entries
+out from under it. Growth therefore keeps every entry where it is, which costs a
+hole not being reclaimed until `clear` — the fix, when that matters, is the list
+of live iterators V8 keeps.
 
 ## 11. Evaluation order and completions
 
@@ -366,9 +406,9 @@ questions:
 
 | | what it says | today |
 |---|---|---|
-| examples | the compiled program agrees with node, case by case | 76 of 76 |
-| corpus | arbitrary input produces no invalid IR and no C that will not compile | 47 lower cleanly; `invalid HIR` 0, `uncompilable C` 2 |
-| profile | how much of a real standard library lowers | 535 functions |
+| examples | the compiled program agrees with node, case by case | 84 of 84 |
+| corpus | arbitrary input produces no invalid IR and no C that will not compile | 48 lower cleanly; `invalid HIR` 0, `uncompilable C` 2 |
+| profile | how much of a real standard library lowers | 664 functions, all of which verify |
 
 Only the examples check **correctness**. The corpus checks robustness; the
 profile measures reach and runs nothing, so a function counted there is one
@@ -376,26 +416,62 @@ that compiles rather than one known to be right — and until recently it counte
 functions that could not even be emitted, because the row that would have said
 so was collected and never printed.
 
+Two ways the profile number has since been caught lying, both worth remembering
+before quoting it:
+
+- It once counted functions the verifier had never seen. `nts hir` verifies the
+  **pruned** program, and an addon emits every *export* — so an exported
+  function nothing calls was dropped before the check and compiled anyway. That
+  is how `void FSWatcher__ref(...)` came to return a pointer.
+- It went **down** by 26 once, and that was the fix: a return type with no
+  representation used to default to `void`, so those functions were being
+  counted as lowered while emitting C that does not compile.
+
+`uncompilable C` has the same shape of problem and still does. It is ratcheted
+at 2, and 2 is not the true count: the emitter *silently drops* a struct field
+whose C type it cannot compute, while the descriptor beside it keeps taking an
+`offsetof` into it. Making that a diagnostic reads **5**, all saying `an object
+type with no layout`. The honest repair — every object-typed field must have a
+layout — costs 40 profile functions, which is why it is written down here
+rather than done quietly under a feature.
+
 ## 15. What to do next, ordered by evidence
 
-From the node profile's refusals, which is the only list ordered by what real
-code actually needs rather than by what looks incomplete.
+From the node profile's 1,219 refusals, which is the only list ordered by what
+real code actually needs rather than by what looks incomplete.
+
+Read the counts as *upper bounds on what is visible*, not as effort. Twice this
+week a tall row was one thing repeated, and twice it was several unrelated
+things sharing a message — so the first move on any row below is to name what it
+blocks on, not to start building.
 
 | | what it unblocks | shape of the work |
 |---|---|---|
-| `Map`, `Set` | ~150 profile refusals; most of `http` and `stream` | one hash table in the runtime, then the two wrappers |
-| typed-array methods | 49, all reachable only since `extends Uint8Array` landed | width-aware helpers; the runtime's array helpers take `const double *` and would misread a byte array, which is why they are refused rather than wrong |
-| `try`/`catch` | the largest *language* gap | needs an unwinding decision — the runtime has none |
-| `Object` statics, `JSON` | 39 | the same hash table as `Map` |
-| a class as a value | `instanceof`, static access through a variable | a class needs a runtime representation of itself |
-| rest, spread | scattered and common in ordinary code | each is small and independent |
-| generators | node's `readline` among others | the suspension machine exists for `async`; what is missing is the `Generator<T>` object and §10's protocol |
-| the iteration protocol | `for...of` over anything but an array, spread, generators, `Map`/`Set` iteration | §10 — one protocol that several of the rows above are each waiting on separately |
+| closures and function values | 86 — a name from an enclosing scope (27), a local function used as a value (28), a capture more than one scope up | the closure class exists; what is missing is capture *by reference* for a name something writes to |
+| module evaluation | 81 — one refusal repeated across the top level of nearly every module | a statement at module scope that is not a declaration; the evaluation order is already modelled |
+| a member a type does not declare | 80 — 26 of them on an anonymous type, then `StreamLike` (12) | mostly structural types the decomposition stopped at; count before building |
+| a global member | 78 — a long tail: `Object.defineProperty` 14, `Array.from` 10, `ArrayBuffer.isView` 7 | the largest entry is §13's, so this row is smaller than it looks |
+| `instanceof` | 67, and 5 distinct names — the provided error classes | TypeScript **closes** the hierarchy, so a test is a descriptor comparison against a set the compiler already knows. A right-hand side that is a *variable* needs a class as a value, which is the harder half |
+| the async iterator protocol | 62, all `AsyncIterableIterator` | §10 plus the suspension machine, which `async` already has |
+| `symbol` | 52 — mostly `string \| symbol` as a property key | a representation, and a decision about whether well-known symbols are values or names |
+| `typeof` on an open value | 45 | the tag exists; what is missing is the tag *not distinguishing an array from an object* |
+| a method not in the hierarchy | 40 — `emit` 8, then a long tail of 23 | structural dispatch, which is the same question as the anonymous-type row above |
+| string methods | 35 — `toLowerCase` 12, `split` 9, `trim` 4, `replace` 3, `replaceAll` 3 | six functions, each pure and independent. The cheapest row on the board |
+| generators | 4 refusals, but `readline` and several streams are behind them | the suspension machine exists; what is missing is the `Generator<T>` object and §10's protocol |
+| `try`/`catch` | the largest *language* gap, and invisible in this table because the code that needs it does not reach the lowering | needs an unwinding decision — the runtime has none |
 
-Two rows in the corpus are meant to be zero and one is not: `uncompilable C` is
-2, both narrow — an `as const` nested object literal whose inner layout is
-built by nothing, and a quoted key on a generic function's result. They are
-ratcheted in `tooling/gate/all.sh` so they can only go down.
+Two rows in the corpus are meant to be zero. `invalid HIR` is 0. `uncompilable
+C` is ratcheted at 2 and only downward — see §14 for why 2 is not the true
+number and what the honest count costs.
+
+### What came off this list
+
+Kept because the reasons are more useful than the checkmarks. `Map` and `Set`
+(~150) were one hash table. Typed-array methods (56) turned out to be 34 calls
+to Buffer's *own* methods on its own `this`, and four lines fixed them. Tuples
+(40) and `bigint` (47) were both hiding inside a single row that said `Map`
+until the refusal named its type arguments. The iteration protocol was mostly
+not needed: a `for...of` over a known shape never wanted an iterator object.
 
 ### What is *not* on this list, and why
 
