@@ -1860,14 +1860,30 @@ static int32_t nts_map_find(const NtsMap *map, NtsValue key, uint32_t hash,
   return -1;
 }
 
-/* Grow the entry arrays, drop the holes, and rebuild the index.
+/* Grow the entry arrays and rebuild the index, keeping every entry where it is.
  *
- * Compaction and growth are one operation because they are one decision: a
- * table that is half holes needs its entries moved either way, and doing it
- * twice would move them twice. */
+ * # Why the holes are not dropped here
+ *
+ * They were, and it was wrong. A walk's whole state is an entry index, and
+ * compaction renumbers entries -- so a `for (const v of s) { s.add(x); }` that
+ * grew the table would leave the cursor pointing at a different entry than the
+ * one it had reached, silently skipping or repeating elements.
+ *
+ * That is not a hypothetical shape. node visits an entry appended during a walk
+ * (`x, k1, k2` for the loop in `nts_map_next`'s comment), so this is a pattern
+ * the language defines rather than one nobody writes.
+ *
+ * Keeping the positions makes a cursor valid for as long as it exists, which is
+ * what lets iteration be a number rather than an object with a registration
+ * protocol. What it costs is that a hole is not reclaimed until `clear`: a
+ * table inserted into and deleted from forever grows with its total insertions
+ * rather than with what it holds. The fix when that matters is the one V8 uses
+ * -- a list of live iterators, updated when the table compacts -- and it is a
+ * real feature rather than a tweak to this function.
+ */
 static void nts_map_rehash(NtsMap *map) {
-  uint32_t live = map->header.length;
-  uint32_t wanted = live * 2u;
+  /* On `used` rather than on the live count, because the holes are staying. */
+  uint32_t wanted = map->used * 2u;
   if (wanted < 8u) {
     wanted = 8u;
   }
@@ -1889,18 +1905,13 @@ static void nts_map_rehash(NtsMap *map) {
     index[slot] = NTS_MAP_EMPTY;
   }
 
-  /* Copy the live entries in order, which is what keeps insertion order
-   * through a growth. */
-  uint32_t out = 0;
-  for (uint32_t at = 0; at < map->used; at++) {
-    if (nts_map_is_hole(map->keys[at])) {
-      continue;
-    }
-    keys[out] = map->keys[at];
+  /* Every entry at the index it already had, holes included. */
+  uint32_t out = map->used;
+  for (uint32_t at = 0; at < out; at++) {
+    keys[at] = map->keys[at];
     if (values) {
-      values[out] = map->values[at];
+      values[at] = map->values[at];
     }
-    out++;
   }
 
   nts_bytes_held += (size_t)wanted * sizeof(NtsValue);
@@ -1925,8 +1936,13 @@ static void nts_map_rehash(NtsMap *map) {
   map->slots = slots;
   map->used = out;
 
+  /* The index is rebuilt from the live entries only: a hole has no key to
+   * hash, and nothing should find its way back to one. */
   uint32_t mask = slots - 1u;
   for (uint32_t at = 0; at < out; at++) {
+    if (nts_map_is_hole(keys[at])) {
+      continue;
+    }
     uint32_t slot = nts_hash_key(keys[at], map->kind) & mask;
     while (index[slot] != NTS_MAP_EMPTY) {
       slot = (slot + 1u) & mask;
@@ -2039,6 +2055,86 @@ void nts_map_clear(NtsMap *map) {
 
 NtsMap *nts_set_add(NtsMap *map, NtsValue key) {
   return nts_map_set(map, key, nts_value_of_undefined());
+}
+
+/* Walking a table, and walking text.
+ *
+ * # Why a cursor and not an iterator object
+ *
+ * JavaScript's iteration over a `Map` is defined against the live table rather
+ * than against a snapshot of it, and both halves of that are observable. node:
+ *
+ *     const g = new Map([["x", 1]]);
+ *     for (const [k] of g) { ...; g.set("k" + n, 1); }   // visits x, k1, k2
+ *
+ *     const d = new Map([["p",1],["q",2],["r",3]]);
+ *     for (const [k] of d) { if (k === "p") d.delete("q"); }   // visits p, r
+ *
+ * An entry appended while the loop runs *is* reached, and one deleted ahead of
+ * the cursor is *not*. An iterator holding a copy of the entries would get both
+ * wrong, and holding a length would get the first wrong. Re-reading `used` and
+ * the hole tag on every step gets both right for free, so the whole of the
+ * state is one integer -- which means the loop carries a number, allocates
+ * nothing, and specializes like any other counter.
+ */
+
+/* The next live entry at or after `from`, or -1 when there is none.
+ *
+ * `used` is read on every call rather than once, which is what makes an entry
+ * appended during the walk visible to it. */
+double nts_map_next(const NtsMap *map, double from) {
+  if (!(from >= 0.0)) {
+    return -1.0;
+  }
+  uint32_t at = from >= 4294967295.0 ? UINT32_MAX : (uint32_t)from;
+  for (; at < map->used; at++) {
+    if (!nts_map_is_hole(map->keys[at])) {
+      return (double)at;
+    }
+  }
+  return -1.0;
+}
+
+/* Read an entry the cursor has already landed on.
+ *
+ * No bounds test: `nts_map_next` returned this index and the only thing that
+ * could invalidate it is a rehash, which cannot happen between the two -- the
+ * loop body runs after the read, not between it and the step. An out-of-range
+ * index would be a compiler bug rather than a program's, so it is not a check
+ * this pays for on every element. */
+NtsValue nts_map_key_at(const NtsMap *map, double at) {
+  return map->keys[(uint32_t)at];
+}
+
+NtsValue nts_map_value_at(const NtsMap *map, double at) {
+  return map->values ? map->values[(uint32_t)at] : nts_value_of_undefined();
+}
+
+/* How many code units the code point at `at` occupies.
+ *
+ * A string iterates by code *point*: node yields three items for
+ * `"a\u{1F600}b"`, of one, two and one units, where `length` is four. Stepping
+ * by one unit would yield the halves of a surrogate pair as two separate
+ * strings, each of them a lone surrogate, which is not what any program means.
+ *
+ * A high surrogate not followed by a low one is one unit wide and yields
+ * itself, which is what JavaScript does with unpaired surrogates rather than
+ * an error. */
+double nts_str_point_width(const NtsString *s, double at) {
+  if (!(at >= 0.0) || at + 1.0 >= (double)s->length) {
+    return 1.0;
+  }
+  if ((s->flags & NTS_TWO_BYTE) == 0) {
+    /* One byte per unit cannot hold a surrogate at all. */
+    return 1.0;
+  }
+  const uint16_t *units = NTS_ELEMENTS(s, uint16_t);
+  uint32_t index = (uint32_t)at;
+  uint16_t high = units[index];
+  uint16_t low = units[index + 1];
+  bool paired =
+      high >= 0xD800u && high <= 0xDBFFu && low >= 0xDC00u && low <= 0xDFFFu;
+  return paired ? 2.0 : 1.0;
 }
 
 /* --- Tasks, the host seam, and the checkpoint (RFC 12.1) -------------------

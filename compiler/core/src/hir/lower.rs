@@ -2400,7 +2400,7 @@ fn iteration_method(name: &str) -> Option<Iteration> {
 /// node to point at. It used to step at the end of the *body* instead, which
 /// works right up until something jumps to the latch -- a `return` inside the
 /// callback did, and the loop never finished.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum Step {
     /// Nothing between iterations; the header is the latch.
     None,
@@ -2408,6 +2408,18 @@ enum Step {
     Expression(NodeId),
     /// One added to a carried name, for a loop this compiler synthesized.
     Increment(u32),
+    /// The cursor of a `for...of`, advanced the way its walk requires.
+    ///
+    /// In the latch rather than at the end of the body, which is the whole
+    /// point: `continue` jumps to the latch, and a step written into the body
+    /// is a step `continue` skips. That was true of `for...of` over an array
+    /// from the beginning and nothing in the suite wrote one, so it hung
+    /// rather than failed.
+    Walk {
+        cursor: u32,
+        walk: Walk,
+        sequence: ValueId,
+    },
 }
 
 /// What an `async` function returns, and what it settles with.
@@ -5197,6 +5209,16 @@ impl<'a> FuncBuilder<'a> {
                 Step::Expression(update) => {
                     self.lower_expression(update)?;
                 }
+                Step::Walk {
+                    cursor,
+                    walk,
+                    sequence,
+                } => {
+                    let origin = self.breakables[record.depth].origin.clone();
+                    let at = self.bindings[&cursor];
+                    let next = self.advance(&walk, sequence, at, &origin);
+                    self.bindings.insert(cursor, next);
+                }
                 Step::Increment(symbol) => {
                     let origin = self.breakables[record.depth].origin.clone();
                     let at = self.bindings[&symbol];
@@ -5682,6 +5704,245 @@ impl<'a> FuncBuilder<'a> {
     /// element and this names the index. There is no iterator protocol here --
     /// `Symbol.iterator` is a dynamic dispatch through a property, and an array
     /// is the one case where the answer is known and the loop is a counter.
+    /// A call to an external runtime function.
+    fn call_runtime(
+        &mut self,
+        name: &str,
+        args: Vec<ValueId>,
+        ty: HirType,
+        origin: &Origin,
+    ) -> ValueId {
+        self.push(
+            OpKind::Call {
+                callee: Callee::External(name.to_owned()),
+                args,
+                frame: None,
+            },
+            ty,
+            origin.clone(),
+        )
+    }
+
+    /// `m.keys()` in the head of a `for...of`, reduced to `m` and which slot to
+    /// read.
+    ///
+    /// Only for a table. `xs.keys()` on an *array* yields indices rather than
+    /// elements, so stripping the call there would iterate the wrong thing
+    /// quietly -- which is why this asks the checker for the receiver's type
+    /// rather than trusting the method name.
+    fn table_source(&self, sequence: NodeId) -> (NodeId, Option<&'static str>) {
+        let plain = (sequence, None);
+        if self.kind_of(sequence) != Some(syntax::CALL_EXPRESSION)
+            || !self.arguments_of(sequence).is_empty()
+        {
+            return plain;
+        }
+        let Some(callee) = self.children(sequence).first().copied() else {
+            return plain;
+        };
+        if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return plain;
+        }
+        let parts = self.children(callee);
+        let [receiver, member] = parts.as_slice() else {
+            return plain;
+        };
+        if !matches!(
+            self.type_of(*receiver),
+            Some(HirType::Managed(
+                ManagedType::Map(_, _) | ManagedType::Set(_)
+            ))
+        ) {
+            return plain;
+        }
+        match self.literal_name(*member).as_deref() {
+            Some("keys") => (*receiver, Some("keys")),
+            Some("values") => (*receiver, Some("values")),
+            Some("entries") => (*receiver, Some("entries")),
+            _ => plain,
+        }
+    }
+
+    /// Which walk a lowered sequence supports, or why it supports none.
+    fn walk_of(
+        &mut self,
+        sequence: NodeId,
+        value: ValueId,
+        forced: Option<&'static str>,
+    ) -> Result<Walk, Diagnostic> {
+        let ty = self.values[value.0 as usize].ty.clone();
+        match (&ty, forced) {
+            (HirType::Managed(ManagedType::Array(element)), None) => {
+                Ok(Walk::Counted((**element).clone()))
+            }
+            (HirType::Managed(ManagedType::String), None) => Ok(Walk::Text),
+            // A `Set`'s elements are its keys, so iterating one, its `keys()`
+            // and its `values()` are the same walk -- which is what JavaScript
+            // says too.
+            (HirType::Managed(ManagedType::Set(element)), None | Some("keys" | "values")) => {
+                Ok(Walk::Table {
+                    read: "nts_map_key_at",
+                    element: (**element).clone(),
+                })
+            }
+            (HirType::Managed(ManagedType::Map(key, _)), Some("keys")) => Ok(Walk::Table {
+                read: "nts_map_key_at",
+                element: (**key).clone(),
+            }),
+            (HirType::Managed(ManagedType::Map(_, value)), Some("values")) => Ok(Walk::Table {
+                read: "nts_map_value_at",
+                element: (**value).clone(),
+            }),
+            // Iterating a `Map` itself yields a `[key, value]` pair, which is a
+            // tuple this compiler cannot represent and which is only useful
+            // through a destructuring binding. Both are real features and
+            // neither is this one, so it says which.
+            (HirType::Managed(ManagedType::Map(_, _)), None) => Err(self.unsupported(
+                sequence,
+                "a `for...of` over a `Map`, which yields a `[key, value]` pair and needs a \
+                 destructuring binding",
+            )),
+            (_, Some(method)) => Err(self.unsupported(
+                sequence,
+                &format!("`{method}()` on this type, which needs the iteration protocol"),
+            )),
+            _ => {
+                let named = self
+                    .snapshot
+                    .node_types
+                    .get(&sequence)
+                    .map(|ty| describe(self.snapshot, *ty));
+                Err(self.unsupported(
+                    sequence,
+                    &match named {
+                        Some(what) => format!("a `for...of` over {what}"),
+                        None => "a `for...of` over something with no iteration".to_owned(),
+                    },
+                ))
+            }
+        }
+    }
+
+    /// The cursor of a `for...of`, moved on by one element.
+    ///
+    /// Built in the loop's latch, which is where `continue` lands.
+    fn advance(
+        &mut self,
+        walk: &Walk,
+        sequence: ValueId,
+        at: ValueId,
+        origin: &Origin,
+    ) -> ValueId {
+        match walk {
+            Walk::Counted(_) => {
+                let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+                self.push(
+                    OpKind::Binary {
+                        op: BinOp::Add,
+                        lhs: at,
+                        rhs: one,
+                    },
+                    HirType::NUMBER,
+                    origin.clone(),
+                )
+            }
+            // The width is asked for again rather than carried out of the body.
+            // It is a pure read of two code units, and carrying it would mean a
+            // second loop-carried name existing only to cross one block edge.
+            Walk::Text => {
+                let width = self.call_runtime(
+                    "nts_str_point_width",
+                    vec![sequence, at],
+                    HirType::NUMBER,
+                    origin,
+                );
+                self.push(
+                    OpKind::Binary {
+                        op: BinOp::Add,
+                        lhs: at,
+                        rhs: width,
+                    },
+                    HirType::NUMBER,
+                    origin.clone(),
+                )
+            }
+            Walk::Table { .. } => {
+                let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+                let after = self.push(
+                    OpKind::Binary {
+                        op: BinOp::Add,
+                        lhs: at,
+                        rhs: one,
+                    },
+                    HirType::NUMBER,
+                    origin.clone(),
+                );
+                self.call_runtime("nts_map_next", vec![sequence, after], HirType::NUMBER, origin)
+            }
+        }
+    }
+
+    /// The element a cursor is currently on.
+    fn read_element(
+        &mut self,
+        walk: &Walk,
+        sequence: ValueId,
+        at: ValueId,
+        origin: &Origin,
+    ) -> ValueId {
+        match walk {
+            // Checked: the length was read once and the bounds pass is what
+            // proves the index inside it.
+            Walk::Counted(element) => self.push(
+                OpKind::ArrayGet {
+                    array: sequence,
+                    index: at,
+                    checked: true,
+                },
+                element.clone(),
+                origin.clone(),
+            ),
+            Walk::Table { read, element } => {
+                let slot = self.call_runtime(read, vec![sequence, at], HirType::Erased, origin);
+                // The table stores erased values. Where the element type is
+                // concrete the payload is read back here, so the body sees a
+                // `Socket` rather than sixteen bytes it has to unpack itself.
+                if *element == HirType::Erased {
+                    slot
+                } else {
+                    self.push(
+                        OpKind::Unerase { value: slot },
+                        element.clone(),
+                        origin.clone(),
+                    )
+                }
+            }
+            Walk::Text => {
+                let width = self.call_runtime(
+                    "nts_str_point_width",
+                    vec![sequence, at],
+                    HirType::NUMBER,
+                    origin,
+                );
+                let end = self.push(
+                    OpKind::Binary {
+                        op: BinOp::Add,
+                        lhs: at,
+                        rhs: width,
+                    },
+                    HirType::NUMBER,
+                    origin.clone(),
+                );
+                self.call_runtime(
+                    "nts_str_slice",
+                    vec![sequence, at, end],
+                    HirType::Managed(ManagedType::String),
+                    origin,
+                )
+            }
+        }
+    }
+
     fn lower_for_of(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         let children = self.children(id);
         let [initializer, sequence, body] = children.as_slice() else {
@@ -5710,20 +5971,34 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| self.unsupported(element_name, "a `for...of` name with no symbol"))?
             .0;
 
+        // `for (const k of m.keys())` reads the table directly. Lowering the
+        // call would build an iterator object, step it once per element and
+        // throw it away, to arrive at this same walk with an indirection in
+        // it -- so the method is recognized here and never lowered.
+        let (sequence, forced) = self.table_source(sequence);
         let sequence_value = self.lower_expression(sequence)?;
-        let HirType::Managed(ManagedType::Array(element_ty)) =
-            self.values[sequence_value.0 as usize].ty.clone()
-        else {
-            return Err(self.unsupported(sequence, "a `for...of` over something not an array"));
-        };
+        let walk = self.walk_of(sequence, sequence_value, forced)?;
 
         let origin = self.origin(id);
-        // The index. A double, like the counter a hand-written `for` produces,
+        // The cursor. A double, like the counter a hand-written `for` produces,
         // so that specialization decides its machine type by the same rule
         // rather than by which loop it came from.
+        //
+        // For an array and for text it is a position and starts at zero. For a
+        // table it is an entry index, and the entries are not contiguous, so
+        // the first live one is asked for rather than assumed.
         let index = self.synthetic_symbol();
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        self.bindings.insert(index, zero);
+        let start = match &walk {
+            Walk::Table { .. } => self.call_runtime(
+                "nts_map_next",
+                vec![sequence_value, zero],
+                HirType::NUMBER,
+                &origin,
+            ),
+            Walk::Counted(_) | Walk::Text => zero,
+        };
+        self.bindings.insert(index, start);
 
         let mut carried = vec![index];
         self.assigned_symbols(body, &mut carried);
@@ -5731,58 +6006,60 @@ impl<'a> FuncBuilder<'a> {
         self.declared_symbols(body, &mut declared);
         carried.retain(|symbol| *symbol == index || !declared.contains(symbol));
 
-        let record = self.begin_loop(id, &carried, false, &origin)?;
+        // `steps: true`, so the loop has a latch of its own. The cursor is
+        // advanced there rather than at the end of the body, because `continue`
+        // jumps to the latch and would otherwise skip the advance and hang.
+        let record = self.begin_loop(id, &carried, true, &origin)?;
 
-        // `index < xs.length`, built rather than lowered: the source has no node
-        // for it.
+        // The test, built rather than lowered: the source has no node for it.
+        // A position runs while it is inside the length; an entry index runs
+        // until the table says there is no next live entry.
         let at = self.bindings[&index];
-        let length = self.push(
-            OpKind::Length(sequence_value),
-            HirType::NUMBER,
-            origin.clone(),
-        );
-        let cond = self.push(
-            OpKind::Binary {
-                op: BinOp::Lt,
-                lhs: at,
-                rhs: length,
-            },
-            HirType::Bool,
-            origin.clone(),
-        );
+        let cond = match &walk {
+            Walk::Counted(_) | Walk::Text => {
+                let length = self.push(
+                    OpKind::Length(sequence_value),
+                    HirType::NUMBER,
+                    origin.clone(),
+                );
+                self.push(
+                    OpKind::Binary {
+                        op: BinOp::Lt,
+                        lhs: at,
+                        rhs: length,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                )
+            }
+            Walk::Table { .. } => {
+                let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                self.push(
+                    OpKind::Binary {
+                        op: BinOp::Ge,
+                        lhs: at,
+                        rhs: zero,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                )
+            }
+        };
         self.test_loop(cond, &record);
         self.switch_to(record.body);
 
-        // `const x = xs[index]`, checked: the length was read once and the
-        // bounds pass is what proves the index inside it.
-        let at = self.bindings[&index];
-        let value = self.push(
-            OpKind::ArrayGet {
-                array: sequence_value,
-                index: at,
-                checked: true,
-            },
-            *element_ty,
-            origin.clone(),
-        );
+        let value = self.read_element(&walk, sequence_value, at, &origin);
         self.bindings.insert(element_symbol, value);
 
         self.lower_statement(body)?;
-        if !self.is_terminated() {
-            let at = self.bindings[&index];
-            let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
-            let next = self.push(
-                OpKind::Binary {
-                    op: BinOp::Add,
-                    lhs: at,
-                    rhs: one,
-                },
-                HirType::NUMBER,
-                origin.clone(),
-            );
-            self.bindings.insert(index, next);
-        }
-        self.end_loop(&record, Step::None)
+        self.end_loop(
+            &record,
+            Step::Walk {
+                cursor: index,
+                walk,
+                sequence: sequence_value,
+            },
+        )
     }
 
     /// `throw new Error("...")`.
@@ -11092,17 +11369,45 @@ enum Place {
     Binding { symbol: u32, ty: Option<HirType> },
 }
 
-/// One side of a branching expression.
+/// How a `for...of` steps through what it was given.
 ///
-/// A ternary's arms are expressions to lower inside their own blocks; a
-/// short-circuit's "untaken" arm is the left operand, already evaluated before
-/// the branch.
-#[derive(Debug, Clone, Copy)]
+/// Three shapes, and each is a cursor and three questions: where it starts,
+/// whether it is still going, and what it reads. Naming them together is what
+/// lets one loop serve an array, a table and a string -- the alternative was
+/// three loops that would drift apart, since `break`, `continue` and the
+/// loop-carried names are the same problem in all three.
+///
+/// The array case still emits exactly the counted loop it emitted before this
+/// existed, which is the whole of what "typed code pays nothing" means here.
+#[derive(Clone)]
+enum Walk {
+    /// `xs[i]` while `i < xs.length`, stepping by one.
+    Counted(HirType),
+    /// The live entries of a `Map` or a `Set`.
+    ///
+    /// The cursor is an entry index rather than a position, because the entries
+    /// are not contiguous -- a deleted one leaves a hole -- so the runtime is
+    /// asked for the next live index rather than told to add one.
+    Table {
+        /// `nts_map_key_at` or `nts_map_value_at`. A `Set` stores its elements
+        /// as keys, so iterating one and iterating `keys()` are the same read.
+        read: &'static str,
+        element: HirType,
+    },
+    /// The code points of a string, which are one or two units wide.
+    ///
+    /// Not the code *units*: node yields three items for `"a\u{1F600}b"` where
+    /// `length` is four, and stepping by one unit would hand the body the
+    /// halves of a surrogate pair as two separate strings.
+    Text,
+}
+
 /// The parts of a `switch` its test chain needs.
 ///
 /// Bundled because they are one thing -- the switch being lowered -- and
 /// passing them one at a time had grown to eight arguments, where a transposed
 /// pair would still compile.
+#[derive(Debug, Clone, Copy)]
 struct CaseChain<'a> {
     clauses: &'a [NodeId],
     blocks: &'a [BlockId],
@@ -11114,6 +11419,11 @@ struct CaseChain<'a> {
     exhaustive: bool,
 }
 
+/// One side of a branching expression.
+///
+/// A ternary's arms are expressions to lower inside their own blocks; a
+/// short-circuit's "untaken" arm is the left operand, already evaluated before
+/// the branch.
 #[derive(Clone, Copy)]
 enum Branch {
     Expression(NodeId),

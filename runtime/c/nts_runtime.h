@@ -506,6 +506,22 @@ NtsMap *nts_set_add(NtsMap *map, NtsValue key);
 bool nts_map_delete(NtsMap *map, NtsValue key);
 void nts_map_clear(NtsMap *map);
 
+/* Walking a table: a cursor, not an iterator object.
+ *
+ * `nts_map_next` returns the next live entry at or after `from`, or -1. It
+ * re-reads the table every call, which is what makes an entry appended during
+ * a walk visible to it and one deleted ahead of the cursor invisible -- both
+ * of which node does and neither of which a snapshot would. The whole of the
+ * iteration state is therefore one number, so the loop that carries it
+ * allocates nothing and specializes like any other counter. */
+NTS_READS_ONLY double nts_map_next(const NtsMap *map, double from);
+NTS_READS_ONLY NtsValue nts_map_key_at(const NtsMap *map, double at);
+NTS_READS_ONLY NtsValue nts_map_value_at(const NtsMap *map, double at);
+
+/* How many code units the code point at `at` occupies: 2 for a surrogate pair
+ * and 1 otherwise. A string iterates by code point, so this is the step. */
+NTS_READS_ONLY double nts_str_point_width(const NtsString *s, double at);
+
 NTS_READS_ONLY double nts_str_code_point_at(const NtsString *s, double at);
 NTS_READS_ONLY double nts_str_index_of(const NtsString *s,
                                        const NtsString *needle);
