@@ -121,6 +121,43 @@ a backlog.
 | ✗ | methods and getters on **object literals** |
 | ✗ | a member name the program computes (`[kSymbol]`) — wants a property map |
 
+### A class has no runtime identity, and it is the layout's fault
+
+`instanceof` and `.constructor` are the two places JavaScript stays *nominal* at
+runtime, and neither can be built on what is emitted today. Two classes of the
+same shape share one layout — deliberately, because TypeScript is structurally
+typed and the two are mutually assignable, so sharing the struct is what makes
+passing one where the other is expected cost nothing. But they share the
+*descriptor* with it:
+
+```c
+struct NtsObj_Alpha { ... };
+void Beta__constructor(NtsObj_Alpha * v0, double v1);
+static const NtsDescriptor nts_desc_NtsObj_Alpha = { ..., "Alpha", ... };
+v3_frame.header.descriptor = &nts_desc_NtsObj_Alpha;   /* this is a Beta */
+```
+
+A `Beta` carries Alpha's descriptor and answers `"Alpha"` when asked its name.
+Nothing observable depends on that yet, because neither `instanceof` nor
+`.constructor` is implemented — but it is why neither *can* be, and it is the
+first thing to fix if they are wanted. The shape is structural and belongs to
+the layout; the identity is nominal and needs a table of its own, one entry per
+class, carrying the name and the base. The descriptor would then follow the
+class rather than the layout.
+
+Worth knowing before starting: of the 67 refusal sites that named a class used
+as a value, **none** would be closed by this. Fifty-nine are one idiom in the
+node profile —
+
+```ts
+override get ["constructor"](): unknown { return TypeError; }
+```
+
+— and the remaining eight are `instanceof` against `Error`, `RangeError` or
+`Uint8Array`. Every right-hand side in all 67 is an ambient `lib` class this
+compiler does not declare, so the nominal machinery is necessary for them and
+nowhere near sufficient.
+
 ## 5. Modules
 
 | | |

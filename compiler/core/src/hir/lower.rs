@@ -10627,6 +10627,17 @@ impl<'a> FuncBuilder<'a> {
                 1,
                 HirType::Managed(ManagedType::Array(Box::new(string))),
             ),
+            // `replace` takes the first match, `replaceAll` every one. The
+            // difference is the whole of it, so they share a runtime function
+            // and differ by which entry point calls it.
+            //
+            // Both expand `$` in the replacement, which is not optional: node
+            // answers `"a-b".replace("-", "$&")` with `"a-b"`, not with
+            // `"a$&b"`. A pattern that is a regular expression is refused just
+            // below rather than here, because the member exists for it and it
+            // is the *argument* that is not something this can do.
+            "replace" => ("nts_str_replace", 2, string.clone()),
+            "replaceAll" => ("nts_str_replace_all", 2, string.clone()),
             // Named, because twenty-eight instances of "this string method"
             // in the node profile is a bucket and not a work item.
             other => {
@@ -10656,6 +10667,18 @@ impl<'a> FuncBuilder<'a> {
         }
         if args.len() != arity + 1 {
             return Err(self.unsupported(id, "a string method with this many arguments"));
+        }
+
+        // A regular expression is a pattern `String.prototype.replace` accepts
+        // and this does not. It has to be named and refused *here*: everything
+        // below spells a call handing a `NtsString *` to the runtime, so a
+        // `RegExp` arriving at it is a wrong answer rather than a type error.
+        if matches!(helper, "nts_str_replace" | "nts_str_replace_all")
+            && args[1..]
+                .iter()
+                .any(|value| self.values[value.0 as usize].ty != HirType::Managed(ManagedType::String))
+        {
+            return Err(self.unsupported(id, "`replace` with a pattern that is not a string"));
         }
 
         Ok(self.push(

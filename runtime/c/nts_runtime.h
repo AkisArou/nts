@@ -365,6 +365,14 @@ __int128 nts_bigint_as_uintn(double bits, __int128 value);
 __int128 nts_bigint_shl(__int128 value, __int128 count);
 __int128 nts_bigint_shr(__int128 value, __int128 count);
 
+/* `replace` and `replaceAll` with a string pattern. The replacement's `$$`,
+ * `$&`, `$\`` and `$'` are expanded; anything else after a `$` stays literal.
+ */
+NtsString *nts_str_replace(const NtsString *s, const NtsString *pattern,
+                           const NtsString *replacement);
+NtsString *nts_str_replace_all(const NtsString *s, const NtsString *pattern,
+                               const NtsString *replacement);
+
 /* `===` where one side is erased.
  *
  * Strict equality, which is *not* the SameValueZero a table compares keys

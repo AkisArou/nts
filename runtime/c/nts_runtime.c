@@ -1790,6 +1790,202 @@ NtsArray *nts_str_split(const NtsString *s, const NtsString *sep) {
   return out;
 }
 
+/* `replace` and `replaceAll`, with a string pattern.
+ *
+ * The replacement is not copied literally. `$` introduces four substitutions,
+ * and every one of these answers was transcribed from node rather than reasoned
+ * about:
+ *
+ *     "a-b".replace("-", "$$")     is "a$b"
+ *     "a-b".replace("-", "[$&]")   is "a[-]b"    the match itself
+ *     "a-b".replace("-", "[$`]")   is "a[a]b"    everything before it
+ *     "a-b".replace("-", "[$']")   is "a[b]b"    everything after it
+ *     "a-b".replace("-", "$x")     is "a$xb"     anything else stays literal
+ *
+ * `$1` through `$99` are group references. A *string* pattern has no groups, so
+ * they fall into the literal case with everything else, and a trailing `$` at
+ * the very end of the replacement is literal too.
+ *
+ * `$`` and `$'` are why this measures before it allocates instead of
+ * computing one length up front: both expand to a slice of the subject whose
+ * size depends on *where* the match was, so two matches of the same pattern can
+ * contribute different amounts.
+ *
+ * The empty pattern is the awkward one, and node settled both halves:
+ *
+ *     "abc".replace("", "+")       is "+abc"     one match, at the front
+ *     "abc".replaceAll("", "-")    is "-a-b-c-"  four, including both ends
+ */
+
+/* The next match at or after `from`, or -1. An empty pattern matches at every
+ * position *including* the end, which is what puts a separator on both ends of
+ * `"abc".replaceAll("", "-")`. */
+static double nts_str_match_from(const NtsString *s, const NtsString *pattern,
+                                 uint32_t from) {
+  if (pattern->length == 0) {
+    return from <= s->length ? (double)from : -1.0;
+  }
+  return nts_str_find(s, pattern, from, 0);
+}
+
+/* Copy `s[from..to)` to `out[at]`, returning where the next unit goes.
+ *
+ * `out` is narrow only when every input was, so the widths either match -- one
+ * `memcpy` -- or the destination is wide and the source is not, which is the
+ * one case that has to widen as it goes. */
+static uint32_t nts_str_paste(NtsString *out, uint32_t at, const NtsString *s,
+                              uint32_t from, uint32_t to) {
+  uint32_t length = to > from ? to - from : 0u;
+  if (length == 0) {
+    return at;
+  }
+  if (out->flags & NTS_TWO_BYTE) {
+    uint16_t *into = NTS_ELEMENTS(out, uint16_t) + at;
+    if (s->flags & NTS_TWO_BYTE) {
+      memcpy(into, NTS_ELEMENTS(s, const uint16_t) + from,
+             (size_t)length * sizeof(uint16_t));
+    } else {
+      const unsigned char *bytes = NTS_ELEMENTS(s, const unsigned char) + from;
+      for (uint32_t i = 0; i < length; i++) {
+        into[i] = bytes[i];
+      }
+    }
+  } else {
+    memcpy(NTS_ELEMENTS(out, unsigned char) + at,
+           NTS_ELEMENTS(s, const unsigned char) + from, length);
+  }
+  return at + length;
+}
+
+/* Expand one replacement for a match of `matched` units at `at`.
+ *
+ * With `out` null this measures and writes nothing, which is the first of the
+ * two passes; with `out` set it writes and returns the same count. One function
+ * for both so the two can never disagree about what `$'` means. */
+static uint32_t nts_str_expand(const NtsString *rep, const NtsString *s,
+                               uint32_t at, uint32_t matched, NtsString *out,
+                               uint32_t cursor) {
+  uint32_t written = 0;
+  for (uint32_t i = 0; i < rep->length;) {
+    if (nts_unit(rep, i) != '$' || i + 1 >= rep->length) {
+      if (out) {
+        cursor = nts_str_paste(out, cursor, rep, i, i + 1);
+      }
+      written++;
+      i++;
+      continue;
+    }
+    uint16_t next = nts_unit(rep, i + 1);
+    uint32_t from = 0;
+    uint32_t to = 0;
+    switch (next) {
+    case '$': /* an escaped dollar, which stands for one of itself */
+      if (out) {
+        cursor = nts_str_paste(out, cursor, rep, i, i + 1);
+      }
+      written++;
+      i += 2;
+      continue;
+    case '&':
+      from = at;
+      to = at + matched;
+      break;
+    case '`':
+      from = 0;
+      to = at;
+      break;
+    case '\'':
+      from = at + matched;
+      to = s->length;
+      break;
+    default: /* `$x` is two literal characters, and so is a `$` before a digit
+              */
+      if (out) {
+        cursor = nts_str_paste(out, cursor, rep, i, i + 2);
+      }
+      written += 2;
+      i += 2;
+      continue;
+    }
+    if (out) {
+      cursor = nts_str_paste(out, cursor, s, from, to);
+    }
+    written += to - from;
+    i += 2;
+  }
+  return written;
+}
+
+NtsString *nts_str_replace_general(const NtsString *s, const NtsString *pattern,
+                                   const NtsString *replacement, bool all) {
+  /* An empty pattern advances by one so the walk terminates; a non-empty one
+   * resumes past the match, which is what keeps `"aaa".replaceAll("aa", "b")`
+   * to a single replacement, as node has it. */
+  uint32_t step = pattern->length ? pattern->length : 1u;
+
+  /* First pass: the exact length, since `$`` and `$'` make it depend on
+   * every match position. */
+  uint32_t total = 0;
+  uint32_t last = 0;
+  uint32_t at = 0;
+  uint32_t matches = 0;
+  for (;;) {
+    double found = nts_str_match_from(s, pattern, at);
+    if (found < 0.0) {
+      break;
+    }
+    uint32_t m = (uint32_t)found;
+    total += m - last;
+    total += nts_str_expand(replacement, s, m, pattern->length, NULL, 0);
+    last = m + pattern->length;
+    at = m + step;
+    matches++;
+    if (!all) {
+      break;
+    }
+  }
+  if (matches == 0) {
+    /* Nothing matched, so the answer *is* the subject, and it is handed back
+     * retained rather than copied. Safe because a string is immutable and the
+     * count is what decides its lifetime: the caller owns one reference either
+     * way and cannot tell which object it got. A `replace` that finds nothing
+     * is common enough to be worth not copying for. */
+    nts_retain((NtsHeader *)s);
+    return (NtsString *)s;
+  }
+  total += s->length - last;
+
+  int wide = ((s->flags | replacement->flags) & NTS_TWO_BYTE) != 0;
+  NtsString *out = nts_str_raw(total, wide);
+
+  /* Second pass, following exactly the walk the first one took. */
+  uint32_t cursor = 0;
+  uint32_t written = 0;
+  last = 0;
+  at = 0;
+  while (written < matches) {
+    double found = nts_str_match_from(s, pattern, at);
+    uint32_t m = (uint32_t)found;
+    cursor = nts_str_paste(out, cursor, s, last, m);
+    cursor += nts_str_expand(replacement, s, m, pattern->length, out, cursor);
+    last = m + pattern->length;
+    at = m + step;
+    written++;
+  }
+  nts_str_paste(out, cursor, s, last, s->length);
+  return out;
+}
+
+NtsString *nts_str_replace(const NtsString *s, const NtsString *pattern,
+                           const NtsString *replacement) {
+  return nts_str_replace_general(s, pattern, replacement, false);
+}
+
+NtsString *nts_str_replace_all(const NtsString *s, const NtsString *pattern,
+                               const NtsString *replacement) {
+  return nts_str_replace_general(s, pattern, replacement, true);
+}
+
 /* Equality is by value, not by identity: `"a" + "b" === "ab"` is true in
  * JavaScript, and the two are different allocations. */
 bool nts_string_eq(const NtsString *a, const NtsString *b) {

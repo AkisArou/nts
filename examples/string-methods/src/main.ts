@@ -77,3 +77,57 @@ export function piecesAreStrings(n: number): number {
   }
   return total * 10 + parts.length + n * 0;
 }
+
+// `replace` and `replaceAll`, whose replacement string is not copied
+// literally: `$$`, `$&`, `` $` `` and `$'` each stand for something, and
+// anything else after a `$` stays as it is. node settled every one of these,
+// including the two the empty pattern produces --
+//
+//     "abc".replace("", "+")     is "+abc"
+//     "abc".replaceAll("", "-")  is "-a-b-c-"
+//
+// -- the second of which puts a separator on both ends, because an empty
+// pattern matches at the end position as well as before every character.
+export function replacingFirst(n: number): string {
+  const subjects = ["a-b-c", "abc", "", "--", "a"];
+  const patterns = ["-", "", "x", "--"];
+  const replacements = ["+", "", "$$", "[$&]", "[$`]", "[$']", "$x", "<$>"];
+  let out = "";
+  for (const s of subjects) {
+    for (const p of patterns) {
+      for (const r of replacements) {
+        out = out + s.replace(p, r) + "|";
+      }
+    }
+  }
+  return out + n;
+}
+
+export function replacingEvery(n: number): string {
+  const subjects = ["a-b-c", "abc", "", "--", "aaa"];
+  const patterns = ["-", "", "a", "aa"];
+  const replacements = ["+", "", "$$", "[$&]", "[$`]", "[$']", "$"];
+  let out = "";
+  for (const s of subjects) {
+    for (const p of patterns) {
+      for (const r of replacements) {
+        out = out + s.replaceAll(p, r) + "|";
+      }
+    }
+  }
+  return out + n;
+}
+
+// A two-byte subject and a narrow replacement, and the reverse, because the
+// result's width is decided from both. The surrogate pair is there because
+// `$&` copies a slice of the subject by code *unit* and a pair must survive it.
+export function replacingWideText(n: number): string {
+  const s = "héllo wörld";
+  return (
+    s.replace("ö", "o") +
+    s.replaceAll("l", "L") +
+    "\u{1F600}x".replace("x", "$&$&") +
+    "plain".replace("a", "ä") +
+    n
+  );
+}
