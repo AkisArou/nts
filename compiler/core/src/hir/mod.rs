@@ -1400,8 +1400,14 @@ pub enum Provider {
     /// silent default for an application.
     #[default]
     NoGc,
-    /// RFC §9.2. Reference counting, without the cycle collector yet — so a
-    /// cycle is still a leak, which is the shape of leak this provider has.
+    /// RFC §9.2. Reference counting, with the cycle collector behind it: an
+    /// object that could be in a cycle goes to a candidate buffer at a count of
+    /// zero rather than being freed there, and collection runs once ten
+    /// thousand roots have accumulated.
+    ///
+    /// That deferral reads as a leak in a program too short to reach the
+    /// threshold — it is what made an async call look like it leaked a promise
+    /// per `await`. Across twenty thousand calls the live count is flat.
     ReferenceCounting,
 }
 

@@ -441,9 +441,16 @@ borrowed by that pass's convention. It is borrowed from whoever provided the
 reference, which is what makes giving it back at the finishing exits — and at
 none of the pausing ones — correct rather than double.
 
-Known and measured: an async call still leaks `awaits + 1` objects under
-reference counting. That is a leak and not a fault, it is not the frame, and it
-is what to look at next in this area.
+I first reported an async call as leaking `awaits + 1` objects under counting.
+It does not, and the correction is worth keeping: what accumulates is
+**promises**, which are cyclic-capable, so at a count of zero they go to the
+cycle collector's candidate buffer rather than being freed on the spot.
+
+A short program ends before the collector's ten-thousand-root threshold, which
+is what made it look like a leak. Measured across twenty thousand calls the live
+count stays flat, and a forced `nts_collect_cycles()` takes it to zero. The
+frames themselves are balanced — 101 allocated and 101 freed over 101 calls —
+which is the part this section is about.
 
 `bigint`'s width is the one place this table promises less than the language.
 Within it the arithmetic is exact and prints without an exponent, and the one
