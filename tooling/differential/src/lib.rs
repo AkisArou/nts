@@ -268,7 +268,20 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
         bail!("the program does not typecheck");
     }
 
-    let prepared = match hir::prepare(&snapshot) {
+    // `NTS_RC=1` compiles the program *and* the runtime for reference counting.
+    // Both halves matter and they have to agree: the provider decides what the
+    // compiler emits, not only what the runtime does with it, so selecting one
+    // without the other compares a program that never releases against an
+    // allocator that expects it to.
+    let options = hir::Options {
+        provider: if std::env::var("NTS_RC").is_ok_and(|value| value != "0") {
+            hir::Provider::ReferenceCounting
+        } else {
+            hir::Provider::NoGc
+        },
+        ..hir::Options::default()
+    };
+    let prepared = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared,
         Err(problems) => bail!("invalid HIR: {problems:?}"),
     };
@@ -939,13 +952,26 @@ fn run_native(
     // belief into a checked claim, since an unwritten slot then reads as a
     // conspicuous value rather than as whatever the allocator left.
     let poison = std::env::var("NTS_POISON").is_ok_and(|value| value != "0");
+    // `NTS_RC=1` builds against the reference-counting provider instead of the
+    // bump allocator.
+    //
+    // The retains and releases in the emitted C are the compiler's own work,
+    // and under the default provider nothing is ever freed -- so a release too
+    // few leaks where nobody looks and a release too many is never observed.
+    // Both become visible here: too many frees an object something still holds,
+    // and with `NTS_POISON` the next read of it is a conspicuous pattern rather
+    // than whatever the allocator left.
+    let counted = std::env::var("NTS_RC").is_ok_and(|value| value != "0");
+    let mut defines: Vec<&str> = Vec::new();
+    if poison {
+        defines.push("-DNTS_POISON=1");
+    }
+    if counted {
+        defines.push("-DNTS_PROVIDER_RC");
+    }
     let build = std::process::Command::new("clang")
         .args(["-std=c11", "-O1", "-w"])
-        .args(if poison {
-            &["-DNTS_POISON=1"][..]
-        } else {
-            &[][..]
-        })
+        .args(&defines)
         .arg("-I")
         .arg(dir)
         .arg("-o")

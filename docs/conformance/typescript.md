@@ -120,7 +120,7 @@ against **zero** uses of the refused form.
 | ✅ | higher-order functions and closures that only *read* what they capture |
 | ✅ | a **named function used as a value** — one static instance, so identity holds |
 | ✅ | recursion |
-| ✅ | `async`/`await` |
+| ◐ | `async`/`await` — right under the default provider; `await` in a **loop** is wrong under reference counting |
 | ✅ | type predicates (`x is T`) and `asserts x is T` |
 | ✅ | rest parameters | the call gathers its trailing arguments into the array |
 | ✗ | `function` expressions — an arrow with the same body lowers |

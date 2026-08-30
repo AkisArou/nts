@@ -173,5 +173,11 @@ step "corpus"  corpus
 step "profile"  profile
 step "sweep"    sweep
 step "examples" ./tooling/gate/gate.sh
+# Last, and the most expensive step by some way -- about four minutes, against
+# two for everything before it. It is here rather than skipped because until it
+# existed nothing ran the retains and releases the compiler emits at all, and it
+# found a wrong answer the first time it was pointed at the examples. Set
+# NTS_GATE_JOBS to dial the parallelism.
+step "rc"       ./tooling/gate/rc.sh
 
 printf '\n\033[32mgreen\033[0m\n'
