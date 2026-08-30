@@ -10113,6 +10113,31 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// Whether a loose comparison between these two could coerce.
+    ///
+    /// It can when either side is erased: the runtime types are then not known
+    /// to agree, and JavaScript's abstract equality converts before comparing.
+    /// Where both sides have the same concrete representation there is nothing
+    /// to convert and `==` is `===`.
+    fn coercing_comparison(&self, lhs: NodeId, rhs: NodeId) -> bool {
+        // `x == null` and `x == undefined` are the *absence* question, whatever
+        // the other side is represented as, and they are answered correctly
+        // above -- by the tag pair for an erased value and by the null pointer
+        // for a reference. They are also the only loose comparison real code
+        // writes: 273 of them in the node profile.
+        let absent = |node: NodeId| {
+            self.kind_of(node) == Some(syntax::NULL_KEYWORD)
+                || self.node(node).text.as_deref() == Some("undefined")
+        };
+        if absent(lhs) || absent(rhs) {
+            return false;
+        }
+        // Otherwise only an erased side can surprise: two concrete
+        // representations that reach here already agree, because the checker
+        // rejects a comparison between types that do not.
+        self.type_of(lhs) == Some(HirType::Erased) || self.type_of(rhs) == Some(HirType::Erased)
+    }
+
     /// The absent values a node's *type* admits, as tags.
     ///
     /// The representation has forgotten which: a `string | null` and a `string
@@ -12712,10 +12737,30 @@ impl<'a> FuncBuilder<'a> {
             syntax::LESS_THAN_EQUALS_TOKEN => BinOp::Le,
             syntax::GREATER_THAN_TOKEN => BinOp::Gt,
             syntax::GREATER_THAN_EQUALS_TOKEN => BinOp::Ge,
-            // `==` and `===` differ only by coercion, and both operands are
-            // already known to be numbers here — where the two agree. A `==`
-            // between different types would not reach this lowering, because
-            // the checker rejects it under `strict`.
+            // `==` and `===` differ only by coercion, and where both operands
+            // have the same representation the two agree exactly -- number
+            // against number, string against string. The checker rejects most
+            // mismatches under `strict`, which is what made this safe.
+            //
+            // It does not reject `unknown == unknown`, and there the runtime
+            // types can differ and coercion is the whole question: node answers
+            // `1 == true` with true, `[1] == 1` with true, and `null ==
+            // undefined` with true. This lowered all three to
+            // `nts_value_strict_eq` and answered false. Refused rather than
+            // answered wrongly -- see the loose-equality note in section 1.
+            //
+            // `x == null` does not come through here: it is the *absence*
+            // question and `erased_absence_test` answered it above, correctly,
+            // which is the one loose comparison real code writes.
+            syntax::EQUALS_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_TOKEN
+                if self.coercing_comparison(*lhs_node, *rhs_node) =>
+            {
+                return Err(self.unsupported(
+                    id,
+                    "`==` between values whose types are not known to agree, which \
+                     coerces -- and this compiler has no `ToPrimitive` to coerce with",
+                ));
+            }
             syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN => BinOp::Eq,
             syntax::EXCLAMATION_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN => BinOp::Ne,
             kind => {

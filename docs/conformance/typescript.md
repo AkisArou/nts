@@ -51,13 +51,37 @@ a backlog.
 |---|---|---|
 | ✅ | arithmetic | `+ - * / % **` |
 | ✅ | bitwise | `& \| ^ ~ << >> >>>` |
-| ✅ | comparison, equality | `< > <= >= == != === !==` |
+| ✅ | comparison, equality | `< > <= >= === !==`, and `==`/`!=` where nothing coerces |
+| ◐ | `==` that **coerces** | refused — see below |
 | ✅ | logical | `&& \|\| !` |
 | ✅ | unary | `+x -x`, `++ --` prefix and postfix |
 | ✅ | compound assignment | `+= -= *= /= %= **= &= \|= ^= <<= >>= >>>=` |
 | ✅ | conditional | `c ? a : b`, nested |
 | ✅ | `typeof` | folded on a known primitive; a tag read on an erased value |
 | ✅ | template literals | including interpolation |
+
+### `==` between types that differ
+
+`==` and `===` agree exactly where both sides have the same representation, and
+under `strict` the checker rejects most comparisons where they do not. It does
+not reject `unknown == unknown`, and there JavaScript's abstract equality
+converts before comparing:
+
+```js
+1 == true      // true
+[1] == 1       // true — the array is converted to a primitive first
+"a" == 1       // false
+```
+
+All three were answered by `nts_value_strict_eq`, so all three came back false.
+Doing it properly needs `ToPrimitive`, which means `valueOf` and `toString` on
+this compiler's object model, so it is **refused by name** rather than answered
+wrongly.
+
+`x == null` is not this and still works: it is the *absence* question, answered
+by the tag pair for an erased value and by the null pointer for a reference. It
+is also the only loose comparison real code writes — 273 in the node profile,
+against **zero** uses of the refused form.
 | ✅ | object and array literals | shorthand, computed keys, quoted keys |
 | ✅ | member access | `o.x`, `o["x"]`, `o[0]` |
 | ✅ | `new` | user classes, `Array`, typed arrays |
