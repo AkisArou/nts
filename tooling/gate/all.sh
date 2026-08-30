@@ -27,6 +27,25 @@ cd "$root"
 NTS_TSGO=${NTS_TSGO:-$root/target/tsgo}
 export NTS_TSGO
 
+# One knob for how hard this is allowed to run the machine.
+#
+#   NTS_JOBS=6 tooling/gate/all.sh
+#
+# There are three separate limits underneath -- cargo's build jobs, the example
+# runner's workers, and the corpus suite's -- and setting two of the three is
+# indistinguishable from setting all three until the one that was missed is the
+# step that runs hot. So they move together or not at all.
+#
+# Unset means each keeps its own default, which is what a healthy machine
+# wants. It exists because this one is not: two of its P-cores fail their own
+# parity checks under sustained all-core load, and the compile that provoked
+# that is exactly this script.
+if [ -n "${NTS_JOBS:-}" ]; then
+  export CARGO_BUILD_JOBS="$NTS_JOBS"
+  export NTS_GATE_JOBS="$NTS_JOBS"
+  export NTS_SUITE_JOBS="$NTS_JOBS"
+fi
+
 step() {
   printf '\n\033[1m%s\033[0m\n' "$1"
   shift
@@ -68,6 +87,20 @@ corpus() {
     return 1
   fi
 }
+
+# The frontend is not cargo's, but it lives in cargo's directory -- so
+# `cargo clean` takes it, and every step afterwards reports a number that is
+# true and means something else. The corpus said `frontend failed 184`, which
+# reads as the compiler having lost the ability to parse anything and meant
+# that a 39MB Go binary was absent.
+#
+# Checked once, here, rather than left for each step to misreport in its own
+# way.
+if [ ! -x "$NTS_TSGO" ]; then
+  printf '\033[31mno frontend\033[0m at %s\n' "$NTS_TSGO"
+  printf 'run tooling/bootstrap/bootstrap.sh -- `cargo clean` removes it\n'
+  exit 1
+fi
 
 step "build"   cargo build --release
 step "clippy"  lint
