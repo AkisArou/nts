@@ -143,3 +143,40 @@ export function readsItFromTwoScopesIn(n: number): number {
   };
   return measure(outer) + n * 0;
 }
+
+// A closure written *above* the declaration of the local it reads. Legal,
+// because the body runs later — and common in the profile, where a handler
+// refers to the cleanup function defined below it:
+//
+//     const onListening = () => { ...cleanup...; };
+//     const cleanup = ...;
+//
+// There is no value to copy where the closure is built, so the name goes
+// through a cell whether or not anything writes to it, and the cell is opened
+// in the function's entry block: it has to dominate both the closure that reads
+// it and the declaration that fills it, and those can sit in different
+// branches.
+export function readsALaterConst(n: number): number {
+  const read = (): number => later;
+  const later = n * 2;
+  return measure(read) + later * 0;
+}
+
+// Two closures either side of the declaration, naming one cell.
+export function bothSidesOfTheDeclaration(n: number): number {
+  const before = (): number => size + 1;
+  const size = n * 3;
+  const after = (): number => size + 2;
+  return measure(before) + measure(after);
+}
+
+// The same, inside a branch, which is what makes the entry block the only
+// placement that always dominates.
+export function insideABranch(n: number): number {
+  if (n > 0) {
+    const read = (): number => tag.length;
+    const tag = "abc";
+    return measure(read);
+  }
+  return -1;
+}

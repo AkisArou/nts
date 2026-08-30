@@ -438,6 +438,86 @@ struct Capture {
     by_reference: bool,
 }
 
+
+/// Whether a name is reached *by name* rather than carried in a closure.
+///
+/// There is one of it for the whole program and every function already reaches
+/// it, so copying it into a closure object would be storage for nothing. That
+/// covers a function, a class, an import of either, and anything declared at
+/// module scope -- and a *type*, which is not a value at all.
+///
+/// Getting this wrong does not produce a wrong answer, it produces a refusal
+/// that blames the wrong thing: the closure is refused for finding no value for
+/// a name that never had one, and the message can only say how far away the
+/// declaration was.
+fn reached_by_name(
+    probe: &FuncBuilder,
+    snapshot: &SemanticSnapshot,
+    symbol: SymbolId,
+    record: &SymbolRecord,
+) -> bool {
+    // There is one of it for the whole program, so copying a pointer to
+    // it into every closure would be storage for nothing.
+    if record.declarations.iter().any(|declaration| {
+        matches!(
+            probe.kind_of(*declaration),
+            Some(syntax::FUNCTION_DECLARATION | syntax::CLASS_DECLARATION)
+        )
+    }) {
+        return true;
+    }
+    // The same, for a name that arrived through an import -- whose
+    // declaration is an import specifier rather than the thing itself
+    // -- and for a name that is not a value at all.
+    //
+    // `(callback as Callback<Stats>)` mentions `Callback`, a type
+    // alias, inside an arrow. It has a symbol and it is declared
+    // outside, so without this it looked like something to capture, and
+    // the closure was refused for failing to find a value for a name
+    // that never had one. `Buffer`, `Stats` and `uvException` are the
+    // same mistake one step further out: imported, so the declaration
+    // test above does not see what they are.
+    let denoted = probe.denoted_symbol(symbol);
+    let record = snapshot
+        .symbols
+        .get(denoted.0 as usize)
+        .unwrap_or(record);
+    if [
+        SymbolFlags::FUNCTION,
+        SymbolFlags::CLASS,
+        SymbolFlags::INTERFACE,
+        SymbolFlags::TYPE_ALIAS,
+        SymbolFlags::ENUM,
+        SymbolFlags::MODULE,
+    ]
+    .iter()
+    .any(|flag| record.flags.contains(*flag))
+    {
+        return true;
+    }
+    // A module-scope name, for the same reason: one of it for the whole
+    // program, reached by name. `const BASE64 = "..."` and `const
+    // weakSetHas = WeakSet.prototype.has` are not things a closure
+    // carries a copy of.
+    if record
+        .declarations
+        .iter()
+        .all(|declaration| probe.is_module_scope(*declaration))
+    {
+        return true;
+    }
+    // A name something writes to is captured by reference: it moves
+    // into a cell, and the cell pointer is what the closure holds.
+    //
+    // Except when the binding is per-iteration. `for (let i = 0; ...)`
+    // gives each turn of the loop its own `i` -- a closure made in the
+    // body captures that turn's value, and JavaScript is explicit about
+    // it. One cell for the whole loop would hand every closure the
+    // value the loop ended on, so it is named and refused rather than
+    // answered wrongly.
+    false
+}
+
 /// The symbols a program captures *by reference*, in a stable order.
 ///
 /// Each one becomes a cell, and its position here is the cell's identity. A
@@ -665,67 +745,24 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             {
                 continue;
             }
-            // A function or a class is reached by name, not through a field.
-            // There is one of it for the whole program, so copying a pointer to
-            // it into every closure would be storage for nothing.
-            if record.declarations.iter().any(|declaration| {
-                matches!(
-                    probe.kind_of(*declaration),
-                    Some(syntax::FUNCTION_DECLARATION | syntax::CLASS_DECLARATION)
-                )
-            }) {
+            if reached_by_name(&probe, snapshot, symbol, record) {
                 continue;
             }
-            // The same, for a name that arrived through an import -- whose
-            // declaration is an import specifier rather than the thing itself
-            // -- and for a name that is not a value at all.
+            // A name declared *below* the arrow that reads it. The closure
+            // captures the binding, and where the closure is built that binding
+            // has no value -- so there is nothing to copy and it has to go
+            // through a cell, whether or not anything writes to it:
             //
-            // `(callback as Callback<Stats>)` mentions `Callback`, a type
-            // alias, inside an arrow. It has a symbol and it is declared
-            // outside, so without this it looked like something to capture, and
-            // the closure was refused for failing to find a value for a name
-            // that never had one. `Buffer`, `Stats` and `uvException` are the
-            // same mistake one step further out: imported, so the declaration
-            // test above does not see what they are.
-            let denoted = probe.denoted_symbol(symbol);
-            let record = snapshot
-                .symbols
-                .get(denoted.0 as usize)
-                .unwrap_or(record);
-            if [
-                SymbolFlags::FUNCTION,
-                SymbolFlags::CLASS,
-                SymbolFlags::INTERFACE,
-                SymbolFlags::TYPE_ALIAS,
-                SymbolFlags::ENUM,
-                SymbolFlags::MODULE,
-            ]
-            .iter()
-            .any(|flag| record.flags.contains(*flag))
-            {
-                continue;
-            }
-            // A module-scope name, for the same reason: one of it for the whole
-            // program, reached by name. `const BASE64 = "..."` and `const
-            // weakSetHas = WeakSet.prototype.has` are not things a closure
-            // carries a copy of.
-            if record
-                .declarations
-                .iter()
-                .all(|declaration| probe.is_module_scope(*declaration))
-            {
-                continue;
-            }
-            // A name something writes to is captured by reference: it moves
-            // into a cell, and the cell pointer is what the closure holds.
+            //     const onListening = () => { ...cleanup...; };
+            //     const cleanup = ...;
             //
-            // Except when the binding is per-iteration. `for (let i = 0; ...)`
-            // gives each turn of the loop its own `i` -- a closure made in the
-            // body captures that turn's value, and JavaScript is explicit about
-            // it. One cell for the whole loop would hand every closure the
-            // value the loop ended on, so it is named and refused rather than
-            // answered wrongly.
-            let by_reference = assigned.contains(&symbol.0);
+            // Legal, because the body runs later.
+            let arrow = probe.node(id).origin.location;
+            let below = record.declarations.iter().all(|declaration| {
+                let declared = probe.node(*declaration).origin.location;
+                declared.file == arrow.file && declared.span.start > arrow.span.start
+            });
+            let by_reference = assigned.contains(&symbol.0) || below;
             if by_reference && probe.is_per_iteration(record) {
                 info.refusal = Some(
                     "a closure over a `for` loop's own variable, which JavaScript \
@@ -4734,6 +4771,22 @@ impl<'a> FuncBuilder<'a> {
         let Some(index) = self.cell_of(symbol) else {
             return value;
         };
+        // A closure written above this declaration already opened the cell, so
+        // this is a store into it rather than a new one -- which is the whole
+        // point: the closure and the declaration have to name one cell.
+        if let Some(cell) = self.opened_cell(symbol, index) {
+            let origin = self.origin(at);
+            self.push(
+                OpKind::FieldSet {
+                    object: cell,
+                    field: 0,
+                    value,
+                },
+                HirType::Void,
+                origin,
+            );
+            return cell;
+        }
         let ty = self.values[value.0 as usize].ty.clone();
         let origin = self.origin(at);
         let cell_ty = HirType::Managed(ManagedType::Object(cell_type(index)));
@@ -4753,6 +4806,44 @@ impl<'a> FuncBuilder<'a> {
             origin,
         );
         cell
+    }
+
+    /// The cell already standing for this symbol, if one is.
+    ///
+    /// The type is the test rather than the binding's presence: a name from an
+    /// enclosing scope can be bound to something that is not this cell, and
+    /// storing into that would write to the wrong place.
+    fn opened_cell(&self, symbol: u32, index: usize) -> Option<ValueId> {
+        let bound = self.bindings.get(&symbol).copied()?;
+        let wanted = HirType::Managed(ManagedType::Object(cell_type(index)));
+        (self.values[bound.0 as usize].ty == wanted).then_some(bound)
+    }
+
+    /// Open a cell in the *entry* block, for a name read above its declaration.
+    ///
+    /// In the entry block rather than beside the closure, because it has to
+    /// dominate both the closure that reads it and the declaration that fills
+    /// it, and those can be in different branches. The entry block dominates
+    /// everything, so this is the one placement that always holds.
+    ///
+    /// The cell is zeroed until the declaration runs. JavaScript throws a
+    /// `ReferenceError` for a read in that window; this answers with the zero.
+    /// The two differ only for a program that would throw, which is the same
+    /// bargain the rest of this compiler makes with exceptions.
+    fn open_cell_early(&mut self, symbol: u32, at: NodeId) -> Option<ValueId> {
+        let index = self.cell_of(symbol)?;
+        let ty = self.type_of(at)?;
+        let origin = self.origin(at);
+        self.layouts.push(self.cell_layout(index, ty));
+        let id = ValueId(u32::try_from(self.values.len()).unwrap_or(u32::MAX));
+        self.values.push(Op {
+            kind: OpKind::ObjectNew { frame: false },
+            ty: HirType::Managed(ManagedType::Object(cell_type(index))),
+            origin,
+        });
+        self.blocks[0].ops.insert(0, id);
+        self.bindings.insert(symbol, id);
+        Some(id)
     }
 
     /// Read a name that lives in a cell.
@@ -9029,6 +9120,9 @@ impl<'a> FuncBuilder<'a> {
             // the collector only allowed a capture of something declared
             // outside the arrow and never assigned -- so by the time the arrow
             // is reached, the binding exists and is final.
+            if !self.bindings.contains_key(&capture.symbol) {
+                self.open_cell_early(capture.symbol, capture.at);
+            }
             let value = *self.bindings.get(&capture.symbol).ok_or_else(|| {
                 // Every name that is reached *by* name -- a function, a class,
                 // an import, a type, anything at module scope -- is excluded

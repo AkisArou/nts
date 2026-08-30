@@ -102,7 +102,7 @@ a backlog.
 | ✗ | `function` expressions — an arrow with the same body lowers |
 | ✅ | closures over a variable something **assigns to** — the variable moves into a cell |
 | ✗ | a closure over a `for` loop's own variable, which JavaScript rebinds per iteration |
-| ✗ | a closure written *above* the declaration of a local it reads |
+| ✅ | a closure written *above* the declaration of a local it reads |
 | ✗ | generators (`function*`, `yield`) — needs the `Generator<T>` object |
 
 ### A written variable moves into a cell, and only then
@@ -152,15 +152,24 @@ are refusals at the *read* that say what the thing is: a module-scope variable
 holding a function, an enum, a builtin this compiler does not provide. A refusal
 belongs where it can name the cause.
 
-The one that remains is real, and is its own row above:
+The one that remained was real, and is now done:
 
 ```ts
 const onListening = () => { ...cleanup...; };
 const cleanup = ...;
 ```
 
-Legal, because the body runs later. There is nothing to capture at the point the
-closure is built, so it is refused rather than answered with an empty value.
+Legal, because the body runs later. There is no value to copy where the closure
+is built, so the name goes through a cell whether or not anything writes to it,
+and the cell is opened in the function's **entry block** — it has to dominate
+both the closure that reads it and the declaration that fills it, and those can
+be in different branches, so that is the one placement that always holds.
+
+One divergence, stated rather than hidden: the cell is zeroed until the
+declaration runs, and a read in that window answers with the zero where
+JavaScript throws a `ReferenceError`. The two differ only for a program that
+would throw, which is the same bargain the rest of this compiler makes with
+exceptions.
 
 ### A function as a value costs one static object, and nothing where it is not used
 
@@ -604,7 +613,7 @@ blocks on, not to start building.
 
 | | what it unblocks | shape of the work |
 |---|---|---|
-| closures and function values | was 101 across four rows; **a named function used as a value is done** and took the profile from 1,155 sites to 1,050. What is left is capture *by reference* (20) and a name from an enclosing scope (27) | capture more than one scope up already works, and so does a returned closure — the row said otherwise and was not checked |
+| closures and function values | **done**, all four rows. 101 sites, and the profile went 1,155 → 1,041 across the four changes | a function as a value, capture by reference, module-scope names, and a capture above its own declaration. What is refused is one thing: a `for` loop's own variable, which JavaScript rebinds per iteration |
 | module evaluation | 81 — one refusal repeated across the top level of nearly every module | a statement at module scope that is not a declaration; the evaluation order is already modelled |
 | a member a type does not declare | 80 — 26 of them on an anonymous type, then `StreamLike` (12) | mostly structural types the decomposition stopped at; count before building |
 | a global member | 78 — a long tail: `Object.defineProperty` 14, `Array.from` 10, `ArrayBuffer.isView` 7 | the largest entry is §13's, so this row is smaller than it looks |
