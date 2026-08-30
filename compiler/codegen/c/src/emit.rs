@@ -1756,21 +1756,15 @@ fn emit_body(
         // A parameter is already declared by the signature, a value nothing
         // reads was dropped by dead-code elimination, and an operation that
         // produces nothing has nothing to hold — `void v4;` is not a variable.
-        if matches!(op.kind, OpKind::Param(_))
-            || matches!(op.ty, HirType::Void)
-            || !declared.contains(&ValueId(u32::try_from(index).unwrap_or(0)))
-        {
-            continue;
-        }
-        let ty = c_type_of(context.program, &op.ty, &op.origin)?;
-        // An object that does not escape lives here rather than on the heap, so
-        // it needs storage as well as a pointer to it. Declared with the other
-        // locals, which means one slot per allocation site rather than one per
-        // execution of it -- correct precisely because nothing outlives the
-        // iteration that made it.
-        // A string built in the frame needs room for its code units as well as
-        // a pointer to them. The capacity is what the compiler proved the result
-        // cannot exceed, which is not the same as what it will be.
+        // A string built in the frame needs room for its code units, and the
+        // statement names that room whether or not anything reads the result --
+        // so the storage is declared on the strength of the *frame* rather than
+        // of the value, above the skip below.
+        //
+        // Reachable since `for (const c of s)` existed: constant folding turns
+        // `c.length` on a literal into a number, the slice becomes a call
+        // nobody reads, and the assignment is dropped while the frame it writes
+        // into is still named.
         if let OpKind::Call {
             frame: Some(units), ..
         } = op.kind
@@ -1783,6 +1777,18 @@ fn emit_body(
                 ),
             );
         }
+        if matches!(op.kind, OpKind::Param(_))
+            || matches!(op.ty, HirType::Void)
+            || !declared.contains(&ValueId(u32::try_from(index).unwrap_or(0)))
+        {
+            continue;
+        }
+        let ty = c_type_of(context.program, &op.ty, &op.origin)?;
+        // An object that does not escape lives here rather than on the heap, so
+        // it needs storage as well as a pointer to it. Declared with the other
+        // locals, which means one slot per allocation site rather than one per
+        // execution of it -- correct precisely because nothing outlives the
+        // iteration that made it.
         if let OpKind::ObjectNew { frame: true } = op.kind {
             let layout = layout_of(context.program, &op.ty, &op.origin)?;
             writer.line(
