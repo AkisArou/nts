@@ -63,7 +63,8 @@ a backlog.
 | ✅ | `new` | user classes, `Array`, typed arrays |
 | ✅ | `??` | the absence test, not the truthiness one — `0 ?? 1` is `0` |
 | ✗ | `??=`, `\|\|=`, `&&=` | |
-| ✗ | `?.`, `?.()` | optional chaining |
+| ✅ | `?.` | one link; a chain after an optional access is refused and named |
+| ✗ | `?.()`, `?.[]` | optional call and optional index |
 | ✗ | spread | `[...a]`, `{...o}` |
 | ✗ | `in`, `delete`, `void`, comma | |
 | ✗ | `instanceof` | needs a class as a value |
@@ -365,7 +366,7 @@ questions:
 
 | | what it says | today |
 |---|---|---|
-| examples | the compiled program agrees with node, case by case | 74 of 74 |
+| examples | the compiled program agrees with node, case by case | 75 of 75 |
 | corpus | arbitrary input produces no invalid IR and no C that will not compile | 47 lower cleanly; `invalid HIR` 0, `uncompilable C` 2 |
 | profile | how much of a real standard library lowers | 535 functions |
 
@@ -387,7 +388,7 @@ code actually needs rather than by what looks incomplete.
 | `try`/`catch` | the largest *language* gap | needs an unwinding decision — the runtime has none |
 | `Object` statics, `JSON` | 39 | the same hash table as `Map` |
 | a class as a value | `instanceof`, static access through a variable | a class needs a runtime representation of itself |
-| `?.`, rest, spread | `?.` is 26 profile refusals and shares `??`'s absence test | each is small and independent |
+| rest, spread | scattered and common in ordinary code | each is small and independent |
 | generators | node's `readline` among others | the suspension machine exists for `async`; what is missing is the `Generator<T>` object and §10's protocol |
 | the iteration protocol | `for...of` over anything but an array, spread, generators, `Map`/`Set` iteration | §10 — one protocol that several of the rows above are each waiting on separately |
 

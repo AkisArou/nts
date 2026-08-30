@@ -7521,6 +7521,13 @@ impl<'a> FuncBuilder<'a> {
     /// `xs.length`. Other members are not lowered yet.
     fn lower_property_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let children = self.children(id);
+        // `a?.b`, which is three children because the `?.` is a token of its
+        // own between the receiver and the name.
+        if let [object, dot, member] = children.as_slice()
+            && self.kind_of(*dot) == Some(syntax::QUESTION_DOT_TOKEN)
+        {
+            return self.lower_optional_access(id, *object, *member);
+        }
         let [object, member] = children.as_slice() else {
             return Err(self.unsupported(
                 id,
@@ -7530,6 +7537,19 @@ impl<'a> FuncBuilder<'a> {
                 ),
             ));
         };
+        // `a?.b.c` short-circuits the *whole* chain: when `a` is absent, `.c`
+        // is not evaluated either. That is a property of the chain rather than
+        // of either access, so a link after an optional one is refused instead
+        // of being lowered as `(a?.b).c`, which would read a member of the
+        // absent value. All twenty-six optional accesses in the node profile
+        // are a single link.
+        if self
+            .children(*object)
+            .get(1)
+            .is_some_and(|dot| self.kind_of(*dot) == Some(syntax::QUESTION_DOT_TOKEN))
+        {
+            return Err(self.unsupported(id, "a link after an optional access"));
+        }
         // `C.x` where `C` is a module: the checker resolved the member to the
         // export's own symbol, so this is a name and lowers as one -- through
         // the same alias-following path `import { x }` already takes.
@@ -7552,16 +7572,61 @@ impl<'a> FuncBuilder<'a> {
         }
 
         let value = self.lower_expression(*object)?;
+        self.member_of(id, value, &member_name)
+    }
+
+    /// `a?.b` -- `a.b` unless `a` is absent, and `undefined` when it is.
+    ///
+    /// The receiver is lowered once, before the test, and read only inside the
+    /// arm that established it is present. Which is the same shape `??` has,
+    /// and the same absence: a tag on an erased value, a null pointer on a
+    /// reference.
+    fn lower_optional_access(
+        &mut self,
+        id: NodeId,
+        object: NodeId,
+        member: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let receiver = self.lower_expression(object)?;
+        let Some(absent) = self.absence_of(object, receiver) else {
+            // A receiver with no room for an absence is never absent, so this
+            // is an ordinary access. TypeScript permits the shape and reports
+            // it as unnecessary.
+            let name = self
+                .literal_name(member)
+                .ok_or_else(|| self.unsupported(member, "a computed property name"))?;
+            return self.member_of(id, receiver, &name);
+        };
+        self.lower_branching_value(
+            id,
+            absent,
+            Branch::Absent,
+            Branch::Member(receiver, member),
+        )
+    }
+
+    /// A member of a receiver that is already lowered.
+    ///
+    /// Split from [`Self::lower_property_access`] so `a?.b` can read the member
+    /// without lowering `a` twice: the optional form has to test the receiver
+    /// *and* read through it, and once is the difference between `a?.b` and
+    /// something that calls a getter on the way in and again on the way out.
+    fn member_of(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        member_name: &str,
+    ) -> Result<ValueId, Diagnostic> {
 
         if let HirType::Managed(ManagedType::Object(type_id)) =
             self.values[value.0 as usize].ty.clone()
         {
             let layout = self.layout_of(id, type_id)?;
-            let Some(field) = layout.index_of(&member_name) else {
+            let Some(field) = layout.index_of(member_name) else {
                 // A getter. `o.x` looks like a field read and runs code, which
                 // is why an accessor may not be laid out as a field: emitting
                 // the load would read whatever sits at that offset.
-                if let Some(callee) = self.accessor_callee(type_id, &member_name, "get ") {
+                if let Some(callee) = self.accessor_callee(type_id, member_name, "get ") {
                     let ty = self
                         .type_of(id)
                         .ok_or_else(|| self.unrepresentable(id, "a getter"))?;
@@ -7576,7 +7641,7 @@ impl<'a> FuncBuilder<'a> {
                         origin,
                     ));
                 }
-                return Err(self.absent_member(id, type_id, &member_name));
+                return Err(self.absent_member(id, type_id, member_name));
             };
             let ty = layout.fields[field as usize].ty.clone();
             let origin = self.origin(id);
@@ -7740,6 +7805,19 @@ impl<'a> FuncBuilder<'a> {
         match branch {
             Branch::Expression(node) => self.lower_expression(node),
             Branch::Value(value) => Ok(value),
+            Branch::Absent => {
+                let ty = self
+                    .type_of(id)
+                    .ok_or_else(|| self.unrepresentable(id, "an optional access"))?;
+                let origin = self.origin(id);
+                Ok(self.push(OpKind::ConstNull, ty, origin))
+            }
+            Branch::Member(receiver, member) => {
+                let name = self
+                    .literal_name(member)
+                    .ok_or_else(|| self.unsupported(member, "a computed property name"))?;
+                self.member_of(id, receiver, &name)
+            }
             // At the type the whole expression has, which is what `id` is.
             // Without this, `const chosen: number = limit || 1` handed a
             // `number` block parameter an erased value -- rejected by the
@@ -10534,6 +10612,16 @@ enum Place {
 enum Branch {
     Expression(NodeId),
     Value(ValueId),
+    /// `undefined`, at whatever type the whole expression has.
+    ///
+    /// What `a?.b` produces when `a` is absent -- and it is the *expression's*
+    /// type rather than the member's, because the member is not read at all.
+    Absent,
+    /// A member read from a receiver that is already lowered.
+    ///
+    /// The receiver is evaluated before the branch and read inside it, which is
+    /// what keeps `a?.b` from evaluating `a` twice.
+    Member(ValueId, NodeId),
     /// A value the branch has established is neither `null` nor `undefined`.
     ///
     /// Distinct from [`Self::Value`] because the distinction is a soundness

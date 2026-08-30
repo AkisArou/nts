@@ -55,6 +55,11 @@ pub const AMPERSAND_AMPERSAND_TOKEN: u16 = 55;
 pub const QUESTION_QUESTION_TOKEN: u16 = 60;
 pub const BAR_BAR_TOKEN: u16 = 56;
 pub const QUESTION_TOKEN: u16 = 57;
+/// The `?.` of `a?.b`, `a?.[i]` and `a?.()`.
+///
+/// A real token node between the receiver and the member, which is why an
+/// optional access has three children where an ordinary one has two.
+pub const QUESTION_DOT_TOKEN: u16 = 28;
 /// `...`, on a rest parameter or a spread element.
 pub const DOT_DOT_DOT_TOKEN: u16 = 25;
 pub const IDENTIFIER: u16 = 79;
