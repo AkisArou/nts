@@ -4088,6 +4088,34 @@ impl<'a> FuncBuilder<'a> {
     /// Only a literal. `[kSymbol]` and `[prefix + n]` are names the program
     /// decides at run time; both want a property map rather than a field, and
     /// reading one as a name would collide two members into a single slot.
+    /// The field a member keyed by a *symbol* names.
+    ///
+    /// `o[kFlag]` indexes by a symbol, and the index's own name is `kFlag` --
+    /// the variable holding the symbol, not the member. The snapshot reports
+    /// the property under TypeScript's own spelling, `__@kFlag@2`: the symbol's
+    /// description and the checker's id for it, which is the name the checker
+    /// does lookup by and so the name the layout carries.
+    ///
+    /// The id is tsgo's and does not survive into this snapshot, so the match
+    /// is on the description alone -- and an ambiguity is *refused* by
+    /// returning nothing rather than guessed at. Two distinct symbols sharing
+    /// one description and keying one type is the case that would otherwise
+    /// pick a field silently.
+    fn symbol_keyed(layout: &Layout, member: &str) -> Option<u32> {
+        let prefix = format!("__@{member}@");
+        let mut found = layout
+            .fields
+            .iter()
+            .enumerate()
+            .filter(|(_, field)| {
+                field.name.starts_with(&prefix)
+                    && field.name[prefix.len()..].bytes().all(|b| b.is_ascii_digit())
+            })
+            .map(|(at, _)| u32::try_from(at).unwrap_or(0));
+        let first = found.next()?;
+        found.next().is_none().then_some(first)
+    }
+
     fn literal_name(&self, name: NodeId) -> Option<String> {
         if let Some(text) = self.node(name).text.clone() {
             return Some(text);
@@ -7471,7 +7499,10 @@ impl<'a> FuncBuilder<'a> {
                 let name = self
                     .literal_name(property)
                     .ok_or_else(|| self.unsupported(element, "a computed property name"))?;
-                let Some(field) = layout.index_of(&name) else {
+                let Some(field) = layout
+                    .index_of(&name)
+                    .or_else(|| Self::symbol_keyed(&layout, &name))
+                else {
                     return Err(self.absent_member(element, type_id, &name));
                 };
                 let ty = layout.fields[field as usize].ty.clone();
@@ -7567,7 +7598,10 @@ impl<'a> FuncBuilder<'a> {
                 .filter(|_| self.is_tuple(type_id))
                 .filter(|at| *at < layout.fields.len())
                 .and_then(|at| u32::try_from(at).ok());
-            let Some(field) = positional.or_else(|| layout.index_of(&name)) else {
+            let Some(field) = positional
+                .or_else(|| layout.index_of(&name))
+                .or_else(|| Self::symbol_keyed(&layout, &name))
+            else {
                 // A setter, for the same reason.
                 if let Some(callee) = self.accessor_callee(type_id, &name, "set ") {
                     return Ok(Place::Setter { object, callee });
@@ -9746,7 +9780,10 @@ impl<'a> FuncBuilder<'a> {
                 // rather than answered with whatever is adjacent in memory.
                 .filter(|at| *at < layout.fields.len())
                 .and_then(|at| u32::try_from(at).ok());
-            let Some(field) = positional.or_else(|| layout.index_of(member_name)) else {
+            let Some(field) = positional
+                .or_else(|| layout.index_of(member_name))
+                .or_else(|| Self::symbol_keyed(&layout, member_name))
+            else {
                 // A getter. `o.x` looks like a field read and runs code, which
                 // is why an accessor may not be laid out as a field: emitting
                 // the load would read whatever sits at that offset.
@@ -10395,7 +10432,10 @@ impl<'a> FuncBuilder<'a> {
             let name = self
                 .literal_name(property)
                 .ok_or_else(|| self.unsupported(element, "a computed property name"))?;
-            let Some(field) = layout.index_of(&name) else {
+            let Some(field) = layout
+                .index_of(&name)
+                .or_else(|| Self::symbol_keyed(&layout, &name))
+            else {
                 return Err(self.absent_member(element, type_id, &name));
             };
             let ty = layout.fields[field as usize].ty.clone();

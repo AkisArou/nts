@@ -244,7 +244,31 @@ ordinary calls emits no closure struct, no dispatch slot and no table at all.
 | ✗ | generic classes |
 | ✗ | a class used as a *value* (`C` itself, `instanceof C`) |
 | ✗ | methods and getters on **object literals** |
-| ✗ | a member name the program computes (`[kSymbol]`) — wants a property map |
+| ✅ | a member keyed by a **symbol** (`[kRefed]`) — an ordinary field, not a map |
+| ✗ | a member name the program computes from a value the compiler cannot see |
+
+### `[kRefed]` is a field, not a property map
+
+`node` keeps internal state off a class's public shape with symbol keys:
+
+```ts
+export const kRefed = Symbol("refed");
+class Immediate { [kRefed]: boolean | null; … this[kRefed] = false; }
+```
+
+It reads like a property map and is not one. A `const` symbol at module scope is
+*one* symbol, known at compile time, so `[kRefed]` is a field with an unusual
+name and costs exactly what `_refed` would.
+
+The snapshot already reported it, under TypeScript's own spelling —
+`__@kRefed@2`, the description and the checker's id, which is the name the
+checker does lookup by. What was missing was only the *access* side: it had the
+variable's name, `kRefed`, and looked for a field called that.
+
+The checker's id does not survive into this snapshot, so the match is on the
+description, and two symbols sharing one description on one type is **refused**
+rather than guessed — the case that would otherwise pick a field silently.
+
 
 ### A class has no runtime identity, and it is the layout's fault
 
