@@ -119,3 +119,56 @@ export function comparisons(n: number): number {
   return (a < b ? 1 : 0) + (a <= b ? 10 : 0) + (b > a ? 100 : 0) +
     (a === 5n ? 1000 : 0) + (a !== b ? 10000 : 0) + n * 0;
 }
+
+// The bitwise operators on a bigint, through parameters so nothing folds.
+//
+// Every one of these was emitted wrongly at first, and the C compiled without
+// a word of complaint: both operands were narrowed to `int32_t`, the result was
+// returned through a `double`, and the two shifts crashed the emitter outright.
+// A 128-bit `&` narrowed to 32 bits still answers correctly for small inputs,
+// which is why the constants below are wider than an int32.
+function bitAnd(a: bigint, b: bigint): bigint {
+  return a & b;
+}
+
+function bitOr(a: bigint, b: bigint): bigint {
+  return a | b;
+}
+
+function bitXor(a: bigint, b: bigint): bigint {
+  return a ^ b;
+}
+
+export function wideBitwise(n: number): number {
+  const mask = 0xffffffffffn; // forty bits: an int32 cannot hold it
+  const low = 0xffn;
+  return (
+    Number(bitAnd(mask, low)) +
+    Number(bitOr(0x100000000n, 1n) === 0x100000001n ? 1000 : 0) +
+    Number(bitXor(0xf00000000n, 0xf00000000n) === 0n ? 10000 : 0) +
+    n * 0
+  );
+}
+
+// Shifting, where JavaScript's rules and C's undefined behaviour differ: a
+// negative count shifts the other way, and a count past the width saturates
+// rather than doing whatever the hardware happens to do.
+function shl(a: bigint, b: bigint): bigint {
+  return a << b;
+}
+
+function shr(a: bigint, b: bigint): bigint {
+  return a >> b;
+}
+
+export function shiftsByAValue(n: number): number {
+  return (
+    (shl(1n, 40n) === 1099511627776n ? 1 : 0) +
+    (shl(1n, -1n) === 0n ? 10 : 0) +
+    (shr(4n, -1n) === 8n ? 100 : 0) +
+    (shr(-8n, 1n) === -4n ? 1000 : 0) +
+    (shr(-1n, 300n) === -1n ? 10000 : 0) +
+    (shr(5n, 300n) === 0n ? 100000 : 0) +
+    n * 0
+  );
+}

@@ -1920,11 +1920,19 @@ fn binary_text(
     // says. When specialization did not give them an integer type, the
     // arithmetic still has to happen in integers, so it is spelled with casts
     // around it. Those casts are exactly the cost the analysis removes.
-    let integral = matches!(op.ty, HirType::Int { .. });
+    //
+    // A `bigint` is the exception at both ends. It is already exact, and it is
+    // 128 bits wide: narrowing it to `int32_t` or returning it through a
+    // `double` would each throw away most of it. So it counts as integral here,
+    // and the cast below leaves it alone.
+    let integral = matches!(op.ty, HirType::Int { .. } | HirType::BigInt);
     // Cast decided per *operand*, from its own type. Deciding it from the
     // result's would emit `v14 | v15` with `v15` a double, which is not C.
     let cast = |value: ValueId| {
-        if matches!(func.values[value.0 as usize].ty, HirType::Int { .. }) {
+        if matches!(
+            func.values[value.0 as usize].ty,
+            HirType::Int { .. } | HirType::BigInt
+        ) {
             value_name(value)
         } else {
             format!("(int32_t){}", value_name(value))
@@ -1943,15 +1951,18 @@ fn binary_text(
     // operand is undefined in C and defined in JavaScript. Each goes through a
     // helper that spells the real rule.
     // The shift helpers spell JavaScript's rule for a *number*: the count is
-    // masked to five bits and the operands are int32. A `bigint` shift has
-    // neither rule, so it is C's own operator on a 128-bit integer -- which is
-    // also what the lowering left here, having skipped the `ToInt32` pair.
+    // masked to five bits and the operands are int32. A `bigint` has neither
+    // rule -- the lowering skipped the `ToInt32` pair for it -- but it does not
+    // get C's operator either, because a negative count reverses the direction
+    // and a count past the width saturates, and C leaves both undefined. It
+    // gets a second pair of helpers that spell *those* rules on 128 bits.
     let wide = matches!(func.values[lhs.0 as usize].ty, HirType::BigInt);
-    let helper = match bin {
-        _ if wide => None,
-        BinOp::Shl => Some("nts_shl"),
-        BinOp::Shr => Some("nts_shr"),
-        BinOp::UShr => Some("nts_ushr"),
+    let helper = match (wide, bin) {
+        (false, BinOp::Shl) => Some("nts_shl"),
+        (false, BinOp::Shr) => Some("nts_shr"),
+        (false, BinOp::UShr) => Some("nts_ushr"),
+        (true, BinOp::Shl) => Some("nts_bigint_shl"),
+        (true, BinOp::Shr) => Some("nts_bigint_shr"),
         _ => None,
     };
     if let Some(helper) = helper {
@@ -1991,7 +2002,12 @@ fn binary_text(
         BinOp::Ge => ">=",
         BinOp::Eq => "==",
         BinOp::Ne => "!=",
-        BinOp::Shl | BinOp::Shr | BinOp::UShr => unreachable!("handled above"),
+        // Every shift went to a helper above except `>>>` on a bigint, which
+        // is a TypeError in JavaScript and is rejected by the typechecker long
+        // before this. Reachable in this `match`, unreachable from a program.
+        BinOp::Shl | BinOp::Shr | BinOp::UShr => {
+            unreachable!("`>>>` on a bigint is a type error and does not arrive")
+        }
         // Not `fmin`/`fmax`: those return the non-NaN operand where JavaScript
         // returns NaN, and disagree about the two zeroes.
         BinOp::Min | BinOp::Max => {

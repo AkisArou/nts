@@ -358,6 +358,13 @@ typedef struct NtsMap {
 __int128 nts_bigint_as_intn(double bits, __int128 value);
 __int128 nts_bigint_as_uintn(double bits, __int128 value);
 
+/* JavaScript's shifts on a bigint. A negative count reverses the direction and
+ * a count past 128 saturates -- both undefined behaviour for C's operators,
+ * which is why these are calls. `>>>` is a TypeError on a bigint and so has no
+ * counterpart here. */
+__int128 nts_bigint_shl(__int128 value, __int128 count);
+__int128 nts_bigint_shr(__int128 value, __int128 count);
+
 /* `===` where one side is erased.
  *
  * Strict equality, which is *not* the SameValueZero a table compares keys

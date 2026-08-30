@@ -405,6 +405,65 @@ __int128 nts_bigint_as_uintn(double bits, __int128 value) {
   return nts_bigint_low_bits(bits, value, false);
 }
 
+/* Shifting a `bigint`, which C's own operators do not spell.
+ *
+ * Three of JavaScript's rules here are undefined behaviour in C, and node was
+ * asked for each of them rather than assumed:
+ *
+ *     1n << -1n     is 0n     -- a negative count shifts the other way
+ *     4n >> -1n     is 8n
+ *     5n >> 300n    is 0n     -- a count past the width saturates
+ *     -1n >> 300n   is -1n       arithmetically, so a negative value stays -1
+ *
+ * C leaves a shift by a negative count undefined, leaves a shift by more than
+ * the operand's width undefined, and leaves `<<` on a negative left operand
+ * undefined as well. Emitting `a << b` would therefore be wrong for three
+ * separate reasons on inputs a program can easily reach, which is why these
+ * exist rather than the operator.
+ *
+ * There is no `>>>` here on purpose: it is a TypeError on a bigint in
+ * JavaScript, and the typechecker rejects it before this is reached.
+ *
+ * The domain is 128 bits, so `1n << 200n` is 0 here where node grows the
+ * number instead. That is the same boundary `nts_bigint_as_intn` works within
+ * and the same one the lowering refuses literals outside of. */
+
+/* Left, on the unsigned twin so a negative value's shift is defined. */
+static __int128 nts_bigint_up(__int128 value, unsigned count) {
+  if (count >= 128u) {
+    return 0;
+  }
+  return (__int128)((unsigned __int128)value << count);
+}
+
+/* Right, arithmetically: the sign bit is replicated, so a negative value
+ * saturates at -1 and a non-negative one at 0. */
+static __int128 nts_bigint_down(__int128 value, unsigned count) {
+  if (count >= 128u) {
+    return value < 0 ? (__int128)-1 : (__int128)0;
+  }
+  return value >> count;
+}
+
+/* A count is itself a bigint, so it can be negative and it can be enormous.
+ * The out-of-range test comes before negating it, because the one count whose
+ * negation overflows is INT128_MIN, and that is past the width either way. */
+__int128 nts_bigint_shl(__int128 value, __int128 count) {
+  if (count < 0) {
+    return count <= -128 ? (value < 0 ? (__int128)-1 : (__int128)0)
+                         : nts_bigint_down(value, (unsigned)-count);
+  }
+  return count >= 128 ? 0 : nts_bigint_up(value, (unsigned)count);
+}
+
+__int128 nts_bigint_shr(__int128 value, __int128 count) {
+  if (count < 0) {
+    return count <= -128 ? 0 : nts_bigint_up(value, (unsigned)-count);
+  }
+  return count >= 128 ? (value < 0 ? (__int128)-1 : (__int128)0)
+                      : nts_bigint_down(value, (unsigned)count);
+}
+
 /* Claim and give up what an erased value holds. */
 void nts_value_retain(NtsValue value) {
   if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&

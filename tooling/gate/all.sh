@@ -74,6 +74,36 @@ format() {
   return 1
 }
 tests() { cargo test --workspace >/dev/null 2>&1; }
+
+# The node profile, emitted but not built.
+#
+# Building the addons needs node's headers and belongs to the conformance
+# harness. *Emitting* them is this compiler's own job, and until now nothing in
+# this gate did it -- so the profile was the largest body of TypeScript the
+# compiler sees and the least watched.
+#
+# A crash is the only failure here. Refusals are expected, counted elsewhere,
+# and a module still being written may refuse a great deal without that being
+# this step's business. But no input may make the emitter panic, whoever wrote
+# it and whatever it says: a panic is a compiler bug by definition.
+#
+# This exists because eleven of these modules crashed the emitter while every
+# other step of this gate was green. A `bigint` shift fell past its helper into
+# an `unreachable!`, and the examples could not see it because none of them
+# shifted a bigint by a value.
+profile() {
+  crashed=$(for m in "$root"/runtime/node/*/tsconfig.json; do
+              if ./target/release/nts emit-c "$m" --out "$root/target/gate-profile" \
+                   --napi 2>&1 | grep -q "panicked at"; then
+                basename "$(dirname "$m")"
+              fi
+            done)
+  printf '  %s modules emitted\n' "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)"
+  [ -z "$crashed" ] && return 0
+  echo "  the emitter panicked on:"
+  echo "$crashed" | sed 's/^/    /'
+  return 1
+}
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
@@ -125,6 +155,7 @@ step "clippy"  lint
 step "format"  format
 step "tests"   tests
 step "corpus"  corpus
+step "profile"  profile
 step "examples" ./tooling/gate/gate.sh
 
 printf '\n\033[32mgreen\033[0m\n'
