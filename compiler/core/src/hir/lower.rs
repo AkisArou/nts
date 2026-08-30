@@ -1953,6 +1953,34 @@ pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
         TypeKind::Conditional { .. } => "a conditional type".to_owned(),
         TypeKind::IndexedAccess { .. } => "an indexed access".to_owned(),
         TypeKind::TemplateLiteral { .. } => "a template literal type".to_owned(),
+        // `Map<K, V>` and `Set<T>` spelled with their arguments.
+        //
+        // The table is the same table whatever it holds, so a refusal naming
+        // one is never about the Map -- it is about a key or a value with no
+        // representation, and `Map` sends the reader to a feature that is
+        // already built. 100 refusals in the node profile said `Map` and could
+        // not be grouped by what actually blocks them.
+        TypeKind::Object { .. } | TypeKind::Structured { .. }
+            if matches!(
+                named(snapshot, ty),
+                Some("Map" | "Set" | "WeakMap" | "WeakSet")
+            ) =>
+        {
+            let name = named(snapshot, ty).unwrap_or("Map");
+            match snapshot.type_arguments.get(&ty) {
+                Some(arguments) if !arguments.is_empty() => {
+                    let spelled: Vec<String> = arguments
+                        .iter()
+                        .map(|argument| short(snapshot, *argument))
+                        .collect();
+                    format!("`{name}<{}>`", spelled.join(", "))
+                }
+                // No recorded arguments is its own answer: the frontend stopped
+                // at the library boundary before it got them, which is why the
+                // representation could not be built either.
+                _ => format!("`{name}` with no recorded arguments"),
+            }
+        }
         TypeKind::Object { .. } => named_or(snapshot, record, "an object type"),
         // Worth distinguishing, because the two are refused for entirely
         // different reasons and only one of them is about *this* type. An
@@ -2145,6 +2173,41 @@ fn representation_within(
     result
 }
 
+/// What a tuple represents as.
+///
+/// Two answers, and the difference is whether the elements agree.
+///
+/// A tuple whose elements share a representation *is* an array of it:
+/// `[number, number]` is two doubles in a row, which is what `number[]` is, and
+/// what the tuple adds is a length -- which is not part of a representation.
+///
+/// A heterogeneous one is a struct with positional fields, which needs a layout
+/// rather than an element type. `layout_of` builds it, and it is a reference
+/// like any other object. Before that existed this was refused, at a cost of 40
+/// refusals in the node profile -- 38 of them a `Map` value, where naming the
+/// argument is what made them visible at all.
+fn tuple_representation(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    elements: &[TypeId],
+    path: &mut Vec<TypeId>,
+    subst: &Substitution,
+) -> Option<HirType> {
+    let mut shared: Option<HirType> = None;
+    let mut mixed = false;
+    for element in elements {
+        let element = representation_within(snapshot, *element, path, subst)?;
+        match &shared {
+            Some(existing) if *existing != element => mixed = true,
+            _ => shared = Some(element),
+        }
+    }
+    if mixed || shared.is_none() {
+        return Some(HirType::Managed(ManagedType::Object(ty)));
+    }
+    Some(HirType::Managed(ManagedType::Array(Box::new(shared?))))
+}
+
 fn representation_of(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
@@ -2265,17 +2328,7 @@ fn representation_of(
         // A heterogeneous tuple is a struct with positional fields, which is a
         // different thing: it needs a layout rather than an element type, and
         // it is refused rather than approximated by the widest member.
-        TypeKind::Tuple(elements) => {
-            let mut shared: Option<HirType> = None;
-            for element in elements {
-                let element = representation_within(snapshot, *element, path, subst)?;
-                match &shared {
-                    Some(existing) if *existing != element => return None,
-                    _ => shared = Some(element),
-                }
-            }
-            HirType::Managed(ManagedType::Array(Box::new(shared?)))
-        }
+        TypeKind::Tuple(elements) => tuple_representation(snapshot, ty, elements, path, subst)?,
 
         // A union whose members all share one representation has that
         // representation. `0 | 1 | 2` is three literal types and one machine
@@ -6504,6 +6557,32 @@ impl<'a> FuncBuilder<'a> {
                     ty,
                     origin,
                 )
+            } else if let HirType::Managed(ManagedType::Object(type_id)) =
+                self.values[value.0 as usize].ty.clone()
+            {
+                // `const [a, b] = pair` where `pair` is a tuple. Written like an
+                // array and read like an object, because that is what a tuple
+                // is here: the position is the field.
+                let layout = self.layout_of(element, type_id)?;
+                let field = u32::try_from(position).unwrap_or(0);
+                let Some(slot) = layout.fields.get(position) else {
+                    return Err(self.unsupported(
+                        element,
+                        &format!(
+                            "position {position} of a tuple with {} element(s)",
+                            layout.fields.len()
+                        ),
+                    ));
+                };
+                let ty = slot.ty.clone();
+                self.push(
+                    OpKind::FieldGet {
+                        object: value,
+                        field,
+                    },
+                    ty,
+                    origin,
+                )
             } else {
                 let HirType::Managed(ManagedType::Array(element_ty)) =
                     self.values[value.0 as usize].ty.clone()
@@ -6554,7 +6633,15 @@ impl<'a> FuncBuilder<'a> {
             let name = self
                 .literal_name(*member)
                 .ok_or_else(|| self.unsupported(*member, "a computed property name"))?;
-            let Some(field) = layout.index_of(&name) else {
+            // `pair[0] = x`, which is the read's positional rule from the
+            // other side. A tuple has no names, so the number is the field.
+            let positional = name
+                .parse::<usize>()
+                .ok()
+                .filter(|_| self.is_tuple(type_id))
+                .filter(|at| *at < layout.fields.len())
+                .and_then(|at| u32::try_from(at).ok());
+            let Some(field) = positional.or_else(|| layout.index_of(&name)) else {
                 // A setter, for the same reason.
                 if let Some(callee) = self.accessor_callee(type_id, &name, "set ") {
                     return Ok(Place::Setter { object, callee });
@@ -7388,6 +7475,18 @@ impl<'a> FuncBuilder<'a> {
             // the node profile to the cascade that followed.
             .or_else(|| self.expecting.clone())
             .ok_or_else(|| self.unrepresentable(id, "an array literal"))?;
+        // `[a, b]` where the slot is a tuple. Written the same way as an array
+        // and meaning something else: a fixed number of slots of their own
+        // types, which is an object, so this builds one rather than an
+        // allocation with a length.
+        if let HirType::Managed(ManagedType::Object(type_id)) = ty.clone()
+            && matches!(
+                self.snapshot.types.get(type_id.0 as usize).map(|r| &r.kind),
+                Some(TypeKind::Tuple(_))
+            )
+        {
+            return self.lower_tuple_literal(id, type_id, &ty);
+        }
         if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
             return Err(self.unsupported(id, "an array literal that is not an array"));
         }
@@ -7795,7 +7894,7 @@ impl<'a> FuncBuilder<'a> {
     /// function the call names directly rather than a slot to load from. This
     /// is where a vtable would go if dispatch needed one.
     fn fields_of(
-        &self,
+        &mut self,
         id: NodeId,
         ty: TypeId,
         properties: &[nts_semantic_schema::PropertyRecord],
@@ -7838,6 +7937,28 @@ impl<'a> FuncBuilder<'a> {
             let field_ty = self.represent(property.ty).ok_or_else(|| {
                 self.unrepresentable_member(id, "a property", &property.name, property.ty)
             })?;
+            // A field of object type needs that object's *layout*, not only its
+            // representation: the struct has to name a member of it, and the
+            // descriptor beside it takes an `offsetof` into it.
+            //
+            // Without this the emitter silently dropped the member -- it skips
+            // a field whose C type it cannot compute -- and left the descriptor
+            // naming one that was not there. Five corpus files emitted a
+            // `struct { NtsHeader header; }` that way, and the two which
+            // happened to be *read* were the two the ratchet had been counting.
+            //
+            // Confined to a *tuple* field, which is the shape this commit
+            // introduced. Asking it of every object field is the honest rule
+            // and costs 40 functions in the node profile -- a field whose type
+            // has no layout but which nothing ever reads still emits and still
+            // runs -- so the wider fix is its own decision, with the silent
+            // drop in the emitter as its other half.
+            if let HirType::Managed(ManagedType::Object(inner)) = &field_ty
+                && *inner != ty
+                && self.is_tuple(*inner)
+            {
+                self.layout_of(id, *inner)?;
+            }
             // An optional field's absence has to live somewhere, and a tag is
             // where. This used to be refused outright -- "an optional field
             // needs a presence bit, which changes the layout rather than adding
@@ -7861,6 +7982,125 @@ impl<'a> FuncBuilder<'a> {
             });
         }
         Ok(fields)
+    }
+
+    /// `[a, b]` where the slot is a tuple.
+    ///
+    /// One allocation and one store per slot, which is what building an object
+    /// of that shape is. The element count has to match exactly: a tuple's
+    /// length is part of its type, so a literal that is short or long is not
+    /// the same tuple and saying so beats writing whatever fits.
+    fn lower_tuple_literal(
+        &mut self,
+        id: NodeId,
+        type_id: TypeId,
+        ty: &HirType,
+    ) -> Result<ValueId, Diagnostic> {
+        let layout = self.layout_of(id, type_id)?;
+        let elements = self.children(id);
+        if elements.len() != layout.fields.len() {
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "a tuple literal of {} element(s) where the type has {}",
+                    elements.len(),
+                    layout.fields.len()
+                ),
+            ));
+        }
+        let origin = self.origin(id);
+        let object = self.push(
+            OpKind::ObjectNew { frame: false },
+            ty.clone(),
+            origin.clone(),
+        );
+        for (at, element) in elements.into_iter().enumerate() {
+            let want = layout.fields[at].ty.clone();
+            let value = self.lower_expression(element)?;
+            let stored = self.coerce(value, &want, element)?;
+            let field = u32::try_from(at).unwrap_or(0);
+            self.push(
+                OpKind::FieldSet {
+                    object,
+                    field,
+                    value: stored,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        Ok(object)
+    }
+
+    /// Whether a type is a tuple, asked of the snapshot rather than of a name.
+    ///
+    /// The first version tested `layout.name.starts_with("Tuple")`, which is a
+    /// string standing in for a fact the snapshot already holds -- and which a
+    /// class the program happened to call `TupleRow` would have answered yes
+    /// to.
+    fn is_tuple(&self, ty: TypeId) -> bool {
+        matches!(
+            self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+            Some(TypeKind::Tuple(_))
+        )
+    }
+
+    /// The layout of a heterogeneous tuple: one field per position.
+    ///
+    /// `[string, number]` *is* a two-field struct, and saying so gives it the
+    /// layout machinery, field access, escape analysis and reference counting
+    /// rather than a second mechanism that would need all four again. A tuple
+    /// whose elements agree never reaches here -- `representation_of` makes it
+    /// an array, which is the older and better answer for that case.
+    fn tuple_layout(
+        &mut self,
+        id: NodeId,
+        ty: TypeId,
+        elements: &[TypeId],
+    ) -> Result<Layout, Diagnostic> {
+        let mut fields = Vec::with_capacity(elements.len());
+        for (at, element) in elements.iter().enumerate() {
+            let Some(field) = self.represent(*element) else {
+                return Err(self.unrepresentable(id, &format!("element {at} of a tuple")));
+            };
+            // An element of object type needs that object's *layout*, not only
+            // its representation: the tuple's struct has to name a member of
+            // it. Asked for here, where the failure is still this tuple's, so
+            // it is refused rather than emitted as a struct whose member the
+            // backend cannot spell.
+            //
+            // The emitter drops a field it cannot type, silently, and the
+            // descriptor beside it keeps the `offsetof` -- so without this the
+            // corpus gained a file whose `struct { NtsHeader header; }` sat
+            // next to a descriptor naming a member it did not have. That
+            // silent drop is its own bug and its own commit.
+            if let HirType::Managed(ManagedType::Object(inner)) = &field
+                && *inner != ty
+            {
+                self.layout_of(id, *inner)?;
+            }
+            fields.push(Field {
+                // `_0`, not `0`: the name reaches C as a struct member and
+                // `v->1` is not C. Every lookup is by position anyway -- a
+                // tuple has no names of its own -- so the spelling is free to
+                // be whatever the backend can pronounce.
+                name: format!("_{at}"),
+                ty: field,
+                // Writable: `const pair: [number, number] = [1, 2]; pair[0] = 5`
+                // is legal TypeScript, and only `readonly [number, number]` is
+                // not. Marking these `readonly` refused a program the checker
+                // accepts.
+                readonly: false,
+            });
+        }
+        let layout = Layout {
+            types: vec![ty],
+            name: format!("Tuple{}", ty.0),
+            fields,
+            methods: Vec::new(),
+        };
+        self.layouts.push(layout.clone());
+        Ok(layout)
     }
 
     fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {
@@ -7887,6 +8127,20 @@ impl<'a> FuncBuilder<'a> {
             self.layouts.push(layout.clone());
             return Ok(layout);
         }
+        // A tuple is a fixed-length heterogeneous sequence, which is what an
+        // object with positional fields already is. Naming the fields `0`, `1`
+        // is not a trick to make it fit: `[string, number]` *is* a two-field
+        // struct, and saying so gives it the layout machinery, field access,
+        // escape analysis and reference counting rather than a second mechanism
+        // that would need all four again.
+        //
+        // Not an array, which is the other tempting answer: an array has one
+        // element type and a length the compiler does not fix, and a tuple has
+        // neither.
+        if let TypeKind::Tuple(elements) = &record.kind {
+            let elements = elements.clone();
+            return self.tuple_layout(id, ty, &elements);
+        }
         // A class this compiler provides rather than decomposes. It never
         // reaches the arm below, because it is never an `Object`: `Error`
         // arrives as a structured type and stays one.
@@ -7896,9 +8150,13 @@ impl<'a> FuncBuilder<'a> {
         let TypeKind::Object { properties } = &record.kind else {
             return Err(self.unsupported(id, "an object type that was not decomposed"));
         };
+        // Cloned so the borrow of the snapshot ends here: `fields_of` builds
+        // the layouts of the object types its fields hold, which needs `&mut`.
+        // Once per type, and a layout is built once.
+        let properties = properties.clone();
         self.representable_bases(id, ty, 0)?;
 
-        let mut fields = self.fields_of(id, ty, properties)?;
+        let mut fields = self.fields_of(id, ty, &properties)?;
 
         // Base first, so a derived object's fields start with exactly the base's
         // and a pointer to one is a pointer to the other. That is what makes an
@@ -8474,7 +8732,23 @@ impl<'a> FuncBuilder<'a> {
             self.values[value.0 as usize].ty.clone()
         {
             let layout = self.layout_of(id, type_id)?;
-            let Some(field) = layout.index_of(member_name) else {
+            // A tuple is indexed by position, and `pair[0]` arrives here as a
+            // member named `0`. Its layout spells the fields `_0`, `_1` --
+            // because `v->1` is not C -- so the number is turned back into the
+            // position it always was rather than looked up as a name nobody
+            // wrote.
+            let positional = member_name
+                .parse::<usize>()
+                .ok()
+                .filter(|_| self.is_tuple(type_id))
+                // Bounded here rather than at the indexing below, which would
+                // read past the layout. A tuple's length is part of its type,
+                // so an index outside it is a program the checker should have
+                // rejected -- and if one arrives anyway it is refused by name
+                // rather than answered with whatever is adjacent in memory.
+                .filter(|at| *at < layout.fields.len())
+                .and_then(|at| u32::try_from(at).ok());
+            let Some(field) = positional.or_else(|| layout.index_of(member_name)) else {
                 // A getter. `o.x` looks like a field read and runs code, which
                 // is why an accessor may not be laid out as a field: emitting
                 // the load would read whatever sits at that offset.
@@ -9044,6 +9318,96 @@ impl<'a> FuncBuilder<'a> {
     /// ...tail]`), a nested pattern and a computed property name are each a
     /// separate feature and are refused by name rather than by falling through
     /// to something that looks close.
+    /// One slot of a destructuring pattern, read from what it destructures.
+    ///
+    /// Three sources and one shape: a property by name for `{ a }`, a field by
+    /// position for a tuple, and an indexed element for an array. Extracted
+    /// from `bind_pattern` so that the loop there is about *binding* -- rests,
+    /// nesting, symbols -- and this is about reading.
+    fn read_for_pattern(
+        &mut self,
+        element: NodeId,
+        property: NodeId,
+        value: ValueId,
+        position: usize,
+        object: bool,
+    ) -> Result<ValueId, Diagnostic> {
+    let origin = self.origin(element);
+    let read = if object {
+            let HirType::Managed(ManagedType::Object(type_id)) =
+                self.values[value.0 as usize].ty.clone()
+            else {
+                return Err(self.unsupported(element, "destructuring something with no fields"));
+            };
+            let layout = self.layout_of(element, type_id)?;
+            let name = self
+                .literal_name(property)
+                .ok_or_else(|| self.unsupported(element, "a computed property name"))?;
+            let Some(field) = layout.index_of(&name) else {
+                return Err(self.absent_member(element, type_id, &name));
+            };
+            let ty = layout.fields[field as usize].ty.clone();
+            self.push(
+                OpKind::FieldGet {
+                    object: value,
+                    field,
+                },
+                ty,
+                origin,
+            )
+        } else if let HirType::Managed(ManagedType::Object(type_id)) =
+            self.values[value.0 as usize].ty.clone()
+        {
+            // `const [a, b] = pair` where `pair` is a tuple: written like an
+            // array and read like an object, because the position *is* the
+            // field.
+            let layout = self.layout_of(element, type_id)?;
+            let Some(slot) = layout.fields.get(position) else {
+                return Err(self.unsupported(
+                    element,
+                    &format!(
+                        "position {position} of a tuple with {} element(s)",
+                        layout.fields.len()
+                    ),
+                ));
+            };
+            let ty = slot.ty.clone();
+            let field = u32::try_from(position).unwrap_or(0);
+            self.push(
+                OpKind::FieldGet {
+                    object: value,
+                    field,
+                },
+                ty,
+                origin,
+            )
+        } else {
+            let HirType::Managed(ManagedType::Array(element_ty)) =
+                self.values[value.0 as usize].ty.clone()
+            else {
+                return Err(
+                    self.unsupported(element, "destructuring something that is not an array")
+                );
+            };
+            #[allow(clippy::cast_precision_loss)]
+            let at = position as f64;
+            let index = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
+            // Checked, like every other element read: a pattern longer than
+            // its array is `undefined` in JavaScript and this compiler has
+            // no `undefined` to hand back.
+            self.push(
+                OpKind::ArrayGet {
+                    array: value,
+                    index,
+                    checked: true,
+                },
+                *element_ty,
+                origin,
+            )
+        };
+        Ok(read)
+    }
+
     fn bind_pattern(&mut self, pattern: NodeId, value: ValueId) -> Result<(), Diagnostic> {
         let object = self.kind_of(pattern) == Some(syntax::OBJECT_BINDING_PATTERN);
         for (position, element) in self.children(pattern).into_iter().enumerate() {
@@ -9089,53 +9453,7 @@ impl<'a> FuncBuilder<'a> {
                 }
             };
 
-            let origin = self.origin(element);
-            let read = if object {
-                let HirType::Managed(ManagedType::Object(type_id)) =
-                    self.values[value.0 as usize].ty.clone()
-                else {
-                    return Err(self.unsupported(element, "destructuring something with no fields"));
-                };
-                let layout = self.layout_of(element, type_id)?;
-                let name = self
-                    .literal_name(property)
-                    .ok_or_else(|| self.unsupported(element, "a computed property name"))?;
-                let Some(field) = layout.index_of(&name) else {
-                    return Err(self.absent_member(element, type_id, &name));
-                };
-                let ty = layout.fields[field as usize].ty.clone();
-                self.push(
-                    OpKind::FieldGet {
-                        object: value,
-                        field,
-                    },
-                    ty,
-                    origin,
-                )
-            } else {
-                let HirType::Managed(ManagedType::Array(element_ty)) =
-                    self.values[value.0 as usize].ty.clone()
-                else {
-                    return Err(
-                        self.unsupported(element, "destructuring something that is not an array")
-                    );
-                };
-                #[allow(clippy::cast_precision_loss)]
-                let at = position as f64;
-                let index = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
-                // Checked, like every other element read: a pattern longer than
-                // its array is `undefined` in JavaScript and this compiler has
-                // no `undefined` to hand back.
-                self.push(
-                    OpKind::ArrayGet {
-                        array: value,
-                        index,
-                        checked: true,
-                    },
-                    *element_ty,
-                    origin,
-                )
-            };
+            let read = self.read_for_pattern(element, property, value, position, object)?;
             // `{ p: { x } }` is a read and then another pattern over what it
             // produced, which is the same function one level down.
             match symbol {
