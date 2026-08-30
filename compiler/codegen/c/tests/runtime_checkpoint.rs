@@ -198,3 +198,22 @@ fn an_erased_reference_is_counted_and_traced() {
         checks(&report)
     );
 }
+
+#[test]
+fn a_grown_array_gives_its_elements_back() {
+    // Reference counting, because the whole question is what reclamation
+    // returns, and NoGC returns nothing on purpose.
+    //
+    // This one is not about ordering. It is here because the leak it covers
+    // was invisible to every other measurement in the tree: `nts_live_bytes`
+    // did not count an array's element block, so a program that leaked every
+    // one it ever grew reported holding exactly what it should. The suite
+    // asserts live bytes come back to their baseline, which is a claim the
+    // accounting only supports since the block started being counted.
+    let report = run_suite("storage", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 6,
+        "expected at least 6 storage checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}

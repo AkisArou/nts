@@ -143,7 +143,12 @@ void *nts_alloc(size_t bytes) {
 /* Give an object's memory back. Only the reference-counting provider has
  * anything to give: under NoGC there is no per-object allocation to return, and
  * the last release is where a tracing collector would do nothing at all. */
-static void nts_free(void *object) {
+/* Give back a block `nts_alloc` handed out.
+ *
+ * Paired with `nts_free` below, which is the one every death path calls: this
+ * is the block alone, and that one is the block *and* whatever hangs off it.
+ */
+static void nts_free_block(void *object) {
 #ifdef NTS_PROVIDER_RC
   size_t *block = (size_t *)((unsigned char *)object - 16u);
   size_t bytes = *block;
@@ -160,6 +165,46 @@ static void nts_free(void *object) {
 #else
   (void)object;
 #endif
+}
+
+/* Whether an array's elements still sit in the block the array itself lives in.
+ *
+ * The one growth that moves them out is the only thing that makes this false,
+ * and two places need to know: the grow path, which must not free the inline
+ * block, and reclamation, which must free every other one. */
+static bool nts_array_is_inline(const NtsArray *array) {
+  return array->elements == (const unsigned char *)array + sizeof(NtsArray);
+}
+
+/* Storage an object owns that does not live in its own block.
+ *
+ * There is exactly one kind today: an array that outgrew the elements sitting
+ * inline after its header allocated a bigger block, and until this existed
+ * nothing ever gave that block back. `nts_free` returned the *header*, whose
+ * size is the header's alone, so the elements were not merely unfreed -- they
+ * were unaccounted, and `nts_live_bytes` reported a program that had leaked
+ * them as holding nothing. 200,000 arrays grown to 128 doubles and released
+ * held 200MB resident afterwards, which is the whole of what they ever
+ * allocated.
+ *
+ * Called from `nts_free` rather than from the two death paths, so that a third
+ * one cannot be added without it. */
+static void nts_free_storage(NtsHeader *object) {
+  if (object->descriptor->kind != NTS_KIND_ARRAY) {
+    return;
+  }
+  NtsArray *array = (NtsArray *)object;
+  if (!nts_array_is_inline(array)) {
+    nts_bytes_held -= (size_t)array->capacity * object->descriptor->size;
+    free(array->elements);
+    array->elements = 0;
+  }
+}
+
+/* Reclaim an object: what hangs off it, then the block itself. */
+static void nts_free(NtsHeader *object) {
+  nts_free_storage(object);
+  nts_free_block(object);
 }
 
 /* A fixed-layout object: the descriptor knows its whole size, and `length` is
@@ -663,8 +708,16 @@ double nts_array_push(NtsArray *a, double value) {
     }
     memcpy(moved, a->elements,
            (size_t)a->header.length * a->header.descriptor->size);
-    if (a->elements != (unsigned char *)a + sizeof(NtsArray)) {
+    /* Counted here rather than left to `nts_alloc`, which never sees this
+     * block: an array's elements are `malloc`'d directly, so without these two
+     * lines `nts_live_bytes` reports the header and calls the elements
+     * nothing. That is how the missing free below stayed invisible -- a
+     * program that leaked every element block it ever grew measured as holding
+     * exactly what it should. */
+    nts_bytes_held += bytes;
+    if (!nts_array_is_inline(a)) {
       /* Not the inline block, so it was one of ours to free. */
+      nts_bytes_held -= (size_t)a->capacity * a->header.descriptor->size;
       free(a->elements);
     }
     a->elements = moved;
