@@ -38,7 +38,7 @@ use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir::facts::Facts;
 use nts_core::hir::{self, HirType};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::TsgoApi;
 
 /// Inputs chosen to hit the places TypeScript and C disagree.
 ///
@@ -259,8 +259,24 @@ fn c_type(ty: &HirType) -> &'static str {
 /// two sides disagree.
 pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
     let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    // The tool's identity, so a rebuilt frontend does not read entries the old
+    // one wrote. Size and modified time rather than a hash of the binary: it is
+    // eighty megabytes and this runs once per check.
+    let stamp = std::fs::metadata(&tsgo).ok().map_or_else(
+        || tsgo.clone(),
+        |data| {
+            format!(
+                "{tsgo}:{}:{:?}",
+                data.len(),
+                data.modified().ok().map(|at| at
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs())
+            )
+        },
+    );
     let mut source = TsgoApi::for_compilation(tsgo);
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, &stamp)?;
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
             eprintln!("{} {}", diagnostic.code, diagnostic.message);

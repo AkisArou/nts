@@ -12,9 +12,11 @@ nts-semantic-schema.workspace = true
 rustc-hash.workspace = true
 
 camino.workspace = true
+postcard.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+xxhash-rust.workspace = true
 
 [dev-dependencies]
 nts-diagnostics.workspace = true

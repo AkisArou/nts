@@ -7,6 +7,7 @@
 //! by [`tsgo::PINNED_TSGO`]. We speak its API protocol over a pipe rather than
 //! linking it, so the checker's memory, GC, and crashes stay in another process.
 
+pub mod cache;
 pub mod source;
 pub mod tsgo;
 

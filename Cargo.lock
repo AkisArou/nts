@@ -253,10 +253,12 @@ dependencies = [
  "camino",
  "nts-diagnostics",
  "nts-semantic-schema",
+ "postcard",
  "rustc-hash",
  "serde",
  "serde_json",
  "thiserror",
+ "xxhash-rust",
 ]
 
 [[package]]
