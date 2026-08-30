@@ -2337,6 +2337,29 @@ fn representation_of(
         // A type parameter has no representation of its own -- that is what
         // makes it one. It has the representation of whatever this instantiation
         // put there, and outside an instantiation there is nothing to say.
+        // The polymorphic `this`, which TypeScript models as a type parameter
+        // named after its class and constrained to it. `ref(): this` is the
+        // fluent-interface shape and it is everywhere in a stream API: 62
+        // refusals across 17 classes in the node profile, `Socket`, `Server`,
+        // `Readable` and `Buffer` among them.
+        //
+        // Its representation is the receiver's, exactly. `this` in a method of
+        // `Socket` is a `Socket` pointer, and in a subclass it is a pointer to
+        // the subclass -- which under base-first layout is the same pointer and
+        // is the rule `verify::compatible` already applies to a return, a store
+        // and a call argument. So this is not an approximation of the
+        // polymorphism; it is what the polymorphism costs at run time, which is
+        // nothing.
+        //
+        // A genuine type parameter still goes through the substitution below.
+        // The two are told apart by the name: `<T extends Socket>` is named `T`
+        // and this is named `Socket`.
+        TypeKind::TypeParameter {
+            name,
+            constraint: Some(constraint),
+        } if named(snapshot, *constraint) == Some(name.as_str()) => {
+            representation_within(snapshot, *constraint, path, subst)?
+        }
         TypeKind::TypeParameter { .. } => subst.get(&ty)?.clone(),
 
         // The named types this compiler provides rather than reads. Neither

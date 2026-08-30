@@ -763,8 +763,32 @@ fn call_text(
         format!("{}({})", c_identifier(target), arguments.join(", "))
     };
 
+    // A result used at a different type than the callee declares.
+    //
+    // `bump(): this` on a base class returns the base pointer, and in a
+    // subclass the caller's `this` is the subclass. Under base-first layout
+    // those are the same pointer -- which is the rule `verify::compatible`
+    // already applies to a return, a store and a call argument -- but C wants
+    // telling, and `-Wincompatible-pointer-types` is an error here.
+    //
+    // Only where the two actually differ, so nothing that agreed before this
+    // grows a cast. Only for a managed type, because two scalars are a
+    // conversion rather than a cast and specialization owns those.
+    let wanted = &func.values[value.0 as usize].ty;
+    let cast = context
+        .program
+        .funcs
+        .iter()
+        .find(|declared| declared.name == *target)
+        .filter(|declared| declared.return_type != *wanted && wanted.is_managed())
+        .map(|_| c_type_of(context.program, wanted, origin))
+        .transpose()?;
+
     Ok(if context.read.contains(&value) {
-        format!("{name} = {call};")
+        match cast {
+            Some(ty) => format!("{name} = ({ty}){call};"),
+            None => format!("{name} = {call};"),
+        }
     } else {
         // The call still happens; only its result is unwanted.
         format!("{call};")
