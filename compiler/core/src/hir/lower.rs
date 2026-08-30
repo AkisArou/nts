@@ -3472,22 +3472,36 @@ impl<'a> FuncBuilder<'a> {
     /// allocates. There is no value for `C`, which is why lowering one asked
     /// for "a name from an enclosing scope" and named a module path.
     fn denotes_a_module(&self, id: NodeId) -> bool {
-        self.node(id)
-            .symbol
-            .map(|symbol| self.denoted_symbol(symbol))
-            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+        let Some(local) = self.node(id).symbol else {
+            return false;
+        };
+        // Declared by `* as ns`, which binds a name to the module and to
+        // nothing in it. Asked of the *local* binding rather than of what it
+        // aliases, because the module symbol is not reliably described: with a
+        // default export in the imported file it arrives with no declarations
+        // at all, and a predicate that looked for a source file among them
+        // said no. The import is the thing that is actually written down.
+        let declared_as_a_namespace = self
+            .snapshot
+            .symbols
+            .get(local.0 as usize)
             .is_some_and(|record| {
-                // Declared by a source file, which is what a module is. By the
-                // declaration rather than by `SymbolFlags::MODULE`, because the
-                // frontend does not populate flags for these -- both the local
-                // binding and the module it aliases arrive with zero -- and a
-                // predicate that reads a field nobody fills is a predicate that
-                // is always false.
                 record
                     .declarations
                     .iter()
-                    .any(|node| self.kind_of(*node) == Some(syntax::SOURCE_FILE))
-            })
+                    .any(|node| self.kind_of(*node) == Some(syntax::NAMESPACE_IMPORT))
+            });
+        declared_as_a_namespace
+            || self
+                .snapshot
+                .symbols
+                .get(self.denoted_symbol(local).0 as usize)
+                .is_some_and(|record| {
+                    record
+                        .declarations
+                        .iter()
+                        .any(|node| self.kind_of(*node) == Some(syntax::SOURCE_FILE))
+                })
     }
 
     /// Whether an expression names a property of an object.

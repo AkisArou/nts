@@ -31,7 +31,15 @@ if [ $# -gt 0 ]; then
   exec ./target/release/nts check "examples/$1/tsconfig.json"
 fi
 
-jobs=${NTS_GATE_JOBS:-$( { command -v nproc >/dev/null && nproc; } || echo 4 )}
+# Capped, not `nproc`. Every worker starts a frontend of its own, and enough of
+# them at once kills one inside Go's collector: at 32 this reported 73 of 73 on
+# one run and 72 on the next, with the odd one out passing in isolation. A gate
+# that is fast and occasionally wrong is worth less than one that is slow and
+# never is -- the same reason `CROWDED` exists in tooling/suite, and the same
+# number.
+crowded=8
+cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )
+jobs=${NTS_GATE_JOBS:-$( [ "$cores" -lt "$crowded" ] && echo "$cores" || echo "$crowded" )}
 
 results=$(mktemp)
 trap 'rm -f "$results"' EXIT

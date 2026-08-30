@@ -130,6 +130,9 @@ pub const AWAIT_KEYWORD: u16 = 134;
 /// (`get ["constructor"]()`), and a string literal inside them is not computed
 /// in any run-time sense.
 pub const COMPUTED_PROPERTY_NAME: u16 = 168;
+/// The `* as ns` of `import * as ns from "./m"`, which binds a name to the
+/// module itself rather than to anything in it.
+pub const NAMESPACE_IMPORT: u16 = 275;
 pub const PARAMETER: u16 = 170;
 pub const PROPERTY_DECLARATION: u16 = 173;
 pub const METHOD_DECLARATION: u16 = 175;
