@@ -342,6 +342,27 @@ typedef struct NtsMap {
 #define NTS_KEY_NUMBER 2u
 #define NTS_KEY_REFERENCE 3u
 
+/* `===` where one side is erased.
+ *
+ * Strict equality, which is *not* the SameValueZero a table compares keys
+ * with: `NaN === NaN` is false and `NaN` is one Map key, so the two cannot
+ * share an implementation however similar they read.
+ *
+ * A tag that does not match the question answers false without reading the
+ * payload, which is what makes the string and reference forms safe: an
+ * `undefined` compared against a string never dereferences anything. */
+static inline bool nts_value_eq_number(NtsValue value, double number) {
+    return value.tag == NTS_TAG_NUMBER && value.as.number == number;
+}
+
+static inline bool nts_value_eq_boolean(NtsValue value, bool boolean) {
+    return value.tag == NTS_TAG_BOOLEAN && value.as.boolean == boolean;
+}
+
+bool nts_value_eq_string(NtsValue value, const NtsString *text);
+bool nts_value_eq_reference(NtsValue value, const NtsHeader *reference);
+bool nts_value_strict_eq(NtsValue a, NtsValue b);
+
 /* Claim and give up what an erased value holds.
  *
  * A no-op for a scalar tag, which is why the compiler can emit these wherever

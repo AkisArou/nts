@@ -423,6 +423,23 @@ fn insert_conversions(
             let kind = func.values[value.0 as usize].kind.clone();
             let ty = func.values[value.0 as usize].ty.clone();
             let updated = match kind {
+                // An erased operand is left exactly as it is. `comparison_type`
+                // falls back to comparing in doubles, on the argument that every
+                // integer this pass produces is exact as an `f64` -- which is
+                // sound for numbers and false for a value that is not one. The
+                // conversion it asked for emitted `(double)v` on a sixteen-byte
+                // struct: uncompilable C, from `x === 5` on a `number |
+                // undefined`, in a function the lowering called complete.
+                //
+                // The emitter compares these by testing the tag first, and that
+                // needs both sides as they are.
+                OpKind::Binary { op: bin, lhs, rhs }
+                    if bin.is_comparison()
+                        && (func.values[lhs.0 as usize].ty == HirType::Erased
+                            || func.values[rhs.0 as usize].ty == HirType::Erased) =>
+                {
+                    None
+                }
                 OpKind::Binary { op: bin, lhs, rhs } if bin.is_comparison() => {
                     // A comparison's operands must agree with each other rather
                     // than with its result, which is a bool either way.

@@ -825,6 +825,61 @@ fn string_comparison(
     ))
 }
 
+/// `===` and `!==` where one side is an erased value.
+///
+/// A tag has to be tested before a payload can be read, so this is a call
+/// rather than a C operator. Reached by `x === 5` on a `number | undefined`,
+/// which is what a `Map#get` produces -- and which emitted `(double)v` on a
+/// sixteen-byte struct before this existed: uncompilable C from a function the
+/// lowering reported as complete.
+///
+/// Deliberately not the table's key comparison. That one is `SameValueZero`, so
+/// it answers true for `NaN` against `NaN`, and `===` answers false.
+fn erased_comparison(
+    func: &Func,
+    name: &str,
+    bin: BinOp,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> Option<String> {
+    if !matches!(bin, BinOp::Eq | BinOp::Ne) {
+        return None;
+    }
+    let left = &func.values[lhs.0 as usize].ty;
+    let right = &func.values[rhs.0 as usize].ty;
+    let negate = if matches!(bin, BinOp::Ne) { "!" } else { "" };
+    if left == &HirType::Erased && right == &HirType::Erased {
+        return Some(format!(
+            "{name} = {negate}nts_value_strict_eq({}, {});",
+            value_name(lhs),
+            value_name(rhs)
+        ));
+    }
+    // One of each, in either order: equality is symmetric, so the erased side
+    // becomes the receiver whichever side it was written on.
+    let (value, against, other) = match (left, right) {
+        (HirType::Erased, _) => (lhs, rhs, right),
+        (_, HirType::Erased) => (rhs, lhs, left),
+        _ => return None,
+    };
+    let helper = match other {
+        HirType::Float { .. } | HirType::Int { .. } => "nts_value_eq_number",
+        HirType::Bool => "nts_value_eq_boolean",
+        HirType::Managed(ManagedType::String) => "nts_value_eq_string",
+        // Every other managed value is a pointer and compares by identity,
+        // which is what `===` means for one.
+        HirType::Managed(_) => "nts_value_eq_reference",
+        // `void` and `never` have no value to compare, and a comparison
+        // against the absent reference was answered before this ran.
+        _ => return None,
+    };
+    Some(format!(
+        "{name} = {negate}{helper}({}, {});",
+        value_name(value),
+        value_name(against)
+    ))
+}
+
 /// `x === null` and `x !== null`, as a comparison of addresses.
 fn null_comparison(
     func: &Func,
@@ -1860,6 +1915,12 @@ fn binary_text(
         return text;
     }
 
+    // After the null rule, which answers `x === null` for an erased `x` as a
+    // question about absence, and before the string one, whose test is the
+    // *static* type being a string and so would not fire for an erased side.
+    if let Some(text) = erased_comparison(func, name, bin, lhs, rhs) {
+        return text;
+    }
     if let Some(text) = string_comparison(func, name, bin, lhs, rhs) {
         return text;
     }

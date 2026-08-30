@@ -331,6 +331,42 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *)) {
   }
 }
 
+/* The out-of-line half of erased strict equality. Declared beside the inline
+ * scalar forms in the header; here because they call through pointers. */
+bool nts_value_eq_string(NtsValue value, const NtsString *text) {
+  return value.tag == NTS_TAG_STRING &&
+         nts_string_eq((const NtsString *)value.as.reference, text);
+}
+
+bool nts_value_eq_reference(NtsValue value, const NtsHeader *reference) {
+  return NTS_TAG_IS_REFERENCE(value.tag) && value.as.reference == reference;
+}
+
+/* Both sides erased. Different tags are unequal without further question --
+ * `1 === "1"` is false -- and the same tag defers to the rule for that kind.
+ *
+ * `NaN === NaN` is false here and true in `nts_key_eq`, which is the whole
+ * difference between strict equality and SameValueZero and the reason these
+ * are two functions. */
+bool nts_value_strict_eq(NtsValue a, NtsValue b) {
+  if (a.tag != b.tag) {
+    return false;
+  }
+  switch (a.tag) {
+  case NTS_TAG_UNDEFINED:
+    return true;
+  case NTS_TAG_BOOLEAN:
+    return a.as.boolean == b.as.boolean;
+  case NTS_TAG_NUMBER:
+    return a.as.number == b.as.number;
+  case NTS_TAG_STRING:
+    return nts_string_eq((const NtsString *)a.as.reference,
+                         (const NtsString *)b.as.reference);
+  default:
+    return a.as.reference == b.as.reference;
+  }
+}
+
 /* Claim and give up what an erased value holds. */
 void nts_value_retain(NtsValue value) {
   if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) && nts_value_reference(value)) {
