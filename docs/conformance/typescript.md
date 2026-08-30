@@ -380,7 +380,7 @@ of the surface therefore costs nothing.
 | ✅ | `typeof` — including `"function"` for a closure and `"object"` for `null` |
 | ✅ | `Map`, `Set` — one insertion-ordered table, keys and values as tagged values |
 | ✅ | the polymorphic `this` — the receiver's own pointer, which costs nothing |
-| ◐ | `bigint` — exact, and **128 bits** rather than arbitrary precision |
+| ◐ | `bigint` — exact, and **128 bits** rather than arbitrary precision; `String()` in decimal |
 | ✗ | `symbol` |
 
 ### `null` is not `undefined`, and a pointer holds one of them
@@ -428,6 +428,16 @@ Two gaps this opened, both small and both real:
   is fine.
 
 `bigint`'s width is the one place this table promises less than the language.
+Within it the arithmetic is exact and prints without an exponent, and the one
+value it cannot spell is `-(2^127)`: the literal is written as a negation of
+`2^127`, whose magnitude does not fit, so it is refused by name.
+
+Three things about it were wrong until a generated sweep asked node. `String()`
+of one was refused. A literal above 2^63 emitted its digits, which C has no
+literal type for and clang rejects outright. And `1n << 100n` folded to `16`,
+because the constant lattice describes *doubles* — a range, whether the value is
+whole, whether it could be `-0` — and was still being asked about a value that
+is none of those. 100 masked to five bits is 4.
 The boundary is deliberate and visible: a literal too large is refused where it
 is written. Every `bigint` in the node profile is a 64-bit quantity —
 `readBigUInt64BE`, an hrtime timestamp, `0xffffffffffffffffn` — and a true
