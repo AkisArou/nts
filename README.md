@@ -96,10 +96,10 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | a property `timestamp` of unrepresentable type (`Date`) | 4 |
 | a rest parameter whose element type has no representation | 4 |
 | an expression of kind 216 | 4 |
-| `A`, a function used as a value | 3 |
-| `Foo`, a function used as a value | 3 |
 | a `for...of` binding by property name, which is object destructuring | 3 |
 | a method on an object literal | 3 |
+| a module-scope construct of kind 250, which has code in it | 3 |
+| a parameter of unrepresentable type (any) | 3 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->
