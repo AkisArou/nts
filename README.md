@@ -70,13 +70,13 @@ question.
 
 | outcome | files |
 | --- | ---: |
-| lowered completely | **47** |
-| refused a construct | 50 |
+| lowered completely | **48** |
+| refused a construct | 49 |
 | rejected by the typechecker | 86 |
 | **the frontend fell over** | **1** |
 | **invalid HIR or a panic** | **0** |
 
-Of the 97 that typecheck, **48%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
+Of the 97 that typecheck, **49%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
 
 The last two rows are the ones that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do, and so is a query this compiler makes that the typechecker cannot answer.
 
