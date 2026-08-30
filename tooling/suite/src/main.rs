@@ -202,22 +202,201 @@ pub fn collect_with(dir: &Utf8Path, into: &mut Vec<Utf8PathBuf>, extension: &str
     Ok(())
 }
 
-fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
-    // One workspace, rewritten per file. A fresh directory per case would spend
-    // more time in the filesystem than in the compiler.
-    let work = root.join("target/suite");
-    let src = work.join("src");
-    std::fs::create_dir_all(&src)?;
-    // Where the generated C goes, to be handed to clang for a syntax check.
-    let built = work.join("c");
-    std::fs::create_dir_all(&built)?;
-    let tsconfig = work.join("tsconfig.json");
-    std::fs::write(
-        &tsconfig,
-        r#"{ "compilerOptions": { "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "noEmit": true }, "include": ["src"] }"#,
-    )?;
+/// Where one worker does its work.
+///
+/// One per worker rather than one per case: a fresh directory per file would
+/// spend more time in the filesystem than in the compiler, and a single shared
+/// one is what kept this serial -- every case rewrites `src/main.ts`, so two at
+/// once would compile each other's input.
+struct Workspace {
+    src: Utf8PathBuf,
+    built: Utf8PathBuf,
+    tsconfig: Utf8PathBuf,
+}
 
+impl Workspace {
+    fn open(root: &Utf8Path, worker: usize) -> Result<Self> {
+        let work = root.join(format!("target/suite/w{worker}"));
+        let src = work.join("src");
+        let built = work.join("c");
+        std::fs::create_dir_all(&src)?;
+        std::fs::create_dir_all(&built)?;
+        let tsconfig = work.join("tsconfig.json");
+        std::fs::write(
+            &tsconfig,
+            r#"{ "compilerOptions": { "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "noEmit": true }, "include": ["src"] }"#,
+        )?;
+        Ok(Self {
+            src,
+            built,
+            tsconfig,
+        })
+    }
+}
+
+/// What one file turned out to be, and anything worth saying about it.
+///
+/// The notes are carried rather than printed where they are found: the workers
+/// finish in whatever order they finish, and a gate whose output depends on
+/// scheduling is a gate nobody can diff. They are printed in file order below.
+struct Examined {
+    outcome: Outcome,
+    notes: Vec<String>,
+    uncompilable: bool,
+}
+
+/// One corpus file, start to finish.
+fn examine(file: &Utf8Path, workspace: &Workspace, tsgo: &str) -> Examined {
+    let text = std::fs::read_to_string(file).unwrap_or_default();
+    let target = workspace.src.join(if file.extension() == Some("tsx") {
+        "main.tsx"
+    } else {
+        "main.ts"
+    });
+    // Only one of the two may exist, or the compilation has two entry points.
+    let _ = std::fs::remove_file(workspace.src.join("main.ts"));
+    let _ = std::fs::remove_file(workspace.src.join("main.tsx"));
+    if std::fs::write(&target, &text).is_err() {
+        return Examined {
+            outcome: Outcome::Failed("could not write the case".to_owned()),
+            notes: Vec::new(),
+            uncompilable: false,
+        };
+    }
+
+    let mut notes = Vec::new();
+    let mut uncompilable = false;
+
+    // A fresh frontend per file. Sharing one would be faster and would also
+    // share whatever state a pathological input leaves behind, and the point of
+    // a corpus is that some of these inputs are pathological.
+    let mut source = TsgoApi::for_compilation(tsgo.to_owned());
+    // The conservation law is enforced in the lowering rather than measured
+    // here: `hir::lower` refuses every function neither walk reached, which is
+    // why it shows up as an ordinary refusal in the histogram. Asking again at
+    // *this* point would be wrong -- `prepare` has run dead-code elimination by
+    // now, and a function that was lowered and then legitimately removed looks
+    // exactly like one that vanished.
+    let outcome = match source.snapshot(&workspace.tsconfig) {
+        Err(error) => Outcome::Failed(error.to_string()),
+        Ok(snapshot) if snapshot.has_errors() => Outcome::Rejected,
+        Ok(snapshot) => match hir::prepare(&snapshot) {
+            Err(_) => Outcome::Invalid,
+            Ok(prepared) => {
+                // Ask clang whether what the backend produced is C. The IR being
+                // well formed does not make the output well formed, and nothing
+                // else here would notice.
+                if let Err(error) = nts_differential::compiles(&prepared.program, &workspace.built)
+                {
+                    uncompilable = true;
+                    notes.push(format!("UNCOMPILABLE C: {file}: {error}"));
+                }
+                if prepared.diagnostics.is_empty() {
+                    Outcome::Lowered
+                } else {
+                    Outcome::Refused(
+                        prepared
+                            .diagnostics
+                            .iter()
+                            .map(|diagnostic| shorten(&diagnostic.message))
+                            .collect(),
+                    )
+                }
+            }
+        },
+    };
+
+    Examined {
+        outcome,
+        notes,
+        uncompilable,
+    }
+}
+
+/// How many files to examine at once.
+///
+/// Every case is an independent subprocess tree -- a frontend, then clang -- so
+/// this is the one place the machine's size shows. It took the corpus from
+/// thirty seconds to four.
+///
+/// Capped low, and the cap is empirical rather than derived. What breaks first
+/// is not this process (it peaks at 145MB whatever the worker count) but the
+/// *frontends*, which are separate processes holding a type graph each: at
+/// thirty-two and at sixteen, one of them died inside Go's collector and the
+/// run reported `io error talking to tsgo` and one extra frontend failure. At
+/// eight it did not, twice. A gate that is fast and occasionally wrong is worth
+/// less than one that is slow and never is.
+///
+/// So eight is a floor under a machine's core count rather than a measurement
+/// of anything, and `NTS_SUITE_JOBS` is there for a machine that differs. If
+/// the frontend stops falling over under concurrency, this cap should go.
+const CROWDED: usize = 8;
+
+fn workers(files: usize) -> usize {
+    let cores = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
+    std::env::var("NTS_SUITE_JOBS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|jobs| *jobs > 0)
+        .unwrap_or_else(|| cores.min(CROWDED))
+        // Spawning thirty-two workers for eleven files is thirty-one frontends
+        // started to do nothing.
+        .min(files.max(1))
+}
+
+fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
     let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+
+    // A multi-file case, which this harness has one workspace per worker for
+    // and therefore cannot express. Filtered before the limit is applied so
+    // that `--limit 25` means twenty-five examined rather than twenty-five
+    // considered.
+    let files: Vec<&Utf8PathBuf> = files
+        .iter()
+        .filter(|file| {
+            !std::fs::read_to_string(file)
+                .unwrap_or_default()
+                .contains("@filename")
+        })
+        .take(limit)
+        .collect();
+
+    let workers = workers(files.len());
+    let done = std::sync::atomic::AtomicUsize::new(0);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let results: Vec<std::sync::Mutex<Option<Examined>>> =
+        (0..files.len()).map(|_| std::sync::Mutex::new(None)).collect();
+
+    std::thread::scope(|scope| -> Result<()> {
+        let mut handles = Vec::new();
+        for worker in 0..workers {
+            let workspace = Workspace::open(root, worker)?;
+            let (files, results, done, next, tsgo) =
+                (&files, &results, &done, &next, tsgo.as_str());
+            handles.push(scope.spawn(move || {
+                loop {
+                    let at = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(file) = files.get(at) else {
+                        return;
+                    };
+                    let examined = examine(file, &workspace, tsgo);
+                    *results[at].lock().unwrap_or_else(std::sync::PoisonError::into_inner) =
+                        Some(examined);
+                    let count = done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                    if count % 25 == 0 {
+                        println!("  {count} files...");
+                    }
+                }
+            }));
+        }
+        for handle in handles {
+            handle.join().map_err(|_| anyhow::anyhow!("a worker panicked"))?;
+        }
+        Ok(())
+    })?;
+
+    // Folded in file order, so the output of a run does not depend on which
+    // worker got there first.
     let mut totals = Totals {
         lowered: 0,
         refused: 0,
@@ -227,76 +406,26 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         uncompilable: 0,
         reasons: FxHashMap::default(),
     };
-
-    let mut attempted = 0;
-    for file in files {
-        if attempted >= limit {
-            break;
-        }
-        let text = std::fs::read_to_string(file).unwrap_or_default();
-        if text.contains("@filename") {
+    for (at, slot) in results.into_iter().enumerate() {
+        let Some(examined) = slot.into_inner().unwrap_or_else(std::sync::PoisonError::into_inner) else {
             continue;
-        }
-        attempted += 1;
-
-        let target = src.join(if file.extension() == Some("tsx") {
-            "main.tsx"
-        } else {
-            "main.ts"
-        });
-        // Only one of the two may exist, or the compilation has two entry points.
-        let _ = std::fs::remove_file(src.join("main.ts"));
-        let _ = std::fs::remove_file(src.join("main.tsx"));
-        std::fs::write(&target, &text)?;
-
-        // A fresh frontend per file. Sharing one would be faster and would also
-        // share whatever state a pathological input leaves behind, and the
-        // point of a corpus is that some of these inputs are pathological.
-        let mut source = TsgoApi::for_compilation(tsgo.clone());
-        // The conservation law is enforced in the lowering rather than measured
-        // here: `hir::lower` refuses every function neither walk reached, which
-        // is why it shows up as an ordinary refusal in the histogram. Asking
-        // again at *this* point would be wrong -- `prepare` has run dead-code
-        // elimination by now, and a function that was lowered and then
-        // legitimately removed looks exactly like one that vanished.
-        let outcome = match source.snapshot(&tsconfig) {
-            Err(error) => Outcome::Failed(error.to_string()),
-            Ok(snapshot) if snapshot.has_errors() => Outcome::Rejected,
-            Ok(snapshot) => match hir::prepare(&snapshot) {
-                Err(_) => Outcome::Invalid,
-                Ok(prepared) => {
-                    // Ask clang whether what the backend produced is C. The IR
-                    // being well formed does not make the output well formed,
-                    // and nothing else here would notice.
-                    if let Err(error) = nts_differential::compiles(&prepared.program, &built) {
-                        totals.uncompilable += 1;
-                        println!("UNCOMPILABLE C: {file}: {error}");
-                    }
-                    if prepared.diagnostics.is_empty() {
-                        Outcome::Lowered
-                    } else {
-                        Outcome::Refused(
-                            prepared
-                                .diagnostics
-                                .iter()
-                                .map(|diagnostic| shorten(&diagnostic.message))
-                                .collect(),
-                        )
-                    }
-                }
-            },
         };
-
-        match outcome {
+        for note in examined.notes {
+            println!("{note}");
+        }
+        if examined.uncompilable {
+            totals.uncompilable += 1;
+        }
+        match examined.outcome {
             Outcome::Lowered => totals.lowered += 1,
             Outcome::Rejected => totals.rejected += 1,
             Outcome::Failed(error) => {
                 totals.failed += 1;
-                println!("FRONTEND FAILED: {file}: {error}");
+                println!("FRONTEND FAILED: {}: {error}", files[at]);
             }
             Outcome::Invalid => {
                 totals.invalid += 1;
-                println!("INVALID HIR: {file}");
+                println!("INVALID HIR: {}", files[at]);
             }
             Outcome::Refused(reasons) => {
                 totals.refused += 1;
@@ -304,10 +433,6 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
                     *totals.reasons.entry(reason).or_default() += 1;
                 }
             }
-        }
-
-        if attempted % 25 == 0 {
-            println!("  {attempted} files...");
         }
     }
     Ok(totals)
@@ -329,6 +454,10 @@ fn report(totals: &Totals) {
     println!("  rejected by typecheck   {}", totals.rejected);
     println!("  frontend failed         {}", totals.failed);
     println!("  invalid HIR             {}", totals.invalid);
+    // Counted since it was added and never printed, which is the same as not
+    // counting it: the two rows that must stay at zero are only a gate if a
+    // reader can see both.
+    println!("  uncompilable C          {}", totals.uncompilable);
 
     let mut reasons: Vec<(&String, &usize)> = totals.reasons.iter().collect();
     reasons.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
