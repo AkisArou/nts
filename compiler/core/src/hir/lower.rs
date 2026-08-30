@@ -2720,11 +2720,14 @@ impl<'a> FuncBuilder<'a> {
 
     /// Every layout a type needs, not only its own.
     ///
-    /// `{ $and: [{ $expr: true }] }` needs one for the element of `$and` as
-    /// much as for the object, and building only the outer one left the backend
-    /// with an object type it could not name -- on a program the lowering had
-    /// called clean, because the layout it was missing belonged to a type no
-    /// *function* mentioned.
+    /// An array of objects needs one for its element as much as for itself, and
+    /// the layout it is missing belongs to a type no *function* mentioned.
+    ///
+    /// Through *containers* and not through an object's fields. Recursing into
+    /// fields as well demanded a layout for every field type whether or not
+    /// anything reads it, which refused a class for holding a `Map` it never
+    /// touches -- 81 functions in the node profile, to fix nothing: the case
+    /// that prompted it was not reached this way either.
     ///
     /// Bounded rather than tracked: a field may hold the type it belongs to,
     /// and a list node is the ordinary case rather than a strange one. The
@@ -2741,10 +2744,7 @@ impl<'a> FuncBuilder<'a> {
         }
         match ty {
             HirType::Managed(ManagedType::Object(object)) => {
-                let layout = self.layout_of(at, *object)?;
-                for field in layout.fields {
-                    self.materialize_within(at, &field.ty, depth + 1)?;
-                }
+                self.layout_of(at, *object)?;
             }
             HirType::Managed(ManagedType::Array(element)) => {
                 self.materialize_within(at, element, depth + 1)?;
