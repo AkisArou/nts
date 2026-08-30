@@ -2,6 +2,7 @@
 -D_GNU_SOURCE
 -I.
 -I../c
--I../../third_party/node-headers/include/node
+-I../../third_party/node/deps/uv/include
+-I../../third_party/node/src
 -Wall
 -Wextra
