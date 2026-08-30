@@ -386,7 +386,8 @@ fn collect_hierarchy(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> H
 /// nothing for the thing that carries the captures.
 #[derive(Clone, Debug)]
 struct ClosureInfo {
-    /// The arrow function node.
+    /// The arrow function node, or -- when [`Self::wraps`] -- the declaration of
+    /// the named function this exists to be.
     node: NodeId,
     /// What the body reads from outside itself, in a fixed order.
     captures: Vec<Capture>,
@@ -396,6 +397,15 @@ struct ClosureInfo {
     /// closure this does not handle still compiles the rest -- and so the
     /// reason is reported at the arrow rather than at whatever read it.
     refusal: Option<&'static str>,
+    /// Whether this closure is a *named function* used as a value rather than
+    /// an arrow.
+    ///
+    /// `nextTick(finish, stream)` passes `finish` where JavaScript's answer is
+    /// a function object. This compiler's answer is a closure with no captures
+    /// whose `call` forwards to `finish` -- one static instance, so `finish`
+    /// is the same object everywhere it is written. An event emitter removing
+    /// a listener depends on exactly that.
+    wraps: bool,
 }
 
 /// A name the closure body reads and the enclosing scope binds.
@@ -566,6 +576,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             node: id,
             captures: Vec::new(),
             refusal: None,
+            wraps: false,
         };
 
         let mut subtree = Vec::new();
@@ -626,7 +637,71 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
         }
         closures.push(info);
     }
+
+    collect_function_values(snapshot, &probe, &mut closures);
     closures
+}
+
+
+/// The named functions a program uses as *values*, as closures that forward.
+///
+/// Separate from the arrow walk above because it asks a different question of
+/// a different node: not "what does this arrow capture" but "is this name being
+/// passed rather than called".
+///
+/// Only for functions something actually uses this way. A wrapper for every
+/// declaration would give a closure table to every program that has a function,
+/// and a program of ordinary calls should carry no table at all.
+fn collect_function_values(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    closures: &mut Vec<ClosureInfo>,
+) {
+    // One per declaration rather than one per use, which is what makes a single
+    // static instance meaningful: two mentions of `finish` are the same object,
+    // as they are in JavaScript.
+    let mut wrapped: Vec<NodeId> = Vec::new();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::IDENTIFIER) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        // Being called is not being used as a value, and neither is being the
+        // name after a dot.
+        if probe.is_callee(id) || probe.names_a_member(id) {
+            continue;
+        }
+        let Some(symbol) = node.symbol else {
+            continue;
+        };
+        let Some(record) = snapshot.symbols.get(symbol.0 as usize) else {
+            continue;
+        };
+        if !record.flags.contains(SymbolFlags::FUNCTION) {
+            continue;
+        }
+        for declaration in &record.declarations {
+            if probe.kind_of(*declaration) != Some(syntax::FUNCTION_DECLARATION) {
+                continue;
+            }
+            // The name in `function finish(...)` is an identifier for the same
+            // symbol, and declaring a function is not using it as a value.
+            if node.parent == Some(*declaration) {
+                continue;
+            }
+            if !wrapped.contains(declaration) {
+                wrapped.push(*declaration);
+            }
+        }
+    }
+    for declaration in wrapped {
+        closures.push(ClosureInfo {
+            node: declaration,
+            captures: Vec::new(),
+            refusal: None,
+            wraps: true,
+        });
+    }
 }
 
 /// Collect what a module declares outside any function.
@@ -3288,6 +3363,21 @@ impl<'a> FuncBuilder<'a> {
         format!("`{}`, a name from an enclosing scope", record.name)
     }
 
+    /// Whether this name is the thing being *called* rather than a value.
+    ///
+    /// `finish(x)` calls it and needs no function object at all; `f(finish)`
+    /// passes it and does. The distinction is what keeps a program of ordinary
+    /// calls free of a closure table.
+    fn is_callee(&self, id: NodeId) -> bool {
+        let Some(parent) = self.node(id).parent else {
+            return false;
+        };
+        if self.kind_of(parent) != Some(syntax::CALL_EXPRESSION) {
+            return false;
+        }
+        self.children(parent).first() == Some(&id)
+    }
+
     /// The member being read, when this name is the target of a property access.
     fn member_read_from(&self, id: NodeId) -> Option<String> {
         let parent = self.node(id).parent?;
@@ -4278,12 +4368,19 @@ impl<'a> FuncBuilder<'a> {
             origin: origin.clone(),
             known: Facts::TOP,
         }];
+        let mut forwarded = Vec::new();
         for child in self.children(id) {
             if self.kind_of(child) != Some(syntax::PARAMETER) {
                 continue;
             }
             let at = u32::try_from(params.len()).unwrap_or(0);
             params.push(self.lower_param(child, at)?);
+            // `lower_param` pushed the value and bound it by symbol. A wrapper
+            // has no body to read that binding, so the value is kept here --
+            // it is the only `Param(at)` this function will hold.
+            if let Some(value) = self.param_value(at) {
+                forwarded.push(value);
+            }
         }
 
         // The captures, read back and bound to the names the body writes. A
@@ -4316,6 +4413,37 @@ impl<'a> FuncBuilder<'a> {
 
         let return_type = self.return_type_of(id)?;
         self.materialize(id, &return_type)?;
+
+        // A wrapper has no body of its own. It forwards to the function it
+        // stands for, which keeps that function's one definition the only one:
+        // re-lowering the declaration's body here would compile it twice and
+        // give recursion two things to mean.
+        if info.wraps {
+            let called = self
+                .children(id)
+                .into_iter()
+                .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+                .and_then(|child| self.node(child).text.clone())
+                .ok_or_else(|| self.unsupported(id, "a function declaration with no name"))?;
+            if forwarded.len() + 1 != params.len() {
+                return Err(self.unsupported(
+                    id,
+                    "a function used as a value whose parameters are not plain names",
+                ));
+            }
+            let call = self.push(
+                OpKind::Call {
+                    callee: Callee::Direct(called),
+                    args: forwarded,
+                    frame: None,
+                },
+                return_type.clone(),
+                origin.clone(),
+            );
+            let carried = (!matches!(return_type, HirType::Void)).then_some(call);
+            self.terminate(Terminator::Return(carried));
+            return Ok(self.finish(name, params, return_type, origin, false));
+        }
 
         // `x => x * 2` and `x => { return x * 2; }` are the same function, and
         // the first is much the more common. The body is the last child either
@@ -4361,6 +4489,18 @@ impl<'a> FuncBuilder<'a> {
         // something dispatches through its slot, which `hir::reachable` decides
         // the same way it decides an override's fate.
         Ok(self.finish(name, params, return_type, origin, false))
+    }
+
+    /// The value a parameter was lowered to, by its index.
+    ///
+    /// `lower_param` binds by symbol, which is what a body wants and what a
+    /// forwarding wrapper cannot use -- it has no body and no mention of the
+    /// name. An index is unique within a function, so this is unambiguous.
+    fn param_value(&self, index: u32) -> Option<ValueId> {
+        self.values
+            .iter()
+            .position(|op| matches!(op.kind, OpKind::Param(at) if at == index))
+            .map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX)))
     }
 
     /// The class a closure allocates, with its one method in the shared slot.
@@ -11591,6 +11731,24 @@ impl<'a> FuncBuilder<'a> {
         // for a name something actually reads.
         if let Some(reason) = self.module.unsupported.get(&symbol.0) {
             return Err(self.unsupported(id, reason));
+        }
+        // A named function used as a value. One static instance per
+        // declaration, so two mentions of it are the same object.
+        if let Some(record) = self.snapshot.symbols.get(symbol.0 as usize)
+            && record.flags.contains(SymbolFlags::FUNCTION)
+            && let Some(index) = record.declarations.iter().find_map(|declaration| {
+                self.closures
+                    .iter()
+                    .position(|closure| closure.wraps && closure.node == *declaration)
+            })
+        {
+            self.used_closures.push(index);
+            // The same layout the body's side builds, pushed here too: the two
+            // are lowered by different builders and `collect_layouts` merges
+            // them, so the type is known wherever it is used.
+            self.layouts.push(self.closure_layout(index, Vec::new()));
+            let ty = HirType::Managed(ManagedType::Object(closure_type(index)));
+            return Ok(self.push(OpKind::ClosureStatic, ty, origin));
         }
         Err(self.unsupported(id, &self.describe_name(id, symbol)))
     }

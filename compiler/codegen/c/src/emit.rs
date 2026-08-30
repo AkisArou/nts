@@ -803,7 +803,11 @@ fn allocated_layouts(program: &Program) -> rustc_hash::FxHashSet<usize> {
     let mut found = rustc_hash::FxHashSet::default();
     for func in &program.funcs {
         for op in &func.values {
-            if !matches!(op.kind, OpKind::ObjectNew { .. }) {
+            // A static closure instance is not allocated, but it *is* an
+            // object: it carries a header, and a header needs a descriptor to
+            // point at. Reference counting reads that descriptor before it
+            // reads `NTS_IMMORTAL` and stops.
+            if !matches!(op.kind, OpKind::ObjectNew { .. } | OpKind::ClosureStatic) {
                 continue;
             }
             let HirType::Managed(ManagedType::Object(ty)) = &op.ty else {
@@ -1167,6 +1171,11 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) 
     }
 }
 
+/// The name of the single instance a named function's closure has.
+fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
+    format!("nts_fnval_{}", object_type_name(layout))
+}
+
 /// A C struct per object type, and its descriptor.
 ///
 /// A real struct rather than manual offsets, so the C compiler decides padding
@@ -1328,8 +1337,35 @@ fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &P
                 erased.len()
             ),
         );
+        // A named function used as a value is one object, so it is emitted
+        // rather than allocated: static, immortal, and nothing in it but the
+        // header. `NTS_IMMORTAL` is what keeps reference counting away from
+        // storage that was never allocated and must never be freed.
+        if wants_a_static_instance(program, layout) {
+            writer.line(
+                origin,
+                format!(
+                    "static {name} {} = {{{{&nts_desc_{name}, NTS_IMMORTAL, 0, 0}}}};",
+                    static_closure_name(layout)
+                ),
+            );
+        }
         writer.blank(origin);
     }
+}
+
+/// Whether anything in the program refers to this layout's single instance.
+///
+/// Asked of the IR rather than tracked alongside it: `ClosureStatic` is the
+/// only thing that reads one, so the ops that read it are the whole answer.
+fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) -> bool {
+    program.funcs.iter().any(|func| {
+        func.values.iter().any(|op| {
+            matches!(op.kind, OpKind::ClosureStatic)
+                && matches!(&op.ty, HirType::Managed(ManagedType::Object(ty))
+                    if layout.types.contains(ty))
+        })
+    })
 }
 
 /// The per-program data: a descriptor per element type this program allocates.
@@ -2307,6 +2343,12 @@ fn managed_op(
     let op = func.value(value);
     let name = value_name(value);
     let text = match &op.kind {
+        // One instance, emitted once beside its descriptor. No allocation and
+        // no reference counting: it is immortal, and there is nothing in it.
+        OpKind::ClosureStatic => {
+            let layout = layout_of(context.program, &op.ty, &op.origin)?;
+            format!("{name} = &{};", static_closure_name(layout))
+        }
         OpKind::ObjectNew { frame } => {
             let layout = layout_of(context.program, &op.ty, &op.origin)?;
             let type_name = object_type_name(layout);
@@ -2490,6 +2532,7 @@ fn emit_op(
             unary_text(func, &name, *un, *operand, &op.ty, &op.origin)?
         }
         OpKind::ObjectNew { .. }
+        | OpKind::ClosureStatic
         | OpKind::FieldGet { .. }
         | OpKind::FieldSet { .. }
         | OpKind::ArrayNew { .. }

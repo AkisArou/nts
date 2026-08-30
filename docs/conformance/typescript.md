@@ -94,6 +94,7 @@ a backlog.
 | ✅ | overload signatures |
 | ✅ | generics, including constrained; monomorphized per instantiation |
 | ✅ | higher-order functions and closures that only *read* what they capture |
+| ✅ | a **named function used as a value** — one static instance, so identity holds |
 | ✅ | recursion |
 | ✅ | `async`/`await` |
 | ✅ | type predicates (`x is T`) and `asserts x is T` |
@@ -101,6 +102,31 @@ a backlog.
 | ✗ | `function` expressions — an arrow with the same body lowers |
 | ✗ | closures over a variable something **assigns to** — this captures by value and JavaScript by reference |
 | ✗ | generators (`function*`, `yield`) — needs the `Generator<T>` object |
+
+### A function as a value costs one static object, and nothing where it is not used
+
+`nextTick(finish, stream)` needs `finish` as a value. The answer is a closure
+with no captures whose `call` forwards to `finish`, emitted once:
+
+```c
+static NtsObj_Closure0 nts_fnval_NtsObj_Closure0 = {{&nts_desc_NtsObj_Closure0, NTS_IMMORTAL, 0, 0}};
+...
+    v1 = &nts_fnval_NtsObj_Closure0;      /* no allocation */
+    v3 = inc(v0);                          /* an ordinary call is still an ordinary call */
+```
+
+One instance rather than one per mention, because `finish === finish` has to be
+true and an event emitter removes a listener by exactly that comparison. It
+forwards rather than re-lowering the declaration's body, so a recursive function
+used as a value still has one definition and recurses into it.
+
+Deliberately **not** extended to a non-capturing arrow: `(() => 1) === (() =>
+1)` is false in JavaScript — two evaluations make two objects — so folding those
+to one instance would answer a comparison wrongly. `examples/function-values`
+holds both halves.
+
+The wrapper exists only for functions something actually passes. A program of
+ordinary calls emits no closure struct, no dispatch slot and no table at all.
 
 ## 4. Classes and objects
 
@@ -506,8 +532,11 @@ rather than done quietly under a feature.
 
 ## 15. What to do next, ordered by evidence
 
-From the node profile's 1,219 refusals, which is the only list ordered by what
-real code actually needs rather than by what looks incomplete.
+From the node profile's refusal sites — 1,050 of them, counted **once each**.
+The raw sweep reports about five times that, because a module is re-compiled
+once per importer and `util/types.ts` is counted twenty-one times over. This is
+the only list ordered by what real code actually needs rather than by what looks
+incomplete.
 
 Read the counts as *upper bounds on what is visible*, not as effort. Twice this
 week a tall row was one thing repeated, and twice it was several unrelated
@@ -516,16 +545,16 @@ blocks on, not to start building.
 
 | | what it unblocks | shape of the work |
 |---|---|---|
-| closures and function values | 86 — a name from an enclosing scope (27), a local function used as a value (28), a capture more than one scope up | the closure class exists; what is missing is capture *by reference* for a name something writes to |
+| closures and function values | was 101 across four rows; **a named function used as a value is done** and took the profile from 1,155 sites to 1,050. What is left is capture *by reference* (20) and a name from an enclosing scope (27) | capture more than one scope up already works, and so does a returned closure — the row said otherwise and was not checked |
 | module evaluation | 81 — one refusal repeated across the top level of nearly every module | a statement at module scope that is not a declaration; the evaluation order is already modelled |
 | a member a type does not declare | 80 — 26 of them on an anonymous type, then `StreamLike` (12) | mostly structural types the decomposition stopped at; count before building |
 | a global member | 78 — a long tail: `Object.defineProperty` 14, `Array.from` 10, `ArrayBuffer.isView` 7 | the largest entry is §13's, so this row is smaller than it looks |
-| `instanceof` | 67, and 5 distinct names — the provided error classes | TypeScript **closes** the hierarchy, so a test is a descriptor comparison against a set the compiler already knows. A right-hand side that is a *variable* needs a class as a value, which is the harder half |
+| `instanceof` | 67, but **8** are `instanceof` — 59 are one idiom, `override get ["constructor"]() { return TypeError; }` | blocked twice over: two classes of a shape share a descriptor (§4), and every right-hand side in all 67 is an ambient `lib` class this compiler does not declare |
 | the async iterator protocol | 62, all `AsyncIterableIterator` | §10 plus the suspension machine, which `async` already has |
 | `symbol` | 52 — mostly `string \| symbol` as a property key | a representation, and a decision about whether well-known symbols are values or names |
 | `typeof` on an open value | 45 | the tag exists; what is missing is the tag *not distinguishing an array from an object* |
 | a method not in the hierarchy | 40 — `emit` 8, then a long tail of 23 | structural dispatch, which is the same question as the anonymous-type row above |
-| string methods | 35 — `toLowerCase` 12, `split` 9, `trim` 4, `replace` 3, `replaceAll` 3 | six functions, each pure and independent. The cheapest row on the board |
+| string methods | 15 — `toLowerCase` 12, `normalize` 2, `toUpperCase` 1. `split`, `trim`, `replace` and `replaceAll` are done | what is left wants a Unicode case table and normalization, which is a different order of work from the rest |
 | generators | 4 refusals, but `readline` and several streams are behind them | the suspension machine exists; what is missing is the `Generator<T>` object and §10's protocol |
 | `try`/`catch` | the largest *language* gap, and invisible in this table because the code that needs it does not reach the lowering | needs an unwinding decision — the runtime has none |
 

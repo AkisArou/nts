@@ -805,9 +805,47 @@ fn render_constant(index: usize, ty: &str, kind: &OpKind) -> String {
         OpKind::ConstFloat(v) => v.to_string(),
         OpKind::ConstBool(v) => v.to_string(),
         OpKind::ConstString(v) => format!("{v:?}"),
+        OpKind::ConstNull => "null".to_owned(),
+        OpKind::ConstUndefined => "undefined".to_owned(),
+        // A constant with an address: the one instance of a named function's
+        // closure. Nullary like the rest, which is why it renders here.
+        OpKind::ClosureStatic => "closure.static".to_owned(),
         _ => unreachable!("only the constants reach here"),
     };
     format!("%{index} = const {value} : {ty}")
+}
+
+/// Indexing an array, both directions.
+///
+/// `unchecked` is printed rather than omitted: it is the bound check the
+/// analysis proved unnecessary, and a dump that did not say so would make an
+/// elided check look like one that was never there.
+fn render_element(index: usize, ty: &str, kind: &OpKind) -> String {
+    match kind {
+        OpKind::ArrayGet {
+            array,
+            index: at,
+            checked,
+        } => format!(
+            "%{index} = array.get{} %{}[%{}] : {ty}",
+            if *checked { "" } else { " unchecked" },
+            array.0,
+            at.0
+        ),
+        OpKind::ArraySet {
+            array,
+            index: at,
+            value,
+            checked,
+        } => format!(
+            "array.set{} %{}[%{}] = %{}",
+            if *checked { "" } else { " unchecked" },
+            array.0,
+            at.0,
+            value.0
+        ),
+        _ => unreachable!("only the two indexing operations reach here"),
+    }
 }
 
 /// The three erasure operations, which differ only in their verb.
@@ -862,12 +900,13 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::ConstInt(_)
         | OpKind::ConstFloat(_)
         | OpKind::ConstBool(_)
-        | OpKind::ConstString(_) => render_constant(index, &ty, &op.kind),
+        | OpKind::ConstString(_)
+        | OpKind::ConstNull
+        | OpKind::ConstUndefined
+        | OpKind::ClosureStatic => render_constant(index, &ty, &op.kind),
         OpKind::Erase { value } | OpKind::TagOf { value } | OpKind::Unerase { value } => {
             render_erasure(index, &ty, &op.kind, *value)
         }
-        OpKind::ConstNull => format!("%{index} = const null : {ty}"),
-        OpKind::ConstUndefined => format!("%{index} = const undefined : {ty}"),
         OpKind::Binary { op: bin, lhs, rhs } => {
             format!(
                 "%{index} = {} %{}, %{} : {ty}",
@@ -911,28 +950,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             field,
             value,
         } => format!("field.set %{}.{field} = %{}", object.0, value.0),
-        OpKind::ArrayGet {
-            array,
-            index: at,
-            checked,
-        } => format!(
-            "%{index} = array.get{} %{}[%{}] : {ty}",
-            if *checked { "" } else { " unchecked" },
-            array.0,
-            at.0
-        ),
-        OpKind::ArraySet {
-            array,
-            index: at,
-            value,
-            checked,
-        } => format!(
-            "array.set{} %{}[%{}] = %{}",
-            if *checked { "" } else { " unchecked" },
-            array.0,
-            at.0,
-            value.0
-        ),
+        OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
+            render_element(index, &ty, &op.kind)
+        }
         OpKind::Await { .. } | OpKind::Suspend { .. } => suspension(index, op),
         OpKind::Unary { op: un, operand } => {
             let operator = match un {

@@ -610,6 +610,22 @@ pub enum OpKind {
     ObjectNew {
         frame: bool,
     },
+    /// The one instance of a closure that stands for a named function.
+    ///
+    /// `nextTick(finish, stream)` needs `finish` as a value, and JavaScript's
+    /// answer is a function object. This compiler's is a closure with no
+    /// captures whose `call` forwards to `finish` -- and because it captures
+    /// nothing there is nothing to distinguish two of them, so there is one,
+    /// static and immortal. That is not only an optimization: `finish ===
+    /// finish` has to be true, and an event emitter removing a listener finds
+    /// it by exactly that comparison.
+    ///
+    /// Deliberately *not* used for a non-capturing arrow. `(() => 1) === (() =>
+    /// 1)` is false in JavaScript -- two evaluations make two objects -- so
+    /// folding those to one instance would answer a comparison wrongly.
+    ///
+    /// The type says which closure class, the way [`OpKind::ObjectNew`]'s does.
+    ClosureStatic,
     /// `object.field`, by index into the type's [`Layout`].
     ///
     /// An index rather than a name: the layout already decided the order, and
