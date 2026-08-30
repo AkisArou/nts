@@ -4685,7 +4685,15 @@ impl<'a> FuncBuilder<'a> {
             carried: carried.clone(),
         });
 
-        self.lower_case_chain(&clauses, &blocks, subject, depth, &carried, &origin)?;
+        let chain = CaseChain {
+            clauses: &clauses,
+            blocks: &blocks,
+            carried: &carried,
+            origin: &origin,
+            depth,
+            exhaustive: self.covers_every_case(discriminant, &clauses),
+        };
+        self.lower_case_chain(&chain, subject)?;
 
         // The clauses, threaded in source order so a missing `break` falls
         // through -- which is what it means.
@@ -4740,13 +4748,17 @@ impl<'a> FuncBuilder<'a> {
     /// is true wherever in the source it was written.
     fn lower_case_chain(
         &mut self,
-        clauses: &[NodeId],
-        blocks: &[BlockId],
+        chain: &CaseChain<'_>,
         subject: ValueId,
-        depth: usize,
-        carried: &[u32],
-        origin: &Origin,
     ) -> Result<(), Diagnostic> {
+        let CaseChain {
+            clauses,
+            blocks,
+            carried,
+            origin,
+            depth,
+            exhaustive,
+        } = *chain;
         let default_at = clauses
             .iter()
             .position(|clause| self.kind_of(*clause) == Some(syntax::DEFAULT_CLAUSE));
@@ -4767,6 +4779,11 @@ impl<'a> FuncBuilder<'a> {
             });
             return Ok(());
         }
+
+        // A `default` covers whatever the labels do not, so coverage only
+        // matters where there is none.
+        let exhaustive = exhaustive && default_at.is_none();
+        let mut unreachable_tail = None;
 
         for (which, at) in cases.iter().enumerate() {
             let clause = clauses[*at];
@@ -4797,6 +4814,19 @@ impl<'a> FuncBuilder<'a> {
                 (self.new_block(), Vec::new())
             } else if let Some(at) = default_at {
                 (blocks[at], reached.clone())
+            } else if exhaustive {
+                // Every value the discriminant can hold is a label, so the last
+                // test's `else` is a point control does not reach. Saying so is
+                // what keeps a `switch` whose every clause returns from looking
+                // like a function that falls out of its end owing a value --
+                // which is how `byteLengthIn` read, and TypeScript accepts it
+                // precisely because the exit is unreachable.
+                //
+                // `Unreachable` rather than `FellThrough`: coverage is checked
+                // below rather than assumed, so this is a claim with a proof.
+                let nowhere = self.new_block();
+                unreachable_tail = Some(nowhere);
+                (nowhere, Vec::new())
             } else {
                 (self.exit_of(depth).0, reached.clone())
             };
@@ -4811,7 +4841,51 @@ impl<'a> FuncBuilder<'a> {
                 self.switch_to(otherwise);
             }
         }
+        if let Some(nowhere) = unreachable_tail {
+            let here = self.current;
+            self.switch_to(nowhere);
+            self.terminate(Terminator::Unreachable);
+            self.switch_to(here);
+        }
         Ok(())
+    }
+
+    /// Whether the `case` labels cover every value the discriminant can hold.
+    ///
+    /// Only where that is *decidable here*: a union of literal types, each of
+    /// which some label matches. Anything else answers no, which costs a
+    /// reachable exit and never costs a wrong one -- and a wrong one is a block
+    /// the emitter fills with `__builtin_unreachable()`.
+    ///
+    /// TypeScript does this analysis too, and better; what it does not do is
+    /// tell us the answer. So this is the narrow version of it, and the
+    /// narrowness is the point.
+    fn covers_every_case(&self, discriminant: NodeId, clauses: &[NodeId]) -> bool {
+        let literal_of = |ty: &TypeId| -> Option<LiteralValue> {
+            match &self.snapshot.types.get(ty.0 as usize)?.kind {
+                TypeKind::Literal(value) => Some(value.clone()),
+                _ => None,
+            }
+        };
+        let Some(subject) = self.snapshot.node_types.get(&discriminant) else {
+            return false;
+        };
+        let Some(record) = self.snapshot.types.get(subject.0 as usize) else {
+            return false;
+        };
+        let TypeKind::Union(members) = &record.kind else {
+            return false;
+        };
+        let Some(wanted) = members.iter().map(literal_of).collect::<Option<Vec<_>>>() else {
+            return false;
+        };
+        let labels: Vec<LiteralValue> = clauses
+            .iter()
+            .filter_map(|clause| self.children(*clause).first().copied())
+            .filter_map(|label| self.snapshot.node_types.get(&label))
+            .filter_map(literal_of)
+            .collect();
+        !wanted.is_empty() && wanted.iter().all(|value| labels.contains(value))
     }
 
     /// `do { .. } while (c)`.
@@ -10783,6 +10857,23 @@ enum Place {
 /// short-circuit's "untaken" arm is the left operand, already evaluated before
 /// the branch.
 #[derive(Debug, Clone, Copy)]
+/// The parts of a `switch` its test chain needs.
+///
+/// Bundled because they are one thing -- the switch being lowered -- and
+/// passing them one at a time had grown to eight arguments, where a transposed
+/// pair would still compile.
+struct CaseChain<'a> {
+    clauses: &'a [NodeId],
+    blocks: &'a [BlockId],
+    carried: &'a [u32],
+    origin: &'a Origin,
+    depth: usize,
+    /// Whether the labels cover every value the discriminant can hold, so that
+    /// the chain's last `else` is a point control does not reach.
+    exhaustive: bool,
+}
+
+#[derive(Clone, Copy)]
 enum Branch {
     Expression(NodeId),
     Value(ValueId),
