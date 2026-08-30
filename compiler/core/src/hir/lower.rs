@@ -3233,6 +3233,16 @@ impl<'a> FuncBuilder<'a> {
             {
                 return format!("`Math.{member}`, not a member of this compiler's `Math`");
             }
+            // With the member, when one is being read. `Object` was 44
+            // refusals that could not be told apart, and they are not one
+            // thing: `Object.keys` is a list the compiler is holding and
+            // `Object.defineProperty` is a shape it does not have.
+            if let Some(member) = self.member_read_from(id) {
+                return format!(
+                    "`{}.{member}`, a global member with no definition here",
+                    record.name
+                );
+            }
             return format!("`{}`, a global with no definition here", record.name);
         }
         if is(SymbolFlags::FUNCTION) {
@@ -5527,6 +5537,231 @@ impl<'a> FuncBuilder<'a> {
     /// subscribed to one of these still runs on the microtask queue, one tick
     /// later, because running it inline would be a different observable order.
     /// That is the runtime's rule and this does not have to restate it.
+    /// A static whose answer the checker's types already contain.
+    ///
+    /// `Array.isArray(x)` is a constant wherever the argument has a static
+    /// type, and so is `Object.hasOwn(o, "k")` wherever the layout is known:
+    /// there is nothing to ask at run time, because the question was settled
+    /// when the type was. `Object.keys(o)` is the same fact one step further --
+    /// the field names of a layout, which is a list the compiler is holding.
+    ///
+    /// Answered from the *checker's* type rather than from the representation,
+    /// which is the whole subtlety. A `Uint8Array` is a `Managed(Array(u8))`
+    /// here, and `Array.isArray(new Uint8Array(4))` is **false** in node -- a
+    /// typed array is not an Array. Reading the representation would have
+    /// answered `true` and been wrong in a way nothing else would catch.
+    fn lower_decided_static(
+        &mut self,
+        id: NodeId,
+        callee: NodeId,
+        arguments: &[NodeId],
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return None;
+        }
+        let parts = self.children(callee);
+        let [object, member] = parts.as_slice() else {
+            return None;
+        };
+        if self.kind_of(*object) != Some(syntax::IDENTIFIER) {
+            return None;
+        }
+        let global = self.node(*object).text.clone()?;
+        let name = self.node(*member).text.clone()?;
+
+        match (global.as_str(), name.as_str(), arguments) {
+            ("Array", "isArray", [argument]) => Some(self.decide_is_array(id, *argument)),
+            ("Object", "keys", [argument]) => Some(self.decide_object_keys(id, *argument)),
+            ("Object", "hasOwn", [argument, key]) => {
+                Some(self.decide_has_own(id, *argument, *key))
+            }
+            // `BigInt.asIntN(64, v)`, which is how the profile reads a signed
+            // 64-bit quantity back out of an unsigned one. A width and a value,
+            // both already machine types here.
+            ("BigInt", helper @ ("asIntN" | "asUintN"), [width, value]) => {
+                let call = if helper == "asIntN" {
+                    "nts_bigint_as_intn"
+                } else {
+                    "nts_bigint_as_uintn"
+                };
+                Some(self.decide_as_n(id, call, *width, *value))
+            }
+            _ => None,
+        }
+    }
+
+    /// The field names of whatever the argument's layout is.
+    fn own_names(&mut self, id: NodeId, argument: NodeId) -> Result<Vec<String>, Diagnostic> {
+        let ty = self
+            .snapshot
+            .node_types
+            .get(&argument)
+            .copied()
+            .map(|ty| self.class_behind(ty))
+            .ok_or_else(|| self.unsupported(id, "a static over a value with no type"))?;
+        let HirType::Managed(ManagedType::Object(type_id)) = self
+            .represent(ty)
+            .ok_or_else(|| self.unrepresentable(id, "the argument of an `Object` static"))?
+        else {
+            return Err(self.unsupported(
+                id,
+                "an `Object` static over something that is not an object here",
+            ));
+        };
+        let layout = self.layout_of(id, type_id)?;
+        Ok(layout.fields.iter().map(|field| field.name.clone()).collect())
+    }
+
+    /// `Object.keys(o)`, as the array of names the layout already holds.
+    ///
+    /// Insertion order is declaration order, which is what a layout is: fields
+    /// are laid out base-first and in the order the class declares them, and
+    /// that is the order `Object.keys` is specified to produce for string keys
+    /// that are not array indices.
+    fn decide_object_keys(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
+        // Lowered for its effects even though the answer does not depend on it:
+        // `Object.keys(f())` calls `f`.
+        let _ = self.lower_expression(argument)?;
+        let names = self.own_names(id, argument)?;
+        let origin = self.origin(id);
+        let element = HirType::Managed(ManagedType::String);
+        let ty = HirType::Managed(ManagedType::Array(Box::new(element.clone())));
+        #[allow(clippy::cast_precision_loss)]
+        let count = names.len() as f64;
+        let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
+        let array = self.push(
+            OpKind::ArrayNew {
+                length,
+                zeroed: true,
+            },
+            ty.clone(),
+            origin.clone(),
+        );
+        for (at, name) in names.into_iter().enumerate() {
+            #[allow(clippy::cast_precision_loss)]
+            let position = at as f64;
+            let index = self.push(OpKind::ConstFloat(position), HirType::NUMBER, origin.clone());
+            let value = self.push(OpKind::ConstString(name), element.clone(), origin.clone());
+            self.push(
+                OpKind::ArraySet {
+                    array,
+                    index,
+                    value,
+                    checked: false,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        Ok(array)
+    }
+
+    /// `Object.hasOwn(o, "k")`, which a layout answers with a constant.
+    fn decide_has_own(
+        &mut self,
+        id: NodeId,
+        argument: NodeId,
+        key: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let _ = self.lower_expression(argument)?;
+        let Some(wanted) = self.literal_name(key) else {
+            // A computed key is a question about a *value*, and a layout cannot
+            // answer it. Named rather than guessed.
+            return Err(self.unsupported(key, "`Object.hasOwn` with a key the program computes"));
+        };
+        let names = self.own_names(id, argument)?;
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::ConstBool(names.contains(&wanted)),
+            HirType::Bool,
+            origin,
+        ))
+    }
+
+    /// `BigInt.asIntN(bits, v)` and its unsigned twin.
+    fn decide_as_n(
+        &mut self,
+        id: NodeId,
+        helper: &str,
+        width: NodeId,
+        value: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let width = self.lower_expression(width)?;
+        let value = self.lower_expression(value)?;
+        if self.values[value.0 as usize].ty != HirType::BigInt {
+            return Err(self.unsupported(id, "`BigInt.asIntN` of something that is not a `bigint`"));
+        }
+        let origin = self.origin(id);
+        Ok(self.call_runtime(helper, vec![width, value], HirType::BigInt, &origin))
+    }
+
+    /// `Array.isArray(x)`, from the checker's type rather than the machine one.
+    fn decide_is_array(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
+        let _ = self.lower_expression(argument)?;
+        let ty = self
+            .snapshot
+            .node_types
+            .get(&argument)
+            .copied()
+            .ok_or_else(|| self.unsupported(id, "`Array.isArray` of a value with no type"))?;
+        let record = self
+            .snapshot
+            .types
+            .get(ty.0 as usize)
+            .ok_or_else(|| self.unsupported(id, "`Array.isArray` of an unknown type"))?;
+        let answer = match &record.kind {
+            // A tuple *is* an Array: `Array.isArray([1, "a"])` is true, however
+            // this compiler chooses to lay it out -- a heterogeneous one is a
+            // struct here and still an Array in the language.
+            TypeKind::Array(_) | TypeKind::Tuple(_) => true,
+            // Anything the checker has left open cannot be decided here, and a
+            // guess would be a wrong answer rather than a missing one. A tag
+            // test is what this needs, and the tag does not distinguish an
+            // array from an object yet.
+            TypeKind::Any | TypeKind::Unknown | TypeKind::Union(_) => {
+                return Err(self.unsupported(
+                    id,
+                    "`Array.isArray` of a value whose type is open, which needs a runtime tag",
+                ));
+            }
+            // Everything else is not an Array -- including a `Uint8Array`,
+            // which this compiler represents as one and node does not call one.
+            _ => false,
+        };
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::ConstBool(answer), HirType::Bool, origin))
+    }
+
+    /// The call forms that are not ordinary calls.
+    ///
+    /// Three kinds, and they are asked in this order because each is narrower
+    /// than the last:
+    ///
+    /// `Math.floor(x)` and friends are *operations*. Lowering them as
+    /// operations is what lets the analysis see that the result is a whole
+    /// number, which is the entire reason an author writes `Math.floor` rather
+    /// than a division.
+    ///
+    /// `Array.isArray(x)`, `Object.keys(o)` and `Object.hasOwn(o, "k")` are
+    /// questions the *types* already answer, so they become constants.
+    ///
+    /// `Promise.resolve(v)` and `Promise.reject(e)` are constructors: each
+    /// allocates a promise and settles it before anyone can subscribe.
+    fn lower_special_call(
+        &mut self,
+        id: NodeId,
+        callee: NodeId,
+        arguments: &[NodeId],
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        if let Some(intrinsic) = self.intrinsic_of(callee) {
+            return Some(self.lower_intrinsic(id, intrinsic, arguments));
+        }
+        if let Some(decided) = self.lower_decided_static(id, callee, arguments) {
+            return Some(decided);
+        }
+        self.lower_promise_static(id, callee, arguments)
+    }
+
     fn lower_promise_static(
         &mut self,
         id: NodeId,
@@ -9707,19 +9942,9 @@ impl<'a> FuncBuilder<'a> {
             }
         }
 
-        // `Math.floor(x)` and friends are operations, not calls. Lowering them
-        // as operations is what lets the analysis see that the result is a whole
-        // number — which is the entire reason an author writes `Math.floor`
-        // rather than a division.
-        if let Some(intrinsic) = self.intrinsic_of(callee_node) {
-            return self.lower_intrinsic(id, intrinsic, &arguments);
-        }
-
-        // `Promise.resolve(v)` and `Promise.reject(e)`, which are constructors
-        // rather than operations: each allocates a promise and settles it
-        // before anyone can subscribe.
-        if let Some(settled) = self.lower_promise_static(id, callee_node, &arguments) {
-            return settled;
+        // The calls that are not calls, in one place.
+        if let Some(special) = self.lower_special_call(id, callee_node, &arguments) {
+            return special;
         }
 
         // `Body.jupiter()` — a *static* method. It looks like a method call and

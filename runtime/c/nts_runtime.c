@@ -370,6 +370,41 @@ bool nts_value_strict_eq(NtsValue a, NtsValue b) {
   }
 }
 
+/* The low `bits` of a value, as two's complement.
+ *
+ * Split from the two entry points below because the masking is the same and
+ * only the last step differs -- an unsigned answer stops at the mask and a
+ * signed one carries the top bit outwards. */
+static __int128 nts_bigint_low_bits(double bits, __int128 value, bool sign) {
+  if (!(bits > 0.0)) {
+    return 0;
+  }
+  if (bits >= 128.0) {
+    return value;
+  }
+  unsigned width = (unsigned)bits;
+  unsigned __int128 mask = ((unsigned __int128)1 << width) - 1;
+  unsigned __int128 low = (unsigned __int128)value & mask;
+  if (!sign) {
+    return (__int128)low;
+  }
+  /* Sign-extend: if the top bit of the field is set the value is negative, and
+   * the bits above the field are all ones. */
+  unsigned __int128 top = (unsigned __int128)1 << (width - 1);
+  if (low & top) {
+    return (__int128)(low | ~mask);
+  }
+  return (__int128)low;
+}
+
+__int128 nts_bigint_as_intn(double bits, __int128 value) {
+  return nts_bigint_low_bits(bits, value, true);
+}
+
+__int128 nts_bigint_as_uintn(double bits, __int128 value) {
+  return nts_bigint_low_bits(bits, value, false);
+}
+
 /* Claim and give up what an erased value holds. */
 void nts_value_retain(NtsValue value) {
   if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&

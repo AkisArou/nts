@@ -347,6 +347,17 @@ typedef struct NtsMap {
 #define NTS_KEY_NUMBER 2u
 #define NTS_KEY_REFERENCE 3u
 
+/* `BigInt.asIntN(bits, v)` and `BigInt.asUintN(bits, v)`: the value wrapped to
+ * `bits` of two's complement, signed or not.
+ *
+ * `bits` is a `double` because that is how this ABI passes a number the
+ * compiler knew all along, and it is a `number` in the source too. Zero gives
+ * zero and anything at or above 128 is the value unchanged, which is what the
+ * specification says for a width that cannot lose anything -- here, rather than
+ * at each call, because a shift by the full width is undefined in C. */
+__int128 nts_bigint_as_intn(double bits, __int128 value);
+__int128 nts_bigint_as_uintn(double bits, __int128 value);
+
 /* `===` where one side is erased.
  *
  * Strict equality, which is *not* the SameValueZero a table compares keys
