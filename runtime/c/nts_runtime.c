@@ -1616,6 +1616,121 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length) {
   return out;
 }
 
+/* The code units `trim` removes.
+ *
+ * The specification's `WhiteSpace` and `LineTerminator` together, which is not
+ * "what `isspace` says": it includes NBSP, the BOM, and the Unicode space
+ * separators, and excludes nothing an ASCII test would have caught. Written out
+ * because the set is small, closed, and worth being able to read.
+ */
+static bool nts_str_is_space(uint32_t unit) {
+  switch (unit) {
+  case 0x0009: /* TAB */
+  case 0x000A: /* LF  */
+  case 0x000B: /* VT  */
+  case 0x000C: /* FF  */
+  case 0x000D: /* CR  */
+  case 0x0020: /* SP  */
+  case 0x00A0: /* NBSP */
+  case 0x1680:
+  case 0x2028: /* LS */
+  case 0x2029: /* PS */
+  case 0x202F:
+  case 0x205F:
+  case 0x3000:
+  case 0xFEFF: /* ZWNBSP, the byte order mark */
+    return true;
+  default:
+    return unit >= 0x2000u && unit <= 0x200Au;
+  }
+}
+
+/* `trim`, `trimStart` and `trimEnd`, which differ only in which ends they
+ * move. One walk each way and then a slice, so a string with nothing to trim
+ * still allocates a copy -- which is what every other string operation here
+ * does, strings being immutable. */
+static NtsString *nts_str_trimmed(const NtsString *s, bool start, bool end) {
+  uint32_t from = 0;
+  uint32_t to = s->length;
+  if (start) {
+    while (from < to && nts_str_is_space(nts_unit(s, from))) {
+      from++;
+    }
+  }
+  if (end) {
+    while (to > from && nts_str_is_space(nts_unit(s, to - 1))) {
+      to--;
+    }
+  }
+  return nts_str_slice(s, (double)from, (double)to);
+}
+
+NtsString *nts_str_trim(const NtsString *s) {
+  return nts_str_trimmed(s, true, true);
+}
+
+NtsString *nts_str_trim_start(const NtsString *s) {
+  return nts_str_trimmed(s, true, false);
+}
+
+NtsString *nts_str_trim_end(const NtsString *s) {
+  return nts_str_trimmed(s, false, true);
+}
+
+/* `split`, with a string separator.
+ *
+ * Two passes, because an array is allocated at its final length: one to count
+ * the pieces and one to cut them. The alternative is pushing into a growing
+ * array, which reallocates and then has to be trimmed.
+ *
+ * Three answers here are the specification's rather than the obvious ones, and
+ * node was asked for each:
+ *
+ *   "".split(",")   is [""]   -- one empty piece
+ *   "".split("")    is []     -- *no* pieces, which is the one special case
+ *   "a\u{1F600}".split("") is three, not two: an empty separator cuts between
+ *                              code *units*, so a surrogate pair comes apart.
+ *
+ * The last is why this counts units rather than code points, deliberately,
+ * where `for...of` over the same string counts points.
+ */
+NtsArray *nts_str_split(const NtsString *s, const NtsString *sep) {
+  if (sep->length == 0) {
+    NtsArray *out = nts_array_new(&nts_desc_ref, (double)s->length);
+    for (uint32_t at = 0; at < s->length; at++) {
+      NTS_ITEMS(out, NtsHeader *)
+      [at] = nts_str_slice(s, (double)at, (double)(at + 1));
+    }
+    return out;
+  }
+
+  uint32_t pieces = 1;
+  if (sep->length <= s->length) {
+    for (uint32_t at = 0; at + sep->length <= s->length;) {
+      double found = nts_str_find(s, sep, at, 0);
+      if (found < 0.0) {
+        break;
+      }
+      pieces++;
+      at = (uint32_t)found + sep->length;
+    }
+  }
+
+  NtsArray *out = nts_array_new(&nts_desc_ref, (double)pieces);
+  uint32_t written = 0;
+  uint32_t from = 0;
+  while (written + 1 < pieces) {
+    double found = nts_str_find(s, sep, from, 0);
+    uint32_t cut = (uint32_t)found;
+    NTS_ITEMS(out, NtsHeader *)
+    [written++] = nts_str_slice(s, (double)from, (double)cut);
+    from = cut + sep->length;
+  }
+  NTS_ITEMS(out, NtsHeader *)
+  [written] = nts_str_slice(s, (double)from, (double)s->length);
+  return out;
+}
+
 /* Equality is by value, not by identity: `"a" + "b" === "ab"` is true in
  * JavaScript, and the two are different allocations. */
 bool nts_string_eq(const NtsString *a, const NtsString *b) {

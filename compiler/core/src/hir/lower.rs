@@ -10611,7 +10611,22 @@ impl<'a> FuncBuilder<'a> {
             "repeat" => ("nts_str_repeat", 1, string.clone()),
             "slice" => ("nts_str_slice", 2, string.clone()),
             "substring" => ("nts_str_substring", 2, string.clone()),
-            "concat" => ("nts_concat", 1, string),
+            "concat" => ("nts_concat", 1, string.clone()),
+            // `trim` and its two halves. The whitespace set is the
+            // specification's rather than `isspace`'s -- it includes NBSP and
+            // the byte order mark -- and lives in the runtime, where it can be
+            // read as a list.
+            "trim" => ("nts_str_trim", 0, string.clone()),
+            "trimStart" => ("nts_str_trim_start", 0, string.clone()),
+            "trimEnd" => ("nts_str_trim_end", 0, string.clone()),
+            // `split`, with a *string* separator. A regular expression is a
+            // different feature and is refused below by falling through, which
+            // names it rather than splitting on its source text.
+            "split" => (
+                "nts_str_split",
+                1,
+                HirType::Managed(ManagedType::Array(Box::new(string))),
+            ),
             // Named, because twenty-eight instances of "this string method"
             // in the node profile is a bucket and not a work item.
             other => {

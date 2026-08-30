@@ -546,6 +546,11 @@ NTS_READS_ONLY bool nts_str_ends_with(const NtsString *s,
                                       const NtsString *needle);
 NtsString *nts_str_char_at(const NtsString *s, double at);
 NtsString *nts_str_repeat(const NtsString *s, double times);
+NtsString *nts_str_trim(const NtsString *s);
+NtsString *nts_str_trim_start(const NtsString *s);
+NtsString *nts_str_trim_end(const NtsString *s);
+/* An array of the pieces, which owns each of them. */
+NtsArray *nts_str_split(const NtsString *s, const NtsString *sep);
 NtsString *nts_str_slice(const NtsString *s, double from, double to);
 NtsString *nts_str_substring(const NtsString *s, double from, double to);
 
