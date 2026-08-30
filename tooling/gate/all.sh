@@ -75,6 +75,21 @@ format() {
 }
 tests() { cargo test --workspace >/dev/null 2>&1; }
 
+# The cross-product of value kinds and the operations that read them, settled
+# by node.
+#
+# Every correctness bug found in this compiler by hand has been one cell of such
+# a product: `null === undefined` answered true, `typeof f === "function"`
+# answered false, `v === undefined` on a `string | null` answered true, a
+# `bigint` in a condition emitted `isnan` on an `__int128`. Each was invisible
+# to a gate of ninety hand-written examples, because an example covers what
+# somebody thought to write down. This covers what nobody did, and it found the
+# last of those four the first time it ran.
+sweep() {
+  ./tooling/sweep/run.sh 2>&1 | grep -E "checked|agreed|disagree|not emitted" | sed 's/^/  /'
+  ./tooling/sweep/run.sh >/dev/null 2>&1
+}
+
 # The node profile, emitted but not built.
 #
 # Building the addons needs node's headers and belongs to the conformance
@@ -156,6 +171,7 @@ step "format"  format
 step "tests"   tests
 step "corpus"  corpus
 step "profile"  profile
+step "sweep"    sweep
 step "examples" ./tooling/gate/gate.sh
 
 printf '\n\033[32mgreen\033[0m\n'

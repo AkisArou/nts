@@ -2173,8 +2173,12 @@ fn unary_text(
                     "{name} = {0} != 0 && {0}->length != 0;",
                     value_name(operand)
                 ),
-                // An integer and a reference are both "not the zero value".
-                HirType::Int { .. } | HirType::Managed(_) => {
+                // An integer, a `bigint` and a reference are all "not the zero
+                // value". A `bigint` reached the double rule below and emitted
+                // `isnan` on an `__int128`, which is not C -- it has no NaN to
+                // exclude, being an exact integer, and `0n` is its only falsy
+                // value.
+                HirType::Int { .. } | HirType::BigInt | HirType::Managed(_) => {
                     format!("{name} = {} != 0;", value_name(operand))
                 }
                 // An erased value carries which of those it is, so the rule is

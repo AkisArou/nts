@@ -885,6 +885,26 @@ fn run_native(
     aborts: &mut Vec<String>,
 ) -> Result<Vec<String>> {
     let emitted = nts_codegen_c::emit(program);
+    // The backend's own refusals, which used to be dropped on the floor here.
+    // A function the emitter cannot write is *absent* from the C, and the
+    // driver below still calls it -- so the run died at the linker with an
+    // undefined reference and no hint of which construct was behind it. The
+    // lowering's refusals were printed all along; these were not.
+    for diagnostic in &emitted.diagnostics {
+        eprintln!("  not emitted: {} {}", diagnostic.code, diagnostic.message);
+    }
+    if !emitted.diagnostics.is_empty() {
+        // Stop here rather than at the linker. The driver calls every function
+        // the *lowering* produced, and one the backend then declined to write
+        // is an undefined reference -- which reports a symbol name and nothing
+        // about the construct, and takes the whole run down with it however
+        // many other functions were fine.
+        bail!(
+            "the backend declined {} function(s), listed above; nothing can be \
+             checked until they are removed or supported",
+            emitted.diagnostics.len()
+        );
+    }
     let generated = dir.join("program.c");
     std::fs::write(&generated, emitted.writer.text())?;
     std::fs::write(
