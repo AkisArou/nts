@@ -8064,6 +8064,28 @@ impl<'a> FuncBuilder<'a> {
         Ok(object)
     }
 
+    /// The class a polymorphic `this` stands for, or the type unchanged.
+    ///
+    /// TypeScript models `this` as a type parameter named after its class and
+    /// constrained to it. Anything keyed by the *class* -- the method
+    /// hierarchy, a layout -- has to be asked about the class rather than about
+    /// the parameter, and this is the one place that unwrapping is spelled.
+    ///
+    /// A genuine type parameter passes through untouched: `<T extends Buffer>`
+    /// is named `T`, and this is named `Buffer`.
+    fn class_behind(&self, ty: TypeId) -> TypeId {
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return ty;
+        };
+        match &record.kind {
+            TypeKind::TypeParameter {
+                name,
+                constraint: Some(constraint),
+            } if named(self.snapshot, *constraint) == Some(name.as_str()) => *constraint,
+            _ => ty,
+        }
+    }
+
     /// Whether a type is a tuple, asked of the snapshot rather than of a name.
     ///
     /// The first version tested `layout.name.starts_with("Tuple")`, which is a
@@ -9612,7 +9634,20 @@ impl<'a> FuncBuilder<'a> {
             // so the member is resolved from the type the *checker* gives the
             // receiver. Without this, `buf.fill(0)` asked the runtime's array
             // helpers for a method the program wrote.
-            if let Some(declared) = self.snapshot.node_types.get(receiver_node).copied()
+            // Through the polymorphic `this` first. Inside `class Buffer
+            // extends Uint8Array`, `this.at8(...)` gives the receiver the
+            // *this* type -- a type parameter constrained to `Buffer` -- and
+            // the hierarchy is keyed by the class, so asking it about a type
+            // parameter found nothing and the call fell through to the
+            // runtime's array helpers. 34 refusals in the node profile were
+            // `at8` and `checkInt`, which are Buffer's own methods called on
+            // its own `this`.
+            if let Some(declared) = self
+                .snapshot
+                .node_types
+                .get(receiver_node)
+                .copied()
+                .map(|ty| self.class_behind(ty))
                 && let Some(name) = self.literal_name(*member)
                 && self.hierarchy.declaring(declared, &name).is_some()
             {
