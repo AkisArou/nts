@@ -27,7 +27,11 @@
  * translation unit cannot see: the POSIX names sit behind a feature-test
  * macro. Set here rather than in each includer, so anything that includes this
  * compiles however it is driven. */
+/* The name is reserved *to the implementation*, and defining it is how the
+ * implementation is asked for the declarations libuv needs. There is no other
+ * spelling. */
 #if defined(__linux__) && !defined(_GNU_SOURCE)
+/* NOLINTNEXTLINE(bugprone-reserved-identifier) */
 #define _GNU_SOURCE
 #endif
 

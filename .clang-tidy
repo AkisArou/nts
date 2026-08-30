@@ -1,0 +1,23 @@
+# What clang-tidy is worth running on the C runtime.
+#
+# Read by clang-tidy on the command line and by clangd in an editor, so the
+# gutter and a CI run agree.
+#
+# The analyser earns its place: this runtime does its own allocation and its own
+# reference counting, and a block nothing frees is exactly the bug that hid
+# behind `nts_live_bytes` not counting an array's elements.
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  -bugprone-easily-swappable-parameters
+
+# The last two, and why they are off:
+#
+#   DeprecatedOrUnsafeBufferHandling flags every `memcpy` and every `fprintf`
+#   and asks for the C11 Annex K `_s` forms, which glibc does not implement.
+#   It fires 40 times here and means nothing.
+#
+#   easily-swappable-parameters flags `(double from, double to)` and the like.
+#   This is the layer where an index pair is the job.

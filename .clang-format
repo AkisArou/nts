@@ -1,0 +1,11 @@
+# The C runtime's format, written down.
+#
+# It was already this: `clang-format --style=LLVM` over `nts_runtime.c` is a
+# no-op against what was there before this file existed. Recording it means
+# clangd and an editor's format-on-save agree with the tree rather than
+# reflowing it, which is how a whole-file reformat once arrived mixed into an
+# unrelated change.
+#
+# C only. The Rust in this repo is rustfmt's, and `cargo clippy` is what the
+# gate runs for it.
+BasedOnStyle: LLVM

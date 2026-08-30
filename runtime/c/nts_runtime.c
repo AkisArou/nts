@@ -22,12 +22,12 @@ size_t nts_live_count(void) { return nts_allocated - nts_reclaimed; }
 
 /* Cyclic, because one descriptor serves every array of references and says
    nothing about what the elements point at. */
-const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY, sizeof(void *), 1, 1, 0, 0,
-                                    "reference", 0u, 0};
-const NtsDescriptor nts_desc_string1 = {NTS_KIND_STRING, 1, 0, 0, 0, 0,
-                                        "string", 0u, 0};
-const NtsDescriptor nts_desc_string2 = {NTS_KIND_STRING, 2, 0, 0, 0, 0,
-                                        "string", 0u, 0};
+const NtsDescriptor nts_desc_ref = {
+    NTS_KIND_ARRAY, sizeof(void *), 1, 1, 0, 0, "reference", 0u, 0};
+const NtsDescriptor nts_desc_string1 = {NTS_KIND_STRING, 1,  0, 0, 0, 0,
+                                        "string",        0u, 0};
+const NtsDescriptor nts_desc_string2 = {NTS_KIND_STRING, 2,  0, 0, 0, 0,
+                                        "string",        0u, 0};
 
 /* The NoGC provider (RFC 9.1): a bump allocator that never frees. For compiler
  * bring-up, allocation testing and bounded-lifetime tools. It must never be
@@ -272,7 +272,8 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *)) {
     const NtsMap *map = (const NtsMap *)object;
     for (uint32_t at = 0; at < map->used; at++) {
       NtsValue key = map->keys[at];
-      if (NTS_TAG_IS_REFERENCE(nts_value_tag(key)) && nts_value_reference(key)) {
+      if (NTS_TAG_IS_REFERENCE(nts_value_tag(key)) &&
+          nts_value_reference(key)) {
         visit(nts_value_reference(key));
       }
       if (!map->values) {
@@ -323,9 +324,11 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *)) {
    * kind of storage -- one concept here, against a parallel tag slot in object
    * layout, array layout, globals and closure captures. */
   for (uint32_t index = 0; index < descriptor->erased; index++) {
-    unsigned char *slot = (unsigned char *)object + descriptor->erased_offsets[index];
+    unsigned char *slot =
+        (unsigned char *)object + descriptor->erased_offsets[index];
     NtsValue value = *(const NtsValue *)slot;
-    if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) && nts_value_reference(value)) {
+    if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&
+        nts_value_reference(value)) {
       visit(nts_value_reference(value));
     }
   }
@@ -369,13 +372,15 @@ bool nts_value_strict_eq(NtsValue a, NtsValue b) {
 
 /* Claim and give up what an erased value holds. */
 void nts_value_retain(NtsValue value) {
-  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) && nts_value_reference(value)) {
+  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&
+      nts_value_reference(value)) {
     nts_retain(nts_value_reference(value));
   }
 }
 
 void nts_value_release(NtsValue value) {
-  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) && nts_value_reference(value)) {
+  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&
+      nts_value_reference(value)) {
     nts_release(nts_value_reference(value));
   }
 }
@@ -468,7 +473,7 @@ static void nts_push(NtsHeader ***buffer, size_t *len, size_t *cap,
   if (*len == *cap) {
     size_t grown = *cap ? *cap * 2u : 64u;
     NtsHeader **moved =
-        (NtsHeader **)realloc(*buffer, grown * sizeof(NtsHeader *));
+        (NtsHeader **)realloc((void *)*buffer, grown * sizeof(NtsHeader *));
     if (!moved) {
       fprintf(stderr, "nts: out of memory collecting cycles\n");
       abort();
@@ -705,7 +710,8 @@ void nts_bounds(double index, uint32_t length) {
 }
 
 /* The shared part: everything but deciding what the elements start as. */
-static NtsArray *nts_array_allocate(const NtsDescriptor *descriptor, double length) {
+static NtsArray *nts_array_allocate(const NtsDescriptor *descriptor,
+                                    double length) {
   if (!(length >= 0.0 && length <= 4294967295.0 &&
         length == (double)(uint32_t)length)) {
     fprintf(stderr, NTS_REFUSED "%g is not a valid array length\n", length);
@@ -761,7 +767,8 @@ NtsArray *nts_array_new_uninitialized(const NtsDescriptor *descriptor,
    *
    * The evidence for the whole optimization is that the example suite agrees
    * with node under this define. */
-  memset(array->elements, 0xA5, (size_t)array->header.length * descriptor->size);
+  memset(array->elements, 0xA5,
+         (size_t)array->header.length * descriptor->size);
 #endif
   return array;
 }
@@ -832,7 +839,8 @@ static NtsString *nts_str_raw(uint32_t length, int wide);
  * no new rule: retain and release already do nothing to an immortal object, and
  * the compiler emits a release wherever this string's live range ends whether
  * it is on the heap or not. `nts_allocated` is deliberately not touched -- this
- * did not allocate, and `nts_live_count` is how reference counting is tested. */
+ * did not allocate, and `nts_live_count` is how reference counting is tested.
+ */
 static NtsString *nts_str_place(NtsHeader *into, uint32_t length, int wide) {
   into->descriptor = wide ? &nts_desc_string2 : &nts_desc_string1;
   into->reserved = NTS_IMMORTAL;
@@ -939,11 +947,10 @@ static NtsString *nts_str_alloc(const uint16_t *units, uint32_t length) {
   return out;
 }
 
-
 /* Copy a range of code units out of a string, into the caller's storage where
  * it supplied one. */
 static NtsString *nts_str_range(NtsHeader *into, const NtsString *s,
-                               uint32_t from, uint32_t to) {
+                                uint32_t from, uint32_t to) {
   uint32_t length = to > from ? to - from : 0u;
   if (length == 0) {
     return nts_str_build(into, 0, 0);
@@ -979,7 +986,8 @@ static NtsString *nts_str_range(NtsHeader *into, const NtsString *s,
   }
   NtsString *out = nts_str_build(into, length, wide);
   if (wide) {
-    memcpy(NTS_ELEMENTS(out, uint16_t), units, (size_t)length * sizeof(uint16_t));
+    memcpy(NTS_ELEMENTS(out, uint16_t), units,
+           (size_t)length * sizeof(uint16_t));
   } else {
     unsigned char *into = NTS_ELEMENTS(out, unsigned char);
     for (uint32_t at = 0; at < length; at++) {
@@ -1131,7 +1139,8 @@ bool nts_str_ends_with(const NtsString *s, const NtsString *needle) {
   return true;
 }
 
-NtsString *nts_str_char_at_into(NtsHeader *into, const NtsString *s, double at) {
+NtsString *nts_str_char_at_into(NtsHeader *into, const NtsString *s,
+                                double at) {
   at = nts_to_integer(at);
   if (at < 0 || at >= (double)s->length) {
     /* Out of range is the empty string, unlike `charCodeAt`'s NaN. */
@@ -1153,7 +1162,8 @@ NtsString *nts_str_repeat(const NtsString *s, double times) {
   /* A repeat that cannot fit in a string's length is an allocation that would
    * fail anyway; refusing loudly beats a truncated answer. */
   if (times * (double)s->length > 4294967295.0) {
-    fprintf(stderr, NTS_REFUSED "repeat produces a string longer than 2^32-1\n");
+    fprintf(stderr,
+            NTS_REFUSED "repeat produces a string longer than 2^32-1\n");
     abort();
   }
   uint32_t total = (uint32_t)(times * (double)s->length);
@@ -1205,9 +1215,7 @@ NtsString *nts_str_substring(const NtsString *s, double from, double to) {
 }
 
 /* The elements of an array of numbers. */
-static double *nts_numbers(const NtsArray *a) {
-  return NTS_ITEMS(a, double);
-}
+static double *nts_numbers(const NtsArray *a) { return NTS_ITEMS(a, double); }
 
 double nts_array_index_of(const NtsArray *a, double needle) {
   /* Strict equality, so a NaN is never found -- `[NaN].indexOf(NaN)` is -1.
@@ -1326,31 +1334,34 @@ NtsArray *nts_array_slice(const NtsArray *a, double from, double to) {
  * differences; and with the search below truncated it differs on 1013 of them,
  * which is what makes the zero worth reporting. */
 static int nts_shortest_digits(double x, char *s, int *n) {
-    char buffer[64];
-    /* Upward from one digit, so the first that reads back is the shortest. */
-    for (int precision = 1; precision <= 17; precision++) {
-        snprintf(buffer, sizeof buffer, "%.*e", precision - 1, x);
-        if (strtod(buffer, NULL) == x) {
-            const char *e = strchr(buffer, 'e');
-            *n = atoi(e + 1) + 1;
-            int k = 0;
-            for (const char *at = buffer; at < e; at++) {
-                if (*at >= '0' && *at <= '9') {
-                    s[k++] = *at;
-                }
-            }
-            /* The specification's `s` has no trailing zeros: 100 is s=1, n=3. */
-            while (k > 1 && s[k - 1] == '0') {
-                k--;
-            }
-            s[k] = '\0';
-            return k;
+  char buffer[64];
+  /* Upward from one digit, so the first that reads back is the shortest. */
+  for (int precision = 1; precision <= 17; precision++) {
+    snprintf(buffer, sizeof buffer, "%.*e", precision - 1, x);
+    if (strtod(buffer, NULL) == x) {
+      const char *e = strchr(buffer, 'e');
+      /* The digits are `snprintf`'s own `%e` output two lines up, so there is
+       * no input here that could fail to convert. */
+      /* NOLINTNEXTLINE(bugprone-unchecked-string-to-number-conversion) */
+      *n = atoi(e + 1) + 1;
+      int k = 0;
+      for (const char *at = buffer; at < e; at++) {
+        if (*at >= '0' && *at <= '9') {
+          s[k++] = *at;
         }
+      }
+      /* The specification's `s` has no trailing zeros: 100 is s=1, n=3. */
+      while (k > 1 && s[k - 1] == '0') {
+        k--;
+      }
+      s[k] = '\0';
+      return k;
     }
-    s[0] = '0';
-    s[1] = '\0';
-    *n = 1;
-    return 1;
+  }
+  s[0] = '0';
+  s[1] = '\0';
+  *n = 1;
+  return 1;
 }
 
 /* The `Number` predicates, each exactly specified -- no approximation here.
@@ -1359,21 +1370,17 @@ static int nts_shortest_digits(double x, char *s, int *n) {
  * exception is `Number.isNaN`, which is `x != x` and is lowered as that: it
  * costs nothing, and folds away entirely where the specializer has narrowed the
  * value to an integer, which cannot be NaN. */
-bool nts_is_finite(double x) {
-    return isfinite(x);
-}
+bool nts_is_finite(double x) { return isfinite(x); }
 
 /* Finite and equal to its own truncation. `Math.floor` would do as well; the
  * point is that infinity is not an integer even though it has no fraction. */
-bool nts_is_integer(double x) {
-    return isfinite(x) && trunc(x) == x;
-}
+bool nts_is_integer(double x) { return isfinite(x) && trunc(x) == x; }
 
 /* An integer that a `double` represents uniquely: |x| <= 2^53 - 1. Above that
  * the spacing between representable doubles exceeds 1, so the value stands for
  * a range rather than for itself. */
 bool nts_is_safe_integer(double x) {
-    return nts_is_integer(x) && fabs(x) <= 9007199254740991.0;
+  return nts_is_integer(x) && fabs(x) <= 9007199254740991.0;
 }
 
 /* The `Math` functions that are a call into libm, and the three that are not.
@@ -1392,25 +1399,24 @@ bool nts_is_safe_integer(double x) {
  * limit is 1 -- and the difference is reachable from ordinary source:
  * `Math.pow(1, x)` where `x` overflows to infinity. */
 double nts_math_pow(double base, double exponent) {
-    if ((base == 1.0 || base == -1.0) && (exponent == INFINITY || exponent == -INFINITY)) {
-        return NAN;
-    }
-    return pow(base, exponent);
+  if ((base == 1.0 || base == -1.0) &&
+      (exponent == INFINITY || exponent == -INFINITY)) {
+    return NAN;
+  }
+  return pow(base, exponent);
 }
 
 /* `Math.sign`, which libm has no equivalent for. Zero keeps its sign and NaN
  * stays NaN, so this is neither `copysign` nor a pair of comparisons. */
 double nts_math_sign(double x) {
-    if (x != x || x == 0.0) {
-        return x;
-    }
-    return x < 0.0 ? -1.0 : 1.0;
+  if (x != x || x == 0.0) {
+    return x;
+  }
+  return x < 0.0 ? -1.0 : 1.0;
 }
 
 /* `Math.fround`: the nearest `float`, back as a `double`. */
-double nts_math_fround(double x) {
-    return (double)(float)x;
-}
+double nts_math_fround(double x) { return (double)(float)x; }
 
 double nts_math_log(double x) { return log(x); }
 double nts_math_log2(double x) { return log2(x); }
@@ -1432,60 +1438,60 @@ double nts_math_atan2(double y, double x) { return atan2(y, x); }
 double nts_math_hypot(double a, double b) { return hypot(a, b); }
 
 NtsString *nts_number_to_string(double x) {
-    char out[64];
-    char *at = out;
-    if (x != x) {
-        return nts_string_from_utf8("NaN", 3);
-    }
-    /* Negative zero prints as "0": the sign is not part of the answer. */
-    if (x == 0.0) {
-        return nts_string_from_utf8("0", 1);
-    }
-    if (x < 0.0) {
-        *at++ = '-';
-        x = -x;
-    }
-    if (x > 1.7976931348623157e308) {
-        memcpy(at, "Infinity", 8);
-        return nts_string_from_utf8(out, (size_t)(at - out) + 8);
-    }
+  char out[64];
+  char *at = out;
+  if (x != x) {
+    return nts_string_from_utf8("NaN", 3);
+  }
+  /* Negative zero prints as "0": the sign is not part of the answer. */
+  if (x == 0.0) {
+    return nts_string_from_utf8("0", 1);
+  }
+  if (x < 0.0) {
+    *at++ = '-';
+    x = -x;
+  }
+  if (x > 1.7976931348623157e308) {
+    memcpy(at, "Infinity", 8);
+    return nts_string_from_utf8(out, (size_t)(at - out) + 8);
+  }
 
-    char s[32];
-    int n = 0;
-    const int k = nts_shortest_digits(x, s, &n);
+  char s[32];
+  int n = 0;
+  const int k = nts_shortest_digits(x, s, &n);
 
-    if (k <= n && n <= 21) {
-        /* Every digit, then the zeros that place them: 100. */
-        memcpy(at, s, (size_t)k);
-        memset(at + k, '0', (size_t)(n - k));
-        at += n;
-    } else if (0 < n && n <= 21) {
-        /* The point falls inside the digits: 1.5. */
-        memcpy(at, s, (size_t)n);
-        at[n] = '.';
-        memcpy(at + n + 1, s + n, (size_t)(k - n));
-        at += k + 1;
-    } else if (-6 < n && n <= 0) {
-        /* A leading zero and the point, then the digits: 0.001. */
-        *at++ = '0';
-        *at++ = '.';
-        memset(at, '0', (size_t)(-n));
-        memcpy(at - n, s, (size_t)k);
-        at += k - n;
-    } else {
-        /* Exponential, with the exponent's sign always written: 1e+21. */
-        *at++ = s[0];
-        if (k != 1) {
-            *at++ = '.';
-            memcpy(at, s + 1, (size_t)(k - 1));
-            at += k - 1;
-        }
-        *at++ = 'e';
-        const int exponent = n - 1;
-        *at++ = exponent < 0 ? '-' : '+';
-        at += snprintf(at, 16, "%d", exponent < 0 ? -exponent : exponent);
+  if (k <= n && n <= 21) {
+    /* Every digit, then the zeros that place them: 100. */
+    memcpy(at, s, (size_t)k);
+    memset(at + k, '0', (size_t)(n - k));
+    at += n;
+  } else if (0 < n && n <= 21) {
+    /* The point falls inside the digits: 1.5. */
+    memcpy(at, s, (size_t)n);
+    at[n] = '.';
+    memcpy(at + n + 1, s + n, (size_t)(k - n));
+    at += k + 1;
+  } else if (-6 < n && n <= 0) {
+    /* A leading zero and the point, then the digits: 0.001. */
+    *at++ = '0';
+    *at++ = '.';
+    memset(at, '0', (size_t)(-n));
+    memcpy(at - n, s, (size_t)k);
+    at += k - n;
+  } else {
+    /* Exponential, with the exponent's sign always written: 1e+21. */
+    *at++ = s[0];
+    if (k != 1) {
+      *at++ = '.';
+      memcpy(at, s + 1, (size_t)(k - 1));
+      at += k - 1;
     }
-    return nts_string_from_utf8(out, (size_t)(at - out));
+    *at++ = 'e';
+    const int exponent = n - 1;
+    *at++ = exponent < 0 ? '-' : '+';
+    at += snprintf(at, 16, "%d", exponent < 0 ? -exponent : exponent);
+  }
+  return nts_string_from_utf8(out, (size_t)(at - out));
 }
 
 /* `typeof` for a tag.
@@ -1501,18 +1507,18 @@ NtsString *nts_number_to_string(double x) {
  * word is a better place to find one than a program that dies without saying
  * which value it died on. */
 NtsString *nts_tag_name(uint32_t tag) {
-    switch (tag) {
-        case NTS_TAG_BOOLEAN:
-            return nts_string_from_utf8("boolean", 7);
-        case NTS_TAG_NUMBER:
-            return nts_string_from_utf8("number", 6);
-        case NTS_TAG_STRING:
-            return nts_string_from_utf8("string", 6);
-        case NTS_TAG_OBJECT:
-            return nts_string_from_utf8("object", 6);
-        default:
-            return nts_string_from_utf8("undefined", 9);
-    }
+  switch (tag) {
+  case NTS_TAG_BOOLEAN:
+    return nts_string_from_utf8("boolean", 7);
+  case NTS_TAG_NUMBER:
+    return nts_string_from_utf8("number", 6);
+  case NTS_TAG_STRING:
+    return nts_string_from_utf8("string", 6);
+  case NTS_TAG_OBJECT:
+    return nts_string_from_utf8("object", 6);
+  default:
+    return nts_string_from_utf8("undefined", 9);
+  }
 }
 
 NtsString *nts_string_from_utf8(const char *bytes, size_t length) {
@@ -1725,7 +1731,8 @@ static uint32_t nts_hash_key(NtsValue key, uint32_t kind) {
     break;
   }
   /* Heterogeneous keys. The tag joins the hash so that the number 3 and the
-   * string "3" -- which are different keys -- do not collide by construction. */
+   * string "3" -- which are different keys -- do not collide by construction.
+   */
   switch (nts_value_tag(key)) {
   case NTS_TAG_STRING:
     return nts_hash_string((const NtsString *)nts_value_reference(key)) ^ 3u;
@@ -1807,7 +1814,9 @@ static NtsMap *nts_map_alloc(uint32_t kind, bool holds_values) {
 }
 
 NtsMap *nts_map_new(double kind) { return nts_map_alloc((uint32_t)kind, true); }
-NtsMap *nts_set_new(double kind) { return nts_map_alloc((uint32_t)kind, false); }
+NtsMap *nts_set_new(double kind) {
+  return nts_map_alloc((uint32_t)kind, false);
+}
 
 /* Where `key` lives, or -1.
  *
@@ -1864,9 +1873,9 @@ static void nts_map_rehash(NtsMap *map) {
   }
 
   NtsValue *keys = (NtsValue *)malloc((size_t)wanted * sizeof(NtsValue));
-  NtsValue *values =
-      map->holds_values ? (NtsValue *)malloc((size_t)wanted * sizeof(NtsValue))
-                        : 0;
+  NtsValue *values = map->holds_values
+                         ? (NtsValue *)malloc((size_t)wanted * sizeof(NtsValue))
+                         : 0;
   uint32_t slots = 8u;
   while (slots < NTS_MAP_SLOTS_FOR(wanted)) {
     slots *= 2u;
@@ -2246,7 +2255,6 @@ void nts_post_from_any_thread(NtsTask task) {
   nts_host.post_from_any_thread(nts_host.state, task);
 }
 
-
 /* --- Promises (RFC 12) -----------------------------------------------------
  *
  * Ordering is the whole substance here: reactions run in subscription order,
@@ -2262,8 +2270,15 @@ static const uint32_t nts_reaction_offsets[] = {
  * hold the promise it will settle. That is an ordinary cycle and the collector
  * has to be able to see it. */
 static const NtsDescriptor nts_desc_reaction = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsReaction), 2u, 1u,
-    nts_reaction_offsets, 0, "Reaction", 0u, 0,
+    NTS_KIND_OBJECT,
+    (uint32_t)sizeof(NtsReaction),
+    2u,
+    1u,
+    nts_reaction_offsets,
+    0,
+    "Reaction",
+    0u,
+    0,
 };
 
 /* The fulfilled payload is *not* here: it is an erased slot, listed below, and
@@ -2280,8 +2295,15 @@ static const uint32_t nts_promise_offsets[] = {
 };
 
 static const NtsDescriptor nts_desc_promise = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsPromise), 2u, 1u,
-    nts_promise_offsets, 0, "Promise", 1u, nts_promise_erased,
+    NTS_KIND_OBJECT,
+    (uint32_t)sizeof(NtsPromise),
+    2u,
+    1u,
+    nts_promise_offsets,
+    0,
+    "Promise",
+    1u,
+    nts_promise_erased,
 };
 
 NtsPromise *nts_promise_new(void) {
@@ -2349,7 +2371,8 @@ uint32_t nts_tag_of_reference(const NtsHeader *object) {
  * know at compile time, and `nts_promise_fulfill_value` is the one that does
  * not know it and is told. */
 static void nts_promise_fulfill(NtsPromise *promise, NtsValue value) {
-  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) && nts_value_reference(value)) {
+  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&
+      nts_value_reference(value)) {
     nts_retain(nts_value_reference(value));
   }
   promise->value = value;
@@ -2434,7 +2457,8 @@ void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction) {
 double nts_promise_number(const NtsPromise *promise) {
   if (promise->state != NTS_PROMISE_FULFILLED ||
       nts_value_tag(promise->value) != NTS_TAG_NUMBER) {
-    fprintf(stderr, "nts: read a number from a promise holding something else\n");
+    fprintf(stderr,
+            "nts: read a number from a promise holding something else\n");
     abort();
   }
   return nts_value_number(promise->value);
@@ -2483,7 +2507,8 @@ bool nts_promise_is_rejected(const NtsPromise *promise) {
  * for one argument that is immediately passed back. */
 void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source) {
   if (source->state != NTS_PROMISE_REJECTED) {
-    fprintf(stderr, "nts: forwarded a rejection from a promise that has none\n");
+    fprintf(stderr,
+            "nts: forwarded a rejection from a promise that has none\n");
     abort();
   }
   nts_promise_reject(result, source->reason);
@@ -2505,16 +2530,16 @@ void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source) {
  */
 
 typedef struct NtsCombinator {
-    NtsHeader header;
-    NtsPromise *result;
-    /* The array being filled, or null for `race`, which keeps no values. */
-    NtsArray *values;
-    /* Fulfilments still owed. A rejection does not decrement it: `all` rejects
-     * outright, and a count that could still reach zero afterwards would
-     * fulfil a promise that is already rejected. The second settle would be
-     * ignored, so this is belt and braces -- but the invariant worth having is
-     * that zero *means* every element fulfilled. */
-    uint32_t remaining;
+  NtsHeader header;
+  NtsPromise *result;
+  /* The array being filled, or null for `race`, which keeps no values. */
+  NtsArray *values;
+  /* Fulfilments still owed. A rejection does not decrement it: `all` rejects
+   * outright, and a count that could still reach zero afterwards would
+   * fulfil a promise that is already rejected. The second settle would be
+   * ignored, so this is belt and braces -- but the invariant worth having is
+   * that zero *means* every element fulfilled. */
+  uint32_t remaining;
 } NtsCombinator;
 
 /* One element's share: which combinator, which promise, and which slot of the
@@ -2522,10 +2547,10 @@ typedef struct NtsCombinator {
  * into a closure, because a reaction's state is one managed reference and the
  * collector reaches the combinator through it. */
 typedef struct NtsCombinatorSlot {
-    NtsHeader header;
-    NtsCombinator *combinator;
-    NtsPromise *source;
-    uint32_t index;
+  NtsHeader header;
+  NtsCombinator *combinator;
+  NtsPromise *source;
+  uint32_t index;
 } NtsCombinatorSlot;
 
 static const uint32_t nts_combinator_offsets[] = {
@@ -2536,8 +2561,15 @@ static const uint32_t nts_combinator_offsets[] = {
 /* Cyclic: a slot points at the combinator, the combinator's result promise
  * holds reactions, and a reaction's state is a slot. */
 static const NtsDescriptor nts_desc_combinator = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsCombinator), 2u, 1u,
-    nts_combinator_offsets, 0, "Combinator", 0u, 0,
+    NTS_KIND_OBJECT,
+    (uint32_t)sizeof(NtsCombinator),
+    2u,
+    1u,
+    nts_combinator_offsets,
+    0,
+    "Combinator",
+    0u,
+    0,
 };
 
 static const uint32_t nts_combinator_slot_offsets[] = {
@@ -2546,8 +2578,15 @@ static const uint32_t nts_combinator_slot_offsets[] = {
 };
 
 static const NtsDescriptor nts_desc_combinator_slot = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsCombinatorSlot), 2u, 1u,
-    nts_combinator_slot_offsets, 0, "CombinatorSlot", 0u, 0,
+    NTS_KIND_OBJECT,
+    (uint32_t)sizeof(NtsCombinatorSlot),
+    2u,
+    1u,
+    nts_combinator_slot_offsets,
+    0,
+    "CombinatorSlot",
+    0u,
+    0,
 };
 
 /* Copy a settled promise's payload onto another promise. `race` is exactly
@@ -2581,8 +2620,8 @@ static void nts_combinator_settled(void *state) {
       nts_retain(value);
       NTS_ITEMS(all->values, NtsHeader *)[slot->index] = value;
     } else {
-      NTS_ITEMS(all->values, double)[slot->index] =
-          nts_value_number(slot->source->value);
+      NTS_ITEMS(all->values, double)
+      [slot->index] = nts_value_number(slot->source->value);
     }
     if (--all->remaining == 0) {
       nts_promise_fulfill_reference(all->result, (NtsHeader *)all->values);
@@ -2642,7 +2681,8 @@ NtsPromise *nts_promise_all(NtsArray *promises, NtsArray *values) {
     /* The compiler allocates `values` with the length of `promises`, so a
      * mismatch is a compiler bug and the next line would write past the end
      * of the array. Cheaper to say so than to debug the corruption. */
-    fprintf(stderr, "nts: `Promise.all` given a result array of the wrong size\n");
+    fprintf(stderr,
+            "nts: `Promise.all` given a result array of the wrong size\n");
     abort();
   }
   return nts_combinator_new(promises, values);
@@ -2667,9 +2707,9 @@ NtsPromise *nts_promise_race(NtsArray *promises) {
  */
 
 typedef struct {
-    NtsHeader header;
-    NtsHeader *callback;
-    uint32_t slot;
+  NtsHeader header;
+  NtsHeader *callback;
+  uint32_t slot;
 } NtsCallback;
 
 static const uint32_t nts_callback_offsets[] = {
@@ -2677,59 +2717,64 @@ static const uint32_t nts_callback_offsets[] = {
 };
 
 static const NtsDescriptor nts_desc_callback = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsCallback), 1u, 1u,
-    nts_callback_offsets, 0, "Callback", 0u, 0,
+    NTS_KIND_OBJECT,
+    (uint32_t)sizeof(NtsCallback),
+    1u,
+    1u,
+    nts_callback_offsets,
+    0,
+    "Callback",
+    0u,
+    0,
 };
 
 static void nts_callback_call(NtsCallback *entry) {
-    NtsHeader *callback = entry->callback;
-    /* The same cast the emitter makes at every closure call site: the table
-     * stores untyped pointers and the caller spells the signature. A timer
-     * callback takes nothing and returns nothing, so there is one signature
-     * here rather than a family. */
-    ((void (*)(NtsHeader *))callback->descriptor->methods[entry->slot])(callback);
+  NtsHeader *callback = entry->callback;
+  /* The same cast the emitter makes at every closure call site: the table
+   * stores untyped pointers and the caller spells the signature. A timer
+   * callback takes nothing and returns nothing, so there is one signature
+   * here rather than a family. */
+  ((void (*)(NtsHeader *))callback->descriptor->methods[entry->slot])(callback);
 }
 
 /* A one-shot: running it is the last thing that happens to it, so running is
  * also what gives the reference back. */
 static void nts_callback_run_once(void *state) {
-    NtsCallback *entry = (NtsCallback *)state;
-    nts_callback_call(entry);
-    nts_release((NtsHeader *)entry);
+  NtsCallback *entry = (NtsCallback *)state;
+  nts_callback_call(entry);
+  nts_release((NtsHeader *)entry);
 }
 
 /* An interval: the host runs the same task again and again, so the reference
  * is given back once, by `drop`, when it is finally cancelled. Releasing here
  * would free it under the timer that is still holding it. */
 static void nts_callback_run_repeating(void *state) {
-    nts_callback_call((NtsCallback *)state);
+  nts_callback_call((NtsCallback *)state);
 }
 
-static void nts_callback_drop(void *state) {
-    nts_release((NtsHeader *)state);
-}
+static void nts_callback_drop(void *state) { nts_release((NtsHeader *)state); }
 
 NtsTask nts_callback_task(NtsHeader *callback, double slot, bool repeating) {
-    NtsCallback *entry = (NtsCallback *)nts_object_new(&nts_desc_callback);
-    entry->callback = callback;
-    nts_retain(callback);
-    entry->slot = (uint32_t)slot;
-    NtsTask task;
-    task.run = repeating ? nts_callback_run_repeating : nts_callback_run_once;
-    task.drop = nts_callback_drop;
-    task.state = entry;
-    return task;
+  NtsCallback *entry = (NtsCallback *)nts_object_new(&nts_desc_callback);
+  entry->callback = callback;
+  nts_retain(callback);
+  entry->slot = (uint32_t)slot;
+  NtsTask task;
+  task.run = repeating ? nts_callback_run_repeating : nts_callback_run_once;
+  task.drop = nts_callback_drop;
+  task.state = entry;
+  return task;
 }
 
 double nts_set_timeout(NtsHeader *callback, double slot, double delay_ms,
                        bool repeating) {
-    return (double)nts_post_delayed(nts_callback_task(callback, slot, repeating),
-                                    delay_ms, repeating);
+  return (double)nts_post_delayed(nts_callback_task(callback, slot, repeating),
+                                  delay_ms, repeating);
 }
 
 void nts_clear_timeout(double id) {
-    /* A timer that already fired, or an id from another turn: the host's slot
-     * table says so and this is a no-op, which is what `clearTimeout`
-     * specifies. */
-    nts_cancel_delayed((NtsTimerId)id);
+  /* A timer that already fired, or an id from another turn: the host's slot
+   * table says so and this is a no-op, which is what `clearTimeout`
+   * specifies. */
+  nts_cancel_delayed((NtsTimerId)id);
 }

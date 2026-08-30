@@ -24,12 +24,12 @@
 static int failures;
 
 static void check(const char *what, bool ok) {
-    if (ok) {
-        printf("ok   %s\n", what);
-    } else {
-        printf("FAIL %s\n", what);
-        failures++;
-    }
+  if (ok) {
+    printf("ok   %s\n", what);
+  } else {
+    printf("FAIL %s\n", what);
+    failures++;
+  }
 }
 
 /* The shape the emitter generates for `number[]`. */
@@ -45,62 +45,62 @@ static const NtsDescriptor desc_ref_grow = {
 };
 
 int main(void) {
-    size_t base = nts_live_bytes();
+  size_t base = nts_live_bytes();
 
-    /* An array that never grows keeps its elements inline, so nothing is owned
-     * outside the block and reclamation was always right for it. Checked so
-     * that a fix which freed the inline block would fail here rather than
-     * corrupt the heap somewhere else. */
-    NtsArray *small = nts_array_new(&desc_num, 4);
-    nts_release(&small->header);
-    check("an array that never grows returns to the baseline",
-          nts_live_bytes() == base);
+  /* An array that never grows keeps its elements inline, so nothing is owned
+   * outside the block and reclamation was always right for it. Checked so
+   * that a fix which freed the inline block would fail here rather than
+   * corrupt the heap somewhere else. */
+  NtsArray *small = nts_array_new(&desc_num, 4);
+  nts_release(&small->header);
+  check("an array that never grows returns to the baseline",
+        nts_live_bytes() == base);
 
-    /* One that does grow. The elements move out on the first push past
-     * capacity and are reallocated on every doubling after it. */
-    NtsArray *grown = nts_array_new(&desc_num, 2);
-    for (int i = 0; i < 512; i++) {
-        nts_array_push(grown, (double)i);
+  /* One that does grow. The elements move out on the first push past
+   * capacity and are reallocated on every doubling after it. */
+  NtsArray *grown = nts_array_new(&desc_num, 2);
+  for (int i = 0; i < 512; i++) {
+    nts_array_push(grown, (double)i);
+  }
+  check("a grown array's elements are counted while it is alive",
+        nts_live_bytes() >= base + 512u * sizeof(double));
+  nts_release(&grown->header);
+  check("a grown array returns to the baseline", nts_live_bytes() == base);
+
+  /* Repeatedly, because a leak of one block is a rounding error and a leak
+   * per array is the bug: 4,000 of these held 4MB before the fix. */
+  for (int round = 0; round < 4000; round++) {
+    NtsArray *a = nts_array_new(&desc_num, 2);
+    for (int i = 0; i < 128; i++) {
+      nts_array_push(a, (double)i);
     }
-    check("a grown array's elements are counted while it is alive",
-          nts_live_bytes() >= base + 512u * sizeof(double));
-    nts_release(&grown->header);
-    check("a grown array returns to the baseline", nts_live_bytes() == base);
+    nts_release(&a->header);
+  }
+  check("4,000 grown arrays leak nothing", nts_live_bytes() == base);
 
-    /* Repeatedly, because a leak of one block is a rounding error and a leak
-     * per array is the bug: 4,000 of these held 4MB before the fix. */
-    for (int round = 0; round < 4000; round++) {
-        NtsArray *a = nts_array_new(&desc_num, 2);
-        for (int i = 0; i < 128; i++) {
-            nts_array_push(a, (double)i);
-        }
-        nts_release(&a->header);
+  /* A grown array of references still releases what it points at. The
+   * elements live in the moved block, so a tracer reading the inline one
+   * would visit garbage -- and a reclamation that freed the moved block
+   * before walking it would read freed memory. */
+  NtsArray *holder = nts_array_new(&desc_ref_grow, 0);
+  holder->header.length = 0;
+  for (int i = 0; i < 64; i++) {
+    NtsString *s = nts_string_from_utf8("held", 4);
+    if (holder->header.length == holder->capacity) {
+      /* `nts_array_push` writes doubles; grow through it and overwrite,
+       * which is what the emitter does for a reference array. */
+      nts_array_push(holder, 0.0);
+      holder->header.length--;
     }
-    check("4,000 grown arrays leak nothing", nts_live_bytes() == base);
+    NTS_ITEMS(holder, NtsHeader *)[holder->header.length] = s;
+    holder->header.length++;
+  }
+  check("a grown reference array holds its elements",
+        holder->header.length == 64);
+  nts_release(&holder->header);
+  check("a grown reference array releases them and returns to the baseline",
+        nts_live_bytes() == base);
 
-    /* A grown array of references still releases what it points at. The
-     * elements live in the moved block, so a tracer reading the inline one
-     * would visit garbage -- and a reclamation that freed the moved block
-     * before walking it would read freed memory. */
-    NtsArray *holder = nts_array_new(&desc_ref_grow, 0);
-    holder->header.length = 0;
-    for (int i = 0; i < 64; i++) {
-        NtsString *s = nts_string_from_utf8("held", 4);
-        if (holder->header.length == holder->capacity) {
-            /* `nts_array_push` writes doubles; grow through it and overwrite,
-             * which is what the emitter does for a reference array. */
-            nts_array_push(holder, 0.0);
-            holder->header.length--;
-        }
-        NTS_ITEMS(holder, NtsHeader *)[holder->header.length] = s;
-        holder->header.length++;
-    }
-    check("a grown reference array holds its elements",
-          holder->header.length == 64);
-    nts_release(&holder->header);
-    check("a grown reference array releases them and returns to the baseline",
-          nts_live_bytes() == base);
-
-    printf("%s\n", failures ? "FAILURES" : "all storage checks passed");
-    return failures ? 1 : 0;
+  printf("%s\n", failures ? "FAILURES" : "all storage checks passed");
+  return failures ? 1 : 0;
 }

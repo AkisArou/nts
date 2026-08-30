@@ -19,10 +19,10 @@
 #ifndef NTS_RUNTIME_H
 #define NTS_RUNTIME_H
 
+#include <assert.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -39,67 +39,67 @@
 #define NTS_KIND_MAP 3u
 
 typedef struct NtsDescriptor {
-    uint32_t kind;
-    uint32_t size;
-    /* RFC 8.3, the reference map. For an object, how many fields hold
-     * references and where they are: `offsets` has `references` byte offsets
-     * into the object, generated with `offsetof` so that the compiler that laid
-     * the struct out is the one that says where its fields are.
-     *
-     * Byte offsets rather than a bitmap over field indices, because the runtime
-     * cannot turn an index into an address: it does not know the field types.
-     * A table also has no width limit, so an object with more than thirty-two
-     * fields needs nothing special.
-     *
-     * For an array, `references` is 1 when the elements are references and 0
-     * otherwise, and `offsets` is null -- element addresses are `i * size` and
-     * there is no table worth writing down. A string has neither. */
-    uint32_t references;
-    /* Whether an object of this type could be part of a reference cycle -- that
-     * is, whether the type can lead back to itself through reference fields.
-     *
-     * The compiler decides it, once per type, and it is what keeps the cycle
-     * collector away from programs that have no cycles to collect. Without it a
-     * candidate would be buffered on every release that does not reach zero,
-     * which is most of them, and every allocating program would pay for a
-     * hazard it does not have.
-     *
-     * Conservative in the safe direction: an array of references is cyclic
-     * because one descriptor serves them all and says nothing about what the
-     * elements point at, and a field whose type the compiler cannot see is
-     * cyclic because unknown has to mean yes. */
-    uint32_t cyclic;
-    const uint32_t *offsets;
-    /* RFC 8.1 says a descriptor describes the shape rather than the contents,
-     * and a class's method table is part of its shape.
-     *
-     * Null for every class in a hierarchy where nothing is overridden, which is
-     * most of them: a method no subclass replaces is a static call and needs no
-     * table. Where there is one, a call is a load of this pointer and an
-     * indirect call through it -- which is what dispatch costs when the compiler
-     * has the whole hierarchy and can say which calls need it. */
-    void *const *methods;
-    const char *name;
-    /* Slots holding an `NtsValue`, which is a reference only when its tag says
-     * so. `erased` is how many and `erased_offsets` is where, in the same byte
-     * offsets and for the same reason as `offsets` above.
-     *
-     * A separate table rather than a flag on the entries in `offsets`, because
-     * the two are read differently: a reference slot is dereferenced, an erased
-     * slot is inspected first. Merging them would put a branch in the loop that
-     * walks the common case.
-     *
-     * For an array, `erased` is 1 when the elements are `NtsValue`s and 0
-     * otherwise, matching how `references` works for one.
-     *
-     * Last in the struct, and every descriptor states them: this runtime is
-     * built with `-Wmissing-field-initializers -Werror`, so C's zero-fill is
-     * not available and each descriptor has to say it has no erased slots
-     * rather than be assumed to. That is the better half of the trade -- adding
-     * a slot kind costs one line in every descriptor and cannot be forgotten in
-     * one. */
-    uint32_t erased;
-    const uint32_t *erased_offsets;
+  uint32_t kind;
+  uint32_t size;
+  /* RFC 8.3, the reference map. For an object, how many fields hold
+   * references and where they are: `offsets` has `references` byte offsets
+   * into the object, generated with `offsetof` so that the compiler that laid
+   * the struct out is the one that says where its fields are.
+   *
+   * Byte offsets rather than a bitmap over field indices, because the runtime
+   * cannot turn an index into an address: it does not know the field types.
+   * A table also has no width limit, so an object with more than thirty-two
+   * fields needs nothing special.
+   *
+   * For an array, `references` is 1 when the elements are references and 0
+   * otherwise, and `offsets` is null -- element addresses are `i * size` and
+   * there is no table worth writing down. A string has neither. */
+  uint32_t references;
+  /* Whether an object of this type could be part of a reference cycle -- that
+   * is, whether the type can lead back to itself through reference fields.
+   *
+   * The compiler decides it, once per type, and it is what keeps the cycle
+   * collector away from programs that have no cycles to collect. Without it a
+   * candidate would be buffered on every release that does not reach zero,
+   * which is most of them, and every allocating program would pay for a
+   * hazard it does not have.
+   *
+   * Conservative in the safe direction: an array of references is cyclic
+   * because one descriptor serves them all and says nothing about what the
+   * elements point at, and a field whose type the compiler cannot see is
+   * cyclic because unknown has to mean yes. */
+  uint32_t cyclic;
+  const uint32_t *offsets;
+  /* RFC 8.1 says a descriptor describes the shape rather than the contents,
+   * and a class's method table is part of its shape.
+   *
+   * Null for every class in a hierarchy where nothing is overridden, which is
+   * most of them: a method no subclass replaces is a static call and needs no
+   * table. Where there is one, a call is a load of this pointer and an
+   * indirect call through it -- which is what dispatch costs when the compiler
+   * has the whole hierarchy and can say which calls need it. */
+  void *const *methods;
+  const char *name;
+  /* Slots holding an `NtsValue`, which is a reference only when its tag says
+   * so. `erased` is how many and `erased_offsets` is where, in the same byte
+   * offsets and for the same reason as `offsets` above.
+   *
+   * A separate table rather than a flag on the entries in `offsets`, because
+   * the two are read differently: a reference slot is dereferenced, an erased
+   * slot is inspected first. Merging them would put a branch in the loop that
+   * walks the common case.
+   *
+   * For an array, `erased` is 1 when the elements are `NtsValue`s and 0
+   * otherwise, matching how `references` works for one.
+   *
+   * Last in the struct, and every descriptor states them: this runtime is
+   * built with `-Wmissing-field-initializers -Werror`, so C's zero-fill is
+   * not available and each descriptor has to say it has no erased slots
+   * rather than be assumed to. That is the better half of the trade -- adding
+   * a slot kind costs one line in every descriptor and cannot be forgotten in
+   * one. */
+  uint32_t erased;
+  const uint32_t *erased_offsets;
 } NtsDescriptor;
 
 /* RFC 8.2. One header for every variable-length managed object: an array and a
@@ -110,10 +110,10 @@ typedef struct NtsDescriptor {
  * count under RC, a forwarding pointer under a moving collector. Not public
  * ABI. */
 typedef struct NtsHeader {
-    const NtsDescriptor *descriptor;
-    uintptr_t reserved;
-    uint32_t flags;
-    uint32_t length;
+  const NtsDescriptor *descriptor;
+  uintptr_t reserved;
+  uint32_t flags;
+  uint32_t length;
 } NtsHeader;
 
 typedef NtsHeader NtsString;
@@ -124,8 +124,8 @@ typedef NtsHeader NtsString;
  * with the elements inline after the header. That is right for a string and
  * wrong for an array, and the difference is `push`: an array grows, and growing
  * something whose elements are inline means moving it, which invalidates every
- * reference anyone holds. A string never grows, so it keeps the inline shape and
- * pays nothing for a field it would never use.
+ * reference anyone holds. A string never grows, so it keeps the inline shape
+ * and pays nothing for a field it would never use.
  *
  * `elements` points just past the struct until something grows the array, so a
  * fixed array still has its contents next to its header and reads them with the
@@ -133,10 +133,10 @@ typedef NtsHeader NtsString;
  * clang hoists it out of any loop that does not call something which could
  * grow the array, which is most loops. */
 typedef struct NtsArray {
-    NtsHeader header;
-    /* Elements the block can hold. `header.length` is how many it does hold. */
-    uint32_t capacity;
-    void *elements;
+  NtsHeader header;
+  /* Elements the block can hold. `header.length` is how many it does hold. */
+  uint32_t capacity;
+  void *elements;
 } NtsArray;
 
 /* A value carrying its own type: what a slot the checker typed `unknown` holds.
@@ -151,22 +151,22 @@ typedef struct NtsArray {
  * The tags are `typeof`'s answers, in `typeof`'s spelling, because reading the
  * tag is what `typeof` on an erased value *is*. */
 typedef enum NtsTag {
-    NTS_TAG_UNDEFINED = 0,
-    NTS_TAG_BOOLEAN = 1,
-    NTS_TAG_NUMBER = 2,
-    NTS_TAG_STRING = 3,
-    NTS_TAG_OBJECT = 4
+  NTS_TAG_UNDEFINED = 0,
+  NTS_TAG_BOOLEAN = 1,
+  NTS_TAG_NUMBER = 2,
+  NTS_TAG_STRING = 3,
+  NTS_TAG_OBJECT = 4
 } NtsTag;
 
 /* The representation is *behind accessors*, and every reader in the runtime,
  * the emitter and the tests goes through them.
  *
- * Not ceremony. Sixteen bytes of tag-beside-payload is one choice and NaN-boxing
- * into eight is another, and the measurement says the difference is worth
- * having: an erased array costs 11% against a typed one, of which 8.6 points is
- * the memory traffic of the extra eight bytes and only 2.4 is the tag test.
- * Swapping the representation should therefore be a change to this file, and it
- * only is if nothing outside reaches past these functions. */
+ * Not ceremony. Sixteen bytes of tag-beside-payload is one choice and
+ * NaN-boxing into eight is another, and the measurement says the difference is
+ * worth having: an erased array costs 11% against a typed one, of which 8.6
+ * points is the memory traffic of the extra eight bytes and only 2.4 is the tag
+ * test. Swapping the representation should therefore be a change to this file,
+ * and it only is if nothing outside reaches past these functions. */
 /* A value that carries its own type: a tag beside a payload, sixteen bytes.
  *
  * Not named for either thing that produces one. `unknown` lowers to this, and
@@ -200,39 +200,43 @@ typedef enum NtsTag {
  * The accessors below stay. They cost nothing (clang inlines them away) and
  * they are what made the experiment a change to one file. */
 typedef struct NtsValue {
-    uint32_t tag;
-    union {
-        double number;
-        bool boolean;
-        /* `NtsHeader *` and not `void *`: everything this member can hold that
-         * is reference-counted is one, and `nts_retain` takes one. */
-        NtsHeader *reference;
-    } as;
+  uint32_t tag;
+  union {
+    double number;
+    bool boolean;
+    /* `NtsHeader *` and not `void *`: everything this member can hold that
+     * is reference-counted is one, and `nts_retain` takes one. */
+    NtsHeader *reference;
+  } as;
 } NtsValue;
 
 /* Read a value's tag. */
 static inline uint32_t nts_value_tag(NtsValue value) { return value.tag; }
 
 /* Read a payload, at the kind the tag has already been checked to be. */
-static inline double nts_value_number(NtsValue value) { return value.as.number; }
-static inline bool nts_value_boolean(NtsValue value) { return value.as.boolean; }
+static inline double nts_value_number(NtsValue value) {
+  return value.as.number;
+}
+static inline bool nts_value_boolean(NtsValue value) {
+  return value.as.boolean;
+}
 static inline NtsHeader *nts_value_reference(NtsValue value) {
-    return value.as.reference;
+  return value.as.reference;
 }
 
 /* Build one. */
 static inline NtsValue nts_value_of_number(double number) {
-    NtsValue value;
-    value.tag = NTS_TAG_NUMBER;
-    value.as.number = number;
-    return value;
+  NtsValue value;
+  value.tag = NTS_TAG_NUMBER;
+  value.as.number = number;
+  return value;
 }
 
 static inline NtsValue nts_value_of_boolean(bool boolean) {
-    NtsValue value;
-    value.tag = NTS_TAG_BOOLEAN;
-    value.as.boolean = boolean;
-    return value;
+  NtsValue value;
+  value.tag = NTS_TAG_BOOLEAN;
+  value.as.boolean = boolean;
+  return value;
 }
 
 /* The undefined value as an *initializer*, for a static.
@@ -243,8 +247,7 @@ static inline NtsValue nts_value_of_boolean(bool boolean) {
  * The same value, spelled the way C requires where it is needed. The first
  * union member is the one an initializer reaches, so the payload is the
  * `double`. */
-#define NTS_VALUE_UNDEFINED                                                    \
-    { NTS_TAG_UNDEFINED, { 0.0 } }
+#define NTS_VALUE_UNDEFINED {NTS_TAG_UNDEFINED, {0.0}}
 
 /* Whether an erased value is truthy, by JavaScript's rule.
  *
@@ -256,35 +259,36 @@ static inline NtsValue nts_value_of_boolean(bool boolean) {
  * emitter would have to spell the whole switch inline at every site that tests
  * one. */
 static inline bool nts_value_truthy(NtsValue value) {
-    switch (value.tag) {
-    case NTS_TAG_UNDEFINED:
-        return false;
-    case NTS_TAG_BOOLEAN:
-        return value.as.boolean;
-    case NTS_TAG_NUMBER:
-        return value.as.number != 0.0 && !(value.as.number != value.as.number);
-    case NTS_TAG_STRING:
-        return value.as.reference != 0 && ((NtsString *)value.as.reference)->length != 0;
-    default:
-        /* An object, an array: present is enough. A reference tag with a null
-         * payload is not a value this compiler produces, and testing for it
-         * costs nothing. */
-        return value.as.reference != 0;
-    }
+  switch (value.tag) {
+  case NTS_TAG_UNDEFINED:
+    return false;
+  case NTS_TAG_BOOLEAN:
+    return value.as.boolean;
+  case NTS_TAG_NUMBER:
+    return value.as.number != 0.0 && !(value.as.number != value.as.number);
+  case NTS_TAG_STRING:
+    return value.as.reference != 0 &&
+           ((NtsString *)value.as.reference)->length != 0;
+  default:
+    /* An object, an array: present is enough. A reference tag with a null
+     * payload is not a value this compiler produces, and testing for it
+     * costs nothing. */
+    return value.as.reference != 0;
+  }
 }
 
 static inline NtsValue nts_value_of_undefined(void) {
-    NtsValue value;
-    value.tag = NTS_TAG_UNDEFINED;
-    value.as.number = 0.0;
-    return value;
+  NtsValue value;
+  value.tag = NTS_TAG_UNDEFINED;
+  value.as.number = 0.0;
+  return value;
 }
 
 static inline NtsValue nts_value_of_reference(NtsHeader *object, uint32_t tag) {
-    NtsValue value;
-    value.tag = tag;
-    value.as.reference = object;
-    return value;
+  NtsValue value;
+  value.tag = tag;
+  value.as.reference = object;
+  return value;
 }
 
 /* `typeof` for a tag, as the interned string the language spells it with.
@@ -299,7 +303,8 @@ NtsString *nts_tag_name(uint32_t tag);
  *
  * The one place that knows, so that the tracer, retain, release and the
  * emitter cannot disagree about it. */
-#define NTS_TAG_IS_REFERENCE(tag) ((tag) == NTS_TAG_STRING || (tag) == NTS_TAG_OBJECT)
+#define NTS_TAG_IS_REFERENCE(tag)                                              \
+  ((tag) == NTS_TAG_STRING || (tag) == NTS_TAG_OBJECT)
 
 /* A `Map`, and a `Set`, which is one that stores no values.
  *
@@ -316,22 +321,22 @@ NtsString *nts_tag_name(uint32_t tag);
  * once, at construction, so a `Map<string, V>` compares strings and never
  * looks at a tag. */
 typedef struct NtsMap {
-    /* `length` is the live entry count, which is `map.size` -- the same field
-     * an array's `length` uses, so `size` lowers to the same operation. */
-    NtsHeader header;
-    /* Entries written, holes included. `header.length` is how many are live. */
-    uint32_t used;
-    uint32_t capacity;
-    /* Index slots, a power of two, kept at twice `capacity` so that at least
-     * half are empty and a probe always terminates. */
-    uint32_t slots;
-    /* Which hash and comparison: one of `NTS_KEY_*`. */
-    uint32_t kind;
-    /* A Map does; a Set does not, and pays nothing for the values it has. */
-    bool holds_values;
-    int32_t *index;
-    NtsValue *keys;
-    NtsValue *values;
+  /* `length` is the live entry count, which is `map.size` -- the same field
+   * an array's `length` uses, so `size` lowers to the same operation. */
+  NtsHeader header;
+  /* Entries written, holes included. `header.length` is how many are live. */
+  uint32_t used;
+  uint32_t capacity;
+  /* Index slots, a power of two, kept at twice `capacity` so that at least
+   * half are empty and a probe always terminates. */
+  uint32_t slots;
+  /* Which hash and comparison: one of `NTS_KEY_*`. */
+  uint32_t kind;
+  /* A Map does; a Set does not, and pays nothing for the values it has. */
+  bool holds_values;
+  int32_t *index;
+  NtsValue *keys;
+  NtsValue *values;
 } NtsMap;
 
 /* How to hash and compare this map's keys, decided from the static key type.
@@ -352,11 +357,11 @@ typedef struct NtsMap {
  * payload, which is what makes the string and reference forms safe: an
  * `undefined` compared against a string never dereferences anything. */
 static inline bool nts_value_eq_number(NtsValue value, double number) {
-    return value.tag == NTS_TAG_NUMBER && value.as.number == number;
+  return value.tag == NTS_TAG_NUMBER && value.as.number == number;
 }
 
 static inline bool nts_value_eq_boolean(NtsValue value, bool boolean) {
-    return value.tag == NTS_TAG_BOOLEAN && value.as.boolean == boolean;
+  return value.tag == NTS_TAG_BOOLEAN && value.as.boolean == boolean;
 }
 
 bool nts_value_eq_string(NtsValue value, const NtsString *text);
@@ -397,8 +402,9 @@ extern const NtsDescriptor nts_desc_string2;
 
 /* Colors for the cycle collector (RFC 9.2), in `flags`. A release that does not
  * reach zero *might* have removed the last reference from outside a cycle, so
- * the object becomes a candidate; the collector later works out which candidates
- * really are garbage by removing internal references and seeing what is left. */
+ * the object becomes a candidate; the collector later works out which
+ * candidates really are garbage by removing internal references and seeing what
+ * is left. */
 #define NTS_COLOR_MASK 3u
 #define NTS_BLACK 0u  /* In use. */
 #define NTS_GRAY 1u   /* Internal references are being removed. */
@@ -457,12 +463,13 @@ bool nts_string_eq(const NtsString *a, const NtsString *b);
 /* String methods.
  *
  * Every one of these is defined over UTF-16 code units, which is what a
- * `NtsString` holds and what JavaScript means by a string's contents, so each is
- * the operation the specification describes rather than an approximation of it.
+ * `NtsString` holds and what JavaScript means by a string's contents, so each
+ * is the operation the specification describes rather than an approximation of
+ * it.
  *
- * `toUpperCase`, `toLowerCase` and `trim` are deliberately absent. All three are
- * defined over Unicode rather than over ASCII, and an ASCII version would be
- * right for most inputs and quietly wrong for the rest.
+ * `toUpperCase`, `toLowerCase` and `trim` are deliberately absent. All three
+ * are defined over Unicode rather than over ASCII, and an ASCII version would
+ * be right for most inputs and quietly wrong for the rest.
  *
  * Indices arrive as doubles because that is what a JavaScript number is, and
  * each function does its own clamping -- `ToIntegerOrInfinity` then a clamp to
@@ -500,11 +507,16 @@ bool nts_map_delete(NtsMap *map, NtsValue key);
 void nts_map_clear(NtsMap *map);
 
 NTS_READS_ONLY double nts_str_code_point_at(const NtsString *s, double at);
-NTS_READS_ONLY double nts_str_index_of(const NtsString *s, const NtsString *needle);
-NTS_READS_ONLY double nts_str_last_index_of(const NtsString *s, const NtsString *needle);
-NTS_READS_ONLY bool nts_str_includes(const NtsString *s, const NtsString *needle);
-NTS_READS_ONLY bool nts_str_starts_with(const NtsString *s, const NtsString *needle);
-NTS_READS_ONLY bool nts_str_ends_with(const NtsString *s, const NtsString *needle);
+NTS_READS_ONLY double nts_str_index_of(const NtsString *s,
+                                       const NtsString *needle);
+NTS_READS_ONLY double nts_str_last_index_of(const NtsString *s,
+                                            const NtsString *needle);
+NTS_READS_ONLY bool nts_str_includes(const NtsString *s,
+                                     const NtsString *needle);
+NTS_READS_ONLY bool nts_str_starts_with(const NtsString *s,
+                                        const NtsString *needle);
+NTS_READS_ONLY bool nts_str_ends_with(const NtsString *s,
+                                      const NtsString *needle);
 NtsString *nts_str_char_at(const NtsString *s, double at);
 NtsString *nts_str_repeat(const NtsString *s, double times);
 NtsString *nts_str_slice(const NtsString *s, double from, double to);
@@ -540,13 +552,13 @@ NtsString *nts_concat_into(NtsHeader *into, const NtsString *a,
  * string.
  *
  * One of these is declared per allocation *site* rather than per execution of
- * it, which is correct for exactly the reason the whole optimisation is: nothing
- * built here outlives the iteration that built it. */
-#define NTS_FRAME_STRING(units)  \
-    struct {                     \
-        NtsHeader header;        \
-        uint16_t data[(units) + 1]; \
-    }
+ * it, which is correct for exactly the reason the whole optimisation is:
+ * nothing built here outlives the iteration that built it. */
+#define NTS_FRAME_STRING(units)                                                \
+  struct {                                                                     \
+    NtsHeader header;                                                          \
+    uint16_t data[(units) + 1];                                                \
+  }
 
 /* Build a string from UTF-8, which is how a C caller has one.
  *
@@ -597,8 +609,9 @@ double nts_math_hypot(double a, double b);
  * What is here is what can be done *without growing* the array: the elements
  * live inline after the header, so growing would move the object and every
  * reference to it. `push`, `pop` and `splice` need a representation that keeps
- * the elements somewhere else, which is a decision with a cost -- an indirection
- * on every access -- and worth making deliberately rather than by accident.
+ * the elements somewhere else, which is a decision with a cost -- an
+ * indirection on every access -- and worth making deliberately rather than by
+ * accident.
  *
  * `map`, `filter` and `forEach` are absent for the other reason: they take a
  * function, and this compiler has no closures yet.
@@ -608,8 +621,8 @@ double nts_math_hypot(double a, double b);
  * uses SameValueZero and *does* find one, which is the one place the two differ
  * and the one thing an implementation is likely to get wrong. */
 /* Growth. `push` returns the new length, which is what the expression is worth
- * in JavaScript, and reallocates the element block when the capacity runs out --
- * doubling, so a loop of pushes is linear rather than quadratic.
+ * in JavaScript, and reallocates the element block when the capacity runs out
+ * -- doubling, so a loop of pushes is linear rather than quadratic.
  *
  * The array object itself never moves, which is the whole reason the elements
  * are not inline: every reference anyone holds stays valid. */
@@ -641,15 +654,15 @@ NtsArray *nts_array_slice(const NtsArray *a, double from, double to);
 
 /* One code unit of a string, whichever width it is stored in.
  *
- * Inline, and so is `charCodeAt` below it. A scan by code unit is the inner loop
- * of every string-heavy program, and as an opaque call it was fifty times slower
- * than the same loop in C++ -- the work is a load and a compare, and the call
- * around it was the whole cost. */
+ * Inline, and so is `charCodeAt` below it. A scan by code unit is the inner
+ * loop of every string-heavy program, and as an opaque call it was fifty times
+ * slower than the same loop in C++ -- the work is a load and a compare, and the
+ * call around it was the whole cost. */
 static inline uint16_t nts_unit(const NtsString *s, uint32_t at) {
-    if ((s->flags & NTS_TWO_BYTE) != 0) {
-        return NTS_ELEMENTS(s, uint16_t)[at];
-    }
-    return NTS_ELEMENTS(s, unsigned char)[at];
+  if ((s->flags & NTS_TWO_BYTE) != 0) {
+    return NTS_ELEMENTS(s, uint16_t)[at];
+  }
+  return NTS_ELEMENTS(s, unsigned char)[at];
 }
 
 /* `ToIntegerOrInfinity`: truncate toward zero, and NaN becomes zero.
@@ -658,57 +671,57 @@ static inline uint16_t nts_unit(const NtsString *s, uint32_t at) {
  * character at 0, not an error and not NaN -- rejecting the fraction was the
  * first thing differential testing found here. */
 static inline double nts_to_integer(double value) {
-    /* The case every index in every real program actually is: a value whose
-     * truncation fits in an `int64`. That is one instruction, and the round
-     * trip back to a double is exact -- a number in this range that was
-     * already whole is unchanged, and one that was not is truncated toward
-     * zero, which is what ToIntegerOrInfinity says.
-     *
-     * `floor` is a call into libm, and a call inside a scan loop costs more
-     * than the loop does. It clobbers every caller-saved register, so the
-     * constants the surrounding code was holding across the loop are spilled
-     * and reloaded around it -- five reloads per call in the string
-     * benchmark, for a truncation.
-     *
-     * NaN fails both comparisons and falls through to the check below; the
-     * infinities fail them too and reach `floor`, which returns them
-     * unchanged, as ToIntegerOrInfinity requires. */
-    if (value > -9223372036854775808.0 && value < 9223372036854775808.0) {
-        return (double)(int64_t)value;
-    }
-    if (value != value) {
-        return 0.0;
-    }
-    return value < 0 ? -floor(-value) : floor(value);
+  /* The case every index in every real program actually is: a value whose
+   * truncation fits in an `int64`. That is one instruction, and the round
+   * trip back to a double is exact -- a number in this range that was
+   * already whole is unchanged, and one that was not is truncated toward
+   * zero, which is what ToIntegerOrInfinity says.
+   *
+   * `floor` is a call into libm, and a call inside a scan loop costs more
+   * than the loop does. It clobbers every caller-saved register, so the
+   * constants the surrounding code was holding across the loop are spilled
+   * and reloaded around it -- five reloads per call in the string
+   * benchmark, for a truncation.
+   *
+   * NaN fails both comparisons and falls through to the check below; the
+   * infinities fail them too and reach `floor`, which returns them
+   * unchanged, as ToIntegerOrInfinity requires. */
+  if (value > -9223372036854775808.0 && value < 9223372036854775808.0) {
+    return (double)(int64_t)value;
+  }
+  if (value != value) {
+    return 0.0;
+  }
+  return value < 0 ? -floor(-value) : floor(value);
 }
 
 static inline double nts_str_char_code_at(const NtsString *s, double at) {
-    at = nts_to_integer(at);
-    if (at < 0 || at >= (double)s->length) {
-        /* Out of range is NaN, not an error and not zero. */
-        return (double)NAN;
-    }
-    return (double)nts_unit(s, (uint32_t)at);
+  at = nts_to_integer(at);
+  if (at < 0 || at >= (double)s->length) {
+    /* Out of range is NaN, not an error and not zero. */
+    return (double)NAN;
+  }
+  return (double)nts_unit(s, (uint32_t)at);
 }
 
 /* One unsigned comparison catches a negative index too: it wraps to something
  * enormous, which is not less than the length. */
 static inline uint32_t nts_check(const NtsArray *array, uint32_t index) {
-    if (index >= array->header.length) {
-        nts_bounds((double)index, array->header.length);
-    }
-    return index;
+  if (index >= array->header.length) {
+    nts_bounds((double)index, array->header.length);
+  }
+  return index;
 }
 
 /* A double index must also be a whole number to name an element at all --
  * `xs[1.5]` is a property in JavaScript, not a slot. NaN fails the first
  * comparison. */
 static inline uint32_t nts_index(const NtsArray *array, double index) {
-    if (!(index >= 0.0 && index < (double)array->header.length
-          && index == (double)(uint32_t)index)) {
-        nts_bounds(index, array->header.length);
-    }
-    return (uint32_t)index;
+  if (!(index >= 0.0 && index < (double)array->header.length &&
+        index == (double)(uint32_t)index)) {
+    nts_bounds(index, array->header.length);
+  }
+  return (uint32_t)index;
 }
 
 /* JavaScript ToInt32: total, and wraps rather than trapping.
@@ -718,62 +731,62 @@ static inline uint32_t nts_index(const NtsArray *array, double index) {
  * path costs calls to trunc and fmod and is 2.6x slower. NaN fails both
  * comparisons and falls through to the isfinite check. */
 static inline int32_t nts_to_int32(double x) {
-    /* The common case: already in range, so the hardware conversion is the
-     * answer and it truncates toward zero exactly as ToInt32 says. */
-    if (x > -2147483649.0 && x < 2147483648.0) {
-        return (int32_t)x;
-    }
+  /* The common case: already in range, so the hardware conversion is the
+   * answer and it truncates toward zero exactly as ToInt32 says. */
+  if (x > -2147483649.0 && x < 2147483648.0) {
+    return (int32_t)x;
+  }
 
-    /* Out of range, which `x | 0` after any real arithmetic usually is: a
-     * product of two int32s is not one. This used to reduce modulo 2^32 with
-     * `fmod`, which is a library call of roughly a hundred cycles -- and in a
-     * loop that is the whole cost of the loop. Reading the exponent and shifting
-     * the mantissa does the same reduction in about ten instructions, none of
-     * them a call.
-     *
-     * NaN and the infinities fall out of the same test: their exponent is 1024,
-     * which is past the point where every one of the low thirty-two bits is
-     * zero, so they return 0 -- which is what ToInt32 says they are. */
-    uint64_t bits;
-    memcpy(&bits, &x, sizeof bits);
-    const int exponent = (int)((bits >> 52) & 0x7FFu) - 1023;
-    if (exponent < 0) {
-        /* |x| < 1, so truncation is zero -- including for -0. */
-        return 0;
-    }
-    if (exponent > 83) {
-        /* A multiple of 2^32 (or NaN, or an infinity): nothing in the low
-         * thirty-two bits. */
-        return 0;
-    }
-    const uint64_t mantissa = (bits & 0xFFFFFFFFFFFFFull) | 0x10000000000000ull;
-    uint32_t magnitude;
-    if (exponent < 52) {
-        magnitude = (uint32_t)(mantissa >> (52 - exponent));
-    } else {
-        /* Only the low thirty-two bits survive, so the shift is done in
-         * thirty-two and cannot overflow out of the range that matters. */
-        magnitude = (uint32_t)mantissa << (exponent - 52);
-    }
-    /* Negation in unsigned arithmetic: `-(int32_t)0x80000000` is undefined, and
-     * that value is reachable. */
-    return (bits >> 63) != 0 ? (int32_t)(0u - magnitude) : (int32_t)magnitude;
+  /* Out of range, which `x | 0` after any real arithmetic usually is: a
+   * product of two int32s is not one. This used to reduce modulo 2^32 with
+   * `fmod`, which is a library call of roughly a hundred cycles -- and in a
+   * loop that is the whole cost of the loop. Reading the exponent and shifting
+   * the mantissa does the same reduction in about ten instructions, none of
+   * them a call.
+   *
+   * NaN and the infinities fall out of the same test: their exponent is 1024,
+   * which is past the point where every one of the low thirty-two bits is
+   * zero, so they return 0 -- which is what ToInt32 says they are. */
+  uint64_t bits;
+  memcpy(&bits, &x, sizeof bits);
+  const int exponent = (int)((bits >> 52) & 0x7FFu) - 1023;
+  if (exponent < 0) {
+    /* |x| < 1, so truncation is zero -- including for -0. */
+    return 0;
+  }
+  if (exponent > 83) {
+    /* A multiple of 2^32 (or NaN, or an infinity): nothing in the low
+     * thirty-two bits. */
+    return 0;
+  }
+  const uint64_t mantissa = (bits & 0xFFFFFFFFFFFFFull) | 0x10000000000000ull;
+  uint32_t magnitude;
+  if (exponent < 52) {
+    magnitude = (uint32_t)(mantissa >> (52 - exponent));
+  } else {
+    /* Only the low thirty-two bits survive, so the shift is done in
+     * thirty-two and cannot overflow out of the range that matters. */
+    magnitude = (uint32_t)mantissa << (exponent - 52);
+  }
+  /* Negation in unsigned arithmetic: `-(int32_t)0x80000000` is undefined, and
+   * that value is reachable. */
+  return (bits >> 63) != 0 ? (int32_t)(0u - magnitude) : (int32_t)magnitude;
 }
 
 /* JavaScript ToUint32. As above; the fast path is the non-negative half of the
  * uint32 range. */
 static inline uint32_t nts_to_uint32(double x) {
-    if (x >= 0.0 && x < 4294967296.0) {
-        return (uint32_t)x;
-    }
-    if (!isfinite(x)) {
-        return 0;
-    }
-    double m = fmod(trunc(x), 4294967296.0);
-    if (m < 0.0) {
-        m += 4294967296.0;
-    }
-    return (uint32_t)m;
+  if (x >= 0.0 && x < 4294967296.0) {
+    return (uint32_t)x;
+  }
+  if (!isfinite(x)) {
+    return 0;
+  }
+  double m = fmod(trunc(x), 4294967296.0);
+  if (m < 0.0) {
+    m += 4294967296.0;
+  }
+  return (uint32_t)m;
 }
 
 /* What a typed array stores. `u8[i] = v` is not a cast: ECMAScript truncates
@@ -792,43 +805,43 @@ static inline uint32_t nts_to_uint32(double x) {
  * whose result is implementation-defined before C23. The subtraction lands in
  * range, so the cast that follows it is not. */
 static inline uint8_t nts_to_uint8(double x) {
-    return (uint8_t)nts_to_uint32(x);
+  return (uint8_t)nts_to_uint32(x);
 }
 
 static inline int8_t nts_to_int8(double x) {
-    const uint8_t u = (uint8_t)nts_to_uint32(x);
-    return u < 128u ? (int8_t)u : (int8_t)((int)u - 256);
+  const uint8_t u = (uint8_t)nts_to_uint32(x);
+  return u < 128u ? (int8_t)u : (int8_t)((int)u - 256);
 }
 
 static inline uint16_t nts_to_uint16(double x) {
-    return (uint16_t)nts_to_uint32(x);
+  return (uint16_t)nts_to_uint32(x);
 }
 
 static inline int16_t nts_to_int16(double x) {
-    const uint16_t u = (uint16_t)nts_to_uint32(x);
-    return u < 32768u ? (int16_t)u : (int16_t)((int)u - 65536);
+  const uint16_t u = (uint16_t)nts_to_uint32(x);
+  return u < 32768u ? (int16_t)u : (int16_t)((int)u - 65536);
 }
 
 /* JavaScript `<<`: the count masks to five bits, and shifting a negative value
  * left is defined rather than undefined. */
 static inline int32_t nts_shl(int32_t a, int32_t b) {
-    return (int32_t)((uint32_t)a << ((uint32_t)b & 31u));
+  return (int32_t)((uint32_t)a << ((uint32_t)b & 31u));
 }
 
 /* JavaScript `>>`: arithmetic, spelled so it does not depend on the
  * implementation's choice for a negative operand. */
 static inline int32_t nts_shr(int32_t a, int32_t b) {
-    uint32_t n = (uint32_t)b & 31u;
-    if (a < 0) {
-        return (int32_t)~(~(uint32_t)a >> n);
-    }
-    return (int32_t)((uint32_t)a >> n);
+  uint32_t n = (uint32_t)b & 31u;
+  if (a < 0) {
+    return (int32_t)~(~(uint32_t)a >> n);
+  }
+  return (int32_t)((uint32_t)a >> n);
 }
 
 /* JavaScript `>>>`: logical, and the one bitwise result that is uint32 rather
  * than int32. */
 static inline uint32_t nts_ushr(int32_t a, int32_t b) {
-    return (uint32_t)a >> ((uint32_t)b & 31u);
+  return (uint32_t)a >> ((uint32_t)b & 31u);
 }
 
 /* JavaScript Math.round (ES 21.3.2.28), which is not C's round and is not
@@ -846,20 +859,20 @@ static inline uint32_t nts_ushr(int32_t a, int32_t b) {
  *   - Something in [-0.5, 0) rounds to *negative* zero, and `1 / -0` is not
  *     `1 / 0`, so the sign is observable and cannot be dropped. */
 static inline double nts_round(double x) {
-    if (!isfinite(x)) {
-        return x;
-    }
-    const double lower = floor(x);
-    if (lower == x) {
-        /* Already an integer. Returning it rather than recomputing also keeps
-         * the sign of a negative zero. */
-        return x;
-    }
-    const double rounded = (x - lower >= 0.5) ? lower + 1.0 : lower;
-    if (rounded == 0.0 && x < 0.0) {
-        return -0.0;
-    }
-    return rounded;
+  if (!isfinite(x)) {
+    return x;
+  }
+  const double lower = floor(x);
+  if (lower == x) {
+    /* Already an integer. Returning it rather than recomputing also keeps
+     * the sign of a negative zero. */
+    return x;
+  }
+  const double rounded = (x - lower >= 0.5) ? lower + 1.0 : lower;
+  if (rounded == 0.0 && x < 0.0) {
+    return -0.0;
+  }
+  return rounded;
 }
 
 /* `substring` into the frame, with the case a tokenizer is spelled out here.
@@ -883,45 +896,45 @@ static inline double nts_round(double x) {
 static inline NtsString *nts_str_substring_into(NtsHeader *into,
                                                 const NtsString *s, double from,
                                                 double to) {
-    if (into != 0 && from >= 0.0 && to >= from && to <= (double)s->length
-        && (s->flags & NTS_TWO_BYTE) == 0) {
-        const uint32_t start = (uint32_t)from;
-        const uint32_t end = (uint32_t)to;
-        if (from == (double)start && to == (double)end) {
-            const uint32_t length = end - start;
-            into->descriptor = &nts_desc_string1;
-            into->reserved = NTS_IMMORTAL;
-            into->flags = 0;
-            into->length = length;
-            unsigned char *bytes = NTS_ELEMENTS(into, unsigned char);
-            memcpy(bytes, NTS_ELEMENTS(s, const unsigned char) + start, length);
-            bytes[length] = 0;
-            return into;
-        }
+  if (into != 0 && from >= 0.0 && to >= from && to <= (double)s->length &&
+      (s->flags & NTS_TWO_BYTE) == 0) {
+    const uint32_t start = (uint32_t)from;
+    const uint32_t end = (uint32_t)to;
+    if (from == (double)start && to == (double)end) {
+      const uint32_t length = end - start;
+      into->descriptor = &nts_desc_string1;
+      into->reserved = NTS_IMMORTAL;
+      into->flags = 0;
+      into->length = length;
+      unsigned char *bytes = NTS_ELEMENTS(into, unsigned char);
+      memcpy(bytes, NTS_ELEMENTS(s, const unsigned char) + start, length);
+      bytes[length] = 0;
+      return into;
     }
-    return nts_str_substring_general(into, s, from, to);
+  }
+  return nts_str_substring_general(into, s, from, to);
 }
 
 /* JavaScript Math.min: NaN wins, and -0 is below 0. C's fmin does neither. */
 static inline double nts_min(double a, double b) {
-    if (isnan(a) || isnan(b)) {
-        return (double)NAN;
-    }
-    if (a == 0.0 && b == 0.0) {
-        return signbit(a) ? a : b;
-    }
-    return a < b ? a : b;
+  if (isnan(a) || isnan(b)) {
+    return (double)NAN;
+  }
+  if (a == 0.0 && b == 0.0) {
+    return signbit(a) ? a : b;
+  }
+  return a < b ? a : b;
 }
 
 /* JavaScript Math.max. See nts_min. */
 static inline double nts_max(double a, double b) {
-    if (isnan(a) || isnan(b)) {
-        return (double)NAN;
-    }
-    if (a == 0.0 && b == 0.0) {
-        return signbit(a) ? b : a;
-    }
-    return a > b ? a : b;
+  if (isnan(a) || isnan(b)) {
+    return (double)NAN;
+  }
+  if (a == 0.0 && b == 0.0) {
+    return signbit(a) ? b : a;
+  }
+  return a > b ? a : b;
 }
 
 /* Two kinds of abort, and the difference is not cosmetic.
@@ -963,40 +976,40 @@ static inline double nts_max(double a, double b) {
  * give the reference back. A host that discards a task on teardown without
  * saying so leaks the frame and everything it holds. */
 typedef struct NtsTask {
-    void (*run)(void *state);
-    /* Release `state` without running. Null when there is nothing owned. */
-    void (*drop)(void *state);
-    void *state;
+  void (*run)(void *state);
+  /* Release `state` without running. Null when there is nothing owned. */
+  void (*drop)(void *state);
+  void *state;
 } NtsTask;
 
 typedef uint64_t NtsTimerId;
 
 /* Everything a host provides. Five operations and one opt-out. */
 typedef struct NtsHost {
-    /* Run after the current task *and* after a complete checkpoint. That
-     * ordering is what `setImmediate` is built on, so it is specified here
-     * rather than left for each host to reproduce. */
-    void (*post_task)(void *state, NtsTask task);
+  /* Run after the current task *and* after a complete checkpoint. That
+   * ordering is what `setImmediate` is built on, so it is specified here
+   * rather than left for each host to reproduce. */
+  void (*post_task)(void *state, NtsTask task);
 
-    /* Run after at least `delay_ms`. The id is what `clearTimeout` cancels. */
-    NtsTimerId (*post_delayed)(void *state, NtsTask task, double delay_ms,
-                               bool repeating);
-    void (*cancel_delayed)(void *state, NtsTimerId id);
+  /* Run after at least `delay_ms`. The id is what `clearTimeout` cancels. */
+  NtsTimerId (*post_delayed)(void *state, NtsTask task, double delay_ms,
+                             bool repeating);
+  void (*cancel_delayed)(void *state, NtsTimerId id);
 
-    /* The only operation callable from a thread the runtime does not own.
-     * Every foreign completion goes through it before touching the heap:
-     * resolving a promise is a heap mutation (RFC 17.4). */
-    void (*post_from_any_thread)(void *state, NtsTask task);
+  /* The only operation callable from a thread the runtime does not own.
+   * Every foreign completion goes through it before touching the heap:
+   * resolving a promise is a heap mutation (RFC 17.4). */
+  void (*post_from_any_thread)(void *state, NtsTask task);
 
-    /* For assertions, and cheap enough to leave on. */
-    bool (*is_owner_thread)(void *state);
+  /* For assertions, and cheap enough to leave on. */
+  bool (*is_owner_thread)(void *state);
 
-    /* Optional, and null for every host but a Blink renderer. Supplying it
-     * means the host owns checkpointing: our queues and our drain are both
-     * disabled, so there is one queue and one ordering (RFC 26.6). */
-    void (*enqueue_microtask)(void *state, NtsTask task);
+  /* Optional, and null for every host but a Blink renderer. Supplying it
+   * means the host owns checkpointing: our queues and our drain are both
+   * disabled, so there is one queue and one ordering (RFC 26.6). */
+  void (*enqueue_microtask)(void *state, NtsTask task);
 
-    void *state;
+  void *state;
 } NtsHost;
 
 void nts_host_install(const NtsHost *host);
@@ -1067,11 +1080,10 @@ bool nts_has_pending_work(void);
  */
 
 enum {
-    NTS_PROMISE_PENDING = 0,
-    NTS_PROMISE_FULFILLED = 1,
-    NTS_PROMISE_REJECTED = 2
+  NTS_PROMISE_PENDING = 0,
+  NTS_PROMISE_FULFILLED = 1,
+  NTS_PROMISE_REJECTED = 2
 };
-
 
 /* One reaction, as a managed object.
  *
@@ -1081,45 +1093,45 @@ enum {
  * neither. This is the second shape, and the list is the first, so nothing in
  * the collector needs a special case. */
 typedef struct NtsReaction {
-    NtsHeader header;
-    void (*run)(void *state);
-    void (*drop)(void *state);
-    NtsHeader *state;
-    /* The list is threaded through the reactions themselves rather than held
-     * in an array: an array of references would need its own growth and its
-     * elements are written through a `double`-typed helper. A chain of
-     * fixed-offset objects needs neither, and one allocation per reaction is
-     * what an array would have cost anyway. */
-    struct NtsReaction *next;
+  NtsHeader header;
+  void (*run)(void *state);
+  void (*drop)(void *state);
+  NtsHeader *state;
+  /* The list is threaded through the reactions themselves rather than held
+   * in an array: an array of references would need its own growth and its
+   * elements are written through a `double`-typed helper. A chain of
+   * fixed-offset objects needs neither, and one allocation per reaction is
+   * what an array would have cost anyway. */
+  struct NtsReaction *next;
 } NtsReaction;
 
 typedef struct NtsPromise {
-    NtsHeader header;
-    uint32_t state; /* NTS_PROMISE_* */
-    /* What it settled with, whatever that turned out to be.
-     *
-     * One representation for every fulfilment path: a number, a reference and
-     * an erased value are the same sixteen bytes with different tags, so there
-     * is no payload-kind enum beside this and no way for the two to disagree.
-     * The descriptor lists this slot in its *erased* table, which is what lets
-     * the collector follow it only when the tag says there is something to
-     * follow.
-     *
-     * Exactly one home. A fulfilled reference lives here and nowhere else --
-     * if it also lived in a plain reference slot, `nts_each_reference` would
-     * visit it through both tables, every retain and release would be doubled,
-     * and the second release would free something still in use. */
-    NtsValue value;
-    /* Why it rejected, which is always a reference.
-     *
-     * Separate from `value` because a rejection is not a fulfilment: the two
-     * are distinguished by `state`, and giving each its own slot means neither
-     * reader has to ask what the other would have meant. */
-    NtsHeader *reason;
-    /* Newest first; reversed into subscription order when it settles, so the
-     * chain holds exactly one strong reference to each reaction and there is
-     * no aliasing tail pointer for the collector to double-count. */
-    NtsReaction *reactions;
+  NtsHeader header;
+  uint32_t state; /* NTS_PROMISE_* */
+  /* What it settled with, whatever that turned out to be.
+   *
+   * One representation for every fulfilment path: a number, a reference and
+   * an erased value are the same sixteen bytes with different tags, so there
+   * is no payload-kind enum beside this and no way for the two to disagree.
+   * The descriptor lists this slot in its *erased* table, which is what lets
+   * the collector follow it only when the tag says there is something to
+   * follow.
+   *
+   * Exactly one home. A fulfilled reference lives here and nowhere else --
+   * if it also lived in a plain reference slot, `nts_each_reference` would
+   * visit it through both tables, every retain and release would be doubled,
+   * and the second release would free something still in use. */
+  NtsValue value;
+  /* Why it rejected, which is always a reference.
+   *
+   * Separate from `value` because a rejection is not a fulfilment: the two
+   * are distinguished by `state`, and giving each its own slot means neither
+   * reader has to ask what the other would have meant. */
+  NtsHeader *reason;
+  /* Newest first; reversed into subscription order when it settles, so the
+   * chain holds exactly one strong reference to each reaction and there is
+   * no aliasing tail pointer for the collector to double-count. */
+  NtsReaction *reactions;
 } NtsPromise;
 
 NtsPromise *nts_promise_new(void);

@@ -1,0 +1,5 @@
+-std=c11
+-I.
+-Wall
+-Wextra
+-DNTS_PROVIDER_RC

@@ -1,0 +1,18 @@
+# clangd, for the C runtime.
+#
+# The flags themselves are in `runtime/c/compile_flags.txt`, because clangd
+# resolves a relative `-I` there against that file's own directory -- which is
+# what makes `#include "nts_runtime.h"` resolve from both `runtime/c` and
+# `runtime/c/tests`. Without it clangd has no flags at all and reports the
+# header as missing and `bool` as an unknown type, which is noise that trains
+# you to ignore the gutter.
+#
+# `-DNTS_PROVIDER_RC` is a choice, not a default. The runtime compiles under two
+# memory providers and clangd can only see one; reference counting is the one
+# with `nts_free`, the cycle collector and the retain/release paths in it, so it
+# is the half worth having analysed. The NoGC build is covered by the gate.
+
+# Check selection lives in `.clang-tidy`, which clang-tidy on the command line
+# reads too -- so the editor gutter and a terminal run cannot disagree.
+Diagnostics:
+  UnusedIncludes: Strict
