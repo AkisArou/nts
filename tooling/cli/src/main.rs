@@ -717,8 +717,11 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // drops the dead blocks, so what matters is what survives the passes.
     if !want_passes {
         match hir::prepare(&snapshot) {
+            // The count is what *reachability pruning* left, which is a
+            // different question from how much lowered -- so it is labelled as
+            // one rather than offered as a second headline.
             Ok(prepared) => println!(
-                "  {} survive the passes and verify",
+                "  all of it verifies ({} after pruning unreachable functions)",
                 prepared.program.funcs.len()
             ),
             Err(problems) => {

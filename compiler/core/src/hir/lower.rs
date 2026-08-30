@@ -6691,7 +6691,17 @@ impl<'a> FuncBuilder<'a> {
                 let Some(inner) = children.first() else {
                     return Err(self.unsupported(id, "an assertion with no operand"));
                 };
-                self.lower_expression(*inner)
+                let value = self.lower_expression(*inner)?;
+                // An assertion *from* an erased value is the one that computes
+                // something: `columns[0] as string` where the element is
+                // `string | number` reads the payload back at the asserted
+                // type. That is what the author claimed, and it is the same
+                // unerase a checker-narrowed read emits -- the difference is
+                // only who established it.
+                //
+                // Where nothing is erased this is the identity, which is what
+                // every other assertion stays.
+                self.narrowed(id, value)
             }
             Some(syntax::PREFIX_UNARY_EXPRESSION) => self.lower_prefix_unary(id),
             Some(syntax::POSTFIX_UNARY_EXPRESSION) => self.lower_postfix_unary(id),
