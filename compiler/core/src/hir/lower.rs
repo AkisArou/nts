@@ -5884,8 +5884,39 @@ impl<'a> FuncBuilder<'a> {
         sequence: NodeId,
         value: ValueId,
         forced: Option<&'static str>,
+        binds: usize,
     ) -> Result<Walk, Diagnostic> {
         let ty = self.values[value.0 as usize].ty.clone();
+        // `for (const [k, v] of map)`, and `of map.entries()`, which is the
+        // same walk written the other way. Two names, two reads, no pair.
+        if binds == 2
+            && let HirType::Managed(ManagedType::Map(key, val)) = &ty
+            && matches!(forced, None | Some("entries"))
+        {
+            return Ok(Walk::Entries {
+                key: (**key).clone(),
+                value: (**val).clone(),
+                value_read: "nts_map_value_at",
+            });
+        }
+        // A `Set`'s `entries()` yields `[v, v]`, which node agrees is the same
+        // value twice.
+        if binds == 2
+            && let HirType::Managed(ManagedType::Set(element)) = &ty
+            && forced == Some("entries")
+        {
+            return Ok(Walk::Entries {
+                key: (**element).clone(),
+                value: (**element).clone(),
+                value_read: "nts_map_key_at",
+            });
+        }
+        if binds != 1 {
+            return Err(self.unsupported(
+                sequence,
+                &format!("a `for...of` binding {binds} names over this sequence"),
+            ));
+        }
         match (&ty, forced) {
             (HirType::Managed(ManagedType::Array(element)), None) => {
                 Ok(Walk::Counted((**element).clone()))
@@ -5914,8 +5945,8 @@ impl<'a> FuncBuilder<'a> {
             // neither is this one, so it says which.
             (HirType::Managed(ManagedType::Map(_, _)), None) => Err(self.unsupported(
                 sequence,
-                "a `for...of` over a `Map`, which yields a `[key, value]` pair and needs a \
-                 destructuring binding",
+                "a `for...of` over a `Map` binding one name, which would be the \
+                 `[key, value]` pair itself; bind `[key, value]` instead",
             )),
             (_, Some(method)) => Err(self.unsupported(
                 sequence,
@@ -5981,7 +6012,7 @@ impl<'a> FuncBuilder<'a> {
                     origin.clone(),
                 )
             }
-            Walk::Table { .. } => {
+            Walk::Table { .. } | Walk::Entries { .. } => {
                 let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
                 let after = self.push(
                     OpKind::Binary {
@@ -6004,8 +6035,34 @@ impl<'a> FuncBuilder<'a> {
         sequence: ValueId,
         at: ValueId,
         origin: &Origin,
-    ) -> ValueId {
-        match walk {
+    ) -> Vec<ValueId> {
+        // A table read comes back erased, because that is what the table
+        // stores. Where the element type is concrete the payload is read back
+        // here, so the body sees a `Socket` rather than sixteen bytes.
+        let unerased = |lower: &mut Self, slot: ValueId, want: &HirType| {
+            if *want == HirType::Erased {
+                slot
+            } else {
+                lower.push(
+                    OpKind::Unerase { value: slot },
+                    want.clone(),
+                    origin.clone(),
+                )
+            }
+        };
+        if let Walk::Entries {
+            key,
+            value,
+            value_read,
+        } = walk
+        {
+            let k = self.call_runtime("nts_map_key_at", vec![sequence, at], HirType::Erased, origin);
+            let k = unerased(self, k, key);
+            let v = self.call_runtime(value_read, vec![sequence, at], HirType::Erased, origin);
+            let v = unerased(self, v, value);
+            return vec![k, v];
+        }
+        vec![match walk {
             // Checked: the length was read once and the bounds pass is what
             // proves the index inside it.
             Walk::Counted(element) => self.push(
@@ -6055,7 +6112,69 @@ impl<'a> FuncBuilder<'a> {
                     origin,
                 )
             }
+            // Handled above, before this match: it is the one shape that reads
+            // more than a single value.
+            Walk::Entries { .. } => unreachable!("entries reads two and returned already"),
+        }]
+    }
+
+    /// The names a `for...of` head binds, in order.
+    ///
+    /// One identifier is the ordinary case. An array pattern is
+    /// `for (const [k, v] of map)`. Everything else -- a default, a rest, a
+    /// nested pattern, a hole, an object pattern -- is refused by the shape it
+    /// is, because each is a separate feature and a reader deciding what to
+    /// implement next cannot rank "a binding of this shape".
+    fn for_of_names(&self, initializer: NodeId) -> Result<Vec<NodeId>, Diagnostic> {
+        let declaration = self
+            .children(initializer)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::VARIABLE_DECLARATION))
+            .ok_or_else(|| self.unsupported(initializer, "a `for...of` without a declaration"))?;
+        let parts = self.children(declaration);
+        if let Some(name) = parts
+            .iter()
+            .copied()
+            .find(|part| self.kind_of(*part) == Some(syntax::IDENTIFIER))
+        {
+            return Ok(vec![name]);
         }
+        if parts
+            .iter()
+            .any(|part| self.kind_of(*part) == Some(syntax::OBJECT_BINDING_PATTERN))
+        {
+            return Err(self.unsupported(
+                initializer,
+                "a `for...of` binding by property name, which is object destructuring",
+            ));
+        }
+        let pattern = parts
+            .iter()
+            .copied()
+            .find(|part| self.kind_of(*part) == Some(syntax::ARRAY_BINDING_PATTERN))
+            .ok_or_else(|| self.unsupported(initializer, "a `for...of` binding of this shape"))?;
+
+        let mut names = Vec::new();
+        for element in self.children(pattern) {
+            if self.kind_of(element) != Some(syntax::BINDING_ELEMENT) {
+                return Err(self.unsupported(element, "a hole in a destructuring pattern"));
+            }
+            // A name and nothing else. A default carries an initializer, a rest
+            // a `...`, and a nested pattern a pattern -- each arrives as a
+            // second child.
+            let inner = self.children(element);
+            let [name] = inner.as_slice() else {
+                return Err(self.unsupported(
+                    element,
+                    "a destructuring element that is more than a name",
+                ));
+            };
+            if self.kind_of(*name) != Some(syntax::IDENTIFIER) {
+                return Err(self.unsupported(*name, "a nested destructuring pattern"));
+            }
+            names.push(*name);
+        }
+        Ok(names)
     }
 
     fn lower_for_of(&mut self, id: NodeId) -> Result<(), Diagnostic> {
@@ -6067,24 +6186,17 @@ impl<'a> FuncBuilder<'a> {
         };
         let (initializer, sequence, body) = (*initializer, *sequence, *body);
 
-        // The element name. One declaration, one identifier: a destructuring
-        // pattern is a separate feature and refusing it says so.
-        let element_name = self
-            .children(initializer)
-            .into_iter()
-            .find(|child| self.kind_of(*child) == Some(syntax::VARIABLE_DECLARATION))
-            .map(|declaration| self.children(declaration))
-            .and_then(|parts| {
-                parts
-                    .into_iter()
-                    .find(|part| self.kind_of(*part) == Some(syntax::IDENTIFIER))
-            })
-            .ok_or_else(|| self.unsupported(initializer, "a `for...of` binding of this shape"))?;
-        let element_symbol = self
-            .node(element_name)
-            .symbol
-            .ok_or_else(|| self.unsupported(element_name, "a `for...of` name with no symbol"))?
-            .0;
+        // What the head binds: one name, or the two of `[key, value]`.
+        let names = self.for_of_names(initializer)?;
+        let mut element_symbols = Vec::with_capacity(names.len());
+        for name in &names {
+            element_symbols.push(
+                self.node(*name)
+                    .symbol
+                    .ok_or_else(|| self.unsupported(*name, "a `for...of` name with no symbol"))?
+                    .0,
+            );
+        }
 
         // `for (const k of m.keys())` reads the table directly. Lowering the
         // call would build an iterator object, step it once per element and
@@ -6092,7 +6204,7 @@ impl<'a> FuncBuilder<'a> {
         // it -- so the method is recognized here and never lowered.
         let (sequence, forced) = self.table_source(sequence);
         let sequence_value = self.lower_expression(sequence)?;
-        let walk = self.walk_of(sequence, sequence_value, forced)?;
+        let walk = self.walk_of(sequence, sequence_value, forced, element_symbols.len())?;
 
         let origin = self.origin(id);
         // The cursor. A double, like the counter a hand-written `for` produces,
@@ -6105,7 +6217,7 @@ impl<'a> FuncBuilder<'a> {
         let index = self.synthetic_symbol();
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let start = match &walk {
-            Walk::Table { .. } => self.call_runtime(
+            Walk::Table { .. } | Walk::Entries { .. } => self.call_runtime(
                 "nts_map_next",
                 vec![sequence_value, zero],
                 HirType::NUMBER,
@@ -6117,7 +6229,7 @@ impl<'a> FuncBuilder<'a> {
 
         let mut carried = vec![index];
         self.assigned_symbols(body, &mut carried);
-        let mut declared = vec![element_symbol];
+        let mut declared = element_symbols.clone();
         self.declared_symbols(body, &mut declared);
         carried.retain(|symbol| *symbol == index || !declared.contains(symbol));
 
@@ -6147,7 +6259,7 @@ impl<'a> FuncBuilder<'a> {
                     origin.clone(),
                 )
             }
-            Walk::Table { .. } => {
+            Walk::Table { .. } | Walk::Entries { .. } => {
                 let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
                 self.push(
                     OpKind::Binary {
@@ -6163,8 +6275,10 @@ impl<'a> FuncBuilder<'a> {
         self.test_loop(cond, &record);
         self.switch_to(record.body);
 
-        let value = self.read_element(&walk, sequence_value, at, &origin);
-        self.bindings.insert(element_symbol, value);
+        let values = self.read_element(&walk, sequence_value, at, &origin);
+        for (symbol, value) in element_symbols.iter().zip(values) {
+            self.bindings.insert(*symbol, value);
+        }
 
         self.lower_statement(body)?;
         self.end_loop(
@@ -11519,6 +11633,20 @@ enum Walk {
         /// as keys, so iterating one and iterating `keys()` are the same read.
         read: &'static str,
         element: HirType,
+    },
+    /// The entries of a `Map`, bound through `[key, value]`.
+    ///
+    /// Two names and two reads. Nothing materializes the pair: it is what the
+    /// *language* says the element is, and building one per iteration to take
+    /// apart immediately would be an allocation for nothing. The table holds
+    /// keys and values in separate arrays, so this reads one of each.
+    Entries {
+        key: HirType,
+        value: HirType,
+        /// `nts_map_value_at` for a `Map`. A `Set` stores no values at all, and
+        /// its `entries()` yields `[v, v]` -- node agrees it is the same value
+        /// twice -- so the second read is the key again.
+        value_read: &'static str,
     },
     /// The code points of a string, which are one or two units wide.
     ///

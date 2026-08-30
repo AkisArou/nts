@@ -327,3 +327,95 @@ export function holesAndRehash(n: number): number {
   }
   return seen * 100000 + total * 10 + s.size + n * 0;
 }
+
+// `for (const [k, v] of map)` — the pair the language says the element is,
+// bound through a destructuring pattern.
+//
+// Nothing materializes the pair. The table already holds keys and values in
+// separate arrays, so two names are two reads; building a `[key, value]` per
+// iteration only to take it apart immediately would be an allocation for
+// nothing, and it is the reason this waited for the walk rather than for
+// tuples.
+export function overMapPairs(n: number): number {
+  const m = new Map<number, number>();
+  m.set(1, n);
+  m.set(2, n * 2);
+  m.set(3, n * 3);
+  let keys = 0;
+  let values = 0;
+  for (const [k, v] of m) {
+    keys += k;
+    values += v;
+  }
+  return keys * 100000 + values;
+}
+
+// `entries()` is the same walk written the other way, and is recognised in the
+// head rather than lowered as a call.
+export function viaEntries(n: number): number {
+  const m = new Map<string, number>();
+  m.set("a", n);
+  m.set("bb", n + 1);
+  m.set("ccc", n + 2);
+  let letters = 0;
+  let total = 0;
+  for (const [k, v] of m.entries()) {
+    letters += k.length;
+    total += v;
+  }
+  return letters * 10000 + total;
+}
+
+// A `Set`'s `entries()` yields `[v, v]` — the same value twice, which is what
+// node does and what a table storing no values has to arrange deliberately.
+export function setEntries(n: number): number {
+  const s = new Set<number>();
+  s.add(n);
+  s.add(n + 4);
+  let first = 0;
+  let second = 0;
+  for (const [x, y] of s.entries()) {
+    first += x;
+    second += y;
+  }
+  return first * 1000 + second;
+}
+
+// Destructured, with holes punched first, so the pair walk skips them too.
+export function pairsAfterDeletes(n: number): number {
+  const m = new Map<number, number>();
+  for (let i = 0; i < 6; i++) {
+    m.set(i, i * 10);
+  }
+  m.delete(1);
+  m.delete(4);
+  let keys = 0;
+  let values = 0;
+  let seen = 0;
+  for (const [k, v] of m) {
+    keys += k;
+    values += v;
+    seen++;
+  }
+  return seen * 1000000 + keys * 1000 + values + n * 0;
+}
+
+// `break` and `continue` through a destructured walk, since the cursor is
+// advanced in the latch and both names are bound in the body.
+export function pairsBreaking(n: number): number {
+  const m = new Map<number, number>();
+  for (let i = 0; i < 8; i++) {
+    m.set(i, i * 2);
+  }
+  let total = 0;
+  for (const [k, v] of m) {
+    if (k === 2) {
+      continue;
+    }
+    if (k > 5) {
+      break;
+    }
+    total += v;
+  }
+  return total + n * 0;
+}
