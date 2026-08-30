@@ -1,26 +1,55 @@
 #!/bin/sh
 # Everything a fresh clone needs before anything can be measured.
 #
-#   tooling/bootstrap/bootstrap.sh          # the parts the gate needs
-#   tooling/bootstrap/bootstrap.sh --all    # and the optional corpora
+#   tooling/bootstrap/bootstrap.sh             # everything
+#   tooling/bootstrap/bootstrap.sh --minimal   # only what the gate needs
 #
 # Each step says why it exists and each is skipped when already done, so this
 # is safe to re-run and is the fastest way to find out what is missing.
 #
-# The optional clones are somebody else's repositories rather than vendored
-# code, and the tools that use them skip gracefully when they are absent -- so
-# `--all` is for the machine that runs conformance and benchmarks, not for one
-# that only needs the gate green.
+# The corpora used to be behind `--all`, on the argument that they are somebody
+# else's repositories and the tools that read them skip gracefully when absent.
+# That is true and it was the wrong default: the node profile is the surface
+# almost every measurement in this repo is taken against, so a bootstrap that
+# leaves it out produces a machine that builds and cannot measure. `--minimal`
+# is there for the case that genuinely only wants a green gate.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
 
-all=false
-[ "${1:-}" = "--all" ] && all=true
+# `--all` stays accepted and means what it always did, which is now the
+# default: it is in muscle memory and in the message this script prints.
+all=true
+[ "${1:-}" = "--minimal" ] && all=false
 
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 have() { [ -e "$1" ]; }
+
+# A shallow, blobless, sparse clone of somebody else's repository.
+#
+#   clone_sparse <path> <url> <branch-or-tag> <path>...
+#
+# Blobless and sparse because these are corpora: we want a few directories out
+# of a repository whose history is enormous, and `--filter=blob:none` fetches a
+# file's content only when something reads it. An empty branch takes the
+# remote's default.
+#
+# An existing clone is left where it is -- re-cloning node takes minutes and
+# the caller checks the tag itself -- but the sparse set is re-applied every
+# time, so adding a directory to the list is picked up without a re-clone.
+clone_sparse() {
+  path=$1 url=$2 branch=$3
+  shift 3
+  if have "$path/.git"; then
+    echo "  already cloned"
+  elif [ -n "$branch" ]; then
+    git clone --depth 1 --filter=blob:none --sparse --branch "$branch" "$url" "$path"
+  else
+    git clone --depth 1 --filter=blob:none --sparse "$url" "$path"
+  fi
+  (cd "$path" && git sparse-checkout set "$@")
+}
 
 # The node version, in one place.
 #
@@ -73,7 +102,7 @@ cargo build --release
 
 if [ "$all" = false ]; then
   say "done"
-  echo "  Optional corpora were skipped. Re-run with --all for:"
+  echo "  Corpora skipped by --minimal. Re-run without it for:"
   echo "    third_party/node               the Node compatibility profile and conformance"
   echo "    third_party/test262            the numeric conformance slice"
   echo "    third_party/are-we-fast-yet    the benchmark fidelity gate"
