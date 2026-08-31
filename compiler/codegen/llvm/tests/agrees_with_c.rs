@@ -430,3 +430,94 @@ int main(void) {
     assert!(!llvm.is_empty(), "the run produced nothing");
     assert_eq!(llvm, c, "the backends disagree about a string");
 }
+
+/// Erased values, which is where the ABI is.
+///
+/// `NtsValue` is a tag beside a union of a double, a bool and a pointer:
+/// sixteen bytes, and System V classifies them as two eightbytes. `clang -S
+/// -emit-llvm` prints `define { i32, i64 } @f(i32 %0, i64 %1)` -- two scalars
+/// in, a two-field struct out -- and the *second* eightbyte is `i64` rather
+/// than `double` because the union holds a pointer. That is the detail a
+/// careful reading gets wrong, which is why this was refused until clang was
+/// asked and why it is tested across a call boundary rather than within one.
+///
+/// The payload holds the union's first member, the `double`, so an integer is
+/// converted before it is stored -- the same conversion the C backend's
+/// `nts_value_of_number(x)` performs.
+#[test]
+fn the_two_backends_agree_about_erased_values() {
+    let source = r"
+// Crossing a call boundary in both directions, which is the ABI.
+function box(v: unknown): unknown {
+  return v;
+}
+
+export function throughACall(n: number): string {
+  const v: unknown = n;
+  const back = box(v);
+  return typeof back + String(typeof v);
+}
+
+export function eachKind(n: number): string {
+  const number1: unknown = n;
+  const flag: unknown = n > 0;
+  const text: unknown = 'held';
+  const nothing: unknown = undefined;
+  const absent: unknown = null;
+  return (
+    typeof box(number1) +
+    typeof box(flag) +
+    typeof box(text) +
+    typeof box(nothing) +
+    typeof box(absent)
+  );
+}
+
+export function readBack(n: number): number {
+  const v: unknown = n;
+  const w = box(v);
+  return typeof w === 'number' ? (w as number) * 3 : -1;
+}
+
+// Each absence carries its own tag, which is the whole reason a union of both
+// is erased rather than a pointer. Written as two bindings because a
+// conditional whose type is `null | undefined` and nothing else has no
+// representation at all -- a real refusal, and not the one being tested.
+export function absentIsNotNull(n: number): number {
+  const nothing: unknown = undefined;
+  const absent: unknown = null;
+  return (
+    (nothing === undefined ? 1 : 0) +
+    (absent === null ? 10 : 0) +
+    (nothing === absent ? 100 : 0) +
+    n * 0
+  );
+}
+";
+    let driver = r#"#include <stdio.h>
+NtsString *throughACall(double n);
+NtsString *eachKind(double n);
+double readBack(double n);
+double absentIsNotNull(double n);
+static void show(NtsString *s) {
+  for (unsigned i = 0; i < s->length; i++) putchar(nts_unit_fn(s, i));
+  putchar('\n');
+}
+int main(void) {
+  double xs[] = {0.0, 1.0, -1.0, 3.5, -0.0, 1e21, 0.0/0.0, 9007199254740993.0};
+  for (int i = 0; i < 8; i++) {
+    show(throughACall(xs[i]));
+    show(eachKind(xs[i]));
+    printf("%a %a\n", readBack(xs[i]), absentIsNotNull(xs[i]));
+  }
+  return 0;
+}
+"#;
+    let driver = format!("#include \"nts_runtime.h\"\n{driver}");
+    let Some((llvm, c)) = both_backends("erased", source, &driver) else {
+        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        return;
+    };
+    assert!(!llvm.is_empty(), "the run produced nothing");
+    assert_eq!(llvm, c, "the backends disagree about an erased value");
+}

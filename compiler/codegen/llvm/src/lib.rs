@@ -40,6 +40,8 @@
 //! managed is refused by name rather than half-emitted. A backend that emits
 //! *something* for every input is a backend nobody can trust the output of.
 
+pub mod signatures;
+
 use std::fmt::Write as _;
 
 use nts_core::hir::{BinOp, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId};
@@ -78,6 +80,10 @@ pub fn emit(program: &Program) -> Emitted {
     let _ = writeln!(text, "declare void @nts_retain(ptr)");
     let _ = writeln!(text, "declare void @nts_release(ptr)");
     let _ = writeln!(text, "declare ptr @nts_concat(ptr, ptr)");
+    let _ = writeln!(
+        text,
+        "declare zeroext i1 @nts_value_strict_eq(i32, i64, i32, i64)"
+    );
     let _ = writeln!(text, "declare zeroext i1 @nts_string_truthy(ptr)");
     let _ = writeln!(text, "declare zeroext i16 @nts_unit_fn(ptr, i32)");
     let _ = writeln!(text, "declare double @nts_str_char_code_at_fn(ptr, double)");
@@ -132,6 +138,26 @@ pub fn emit(program: &Program) -> Emitted {
         }
     }
     Emitted { text, diagnostics }
+}
+
+/// An erased value: the tag, and the union's eightbyte as an integer.
+const ERASED_TYPE: &str = "{ i32, i64 }";
+
+/// The tags, which are `typeof`'s answers in `typeof`'s order.
+///
+/// Read from the middle end rather than restated: `hir::tags` is where the
+/// order is decided, and the order is load-bearing -- `"object"` is the range
+/// test `tag >= OBJECT`, which is why `FUNCTION` sits below it.
+fn tag_of(ty: &HirType) -> Option<u32> {
+    use nts_core::hir::tags;
+    Some(match ty {
+        HirType::Bool => tags::BOOLEAN,
+        HirType::Float { .. } | HirType::Int { .. } => tags::NUMBER,
+        HirType::Managed(nts_core::hir::ManagedType::String) => tags::STRING,
+        HirType::Managed(_) => tags::OBJECT,
+        HirType::Void => tags::UNDEFINED,
+        _ => return None,
+    })
 }
 
 /// `NtsHeader`, as LLVM's own struct type: the same fields in the same order,
@@ -384,65 +410,43 @@ fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
         .collect()
 }
 
-/// One `declare` per runtime helper the program calls.
+/// One `declare` per runtime helper the program calls, from `signatures`.
 ///
-/// The signature is read off the *call site* -- the argument types the lowering
-/// chose and the result type the operation carries -- rather than from the C
-/// header, which this backend cannot read. That is sound for the scalars and
-/// pointers it renders, and it is exactly where it would stop being sound for
-/// `NtsValue`: a sixteen-byte struct by value is where a hand-derived signature
-/// and clang's part company, which is why an erased value is refused before it
-/// reaches here.
-///
-/// Two call sites that disagree about a helper's signature would emit two
-/// conflicting declarations, so the first is kept and the conflict is reported
-/// rather than written out -- a program that fails to assemble with a clear
-/// reason beats one that assembles into the wrong call.
+/// Read off the *call site* at first, which is sound only where the lowering's
+/// types and the runtime's already agree -- and they do not. `nts_tag_name`
+/// takes a `uint32_t` and the lowering hands it a double, because C converts
+/// implicitly at the call and the C backend never had to notice. The declared
+/// double went into an SSE register, the callee read an integer one, and
+/// `typeof v` answered "undefined" for a number. Found by the cross-backend
+/// test, which is the only thing that could have.
 fn externals(program: &Program) -> Vec<String> {
-    let mut seen: Vec<(String, String)> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    let mut lines = Vec::new();
     for func in &program.funcs {
         for op in &func.values {
             let OpKind::Call {
                 callee: Callee::External(target),
-                args,
                 ..
             } = &op.kind
             else {
                 continue;
             };
-            let Ok(returns) = ty_of(&op.ty, func) else {
+            if seen.iter().any(|name| name == target) {
+                continue;
+            }
+            let Some(known) = signatures::signature(target) else {
                 continue;
             };
-            let mut types = Vec::new();
-            let mut whole = true;
-            for arg in args {
-                match ty_of(&func.values[arg.0 as usize].ty, func) {
-                    Ok(ty) => types.push(format!(
-                        "{ty} {}",
-                        extension(&func.values[arg.0 as usize].ty)
-                    )),
-                    Err(_) => whole = false,
-                }
-            }
-            if !whole {
-                continue;
-            }
-            let line = format!(
-                "declare {}{returns} {}({})",
-                extension(&op.ty),
+            seen.push(target.clone());
+            lines.push(format!(
+                "declare {} {}({})",
+                known.returns,
                 symbol(target),
-                types
-                    .iter()
-                    .map(|ty| ty.trim_end().to_owned())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-            if !seen.iter().any(|(name, _)| name == target) {
-                seen.push((target.clone(), line));
-            }
+                known.params.join(", ")
+            ));
         }
     }
-    seen.into_iter().map(|(_, line)| line).collect()
+    lines
 }
 
 /// The LLVM type a value of this HIR type lives in.
@@ -464,10 +468,16 @@ fn ty_of(ty: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
         // kind since 17, and it is the same fact the C backend leans on when a
         // field's type has no layout: every managed value is a pointer.
         HirType::Managed(_) => "ptr",
-        // `NtsValue` is the one that is not. A sixteen-byte struct passed by
-        // value in seventeen runtime signatures, whose register classification
-        // is not something to hand-derive: the signatures have to come from
-        // clang. Named rather than guessed at.
+        // `NtsValue`: a tag beside a union of a double, a bool and a pointer.
+        //
+        // The *type* is easy and the **ABI** is not, which is why this was
+        // refused until clang was asked. `clang -S -emit-llvm` on a function
+        // taking one prints `define { i32, i64 } @f(i32 %0, i64 %1)`: System V
+        // classifies the sixteen bytes as two eightbytes, and the second is
+        // `i64` rather than `double` because the union holds a pointer. So an
+        // erased value is this aggregate inside a function and *two scalars*
+        // across a call, which `function` and the call arm below arrange.
+        HirType::Erased => ERASED_TYPE,
         other => {
             return Err(refuse(
                 func,
@@ -544,6 +554,9 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let returns = ty_of(&func.return_type, func)?;
     let mut params = Vec::new();
+    // An erased parameter arrives as two scalars and is put back together at
+    // the top of the entry block, which is what clang does for the same C.
+    let mut prologue: Vec<String> = Vec::new();
     for (at, param) in func.params.iter().enumerate() {
         let ty = ty_of(&param.ty, func)?;
         // A parameter's *value* is whichever op is `Param(at)`, which is how
@@ -556,7 +569,18 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
                 || format!("%unused{at}"),
                 |index| name(ValueId(u32::try_from(index).unwrap_or(0))),
             );
-        params.push(format!("{ty} {}{value}", extension(&param.ty)));
+        if param.ty == HirType::Erased {
+            params.push(format!("i32 {value}.tag"));
+            params.push(format!("i64 {value}.bits"));
+            prologue.push(format!(
+                "{value}.half = insertvalue {ERASED_TYPE} undef, i32 {value}.tag, 0"
+            ));
+            prologue.push(format!(
+                "{value} = insertvalue {ERASED_TYPE} {value}.half, i64 {value}.bits, 1"
+            ));
+        } else {
+            params.push(format!("{ty} {}{value}", extension(&param.ty)));
+        }
     }
     let linkage = if func.exported { "" } else { "internal " };
     let _ = writeln!(
@@ -570,6 +594,11 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     for (index, block) in func.blocks.iter().enumerate() {
         let id = BlockId(u32::try_from(index).unwrap_or(0));
         let _ = writeln!(out, "{}:", label(id));
+        if index == 0 {
+            for line in &prologue {
+                let _ = writeln!(out, "  {line}");
+            }
+        }
         // Block parameters become `phi`, one incoming per predecessor edge.
         for (slot, param) in block.params.iter().enumerate() {
             let ty = ty_of(&func.values[param.0 as usize].ty, func)?;
@@ -715,7 +744,20 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
         OpKind::ConstBool(flag) => {
             format!("{out} = add i1 0, {}", u8::from(*flag))
         }
-        // Two operators wear the `+` token and this is the other one: the
+        OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::TagOf { .. } => {
+            return tagging(func, value, &out);
+        }
+        // Before the general binary arm, because it *is* a binary and the
+        // general one would match it first -- and an `icmp` on a sixteen-byte
+        // aggregate is not an instruction.
+        OpKind::Binary {
+            op: BinOp::Eq | BinOp::Ne,
+            lhs,
+            ..
+        } if func.values[lhs.0 as usize].ty == HirType::Erased => {
+            return tagging(func, value, &out);
+        }
+        // Two operators wear the `+` token and this is the other one. The
         // lowering already decided which, from the result type, so there is
         // nothing to work out here.
         OpKind::Binary {
@@ -738,6 +780,47 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
             )
         }
         OpKind::Unary { op: un, operand } => unary(func, &out, *un, *operand)?,
+        // A representation change specialization decided on. The C backend
+        // spells it as a cast; LLVM makes the direction explicit, which is the
+        // same instruction and a better record of what was meant.
+        //
+        // Out-of-range float to integer is undefined in C and poison here --
+        // the same hazard by the same argument, and specialization only emits
+        // one where the interval analysis proved the value fits.
+        OpKind::Convert(operand) => {
+            let from = &func.values[operand.0 as usize].ty;
+            let to = &op.ty;
+            let instruction = conversion(from, to, func)?;
+            format!(
+                "{out} = {instruction} {} {} to {}",
+                ty_of(from, func)?,
+                name(*operand),
+                ty_of(to, func)?
+            )
+        }
+        OpKind::Call { .. } => return call(func, value, &out),
+        // A null pointer, which is what an absent reference is: the one spare
+        // value a pointer has, and the whole reason `T | null` costs nothing.
+        OpKind::ConstNull | OpKind::ConstUndefined if matches!(op.ty, HirType::Managed(_)) => {
+            format!("{out} = inttoptr i64 0 to ptr")
+        }
+        // Where there are *two* absences the value is erased and each has a tag
+        // of its own, which is the whole reason that union is not a pointer.
+        // The payload is zero rather than undefined: a program that reads it
+        // through a wrong narrowing then gets a zero rather than whatever was
+        // in the register, which is the same choice `nts_value_of_undefined`
+        // makes.
+        OpKind::ConstNull | OpKind::ConstUndefined if op.ty == HirType::Erased => {
+            let tag = if matches!(op.kind, OpKind::ConstNull) {
+                nts_core::hir::tags::NULL
+            } else {
+                nts_core::hir::tags::UNDEFINED
+            };
+            format!(
+                "{out}.half = insertvalue {ERASED_TYPE} undef, i32 {tag}, 0\n  \
+                 {out} = insertvalue {ERASED_TYPE} {out}.half, i64 0, 1"
+            )
+        }
         _ => return memory_operation(program, func, value, &out),
     })
 }
@@ -969,6 +1052,225 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
     })
 }
 
+/// Putting a value in a tagged one, taking it back out, and comparing two.
+///
+/// The whole of what a tag is *for*: `1 == true` and `[1] == 1` are questions
+/// only a tag can answer, and the runtime answers them. The payload eightbyte
+/// holds the union's first member, the `double`, so an integer is converted
+/// before it is stored -- the same conversion `nts_value_of_number(x)` makes.
+fn tagging(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
+    let op = &func.values[value.0 as usize];
+    let out = out.to_owned();
+    Ok(match &op.kind {
+        // Comparing two tagged values, which is the one thing carrying a tag is
+        // *for*: `1 == true` and `[1] == 1` are questions only a tag can
+        // answer, and the runtime answers them. Four scalars, because each
+        // sixteen-byte value is two.
+        OpKind::Binary {
+            op: bin @ (BinOp::Eq | BinOp::Ne),
+            lhs,
+            rhs,
+        } => {
+            let parts: Vec<String> = [lhs, rhs]
+                .iter()
+                .enumerate()
+                .flat_map(|(at, held)| {
+                    [
+                        format!("{out}.t{at} = extractvalue {ERASED_TYPE} {}, 0", name(**held)),
+                        format!("{out}.p{at} = extractvalue {ERASED_TYPE} {}, 1", name(**held)),
+                    ]
+                })
+                .collect();
+            let same = format!("{out}.eq");
+            let call = format!(
+                "{same} = call zeroext i1 @nts_value_strict_eq(i32 {out}.t0, i64 {out}.p0, \
+                 i32 {out}.t1, i64 {out}.p1)"
+            );
+            let answer = if matches!(bin, BinOp::Ne) {
+                format!("{out} = xor i1 {same}, true")
+            } else {
+                format!("{out} = add i1 {same}, 0")
+            };
+            format!("{}\n  {call}\n  {answer}", parts.join("\n  "))
+        }
+        // Putting a value in a tagged one. The payload eightbyte holds the
+        // union's first member, which is the `double` -- so an *integer* is
+        // converted before it is stored, exactly as the C backend's
+        // `nts_value_of_number(x)` converts it, and a bool and a pointer are
+        // widened to the same eightbyte.
+        OpKind::Erase { value } => {
+            let from = &func.values[value.0 as usize].ty;
+            let tag = tag_of(from)
+                .ok_or_else(|| refuse(func, &format!("erasing a value of type {from:?}")))?;
+            let bits = format!("{out}.bits");
+            let widen = payload_from(func, &out, &bits, from, *value)?;
+            format!(
+                "{widen}\n  {out}.half = insertvalue {ERASED_TYPE} undef, i32 {tag}, 0\n  \
+                 {out} = insertvalue {ERASED_TYPE} {out}.half, i64 {bits}, 1"
+            )
+        }
+        // Reading the payload back, at the type the checker narrowed to.
+        // Unchecked by construction, exactly as the C backend's union read is:
+        // the licence comes from the narrowing and from nothing else.
+        OpKind::Unerase { value } => {
+            let bits = format!("{out}.bits");
+            let read = format!("{bits} = extractvalue {ERASED_TYPE} {}, 1", name(*value));
+            let narrow = payload_into(func, &out, &bits, &op.ty)?;
+            format!("{read}\n  {narrow}")
+        }
+        OpKind::TagOf { value } => {
+            format!("{out} = extractvalue {ERASED_TYPE} {}, 0", name(*value))
+        }
+        other => {
+            return Err(refuse(
+                func,
+                &format!("the operation {other:?}, which reads no tag"),
+            ));
+        }
+    })
+}
+
+/// A call, direct or into the runtime.
+///
+/// Two things happen here that C does silently. An erased argument becomes
+/// *two* scalars, because that is how the platform passes a sixteen-byte
+/// struct. And an argument whose type is not the one the runtime declares is
+/// converted -- C does that at the call and says nothing, which is how
+/// `nts_tag_name(uint32_t)` came to be handed a double.
+fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
+    let op = &func.values[value.0 as usize];
+    let out = out.to_owned();
+    Ok(match &op.kind {
+        OpKind::Call { callee, args, .. } => {
+            let returns = ty_of(&op.ty, func)?;
+            let target = match callee {
+                Callee::Direct(target) | Callee::External(target) => target,
+                // A dispatch through a method table. It needs the table, which
+                // needs a descriptor, which is the next thing to build.
+                Callee::Virtual { .. } | Callee::Closure { .. } => {
+                    return Err(refuse(func, "a dispatched call, which needs a method table"));
+                }
+            };
+            let mut rendered = Vec::new();
+            let mut before: Vec<String> = Vec::new();
+            for arg in args {
+                let arg_ty = &func.values[arg.0 as usize].ty;
+                // Two scalars, because that is how the platform passes a
+                // sixteen-byte struct and how clang emits the same call.
+                if *arg_ty == HirType::Erased {
+                    let tag = format!("{}.a{}", out, arg.0);
+                    let bits = format!("{}.b{}", out, arg.0);
+                    before.push(format!(
+                        "{tag} = extractvalue {ERASED_TYPE} {}, 0",
+                        name(*arg)
+                    ));
+                    before.push(format!(
+                        "{bits} = extractvalue {ERASED_TYPE} {}, 1",
+                        name(*arg)
+                    ));
+                    rendered.push(format!("i32 {tag}"));
+                    rendered.push(format!("i64 {bits}"));
+                    continue;
+                }
+                let ty = ty_of(arg_ty, func)?;
+                // What the runtime actually declares, where it declares one.
+                // C converts at the call and says nothing; here the conversion
+                // has to be written down, which is the better of the two.
+                let wanted = match callee {
+                    Callee::External(target) => signatures::signature(target)
+                        .and_then(|known| known.params.get(rendered.len()))
+                        .map(|spec| spec.split_whitespace().next().unwrap_or(spec)),
+                    _ => None,
+                };
+                match wanted {
+                    Some(target_ty) if target_ty != ty => {
+                        let at = format!("{out}.c{}", arg.0);
+                        before.push(converted(&at, ty, target_ty, &name(*arg), func)?);
+                        rendered.push(format!("{target_ty} {at}"));
+                    }
+                    _ => rendered.push(format!("{ty} {}{}", extension(arg_ty), name(*arg))),
+                }
+            }
+            let call = format!(
+                "call {}{returns} {}({})",
+                extension(&op.ty),
+                symbol(target),
+                rendered.join(", ")
+            );
+            let call = if returns == "void" {
+                call
+            } else {
+                format!("{out} = {call}")
+            };
+            if before.is_empty() {
+                call
+            } else {
+                before.push(call);
+                before.join("\n  ")
+            }
+        }
+        other => {
+            return Err(refuse(func, &format!("the operation {other:?}, which is not a call")));
+        }
+    })
+}
+
+/// A concrete value, widened into the payload eightbyte.
+///
+/// The union's first member is the `double`, so an integer is converted to one
+/// before its bits are stored -- the same conversion `nts_value_of_number(x)`
+/// performs when C passes it an `int`. A bool and a pointer widen directly.
+fn payload_from(
+    func: &Func,
+    out: &str,
+    bits: &str,
+    from: &HirType,
+    value: ValueId,
+) -> Result<String, Diagnostic> {
+    Ok(match from {
+        HirType::Float { .. } => format!("{bits} = bitcast double {} to i64", name(value)),
+        HirType::Int { signed, .. } => {
+            let wide = format!("{out}.d");
+            let widen = if *signed { "sitofp" } else { "uitofp" };
+            format!(
+                "{wide} = {widen} {} {} to double\n  {bits} = bitcast double {wide} to i64",
+                ty_of(from, func)?,
+                name(value)
+            )
+        }
+        HirType::Bool => format!("{bits} = zext i1 {} to i64", name(value)),
+        HirType::Managed(_) => format!("{bits} = ptrtoint ptr {} to i64", name(value)),
+        other => return Err(refuse(func, &format!("erasing a value of type {other:?}"))),
+    })
+}
+
+/// The payload eightbyte, read back at the type the checker narrowed to.
+///
+/// Unchecked by construction, exactly as the C backend's union read is: the
+/// licence comes from the narrowing and from nothing else.
+fn payload_into(
+    func: &Func,
+    out: &str,
+    bits: &str,
+    want: &HirType,
+) -> Result<String, Diagnostic> {
+    Ok(match want {
+        HirType::Float { .. } => format!("{out} = bitcast i64 {bits} to double"),
+        HirType::Int { signed, .. } => {
+            let wide = format!("{out}.d");
+            let narrow = if *signed { "fptosi" } else { "fptoui" };
+            format!(
+                "{wide} = bitcast i64 {bits} to double\n  \
+                 {out} = {narrow} double {wide} to {}",
+                ty_of(want, func)?
+            )
+        }
+        HirType::Bool => format!("{out} = trunc i64 {bits} to i1"),
+        HirType::Managed(_) => format!("{out} = inttoptr i64 {bits} to ptr"),
+        other => return Err(refuse(func, &format!("reading back a {other:?}"))),
+    })
+}
+
 /// The operations that read or write memory.
 ///
 /// Split from the rest because this is the half of the backend that depends on
@@ -1037,60 +1339,6 @@ fn memory_operation(
                 name(*value)
             )
         }
-        // A representation change specialization decided on. The C backend
-        // spells it as a cast; LLVM makes the direction explicit, which is the
-        // same instruction and a better record of what was meant.
-        //
-        // Out-of-range float to integer is undefined in C and poison here --
-        // the same hazard by the same argument, and specialization only emits
-        // one where the interval analysis proved the value fits.
-        OpKind::Convert(operand) => {
-            let from = &func.values[operand.0 as usize].ty;
-            let to = &op.ty;
-            let instruction = conversion(from, to, func)?;
-            format!(
-                "{out} = {instruction} {} {} to {}",
-                ty_of(from, func)?,
-                name(*operand),
-                ty_of(to, func)?
-            )
-        }
-        OpKind::Call { callee, args, .. } => {
-            let returns = ty_of(&op.ty, func)?;
-            let target = match callee {
-                Callee::Direct(target) | Callee::External(target) => target,
-                // A dispatch through a method table. It needs the table, which
-                // needs a descriptor, which is the next thing to build.
-                Callee::Virtual { .. } | Callee::Closure { .. } => {
-                    return Err(refuse(func, "a dispatched call, which needs a method table"));
-                }
-            };
-            let mut rendered = Vec::new();
-            for arg in args {
-                let ty = ty_of(&func.values[arg.0 as usize].ty, func)?;
-                rendered.push(format!(
-                    "{ty} {}{}",
-                    extension(&func.values[arg.0 as usize].ty),
-                    name(*arg)
-                ));
-            }
-            let call = format!(
-                "call {}{returns} {}({})",
-                extension(&op.ty),
-                symbol(target),
-                rendered.join(", ")
-            );
-            if returns == "void" {
-                call
-            } else {
-                format!("{out} = {call}")
-            }
-        }
-        // A null pointer, which is what an absent reference is: the one spare
-        // value a pointer has, and the whole reason `T | null` costs nothing.
-        OpKind::ConstNull | OpKind::ConstUndefined if matches!(op.ty, HirType::Managed(_)) => {
-            format!("{out} = inttoptr i64 0 to ptr")
-        }
         // Everything that touches memory is next door: it is the half of this
         // backend that depends on the layout engine, and keeping it together
         // is what makes that dependency visible.
@@ -1156,6 +1404,36 @@ fn binary(op: BinOp, float: bool, func: &Func) -> Result<&'static str, Diagnosti
             ));
         }
     })
+}
+
+/// One argument, at the type the runtime declares for it.
+///
+/// The conversions C performs silently at a call, written out. Only the pairs
+/// that actually occur: a tag handed over as a double and wanted as a
+/// `uint32_t`, a length the other way, an index narrowed. Anything else is
+/// refused, because a silent conversion is what caused this.
+fn converted(
+    into: &str,
+    have: &str,
+    want: &str,
+    from: &str,
+    func: &Func,
+) -> Result<String, Diagnostic> {
+    let instruction = match (have, want) {
+        ("double", "i32" | "i64" | "i16" | "i8") => "fptoui",
+        ("i32" | "i64" | "i16" | "i8", "double") => "uitofp",
+        ("i64", "i32") => "trunc",
+        // A narrower unsigned value into a wider slot, `i1` included: a bool is
+        // one unsigned bit and widens the way an unsigned integer does.
+        ("i32" | "i1", "i64") | ("i1", "i32") => "zext",
+        _ => {
+            return Err(refuse(
+                func,
+                &format!("an argument of {have} where the runtime declares {want}"),
+            ));
+        }
+    };
+    Ok(format!("{into} = {instruction} {have} {from} to {want}"))
 }
 
 /// The instruction that turns one representation into another.
