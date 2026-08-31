@@ -1,23 +1,24 @@
-// `typeof` on a value whose type is not a single primitive.
+// `typeof` on a value whose answer is not fixed by how it is stored.
 //
-// The counterpart to `examples/typeof`, and the restriction that makes folding
-// correct there. `typeof n` where `n: number` is a fact about the *type*, so it
-// folds to `"number"` and the operand is never read. An object is not one
-// primitive, so the answer is a property of the value and needs a runtime tag
-// this compiler has not decided on.
+// Most answers are. `typeof n` where `n: number` is a fact about the *type*.
+// `typeof p` where `p` is a class instance is a fact about the *representation*
+// -- a reference to an object is "object", a closure is "function" -- and both
+// fold with the operand never read.
 //
-// An object local rather than a `unknown` or a union parameter: both of those
-// are refused at the *signature*, before anything looks at the body, so they
-// would pin the wrong refusal. Two earlier drafts of this fixture did exactly
-// that and the test caught them.
+// A type that admits an *absence* is the one that does not. `string | null` is
+// a single pointer, and which of "string" and "object" it answers depends on
+// what the pointer holds. That is a runtime question, and reading a tag is how
+// it would be answered -- except a pointer has no tag, which is the whole
+// reason it is one word instead of two.
 //
 // Refused, which is why it is not an example: node answers and the compiled
 // program does not exist.
-class Point {
-  x = 1;
+
+function orNothing(n: number): string | null {
+  return n > 0 ? "here" : null;
 }
 
-export function ofObject(n: number): number {
-  const p = new Point();
-  return typeof p === "object" ? n : 0;
+export function ofNullable(n: number): number {
+  const v = orNothing(n);
+  return typeof v === "string" ? n : 0;
 }

@@ -2130,6 +2130,7 @@ fn spelling(kind: u16) -> String {
         syntax::QUESTION_QUESTION_TOKEN => "??",
         syntax::AMPERSAND_AMPERSAND_TOKEN => "&&",
         syntax::BAR_BAR_TOKEN => "||",
+        syntax::IN_KEYWORD => "in",
         syntax::INSTANCEOF_KEYWORD => "instanceof",
         _ => return format!("of kind {kind}"),
     };
@@ -4440,6 +4441,28 @@ impl<'a> FuncBuilder<'a> {
         // lowering, and doing it here would put the tag table in two places.
         if answer.is_err() {
             let value = self.lower_expression(operand)?;
+            // A representation `typeof` can answer from, with no tag to read.
+            //
+            // A class instance is `"object"`, a closure is `"function"`, an
+            // array is `"object"` -- the *representation* says which, and it
+            // says so at compile time. This used to refuse anything the checker
+            // did not call a single primitive, which meant refusing `typeof obj
+            // === "object"` on an object.
+            //
+            // Only where the type admits no absence. A `T | undefined` is one
+            // pointer whose answer differs by what it holds -- `"object"` or
+            // `"undefined"` -- and that is a runtime question this cannot fold.
+            if self.values[value.0 as usize].ty != HirType::Erased
+                && self.absences_of(operand).is_some_and(|absent| absent.is_empty())
+                && let Some(spelling) = spelling_of(&self.values[value.0 as usize].ty)
+            {
+                let origin = self.origin(id);
+                return Ok(self.push(
+                    OpKind::ConstString(spelling.to_owned()),
+                    HirType::Managed(ManagedType::String),
+                    origin,
+                ));
+            }
             if self.values[value.0 as usize].ty == HirType::Erased {
                 let origin = self.origin(id);
                 let tag = self.push(
@@ -12929,6 +12952,25 @@ const fn strict_operator(token: u16) -> bool {
         token,
         syntax::EQUALS_EQUALS_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
     )
+}
+
+/// What `typeof` answers for a representation, where the representation
+/// decides it.
+///
+/// `None` for a value whose answer is not fixed by how it is stored: an erased
+/// one carries a tag and is read at run time, and `void`/`never` have no value
+/// to ask about.
+const fn spelling_of(ty: &HirType) -> Option<&'static str> {
+    Some(match ty {
+        HirType::Bool => "boolean",
+        HirType::Int { .. } | HirType::Float { .. } => "number",
+        HirType::BigInt => "bigint",
+        HirType::Managed(ManagedType::String) => "string",
+        // A closure is the one reference `typeof` does not call an object.
+        HirType::Managed(ManagedType::Object(id)) if super::is_closure_type(*id) => "function",
+        HirType::Managed(_) => "object",
+        HirType::Erased | HirType::Void | HirType::Never => return None,
+    })
 }
 
 /// The bitwise operator a token spells, if it spells one.

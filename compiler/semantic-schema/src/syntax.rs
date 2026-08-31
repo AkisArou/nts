@@ -130,6 +130,7 @@ pub const YIELD_EXPRESSION: u16 = 230;
 /// against a real program, because a wrong constant here would silently
 /// reclassify every type test as something else.
 pub const TYPE_OF_EXPRESSION: u16 = 222;
+pub const IN_KEYWORD: u16 = 102;
 pub const INSTANCEOF_KEYWORD: u16 = 104;
 pub const AWAIT_KEYWORD: u16 = 134;
 /// `["name"]` in a member position.

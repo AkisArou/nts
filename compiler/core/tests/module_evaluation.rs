@@ -333,18 +333,24 @@ fn a_yield_is_refused_by_name() {
     );
 }
 
-/// `typeof` on an erased value is refused, and says why.
+/// `typeof` on a value whose answer its representation does not fix.
 ///
-/// The counterpart to `examples/typeof`, and the restriction that makes the
-/// fold there correct. `typeof n` where `n: number` is a fact about the type,
-/// so it is a constant. `typeof value` where `value: unknown` is a fact about
-/// the *value*, and answering it needs a runtime tag -- which is the
-/// representation question `docs/records/0019` measures and does not decide.
+/// The counterpart to `examples/absent`, and the restriction that makes the
+/// folds there correct. `typeof n` where `n: number` is a fact about the type;
+/// `typeof p` where `p` is a class instance is a fact about the representation,
+/// since a reference to an object is "object" and a closure is "function". Both
+/// fold and neither reads the operand.
 ///
-/// A test on the refusal rather than only on the fold, because the fold is
+/// A type admitting an *absence* is the case that does not fold. `string |
+/// null` is one pointer, and which of "string" and "object" it answers depends
+/// on what the pointer holds -- a runtime question, and a pointer carries no
+/// tag to answer it with, which is the whole reason it is one word rather than
+/// two.
+///
+/// A test on the refusal rather than only on the fold, because the folds are
 /// only sound while this stays refused.
 #[test]
-fn typeof_on_an_erased_value_is_refused() {
+fn typeof_on_a_value_its_representation_does_not_fix() {
     let Some(lowered) = lower_at("tests/programs/typeof-erased", true) else {
         return;
     };

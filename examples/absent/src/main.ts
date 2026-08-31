@@ -197,3 +197,48 @@ export function throughAConditional(n: number): number {
     (typeof w === "object" ? 16 : 0)
   );
 }
+
+// `typeof` answers from the *representation* where the representation decides
+// it. A class instance is "object", a closure is "function", an array is
+// "object" — none of which needs a tag read, and none of which the checker
+// calls a single primitive, which is why they were all refused.
+class Boxed {
+  v: number;
+  constructor(v: number) {
+    this.v = v;
+  }
+}
+
+export function typeofFromTheRepresentation(n: number): string {
+  const instance = new Boxed(n);
+  const closure = (x: number): number => x + n;
+  const list = [n, n + 1];
+  const text = n > 0 ? "a" : "b";
+  const big = 2n;
+  return (
+    typeof instance +
+    "|" +
+    typeof closure +
+    "|" +
+    typeof list +
+    "|" +
+    typeof text +
+    "|" +
+    typeof big +
+    "|" +
+    typeof n
+  );
+}
+
+// ...and the comparisons fold to a tag test or, here, to nothing at all.
+export function typeofDecided(n: number): number {
+  const instance = new Boxed(n);
+  const closure = (x: number): number => x + n;
+  return (
+    (typeof instance === "object" ? 1 : 0) +
+    (typeof instance === "function" ? 2 : 0) +
+    (typeof closure === "function" ? 4 : 0) +
+    (typeof closure === "object" ? 8 : 0) +
+    n * 0
+  );
+}

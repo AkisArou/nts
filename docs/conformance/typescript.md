@@ -54,10 +54,11 @@ a backlog.
 | ✅ | comparison, equality | `< > <= >= === !==`, and `==`/`!=` where nothing coerces |
 | ◐ | `==` that **coerces** | refused — see below |
 | ✅ | logical | `&& \|\| !` |
+| ✗ | `in` | needs a decision about an optional property, whose slot exists here and not in JavaScript |
 | ✅ | unary | `+x -x`, `++ --` prefix and postfix |
 | ✅ | compound assignment | `+= -= *= /= %= **= &= \|= ^= <<= >>= >>>=` |
 | ✅ | conditional | `c ? a : b`, nested |
-| ✅ | `typeof` | folded on a known primitive; a tag read on an erased value |
+| ✅ | `typeof` | folded from the representation; a tag read on an erased value |
 | ✅ | template literals | including interpolation |
 
 ### `==` between types that differ
