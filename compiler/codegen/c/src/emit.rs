@@ -1289,6 +1289,38 @@ fn emit_object_types(
             writer.line(origin, format!("    {ty} {};", c_identifier(&field.name)));
         }
         writer.line(origin, "};");
+        // What this compiler believes about the struct clang just laid out.
+        //
+        // Descriptors take `offsetof` on the principle that whoever laid the
+        // struct out says where its fields are. That is right while C owns the
+        // layout and unavailable the moment a second backend does not have an
+        // `offsetof` to ask -- so the placement is computed in
+        // `nts_codegen_common::layout` and this is where clang checks it, on
+        // every build, per field.
+        //
+        // The claim and the oracle, side by side, until the claim has gone long
+        // enough without being wrong to become the authority. A `_Static_assert`
+        // costs nothing at run time and fails at compile time with the field's
+        // name in the message.
+        if let Some(placed) = nts_codegen_common::layout::place(&layout.fields) {
+            writer.line(
+                origin,
+                format!(
+                    "_Static_assert(sizeof({name}) == {}u, \"{name} is not the size nts computed\");",
+                    placed.size
+                ),
+            );
+            for (field, offset) in layout.fields.iter().zip(&placed.offsets) {
+                writer.line(
+                    origin,
+                    format!(
+                        "_Static_assert(offsetof({name}, {}) == {offset}u, \"{name}.{} is not where nts computed\");",
+                        c_identifier(&field.name),
+                        field.name
+                    ),
+                );
+            }
+        }
         writer.blank(origin);
     }
 }

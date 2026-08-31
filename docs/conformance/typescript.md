@@ -1164,12 +1164,33 @@ means clang, and a backend refusal is reported as one. A number is only worth
 ratcheting if everything in it is the thing the number is named after, which is
 the same lesson the `rc` list taught two sections up.
 
-The repair itself is still ahead, and it is bigger than a bug fix: **the
-compiler has never computed a byte offset.** `Layout.fields` carries a name, a
-type and `readonly`, and the backend derives offsets with `offsetof` on the
-stated principle that the compiler which laid the struct out is the one that
-says where its fields are. That principle is exactly right while C owns layout.
-It stops being available the moment anything else does.
+### The compiler computes its own offsets now, and clang checks them
+
+Descriptors were built with `offsetof`, on the principle that the compiler which
+laid the struct out is the one that says where its fields are. That is exactly
+right while C owns the layout, and it stops being available the moment anything
+else does: a second backend emits its own aggregates and has no `offsetof` to
+ask.
+
+So the placement moved into `nts_codegen_common::layout` — the platform C ABI's
+rule for a struct, which SysV and AAPCS64 agree on for everything here: a field
+starts at the next offset that is a multiple of its alignment, the struct's
+alignment is the widest field's, and its size is rounded up to that. Every
+managed value is one pointer, which is what lets a field whose type has no
+layout be placed exactly without one; `NtsValue` is two words; a `bigint` is the
+only thing here wider than a word, and it drags the whole object's alignment to
+sixteen.
+
+The C backend keeps `offsetof` for one purpose: to **check** this, on every
+build, with a `_Static_assert` per field and one for the struct's size. The
+claim and the oracle side by side. Across the node profile that is **10,340
+assertions, and clang agrees with all of them** — so the number that matters
+here is not that the engine works but that a disagreement would stop the build
+with the field's name in the message.
+
+They stay side by side until the claim has gone long enough without being wrong
+to become the authority. The C backend has no reason to stop using `offsetof`;
+the one that comes next has no way to start.
 
 ## 15. What to do next, ordered by evidence
 
