@@ -31,9 +31,13 @@ fn tsgo() -> Option<String> {
 }
 
 /// Lower a fixture, render it both ways, build both, run both, compare.
-fn both_backends(source: &str, driver: &str) -> Option<(String, String)> {
+fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, String)> {
     let tsgo = tsgo()?;
-    let dir = std::env::temp_dir().join(format!("nts-llvm-{}", std::process::id()));
+    // Per *case*, not per process: `cargo test` runs these in parallel and one
+    // directory keyed on the pid means two tests writing each other's
+    // `program.ll`. Which is how this was found -- the test that had passed
+    // started failing the moment a second one existed.
+    let dir = std::env::temp_dir().join(format!("nts-llvm-{}-{case}", std::process::id()));
     let src = dir.join("src");
     std::fs::create_dir_all(&src).expect("a work directory");
     std::fs::write(src.join("main.ts"), source).expect("write the program");
@@ -81,8 +85,10 @@ fn both_backends(source: &str, driver: &str) -> Option<(String, String)> {
         .expect("write the runtime");
     std::fs::write(dir.join("drive.c"), driver).expect("write the driver");
 
-    let build = |args: &[&str], out: &str| -> bool {
-        std::process::Command::new("clang")
+    // Reporting rather than a bool: a check that fails without saying why is
+    // the thing this whole file exists to stop happening.
+    let build = |args: &[&str], out: &str| -> Result<(), String> {
+        let result = std::process::Command::new("clang")
             .args(["-w", "-O1"])
             .args(args)
             .arg("-I")
@@ -92,7 +98,12 @@ fn both_backends(source: &str, driver: &str) -> Option<(String, String)> {
             .arg("-o")
             .arg(dir.join(out))
             .output()
-            .is_ok_and(|out| out.status.success())
+            .map_err(|error| error.to_string())?;
+        if result.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&result.stderr).into_owned())
+        }
     };
     let ll = dir.join("program.ll");
     let object = dir.join("program.o");
@@ -109,14 +120,12 @@ fn both_backends(source: &str, driver: &str) -> Option<(String, String)> {
     // only place the C-to-LLVM ABI is exercised.
     let program_c = dir.join("program.c");
     let runtime_c = dir.join("nts_runtime.c");
-    assert!(
-        build(&[object.to_str()?, runtime_c.to_str()?], "run_llvm"),
-        "linking the IR against the runtime failed"
-    );
-    assert!(
-        build(&[program_c.to_str()?, runtime_c.to_str()?], "run_c"),
-        "building the C failed"
-    );
+    if let Err(problem) = build(&[object.to_str()?, runtime_c.to_str()?], "run_llvm") {
+        panic!("linking the IR against the runtime failed:\n{problem}");
+    }
+    if let Err(problem) = build(&[program_c.to_str()?, runtime_c.to_str()?], "run_c") {
+        panic!("building the C failed:\n{problem}");
+    }
 
     let read = |name: &str| -> String {
         let out = std::process::Command::new(dir.join(name))
@@ -168,7 +177,7 @@ int main(void) {{
 }}
 "#
     );
-    let Some((llvm, c)) = both_backends(source, &driver) else {
+    let Some((llvm, c)) = both_backends("scalar", source, &driver) else {
         eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
         return;
     };
@@ -176,5 +185,82 @@ int main(void) {{
     assert_eq!(
         llvm, c,
         "the two backends disagree, which is a backend bug by construction"
+    );
+}
+
+/// Fields, at offsets nothing in the LLVM output could have got from clang.
+///
+/// This is what makes `nts_codegen_common::layout` load-bearing rather than
+/// merely checked. The C backend writes `p->x` and lets clang place it; the IR
+/// has no `p->x`, only `getelementptr i8, ptr %p, i64 24`, and the 24 came from
+/// the layout engine. If the two disagreed about an offset they would read
+/// different bytes of the same object, which is what this asks.
+///
+/// The driver hands over a **zeroed buffer** and never names a field itself.
+/// It did, at first, and the struct it wrote out by hand was wrong: `y` is an
+/// `int32_t` in the emitted layout, not a `double`, because specialization
+/// narrows a field like any other value. A driver that assumes `number` means
+/// `double` is asserting something this compiler does not promise -- so it
+/// asserts nothing, and every field is reached through the program.
+#[test]
+fn the_two_backends_agree_about_where_a_field_is() {
+    let source = r"
+class Point {
+  x: number;
+  y: number;
+  flag: boolean;
+
+  constructor(x: number, y: number, flag: boolean) {
+    this.x = x;
+    this.y = y;
+    this.flag = flag;
+  }
+}
+
+export function fill(p: Point, x: number, y: number, flag: boolean): number {
+  p.x = x;
+  p.y = y;
+  p.flag = flag;
+  return p.x;
+}
+export function readX(p: Point): number { return p.x; }
+export function readY(p: Point): number { return p.y; }
+export function readFlag(p: Point): number { return p.flag ? 1 : 0; }
+export function bump(p: Point, by: number): number {
+  p.x = p.x + by;
+  return p.x;
+}
+";
+    let driver = r#"#include <stdio.h>
+#include <stdbool.h>
+#include "nts_runtime.h"
+/* Room for any object this fixture can produce, zeroed and over-aligned. The
+   driver never names a field: every one is written and read through the
+   program, so nothing here assumes a layout. */
+static _Alignas(16) unsigned char storage[128];
+double fill(void *p, double x, double y, bool flag);
+double readX(void *p);
+double readY(void *p);
+double readFlag(void *p);
+double bump(void *p, double by);
+int main(void) {
+  double xs[] = {0.0, 1.0, -1.0, 3.5, -0.0, 1e21, 1.0/0.0, 0.0/0.0, 9007199254740993.0};
+  for (int i = 0; i < 9; i++) {
+    for (int k = 0; k < 128; k++) storage[k] = 0;
+    printf("%a", fill(storage, xs[i], xs[(i + 3) % 9], i % 2 == 0));
+    printf(" %a %a %a", readX(storage), readY(storage), readFlag(storage));
+    printf(" %a\n", bump(storage, xs[(i + 5) % 9]));
+  }
+  return 0;
+}
+"#;
+    let Some((llvm, c)) = both_backends("fields", source, driver) else {
+        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        return;
+    };
+    assert!(!llvm.is_empty(), "the run produced nothing");
+    assert_eq!(
+        llvm, c,
+        "the backends read different bytes of the same object"
     );
 }

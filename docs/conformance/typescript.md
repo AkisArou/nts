@@ -578,9 +578,32 @@ Two things the move has already taught:
   `module#init` — chosen because TypeScript cannot produce one. LLVM identifiers
   cannot hold it unquoted, so the quoted form is where that is absorbed.
 
+Objects are rendered too, and that is where the layout engine stops being
+merely checked and starts being load-bearing. The C backend writes `p->x` and
+lets clang place it; the IR has no `p->x`, only `getelementptr i8, ptr %p, i64
+24`, and the 24 came from `place()`. If the two disagreed about an offset they
+would read different bytes of the same object.
+
 The test drives both backends over the differential's own hostile pool — both
 zeroes, both infinities, a NaN, past 2^53, the 1e21 boundary — with the runtime
 linked into both, which is also the only place the C-to-LLVM ABI is exercised.
+
+Two things that test taught, and both are about not assuming:
+
+- **A field's representation is specialized.** The driver first wrote the struct
+  out by hand and got it wrong: `y: number` is an `int32_t` in the emitted
+  layout, because specialization narrows a field like any other value. The
+  driver names no field now — every one is written and read through the program.
+- **The ABI is taken from clang, not derived.** `clang -S -emit-llvm` on the
+  same declarations prints `zeroext i1` for a `_Bool`, `signext i8` for an
+  `int8_t`, and nothing for anything word-sized. A bare `i1` happens to work on
+  x86-64 because both ends use the low bit of a register; "happens to work" is
+  not an ABI, and the runtime this has to agree with is compiled by clang. The
+  extension attributes are copied from what clang prints.
+
+`NtsValue` by value is the part of the ABI that is *not* settled — a sixteen-byte
+struct in seventeen runtime signatures — and it is refused rather than guessed
+at until its signatures come from clang the same way.
 
 ### `this` is a free variable of an arrow, and was the only one not treated as one
 

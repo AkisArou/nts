@@ -73,7 +73,7 @@ pub fn emit(program: &Program) -> Emitted {
     let _ = writeln!(text, "declare i32 @nts_to_int32_fn(double)");
     let _ = writeln!(text, "declare i32 @nts_to_uint32_fn(double)");
     for func in &program.funcs {
-        match function(func) {
+        match function(program, func) {
             Ok(rendered) => {
                 let _ = writeln!(text, "\n{rendered}");
             }
@@ -94,11 +94,14 @@ fn ty_of(ty: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
         HirType::Int { bits: 16, .. } => "i16",
         HirType::Int { bits: 32, .. } => "i32",
         HirType::Int { bits: 64, .. } => "i64",
-        // Named rather than approximated. A managed value is a pointer and
-        // would render trivially; what it needs is the *runtime*, whose
-        // signatures have to come from clang rather than be hand-derived —
-        // `NtsValue` is a sixteen-byte struct passed by value in seventeen
-        // places and its register classification is not something to guess at.
+        // One opaque pointer, whatever it points at. LLVM has had no other
+        // kind since 17, and it is the same fact the C backend leans on when a
+        // field's type has no layout: every managed value is a pointer.
+        HirType::Managed(_) => "ptr",
+        // `NtsValue` is the one that is not. A sixteen-byte struct passed by
+        // value in seventeen runtime signatures, whose register classification
+        // is not something to hand-derive: the signatures have to come from
+        // clang. Named rather than guessed at.
         other => {
             return Err(refuse(
                 func,
@@ -106,6 +109,36 @@ fn ty_of(ty: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
             ));
         }
     })
+}
+
+/// The extension attribute a value of this type carries across a call.
+///
+/// Taken from clang rather than derived. A `_Bool` is passed `zeroext`, an
+/// `int8_t` `signext`, a `uint16_t` `zeroext`, and anything word-sized or
+/// wider nothing at all -- which is what `clang -S -emit-llvm` prints for the
+/// same declarations, and the only way to be sure is to look.
+///
+/// On x86-64 a bare `i1` happens to work, because both ends use the low bit of
+/// a register. "Happens to work" is not an ABI: the runtime is compiled by
+/// clang and this has to agree with it on every target, not on the one it was
+/// written on. This is the whole of the ABI story for the scalar slice --
+/// `NtsValue` by value is the part that is not, and it is refused rather than
+/// guessed at.
+fn extension(ty: &HirType) -> &'static str {
+    match ty {
+        HirType::Int {
+            bits: 8 | 16,
+            signed: true,
+        } => "signext ",
+        // A `_Bool` and an unsigned narrow integer are the same case: neither
+        // has a sign bit to carry into the upper half of the register.
+        HirType::Bool
+        | HirType::Int {
+            bits: 8 | 16,
+            signed: false,
+        } => "zeroext ",
+        _ => "",
+    }
 }
 
 fn refuse(func: &Func, what: &str) -> Diagnostic {
@@ -147,7 +180,7 @@ fn symbol(raw: &str) -> String {
     }
 }
 
-fn function(func: &Func) -> Result<String, Diagnostic> {
+fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let returns = ty_of(&func.return_type, func)?;
     let mut params = Vec::new();
@@ -163,12 +196,13 @@ fn function(func: &Func) -> Result<String, Diagnostic> {
                 || format!("%unused{at}"),
                 |index| name(ValueId(u32::try_from(index).unwrap_or(0))),
             );
-        params.push(format!("{ty} {value}"));
+        params.push(format!("{ty} {}{value}", extension(&param.ty)));
     }
     let linkage = if func.exported { "" } else { "internal " };
     let _ = writeln!(
         out,
-        "define {linkage}{returns} {}({}) {{",
+        "define {linkage}{}{returns} {}({}) {{",
+        extension(&func.return_type),
         symbol(&func.name),
         params.join(", ")
     );
@@ -194,7 +228,7 @@ fn function(func: &Func) -> Result<String, Diagnostic> {
             );
         }
         for value in &block.ops {
-            let line = operation(func, *value)?;
+            let line = operation(program, func, *value)?;
             if !line.is_empty() {
                 let _ = writeln!(out, "  {line}");
             }
@@ -262,7 +296,38 @@ fn terminator(func: &Func, term: &Terminator) -> Result<String, Diagnostic> {
     })
 }
 
-fn operation(func: &Func, value: ValueId) -> Result<String, Diagnostic> {
+/// Where a field sits, and what it holds.
+///
+/// The offset comes from the layout engine and the *type* from the operation
+/// rather than from the layout: a field whose own type has no layout is a
+/// pointer here exactly as it is in the C backend, and the operation says so.
+fn field_at(
+    program: &Program,
+    func: &Func,
+    object: ValueId,
+    field: u32,
+    ty: &HirType,
+) -> Result<(u32, &'static str), Diagnostic> {
+    let HirType::Managed(nts_core::hir::ManagedType::Object(id)) =
+        &func.values[object.0 as usize].ty
+    else {
+        return Err(refuse(func, "a field of something that is not an object"));
+    };
+    let layout = program
+        .layouts
+        .iter()
+        .find(|layout| layout.types.contains(id))
+        .ok_or_else(|| refuse(func, "a field of a type with no layout"))?;
+    let placed = nts_codegen_common::layout::place(&layout.fields)
+        .ok_or_else(|| refuse(func, "an object whose fields cannot be placed"))?;
+    let offset = *placed
+        .offsets
+        .get(field as usize)
+        .ok_or_else(|| refuse(func, "a field index outside its layout"))?;
+    Ok((offset, ty_of(ty, func)?))
+}
+
+fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = name(value);
     Ok(match &op.kind {
@@ -293,6 +358,45 @@ fn operation(func: &Func, value: ValueId) -> Result<String, Diagnostic> {
             )
         }
         OpKind::Unary { op: un, operand } => unary(func, &out, *un, *operand)?,
+        // A field, at the offset this compiler computed.
+        //
+        // The C backend writes `p->x` and lets clang place it; there is no
+        // `p->x` here, so `nts_codegen_common::layout` is not merely checked by
+        // the `_Static_assert`s it emits -- it is the only thing that knows
+        // where the field is. That is the whole reason the placement moved out
+        // of the backend.
+        //
+        // `getelementptr i8` and a byte offset rather than an indexed GEP into
+        // a named struct: opaque pointers mean the type is not carried by the
+        // value, and a byte offset is exactly what the descriptor's reference
+        // map already holds.
+        //
+        // Two instructions rather than one, because a *constant*
+        // `getelementptr` may not name a function-local value and the object
+        // always is one. The address gets a name of its own, derived from the
+        // value it serves so nothing has to be counted.
+        OpKind::FieldGet { object, field } => {
+            let (offset, ty) = field_at(program, func, *object, *field, &op.ty)?;
+            let at = format!("{out}.at");
+            format!(
+                "{at} = getelementptr i8, ptr {}, i64 {offset}\n  {out} = load {ty}, ptr {at}",
+                name(*object)
+            )
+        }
+        OpKind::FieldSet {
+            object,
+            field,
+            value,
+        } => {
+            let stored = func.values[value.0 as usize].ty.clone();
+            let (offset, ty) = field_at(program, func, *object, *field, &stored)?;
+            let at = format!("{out}.at");
+            format!(
+                "{at} = getelementptr i8, ptr {}, i64 {offset}\n  store {ty} {}, ptr {at}",
+                name(*object),
+                name(*value)
+            )
+        }
         // A representation change specialization decided on. The C backend
         // spells it as a cast; LLVM makes the direction explicit, which is the
         // same instruction and a better record of what was meant.
@@ -319,9 +423,18 @@ fn operation(func: &Func, value: ValueId) -> Result<String, Diagnostic> {
             let mut rendered = Vec::new();
             for arg in args {
                 let ty = ty_of(&func.values[arg.0 as usize].ty, func)?;
-                rendered.push(format!("{ty} {}", name(*arg)));
+                rendered.push(format!(
+                    "{ty} {}{}",
+                    extension(&func.values[arg.0 as usize].ty),
+                    name(*arg)
+                ));
             }
-            let call = format!("call {returns} {}({})", symbol(target), rendered.join(", "));
+            let call = format!(
+                "call {}{returns} {}({})",
+                extension(&op.ty),
+                symbol(target),
+                rendered.join(", ")
+            );
             if returns == "void" {
                 call
             } else {
