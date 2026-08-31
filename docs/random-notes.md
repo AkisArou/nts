@@ -1,0 +1,1 @@
+- [].map(...).filter(...) -> Skip intermediate arrays if no side-effect
