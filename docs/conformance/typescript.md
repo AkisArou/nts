@@ -601,9 +601,20 @@ Two things that test taught, and both are about not assuming:
   not an ABI, and the runtime this has to agree with is compiled by clang. The
   extension attributes are copied from what clang prints.
 
-`NtsValue` by value is the part of the ABI that is *not* settled — a sixteen-byte
-struct in seventeen runtime signatures — and it is refused rather than guessed
-at until its signatures come from clang the same way.
+`NtsValue` by value was the part of the ABI that was not settled — a sixteen-byte
+struct in seventeen runtime signatures — and it is settled now, by asking rather
+than reasoning. `clang -S -emit-llvm` on a function taking one prints:
+
+```llvm
+define dso_local { i32, i64 } @passthrough(i32 %0, i64 %1)
+```
+
+Two separate scalar arguments in, a two-field struct out. The System V rule
+classifies the sixteen bytes as two eightbytes, and the *second* is `i64` rather
+than `double` because the union holds a pointer — which is exactly the detail a
+careful reading would have got wrong, and the reason this was refused rather
+than guessed at. An erased value is still refused in the backend until it is
+built to that shape, but the shape is no longer unknown.
 
 Descriptors, arrays, module-scope globals and reference counting followed, and
 **67.8% of the 915 functions across `examples/` now render**, from 36.2% when
