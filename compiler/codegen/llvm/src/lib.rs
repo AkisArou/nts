@@ -854,9 +854,6 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
         // Anything an outgoing edge has to convert, before the terminator that
         // carries it: a phi's incoming value must be available in the
         // predecessor, so this is the only place it can go.
-        for line in outgoing_conversions(func, id) {
-            let _ = writeln!(out, "  {line}");
-        }
         let _ = writeln!(out, "  {}", terminator(func, &block.terminator)?);
     }
     let _ = writeln!(out, "}}");
@@ -876,65 +873,32 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
 /// doing silently, and the IR being under-specified about it is a real finding:
 /// nothing but a second backend could have noticed, because the first one's
 /// language happened to fill the gap.
-fn edge_value(func: &Func, from: BlockId, to: BlockId, slot: usize, value: ValueId) -> (String, Option<String>) {
-    let Some(param) = func.blocks[to.0 as usize].params.get(slot) else {
-        return (name(value), None);
-    };
-    let have = &func.values[value.0 as usize].ty;
-    let want = &func.values[param.0 as usize].ty;
-    if have == want {
-        return (name(value), None);
-    }
-    let (Ok(from_ty), Ok(to_ty)) = (ty_of(have, func), ty_of(want, func)) else {
-        return (name(value), None);
-    };
-    if from_ty == to_ty {
-        return (name(value), None);
-    }
-    let Ok(instruction) = conversion(have, want, func) else {
-        return (name(value), None);
-    };
-    let into = format!("%e{}_{}_{slot}", from.0, to.0);
-    let line = format!("{into} = {instruction} {from_ty} {} to {to_ty}", name(value));
-    (into, Some(line))
+/// The value an edge supplies to a block parameter.
+///
+/// Just the name. It used to convert: `verify::compatible` called any scalar
+/// compatible with any other, so specialization could send an `i32` along an
+/// edge into an `f64` block parameter, and a `phi double` taking an `i32` is
+/// not a module. The C backend wrote `v7 = v0;` and let C convert.
+///
+/// `verify` requires them to agree now and `specialize::reconcile_edges` makes
+/// them, in the predecessor, which is where the conversion had to go anyway.
+fn edge_value(value: ValueId) -> String {
+    name(value)
 }
 
-/// The conversions this block's outgoing edges need.
-fn outgoing_conversions(func: &Func, from: BlockId) -> Vec<String> {
-    let mut lines = Vec::new();
-    let collect = |to: BlockId, args: &[ValueId], lines: &mut Vec<String>| {
-        for (slot, value) in args.iter().enumerate() {
-            if let (_, Some(line)) = edge_value(func, from, to, slot, *value) {
-                lines.push(line);
-            }
-        }
-    };
-    match &func.blocks[from.0 as usize].terminator {
-        Terminator::Jump { target, args } => collect(*target, args, &mut lines),
-        Terminator::Branch {
-            then_target,
-            then_args,
-            else_target,
-            else_args,
-            ..
-        } => {
-            collect(*then_target, then_args, &mut lines);
-            collect(*else_target, else_args, &mut lines);
-        }
-        _ => {}
-    }
-    lines
-}
-
-/// Every `[value, %predecessor]` pair reaching one block parameter.
+/// Every predecessor's contribution to one block parameter, as a phi's
+/// incoming list.
+///
+/// A block parameter is a phi read from the other side: the parameter says what
+/// it holds and each predecessor says what it sends, and this collects the
+/// second into the first.
 fn incoming_for(func: &Func, target: BlockId, slot: usize) -> Vec<String> {
     let mut pairs = Vec::new();
     for (index, block) in func.blocks.iter().enumerate() {
         let from = BlockId(u32::try_from(index).unwrap_or(0));
         let mut add = |to: BlockId, args: &[ValueId]| {
             if to == target && let Some(value) = args.get(slot) {
-                let (supplied, _) = edge_value(func, from, to, slot, *value);
-                pairs.push(format!("[ {supplied}, %{} ]", label(from)));
+                pairs.push(format!("[ {}, %{} ]", edge_value(*value), label(from)));
             }
         };
         match &block.terminator {
@@ -1085,36 +1049,16 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
             name(*rhs)
         ),
         OpKind::Binary { op: bin, lhs, rhs } => {
-            // Both operands at one type, which C picks for itself and a module
-            // has to be told. The IR does not require the two to agree --
-            // `verify::compatible` calls any scalar compatible with any other
-            // -- so a `double` and an `int64_t` reached one `+` and this wrote
-            // `fadd double %a, %b` with `%b` an `i64`.
-            let left = &func.values[lhs.0 as usize].ty;
-            let right = &func.values[rhs.0 as usize].ty;
-            let joint = usual_conversion(left, right);
-            let ty = ty_of(&joint, func)?;
-            let float = matches!(joint, HirType::Float { .. });
-            let instruction = binary(*bin, float, wraps(&joint), func)?;
-            let mut lines = Vec::new();
-            let a = at_joint(func, &out, "l", &joint, *lhs, &mut lines)?;
-            let b = at_joint(func, &out, "r", &joint, *rhs, &mut lines)?;
-            // A comparison answers a bool whatever it compared; everything else
-            // answers at the type it worked in, and where the slot the middle
-            // end gave it is narrower or wider than that, C would have
-            // converted on the way out.
-            let want = ty_of(&op.ty, func)?;
-            let landing = if op.ty == HirType::Bool || want == ty {
-                out.clone()
-            } else {
-                format!("{out}.o")
-            };
-            lines.push(format!("{landing} = {instruction} {ty} {a}, {b}"));
-            if landing != out {
-                let back = conversion(&joint, &op.ty, func)?;
-                lines.push(format!("{out} = {back} {ty} {landing} to {want}"));
-            }
-            lines.join("\n  ")
+            // One type, taken from an operand and trusted. `verify` requires
+            // both operands and the result to agree, so there is nothing here
+            // to decide -- which is the point. This used to carry C's usual
+            // arithmetic conversions, because the IR allowed a `double` and an
+            // `i64` to reach one `+` and somebody had to pick. That somebody is
+            // the middle end now.
+            let ty = ty_of(&func.values[lhs.0 as usize].ty, func)?;
+            let float = matches!(func.values[lhs.0 as usize].ty, HirType::Float { .. });
+            let instruction = binary(*bin, float, wraps(&func.values[lhs.0 as usize].ty), func)?;
+            format!("{out} = {instruction} {ty} {}, {}", name(*lhs), name(*rhs))
         }
         OpKind::Unary { op: un, operand } => unary(func, &out, value, *un, *operand)?,
         // A representation change specialization decided on. The C backend
@@ -1146,7 +1090,7 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
                 )
             }
         }
-        OpKind::Call { .. } => return call(program, func, value, &out),
+        OpKind::Call { .. } => return call(func, value, &out),
         // A null pointer, which is what an absent reference is: the one spare
         // value a pointer has, and the whole reason `T | null` costs nothing.
         OpKind::ConstNull | OpKind::ConstUndefined if matches!(op.ty, HirType::Managed(_)) => {
@@ -1275,27 +1219,20 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             index,
             checked,
         } => {
-            let held = array_element(func, *array)?;
-            let element = ty_of(held, func)?;
-            let want = ty_of(&op.ty, func)?;
-            let landing = if element == want {
-                out.clone()
-            } else {
-                format!("{out}.e")
-            };
+            // The element type, from the array. Not from the result and not
+            // from the value: the descriptor was built from the element type,
+            // so it is the only one that describes the memory. `verify`
+            // requires the read and the write to agree with it, which is why
+            // there is no conversion here any more -- there used to be two, and
+            // the one on the write took its type from the *stored value* and
+            // put `store i64` into an array of doubles.
+            let element = ty_of(array_element(func, *array)?, func)?;
             let mut lines = index_lines(func, &out, *array, *index, *checked);
             lines.push(format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")));
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
-            lines.push(format!(
-                "{landing} = load {element}, ptr {out}.at{}",
-                tbaa(element)
-            ));
-            if element != want {
-                let instruction = conversion(held, &op.ty, func)?;
-                lines.push(format!("{out} = {instruction} {element} {landing} to {want}"));
-            }
+            lines.push(format!("{out} = load {element}, ptr {out}.at{}", tbaa(element)));
             lines.join("\n  ")
         }
         OpKind::ArraySet {
@@ -1304,28 +1241,15 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             value,
             checked,
         } => {
-            let held = array_element(func, *array)?;
-            let element = ty_of(held, func)?;
-            let stored = &func.values[value.0 as usize].ty;
-            let have = ty_of(stored, func)?;
+            let element = ty_of(array_element(func, *array)?, func)?;
             let mut lines = index_lines(func, &out, *array, *index, *checked);
             lines.push(format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")));
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
-            let put = if have == element {
-                name(*value)
-            } else {
-                let fitted = format!("{out}.v");
-                let instruction = conversion(stored, held, func)?;
-                lines.push(format!(
-                    "{fitted} = {instruction} {have} {} to {element}",
-                    name(*value)
-                ));
-                fitted
-            };
             lines.push(format!(
-                "store {element} {put}, ptr {out}.at{}",
+                "store {element} {}, ptr {out}.at{}",
+                name(*value),
                 tbaa(element)
             ));
             lines.join("\n  ")
@@ -1547,12 +1471,7 @@ fn tagging(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic>
 /// struct. And an argument whose type is not the one the runtime declares is
 /// converted -- C does that at the call and says nothing, which is how
 /// `nts_tag_name(uint32_t)` came to be handed a double.
-fn call(
-    program: &Program,
-    func: &Func,
-    value: ValueId,
-    out: &str,
-) -> Result<String, Diagnostic> {
+fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -1566,26 +1485,9 @@ fn call(
                     return Err(refuse(func, "a dispatched call, which needs a method table"));
                 }
             };
-            // What the *callee* was defined as, for a call to something in
-            // this program. The signature table answers this for the runtime
-            // and nothing answered it for our own functions: the definition
-            // took its types from the callee's `Func` and the call site took
-            // them from the operation, so `Closure0__call` was defined
-            // `double` and called `i32`.
-            //
-            // Nothing rejects that -- it verifies, and it is the ABI mismatch
-            // it looks like: the callee returns in xmm0 and the caller reads
-            // eax. Worse for speed, **LLVM cannot inline a call whose signature
-            // disagrees with its callee**, so a one-line closure stayed a call
-            // in the innermost loop of `benches/cases/closures` and the case
-            // ran 14x slower than the same HIR through the C backend.
-            let defined = match callee {
-                Callee::Direct(target) => program.funcs.iter().find(|it| &it.name == target),
-                _ => None,
-            };
             let mut rendered = Vec::new();
             let mut before: Vec<String> = Vec::new();
-            for (at, arg) in args.iter().enumerate() {
+            for arg in args {
                 let arg_ty = &func.values[arg.0 as usize].ty;
                 // Two scalars, because that is how the platform passes a
                 // sixteen-byte struct and how clang emits the same call.
@@ -1616,9 +1518,10 @@ fn call(
                     Callee::External(target) => signatures::signature(target)
                         .and_then(|known| known.params.get(rendered.len()))
                         .map(|spec| spec.split_whitespace().next().unwrap_or(spec)),
-                    Callee::Direct(_) => defined
-                        .and_then(|it| it.params.get(at))
-                        .and_then(|param| ty_of(&param.ty, func).ok()),
+                    // Nothing for a call inside this program: `verify` requires
+                    // an argument to match the parameter it fills, so there is
+                    // no conversion left to make. Only the runtime, whose
+                    // signatures are C's and not ours, still needs one.
                     _ => None,
                 };
                 match wanted {
@@ -1656,7 +1559,6 @@ fn call(
             let declared = match callee {
                 Callee::External(target) => signatures::signature(target)
                     .map(|known| known.returns.split_whitespace().last().unwrap_or(known.returns)),
-                Callee::Direct(_) => defined.and_then(|it| ty_of(&it.return_type, it).ok()),
                 _ => None,
             };
             let call_returns = declared.unwrap_or(returns);
@@ -1837,73 +1739,6 @@ fn float_literal(number: f64) -> String {
         format!("{number:.1}")
     } else {
         format!("0x{:016X}", number.to_bits())
-    }
-}
-
-/// One operand of a binary operation, converted to the type both meet at.
-///
-/// Any conversion goes into `lines`, ahead of the operation.
-fn at_joint(
-    func: &Func,
-    out: &str,
-    side: &str,
-    joint: &HirType,
-    value: ValueId,
-    lines: &mut Vec<String>,
-) -> Result<String, Diagnostic> {
-    let held = &func.values[value.0 as usize].ty;
-    let (have, want) = (ty_of(held, func)?, ty_of(joint, func)?);
-    if have == want {
-        return Ok(name(value));
-    }
-    let slot = format!("{out}.{side}");
-    let instruction = conversion(held, joint, func)?;
-    lines.push(format!(
-        "{slot} = {instruction} {have} {} to {want}",
-        name(value)
-    ));
-    Ok(slot)
-}
-
-/// The one type two operands of a binary operation meet at.
-///
-/// C's usual arithmetic conversions, because C is the oracle and this is
-/// exactly what it does silently at every mixed-type `+`: a `double` on either
-/// side wins, then `bigint`, then the wider integer -- and at equal width the
-/// unsigned one, which is C's rule and not an arbitrary tiebreak. A `bool`
-/// never wins, because it promotes.
-fn usual_conversion(left: &HirType, right: &HirType) -> HirType {
-    if left == right {
-        return left.clone();
-    }
-    match (left, right) {
-        (HirType::Float { bits: a }, HirType::Float { bits: b }) => {
-            HirType::Float { bits: *a.max(b) }
-        }
-        (HirType::Float { .. }, _) => left.clone(),
-        (_, HirType::Float { .. }) => right.clone(),
-        (HirType::BigInt, _) | (_, HirType::BigInt) => HirType::BigInt,
-        (
-            HirType::Int {
-                bits: a,
-                signed: left_signed,
-            },
-            HirType::Int {
-                bits: b,
-                signed: right_signed,
-            },
-        ) => HirType::Int {
-            bits: *a.max(b),
-            // The wider operand's signedness wins, and at equal width an
-            // unsigned one does -- C's rule, not a tiebreak invented here.
-            signed: match a.cmp(b) {
-                std::cmp::Ordering::Equal => *left_signed && *right_signed,
-                std::cmp::Ordering::Greater => *left_signed,
-                std::cmp::Ordering::Less => *right_signed,
-            },
-        },
-        (HirType::Bool, other) | (other, HirType::Bool) => other.clone(),
-        _ => left.clone(),
     }
 }
 

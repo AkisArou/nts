@@ -65,6 +65,33 @@ pub enum Invalid {
         expected: HirType,
         found: HirType,
     },
+    /// The two operands of one operator have different representations.
+    ///
+    /// C answers this with its usual arithmetic conversions and says nothing,
+    /// so the C backend never had to ask -- and the LLVM backend, which must
+    /// name one type for the instruction, grew a copy of those rules to
+    /// compensate. That is C's semantics living somewhere that should not know
+    /// them. The conversion belongs in the IR, where both backends read it.
+    OperandsDiffer {
+        func: String,
+        op: &'static str,
+        left: HirType,
+        right: HirType,
+    },
+    /// A direct call's result is not what the function it names returns.
+    ///
+    /// Unchecked until a closure turned out to be fourteen times slower through
+    /// LLVM than through C. `Closure0__call` was defined returning `double` and
+    /// called expecting `i32`, because the definition took its type from the
+    /// callee and the call site took it from the operation. LLVM verified it --
+    /// with opaque pointers a call carries its own signature -- and then could
+    /// not inline a call whose signature disagrees with its callee.
+    CallResultType {
+        func: String,
+        callee: String,
+        expected: HirType,
+        found: HirType,
+    },
     /// An operator was applied to an operand it cannot be applied to.
     ///
     /// Arithmetic, ordering and the bitwise operators all read a *machine*
@@ -211,7 +238,9 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
 /// so the question this asks is answered by the typechecker rather than here.
 fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
     let mut arity: rustc_hash::FxHashMap<&str, Vec<HirType>> = rustc_hash::FxHashMap::default();
+    let mut returns: rustc_hash::FxHashMap<&str, HirType> = rustc_hash::FxHashMap::default();
     for func in &program.funcs {
+        returns.insert(func.name.as_str(), func.return_type.clone());
         if arity
             .insert(
                 func.name.as_str(),
@@ -235,6 +264,19 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
             else {
                 continue;
             };
+            // `compatible` and not equality: two references are two pointers
+            // however their types relate, which is what lets `ref(): this`
+            // return the class that implements it.
+            if let Some(declared) = returns.get(name.as_str())
+                && !compatible(&op.ty, declared)
+            {
+                problems.push(Invalid::CallResultType {
+                    func: func.name.clone(),
+                    callee: name.clone(),
+                    expected: declared.clone(),
+                    found: op.ty.clone(),
+                });
+            }
             let Some(expected) = arity.get(name.as_str()) else {
                 problems.push(Invalid::MissingCallee {
                     func: func.name.clone(),
@@ -297,15 +339,21 @@ fn compatible(found: &HirType, want: &HirType) -> bool {
     {
         return true;
     }
-    // Two scalars are a conversion the backend already emits: a field narrowed
-    // to `i32` by specialization is assigned from a `double` and C converts.
-    matches!(
-        (found, want),
-        (
-            HirType::Bool | HirType::Int { .. } | HirType::Float { .. },
-            HirType::Bool | HirType::Int { .. } | HirType::Float { .. }
-        )
-    )
+    // Nothing else. Two scalars used to be compatible here, on the grounds that
+    // "the backend already emits the conversion" -- which was a description of
+    // the *C* backend, where an assignment converts silently and the mismatch
+    // is invisible. Written into the definition of a valid program, it meant
+    // the IR could hand a `double` to an `i32` slot and be within its rights.
+    //
+    // The second backend had to write those conversions down, and got one
+    // wrong: it took an array's element type from the value being stored and
+    // emitted `store i64` into an array of doubles. Same width, no crash, and
+    // every read of that element afterwards was an integer's bits read as a
+    // double.
+    //
+    // So the conversion is inserted once, by `specialize::reconcile_stores`,
+    // and this says what it now means for a program to be valid.
+    false
 }
 
 fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
@@ -321,6 +369,17 @@ fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
     };
     for op in &func.values {
         match &op.kind {
+            // A read is a slot too. Nothing checked it, and the backend that
+            // had to name a type for the load chose the *result's* rather than
+            // the element's -- the same confusion that made a write store an
+            // `i64` into an array of doubles.
+            OpKind::ArrayGet { array, .. } => {
+                if let HirType::Managed(super::ManagedType::Array(element)) =
+                    &func.values[array.0 as usize].ty
+                {
+                    report("an array element read", element, &op.ty);
+                }
+            }
             OpKind::ArraySet { array, value, .. } => {
                 if let HirType::Managed(super::ManagedType::Array(element)) =
                     &func.values[array.0 as usize].ty
@@ -468,6 +527,35 @@ fn check_operands(func: &Func, problems: &mut Vec<Invalid>) {
                     found: found.clone(),
                 });
             }
+        }
+        // And the two operands must agree with *each other*. Nothing checked
+        // this, and nothing had to: C picks a type for a mixed-type `+` by its
+        // usual arithmetic conversions and says nothing. The second backend had
+        // to pick one too, so it grew a copy of C's rules -- which is C's
+        // semantics living in a backend that should not know them.
+        let (left, right) = (
+            &func.values[lhs.0 as usize].ty,
+            &func.values[rhs.0 as usize].ty,
+        );
+        if left != right && *left != HirType::Erased && *right != HirType::Erased {
+            problems.push(Invalid::OperandsDiffer {
+                func: func.name.clone(),
+                op: machine,
+                left: left.clone(),
+                right: right.clone(),
+            });
+        }
+        // And, for everything that is not a comparison, the result must be that
+        // same type. A comparison answers a bool whatever it compared; `a + b`
+        // answers what it worked in, and a slot of another width is a
+        // conversion somebody has to write.
+        if !bin.is_comparison() && op.ty != *left && *left != HirType::Erased {
+            problems.push(Invalid::OperandsDiffer {
+                func: func.name.clone(),
+                op: machine,
+                left: left.clone(),
+                right: op.ty.clone(),
+            });
         }
     }
 }

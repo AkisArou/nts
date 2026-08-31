@@ -642,6 +642,80 @@ a single-backend assumption:
 - **A field's representation is specialized**, so nothing outside the program
   may assume `number` means `double`.
 
+### The definition of a valid program was a description of one backend
+
+`verify::compatible` called any scalar compatible with any other, and the
+comment above it said why:
+
+> Two scalars are a conversion the backend already emits: a field narrowed to
+> `i32` by specialization is assigned from a `double` and C converts.
+
+That is a true statement about C written into the definition of a valid
+program. It means the IR was *within its rights* to store a `double` into an
+`i32` field, send an `i32` along an edge into an `f64` parameter, or hand a
+`double` and an `i64` to one `+` -- and the only backend that ever had to notice
+was the one that could not convert silently.
+
+Making the rule exact and counting what fell out:
+
+| | examples (89) | corpus (184) |
+|---|---:|---:|
+| before | 18 fail | 5 fail |
+| after `reconcile_stores` and `reconcile_edges` | **0** | **0** |
+
+Two kinds, and both are the same story. **`StoreType`** -- a field, an array
+element, a global -- is specialization narrowing a *slot* and the *value* that
+fills it independently, with nothing putting them back together. **`EdgeType`**
+is a block parameter taking an `i32` where it declares `f64`; `specialize`
+already unions a parameter with every argument feeding it, so only three
+survived that union, and the conversion has to land in the **predecessor**,
+because that is the only place both the value and the branch exist.
+
+### Three things nothing was checking at all
+
+Tightening the rule exposed which questions had never been asked. Each was added
+as a check and then measured, because a check that has never fired is a claim
+rather than a fact:
+
+| new check | fired |
+|---|---:|
+| a binary's two operands agree with each other | 0 |
+| a binary's result agrees with its operands | 0 |
+| an array *read* agrees with the element type | 0 |
+| **a direct call's result is what the callee returns** | **6** |
+
+The zeros are worth as much as the six. The LLVM backend carried a copy of C's
+usual arithmetic conversions to pick a type for a mixed-type `+`; the IR turns
+out never to produce one once the stores are reconciled, so the mismatched `fadd
+double %v25, %v33` that started it was the *store* bug propagating, not a
+separate defect. That code is gone rather than kept "just in case".
+
+The six are the 14x closure. Nothing said a call's result must be what the
+callee returns, so specialization narrowed the result at the call site and left
+the callee alone. It is explicit now: the call yields the callee's type and a
+`Convert` narrows it.
+
+### What the backends stopped deciding
+
+Deleted from `compiler/codegen/llvm`, because the IR now guarantees it:
+`usual_conversion` and `at_joint`, the edge conversions in `edge_value` and
+`outgoing_conversions` (the whole of the second), the element conversions in
+`element_access`, and the direct-call argument and result fixups. The C backend
+had no code to delete -- its compensation *was* C, an implicit conversion at
+every assignment, and it simply stops happening.
+
+**What stays, and it is not compensation.** `helper_operand` and the conversions
+around calls to the runtime are the boundary between our types and C's declared
+ones: `nts_array_new(ptr, double)` wants a `double` length whatever
+specialization narrowed ours to, and no amount of tightening the IR changes what
+that function's signature says. The earlier plan listed those for deletion and
+that was wrong -- an ABI boundary is not a backend making a decision it should
+not.
+
+The LLVM gate row went **56 to 60** on the tightening alone, before any deletion:
+four examples the second backend had been getting wrong were programs the IR had
+never been explicit enough to state.
+
 ### A closure was 14x slower, and the reason verified cleanly
 
 With both backends in one bench run, `closures` came out at **16.33us through

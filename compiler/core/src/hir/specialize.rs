@@ -403,6 +403,315 @@ fn width_of(
 }
 
 /// Add the conversions the new types require, and count them.
+/// Make every store agree with the slot it writes into.
+///
+/// Specialization narrows a *slot* and the *value* that fills it independently,
+/// and nothing put them back together. A field narrowed to `i32` was assigned a
+/// `double`; an array of `double` was assigned an `i32`. The IR permitted it
+/// because `verify::compatible` called any scalar compatible with any other,
+/// and that rule existed because **C converts at an assignment and says
+/// nothing** -- so the only backend that ever saw the mismatch was the one that
+/// had to write the conversion down.
+///
+/// It is not a harmless untidiness. The LLVM backend chose the element type
+/// from the stored value and emitted `store i64` into an array of doubles: the
+/// same eight bytes, so nothing crashed, and every later read of that element
+/// was an integer's bits read as a double. `erasure-stored-typed` answered
+/// 1.3186118021857029e-314 where node answered 2668900000.
+///
+/// So the conversion belongs here, once, where both backends inherit it --
+/// rather than in each backend, differently, where one of them can get it
+/// wrong. `insert_conversions` next door does exactly this for operands,
+/// arguments and returns; these are the three slots it did not cover.
+pub fn reconcile_stores<S: std::hash::BuildHasher>(
+    func: &mut Func,
+    layouts: &[super::Layout],
+    globals: &[super::Global],
+    returns: &std::collections::HashMap<String, HirType, S>,
+) -> usize {
+    let mut blocks = std::mem::take(&mut func.blocks);
+    let mut count = 0;
+
+    for block in &mut blocks {
+        let mut rewritten = Vec::with_capacity(block.ops.len());
+        for &value in &block.ops {
+            let kind = func.values[value.0 as usize].kind.clone();
+            let produced = func.values[value.0 as usize].ty.clone();
+            let updated = match kind {
+                // Both operands of an operator at one type, which C picks for
+                // itself with its usual arithmetic conversions and never
+                // mentions. The LLVM backend had to name a type for the
+                // instruction, so it grew a copy of those rules -- C's
+                // semantics living in a backend that should not know them.
+                // Deciding it here means both backends read the same answer.
+                OpKind::Binary { op: bin, lhs, rhs }
+                    if !matches!(bin, BinOp::Eq | BinOp::Ne | BinOp::Concat)
+                        && func.values[lhs.0 as usize].ty != HirType::Erased
+                        && func.values[rhs.0 as usize].ty != HirType::Erased =>
+                {
+                    let left = func.values[lhs.0 as usize].ty.clone();
+                    let right = func.values[rhs.0 as usize].ty.clone();
+                    // A comparison answers a bool whatever it compared, so the
+                    // type the two meet at is theirs to decide; everything else
+                    // works in the type of its own result.
+                    let joint = if bin.is_comparison() {
+                        usual_conversion(&left, &right)
+                    } else {
+                        produced
+                    };
+                    let lhs = convert(func, &mut rewritten, &mut count, lhs, &joint);
+                    let rhs = convert(func, &mut rewritten, &mut count, rhs, &joint);
+                    Some(OpKind::Binary { op: bin, lhs, rhs })
+                }
+                OpKind::ArraySet {
+                    array,
+                    index,
+                    value: stored,
+                    checked,
+                } => match &func.values[array.0 as usize].ty {
+                    HirType::Managed(super::ManagedType::Array(element)) => {
+                        let want = (**element).clone();
+                        let stored = convert(func, &mut rewritten, &mut count, stored, &want);
+                        Some(OpKind::ArraySet {
+                            array,
+                            index,
+                            value: stored,
+                            checked,
+                        })
+                    }
+                    _ => None,
+                },
+                OpKind::GlobalSet {
+                    global,
+                    value: stored,
+                } => globals.get(global as usize).map(|slot| {
+                    let want = slot.ty.clone();
+                    let stored = convert(func, &mut rewritten, &mut count, stored, &want);
+                    OpKind::GlobalSet {
+                        global,
+                        value: stored,
+                    }
+                }),
+                OpKind::FieldSet {
+                    object,
+                    field,
+                    value: stored,
+                } => {
+                    let want = match &func.values[object.0 as usize].ty {
+                        HirType::Managed(super::ManagedType::Object(ty)) => layouts
+                            .iter()
+                            .find(|layout| layout.types.contains(ty))
+                            .and_then(|layout| layout.fields.get(field as usize))
+                            .map(|slot| slot.ty.clone()),
+                        _ => None,
+                    };
+                    want.map(|want| {
+                        let stored = convert(func, &mut rewritten, &mut count, stored, &want);
+                        OpKind::FieldSet {
+                            object,
+                            field,
+                            value: stored,
+                        }
+                    })
+                }
+                _ => None,
+            };
+            if let Some(kind) = updated {
+                func.values[value.0 as usize].kind = kind;
+            }
+            rewritten.push(value);
+        }
+        block.ops = rewritten;
+    }
+
+    func.blocks = blocks;
+    count + reconcile_edges(func) + reconcile_call_results(func, returns)
+}
+
+/// The one type two operands of an operator meet at.
+///
+/// C's usual arithmetic conversions, because C is the oracle and this is what
+/// it does silently at every mixed-type comparison: a `double` on either side
+/// wins, then `bigint`, then the wider integer -- and at equal width the
+/// unsigned one, which is C's rule rather than an arbitrary tiebreak. A `bool`
+/// never wins, because it promotes.
+///
+/// This lived in the LLVM backend, which is the wrong place for it twice over:
+/// it is a decision about what a program *means*, and a backend that makes it
+/// is a backend the other one can disagree with.
+fn usual_conversion(left: &HirType, right: &HirType) -> HirType {
+    if left == right {
+        return left.clone();
+    }
+    match (left, right) {
+        (HirType::Float { bits: a }, HirType::Float { bits: b }) => {
+            HirType::Float { bits: *a.max(b) }
+        }
+        (HirType::Float { .. }, _) => left.clone(),
+        (_, HirType::Float { .. }) => right.clone(),
+        (HirType::BigInt, _) | (_, HirType::BigInt) => HirType::BigInt,
+        (
+            HirType::Int {
+                bits: a,
+                signed: left_signed,
+            },
+            HirType::Int {
+                bits: b,
+                signed: right_signed,
+            },
+        ) => HirType::Int {
+            bits: *a.max(b),
+            signed: match a.cmp(b) {
+                std::cmp::Ordering::Equal => *left_signed && *right_signed,
+                std::cmp::Ordering::Greater => *left_signed,
+                std::cmp::Ordering::Less => *right_signed,
+            },
+        },
+        (HirType::Bool, other) | (other, HirType::Bool) => other.clone(),
+        _ => left.clone(),
+    }
+}
+
+/// Make a direct call's result the type the function it names returns.
+///
+/// The call keeps the callee's type and a `Convert` narrows it, which is the
+/// explicit form of what the call site used to assert on its own. Unchecked
+/// until a closure came out fourteen times slower through LLVM than through C:
+/// `Closure0__call` was defined returning `double` and called expecting `i32`,
+/// because the definition read the callee and the call site read the operation.
+///
+/// LLVM verified that -- with opaque pointers a call carries its own signature
+/// and may disagree with its callee -- and then could not inline a call whose
+/// signature disagrees, so a one-line arrow function stayed a real call in the
+/// innermost loop. C converts at the assignment and never had to notice.
+fn reconcile_call_results<S: std::hash::BuildHasher>(
+    func: &mut Func,
+    returns: &std::collections::HashMap<String, HirType, S>,
+) -> usize {
+    let disagreeing: Vec<(ValueId, HirType)> = func
+        .values
+        .iter()
+        .enumerate()
+        .filter_map(|(at, op)| {
+            let OpKind::Call {
+                callee: super::Callee::Direct(name),
+                ..
+            } = &op.kind
+            else {
+                return None;
+            };
+            let declared = returns.get(name)?;
+            // Two references are two pointers however their types relate, so
+            // there is nothing between them to convert -- and manufacturing a
+            // value for the upcast would give one object two SSA names, which
+            // every pass that follows a reference would then see as two
+            // objects. `convert` says the same thing next door; this path did
+            // not, and `ref(): this` became a `Convert` from one class to
+            // another that the C backend could only refuse.
+            if declared.is_managed() && op.ty.is_managed() {
+                return None;
+            }
+            (*declared != op.ty).then(|| {
+                (
+                    ValueId(u32::try_from(at).unwrap_or(u32::MAX)),
+                    declared.clone(),
+                )
+            })
+        })
+        .collect();
+
+    let mut count = 0;
+    for (call, declared) in disagreeing {
+        let produced = func.values[call.0 as usize].ty.clone();
+        let origin = func.values[call.0 as usize].origin.clone();
+        let narrowed = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
+
+        // Every reader moves to the conversion -- done *before* the conversion
+        // exists, so its own operand is not rewritten to itself.
+        for op in &mut func.values {
+            super::simplify::substitute(&mut op.kind, |v| if v == call { narrowed } else { v });
+        }
+        for block in &mut func.blocks {
+            super::simplify::substitute_terminator(&mut block.terminator, |v| {
+                if v == call { narrowed } else { v }
+            });
+        }
+
+        func.values.push(Op {
+            kind: OpKind::Convert(call),
+            ty: produced,
+            origin,
+        });
+        func.values[call.0 as usize].ty = declared;
+        for block in &mut func.blocks {
+            if let Some(at) = block.ops.iter().position(|&v| v == call) {
+                block.ops.insert(at + 1, narrowed);
+                break;
+            }
+        }
+        count += 1;
+    }
+    count
+}
+
+/// Make every jump hand a block parameter the type it declares.
+///
+/// A block parameter is where two paths agree about what a name holds, so a
+/// mismatch is the two paths disagreeing. The conversion has to happen in the
+/// *predecessor*, because that is the only place both the value and the branch
+/// exist -- a phi's incoming value must be available in the block it comes
+/// from, which is a rule about LLVM and a rule about meaning.
+///
+/// `specialize` already unions a parameter with every argument feeding it, so
+/// what reaches here is the few that union could not settle: three across the
+/// whole example corpus, all of them an `i32` arriving where an `f64` was
+/// declared.
+fn reconcile_edges(func: &mut Func) -> usize {
+    let mut blocks = std::mem::take(&mut func.blocks);
+    let mut count = 0;
+    let wanted: Vec<Vec<HirType>> = blocks
+        .iter()
+        .map(|block| {
+            block
+                .params
+                .iter()
+                .map(|param| func.values[param.0 as usize].ty.clone())
+                .collect()
+        })
+        .collect();
+    for block in &mut blocks {
+        let mut rewritten = std::mem::take(&mut block.ops);
+        let mut fit = |func: &mut Func, target: super::BlockId, args: &mut Vec<ValueId>| {
+            for (at, arg) in args.iter_mut().enumerate() {
+                let Some(want) = wanted[target.0 as usize].get(at) else {
+                    continue;
+                };
+                *arg = convert(func, &mut rewritten, &mut count, *arg, want);
+            }
+        };
+        let mut terminator = std::mem::replace(&mut block.terminator, super::Terminator::Unreachable);
+        match &mut terminator {
+            super::Terminator::Jump { target, args } => fit(func, *target, args),
+            super::Terminator::Branch {
+                then_target,
+                then_args,
+                else_target,
+                else_args,
+                ..
+            } => {
+                fit(func, *then_target, then_args);
+                fit(func, *else_target, else_args);
+            }
+            _ => {}
+        }
+        block.terminator = terminator;
+        block.ops = rewritten;
+    }
+
+    func.blocks = blocks;
+    count
+}
+
 fn insert_conversions(
     func: &mut Func,
     analysis: &Analysis,

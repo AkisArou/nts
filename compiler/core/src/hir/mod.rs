@@ -1408,6 +1408,36 @@ pub fn unaccounted(
     missing
 }
 
+/// Put every store and every edge back in agreement with the slot it fills.
+///
+/// Specialization narrows a slot and the value that fills it independently, and
+/// until now nothing reconciled them: a field narrowed to `i32` was assigned a
+/// `double`, an array of `double` was assigned an `i32`. The IR permitted it
+/// because `verify::compatible` called any scalar compatible with any other --
+/// and *that* was true only because C converts at an assignment without being
+/// asked. The rule was a description of one backend, written into the
+/// definition of a valid program.
+///
+/// Unconditional, not under `specialize_numbers`: a store that disagrees with
+/// its slot is malformed however it came to be.
+fn reconcile(program: &mut Program) -> usize {
+    let returns: rustc_hash::FxHashMap<String, HirType> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.clone(), func.return_type.clone()))
+        .collect();
+    let Program {
+        funcs,
+        layouts,
+        globals,
+        ..
+    } = program;
+    funcs
+        .iter_mut()
+        .map(|func| specialize::reconcile_stores(func, layouts, globals, &returns))
+        .sum()
+}
+
 pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Vec<verify::Invalid>> {
     prepare_with(snapshot, &Options::default())
 }
@@ -1651,6 +1681,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         }
     }
 
+
     // Identities become visible only once specialization has decided
     // representations: `x | 0` is a coercion until `x` is known to be an `i32`,
     // and then it is nothing. Removing them here keeps every pass below from
@@ -1661,6 +1692,16 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     for func in &mut program.funcs {
         simplified += simplify::simplify(func);
     }
+
+    // Reconcile *after* the passes that rewrite operands, not before.
+    //
+    // It ran before `shed_erasure` at first, which was too early: that pass
+    // removes `x | 0` once `x` is known to be an `i32`, and removing an
+    // identity means every reader of it moves to the value underneath -- which
+    // may be of another type than the one the reader was reconciled against.
+    // The unit tests caught it where two corpora did not, on a `+` whose right
+    // operand went back to being an `i64` under a `double`.
+    conversions += reconcile(&mut program);
 
     // Specialization orphans values by design — a folded constant leaves its
     // unfolded original with no readers — and the C emitter declares a local for
