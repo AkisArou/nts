@@ -242,3 +242,102 @@ export function typeofDecided(n: number): number {
     n * 0
   );
 }
+
+// One absence and a pointer: two answers, chosen by whether the pointer is
+// there. This was refused, on the reasoning that "a pointer carries no tag to
+// answer with" — but where the type admits exactly one absence, the null
+// pointer *is* the tag, and the two answers are both known at compile time.
+// `if (typeof callback === "function")` is how an optional callback is checked,
+// twenty-five times in node's own sources.
+//
+// A declared signature is a function to `typeof` no less than a closure literal
+// is. Its lowered type is the TypeScript function type rather than a synthetic
+// closure id, and answering from the id alone called it an object — a wrong
+// answer that shipped for one commit.
+//
+// Through a parameter, because returning a `Fold | undefined` is a union the
+// backend has no layout for — a separate gap, and not this one.
+type Fold = (x: number) => number;
+
+function spellingOf(fold?: Fold): string {
+  return typeof fold + (typeof fold === "function" ? "F" : "-");
+}
+
+function textOrNull(n: number): string | null {
+  return n > 0 ? "here" : null;
+}
+
+export function typeofAcrossOneAbsence(n: number): string {
+  const text = textOrNull(n);
+  return (
+    spellingOf() +
+    "|" +
+    spellingOf((x: number): number => x + n) +
+    "|" +
+    typeof text +
+    (typeof text === "string" ? "S" : "-") +
+    (typeof text === "object" ? "O" : "-")
+  );
+}
+
+export function typeofOfADeclaredSignature(n: number): string {
+  const named: Fold = (x: number): number => x - n;
+  return typeof named + String(named(n));
+}
+
+// `x == null` where the type admits no absence at all. Abstract equality
+// answers this before it converts anything, so it needs no `ToPrimitive`: it is
+// false, and `!=` is true, whatever the value. Thirty-two of the profile's
+// sites were this, refused only because lowering the `null` came first and a
+// double has nowhere to put one.
+//
+// The operand is still evaluated. Folding the comparison to a constant *and*
+// dropping the call made `next() === undefined` skip a call node makes.
+let calls = 0;
+
+function counted(n: number): string {
+  calls = calls + 1;
+  return "c" + String(n);
+}
+
+export function absenceAgainstAValueThatHasNone(n: number): string {
+  calls = 0;
+  const number1 = n;
+  const flag = n > 0;
+  const text = "t" + String(n);
+  const spent = counted(n) === undefined ? "!" : "-";
+  return (
+    (number1 == null ? "T" : "F") +
+    (number1 != null ? "t" : "f") +
+    (flag == null ? "T" : "F") +
+    (text === undefined ? "T" : "F") +
+    spent +
+    String(calls)
+  );
+}
+
+// `null` in an argument, which is where node's own callbacks put it. The
+// contextual type comes from the signature — for a direct call from the
+// resolved target, and for a call through a value from the callee's own type,
+// which is the only kind a `Callback<T>` is ever invoked by.
+type Callback = (error: string | null, value: string) => void;
+
+function finish(n: number, callback: Callback): void {
+  if (n > 0) {
+    callback(null, "ok" + String(n));
+  } else {
+    callback("failed", "");
+  }
+}
+
+export function absenceInAnArgument(n: number): string {
+  let seen = "";
+  finish(n, (error, value) => {
+    seen = (error === null ? "null" : error) + ":" + value;
+  });
+  const indirect: Callback = (error, value) => {
+    seen = seen + "/" + String(error === null) + value;
+  };
+  indirect(null, "x");
+  return seen;
+}

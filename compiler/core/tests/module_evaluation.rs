@@ -333,37 +333,6 @@ fn a_yield_is_refused_by_name() {
     );
 }
 
-/// `typeof` on a value whose answer its representation does not fix.
-///
-/// The counterpart to `examples/absent`, and the restriction that makes the
-/// folds there correct. `typeof n` where `n: number` is a fact about the type;
-/// `typeof p` where `p` is a class instance is a fact about the representation,
-/// since a reference to an object is "object" and a closure is "function". Both
-/// fold and neither reads the operand.
-///
-/// A type admitting an *absence* is the case that does not fold. `string |
-/// null` is one pointer, and which of "string" and "object" it answers depends
-/// on what the pointer holds -- a runtime question, and a pointer carries no
-/// tag to answer it with, which is the whole reason it is one word rather than
-/// two.
-///
-/// A test on the refusal rather than only on the fold, because the folds are
-/// only sound while this stays refused.
-#[test]
-fn typeof_on_a_value_its_representation_does_not_fix() {
-    let Some(lowered) = lower_at("tests/programs/typeof-erased", true) else {
-        return;
-    };
-    assert!(
-        lowered
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.message.contains("runtime tag")),
-        "the refusal should say what is missing: {:?}",
-        refusals(&lowered),
-    );
-}
-
 /// Nothing is refused as "this expression" any more.
 ///
 /// The expression lowering's fallthrough names no construct, and a refusal

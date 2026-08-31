@@ -3184,6 +3184,25 @@ impl<'a> FuncBuilder<'a> {
             .collect()
     }
 
+    /// The parent a child would name, with list nodes stepped over.
+    ///
+    /// [`Self::children`] flattens a `List` -- an argument list, a parameter
+    /// list -- so a call's children are its callee and its arguments. The
+    /// `parent` link does not: an argument's parent is the list, whose kind is
+    /// no syntax at all. Anything that asks what encloses a node and then looks
+    /// for it among that node's children has to agree with `children` about
+    /// which node that is, and this is the half that was missing: every
+    /// argument's parent was a `List`, so `f(null)` matched no arm of
+    /// [`Self::contextual_type`] and the `null` was refused for standing in for
+    /// nothing.
+    fn syntactic_parent(&self, id: NodeId) -> Option<NodeId> {
+        let mut at = self.node(id).parent?;
+        while self.node(at).kind == NodeKind::List {
+            at = self.node(at).parent?;
+        }
+        Some(at)
+    }
+
     /// Every node at or below `id`, in source order.
     fn subtree(&self, id: NodeId, into: &mut Vec<NodeId>) {
         into.push(id);
@@ -3379,6 +3398,27 @@ impl<'a> FuncBuilder<'a> {
             .get(&id)
             .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
             .is_some_and(|record| matches!(record.kind, TypeKind::Function(_)))
+    }
+
+    /// What `typeof` answers for a value, where its representation fixes it.
+    ///
+    /// A *declared* signature keeps its TypeScript type id rather than a
+    /// synthetic closure one -- `cb?: (x: number) => number` is stored as the
+    /// function type itself -- so the closure-id test alone calls it an object.
+    /// It is the same value either way, and `typeof` says `"function"` for
+    /// both. A synthetic id is above every real one, so the lookup simply
+    /// misses for cells, frames and closures, and the free function answers.
+    fn spelling_for(&self, ty: &HirType) -> Option<&'static str> {
+        if let HirType::Managed(ManagedType::Object(id)) = ty
+            && self
+                .snapshot
+                .types
+                .get(id.0 as usize)
+                .is_some_and(|record| matches!(record.kind, TypeKind::Function(_)))
+        {
+            return Some("function");
+        }
+        spelling_of(ty)
     }
 
     /// Whether a callee names a function or class declaration rather than a
@@ -4454,7 +4494,7 @@ impl<'a> FuncBuilder<'a> {
             // `"undefined"` -- and that is a runtime question this cannot fold.
             if self.values[value.0 as usize].ty != HirType::Erased
                 && self.absences_of(operand).is_some_and(|absent| absent.is_empty())
-                && let Some(spelling) = spelling_of(&self.values[value.0 as usize].ty)
+                && let Some(spelling) = self.spelling_for(&self.values[value.0 as usize].ty)
             {
                 let origin = self.origin(id);
                 return Ok(self.push(
@@ -4462,6 +4502,41 @@ impl<'a> FuncBuilder<'a> {
                     HirType::Managed(ManagedType::String),
                     origin,
                 ));
+            }
+            // One absence and a pointer: two answers, chosen by whether the
+            // pointer is there. `typeof callback` on a `Callback | undefined`
+            // is "undefined" or "function", and the profile asks it that way
+            // twenty-odd times -- `if (typeof callback === "function")` is how
+            // an optional callback is checked.
+            //
+            // A branch rather than a tag, because a pointer has no tag. Where
+            // there are *two* absences the type is erased and the tag path
+            // below answers it.
+            if let Some(absent) = self.absences_of(operand)
+                && let [only] = absent.as_slice()
+                && let Some(present) = self.spelling_for(&self.values[value.0 as usize].ty)
+                && self.values[value.0 as usize].ty != HirType::Erased
+            {
+                let missing = if *only == super::tags::NULL {
+                    "object"
+                } else {
+                    "undefined"
+                };
+                let text = HirType::Managed(ManagedType::String);
+                let origin = self.origin(id);
+                let when_absent =
+                    self.push(OpKind::ConstString(missing.to_owned()), text.clone(), origin.clone());
+                let when_present =
+                    self.push(OpKind::ConstString(present.to_owned()), text, origin);
+                let Some(condition) = self.absence_of(id, value) else {
+                    return Err(self.unsupported(id, "`typeof` on a value with no absence to test"));
+                };
+                return self.lower_branching_value(
+                    id,
+                    condition,
+                    Branch::Value(when_absent),
+                    Branch::Value(when_present),
+                );
             }
             if self.values[value.0 as usize].ty == HirType::Erased {
                 let origin = self.origin(id);
@@ -12459,7 +12534,7 @@ impl<'a> FuncBuilder<'a> {
         if depth > 8 {
             return None;
         }
-        let parent = self.node(id).parent?;
+        let parent = self.syntactic_parent(id)?;
         match self.kind_of(parent) {
             // `return null` — whatever the enclosing function promised.
             Some(syntax::RETURN_STATEMENT) => {
@@ -12537,8 +12612,26 @@ impl<'a> FuncBuilder<'a> {
                 let Some(argument) = at.checked_sub(1) else {
                     return self.contextual_type(parent, depth + 1);
                 };
-                let target = self.snapshot.call_targets.get(&parent)?;
-                let signature = self.snapshot.signatures.get(target.signature.0 as usize)?;
+                let signature = self
+                    .snapshot
+                    .call_targets
+                    .get(&parent)
+                    .map(|target| target.signature)
+                    // A call through a *value* has no resolved target:
+                    // `(callback as Callback<string>)(null, resolved)` names no
+                    // declaration for the checker to point at. The callee's own
+                    // type is a signature, which is the same answer reached from
+                    // the other end, and it is how a node-style callback is
+                    // always invoked -- seven of the sites in the profile.
+                    .or_else(|| {
+                        let callee = *self.children(parent).first()?;
+                        let ty = *self.snapshot.node_types.get(&callee)?;
+                        match self.snapshot.types.get(ty.0 as usize)?.kind {
+                            TypeKind::Function(signature) => Some(signature),
+                            _ => None,
+                        }
+                    })?;
+                let signature = self.snapshot.signatures.get(signature.0 as usize)?;
                 let parameter = signature.parameters.get(argument)?;
                 self.represent(parameter.ty)
             }
@@ -12806,6 +12899,58 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))
     }
 
+    /// A comparison against an absent literal whose answer is in the *type*.
+    ///
+    /// A pointer carries one absence, so comparing it against the other absent
+    /// literal is a question its representation cannot be asked -- the null
+    /// pointer would answer yes to both.
+    ///
+    /// ```ts
+    /// const v: string | null = ...;
+    /// v === null        // the pointer test
+    /// v === undefined   // false, whatever the pointer holds
+    /// ```
+    ///
+    /// Strictly, because `v == undefined` is the loose question and a null
+    /// answers it. Answered from the type, which still knows which absence it
+    /// has even though the representation does not.
+    ///
+    /// A type carrying *no* absence answers both operators the same way, and
+    /// `==` no less than `===`: abstract equality returns false as soon as one
+    /// side is absent and the other is not, before any conversion. `v == null`
+    /// on a `number` needs no `ToPrimitive` and never did -- it was refused
+    /// only because lowering the `null` came first and a double has nowhere to
+    /// put one. Thirty-two sites in the profile, and `x == null` is how
+    /// TypeScript spells the nullish check.
+    ///
+    /// `None` leaves it to the caller: a pointer asked about the absence it
+    /// does carry is a real test and not a constant.
+    fn absence_the_type_decides(
+        &mut self,
+        id: NodeId,
+        operator: u16,
+        value: NodeId,
+        written: u32,
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        let carried = self.absences_of(value)?;
+        if !(carried.is_empty() || (strict_operator(operator) && !carried.contains(&written))) {
+            return None;
+        }
+        // The answer is known; the operand is still evaluated. Folding it away
+        // made `next() === undefined` skip the call to `next`, which node
+        // makes -- a constant is what the *comparison* is, not what the
+        // expression is.
+        if let Err(diagnostic) = self.lower_expression(value) {
+            return Some(Err(diagnostic));
+        }
+        let origin = self.origin(id);
+        let answer = matches!(
+            operator,
+            syntax::EXCLAMATION_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
+        );
+        Some(Ok(self.push(OpKind::ConstBool(answer), HirType::Bool, origin)))
+    }
+
     /// `v === undefined` where `v` is erased, as the tag test it is.
     ///
     /// A `number | undefined` is one erased value, and its absence is the
@@ -12849,31 +12994,7 @@ impl<'a> FuncBuilder<'a> {
             (None, None) => return None,
         };
         if self.type_of(value) != Some(HirType::Erased) {
-            // A *pointer* carries one absence, and comparing it against the
-            // other absent literal is a question its representation cannot be
-            // asked -- the null pointer would answer yes to both.
-            //
-            //     const v: string | null = ...;
-            //     v === null        the pointer test
-            //     v === undefined   false, whatever the pointer holds
-            //
-            // Strictly, because `v == undefined` is the loose question and is
-            // true for a null. Answered from the *type*, which still knows
-            // which absence it has even though the representation does not.
-            if strict_operator(operator)
-                && let Some(carried) = self.absences_of(value)
-                && !carried.is_empty()
-                && !carried.contains(&written)
-            {
-                let origin = self.origin(id);
-                let answer = operator == syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN;
-                return Some(Ok(self.push(
-                    OpKind::ConstBool(answer),
-                    HirType::Bool,
-                    origin,
-                )));
-            }
-            return None;
+            return self.absence_the_type_decides(id, operator, value, written);
         }
         Some((|| {
             let value = self.lower_expression(value)?;
@@ -12954,8 +13075,9 @@ const fn strict_operator(token: u16) -> bool {
     )
 }
 
-/// What `typeof` answers for a representation, where the representation
-/// decides it.
+/// What `typeof` answers for a representation, where the representation alone
+/// decides it -- `Self::spelling_for` wraps this with the one question that
+/// needs the snapshot.
 ///
 /// `None` for a value whose answer is not fixed by how it is stored: an erased
 /// one carries a tag and is read at run time, and `void`/`never` have no value

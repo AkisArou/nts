@@ -58,7 +58,7 @@ a backlog.
 | ✅ | unary | `+x -x`, `++ --` prefix and postfix |
 | ✅ | compound assignment | `+= -= *= /= %= **= &= \|= ^= <<= >>= >>>=` |
 | ✅ | conditional | `c ? a : b`, nested |
-| ✅ | `typeof` | folded from the representation; a tag read on an erased value |
+| ✅ | `typeof` | folded from the representation, a branch across one absence, a tag read on an erased value — it refuses nothing |
 | ✅ | template literals | including interpolation |
 
 ### `==` between types that differ
@@ -83,6 +83,18 @@ wrongly.
 by the tag pair for an erased value and by the null pointer for a reference. It
 is also the only loose comparison real code writes — 273 in the node profile,
 against **zero** uses of the refused form.
+
+Where the type admits **no** absence at all, both operators are a constant and
+neither converts anything. Abstract equality returns false as soon as one side
+is absent and the other is not, before any `ToPrimitive` — so `n == null` on a
+`number` is false, `n != null` is true, and no coercion was ever involved. This
+was refused for a year under the coercion message, because lowering the `null`
+came first and a double has nowhere to put one. Thirty-two profile sites, and
+`x == null` is how TypeScript spells the nullish check.
+
+The *comparison* is the constant, not the expression. Folding the operand away
+with it made `next() === undefined` skip a call node makes — found by asking a
+counter, not by reading the emitted C.
 | ✅ | object and array literals | shorthand, computed keys, quoted keys |
 | ✅ | member access | `o.x`, `o["x"]`, `o[0]` |
 | ✅ | `new` | user classes, `Array`, typed arrays |
@@ -91,7 +103,7 @@ against **zero** uses of the refused form.
 | ✅ | `?.` | one link; a chain after an optional access is refused and named |
 | ✗ | `?.()`, `?.[]` | optional call and optional index |
 | ✗ | spread | `[...a]`, `{...o}` |
-| ✗ | `in`, `delete`, `void`, comma | |
+| ✗ | `delete`, `void`, comma | `in` is named above |
 | ✗ | `instanceof` | needs a class as a value |
 | ✗ | tagged templates | |
 
@@ -418,15 +430,52 @@ v == undefined       // true for a null — the loose one asks about either
 The representation cannot tell them apart; the **type** still can, and that is
 what answers it.
 
-Two gaps this opened, both small and both real:
+One absence is also enough to answer `typeof`. Which of `"string"` and
+`"object"` a `string | null` gives depends on what the pointer holds — a runtime
+question, and the null pointer is the thing that answers it, so it is a branch
+between two constants and never a tag read. This was documented here as refused,
+on the reasoning that "a pointer carries no tag": true, and beside the point,
+because with one absence the *nullness* is the tag. `typeof callback ===
+"function"` is how an optional callback is checked, twenty-five times in node's
+own sources.
+
+Which is the other half of a wrong answer worth recording. Folding `typeof` from
+the representation shipped with the closure test asking only whether the type id
+was a *synthetic* closure — so a value of declared signature type, which keeps
+its TypeScript function type id, answered `"object"`. node says `"function"`.
+It was live for one commit. The gate did not catch it because the sweep produced
+every value as an expression, and an expression's representation is its most
+concrete one: `const v: Fold = (x) => x` is the closure, while `f(v)`'s
+parameter is the function type. Same TypeScript type, two representations, and
+only one of them was ever asked. The sweep now runs every cell twice, once on a
+local and once on a value that arrived as a parameter.
+
+A gap this opened, still real:
 
 - `v?.length` directly on a two-absence union is refused — the receiver is
   erased and the present branch does not unerase it. Narrowing first works, in
   all three forms: `v !== null && v !== undefined`, `typeof v === "string"`, and
   plain truthiness.
-- a bare `null` *literal* as an argument whose parameter is a two-absence union
-  (`m.set(null, 1)`) finds no contextual type. The same call through a variable
-  is fine.
+
+### An absent literal in an argument
+
+`callback(null, value)` is how every node-style callback reports success, and
+every one of them was refused: `null` has no representation of its own, so it
+takes one from where it sits, and the argument position found nothing.
+
+The cause was not the argument rule but the tree. `children()` flattens a
+`List` node — an argument list, a parameter list — so a call's children are its
+callee and its arguments, laid out flat. The `parent` link does **not**: an
+argument's parent is the list, whose kind is no syntax at all. So the rule that
+reads `f(null)` was looking at a node that matched none of its arms, and had
+been since it was written; the comment above it claimed the case and no test
+asked. `syntactic_parent` now steps over lists, which is the half of `children`
+that was missing.
+
+Under it sat a second one: a call through a *value* — `(callback as
+Callback<string>)(null, resolved)` — resolves to no declaration, so there is no
+call target to read a signature from. The callee's own type is a signature, and
+that is the same answer reached from the other end.
 
 ### The frame's reference moves through the suspension
 
@@ -763,15 +812,30 @@ questions:
 
 | | what it says | today |
 |---|---|---|
-| examples | the compiled program agrees with node, case by case | 84 of 84 |
-| corpus | arbitrary input produces no invalid IR and no C that will not compile | 48 lower cleanly; `invalid HIR` 0, `uncompilable C` 2 |
-| profile | how much of a real standard library lowers | 664 functions, all of which verify |
+| examples | the compiled program agrees with node, case by case | 89 of 89 |
+| sweep | a generated cross-product agrees with node, cell by cell | 7,366 cases across 254 functions |
+| corpus | arbitrary input produces no invalid IR and no C that will not compile | 49 lower cleanly; `invalid HIR` 0, `uncompilable C` 2 |
+| profile | how much of a real standard library lowers | 22 modules emit; 1,013 distinct refusal sites |
+| rc | the same examples hold nothing at exit under reference counting | 85 of 89, four named |
 
-Only the examples check **correctness**. The corpus checks robustness; the
-profile measures reach and runs nothing, so a function counted there is one
-that compiles rather than one known to be right — and until recently it counted
-functions that could not even be emitted, because the row that would have said
-so was collected and never printed.
+Only the examples and the sweep check **correctness**, and they check it
+differently: an example covers what somebody thought to write down, a sweep
+covers what nobody did. Every correctness bug found here by hand has been one
+cell of a product — `null === undefined` answered true, `typeof f ===
+"function"` answered false, a `bigint` `&` narrowed both operands to 32 bits —
+which is the whole argument for generating them.
+
+A sweep is only as good as its dimensions, and one of them was missing until a
+wrong answer got through: every value was produced as an *expression*, and an
+expression has the most concrete representation its type allows. The same
+TypeScript type reaching a **parameter** can be represented differently, and
+that is where `typeof` on a declared signature answered `"object"`. Each cell
+now runs both ways.
+
+The corpus checks robustness; the profile measures reach and runs nothing, so a
+function counted there is one that compiles rather than one known to be right —
+and until recently it counted functions that could not even be emitted, because
+the row that would have said so was collected and never printed.
 
 Two ways the profile number has since been caught lying, both worth remembering
 before quoting it:
@@ -794,7 +858,7 @@ rather than done quietly under a feature.
 
 ## 15. What to do next, ordered by evidence
 
-From the node profile's refusal sites — 1,050 of them, counted **once each**.
+From the node profile's refusal sites — 1,013 of them, counted **once each**.
 The raw sweep reports about five times that, because a module is re-compiled
 once per importer and `util/types.ts` is counted twenty-one times over. This is
 the only list ordered by what real code actually needs rather than by what looks
@@ -809,13 +873,13 @@ blocks on, not to start building.
 |---|---|---|
 | closures and function values | **done**, all four rows. 101 sites, and the profile went 1,155 → 1,041 across the four changes | a function as a value, capture by reference, module-scope names, and a capture above its own declaration. What is refused is one thing: a `for` loop's own variable, which JavaScript rebinds per iteration |
 | module evaluation | 81 — one refusal repeated across the top level of nearly every module | a statement at module scope that is not a declaration; the evaluation order is already modelled |
-| a member a type does not declare | 80 — 26 of them on an anonymous type, then `StreamLike` (12) | mostly structural types the decomposition stopped at; count before building |
-| a global member | 78 — a long tail: `Object.defineProperty` 14, `Array.from` 10, `ArrayBuffer.isView` 7 | the largest entry is §13's, so this row is smaller than it looks |
+| a class as a value | 68 — the largest single row | a class object with a descriptor, which `instanceof` and the ambient `lib` classes both wait on |
+| a member a type does not declare | 62 — 26 of them on an anonymous type, then `StreamLike` (12) | mostly structural types the decomposition stopped at; count before building |
+| a global member | 64 — a long tail: `Object.defineProperty` 14, `Array.from` 10, `ArrayBuffer.isView` 7 | the largest entry is §13's, so this row is smaller than it looks |
 | `instanceof` | 67, but **8** are `instanceof` — 59 are one idiom, `override get ["constructor"]() { return TypeError; }` | blocked twice over: two classes of a shape share a descriptor (§4), and every right-hand side in all 67 is an ambient `lib` class this compiler does not declare |
-| the async iterator protocol | 62, all `AsyncIterableIterator` | §10 plus the suspension machine, which `async` already has |
-| `symbol` | 52 — mostly `string \| symbol` as a property key | a representation, and a decision about whether well-known symbols are values or names |
-| `typeof` on an open value | 45 | the tag exists; what is missing is the tag *not distinguishing an array from an object* |
-| a method not in the hierarchy | 40 — `emit` 8, then a long tail of 23 | structural dispatch, which is the same question as the anonymous-type row above |
+| the async iterator protocol | 63, all `AsyncIterableIterator` — and a **second** 62-site row is the same thing under another message, a property `#lineObjectStream` of type `AsyncIterableIterator \| undefined`. One property, counted 62 times | §10 plus the suspension machine, which `async` already has |
+| `symbol` | 46 — `string \| symbol` as a property key, 30 as a parameter and 16 as a property | a representation, and a decision about whether well-known symbols are values or names |
+| a method not in the hierarchy | 52 — `emit` 8, then a long tail | structural dispatch, which is the same question as the anonymous-type row above |
 | string methods | 15 — `toLowerCase` 12, `normalize` 2, `toUpperCase` 1. `split`, `trim`, `replace` and `replaceAll` are done | what is left wants a Unicode case table and normalization, which is a different order of work from the rest |
 | generators | 4 refusals, but `readline` and several streams are behind them | the suspension machine exists; what is missing is the `Generator<T>` object and §10's protocol |
 | `try`/`catch` | the largest *language* gap, and invisible in this table because the code that needs it does not reach the lowering | needs an unwinding decision — the runtime has none |
@@ -825,6 +889,16 @@ C` is ratcheted at 2 and only downward — see §14 for why 2 is not the true
 number and what the honest count costs.
 
 ### What came off this list
+
+`typeof` (25) and absent literals (33 → 16) came off together, and neither was
+the shape its message suggested. `typeof` was not waiting on a tag: every
+answer it refused was fixed by the representation, or by one branch on a
+pointer that carries a single absence. The absent-literal row was not waiting
+on a representation either — half of it was `x == null` on a type with no
+absence, which is a constant the equality algorithm reaches before it converts
+anything, and the other half was `callback(null, …)`, which was refused because
+an argument's `parent` link points at a list node and the rule that reads
+argument positions had never once matched.
 
 Kept because the reasons are more useful than the checkmarks. `Map` and `Set`
 (~150) were one hash table. Typed-array methods (56) turned out to be 34 calls

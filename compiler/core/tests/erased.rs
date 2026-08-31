@@ -92,8 +92,10 @@ fn a_concrete_value_is_erased_at_the_boundary() {
 /// `typeof` on an erased value reads its tag.
 ///
 /// The refusal it replaces said `which needs a runtime tag`, and this is that
-/// tag. `compiler/core/tests/programs/typeof-erased` still pins the refusal for
-/// a value that has no tag to read.
+/// tag. Nothing pins that refusal any more: a value with one absence is
+/// answered by a branch on the pointer, and one with two is erased and reaches
+/// here, so `typeof` no longer refuses anything the lowering can produce.
+/// `examples/absent` holds both.
 #[test]
 fn typeof_on_an_erased_value_reads_the_tag() {
     let Some(lowered) = lower_at("../../examples/unknown") else {

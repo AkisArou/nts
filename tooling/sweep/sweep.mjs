@@ -168,12 +168,30 @@ out.push("  return undefined;");
 out.push("}");
 out.push("");
 let count = 0;
+// Each cell twice: once on a local, and once on a value that arrived as a
+// parameter.
+//
+// Not redundancy -- the two can have different *representations* of the same
+// TypeScript type. A `const v: (x: number) => number = (x) => x` is lowered
+// from its initializer, so it is the concrete closure; the parameter has only
+// the annotation, so it is the function type. `typeof` answered "function" for
+// the first and "object" for the second, and this file asked only the first.
+// A parameter is also the only one of the two that a caller can pass an
+// absence to without the callee's declaration mentioning it.
 for (const kind of KINDS) {
   for (const ask of kind.asks) {
     count++;
     out.push(`export function ${kind.id}_${ask}(n: number): string {`);
     out.push(`  const v: ${kind.ts} = ${kind.expr};`);
     out.push(`  return ${ASKS[ask]("v")};`);
+    out.push(`}`);
+    out.push("");
+    count++;
+    out.push(`function ${kind.id}_${ask}_at(v: ${kind.ts}): string {`);
+    out.push(`  return ${ASKS[ask]("v")};`);
+    out.push(`}`);
+    out.push(`export function ${kind.id}_${ask}_param(n: number): string {`);
+    out.push(`  return ${kind.id}_${ask}_at(${kind.expr});`);
     out.push(`}`);
     out.push("");
   }
