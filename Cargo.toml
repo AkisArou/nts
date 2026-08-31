@@ -9,6 +9,7 @@ members = [
     "compiler/debug-lowering",
     "compiler/codegen/common",
     "compiler/codegen/c",
+    "compiler/codegen/llvm",
     "compiler/codegen/napi",
     "build",
     "tooling/cli",
@@ -29,6 +30,7 @@ publish = false
 # Internal crates. Kept here so a version or path move happens in one place.
 nts-build = { path = "build" }
 nts-codegen-c = { path = "compiler/codegen/c" }
+nts-codegen-llvm = { path = "compiler/codegen/llvm" }
 nts-codegen-napi = { path = "compiler/codegen/napi" }
 nts-codegen-common = { path = "compiler/codegen/common" }
 nts-core = { path = "compiler/core" }

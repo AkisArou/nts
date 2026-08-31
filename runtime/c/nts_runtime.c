@@ -1637,6 +1637,23 @@ NtsArray *nts_array_fill_ref(NtsArray *a, void *value) {
   return nts_array_same(a);
 }
 
+/* The coercions, as linkable symbols.
+ *
+ * `nts_to_int32` and its siblings are `static inline` in the header, which is
+ * right for C -- every translation unit gets the ten instructions rather than a
+ * call -- and invisible to any backend that is not a C compiler. A header is
+ * not a contract another code generator can read.
+ *
+ * So the inline stays and this stands beside it: one definition, called by
+ * nobody in C, giving a second backend a symbol to link against. It is the
+ * smallest possible statement of the rule that what the runtime *offers* has
+ * to be linkable, and the first thing across the C-to-LLVM boundary -- a double
+ * in, an `int32_t` out, which is the simplest ABI there is to be wrong about.
+ */
+int32_t nts_to_int32_fn(double x) { return nts_to_int32(x); }
+
+uint32_t nts_to_uint32_fn(double x) { return nts_to_uint32(x); }
+
 /* `String.fromCharCode(x)`: one UTF-16 code unit, from `ToUint16(x)`.
  *
  * `ToUint16` rather than a cast. The specification truncates towards zero,

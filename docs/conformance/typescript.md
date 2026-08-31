@@ -538,6 +538,50 @@ its sibling that calls `clearTimeout` shows no growth at all. Both stay listed,
 because the check cannot tell state a program still needs from state it has
 lost, and a *change* in either number is worth stopping for.
 
+### There are two backends now, and they agree
+
+`compiler/codegen/llvm` renders the same HIR as textual LLVM IR, fed to
+`clang -x ir`. Textual rather than a linked `llvm-sys`, for the reason the C
+backend has earned: reading `program.c` diagnosed three separate bugs in one
+week, and an IR nobody can read gives that up. It also avoids pinning an LLVM
+version into the build.
+
+The C backend does not go away. It is the **oracle**: one HIR, two renderers,
+and a disagreement between them is a backend bug *by construction* — the
+program, the lowering, every optimisation and the runtime are identical, and
+only the rendering differs. Nothing else here can isolate a backend that way;
+the differential compares against node, which is the right oracle for semantics
+and says nothing about which renderer was wrong.
+
+That this is possible at all is a consequence of where suspension lives.
+`hir::suspend` turns a suspending function into a state machine in the *middle
+end*, before any backend sees it, so the C backend can express `async`. scriptc
+put suspension in the backend, so theirs cannot — their C output is debug-only
+and their LLVM output has no second opinion.
+
+What is rendered so far is the scalar slice: numbers, integers and booleans,
+arithmetic, comparison, conversions, direct calls, and control flow. Anything
+managed is refused by name. The one structural difference between the IRs is
+block parameters: HIR puts arguments on edges the way MLIR and SIL do, LLVM puts
+the join in the successor as a `phi`. They carry the same information and the
+translation is mechanical, which is a large part of why the lowering chose block
+parameters in the first place.
+
+Two things the move has already taught:
+
+- **A `static inline` in a C header is not a contract another backend can
+  read.** `nts_to_int32` is thirty-one such helpers' worth of the runtime, right
+  for C — every translation unit gets ten instructions instead of a call — and
+  invisible to a code generator that is not a C compiler. The inline stays and a
+  linkable form stands beside it. What the runtime *offers* has to be linkable.
+- **`#` is in every name this compiler invents** — `fib#whole`, `Closure3#call`,
+  `module#init` — chosen because TypeScript cannot produce one. LLVM identifiers
+  cannot hold it unquoted, so the quoted form is where that is absorbed.
+
+The test drives both backends over the differential's own hostile pool — both
+zeroes, both infinities, a NaN, past 2^53, the 1e21 boundary — with the runtime
+linked into both, which is also the only place the C-to-LLVM ABI is exercised.
+
 ### `this` is a free variable of an arrow, and was the only one not treated as one
 
 Two rows in §15 looked like the case for structural dispatch: "a member `X`

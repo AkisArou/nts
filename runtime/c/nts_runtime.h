@@ -662,6 +662,11 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
 /* ECMAScript `Number::toString`, base 10. The shortest decimal that reads back
  * as the same double, laid out the way the specification lays it out -- which
  * is not what any `printf` conversion produces. */
+/* The coercions as linkable symbols, for a backend that cannot read a C
+ * header's `static inline`. See the definitions for why both exist. */
+int32_t nts_to_int32_fn(double x);
+uint32_t nts_to_uint32_fn(double x);
+
 NtsString *nts_number_to_string(double x);
 /* `String.fromCharCode` and `String.fromCodePoint`, which are two functions:
  * the first takes a UTF-16 code *unit* through `ToUint16` and always returns

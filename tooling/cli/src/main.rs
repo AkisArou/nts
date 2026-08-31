@@ -122,6 +122,13 @@ fn main() -> Result<()> {
                 .map(Utf8PathBuf::from);
             emit_c(&tsconfig, out.as_deref())
         }
+        // The second backend, reading the same HIR. Textual, so it can be read
+        // the way `program.c` can -- which is how three bugs were found in the
+        // week before it existed.
+        Some("emit-llvm") => {
+            let rest: Vec<String> = args.collect();
+            emit_llvm(&project(&rest))
+        }
         // Every type the frontend resolved, as the schema records it. A
         // lowering refusal names a *type*, and until now there was no way to see
         // what that type actually is — which is a scavenger hunt for anyone
@@ -1176,6 +1183,32 @@ fn write_standalone(program: &hir::Program, out: &Utf8Path) -> Result<()> {
 }
 
 /// Lower a project and print the C it becomes.
+/// `nts emit-llvm <tsconfig>` — the same program, rendered as LLVM IR.
+///
+/// Prints rather than writes: the slice it renders is scalar, so there is no
+/// runtime to place beside it yet and a file would suggest otherwise.
+fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
+    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let snapshot = source.snapshot(tsconfig)?;
+    report_snapshot_diagnostics(&snapshot)?;
+    let prepared = match hir::prepare(&snapshot) {
+        Ok(prepared) => prepared,
+        Err(problems) => {
+            for problem in &problems {
+                eprintln!("invalid HIR: {problem:?}");
+            }
+            bail!("refusing to emit code from invalid HIR");
+        }
+    };
+    let emitted = nts_codegen_llvm::emit(&prepared.program);
+    for diagnostic in &emitted.diagnostics {
+        eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
+    }
+    print!("{}", emitted.text);
+    Ok(())
+}
+
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let mut source = TsgoApi::for_compilation(tsgo_binary);
