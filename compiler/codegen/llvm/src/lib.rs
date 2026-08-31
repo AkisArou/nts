@@ -632,13 +632,37 @@ fn frame_units(func: &Func, value: ValueId) -> Option<u32> {
     }
 }
 
-/// Stack storage for a string the escape analysis kept out of the heap.
+/// Stack storage for the strings the escape analysis kept out of the heap.
+///
+/// Every one of them, in the **entry block**. An `alloca` runs where it is
+/// written, so one emitted beside its call sits inside whatever loop the call
+/// is in and takes another 186 bytes of stack every iteration -- and
+/// `benches/substrings` slices a word at a time, sixty-four rounds deep. The C
+/// backend declares this storage with the function's other locals and says why:
+/// one slot per allocation *site* rather than one per execution of it, which is
+/// correct precisely because nothing outlives the iteration that made it.
 ///
 /// `NTS_FRAME_STRING(units)`: a header and `units + 1` code units, which is a
 /// *bound* rather than a length -- what the compiler knows is that a slice
 /// cannot exceed the string it came from, and how long it actually is only
 /// running finds out.
-fn frame_storage(out: &str, units: u32) -> String {
+fn frame_storage(func: &Func) -> Vec<String> {
+    func.values
+        .iter()
+        .enumerate()
+        .filter_map(|(at, op)| match op.kind {
+            OpKind::Call {
+                frame: Some(units), ..
+            } => Some(one_frame(
+                &name(ValueId(u32::try_from(at).unwrap_or(0))),
+                units,
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+fn one_frame(out: &str, units: u32) -> String {
     let bytes = u64::from(nts_codegen_common::layout::HEADER.size) + 2 * (u64::from(units) + 1);
     format!(
         "{out}.frame = alloca i8, i64 {bytes}, align {}",
@@ -855,6 +879,7 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
             params.push(format!("{ty} {}{value}", extension(&param.ty)));
         }
     }
+    prologue.extend(frame_storage(func));
     let linkage = if func.exported { "" } else { "internal " };
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
@@ -1610,8 +1635,9 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
             }
             let mut rendered = Vec::new();
             let mut before: Vec<String> = Vec::new();
-            if let Some(units) = framed {
-                before.push(frame_storage(&out, units));
+            if framed.is_some() {
+                // The storage itself is declared in the entry block, not here.
+                // See `frame_storage`.
                 rendered.push(format!("ptr {out}.frame"));
             }
             rendered.extend(arguments(func, &out, args, &mut before)?);
