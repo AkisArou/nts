@@ -642,6 +642,33 @@ a single-backend assumption:
 - **A field's representation is specialized**, so nothing outside the program
   may assume `number` means `double`.
 
+### A generated file with no generator, and a check that did not check
+
+`src/signatures.rs` said it was generated and nothing generated it: it was
+produced once, by hand, out of band. `NTS_REGENERATE=1 cargo test -p
+nts-codegen-llvm --test signatures` writes it now, from the same parse that
+checks it, so the two cannot answer different questions.
+
+The check had a hole of its own. It compared return types and parameter types
+and *not* attributes -- the part worth 5x. An attribute that stopped being
+emitted would have cost that with every test still green. It compares them now.
+
+And it skipped too politely. Failing to compile the probe returned "no
+toolchain", which is what a missing clang looks like; a broken header looked
+exactly like a machine without a compiler. Clang absent still skips. Clang
+present and refusing now fails, with what it said.
+
+### `nts emit-llvm` printed nothing about what it had refused
+
+`emit-c` reports the lowering's diagnostics and `emit-llvm` reported only the
+backend's, so a module with two refusals in it -- a top-level loop assigning a
+module-scope name, and a `console.log` -- printed an empty `module__init` and no
+explanation. It looked like a backend that had rendered everything asked of it.
+It reports both now.
+
+The same shape as `uncompilable C` being 15 and invisible: the number was not
+wrong, nothing printed it.
+
 ### The second backend runs the whole differential
 
 `NTS_BACKEND=llvm` drives every example, every case and the same hostile pool
@@ -682,6 +709,159 @@ One of them had to be taken *away*. `nts_check_fn` was declared
 fails does not return, it aborts. That would have licensed hoisting a trap out
 of the branch guarding it. An attribute is a promise, and a promise that is
 nearly true is worse than none.
+
+### An attribute the header states once, and both backends get
+
+`nts_object_new` and its five siblings always return a *fresh* object: never
+null, reachable through no pointer the caller already holds. Written in the
+header as `__attribute__((malloc, returns_nonnull))`, that reaches generated C
+because C includes the header and reaches the module because the signature table
+is generated from what clang says. One place, both backends.
+
+**Measured, and it bought nothing.** On an allocating loop -- four million fresh
+two-field objects, each written and read -- 0.23s with the promise and 0.23s
+without, same checksum. Adding the stronger claim by hand (`memory(argmem: read,
+inaccessiblemem: readwrite)`, which is how LLVM models `malloc`) also changed
+nothing. The reason is the honest one: the allocation call *is* the cost, and no
+promise about what it does short of deleting it changes that.
+
+It stays because it is true and free, and because `noalias` pays in shapes that
+have not been written yet. But it is recorded as a measurement rather than a
+win, because "the attributes are worth 5x" was a real number from a real
+program, and this is not that.
+
+Applied only where the definition allocates unconditionally -- and the
+exclusion that matters is the `_into` family, which returns storage its *caller*
+supplied. That is a pointer the caller already holds, which is exactly what
+`malloc` promises cannot happen.
+
+The first version of that reasoning was invented rather than read. It said
+`nts_str_slice` may hand back its argument and `nts_tag_name` returns one of
+seven static strings; neither is true -- `nts_str_slice` routes through
+`nts_str_raw` and allocates every time, and `nts_tag_name` builds a fresh string
+on every call. The functions excluded were still the right ones, by luck rather
+than by the reason given, which is worth writing down: a promise that is nearly
+true is worse than none, and so is a reason for one that was never checked.
+
+### `nsw`, exactly where clang puts it
+
+`int32_t` overflow is undefined in C, and `Int { bits: 32, signed: true }` is
+`int32_t`. So the C backend has always been compiled under the stronger
+assumption -- clang writes `add nsw i32` for it -- while the LLVM backend wrote
+a bare `add`. That is a divergence in the direction nobody wants: the *primary*
+backend giving up an optimization the reference implementation already takes.
+
+Which operations carry it is read off clang rather than off C11 6.5, for the
+same reason the signatures are:
+
+| | |
+|---|---|
+| signed `+` `-` `*`, unary `-` | `nsw` |
+| unsigned `+` `*` | nothing |
+| `<<`, `/`, `>>` | nothing, even signed |
+
+There is no `nuw` anywhere and its absence is the point. Unsigned overflow in C
+is *defined* to wrap, so `nuw` would be the one place this backend promised more
+than its oracle does.
+
+### A read-only array loop is at parity, and the counter is not the reason
+
+A `for (let i = 0; i < xs.length; i++)` counter stays a `double`, because
+`xs.length` is a `uint32_t` and does not fit an `int32_t` -- so the loop pays a
+`fptoui` per element and carries `fadd double %i, 1.0` instead of an integer
+induction variable. That looks like it should cost something.
+
+Against the same loop written by hand in C++ over a `std::vector<double>`, four
+thousand elements, twenty thousand rounds:
+
+| | time |
+|---|---|
+| nts, through LLVM | 0.05s |
+| hand-written C++ | 0.06s |
+
+Same checksum. The accumulator is a chain of dependent `fadd`s, four cycles
+each, and neither compiler can vectorize a floating-point reduction without
+being told it may reassociate. The counter's type is not the wall; the
+arithmetic is, for both. A narrower counter is still worth having for the loops
+that are not reductions -- but it is not the thing standing between this and C++
+here, and it would have been easy to spend a day believing it was.
+
+### What may alias what, and a measurement that was too short to show it
+
+Add a *store* to that loop -- `xs[i] = xs[i] * k` -- and it changes character.
+The element block pointer and the length both live in the array's header,
+reached through the same parameter, so a `store double` may for all LLVM knows
+have overwritten them: they are re-loaded on every element.
+
+The generated C does not have this problem. C's rule is that two accesses of
+different types do not alias, so clang hoists the `uint32_t` length and the
+element pointer out of a loop that only writes `double`s. **A module carries no
+types at all once it is written.** `store double` and `load i32` are both just
+bytes.
+
+The first measurement said there was nothing here:
+
+| | 20k rounds |
+|---|---|
+| LLVM backend | 0.04s |
+| C backend | 0.04s |
+| hand-written C++ | 0.03s |
+
+Three numbers at 10ms resolution, which is not a measurement of anything -- 0.04
+and 0.04 could be 0.035 and 0.044. Twenty times the work:
+
+| | 400k rounds |
+|---|---|
+| LLVM backend, before | 0.85s |
+| LLVM backend, with `!tbaa` | **0.78s** |
+| C backend | 0.78s |
+| hand-written C++ | 0.58s |
+
+So the gap was 9%, it was **to our own oracle rather than to clang**, and a type
+tree closes it exactly. The lesson is the older one: a number whose resolution
+is the same size as the effect is not evidence, and "they came out equal" is the
+easiest wrong answer to accept.
+
+The remaining 0.78 against C++'s 0.58 is shared by both backends and is a
+different question -- C++'s `vector` is a local whose address never leaves the
+function, so its size and data pointer cannot be disturbed by anything at all,
+where our array arrives as a parameter.
+
+Only types, not fields: LLVM's struct-path TBAA would additionally say `Point.x`
+and `Point.y` do not alias, which is where soundness stops being obvious, and
+the plain type rule already recovered the whole difference. `i8` deliberately
+has no node -- it is the omnipotent char and aliases everything, which is what C
+says and what string data is.
+
+**The tree is clang's, and the first one was not.** It invented a root,
+`!{!"nts"}`, and the worry about that turned out to be backwards. The fear was
+unsoundness under `-flto` -- which `tooling/bench` uses -- from two trees
+describing the same memory. The experiment says otherwise: a loop that loads a
+`double` and stores an `int` through an unrelated pointer has its load hoisted
+clean out when both tags sit under clang's root, and moves *nothing* when the
+store's tag has a root of its own. Unrelated roots are treated as possibly
+aliasing.
+
+So an invented root is safe and **useless across a translation unit**: every tag
+the runtime carries would be opaque to every tag we emit, and under LTO -- where
+the runtime is finally visible and there is most to gain -- it would have gained
+nothing. Metadata nodes are uniqued by content, so spelling the tree exactly as
+clang spells it makes our `double` node *be* the runtime's. The names are not
+guessable and were read off clang: `int8_t` and `uint8_t` are character types
+and get the omnipotent char, signed and unsigned share a node so `uint32_t` is
+`"int"`, `int64_t` and `uintptr_t` are both `"long"`, and `_Bool` keeps its
+underscore.
+
+`NtsValue` gets the char node rather than one of its own, because it is a union
+in C and this is not the place to make a claim about one. Measured on an erased
+field read inside a storing loop, giving it a distinct node was worth nothing,
+so the conservative choice is free.
+
+What makes it sound is that every field is accessed at exactly one LLVM type:
+the type comes from `field_at`, off the field's HIR type. An erased value is
+read and written whole, as `{ i32, i64 }`, never as a `double` through one path
+and an `i64` through another -- the one place a union could have made this a
+lie.
 
 ### Two things C was doing silently
 

@@ -1201,6 +1201,18 @@ fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
             bail!("refusing to emit code from invalid HIR");
         }
     };
+    // The lowering's refusals, not just the backend's. Printing only the
+    // second is how this command answered an empty module for a program with
+    // two refusals in it: `emit-c` reported them and this did not, so the
+    // module looked like a backend that had rendered everything asked of it.
+    for diagnostic in &prepared.diagnostics {
+        eprintln!(
+            "{}: {} {}",
+            where_it_is(&snapshot, &diagnostic.primary),
+            diagnostic.code,
+            diagnostic.message
+        );
+    }
     let emitted = nts_codegen_llvm::emit(&prepared.program);
     for diagnostic in &emitted.diagnostics {
         eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);

@@ -510,7 +510,41 @@ size_t nts_cycle_candidates(void);
  * NoGC is not slower for being simpler: a bump allocator is a pointer add, and
  * that is the point of it for allocation testing and microbenchmarks. RC pays
  * for a free list because it has something to give back. */
-void *nts_alloc(size_t bytes);
+
+/* The result is a *fresh* object: never null, and reachable through no pointer
+ * the caller already holds.
+ *
+ * Both halves earn their keep. `returns_nonnull` deletes the null test a
+ * compiler would otherwise have to keep around every allocation -- these abort
+ * on exhaustion rather than returning zero, so the test is dead and only the
+ * declaration can say so. `malloc` -- clang's `noalias` on the return -- is the
+ * larger one: it is what lets a store into a new object be reasoned about at
+ * all. Without it, `o->x = 1` may write through to anything else the caller can
+ * see, so nothing before it can be forwarded and nothing after it dropped;
+ * with it, a freshly allocated object is private until the program publishes it
+ * and its stores behave like stores to a local.
+ *
+ * The exclusion that matters is the `_into` family. `nts_str_slice_into` and
+ * `nts_concat_into` return the storage their *caller* supplied, which is a
+ * pointer the caller already holds by definition -- exactly what `malloc`
+ * promises cannot happen. Their wrappers pass `NULL` and do allocate every
+ * time, so they could carry this; they do not, because it measured as worth
+ * nothing and every promise added is surface for getting one wrong.
+ *
+ * That distinction was checked rather than assumed, and the first version of
+ * this comment had it wrong twice: it claimed `nts_str_slice` may hand back its
+ * argument, which it never does, and that `nts_tag_name` returns one of seven
+ * static strings, when it builds a fresh one on every call. A promise that is
+ * nearly true is worse than no promise -- the same reason `NTS_READS_ONLY` had
+ * to come off the bounds checks -- and so is a reason for one that was never
+ * read. */
+#if defined(__GNUC__) || defined(__clang__)
+#define NTS_ALLOCATES __attribute__((malloc, returns_nonnull))
+#else
+#define NTS_ALLOCATES
+#endif
+
+NTS_ALLOCATES void *nts_alloc(size_t bytes);
 size_t nts_live_bytes(void);
 void nts_retain(NtsHeader *object);
 /* How many allocated objects still hold a reference.
@@ -521,14 +555,15 @@ void nts_retain(NtsHeader *object);
  * program rather than inferred from its memory use. */
 size_t nts_live_count(void);
 void nts_release(NtsHeader *object);
-NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length);
+NTS_ALLOCATES NtsArray *nts_array_new(const NtsDescriptor *descriptor,
+                                      double length);
 /* The same, without zeroing the elements. Only for an allocation the compiler
  * fills completely before anything can read it; see the definition. */
-NtsArray *nts_array_new_uninitialized(const NtsDescriptor *descriptor,
-                                      double length);
-NtsHeader *nts_object_new(const NtsDescriptor *descriptor);
+NTS_ALLOCATES NtsArray *
+nts_array_new_uninitialized(const NtsDescriptor *descriptor, double length);
+NTS_ALLOCATES NtsHeader *nts_object_new(const NtsDescriptor *descriptor);
 void nts_bounds(double index, uint32_t length);
-NtsString *nts_concat(const NtsString *a, const NtsString *b);
+NTS_ALLOCATES NtsString *nts_concat(const NtsString *a, const NtsString *b);
 bool nts_string_eq(const NtsString *a, const NtsString *b);
 
 /* String methods.
@@ -567,8 +602,8 @@ bool nts_string_eq(const NtsString *a, const NtsString *b);
 
 /* `new Map()` and `new Set()`. `kind` is one of `NTS_KEY_*`, a double because
  * that is how this ABI passes a number the compiler knew all along. */
-NtsMap *nts_map_new(double kind);
-NtsMap *nts_set_new(double kind);
+NTS_ALLOCATES NtsMap *nts_map_new(double kind);
+NTS_ALLOCATES NtsMap *nts_set_new(double kind);
 NTS_READS_ONLY NtsValue nts_map_get(const NtsMap *map, NtsValue key);
 NTS_READS_ONLY bool nts_map_has(const NtsMap *map, NtsValue key);
 /* Returns the collection, which is what `set` and `add` evaluate to. */

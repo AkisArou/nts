@@ -133,12 +133,18 @@ fn main() -> Result<()> {
         }
     }
 
-    // Only a full run may rewrite the README. A filtered one would leave the
-    // table describing a mixture of two machines and two revisions, which is
-    // worse than a stale table because it does not look stale.
-    if requested.is_empty() && rows.len() == cases.len() {
+    // Only a full run through the default backend may rewrite the README. A
+    // filtered one would leave the table describing a mixture of two machines
+    // and two revisions, which is worse than a stale table because it does not
+    // look stale -- and the same argument now applies to the backend. The table
+    // does not say which one produced it, so a run through the second would
+    // silently replace the first's numbers with numbers measured somewhere
+    // else. Reading them is the point; publishing them unlabelled is not.
+    if requested.is_empty() && rows.len() == cases.len() && !through_llvm() {
         write_readme(&root, &rows)?;
         println!("\nREADME updated.");
+    } else if through_llvm() {
+        println!("\nREADME not updated: these are the second backend's numbers.");
     } else if !requested.is_empty() {
         println!("\nREADME not updated: a filtered run measures only part of the table.");
     }
@@ -266,8 +272,9 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         hir::Provider::NoGc => name.to_owned(),
     };
 
-    let specialized = out.join(format!("{name}.specialized.c"));
-    let plain = out.join(format!("{name}.plain.c"));
+    let suffix = if through_llvm() { "ll" } else { "c" };
+    let specialized = out.join(format!("{name}.specialized.{suffix}"));
+    let plain = out.join(format!("{name}.plain.{suffix}"));
     let entry = entry_points(case)?;
     std::fs::write(&specialized, emit(&tsconfig, &entry, true, provider)?)
         .with_context(|| format!("writing {specialized}"))?;
@@ -443,11 +450,34 @@ fn emit(
         eprintln!("  {} {}", diagnostic.code, diagnostic.message);
     }
 
+    if through_llvm() {
+        let emitted = nts_codegen_llvm::emit(&prepared.program);
+        for diagnostic in &emitted.diagnostics {
+            eprintln!("  {} {}", diagnostic.code, diagnostic.message);
+        }
+        return Ok(emitted.text);
+    }
     let emitted = nts_codegen_c::emit(&prepared.program);
     for diagnostic in &emitted.diagnostics {
         eprintln!("  {} {}", diagnostic.code, diagnostic.message);
     }
     Ok(emitted.writer.text().to_owned())
+}
+
+/// Whether to measure the second backend instead of the first.
+///
+/// The table measured the C backend and only the C backend, which was right
+/// while that was the only one. It is not any more: "no degraded performance"
+/// is a claim about the backend a program will actually be compiled by, and it
+/// cannot be checked on a different one. `NTS_BACKEND=llvm` is the same switch
+/// the differential takes, spelled the same way, so a case that disagrees here
+/// can be handed straight to that.
+///
+/// The C backend stays the default, because it is the one that renders every
+/// program: the second refuses what it has not learned, and a table with
+/// missing rows would be a worse instrument than one measuring the oracle.
+fn through_llvm() -> bool {
+    std::env::var("NTS_BACKEND").is_ok_and(|name| name == "llvm")
 }
 
 /// Build one variant.
@@ -487,15 +517,26 @@ fn compile(
     }
 
     let mut objects = Vec::new();
-    for (driver, standard, sources) in [("clang++", "-std=c++20", cpp), ("clang", "-std=c11", c)] {
-        for source in sources {
+    // Three languages now, not two. A `.ll` is handed to the same clang with
+    // `-x ir`, because the file extension is not what clang reads: without it
+    // the driver would take a textual module for C and fail on its first line.
+    // `-w` because `-Werror` is for source we wrote by hand -- a module the
+    // backend rendered has no warnings to fix, and clang emits one about the
+    // target triple for every `-x ir` input.
+    let (ll, c): (Vec<_>, Vec<_>) = c.iter().cloned().partition(|s| s.extension() == Some("ll"));
+    for (driver, extra, sources) in [
+        ("clang++", vec!["-std=c++20"], cpp.to_vec()),
+        ("clang", vec!["-std=c11"], c),
+        ("clang", vec!["-x", "ir", "-w"], ll),
+    ] {
+        for source in &sources {
             let object = binary.with_extension(format!(
                 "{}.o",
                 source.file_name().unwrap_or("unit").replace('.', "_")
             ));
             let output = std::process::Command::new(driver)
                 .args(SHARED)
-                .arg(standard)
+                .args(&extra)
                 .args(defines)
                 .args(&includes)
                 .arg("-c")

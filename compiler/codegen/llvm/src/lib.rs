@@ -127,7 +127,108 @@ pub fn emit(program: &Program) -> Emitted {
             Err(diagnostic) => diagnostics.push(diagnostic),
         }
     }
+    let _ = writeln!(text, "\n{TBAA_TREE}");
     Emitted { text, diagnostics }
+}
+
+/// What may alias what, which C tells clang and a module has to say for itself.
+///
+/// # Why this is here at all
+///
+/// The generated C gets this free. `xs[i] = ...` writes a `double` and
+/// `xs.length` reads a `uint32_t`, and C's rule -- two accesses of different
+/// types do not alias -- lets clang hoist the length and the element block out
+/// of a loop that only writes doubles. A module carries no types at all once it
+/// is written: `store double` and `load i32` are both just bytes, so every
+/// store forces every later load to be done again.
+///
+/// Measured on `xs[i] = xs[i] * k; total += xs[i]` over four thousand doubles,
+/// four hundred thousand rounds: **0.85s without this and 0.78s with it** --
+/// which is exactly the C backend's 0.78s. The gap was never to clang; it was
+/// to our own oracle, and this closes it.
+///
+/// # Why this is clang's tree and not one of ours
+///
+/// The first version invented a root, `!{!"nts"}`. The worry was that this
+/// would be *unsound* under `-flto` -- which `tooling/bench` uses -- because
+/// two trees would make claims about the same memory. It is the opposite, and
+/// the experiment is worth keeping: given a loop that loads a `double` and
+/// stores an `int` through an unrelated pointer, LLVM hoists the load out
+/// entirely when both tags sit under clang's root, and moves *nothing* when the
+/// store's tag has a root of its own. Tags from unrelated roots are treated as
+/// possibly aliasing, which is the conservative answer.
+///
+/// So an invented root is safe and **useless across a translation unit**. Every
+/// tag the runtime carries would have been opaque to every tag we emit, and
+/// under LTO -- where the runtime's body is finally visible and there is most
+/// to gain -- we would have gained nothing.
+///
+/// Metadata nodes are uniqued by content, so spelling the tree exactly as clang
+/// spells it makes our `double` node *be* the runtime's `double` node. The
+/// names are read off clang rather than guessed, and they are not obvious:
+/// `int8_t` and `uint8_t` are character types and get the omnipotent char;
+/// signed and unsigned share one node, so `uint32_t` is `"int"`; `int64_t` and
+/// `uintptr_t` are both `"long"`; `_Bool` keeps its underscore.
+///
+/// # Why it is only types, and not fields
+///
+/// Clang additionally emits struct-path tags, which say `Point.x` and `Point.y`
+/// do not alias. Scalar tags are strictly weaker, so mixing ours with the
+/// runtime's paths is safe, and the plain type rule already recovered the whole
+/// measured difference.
+///
+/// # What makes this sound here
+///
+/// Every field is accessed at exactly one LLVM type: the type comes from
+/// `field_at`, off the field's HIR type, and it is the same type `emit.rs`
+/// would have written in C -- so the tag agrees with the runtime's by
+/// construction rather than by coincidence. An erased value is read and written
+/// whole and gets the char node, because `NtsValue` is a union in C and this is
+/// not the place to make a claim about one.
+const TBAA_TREE: &str = "!0 = !{!\"Simple C/C++ TBAA\"}
+!1 = !{!\"omnipotent char\", !0, i64 0}
+!2 = !{!\"any pointer\", !1, i64 0}
+!3 = !{!\"double\", !1, i64 0}
+!4 = !{!\"float\", !1, i64 0}
+!5 = !{!\"_Bool\", !1, i64 0}
+!6 = !{!\"short\", !1, i64 0}
+!7 = !{!\"int\", !1, i64 0}
+!8 = !{!\"long\", !1, i64 0}
+!9 = !{!\"__int128\", !1, i64 0}
+!10 = !{!1, !1, i64 0}
+!11 = !{!2, !2, i64 0}
+!12 = !{!3, !3, i64 0}
+!13 = !{!4, !4, i64 0}
+!14 = !{!5, !5, i64 0}
+!15 = !{!6, !6, i64 0}
+!16 = !{!7, !7, i64 0}
+!17 = !{!8, !8, i64 0}
+!18 = !{!9, !9, i64 0}";
+
+/// The access tag for a load or store at this LLVM type, as a suffix.
+///
+/// The mapping is C's, because the memory is shared with C: `i32` is `"int"`
+/// whether the field was signed or not, `i64` is `"long"` because that is what
+/// `int64_t` and `uintptr_t` are here, and `i8` is the omnipotent char, which
+/// aliases everything.
+///
+/// Anything unrecognised falls to the char node too: a type this does not know
+/// is a type whose memory it cannot reason about, and the conservative answer
+/// is the one that is never wrong.
+fn tbaa(ty: &str) -> &'static str {
+    match ty {
+        "ptr" => ", !tbaa !11",
+        "double" => ", !tbaa !12",
+        "float" => ", !tbaa !13",
+        "i1" => ", !tbaa !14",
+        "i16" => ", !tbaa !15",
+        "i32" => ", !tbaa !16",
+        "i64" => ", !tbaa !17",
+        "i128" => ", !tbaa !18",
+        // `i8` and `NtsValue` included: a character type aliases everything in
+        // C, and a union is not something to make a claim about from here.
+        _ => ", !tbaa !10",
+    }
 }
 
 /// An erased value: the tag, and the union's eightbyte as an integer.
@@ -827,10 +928,26 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
         OpKind::Param(_) | OpKind::BlockParam(_) => String::new(),
         OpKind::ConstFloat(number) => {
             // LLVM reads a float literal as a C double, and prints one back
-            // exactly when it is written in full. `fadd double %x, 1.0` is the
-            // shape, and a value that is not representable is written as its
-            // bits so nothing is lost in the spelling.
-            format!("{out} = fadd double 0.0, {}", float_literal(*number))
+            // exactly when it is written in full. A value that is not
+            // representable is written as its bits so nothing is lost in the
+            // spelling.
+            //
+            // `x - 0.0` rather than `0.0 + x`, and the difference is one value:
+            // `0.0 + -0.0` is `+0.0`, because a sum of opposite signs that is
+            // exactly zero is positive under round-to-nearest. Subtraction has
+            // no such case -- `-0.0 - 0.0` is `-0.0 + -0.0`, like signs, so the
+            // sign survives -- and `x - 0.0` is exact for every other double
+            // too. Nothing produces a `-0` literal today, since `-0` lowers as
+            // a negation of zero; this is so that a constant-folding pass in
+            // the middle end cannot quietly turn `1 / -0` from `-Infinity` into
+            // `Infinity` later.
+            //
+            // An instruction at all is a wart: a constant has no SSA name in
+            // LLVM and should be substituted at its uses, which needs `name` to
+            // tell a definition from a use and it currently cannot. The
+            // optimizer folds this away at -O1, so it costs spelling rather
+            // than speed.
+            format!("{out} = fsub double {}, 0.0", float_literal(*number))
         }
         OpKind::ConstInt(number) => {
             let ty = ty_of(&op.ty, func)?;
@@ -875,7 +992,7 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
         OpKind::Binary { op: bin, lhs, rhs } => {
             let ty = ty_of(&func.values[lhs.0 as usize].ty, func)?;
             let float = matches!(func.values[lhs.0 as usize].ty, HirType::Float { .. });
-            let instruction = binary(*bin, float, func)?;
+            let instruction = binary(*bin, float, wraps(&func.values[lhs.0 as usize].ty), func)?;
             format!(
                 "{out} = {instruction} {ty} {}, {}",
                 name(*lhs),
@@ -985,11 +1102,12 @@ fn allocation(
                 // release is a no-op on storage that was never allocated.
                 [
                     format!("{out} = alloca i8, i64 {}, align {}", placed.size, placed.align),
-                    format!("store ptr @nts_desc_{tag}, ptr {out}"),
+                    format!("store ptr @nts_desc_{tag}, ptr {out}{}", tbaa("ptr")),
                     format!("{out}.rc = getelementptr i8, ptr {out}, i64 8"),
                     format!(
-                        "store i64 {}, ptr {out}.rc",
-                        nts_codegen_common::layout::IMMORTAL
+                        "store i64 {}, ptr {out}.rc{}",
+                        nts_codegen_common::layout::IMMORTAL,
+                        tbaa("i64")
                     ),
                 ]
                 .join("\n  ")
@@ -1022,11 +1140,11 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
         } => {
             let element = ty_of(&op.ty, func)?;
             let mut lines = index_lines(func, &out, *array, *index, *checked);
-            lines.push(format!("{out}.block = load ptr, ptr {out}.blk"));
+            lines.push(format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")));
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
-            lines.push(format!("{out} = load {element}, ptr {out}.at"));
+            lines.push(format!("{out} = load {element}, ptr {out}.at{}", tbaa(element)));
             lines.join("\n  ")
         }
         OpKind::ArraySet {
@@ -1037,11 +1155,11 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
         } => {
             let element = ty_of(&func.values[value.0 as usize].ty, func)?;
             let mut lines = index_lines(func, &out, *array, *index, *checked);
-            lines.push(format!("{out}.block = load ptr, ptr {out}.blk"));
+            lines.push(format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")));
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
-            lines.push(format!("store {element} {}, ptr {out}.at", name(*value)));
+            lines.push(format!("store {element} {}, ptr {out}.at{}", name(*value), tbaa(element)));
             lines.join("\n  ")
         }
         other => {
@@ -1073,16 +1191,18 @@ fn counting_or_global(program: &Program, func: &Func, value: ValueId, out: &str)
         OpKind::GlobalGet(global) => {
             let ty = ty_of(&op.ty, func)?;
             format!(
-                "{out} = load {ty}, ptr {}",
-                symbol(&global_symbol(program, *global as usize))
+                "{out} = load {ty}, ptr {}{}",
+                symbol(&global_symbol(program, *global as usize)),
+                tbaa(ty)
             )
         }
         OpKind::GlobalSet { global, value } => {
             let ty = ty_of(&func.values[value.0 as usize].ty, func)?;
             format!(
-                "store {ty} {}, ptr {}",
+                "store {ty} {}, ptr {}{}",
                 name(*value),
-                symbol(&global_symbol(program, *global as usize))
+                symbol(&global_symbol(program, *global as usize)),
+                tbaa(ty)
             )
         }
         other => {
@@ -1137,7 +1257,7 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             let offset = nts_codegen_common::layout::LENGTH_OFFSET;
             let mut lines = vec![
                 format!("{at} = getelementptr i8, ptr {}, i64 {offset}", name(*of)),
-                format!("{raw} = load i32, ptr {at}"),
+                format!("{raw} = load i32, ptr {at}{}", tbaa("i32")),
             ];
             lines.push(if returns == "i32" {
                 format!("{out} = add i32 {raw}, 0")
@@ -1437,8 +1557,9 @@ fn memory_operation(
             let (offset, ty) = field_at(program, func, *object, *field, &op.ty)?;
             let at = format!("{out}.at");
             format!(
-                "{at} = getelementptr i8, ptr {}, i64 {offset}\n  {out} = load {ty}, ptr {at}",
-                name(*object)
+                "{at} = getelementptr i8, ptr {}, i64 {offset}\n  {out} = load {ty}, ptr {at}{}",
+                name(*object),
+                tbaa(ty)
             )
         }
         OpKind::FieldSet {
@@ -1450,9 +1571,10 @@ fn memory_operation(
             let (offset, ty) = field_at(program, func, *object, *field, &stored)?;
             let at = format!("{out}.at");
             format!(
-                "{at} = getelementptr i8, ptr {}, i64 {offset}\n  store {ty} {}, ptr {at}",
+                "{at} = getelementptr i8, ptr {}, i64 {offset}\n  store {ty} {}, ptr {at}{}",
                 name(*object),
-                name(*value)
+                name(*value),
+                tbaa(ty)
             )
         }
         // Everything that touches memory is next door: it is the half of this
@@ -1481,14 +1603,51 @@ fn float_literal(number: f64) -> String {
     }
 }
 
-fn binary(op: BinOp, float: bool, func: &Func) -> Result<&'static str, Diagnostic> {
+/// Whether overflow of this type wraps rather than being undefined.
+///
+/// The distinction is C's, and this backend inherits it rather than inventing
+/// it: `int32_t` overflow is undefined and `uint32_t` overflow wraps, so the C
+/// backend has *always* been compiled under the stronger assumption. Saying so
+/// here is what makes the two backends agree; staying silent made this one
+/// strictly more conservative than its own oracle, which is a divergence in the
+/// direction nobody wants -- the primary backend giving up an optimization the
+/// reference implementation already takes.
+///
+/// `bigint` is `__int128`, which is signed, and clang emits `add nsw i128` for
+/// it. Whether *that* is the semantics `bigint` should have is a question for
+/// the middle end, where it would change both backends at once. It is not a
+/// question this file gets to answer on its own.
+fn wraps(ty: &HirType) -> bool {
+    !matches!(ty, HirType::Int { signed: true, .. } | HirType::BigInt)
+}
+
+/// The instruction, and the overflow flag where the type licenses one.
+///
+/// Which operations carry `nsw` is taken from clang rather than from the
+/// standard: `+`, `-`, `*` and unary `-` on a signed type, and nothing else. In
+/// particular `<<` does not, even on a signed operand, and `/` and `>>` do not.
+/// Reading it off a compiler beats reading it off C11 6.5 and getting one case
+/// subtly wrong, for the same reason the signature table is generated.
+///
+/// There is no `nuw` anywhere, and its absence is the point: unsigned overflow
+/// in C is *defined* to wrap, so claiming otherwise would be the one place this
+/// backend promised more than the oracle does.
+fn binary(
+    op: BinOp,
+    float: bool,
+    wraps: bool,
+    func: &Func,
+) -> Result<&'static str, Diagnostic> {
     Ok(match (op, float) {
         (BinOp::Add, true) => "fadd",
-        (BinOp::Add, false) => "add",
+        (BinOp::Add, false) if wraps => "add",
+        (BinOp::Add, false) => "add nsw",
         (BinOp::Sub, true) => "fsub",
-        (BinOp::Sub, false) => "sub",
+        (BinOp::Sub, false) if wraps => "sub",
+        (BinOp::Sub, false) => "sub nsw",
         (BinOp::Mul, true) => "fmul",
-        (BinOp::Mul, false) => "mul",
+        (BinOp::Mul, false) if wraps => "mul",
+        (BinOp::Mul, false) => "mul nsw",
         (BinOp::Div, true) => "fdiv",
         (BinOp::Div, false) => "sdiv",
         (BinOp::Rem, true) => "frem",
@@ -1601,7 +1760,17 @@ fn unary(func: &Func, out: &str, op: UnOp, operand: ValueId) -> Result<String, D
     let float = matches!(func.values[operand.0 as usize].ty, HirType::Float { .. });
     Ok(match op {
         UnOp::Neg if float => format!("{out} = fneg {ty} {}", name(operand)),
-        UnOp::Neg => format!("{out} = sub {ty} 0, {}", name(operand)),
+        // `sub nsw 0, x` on a signed type, which is what clang emits for
+        // `-a` -- and it is a real promise rather than a formality, because
+        // negating `INT32_MIN` is exactly the case it excludes.
+        UnOp::Neg => {
+            let flag = if wraps(&func.values[operand.0 as usize].ty) {
+                ""
+            } else {
+                " nsw"
+            };
+            format!("{out} = sub{flag} {ty} 0, {}", name(operand))
+        }
         UnOp::Not => format!("{out} = xor i1 {}, true", name(operand)),
         // An integer, a `bigint` and a reference are all "not the zero value".
         // A double additionally has to exclude NaN, which is falsy and which a
