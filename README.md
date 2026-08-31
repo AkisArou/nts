@@ -98,14 +98,14 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it | 37 |
 | a module-scope variable with no initializer | 14 |
 | `console.log`, a global member with no definition here | 7 |
-| a module-scope construct of kind 268, which has code in it | 6 |
+| a module declaration, which has code in it | 6 |
 | `MyEnum`, an enum | 4 |
 | a property `timestamp` of unrepresentable type (`Date`) | 4 |
 | a rest parameter whose element type has no representation | 4 |
-| an expression of kind 216 | 4 |
+| a tagged template expression | 4 |
+| a `for...in` statement, which has code in it | 3 |
 | a `for...of` binding by property name, which is object destructuring | 3 |
 | a method on an object literal | 3 |
-| a module-scope construct of kind 250, which has code in it | 3 |
 | a parameter of unrepresentable type (any) | 3 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.

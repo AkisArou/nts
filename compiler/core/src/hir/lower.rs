@@ -460,7 +460,6 @@ struct Capture {
     by_reference: bool,
 }
 
-
 /// Whether a name is reached *by name* rather than carried in a closure.
 ///
 /// There is one of it for the whole program and every function already reaches
@@ -500,10 +499,7 @@ fn reached_by_name(
     // same mistake one step further out: imported, so the declaration
     // test above does not see what they are.
     let denoted = probe.denoted_symbol(symbol);
-    let record = snapshot
-        .symbols
-        .get(denoted.0 as usize)
-        .unwrap_or(record);
+    let record = snapshot.symbols.get(denoted.0 as usize).unwrap_or(record);
     if [
         SymbolFlags::FUNCTION,
         SymbolFlags::CLASS,
@@ -856,7 +852,6 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
     closures
 }
 
-
 /// The named functions a program uses as *values*, as closures that forward.
 ///
 /// Separate from the arrow walk above because it asks a different question of
@@ -994,9 +989,10 @@ fn distinguishing_tail(snapshot: &SemanticSnapshot, group: &[NodeId], id: NodeId
             .map_or(nts_diagnostics::SourceId(0), |node| {
                 node.origin.location.file
             });
-        snapshot.sources.get(file.0 as usize).map_or_else(
-            Vec::new,
-            |source| {
+        snapshot
+            .sources
+            .get(file.0 as usize)
+            .map_or_else(Vec::new, |source| {
                 source
                     .display_path
                     .as_str()
@@ -1005,8 +1001,7 @@ fn distinguishing_tail(snapshot: &SemanticSnapshot, group: &[NodeId], id: NodeId
                     .filter(|part| !part.is_empty())
                     .map(|part| part.replace(['.', '-'], "_"))
                     .collect()
-            },
-        )
+            })
     };
     let mine = components(id);
     let others: Vec<Vec<String>> = group
@@ -1536,7 +1531,10 @@ fn module_statements(
                 // of this pass.
                 refusals.push(probe.unsupported(
                     child,
-                    &format!("a module-scope construct of kind {kind}, which has code in it"),
+                    &format!(
+                        "{}, which has code in it",
+                        spell(kind, "a module-scope construct")
+                    ),
                 ));
             }
         }
@@ -1866,7 +1864,8 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
     let generic = generic_classes(snapshot);
-    let refused = mark_refused_initializers(snapshot, &mut module, &hierarchy, &closures, &mut lowered);
+    let refused =
+        mark_refused_initializers(snapshot, &mut module, &hierarchy, &closures, &mut lowered);
     let shared = Shared::whole_program(snapshot, &module, &hierarchy, &closures);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -2203,6 +2202,38 @@ fn short(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
     }
 }
 
+/// What to call a syntax kind in a refusal.
+///
+/// "an expression of kind 216" names nothing, and naming the thing is the whole
+/// rule for a refusal: it is a *tagged template*, and the difference between
+/// those two messages is the difference between a number in a report and an
+/// item on a queue. Six of the corpus's refusals were `kind 268`, which is a
+/// `namespace`.
+///
+/// Falls back to the number for a kind the table does not carry, which is what
+/// a tsgo bump that adds one would produce.
+fn spell(kind: u16, fallback: &str) -> String {
+    nts_semantic_schema::syntax::name_of(kind).map_or_else(
+        || format!("{fallback} of kind {kind}"),
+        |name| {
+            // The table humanises a `PascalCase` kind by splitting it into
+            // words, which is right for nearly all of them and wrong for the
+            // two whose name is a keyword pair rather than English.
+            let name = match name {
+                "for in statement" => "`for...in` statement",
+                "for of statement" => "`for...of` statement",
+                other => other,
+            };
+            let article = if name.starts_with(['a', 'e', 'i', 'o', 'u']) {
+                "an"
+            } else {
+                "a"
+            };
+            format!("{article} {name}")
+        },
+    )
+}
+
 /// How an operator token is written, for a refusal that has to name it.
 ///
 /// By kind, because a token node carries no text. The number is the fallback
@@ -2215,7 +2246,7 @@ fn spelling(kind: u16) -> String {
         syntax::BAR_BAR_TOKEN => "||",
         syntax::IN_KEYWORD => "in",
         syntax::INSTANCEOF_KEYWORD => "instanceof",
-        _ => return format!("of kind {kind}"),
+        _ => return spell(kind, "an operator"),
     };
     format!("`{named}`")
 }
@@ -2232,7 +2263,10 @@ fn named_or(snapshot: &SemanticSnapshot, record: &TypeRecord, fallback: &str) ->
         .symbols
         .get(symbol.0 as usize)
         .filter(|declared| !declared.name.is_empty())
-        .map_or_else(|| fallback.to_owned(), |declared| format!("`{}`", declared.name))
+        .map_or_else(
+            || fallback.to_owned(),
+            |declared| format!("`{}`", declared.name),
+        )
 }
 
 /// Which hash and comparison a table of these keys is built with.
@@ -2663,14 +2697,12 @@ fn representation_of(
         // refused. An array's items are inline and variable-length, so there is
         // nowhere to put one -- that is a real layout question and not this
         // one.
-        TypeKind::Object { properties } => {
-            match inherited_typed_array(snapshot, ty) {
-                Some(element) if !declares_storage(snapshot, properties) => {
-                    HirType::Managed(ManagedType::Array(Box::new(element)))
-                }
-                _ => HirType::Managed(ManagedType::Object(ty)),
+        TypeKind::Object { properties } => match inherited_typed_array(snapshot, ty) {
+            Some(element) if !declares_storage(snapshot, properties) => {
+                HirType::Managed(ManagedType::Array(Box::new(element)))
             }
-        }
+            _ => HirType::Managed(ManagedType::Object(ty)),
+        },
         TypeKind::Function(_) => HirType::Managed(ManagedType::Object(ty)),
 
         // A tuple whose elements share a representation *is* an array of that
@@ -3357,7 +3389,10 @@ impl<'a> FuncBuilder<'a> {
         {
             let returned = signature.return_type;
             let is_nothing = matches!(
-                self.snapshot.types.get(returned.0 as usize).map(|r| &r.kind),
+                self.snapshot
+                    .types
+                    .get(returned.0 as usize)
+                    .map(|r| &r.kind),
                 Some(TypeKind::Void | TypeKind::Undefined)
             );
             // A generator returns a `Generator<...>`, which has no
@@ -4276,7 +4311,9 @@ impl<'a> FuncBuilder<'a> {
             .enumerate()
             .filter(|(_, field)| {
                 field.name.starts_with(&prefix)
-                    && field.name[prefix.len()..].bytes().all(|b| b.is_ascii_digit())
+                    && field.name[prefix.len()..]
+                        .bytes()
+                        .all(|b| b.is_ascii_digit())
             })
             .map(|(at, _)| u32::try_from(at).unwrap_or(0));
         let first = found.next()?;
@@ -4384,16 +4421,16 @@ impl<'a> FuncBuilder<'a> {
         // default export in the imported file it arrives with no declarations
         // at all, and a predicate that looked for a source file among them
         // said no. The import is the thing that is actually written down.
-        let declared_as_a_namespace = self
-            .snapshot
-            .symbols
-            .get(local.0 as usize)
-            .is_some_and(|record| {
-                record
-                    .declarations
-                    .iter()
-                    .any(|node| self.kind_of(*node) == Some(syntax::NAMESPACE_IMPORT))
-            });
+        let declared_as_a_namespace =
+            self.snapshot
+                .symbols
+                .get(local.0 as usize)
+                .is_some_and(|record| {
+                    record
+                        .declarations
+                        .iter()
+                        .any(|node| self.kind_of(*node) == Some(syntax::NAMESPACE_IMPORT))
+                });
         declared_as_a_namespace
             || self
                 .snapshot
@@ -4639,7 +4676,9 @@ impl<'a> FuncBuilder<'a> {
             // pointer whose answer differs by what it holds -- `"object"` or
             // `"undefined"` -- and that is a runtime question this cannot fold.
             if self.values[value.0 as usize].ty != HirType::Erased
-                && self.absences_of(operand).is_some_and(|absent| absent.is_empty())
+                && self
+                    .absences_of(operand)
+                    .is_some_and(|absent| absent.is_empty())
                 && let Some(spelling) = self.spelling_for(&self.values[value.0 as usize].ty)
             {
                 let origin = self.origin(id);
@@ -4670,10 +4709,12 @@ impl<'a> FuncBuilder<'a> {
                 };
                 let text = HirType::Managed(ManagedType::String);
                 let origin = self.origin(id);
-                let when_absent =
-                    self.push(OpKind::ConstString(missing.to_owned()), text.clone(), origin.clone());
-                let when_present =
-                    self.push(OpKind::ConstString(present.to_owned()), text, origin);
+                let when_absent = self.push(
+                    OpKind::ConstString(missing.to_owned()),
+                    text.clone(),
+                    origin.clone(),
+                );
+                let when_present = self.push(OpKind::ConstString(present.to_owned()), text, origin);
                 let Some(condition) = self.absence_of(id, value) else {
                     return Err(self.unsupported(id, "`typeof` on a value with no absence to test"));
                 };
@@ -5177,11 +5218,7 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(at);
         let cell_ty = HirType::Managed(ManagedType::Object(cell_type(index)));
         self.layouts.push(self.cell_layout(index, ty));
-        let cell = self.push(
-            OpKind::ObjectNew { frame: false },
-            cell_ty,
-            origin.clone(),
-        );
+        let cell = self.push(OpKind::ObjectNew { frame: false }, cell_ty, origin.clone());
         self.push(
             OpKind::FieldSet {
                 object: cell,
@@ -5507,9 +5544,7 @@ impl<'a> FuncBuilder<'a> {
     fn absent_argument(&mut self, call: NodeId, at: usize) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(call);
         match self.parameter_representation(call, at) {
-            Some(HirType::Erased) => {
-                Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin))
-            }
+            Some(HirType::Erased) => Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin)),
             Some(ty) if ty.is_managed() => Ok(self.push(OpKind::ConstUndefined, ty, origin)),
             _ => Err(self.unsupported(
                 call,
@@ -6521,9 +6556,7 @@ impl<'a> FuncBuilder<'a> {
         match (global.as_str(), name.as_str(), arguments) {
             ("Array", "isArray", [argument]) => Some(self.decide_is_array(id, *argument)),
             ("Object", "keys", [argument]) => Some(self.decide_object_keys(id, *argument)),
-            ("Object", "hasOwn", [argument, key]) => {
-                Some(self.decide_has_own(id, *argument, *key))
-            }
+            ("Object", "hasOwn", [argument, key]) => Some(self.decide_has_own(id, *argument, *key)),
             // `BigInt.asIntN(64, v)`, which is how the profile reads a signed
             // 64-bit quantity back out of an unsigned one. A width and a value,
             // both already machine types here.
@@ -6558,7 +6591,11 @@ impl<'a> FuncBuilder<'a> {
             ));
         };
         let layout = self.layout_of(id, type_id)?;
-        Ok(layout.fields.iter().map(|field| field.name.clone()).collect())
+        Ok(layout
+            .fields
+            .iter()
+            .map(|field| field.name.clone())
+            .collect())
     }
 
     /// `Object.keys(o)`, as the array of names the layout already holds.
@@ -6589,7 +6626,11 @@ impl<'a> FuncBuilder<'a> {
         for (at, name) in names.into_iter().enumerate() {
             #[allow(clippy::cast_precision_loss)]
             let position = at as f64;
-            let index = self.push(OpKind::ConstFloat(position), HirType::NUMBER, origin.clone());
+            let index = self.push(
+                OpKind::ConstFloat(position),
+                HirType::NUMBER,
+                origin.clone(),
+            );
             let value = self.push(OpKind::ConstString(name), element.clone(), origin.clone());
             self.push(
                 OpKind::ArraySet {
@@ -7229,13 +7270,7 @@ impl<'a> FuncBuilder<'a> {
     /// The cursor of a `for...of`, moved on by one element.
     ///
     /// Built in the loop's latch, which is where `continue` lands.
-    fn advance(
-        &mut self,
-        walk: &Walk,
-        sequence: ValueId,
-        at: ValueId,
-        origin: &Origin,
-    ) -> ValueId {
+    fn advance(&mut self, walk: &Walk, sequence: ValueId, at: ValueId, origin: &Origin) -> ValueId {
         match walk {
             Walk::Counted(_) => {
                 let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
@@ -7280,7 +7315,12 @@ impl<'a> FuncBuilder<'a> {
                     HirType::NUMBER,
                     origin.clone(),
                 );
-                self.call_runtime("nts_map_next", vec![sequence, after], HirType::NUMBER, origin)
+                self.call_runtime(
+                    "nts_map_next",
+                    vec![sequence, after],
+                    HirType::NUMBER,
+                    origin,
+                )
             }
         }
     }
@@ -7313,7 +7353,12 @@ impl<'a> FuncBuilder<'a> {
             value_read,
         } = walk
         {
-            let k = self.call_runtime("nts_map_key_at", vec![sequence, at], HirType::Erased, origin);
+            let k = self.call_runtime(
+                "nts_map_key_at",
+                vec![sequence, at],
+                HirType::Erased,
+                origin,
+            );
             let k = unerased(self, k, key);
             let v = self.call_runtime(value_read, vec![sequence, at], HirType::Erased, origin);
             let v = unerased(self, v, value);
@@ -7421,10 +7466,9 @@ impl<'a> FuncBuilder<'a> {
             // second child.
             let inner = self.children(element);
             let [name] = inner.as_slice() else {
-                return Err(self.unsupported(
-                    element,
-                    "a destructuring element that is more than a name",
-                ));
+                return Err(
+                    self.unsupported(element, "a destructuring element that is more than a name")
+                );
             };
             if self.kind_of(*name) != Some(syntax::IDENTIFIER) {
                 return Err(self.unsupported(*name, "a nested destructuring pattern"));
@@ -8140,8 +8184,7 @@ impl<'a> FuncBuilder<'a> {
                     "undefined"
                 };
                 let origin = self.origin(from);
-                let when_absent =
-                    self.push(OpKind::ConstString(spelling.to_owned()), text, origin);
+                let when_absent = self.push(OpKind::ConstString(spelling.to_owned()), text, origin);
                 // The type is that absence and nothing else -- what the checker
                 // leaves a binding at after `v = null`. There is no branch to
                 // build, and trying to build one asked for the representation
@@ -8264,7 +8307,10 @@ impl<'a> FuncBuilder<'a> {
                     return value;
                 };
                 match self.layout_of(id, ty) {
-                    Ok(layout) => layout.fields.get(field as usize).map(|slot| slot.ty.clone()),
+                    Ok(layout) => layout
+                        .fields
+                        .get(field as usize)
+                        .map(|slot| slot.ty.clone()),
                     Err(_) => None,
                 }
             }
@@ -8328,7 +8374,10 @@ impl<'a> FuncBuilder<'a> {
             Place::Binding { symbol, .. } => {
                 // A cell is storage, so the write is a store rather than a new
                 // binding: the closure holding the same cell has to see it.
-                match self.cell_of(symbol).and(self.bindings.get(&symbol).copied()) {
+                match self
+                    .cell_of(symbol)
+                    .and(self.bindings.get(&symbol).copied())
+                {
                     Some(cell) => {
                         self.push(
                             OpKind::FieldSet {
@@ -8784,9 +8833,9 @@ impl<'a> FuncBuilder<'a> {
             // work-list by and to find the one case that is worth naming next.
             kind => Err(self.unsupported(
                 id,
-                &format!(
-                    "an expression of kind {}",
-                    kind.map_or_else(|| "a node list".to_owned(), |kind| kind.to_string())
+                &kind.map_or_else(
+                    || "a node list".to_owned(),
+                    |kind| spell(kind, "an expression"),
                 ),
             )),
         }
@@ -9419,7 +9468,10 @@ impl<'a> FuncBuilder<'a> {
     /// to.
     fn is_tuple(&self, ty: TypeId) -> bool {
         matches!(
-            self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+            self.snapshot
+                .types
+                .get(ty.0 as usize)
+                .map(|record| &record.kind),
             Some(TypeKind::Tuple(_))
         )
     }
@@ -9645,9 +9697,9 @@ impl<'a> FuncBuilder<'a> {
             // `this` is not in `bindings` and never was: it is the enclosing
             // function's receiver, which is exactly what an arrow inherits.
             if capture.symbol == THIS_CAPTURE {
-                let value = self.this.ok_or_else(|| {
-                    self.unsupported(capture.at, "`this` outside a method")
-                })?;
+                let value = self
+                    .this
+                    .ok_or_else(|| self.unsupported(capture.at, "`this` outside a method"))?;
                 let field_ty = self.values[value.0 as usize].ty.clone();
                 self.push(
                     OpKind::FieldSet {
@@ -10130,12 +10182,7 @@ impl<'a> FuncBuilder<'a> {
                 .ok_or_else(|| self.unsupported(member, "a computed property name"))?;
             return self.member_of(id, receiver, &name);
         };
-        self.lower_branching_value(
-            id,
-            absent,
-            Branch::Absent,
-            Branch::Member(receiver, member),
-        )
+        self.lower_branching_value(id, absent, Branch::Absent, Branch::Member(receiver, member))
     }
 
     /// A member of a receiver that is already lowered.
@@ -10150,7 +10197,6 @@ impl<'a> FuncBuilder<'a> {
         value: ValueId,
         member_name: &str,
     ) -> Result<ValueId, Diagnostic> {
-
         if let HirType::Managed(ManagedType::Object(type_id)) =
             self.values[value.0 as usize].ty.clone()
         {
@@ -10837,8 +10883,8 @@ impl<'a> FuncBuilder<'a> {
         position: usize,
         object: bool,
     ) -> Result<ValueId, Diagnostic> {
-    let origin = self.origin(element);
-    let read = if object {
+        let origin = self.origin(element);
+        let read = if object {
             let HirType::Managed(ManagedType::Object(type_id)) =
                 self.values[value.0 as usize].ty.clone()
             else {
@@ -11343,11 +11389,9 @@ impl<'a> FuncBuilder<'a> {
         // identifier kind: reading only identifiers left a private static
         // method nameless, and the members declared after it in the same class
         // were then neither lowered nor refused.
-        let member_name = self
-            .member_name(member)
-            .ok_or_else(|| {
-                self.unsupported(member, "a static method whose name the program computes")
-            })?;
+        let member_name = self.member_name(member).ok_or_else(|| {
+            self.unsupported(member, "a static method whose name the program computes")
+        })?;
 
         let args = self.lower_arguments(id, arguments)?;
         let ty = self
@@ -11887,9 +11931,10 @@ impl<'a> FuncBuilder<'a> {
             // Named, because twenty-eight instances of "this string method"
             // in the node profile is a bucket and not a work item.
             other => {
-                return Err(
-                    self.unsupported(member, &format!("`{other}`, which a string does not have here"))
-                );
+                return Err(self.unsupported(
+                    member,
+                    &format!("`{other}`, which a string does not have here"),
+                ));
             }
         };
 
@@ -11920,9 +11965,9 @@ impl<'a> FuncBuilder<'a> {
         // below spells a call handing a `NtsString *` to the runtime, so a
         // `RegExp` arriving at it is a wrong answer rather than a type error.
         if matches!(helper, "nts_str_replace" | "nts_str_replace_all")
-            && args[1..]
-                .iter()
-                .any(|value| self.values[value.0 as usize].ty != HirType::Managed(ManagedType::String))
+            && args[1..].iter().any(|value| {
+                self.values[value.0 as usize].ty != HirType::Managed(ManagedType::String)
+            })
         {
             return Err(self.unsupported(id, "`replace` with a pattern that is not a string"));
         }
@@ -12032,9 +12077,8 @@ impl<'a> FuncBuilder<'a> {
         // `pop` and `at` answer the element type directly here rather than an
         // erased value: `T | undefined` for a reference *is* the null pointer.
         if let HirType::Managed(managed) = element.clone() {
-            return self.lower_reference_array_method(
-                id, member, &name, receiver, &managed, arguments,
-            );
+            return self
+                .lower_reference_array_method(id, member, &name, receiver, &managed, arguments);
         }
         if !matches!(element, HirType::Float { .. } | HirType::Int { .. }) {
             return Err(self.unsupported(member, "an array method on a non-numeric array"));
@@ -12202,10 +12246,9 @@ impl<'a> FuncBuilder<'a> {
             "slice" => ("nts_array_slice_ref", 2, array),
             "reverse" => ("nts_array_reverse_ref", 0, array),
             _ => {
-                return Err(self.unsupported(
-                    member,
-                    &format!("`{name}` on an array of references"),
-                ));
+                return Err(
+                    self.unsupported(member, &format!("`{name}` on an array of references"))
+                );
             }
         };
         let mut args = vec![receiver];
@@ -12268,7 +12311,12 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(
             OpKind::Call {
                 callee: Callee::External(
-                    if is_a_map { "nts_map_new" } else { "nts_set_new" }.to_owned(),
+                    if is_a_map {
+                        "nts_map_new"
+                    } else {
+                        "nts_set_new"
+                    }
+                    .to_owned(),
                 ),
                 args: vec![kind],
                 frame: None,
@@ -12319,9 +12367,10 @@ impl<'a> FuncBuilder<'a> {
             ("delete", _) => ("nts_map_delete", 1, HirType::Bool),
             ("clear", _) => ("nts_map_clear", 0, HirType::Void),
             _ => {
-                return Err(
-                    self.unsupported(member, &format!("`{what}#{name}`, which this table has not"))
-                );
+                return Err(self.unsupported(
+                    member,
+                    &format!("`{what}#{name}`, which this table has not"),
+                ));
             }
         };
         if arguments.len() != arity {
@@ -13370,10 +13419,9 @@ impl<'a> FuncBuilder<'a> {
             syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN => BinOp::Eq,
             syntax::EXCLAMATION_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN => BinOp::Ne,
             kind => {
-                return Err(self.unsupported(
-                    *operator,
-                    &format!("the operator {}", spelling(kind)),
-                ));
+                return Err(
+                    self.unsupported(*operator, &format!("the operator {}", spelling(kind)))
+                );
             }
         };
 
@@ -13449,7 +13497,11 @@ impl<'a> FuncBuilder<'a> {
             syntax::EXCLAMATION_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
         );
         let answer = if negated { !equal } else { equal };
-        Some(Ok(self.push(OpKind::ConstBool(answer), HirType::Bool, origin)))
+        Some(Ok(self.push(
+            OpKind::ConstBool(answer),
+            HirType::Bool,
+            origin,
+        )))
     }
 
     /// Whether a node's type is an absence and nothing else.
@@ -13956,7 +14008,10 @@ enum Place {
     /// type is carried here because the *declaration* is where it is written
     /// and the symbol table does not have it: a local's `SymbolRecord.ty` is
     /// `None`.
-    Binding { symbol: u32, ty: Option<HirType> },
+    Binding {
+        symbol: u32,
+        ty: Option<HirType>,
+    },
 }
 
 /// How a `for...of` steps through what it was given.

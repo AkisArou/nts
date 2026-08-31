@@ -9,8 +9,9 @@ suite. This file is the *language* and the *runtime under it*.
 Two things it is deliberately not. It is not a conformance claim against
 ECMA-262: this compiles a *typed* language ahead of time, and §13 sets out the
 part of the specification that is a non-goal rather than a gap. And it is not a
-plan — §15 is the plan, and it is ordered by what real code is refused for
-rather than by what looks incomplete.
+plan — §15 is the plan for *coverage*, ordered by what real code is refused
+for rather than by what looks incomplete, and §16 is the plan for *precision*:
+the facts the checker proved that the IR does not carry.
 
 ## How this was derived
 
@@ -1955,3 +1956,134 @@ not needed: a `for...of` over a known shape never wanted an iterator object.
 `Proxy`, `Reflect`, property descriptors, prototype manipulation, realms — §13.
 They are refused, they will stay refused, and a checklist that files them beside
 `Map` turns one decision into a hundred open items.
+
+## 16. What the checker knew, and the IR dropped
+
+§6 says types are erased: they decide representation and then stop existing.
+That is the design, and it is why nearly all of the type surface costs nothing.
+But erasure runs in one direction only, and it takes the proofs with it. By the
+time a backend could use the fact that a value is one of three integers, nothing
+in HIR remembers that anybody ever knew.
+
+This section is the ledger of those facts. Ordered by what was measured, and
+the zeros are kept — three of the entries below are things that looked obvious
+and were worth nothing, which is the only reason to write them down.
+
+The question to ask of every new pass: **what did the checker know that we
+dropped?**
+
+### Two kinds of fact, and only one of them is cheap
+
+**Stated.** TypeScript, or the runtime header, already says it. Recovering it
+is carriage, not analysis: find where the fact is discarded and stop discarding
+it. Both of this week's wins were this shape, and both were small changes.
+
+**Derived.** Nothing states it and an analysis has to prove it. That `Ball.x`
+fits an `int32` is true and no part of the program says so — §7's note on the
+awfy family is this shape, and it is still open.
+
+The distinction is the whole planning value of this section. The first kind is
+bounded work with a known answer. The second is a research problem, and filing
+the two together turns a short list into a long one.
+
+### What it was worth
+
+| fact | where it was being dropped | measured |
+|---|---|---|
+| a length is a `uint32_t` | the header states it; `OpKind::Length` was typed `f64`, so a counter bounded by one was not provably an `i32` | **4.0×**. `elementwise` went 4.95× C++ to 1.25×, and it moved `accumulate`, `awfy-nbody` and `awfy-sieve` with it. Both backends |
+| a typed-array element is a `u8` | the element type was known and the value still travelled through a `double` on the way to an `i32` | the generated C went from **74 implicit conversions to 0**; `simplify::fold_conversions` collapses the detour where it is exact |
+| `readonly` on a field | `Field::readonly` is carried all the way from the frontend | **0**, twice over. `!invariant.load` is the wrong encoding — it licenses "same value wherever the location is dereferenceable", which folds a post-construction load into a pre-construction one. And no benchmark has a `readonly` field, so there is nothing to measure even if the encoding were right |
+| an array that cannot grow | `arrays_can_grow` is **one boolean for the whole program**: a single `push` anywhere disables exact-length reasoning everywhere | **0**, and not for the reason expected. Adding an unrelated exported `push` to `elementwise` changed `scale`'s IR *not at all* — its array is a parameter, and `allocated_length_is_exact` already declines for parameters. The cliff is real and no case has yet fallen off it |
+
+Two more zeros belong here for the same reason, from §7's attribute work:
+`captures(none)` was worth nothing once `memory(read)` was in place, and the
+allocator attributes (`malloc`, `returns_nonnull`) were worth nothing at all.
+
+### What is still on the table
+
+Each row is a fact TypeScript states today and HIR does not carry. None of them
+is measured, so none is a promise — the `readonly` row above is what an obvious
+one is worth when nothing exercises it. **Build the case that would show it
+before building the pass.**
+
+| what TypeScript states | what it would license | what would falsify it |
+|---|---|---|
+| **definite assignment** — `strictPropertyInitialization` proves every field is written before it is read | `hir::fields` joins in `Facts::constant(0.0)` "because that is what the allocator leaves", and its own comment says avoiding it needs a definite-assignment analysis. The checker has already done that analysis | soundness first: `!` assertions and a non-strict config both opt out, so it is conditional on a flag we would have to read. Then a case where the join is what widens a field |
+| **literal and union-of-literal types** — `type Dir = 0 \| 1 \| 2` | a `!range`, a narrower integer than `i32`, and a switch that needs no default arm | a case where a literal-typed value is the thing that stops a narrowing. §6 already lowers literal types; the question is whether anything downstream would use the bound |
+| **an exhaustive discriminated union** — every arm covered, which the checker verifies to give you `never` in the default | an unreachable default, so no fallback branch and a dense jump table rather than a compare chain | whether the branch chain shows up at all. Measure the emitted IR before assuming a jump table is faster |
+| **`enum`** — a member is one of N known constants | the same range fact as literal types, on a construct real code actually uses | §6 marks `enum` ✅ but the corpus refuses four of them. This is Lane 1 work before it is Lane 2 work |
+| **non-nullability** — `T` is not `T \| null`, and the representation already knows | `!nonnull` on the load, and a null check the optimizer can drop | whether any null check survives to the backend today. It may already be gone |
+| **`readonly T[]` per array** | the per-array answer to `arrays_can_grow`'s whole-program boolean | the row above: find the case that falls off the cliff first |
+
+### `instanceof` is where the two lanes meet
+
+`erasure.rs` reads `INSTANCEOF_KEYWORD` to recognise that `x instanceof C`
+narrows an erased value — a real precision gain, on the compiler's single
+largest representation cost. The constant was **wrong**: 104, which is `new`;
+`instanceof` is 103. Every classification it made was of the wrong keyword.
+
+Fixing it changed no measurement, and the reason is the useful part. There is
+no example that uses `instanceof`, because `instanceof` on a class is refused
+before the erasure analysis ever runs — "a class used as a value is not
+supported by this lowering yet", §15's largest single row at 68 sites.
+
+So a silent precision loss sat behind a refusal, where no test could reach it
+and no benchmark could price it. That is the general hazard with this section:
+**a Lane 2 fact is worth zero until the Lane 1 construct that produces it
+lowers.** Check that a construct compiles before pricing what its type could
+buy.
+
+### The one that is not stated, and what it would take
+
+`Ball` carries four `number` fields that hold `int32` values and are stored as
+`double` — a 56-byte object where the C++ reference has 40. It is the whole of
+`awfy-bounce`'s 1.53×, and the fixpoint cannot close it because the store is
+self-referential: `x = x + xVel` reads the field it writes, so the analysis
+starts at `TOP` and `TOP` is a fixed point.
+
+The HIR shows the way out. `bounce` clamps on every path — `if (x > 500) x =
+500` and `if (x < 0) x = 0` — so the value at *exit* does not depend on the
+value at entry. A field analysis that tracks a per-method exit fact separately
+from the set of stored values converges in two rounds:
+
+```
+round 0   entry = [0,499]                         from the constructor alone
+round 1   x + xVel = [-150,648]                   stored, so storage widens
+          exit    = [0,500]                       the clamps, for any entry
+          entry   = [0,500]
+round 2   x + xVel = [-150,649];  exit = [0,500]  stable
+```
+
+`[-150,649]` is an `i32`. This is flow-sensitivity *within* a method plus a
+join across methods — not the narrowing iteration first prescribed for it,
+which cannot work: joining every store field-insensitively re-derives `TOP` on
+the first intermediate store no matter how the fixpoint is seeded.
+
+### What a representation costs when no analysis can remove it
+
+`fib` is the row where this section runs out. It sits at **1.70×** C++, the
+second-widest gap in the table, and none of it is a dropped fact.
+
+`fib#whole(n: i32)` already exists — the *parameter* narrows, because `number`
+carrying a whole value is exactly what the `#whole` specialization proves. The
+**return** is still `f64`, so every base case emits a `convert %0 : f64` and the
+combine is a double add where the C++ reference has an integer one.
+
+Compiling the reference twice — once as written, once in nts's representation —
+prices that exactly:
+
+| | `fib(27)` | vs the reference |
+|---|---:|---:|
+| C++ `int64_t` throughout, as the reference is written | 301.96 us | 1.00× |
+| C++ with an `int32_t` parameter and a `double` result | 485.93 us | **1.61×** |
+| nts (LLVM) | 517.40 us | 1.71× |
+
+So **1.61× of the 1.70× is the representation**, and 6.5% is everything this
+compiler does differently from clang given the same one. There is no analysis
+to write: narrowing the *return* needs `fib(n) < 2^31`, which needs a bound on
+`n`, which the exported signature destroys — and the reference's `volatile`
+denies clang the same bound, so this is not a constant-folding advantage either.
+
+Worth keeping as the section's own ceiling. Three of the four zeros above were
+facts that turned out not to be there; this is a gap that is real, measured, and
+still not a fact anybody dropped.
