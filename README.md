@@ -23,33 +23,39 @@ them, so read the ratios rather than the absolute times.
 ### How fast it is
 
 <!-- benchmarks:start -->
-| case | C++ | nts | nts f64 | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |
+| case | C++ | nts (C) | nts (LLVM) | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| accumulate | 1.36 us | **2.08 us** | 28.55 us | 3.69 us | 30.81 us | 1.53x | 0.56x | 0.07x |
-| array-methods | 3.34 us | **1.53 us** | 3.87 us | 5.60 us | 7.48 us | 0.46x | 0.27x | 0.20x |
-| arrays | 1.75 us | **1.86 us** | 5.18 us | 2.69 us | 1.80 us | 1.06x | 0.69x | 1.03x |
-| awfy-bounce | 4.28 us | **7.74 us** | 11.91 us | 11.02 us | 10.06 us | 1.81x | 0.70x | 0.77x |
-| awfy-list | 8.34 us | **8.34 us** | 8.31 us | 13.62 us | 11.95 us | 1.00x | 0.61x | 0.70x |
-| awfy-mandelbrot | 23.12 ms | **24.28 ms** | 28.11 ms | 23.25 ms | 23.24 ms | 1.05x | 1.04x | 1.04x |
-| awfy-nbody | 9.11 ms | **10.92 ms** | 11.26 ms | 84.36 ms | 14.69 ms | 1.20x | 0.13x | 0.74x |
-| awfy-permute | 11.15 us | **19.37 us** | 27.37 us | 24.79 us | 18.85 us | 1.74x | 0.78x | 1.03x |
-| awfy-queens | 5.61 us | **7.29 us** | 21.38 us | 16.34 us | 13.29 us | 1.30x | 0.45x | 0.55x |
-| awfy-sieve | 4.26 us | **7.46 us** | 16.47 us | 9.85 us | 11.71 us | 1.75x | 0.76x | 0.64x |
-| awfy-towers | 13.64 us | **20.91 us** | 23.99 us | 35.34 us | 22.32 us | 1.53x | 0.59x | 0.94x |
-| bytes | 581.06 us | **583.62 us** | 2.02 ms | 650.41 us | 880.10 us | 1.00x | 0.90x | 0.66x |
-| checksum | 6.38 us | **6.38 us** | 64.59 us | 7.30 us | 33.85 us | 1.00x | 0.87x | 0.19x |
-| closures | 1.20 us | **1.20 us** | 49.10 us | 3.45 us | 17.18 us | 1.01x | 0.35x | 0.07x |
-| dispatch | 10.67 us | **11.24 us** | 160.03 us | 56.13 us | 17.21 us | 1.05x | 0.20x | 0.65x |
-| fib | 332.38 us | **605.75 us** | 614.03 us | 1.04 ms | 667.19 us | 1.82x | 0.58x | 0.91x |
-| loop | 994.8 ns | **906.2 ns** | 859.1 ns | 1.01 us | 994.6 ns | 0.91x | 0.90x | 0.91x |
-| objects (rc) | 2.08 us | **2.09 us** | 2.34 us | 2.21 us | 1.77 us | 1.01x | 0.95x | 1.18x |
-| pipeline (rc) | 37.09 us | **39.46 us** | 143.54 us | 149.11 us | 138.84 us | 1.06x | 0.26x | 0.28x |
-| strings | 556.6 ns | **407.6 ns** | 28.79 us | 2.92 us | 3.27 us | 0.73x | 0.14x | 0.12x |
-| substrings (rc) | 2.12 us | **4.26 us** | 11.89 us | 7.22 us | 37.43 us | 2.00x | 0.59x | 0.11x |
+| accumulate | 1.14 us | **1.91 us** | 1.44 us | 2.92 us | 22.02 us | 1.67x | 0.65x | 0.09x |
+| array-methods | 2.47 us | **1.36 us** | -- | 5.91 us | 8.15 us | 0.55x | 0.23x | 0.17x |
+| arrays | 1.35 us | **1.45 us** | 1.45 us | 2.71 us | 2.15 us | 1.07x | 0.53x | 0.67x |
+| awfy-bounce | 4.15 us | **6.59 us** | -- | 12.71 us | 11.03 us | 1.59x | 0.52x | 0.60x |
+| awfy-list | 7.53 us | **8.17 us** | -- | 16.35 us | 13.54 us | 1.08x | 0.50x | 0.60x |
+| awfy-mandelbrot | 23.75 ms | **23.23 ms** | 23.63 ms | 21.97 ms | 21.91 ms | 0.98x | 1.06x | 1.06x |
+| awfy-nbody | 7.04 ms | **8.71 ms** | -- | 78.72 ms | 14.13 ms | 1.24x | 0.11x | 0.62x |
+| awfy-permute | 9.01 us | **12.23 us** | -- | 21.09 us | 16.74 us | 1.36x | 0.58x | 0.73x |
+| awfy-queens | 4.62 us | **6.20 us** | -- | 16.87 us | 14.27 us | 1.34x | 0.37x | 0.43x |
+| awfy-sieve | 3.68 us | **5.25 us** | -- | 10.04 us | 9.19 us | 1.43x | 0.52x | 0.57x |
+| awfy-towers | 12.65 us | **18.06 us** | -- | 32.17 us | 20.76 us | 1.43x | 0.56x | 0.87x |
+| bytes | 423.42 us | **433.24 us** | -- | 509.18 us | 721.85 us | 1.02x | 0.85x | 0.60x |
+| checksum | 4.78 us | **4.78 us** | 4.78 us | 5.47 us | 22.80 us | 1.00x | 0.87x | 0.21x |
+| closures | 1.11 us | **1.13 us** | 1.13 us | 2.94 us | 18.20 us | 1.01x | 0.38x | 0.06x |
+| dispatch | 27.85 us | **21.41 us** | 21.38 us | 41.44 us | 13.73 us | 0.77x | 0.52x | 1.56x |
+| erasure-stored-typed | 67.19 us | **71.15 us** | 71.12 us | 112.31 us | 69.03 us | 1.06x | 0.63x | 1.03x |
+| erasure-stored-unknown | 67.19 us | **70.34 us** | 70.26 us | 87.75 us | 68.97 us | 1.05x | 0.80x | 1.02x |
+| erasure-typed | 133.74 us | **133.76 us** | 133.77 us | 136.04 us | 87.34 us | 1.00x | 0.98x | 1.53x |
+| erasure-unknown | 133.76 us | **133.76 us** | 133.81 us | 136.03 us | 87.25 us | 1.00x | 0.98x | 1.53x |
+| fib | 305.66 us | **516.33 us** | 517.61 us | 1000.00 us | 657.26 us | 1.69x | 0.52x | 0.79x |
+| loop | 653.4 ns | **649.2 ns** | 649.2 ns | 666.2 ns | 670.5 ns | 0.99x | 0.97x | 0.97x |
+| objects (rc) | 1.53 us | **1.52 us** | 1.52 us | 1.82 us | 1.42 us | 1.00x | 0.83x | 1.07x |
+| pipeline (rc) | 28.68 us | **27.90 us** | 27.90 us | 116.73 us | 118.61 us | 0.97x | 0.24x | 0.24x |
+| strings | 339.1 ns | **210.6 ns** | 211.1 ns | 2.44 us | 2.25 us | 0.62x | 0.09x | 0.09x |
+| substrings (rc) | 1.69 us | **3.50 us** | 8.04 us | 6.68 us | 23.98 us | 2.07x | 0.52x | 0.15x |
 
 Every ratio is nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and `nts/Bun` under 1.00 beat those engines.
 
-`nts f64` is the same TypeScript with number specialization switched off. It is the column that makes a speedup a measurement rather than a claim — one program, compiled two ways, run against each other.
+There are two backends and both are measured, in the same run on the same machine: `nts (C)` is the C backend and `nts (LLVM)` is the LLVM one, which is the primary target and is still learning constructs. A `--` there is a program it refuses, not a program it gets wrong — every variant that *does* run must produce the same checksum as every other, so a bench run is a cross-backend correctness check as well as a measurement. The ratio columns are the C backend's, because it is the one that renders every case.
+
+The suite also measures the same TypeScript with number specialization switched off — one program compiled two ways, which is what makes a speedup a measurement rather than a claim. `cargo run -p nts-bench` prints it; it is not published here, because it answers a question about this compiler's insides rather than about how fast the result is.
 
 `C++` is one hand-written reference per case, being what a C++ programmer would actually write for that program; each `ref.cpp` says why in a comment. Every variant returns a checksum and the runner refuses to report a case whose variants disagree, so a backend cannot win by computing the wrong answer quickly.
 
@@ -88,7 +94,7 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 
 | refused | files |
 | --- | ---: |
-| this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it | 38 |
+| this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it | 37 |
 | a module-scope variable with no initializer | 14 |
 | `console.log`, a global member with no definition here | 7 |
 | a module-scope construct of kind 268, which has code in it | 6 |

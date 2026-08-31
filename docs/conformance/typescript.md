@@ -642,6 +642,112 @@ a single-backend assumption:
 - **A field's representation is specialized**, so nothing outside the program
   may assume `number` means `double`.
 
+### A closure was 14x slower, and the reason verified cleanly
+
+With both backends in one bench run, `closures` came out at **16.33us through
+LLVM against the C backend's 1.13us** -- same HIR, same machine, same run, same
+checksum. Fourteen times, on a one-line arrow function.
+
+The module says it plainly once you look:
+
+```llvm
+define internal double @Closure0__call(ptr %v0, double %v1) nounwind {
+  ...
+  ret double %v20
+}
+...
+  %v17 = call i32 @Closure0__call(ptr %v5, double %v34)
+```
+
+Defined `double`, called `i32`. The definition took its types from the callee's
+`Func` and the call site took them from the *operation*, and nothing reconciled
+the two -- the signature table answers exactly this question for the runtime,
+and nothing answered it for our own functions.
+
+It is the ABI mismatch it looks like: the callee returns in `xmm0` and the
+caller reads `eax`. And LLVM verified it without complaint, because with opaque
+pointers a call carries its own signature and is entitled to disagree.
+
+The cost is not only correctness. **LLVM cannot inline a call whose signature
+disagrees with its callee**, so a closure that should have vanished stayed a
+real call in the innermost loop, twice over. Taking a direct call's types from
+the callee -- the same thing the table already does for the runtime -- put it at
+**1.13us, level with the C backend and 1.01x hand-written C++.**
+
+A scan of every emitted module for the same shape now reports zero. It is worth
+keeping in mind that it was *silent*: it verified, it linked, and it agreed with
+node. The only instrument that saw it was a second backend measured beside the
+first on the same program.
+
+### The bench measured one backend, and the other one was full of holes
+
+`tooling/bench` compiled through the C backend and only the C backend, which
+was right while there was one of them. Running the same 25 cases through the
+second, at `-O2 -flto`, **five ran and twenty did not** -- against a gate that
+said green with 49 of 88 examples carried.
+
+The gate was not lying. It was answering a different question. An example that
+fails to *build* and an example the backend has not learned both count as "not
+carried", so 39 refusals hid a dozen broken modules among them. A number that
+cannot tell "I decline" from "I emitted nonsense" will report the second as the
+first for as long as you let it.
+
+Every one of the bugs is the same shape, and it is the shape this whole
+exercise keeps finding: **C converts silently and a module has to say it out
+loud.**
+
+| what clang said | what was wrong |
+|---|---|
+| answered `1.3186118021857029e-314`, node said `2668900000` | `ArraySet` took its element type from the **stored value**, not the array |
+| `fadd double %v25, %v33` with `%v33` an `i64` | binary operands never met at one type |
+| `use of undefined value '@Benchmark__innerBenchmarkLoop'` | a *refused* function was still called |
+| `use of undefined value '@nts_to_uint8'` | a `static inline` has no symbol and no table entry |
+| `'%v22' defined with type 'i32' but expected 'i64'` | `ToInt32` hardcoded an `i32` result |
+| `nts_unit_fn(ptr, i32 %v46)` with `%v46` a double | `StringUnitAt` hardcoded `double` both ways |
+| `zext i32 %v2 to i32` | `int32_t` to `uint32_t` is a conversion in C and nothing in LLVM |
+| `nts_array_new(ptr, double %v1)` with `%v1` an `i32` | the signature table had exactly one reader |
+
+Eighteen of the twenty are now clean refusals and the other two run. Two of them
+deserve their own paragraphs.
+
+### An `i64` and a `double` are the same eight bytes, and only one is right
+
+`erasure-stored-typed` answered `1.3186118021857029e-314` where node answered
+`2668900000`. That is not a rounding difference; it is `2668900000`'s bit
+pattern read as a double.
+
+`ArraySet` chose the type of the *value being stored* rather than the type the
+array holds. Specialization had narrowed the value to an `int64_t` while the
+array's descriptor still said eight-byte doubles -- so the store was `store
+i64` into memory every reader loaded as a `double`. **The widths matched**, so
+nothing crashed, nothing was diagnosed, and the answer was wrong.
+
+The C backend cannot make this mistake, and not because it is more careful:
+it writes `elements[i] = value` through a `double *`, so C converts on the way
+in. The element type now comes from the array, and the conversion is written
+down.
+
+### A refusal has to look like a refusal
+
+Seven benchmarks failed with `use of undefined value
+'@Benchmark__innerBenchmarkLoop'`. The callee needed a method table and was
+refused; the *caller* rendered fine and called it anyway. A module that
+references a name nothing defines is not a module -- clang rejects the whole
+file, so one refused function took out everything.
+
+A refused function gets a `declare` now. The module verifies, the link fails,
+and the error names the function that was not built -- which is exactly where
+the C backend has always put it, because C emits a prototype for everything and
+lets `ld` say what is missing.
+
+The `_fn` distinction came back too. `nts_to_uint8` is `static inline` in the
+header: no symbol to link against, and no row in the generated table because
+the table is built from what clang *declares*. Emitting the call anyway made a
+broken build out of what should have been a refusal. A call to a helper the
+table does not carry is refused now, for the same reason `nts_to_int32_fn`
+exists at all -- **a `static inline` is not a contract another code generator
+can read.**
+
 ### A generated file with no generator, and a check that did not check
 
 `src/signatures.rs` said it was generated and nothing generated it: it was

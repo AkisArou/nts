@@ -47,6 +47,19 @@ enum Generated {
     /// number an f64. The gap between this and `Specialized` is what the
     /// analysis is worth, measured rather than argued.
     Unspecialized,
+    /// The same program through the second backend, as textual LLVM IR.
+    ///
+    /// A column rather than a mode, because the interesting comparison is
+    /// *against the first backend on the same machine in the same run* -- and
+    /// because both then have to produce the same checksum as C++, node and
+    /// bun, which makes every bench run a cross-backend correctness check as
+    /// well as a measurement.
+    ///
+    /// This is the one variant allowed to be missing. The second backend
+    /// refuses what it has not learned, and a case it cannot render is a blank
+    /// cell: the C backend's number is still worth having, and the gap is the
+    /// point rather than an embarrassment to hide by failing the row.
+    Llvm,
 }
 
 /// What a variant is called and how it is built.
@@ -81,6 +94,11 @@ const VARIANTS: &[Variant] = &[
         label: "C++",
         source: "ref.cpp",
         generated: Generated::None,
+    },
+    Variant {
+        label: "nts (llvm)",
+        source: "nts.cpp",
+        generated: Generated::Llvm,
     },
 ];
 
@@ -120,10 +138,11 @@ fn main() -> Result<()> {
     .context("writing the runtime")?;
 
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
-        "case", "C++", "nts", "nts f64", "node", "bun", "nts/C++", "nts/node", "nts/bun"
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
+        "case", "C++", "nts C", "nts LLVM", "nts f64", "node", "bun", "nts/C++", "nts/node",
+        "nts/bun"
     );
-    println!("{}", "-".repeat(112));
+    println!("{}", "-".repeat(124));
 
     let mut rows = Vec::new();
     for case in &cases {
@@ -133,18 +152,12 @@ fn main() -> Result<()> {
         }
     }
 
-    // Only a full run through the default backend may rewrite the README. A
-    // filtered one would leave the table describing a mixture of two machines
-    // and two revisions, which is worse than a stale table because it does not
-    // look stale -- and the same argument now applies to the backend. The table
-    // does not say which one produced it, so a run through the second would
-    // silently replace the first's numbers with numbers measured somewhere
-    // else. Reading them is the point; publishing them unlabelled is not.
-    if requested.is_empty() && rows.len() == cases.len() && !through_llvm() {
+    // Only a full run may rewrite the README. A filtered one would leave the
+    // table describing a mixture of two machines and two revisions, which is
+    // worse than a stale table because it does not look stale.
+    if requested.is_empty() && rows.len() == cases.len() {
         write_readme(&root, &rows)?;
         println!("\nREADME updated.");
-    } else if through_llvm() {
-        println!("\nREADME not updated: these are the second backend's numbers.");
     } else if !requested.is_empty() {
         println!("\nREADME not updated: a filtered run measures only part of the table.");
     }
@@ -162,11 +175,15 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
 
     let mut table = String::new();
     let with_bun = rows.iter().any(|row| row.bun.is_some());
+    // `nts f64` is measured on every run and printed by the tool; it is not
+    // published. It answers "what does the analysis buy", which is a question
+    // about this compiler's insides rather than about how fast the thing is,
+    // and a reader comparing against V8 does not need a column for it.
     table.push_str(if with_bun {
-        "| case | C++ | nts | nts f64 | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |\n\
+        "| case | C++ | nts (C) | nts (LLVM) | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |\n\
          | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
     } else {
-        "| case | C++ | nts | nts f64 | V8 | nts/C++ | nts/V8 |\n\
+        "| case | C++ | nts (C) | nts (LLVM) | V8 | nts/C++ | nts/V8 |\n\
          | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n"
     });
     for row in rows {
@@ -187,7 +204,7 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
             row.case,
             human(row.cpp),
             human(row.nts),
-            human(row.unspecialized),
+            row.llvm.map_or_else(|| "--".to_owned(), human),
             human(row.node),
             row.nts / row.cpp,
             row.nts / row.node,
@@ -198,9 +215,19 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         Every ratio is nts divided by the other, so **lower is better and 1.00 is \
         parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and \
         `nts/Bun` under 1.00 beat those engines.\n\n\
-        `nts f64` is the same TypeScript with number specialization switched off. \
-        It is the column that makes a speedup a measurement rather than a claim — \
-        one program, compiled two ways, run against each other.\n\n\
+        There are two backends and both are measured, in the same run on the \
+        same machine: `nts (C)` is the C backend and `nts (LLVM)` is the LLVM \
+        one, which is the primary target and is still learning constructs. A \
+        `--` there is a program it refuses, not a program it gets wrong — every \
+        variant that *does* run must produce the same checksum as every other, \
+        so a bench run is a cross-backend correctness check as well as a \
+        measurement. The ratio columns are the C backend's, because it is the \
+        one that renders every case.\n\n\
+        The suite also measures the same TypeScript with number specialization \
+        switched off — one program compiled two ways, which is what makes a \
+        speedup a measurement rather than a claim. `cargo run -p nts-bench` \
+        prints it; it is not published here, because it answers a question about \
+        this compiler's insides rather than about how fast the result is.\n\n\
         `C++` is one hand-written reference per case, being what a C++ programmer \
         would actually write for that program; each `ref.cpp` says why in a \
         comment. Every variant returns a checksum and the runner refuses to report \
@@ -237,6 +264,9 @@ struct Row {
     nts: f64,
     unspecialized: f64,
     node: f64,
+    /// The same program through the second backend. `None` where it refused
+    /// the program, which is most of them today and is the honest answer.
+    llvm: Option<f64>,
     /// Bun, where it is installed. `None` skips the column rather than
     /// reporting a zero that reads like a win.
     bun: Option<f64>,
@@ -272,16 +302,22 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         hir::Provider::NoGc => name.to_owned(),
     };
 
-    let suffix = if through_llvm() { "ll" } else { "c" };
-    let specialized = out.join(format!("{name}.specialized.{suffix}"));
-    let plain = out.join(format!("{name}.plain.{suffix}"));
+    let specialized = out.join(format!("{name}.specialized.c"));
+    let plain = out.join(format!("{name}.plain.c"));
+    let rendered = out.join(format!("{name}.specialized.ll"));
     let entry = entry_points(case)?;
-    std::fs::write(&specialized, emit(&tsconfig, &entry, true, provider)?)
+    std::fs::write(&specialized, emit(&tsconfig, &entry, true, provider, false)?)
         .with_context(|| format!("writing {specialized}"))?;
-    std::fs::write(&plain, emit(&tsconfig, &entry, false, provider)?)
+    std::fs::write(&plain, emit(&tsconfig, &entry, false, provider, false)?)
         .with_context(|| format!("writing {plain}"))?;
+    // The second backend is allowed to fail here and further down. Anything it
+    // cannot render leaves its column empty rather than taking the row with it.
+    let renderable = match emit(&tsconfig, &entry, true, provider, true) {
+        Ok(text) => std::fs::write(&rendered, text).is_ok(),
+        Err(_) => false,
+    };
 
-    let mut results = Vec::new();
+    let mut results: Vec<Option<Measured>> = Vec::new();
     for variant in VARIANTS {
         let binary = out.join(format!(
             "{name}.{}",
@@ -295,10 +331,22 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         match variant.generated {
             Generated::Specialized => c.push(specialized.clone()),
             Generated::Unspecialized => c.push(plain.clone()),
+            Generated::Llvm if renderable => c.push(rendered.clone()),
+            Generated::Llvm => {
+                results.push(None);
+                continue;
+            }
             Generated::None => {}
         }
-        compile(root, &cpp, &c, &binary, defines)?;
-        results.push(measure(&mut std::process::Command::new(&binary))?);
+        let built = compile(root, &cpp, &c, &binary, defines)
+            .and_then(|()| measure(&mut std::process::Command::new(&binary)));
+        match built {
+            Ok(measured) => results.push(Some(measured)),
+            // A refused program does not link, which is what a refusal is
+            // supposed to look like. It empties this column and leaves the row.
+            Err(_) if matches!(variant.generated, Generated::Llvm) => results.push(None),
+            Err(error) => return Err(error),
+        }
     }
 
     let harness = case.join("bench.mjs");
@@ -309,13 +357,55 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         .map(|binary| measure(std::process::Command::new(binary).arg(&harness)))
         .transpose()?;
 
-    // Every variant must agree about the answer before any of them is allowed to
-    // be fast.
+    agreed(&results, bun.as_ref(), &node)?;
+
+    let required = |at: usize| -> Result<f64> {
+        Ok(results
+            .get(at)
+            .and_then(Option::as_ref)
+            .context("a variant that must run did not")?
+            .ns_per_op)
+    };
+    let row = Row {
+        case: shown,
+        cpp: required(2)?,
+        nts: required(0)?,
+        unspecialized: required(1)?,
+        node: node.ns_per_op,
+        llvm: results.get(3).and_then(Option::as_ref).map(|it| it.ns_per_op),
+        bun: bun.map(|result| result.ns_per_op),
+    };
+    println!(
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>8.2}x {:>8.2}x {:>9}",
+        row.case,
+        human(row.cpp),
+        human(row.nts),
+        row.llvm.map_or_else(|| "--".to_owned(), human),
+        human(row.unspecialized),
+        human(row.node),
+        row.bun.map_or_else(|| "--".to_owned(), human),
+        row.nts / row.cpp,
+        row.nts / row.node,
+        row.against_bun(),
+    );
+    Ok(row)
+}
+
+/// Every variant must agree about the answer before any of them is allowed to
+/// be fast.
+///
+/// Both backends are in here, so this is where a disagreement between them
+/// surfaces -- and it did: the LLVM backend answered 1.3186118021857029e-314
+/// where node answered 2668900000, which is that number's bit pattern read as a
+/// double. A benchmark that did not compare answers would have reported it as a
+/// speedup.
+fn agreed(results: &[Option<Measured>], bun: Option<&Measured>, node: &Measured) -> Result<()> {
     for (label, checksum) in VARIANTS
         .iter()
         .map(|variant| variant.label)
-        .zip(results.iter().map(|result| result.checksum.as_str()))
-        .chain(bun.iter().map(|result| ("bun", result.checksum.as_str())))
+        .zip(results.iter())
+        .filter_map(|(label, result)| result.as_ref().map(|it| (label, it.checksum.as_str())))
+        .chain(bun.map(|result| ("bun", result.checksum.as_str())))
     {
         if checksum != node.checksum {
             bail!(
@@ -325,28 +415,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
             );
         }
     }
-
-    let row = Row {
-        case: shown,
-        cpp: results[2].ns_per_op,
-        nts: results[0].ns_per_op,
-        unspecialized: results[1].ns_per_op,
-        node: node.ns_per_op,
-        bun: bun.map(|result| result.ns_per_op),
-    };
-    println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>8.2}x {:>8.2}x {:>9}",
-        row.case,
-        human(row.cpp),
-        human(row.nts),
-        human(row.unspecialized),
-        human(row.node),
-        row.bun.map_or_else(|| "--".to_owned(), human),
-        row.nts / row.cpp,
-        row.nts / row.node,
-        row.against_bun(),
-    );
-    Ok(row)
+    Ok(())
 }
 
 /// The compiler's own pipeline, not a shell out to the CLI — a benchmark that
@@ -413,6 +482,7 @@ fn emit(
     entry: &[String],
     specialize: bool,
     provider: hir::Provider,
+    llvm: bool,
 ) -> Result<String> {
     let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(tsconfig)?;
@@ -450,11 +520,11 @@ fn emit(
         eprintln!("  {} {}", diagnostic.code, diagnostic.message);
     }
 
-    if through_llvm() {
+    if llvm {
         let emitted = nts_codegen_llvm::emit(&prepared.program);
-        for diagnostic in &emitted.diagnostics {
-            eprintln!("  {} {}", diagnostic.code, diagnostic.message);
-        }
+        // Not printed. The second backend refuses whole categories of program
+        // and says so once per function; twenty cases' worth of that would bury
+        // the table it is printed above.
         return Ok(emitted.text);
     }
     let emitted = nts_codegen_c::emit(&prepared.program);
@@ -462,22 +532,6 @@ fn emit(
         eprintln!("  {} {}", diagnostic.code, diagnostic.message);
     }
     Ok(emitted.writer.text().to_owned())
-}
-
-/// Whether to measure the second backend instead of the first.
-///
-/// The table measured the C backend and only the C backend, which was right
-/// while that was the only one. It is not any more: "no degraded performance"
-/// is a claim about the backend a program will actually be compiled by, and it
-/// cannot be checked on a different one. `NTS_BACKEND=llvm` is the same switch
-/// the differential takes, spelled the same way, so a case that disagrees here
-/// can be handed straight to that.
-///
-/// The C backend stays the default, because it is the one that renders every
-/// program: the second refuses what it has not learned, and a table with
-/// missing rows would be a worse instrument than one measuring the oracle.
-fn through_llvm() -> bool {
-    std::env::var("NTS_BACKEND").is_ok_and(|name| name == "llvm")
 }
 
 /// Build one variant.

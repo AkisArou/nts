@@ -119,14 +119,32 @@ pub fn emit(program: &Program) -> Emitted {
             symbol(&global_symbol(program, at))
         );
     }
+    let mut bodies = String::new();
     for func in &program.funcs {
         match function(program, func) {
             Ok(rendered) => {
-                let _ = writeln!(text, "\n{rendered}");
+                let _ = writeln!(bodies, "\n{rendered}");
             }
-            Err(diagnostic) => diagnostics.push(diagnostic),
+            Err(diagnostic) => {
+                diagnostics.push(diagnostic);
+                // A refused function is absent, and a module that *calls* an
+                // absent function is not a module: clang rejects the whole
+                // thing, which turns a clean refusal into a broken build. Seven
+                // benchmarks failed exactly that way -- the caller rendered,
+                // the callee did not, and `@Benchmark__innerBenchmarkLoop` was
+                // a name with nothing behind it.
+                //
+                // Declaring it makes the module valid and moves the failure to
+                // the linker, which is where the C backend already puts it: C
+                // emits a prototype for everything and lets `ld` say what is
+                // missing. A refusal should look like a refusal.
+                if let Some(line) = refused_declaration(func) {
+                    let _ = writeln!(text, "{line}");
+                }
+            }
         }
     }
+    text.push_str(&bodies);
     let _ = writeln!(text, "\n{TBAA_TREE}");
     Emitted { text, diagnostics }
 }
@@ -229,6 +247,83 @@ fn tbaa(ty: &str) -> &'static str {
         // C, and a union is not something to make a claim about from here.
         _ => ", !tbaa !10",
     }
+}
+
+/// What an array holds, taken from the *array*.
+///
+/// Not from the value being stored, and not from the slot being filled. The
+/// element type is what the descriptor was built from, so it is the only one
+/// that describes the memory. `ArraySet` used the stored value's type instead:
+/// a `number[]` whose descriptor says eight-byte doubles took `store i64`.
+/// The width matched, so nothing crashed and nothing was diagnosed -- and every
+/// later read of that element was an integer's bits read as a double.
+/// `erasure-stored-typed` answered 1.3186118021857029e-314 where node answered
+/// 2668900000, which is exactly the one reinterpreted as the other.
+///
+/// The C backend cannot make this mistake. It writes `elements[i] = value`
+/// through a `double *` and C converts on the way in. Here it is written down.
+fn array_element(func: &Func, array: ValueId) -> Result<&HirType, Diagnostic> {
+    match &func.values[array.0 as usize].ty {
+        HirType::Managed(nts_core::hir::ManagedType::Array(element)) => Ok(element),
+        _ => Err(refuse(func, "an element access on something that is not an array")),
+    }
+}
+
+/// One operand of a runtime helper, at the type the runtime declares for it.
+///
+/// C converts at the call and says nothing. Here every conversion has to be
+/// written down -- and at *every* call, not only the ones `call` renders. The
+/// signature table existed and exactly one code path consulted it, so a length
+/// specialization had narrowed to an `i32` was handed to `nts_array_new(ptr,
+/// double)` as an `i32`, an index narrowed the other way was handed to
+/// `nts_unit_fn(ptr, i32)` as a `double`, and neither module assembled.
+///
+/// Any conversion lines go into `before`, because they have to be emitted
+/// ahead of the call rather than inside its argument list.
+fn helper_operand(
+    func: &Func,
+    out: &str,
+    target: &str,
+    at: usize,
+    value: ValueId,
+    before: &mut Vec<String>,
+) -> Result<String, Diagnostic> {
+    let have = ty_of(&func.values[value.0 as usize].ty, func)?;
+    let want = signatures::signature(target)
+        .and_then(|known| known.params.get(at))
+        .map_or(have, |spec| spec.split_whitespace().next().unwrap_or(spec));
+    if want == have {
+        return Ok(format!("{have} {}", name(value)));
+    }
+    let slot = format!("{out}.a{}", value.0);
+    before.push(converted(&slot, have, want, &name(value), func)?);
+    Ok(format!("{want} {slot}"))
+}
+
+/// `declare` for a function this backend could not render.
+///
+/// Types only and no `internal`: LLVM has no such thing as an internal
+/// declaration, and external is what makes the link fail with the function's
+/// name in the message rather than the module fail to parse.
+fn refused_declaration(func: &Func) -> Option<String> {
+    let returns = ty_of(&func.return_type, func).ok()?;
+    let mut params = Vec::new();
+    for param in &func.params {
+        if param.ty == HirType::Erased {
+            // Two scalars, the same split `function` makes for a definition.
+            params.push("i32".to_owned());
+            params.push("i64".to_owned());
+        } else {
+            let ty = ty_of(&param.ty, func).ok()?;
+            params.push(format!("{}{ty}", extension(&param.ty)));
+        }
+    }
+    Some(format!(
+        "declare {}{returns} {}({}) nounwind",
+        extension(&func.return_type),
+        symbol(&func.name),
+        params.join(", ")
+    ))
 }
 
 /// An erased value: the tag, and the union's eightbyte as an integer.
@@ -990,16 +1085,38 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
             name(*rhs)
         ),
         OpKind::Binary { op: bin, lhs, rhs } => {
-            let ty = ty_of(&func.values[lhs.0 as usize].ty, func)?;
-            let float = matches!(func.values[lhs.0 as usize].ty, HirType::Float { .. });
-            let instruction = binary(*bin, float, wraps(&func.values[lhs.0 as usize].ty), func)?;
-            format!(
-                "{out} = {instruction} {ty} {}, {}",
-                name(*lhs),
-                name(*rhs)
-            )
+            // Both operands at one type, which C picks for itself and a module
+            // has to be told. The IR does not require the two to agree --
+            // `verify::compatible` calls any scalar compatible with any other
+            // -- so a `double` and an `int64_t` reached one `+` and this wrote
+            // `fadd double %a, %b` with `%b` an `i64`.
+            let left = &func.values[lhs.0 as usize].ty;
+            let right = &func.values[rhs.0 as usize].ty;
+            let joint = usual_conversion(left, right);
+            let ty = ty_of(&joint, func)?;
+            let float = matches!(joint, HirType::Float { .. });
+            let instruction = binary(*bin, float, wraps(&joint), func)?;
+            let mut lines = Vec::new();
+            let a = at_joint(func, &out, "l", &joint, *lhs, &mut lines)?;
+            let b = at_joint(func, &out, "r", &joint, *rhs, &mut lines)?;
+            // A comparison answers a bool whatever it compared; everything else
+            // answers at the type it worked in, and where the slot the middle
+            // end gave it is narrower or wider than that, C would have
+            // converted on the way out.
+            let want = ty_of(&op.ty, func)?;
+            let landing = if op.ty == HirType::Bool || want == ty {
+                out.clone()
+            } else {
+                format!("{out}.o")
+            };
+            lines.push(format!("{landing} = {instruction} {ty} {a}, {b}"));
+            if landing != out {
+                let back = conversion(&joint, &op.ty, func)?;
+                lines.push(format!("{out} = {back} {ty} {landing} to {want}"));
+            }
+            lines.join("\n  ")
         }
-        OpKind::Unary { op: un, operand } => unary(func, &out, *un, *operand)?,
+        OpKind::Unary { op: un, operand } => unary(func, &out, value, *un, *operand)?,
         // A representation change specialization decided on. The C backend
         // spells it as a cast; LLVM makes the direction explicit, which is the
         // same instruction and a better record of what was meant.
@@ -1010,15 +1127,26 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
         OpKind::Convert(operand) => {
             let from = &func.values[operand.0 as usize].ty;
             let to = &op.ty;
-            let instruction = conversion(from, to, func)?;
-            format!(
-                "{out} = {instruction} {} {} to {}",
-                ty_of(from, func)?,
-                name(*operand),
-                ty_of(to, func)?
-            )
+            let (from_ty, to_ty) = (ty_of(from, func)?, ty_of(to, func)?);
+            // `int32_t` to `uint32_t` is a conversion in C and nothing at all
+            // in LLVM: same width, same bits, and signedness is a property of
+            // the *operation* here rather than of the type. Falling through to
+            // the width comparison produced `zext i32 %v to i32`, which is not
+            // an instruction -- two benchmarks failed to assemble on it.
+            //
+            // There is no no-op cast, so this is the same `add x, 0` the
+            // backend already uses to give a constant a name.
+            if from_ty == to_ty {
+                format!("{out} = add {from_ty} {}, 0", name(*operand))
+            } else {
+                let instruction = conversion(from, to, func)?;
+                format!(
+                    "{out} = {instruction} {from_ty} {} to {to_ty}",
+                    name(*operand)
+                )
+            }
         }
-        OpKind::Call { .. } => return call(func, value, &out),
+        OpKind::Call { .. } => return call(program, func, value, &out),
         // A null pointer, which is what an absent reference is: the one spare
         // value a pointer has, and the whole reason `T | null` costs nothing.
         OpKind::ConstNull | OpKind::ConstUndefined if matches!(op.ty, HirType::Managed(_)) => {
@@ -1080,10 +1208,19 @@ fn allocation(
             } else {
                 format!("@nts_desc_arr_{}", element_tag(element))
             };
-            format!(
-                "{out} = call ptr {allocate}(ptr {descriptor}, double {})",
-                name(*length)
-            )
+            let mut before = Vec::new();
+            let count = helper_operand(
+                func,
+                &out,
+                allocate.trim_start_matches('@'),
+                1,
+                *length,
+                &mut before,
+            )?;
+            before.push(format!(
+                "{out} = call ptr {allocate}(ptr {descriptor}, {count})"
+            ));
+            before.join("\n  ")
         }
         OpKind::ObjectNew { frame } => {
             let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &op.ty else {
@@ -1138,13 +1275,27 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             index,
             checked,
         } => {
-            let element = ty_of(&op.ty, func)?;
+            let held = array_element(func, *array)?;
+            let element = ty_of(held, func)?;
+            let want = ty_of(&op.ty, func)?;
+            let landing = if element == want {
+                out.clone()
+            } else {
+                format!("{out}.e")
+            };
             let mut lines = index_lines(func, &out, *array, *index, *checked);
             lines.push(format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")));
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
-            lines.push(format!("{out} = load {element}, ptr {out}.at{}", tbaa(element)));
+            lines.push(format!(
+                "{landing} = load {element}, ptr {out}.at{}",
+                tbaa(element)
+            ));
+            if element != want {
+                let instruction = conversion(held, &op.ty, func)?;
+                lines.push(format!("{out} = {instruction} {element} {landing} to {want}"));
+            }
             lines.join("\n  ")
         }
         OpKind::ArraySet {
@@ -1153,13 +1304,30 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             value,
             checked,
         } => {
-            let element = ty_of(&func.values[value.0 as usize].ty, func)?;
+            let held = array_element(func, *array)?;
+            let element = ty_of(held, func)?;
+            let stored = &func.values[value.0 as usize].ty;
+            let have = ty_of(stored, func)?;
             let mut lines = index_lines(func, &out, *array, *index, *checked);
             lines.push(format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")));
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
-            lines.push(format!("store {element} {}, ptr {out}.at{}", name(*value), tbaa(element)));
+            let put = if have == element {
+                name(*value)
+            } else {
+                let fitted = format!("{out}.v");
+                let instruction = conversion(stored, held, func)?;
+                lines.push(format!(
+                    "{fitted} = {instruction} {have} {} to {element}",
+                    name(*value)
+                ));
+                fitted
+            };
+            lines.push(format!(
+                "store {element} {put}, ptr {out}.at{}",
+                tbaa(element)
+            ));
             lines.join("\n  ")
         }
         other => {
@@ -1234,21 +1402,40 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             index,
             checked,
         } => {
-            if *checked {
-                format!(
-                    "{out} = call double @nts_str_char_code_at_fn(ptr {}, double {})",
-                    name(*string),
-                    name(*index)
-                )
+            // Both the index and the result are whatever specialization
+            // decided, not whatever the runtime happens to declare. This used
+            // to write `double` for both, so a narrowed index was handed to
+            // `nts_unit_fn(ptr, i32)` as a `double` and a narrowed *result* was
+            // produced as a `double` that every later reader then disagreed
+            // with -- one bad type propagating to every use of it. `Length`
+            // next door had it right all along.
+            let returns = ty_of(&op.ty, func)?;
+            let helper = if *checked {
+                "nts_str_char_code_at_fn"
+            } else {
+                "nts_unit_fn"
+            };
+            // What the helper hands back, from the table rather than from
+            // memory: one is a `double` and the other a `uint16_t`, and the
+            // second carries `zeroext`.
+            let known = signatures::signature(helper)
+                .ok_or_else(|| refuse(func, "a string read with no declared helper"))?;
+            let produced = known.returns.split_whitespace().last().unwrap_or(known.returns);
+            let mut lines = Vec::new();
+            let at = helper_operand(func, &out, helper, 1, *index, &mut lines)?;
+            let call = format!(
+                "call {} @{helper}(ptr {}, {at})",
+                known.returns,
+                name(*string)
+            );
+            if produced == returns {
+                lines.push(format!("{out} = {call}"));
             } else {
                 let raw = format!("{out}.u");
-                format!(
-                    "{raw} = call zeroext i16 @nts_unit_fn(ptr {}, i32 {})\n  \
-                     {out} = uitofp i16 {raw} to double",
-                    name(*string),
-                    name(*index)
-                )
+                lines.push(format!("{raw} = {call}"));
+                lines.push(converted(&out, produced, returns, &raw, func)?);
             }
+            lines.join("\n  ")
         }
         OpKind::Length(of) => {
             let returns = ty_of(&op.ty, func)?;
@@ -1360,7 +1547,12 @@ fn tagging(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic>
 /// struct. And an argument whose type is not the one the runtime declares is
 /// converted -- C does that at the call and says nothing, which is how
 /// `nts_tag_name(uint32_t)` came to be handed a double.
-fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
+fn call(
+    program: &Program,
+    func: &Func,
+    value: ValueId,
+    out: &str,
+) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -1374,9 +1566,26 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
                     return Err(refuse(func, "a dispatched call, which needs a method table"));
                 }
             };
+            // What the *callee* was defined as, for a call to something in
+            // this program. The signature table answers this for the runtime
+            // and nothing answered it for our own functions: the definition
+            // took its types from the callee's `Func` and the call site took
+            // them from the operation, so `Closure0__call` was defined
+            // `double` and called `i32`.
+            //
+            // Nothing rejects that -- it verifies, and it is the ABI mismatch
+            // it looks like: the callee returns in xmm0 and the caller reads
+            // eax. Worse for speed, **LLVM cannot inline a call whose signature
+            // disagrees with its callee**, so a one-line closure stayed a call
+            // in the innermost loop of `benches/cases/closures` and the case
+            // ran 14x slower than the same HIR through the C backend.
+            let defined = match callee {
+                Callee::Direct(target) => program.funcs.iter().find(|it| &it.name == target),
+                _ => None,
+            };
             let mut rendered = Vec::new();
             let mut before: Vec<String> = Vec::new();
-            for arg in args {
+            for (at, arg) in args.iter().enumerate() {
                 let arg_ty = &func.values[arg.0 as usize].ty;
                 // Two scalars, because that is how the platform passes a
                 // sixteen-byte struct and how clang emits the same call.
@@ -1396,13 +1605,20 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
                     continue;
                 }
                 let ty = ty_of(arg_ty, func)?;
-                // What the runtime actually declares, where it declares one.
-                // C converts at the call and says nothing; here the conversion
-                // has to be written down, which is the better of the two.
+                // What the callee actually declares. C converts at the call and
+                // says nothing; here the conversion has to be written down,
+                // which is the better of the two.
+                //
+                // The runtime's index is into `rendered` because an erased
+                // parameter is two entries there and one here; our own
+                // functions carry one parameter per argument.
                 let wanted = match callee {
                     Callee::External(target) => signatures::signature(target)
                         .and_then(|known| known.params.get(rendered.len()))
                         .map(|spec| spec.split_whitespace().next().unwrap_or(spec)),
+                    Callee::Direct(_) => defined
+                        .and_then(|it| it.params.get(at))
+                        .and_then(|param| ty_of(&param.ty, func).ok()),
                     _ => None,
                 };
                 match wanted {
@@ -1414,12 +1630,33 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
                     _ => rendered.push(format!("{ty} {}{}", extension(arg_ty), name(*arg))),
                 }
             }
+            // A helper the table does not carry is one this backend cannot
+            // call. `nts_to_uint8` is `static inline` in the header, so there
+            // is no symbol to link against and no signature to read -- and
+            // emitting the call anyway produced a module that referenced a name
+            // nothing defined. That is not a refusal, it is a broken build.
+            //
+            // The same distinction the `_fn` companions exist for: a `static
+            // inline` is not a contract another code generator can read.
+            match callee {
+                Callee::External(target) if signatures::signature(target).is_none() => {
+                    return Err(refuse(
+                        func,
+                        &format!(
+                            "a call to {target}, which the runtime declares only as a \
+                             `static inline` and so exposes no symbol for"
+                        ),
+                    ));
+                }
+                _ => {}
+            }
             // The type the *callee* returns, which is not always the type the
             // rest of the function wants: C converts a `double` result into an
             // `int64_t` slot without a word, and the op carries the slot's type.
             let declared = match callee {
                 Callee::External(target) => signatures::signature(target)
                     .map(|known| known.returns.split_whitespace().last().unwrap_or(known.returns)),
+                Callee::Direct(_) => defined.and_then(|it| ty_of(&it.return_type, it).ok()),
                 _ => None,
             };
             let call_returns = declared.unwrap_or(returns);
@@ -1603,6 +1840,73 @@ fn float_literal(number: f64) -> String {
     }
 }
 
+/// One operand of a binary operation, converted to the type both meet at.
+///
+/// Any conversion goes into `lines`, ahead of the operation.
+fn at_joint(
+    func: &Func,
+    out: &str,
+    side: &str,
+    joint: &HirType,
+    value: ValueId,
+    lines: &mut Vec<String>,
+) -> Result<String, Diagnostic> {
+    let held = &func.values[value.0 as usize].ty;
+    let (have, want) = (ty_of(held, func)?, ty_of(joint, func)?);
+    if have == want {
+        return Ok(name(value));
+    }
+    let slot = format!("{out}.{side}");
+    let instruction = conversion(held, joint, func)?;
+    lines.push(format!(
+        "{slot} = {instruction} {have} {} to {want}",
+        name(value)
+    ));
+    Ok(slot)
+}
+
+/// The one type two operands of a binary operation meet at.
+///
+/// C's usual arithmetic conversions, because C is the oracle and this is
+/// exactly what it does silently at every mixed-type `+`: a `double` on either
+/// side wins, then `bigint`, then the wider integer -- and at equal width the
+/// unsigned one, which is C's rule and not an arbitrary tiebreak. A `bool`
+/// never wins, because it promotes.
+fn usual_conversion(left: &HirType, right: &HirType) -> HirType {
+    if left == right {
+        return left.clone();
+    }
+    match (left, right) {
+        (HirType::Float { bits: a }, HirType::Float { bits: b }) => {
+            HirType::Float { bits: *a.max(b) }
+        }
+        (HirType::Float { .. }, _) => left.clone(),
+        (_, HirType::Float { .. }) => right.clone(),
+        (HirType::BigInt, _) | (_, HirType::BigInt) => HirType::BigInt,
+        (
+            HirType::Int {
+                bits: a,
+                signed: left_signed,
+            },
+            HirType::Int {
+                bits: b,
+                signed: right_signed,
+            },
+        ) => HirType::Int {
+            bits: *a.max(b),
+            // The wider operand's signedness wins, and at equal width an
+            // unsigned one does -- C's rule, not a tiebreak invented here.
+            signed: match a.cmp(b) {
+                std::cmp::Ordering::Equal => *left_signed && *right_signed,
+                std::cmp::Ordering::Greater => *left_signed,
+                std::cmp::Ordering::Less => *right_signed,
+            },
+        },
+        (HirType::Bool, other) | (other, HirType::Bool) => other.clone(),
+        _ => left.clone(),
+    }
+}
+
 /// Whether overflow of this type wraps rather than being undefined.
 ///
 /// The distinction is C's, and this backend inherits it rather than inventing
@@ -1697,10 +2001,14 @@ fn converted(
     let instruction = match (have, want) {
         ("double", "i32" | "i64" | "i16" | "i8") => "fptoui",
         ("i32" | "i64" | "i16" | "i8", "double") => "uitofp",
-        ("i64", "i32") => "trunc",
+        ("i64", "i32") | ("i32" | "i64", "i16" | "i8") | ("i16", "i8") => "trunc",
         // A narrower unsigned value into a wider slot, `i1` included: a bool is
-        // one unsigned bit and widens the way an unsigned integer does.
-        ("i32" | "i1", "i64") | ("i1", "i32") => "zext",
+        // one unsigned bit and widens the way an unsigned integer does. A code
+        // unit is a `uint16_t` and widens the same way, which is what a string
+        // read needs when specialization has narrowed its result.
+        ("i32" | "i1" | "i16" | "i8", "i64")
+        | ("i1" | "i16" | "i8", "i32")
+        | ("i8", "i16") => "zext",
         _ => {
             return Err(refuse(
                 func,
@@ -1755,7 +2063,13 @@ fn conversion(from: &HirType, to: &HirType, func: &Func) -> Result<&'static str,
     })
 }
 
-fn unary(func: &Func, out: &str, op: UnOp, operand: ValueId) -> Result<String, Diagnostic> {
+fn unary(
+    func: &Func,
+    out: &str,
+    value: ValueId,
+    op: UnOp,
+    operand: ValueId,
+) -> Result<String, Diagnostic> {
     let ty = ty_of(&func.values[operand.0 as usize].ty, func)?;
     let float = matches!(func.values[operand.0 as usize].ty, HirType::Float { .. });
     Ok(match op {
@@ -1803,38 +2117,80 @@ fn unary(func: &Func, out: &str, op: UnOp, operand: ValueId) -> Result<String, D
         // out, called rather than reproduced. Inlining it here would be a
         // second implementation of ToInt32 to keep in step with the first, and
         // the differential would only find the difference after it shipped.
-        UnOp::ToInt32 if float => format!(
-            "{out} = call i32 @nts_to_int32_fn(double {})",
-            name(operand)
-        ),
-        UnOp::ToUint32 if float => format!(
-            "{out} = call i32 @nts_to_uint32_fn(double {})",
-            name(operand)
-        ),
-        UnOp::ToInt32 | UnOp::ToUint32 if !float => {
-            let HirType::Int { bits, .. } = func.values[operand.0 as usize].ty else {
-                return Err(refuse(func, "a width-changing coercion of a non-integer"));
-            };
+        UnOp::ToInt32 | UnOp::ToUint32 => {
             // LLVM's integer types carry no sign, so both coercions land in
             // `i32` and only the *widening* differs: `sext` keeps a negative
             // number negative, `zext` does not.
             let signed = matches!(op, UnOp::ToInt32);
-            let target = "i32";
-            match bits.cmp(&32) {
-                std::cmp::Ordering::Greater => {
-                    format!("{out} = trunc {ty} {} to {target}", name(operand))
-                }
-                std::cmp::Ordering::Equal => {
+            let want = ty_of(&func.values[value.0 as usize].ty, func)?;
+            // The coercion *is* a reduction to thirty-two bits, so that happens
+            // first -- and then the result goes into whatever slot the middle
+            // end gave it, which is not always a thirty-two bit one.
+            //
+            // Producing `i32` and calling it the result's type made a value
+            // whose emitted width disagreed with its recorded one. Nothing
+            // complained at the definition; every later reader converted from
+            // the width the HIR claimed, and `%v22`, an `i32`, was truncated
+            // from `i64`. One hardcoded type, and the module stopped verifying
+            // several instructions away from the cause.
+            let reduced = if want == "i32" {
+                out.to_owned()
+            } else {
+                format!("{out}.n")
+            };
+            let reduce = if float {
+                // A genuine double: the ten-instruction reduction the runtime
+                // spells out, called rather than reproduced. Inlining it here
+                // would be a second implementation of ToInt32 to keep in step
+                // with the first, and the differential would only find the
+                // difference after it shipped.
+                let helper = if signed {
+                    "nts_to_int32_fn"
+                } else {
+                    "nts_to_uint32_fn"
+                };
+                format!("{reduced} = call i32 @{helper}(double {})", name(operand))
+            } else {
+                let HirType::Int { bits, .. } = func.values[operand.0 as usize].ty else {
+                    return Err(refuse(func, "a width-changing coercion of a non-integer"));
+                };
+                match bits.cmp(&32) {
+                    std::cmp::Ordering::Greater => {
+                        format!("{reduced} = trunc {ty} {} to i32", name(operand))
+                    }
                     // Already thirty-two bits: the reinterpretation is free and
                     // LLVM's types carry no sign, so there is nothing to emit.
-                    format!("{out} = add {ty} {}, 0", name(operand))
+                    std::cmp::Ordering::Equal => {
+                        format!("{reduced} = add {ty} {}, 0", name(operand))
+                    }
+                    std::cmp::Ordering::Less if signed => {
+                        format!("{reduced} = sext {ty} {} to i32", name(operand))
+                    }
+                    std::cmp::Ordering::Less => {
+                        format!("{reduced} = zext {ty} {} to i32", name(operand))
+                    }
                 }
-                std::cmp::Ordering::Less if signed => {
-                    format!("{out} = sext {ty} {} to {target}", name(operand))
-                }
-                std::cmp::Ordering::Less => {
-                    format!("{out} = zext {ty} {} to {target}", name(operand))
-                }
+            };
+            if want == "i32" {
+                reduce
+            } else {
+                // The widening keeps the sign the coercion just established:
+                // a `ToInt32` result is signed and a `ToUint32` result is not.
+                // Backwards here reads 4294967295 as -1.
+                let land = match want {
+                    "i64" if signed => "sext",
+                    "i64" => "zext",
+                    "i16" | "i8" => "trunc",
+                    "double" if signed => "sitofp",
+                    "double" => "uitofp",
+                    _ => {
+                        return Err(refuse(
+                            func,
+                            &format!("a thirty-two bit coercion landing in {want}"),
+                        ));
+                    }
+                };
+                format!("{reduce}\n  {out} = {land} i32 {reduced} to {want}")
             }
         }
         other => {
