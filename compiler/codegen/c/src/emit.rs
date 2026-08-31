@@ -1238,16 +1238,38 @@ fn emit_object_types(
             // Named instead. The layout is the thing that is unrepresentable,
             // so the diagnostic is about the layout rather than about whichever
             // function happened to touch it first.
-            let Ok(ty) = c_type_of(program, &field.ty, origin) else {
-                diagnostics.push(Diagnostic::error(
-                    "NTS2006",
-                    format!(
-                        "no layout for the type of `{}.{}`",
-                        layout.name, field.name
-                    ),
-                    origin.location,
-                ));
-                continue;
+            // A field whose type has no layout is still a *pointer*, and that
+            // is the whole of what this struct needs from it.
+            //
+            // `materialize_within` walks containers and deliberately not
+            // fields: demanding a layout for every field type refused a class
+            // for holding a `Map` it never touches, at 81 profile functions to
+            // fix nothing. What it did instead was silently *drop* the field --
+            // ninety-three of them, including a cell's `value` and a closure's
+            // captured `callback` -- while `reference_fields` kept the name in
+            // the descriptor's map and the emitter kept taking an `offsetof`
+            // into it. A struct missing a field the reference map points at is
+            // not a smaller object, it is a wrong one.
+            //
+            // Neither horn was necessary. Every managed object is one pointer
+            // whatever its layout, the reference map wants an offset and a
+            // pointer has one, and nothing here can dereference it: reading
+            // through the field would have called `layout_of` and there would
+            // be a layout. So it is emitted opaque.
+            //
+            // Which is also where LLVM already is -- it has had none but opaque
+            // pointers since 17 -- so this is the C backend agreeing with the
+            // one that comes next rather than a concession.
+            let ty = match c_type_of(program, &field.ty, origin) {
+                Ok(ty) => ty,
+                Err(problem) if field.ty.is_managed() => {
+                    let _ = problem;
+                    "void *".to_owned()
+                }
+                Err(problem) => {
+                    diagnostics.push(problem);
+                    continue;
+                }
             };
             // `readonly` is semantic, not syntactic — `Readonly<T>` counts — but
             // it is deliberately *not* emitted as `const` on the member.
