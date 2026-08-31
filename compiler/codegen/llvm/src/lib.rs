@@ -89,6 +89,7 @@ pub fn emit(program: &Program) -> Emitted {
     }
     let _ = writeln!(text, "\n{}", descriptors(program));
     let _ = writeln!(text, "{}", literals(program));
+    let _ = write!(text, "{}", cell_name_globals(program));
     // Module-scope storage. `internal` unless the program exports it, for the
     // same reason the C backend makes it `static`: a name outside the program
     // is a name something outside can collide with.
@@ -360,6 +361,10 @@ const HEADER_TYPE: &str = "%NtsHeader = type { ptr, i64, i32, i32 }";
 fn literals(program: &Program) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "{HEADER_TYPE}");
+    // What to run, how to drop it unrun, and the frame both act on. Named
+    // `%struct.NtsTask` because that is what the runtime's own signature says
+    // it passes `byval`, and the two have to agree.
+    let _ = writeln!(out, "%struct.NtsTask = type {{ ptr, ptr, ptr }}");
     let _ = writeln!(out, "@nts_desc_string1 = external constant %NtsDescriptor");
     let _ = writeln!(out, "@nts_desc_string2 = external constant %NtsDescriptor");
     for (index, text) in literal_table(program).iter().enumerate() {
@@ -464,6 +469,11 @@ fn descriptors(program: &Program) -> String {
             .collect();
         let reference_table = offsets("refs", &references);
         let erased_table = offsets("erased", &erased);
+        // The class's dispatch table, where the hierarchy has one. A slot the
+        // class does not implement is null, which is unreachable: a call only
+        // uses a slot the receiver's static type declares, and every class at
+        // or below that type fills it.
+        let methods = vtable(&mut out, layout, &tag);
         // A named function used as a value is one object, so it is emitted
         // rather than allocated: nothing in it but the header, and immortal.
         // `NTS_IMMORTAL` in the count word is what keeps reference counting
@@ -491,7 +501,7 @@ fn descriptors(program: &Program) -> String {
         let _ = writeln!(
             out,
             "@nts_desc_{tag} = internal constant %NtsDescriptor {{ i32 {KIND_OBJECT}, \
-             i32 {}, i32 {}, i32 {is_cyclic}, {reference_table}, ptr null, \
+             i32 {}, i32 {}, i32 {is_cyclic}, {reference_table}, {methods}, \
              ptr @nts_name_{tag}, i32 {}, {erased_table} }}",
             placed.size,
             references.len(),
@@ -604,6 +614,164 @@ fn element_tag(ty: &HirType) -> String {
 }
 
 /// A layout's descriptor symbol, with anything LLVM dislikes replaced.
+/// The three operations a suspended function is made of.
+///
+/// `hir::suspend` turns a function that awaits into a state machine in the
+/// middle end, so a backend never sees `await` -- it sees the machine. What is
+/// left is subscribing the rest of the function to a promise, and checking that
+/// a cell was written before it is read.
+fn suspension(
+    program: &Program,
+    func: &Func,
+    value: ValueId,
+    out: &str,
+) -> Result<String, Diagnostic> {
+    let op = &func.values[value.0 as usize];
+    let out = out.to_owned();
+    Ok(match &op.kind {
+        // A cell read before its initializer ran. The check is a load and a
+    // branch rather than a call, because the answer is yes on every
+    // execution but the broken one -- so this is the one place the emitter
+    // writes basic blocks of its own.
+    OpKind::CellReady { cell, name: what } => {
+        let held = &func.values[cell.0 as usize].ty;
+        let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = held else {
+            return Err(refuse(func, "a readiness check on something that is not a cell"));
+        };
+        let layout = program
+            .layouts
+            .iter()
+            .find(|layout| layout.types.contains(id))
+            .ok_or_else(|| refuse(func, "a cell whose type has no layout"))?;
+        let placed = nts_codegen_common::layout::place(&layout.fields)
+            .ok_or_else(|| refuse(func, "a cell whose fields cannot be placed"))?;
+        let at = layout
+            .fields
+            .iter()
+            .position(|field| field.name == "ready")
+            .and_then(|at| placed.offsets.get(at).copied())
+            .ok_or_else(|| refuse(func, "a cell with no `ready` field"))?;
+        let text = format!("@nts_cellname_{}", cell_names(program)
+            .iter()
+            .position(|known| known == what)
+            .unwrap_or(0));
+        [
+            format!("{out}.at = getelementptr i8, ptr {}, i64 {at}", name(*cell)),
+            format!("{out}.ready = load i8, ptr {out}.at{}", tbaa("i8")),
+            format!("{out}.is = icmp ne i8 {out}.ready, 0"),
+            format!("br i1 {out}.is, label %{out}.ok, label %{out}.no"),
+            format!("{}.no:", out.trim_start_matches('%')),
+            format!("  call void @nts_cell_unready(ptr {text})"),
+            format!("  br label %{out}.ok"),
+            format!("{}.ok:", out.trim_start_matches('%')),
+        ]
+        .join("\n  ")
+    }
+    // `await` is not a code generation concept. `hir::suspend` turns a
+    // function that awaits into a state machine and leaves `Suspend`
+    // behind; one reaching here means that pass did not run.
+    OpKind::Await { .. } => {
+        return Err(refuse(func, "an `await`, which the suspension pass should have removed"));
+    }
+    // Subscribing the rest of this function to a promise. `NtsTask` is
+    // three pointers -- what to run, how to drop it unrun, and the frame
+    // both act on -- and the platform passes it in memory, which is what
+    // `byval` in the runtime's signature says.
+    OpKind::Suspend {
+        promise,
+        frame,
+        resume,
+    } => [
+        format!("{out}.task = alloca %struct.NtsTask, align 8"),
+        format!("store ptr {}, ptr {out}.task{}", symbol(resume), tbaa("ptr")),
+        format!("{out}.drop = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 1"),
+        format!("store ptr null, ptr {out}.drop{}", tbaa("ptr")),
+        format!("{out}.state = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 2"),
+        format!("store ptr {}, ptr {out}.state{}", name(*frame), tbaa("ptr")),
+        format!(
+            "call void @nts_promise_subscribe(ptr {}, ptr byval(%struct.NtsTask) align 8 {out}.task)",
+            name(*promise)
+        ),
+    ]
+    .join("\n  "),
+        other => {
+            return Err(refuse(
+                func,
+                &format!("the operation {other:?}, which is not a suspension"),
+            ));
+        }
+    })
+}
+
+/// Every name a readiness check can report, in a stable order.
+///
+/// The runtime prints it, so it is a C string rather than an `NtsString`, and
+/// the emitter cannot add a global from inside an operation -- so they are
+/// collected up front the way string literals are.
+fn cell_names(program: &Program) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for func in &program.funcs {
+        for op in &func.values {
+            if let OpKind::CellReady { name, .. } = &op.kind
+                && !names.contains(name)
+            {
+                names.push(name.clone());
+            }
+        }
+    }
+    names
+}
+
+/// One `private constant` per name, NUL terminated for C.
+fn cell_name_globals(program: &Program) -> String {
+    let mut out = String::new();
+    for (at, name) in cell_names(program).iter().enumerate() {
+        let bytes: String = name
+            .bytes()
+            .map(|byte| {
+                if byte.is_ascii_graphic() && byte != b'"' && byte != b'\\' {
+                    (byte as char).to_string()
+                } else {
+                    format!("\\{byte:02X}")
+                }
+            })
+            .collect();
+        let _ = writeln!(
+            out,
+            "@nts_cellname_{at} = private unnamed_addr constant [{} x i8] c\"{bytes}\\00\"",
+            name.len() + 1
+        );
+    }
+    out
+}
+
+/// The class's dispatch table, where the hierarchy has one.
+///
+/// A slot the class does not implement is null, which is unreachable: a call
+/// only uses a slot the receiver's static type declares, and every class at or
+/// below that type fills it.
+fn vtable(out: &mut String, layout: &nts_core::hir::Layout, tag: &str) -> String {
+    if layout.methods.iter().all(Option::is_none) {
+        return "ptr null".to_owned();
+    }
+    let entries: Vec<String> = layout
+        .methods
+        .iter()
+        .map(|method| {
+            method
+                .as_ref()
+                .map_or_else(|| "ptr null".to_owned(), |name| format!("ptr {}", symbol(name)))
+        })
+        .collect();
+    let _ = writeln!(
+        out,
+        "@nts_vtable_{tag} = internal constant [{} x ptr] [{}]",
+        entries.len(),
+        entries.join(", ")
+    );
+    format!("ptr @nts_vtable_{tag}")
+}
+
 /// Whether anything in the program refers to this layout's single instance.
 ///
 /// Asked of the IR rather than tracked alongside it: `ClosureStatic` is the
@@ -639,8 +807,10 @@ fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
 const ALWAYS_DECLARED: &[&str] = &[
     "nts_array_new",
     "nts_array_new_uninitialized",
+    "nts_cell_unready",
     "nts_check_fn",
     "nts_concat",
+    "nts_promise_subscribe",
     "nts_index_fn",
     "nts_object_new",
     "nts_release",
@@ -1294,6 +1464,9 @@ fn allocation(
                 static_closure_name(layout)
             )
         }
+        OpKind::CellReady { .. } | OpKind::Await { .. } | OpKind::Suspend { .. } => {
+            return suspension(program, func, value, &out);
+        }
         OpKind::ObjectNew { frame } => {
             let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &op.ty else {
                 return Err(refuse(func, "an allocation of something that is not an object"));
@@ -1592,6 +1765,27 @@ fn tagging(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic>
     })
 }
 
+/// The implementation to call, three loads down from the receiver.
+///
+/// `args[0]` is the receiver and its descriptor is where the table lives, so
+/// this is the descriptor, then the table, then the slot. The table stores
+/// untyped pointers, which is why the call spells its own signature.
+fn method_pointer(out: &str, args: &[ValueId], slot: u32, before: &mut Vec<String>) -> String {
+    let receiver = args
+        .first()
+        .map_or_else(|| "null".to_owned(), |value| name(*value));
+    before.push(format!("{out}.desc = load ptr, ptr {receiver}{}", tbaa("ptr")));
+    before.push(format!(
+        "{out}.tab.at = getelementptr %NtsDescriptor, ptr {out}.desc, i32 0, i32 5"
+    ));
+    before.push(format!("{out}.tab = load ptr, ptr {out}.tab.at{}", tbaa("ptr")));
+    before.push(format!(
+        "{out}.fn.at = getelementptr ptr, ptr {out}.tab, i32 {slot}"
+    ));
+    before.push(format!("{out}.fn = load ptr, ptr {out}.fn.at{}", tbaa("ptr")));
+    format!("{out}.fn")
+}
+
 /// Every argument to a call, at the type the callee declares.
 ///
 /// Two things happen here that C does silently. An erased argument becomes
@@ -1661,13 +1855,19 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
     Ok(match &op.kind {
         OpKind::Call { callee, args, .. } => {
             let returns = ty_of(&op.ty, func)?;
+            // A dispatch through the receiver's method table: one load for the
+            // descriptor, one for the table, one for the slot, and an indirect
+            // call. That is what dispatch costs when the compiler knows the
+            // whole hierarchy -- and the table stores untyped pointers, so the
+            // call spells the signature it is making.
+            let dispatched = match callee {
+                Callee::Virtual { slot, .. } | Callee::Closure { slot } => Some(*slot),
+                _ => None,
+            };
+            let empty = String::new();
             let target = match callee {
                 Callee::Direct(target) | Callee::External(target) => target,
-                // A dispatch through a method table. It needs the table, which
-                // needs a descriptor, which is the next thing to build.
-                Callee::Virtual { .. } | Callee::Closure { .. } => {
-                    return Err(refuse(func, "a dispatched call, which needs a method table"));
-                }
+                Callee::Virtual { .. } | Callee::Closure { .. } => &empty,
             };
             let framed = frame_units(func, value);
             // The `_into` form of the same helper, handed the storage above.
@@ -1720,10 +1920,16 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
             // carries: `hir::runtime` reconciled it with what the runtime
             // declares, the same way it did the arguments.
             let call_returns = returns;
+            // The function to call: a name, or three loads down from the
+            // receiver. `args[0]` is the receiver, and its descriptor is where
+            // the table lives.
+            let callable = match dispatched {
+                None => symbol(&called),
+                Some(slot) => method_pointer(&out, args, slot, &mut before),
+            };
             let call = format!(
-                "call {}{call_returns} {}({})",
+                "call {}{call_returns} {callable}({})",
                 extension(&op.ty),
-                symbol(&called),
                 rendered.join(", ")
             );
             let call = if returns == "void" {
@@ -1821,7 +2027,11 @@ fn memory_operation(
         // Making one is next door: an allocation needs a descriptor, which is
         // data rather than code and the one piece of the runtime a backend has
         // to build.
-        OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } | OpKind::ClosureStatic => {
+        OpKind::ObjectNew { .. }
+        | OpKind::ArrayNew { .. }
+        | OpKind::ClosureStatic
+        | OpKind::Await { .. }
+        | OpKind::Suspend { .. } => {
             return allocation(program, func, value, &out);
         }
         OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
