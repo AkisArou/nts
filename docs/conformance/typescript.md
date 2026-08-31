@@ -1093,7 +1093,7 @@ questions:
 |---|---|---|
 | examples | the compiled program agrees with node, case by case | 90 of 90 |
 | sweep | a generated cross-product agrees with node, cell by cell | 9,570 cases across 330 functions |
-| corpus | arbitrary input produces no invalid IR and no C that will not compile | 49 lower cleanly; `invalid HIR` 0, `uncompilable C` 2 |
+| corpus | arbitrary input produces no invalid IR and no C that will not compile | 49 lower cleanly; `invalid HIR` 0, `uncompilable C` 0 — both hard rows |
 | profile | how much of a real standard library lowers | 22 modules emit and verify; 1,097 distinct refusal sites |
 | rc | the same examples hold nothing at exit under reference counting | 87 of 90, three named |
 
@@ -1139,8 +1139,19 @@ struct field whose C type it could not compute, while the descriptor beside it
 kept taking an `offsetof` into it — a struct missing a field the reference map
 still points at is not a smaller object, it is a wrong one.
 
-It is named now, and the count is **93** across the node profile, not the five
-this section used to claim. Nor are they obscure: a cell's `value`, a closure's
+It is fixed now, and neither horn of the dilemma the note described was
+necessary. Every managed object is one pointer whatever its layout; the
+reference map wants an offset and a pointer has one; and nothing can dereference
+such a field, because reading through it would have called `layout_of` and there
+would be a layout. So it is emitted **opaque** -- which is also where LLVM
+already is, having had none but opaque pointers since 17.
+
+93 across the node profile, not the five this section used to claim, and it is
+3: the three that remain are `layout_of` failing where a function genuinely
+reads through the type, with a source location. **`uncompilable C` is 0** and is
+a hard row now, as its note always said it would become when it got there.
+
+Before it was fixed it was named, and that alone is worth recording. Nor are they obscure: a cell's `value`, a closure's
 captured `callback`, `Agent.requests`. Naming them cost nothing — 90 of 90
 examples still agree.
 
@@ -1189,9 +1200,8 @@ blocks on, not to start building.
 | generators | 4 refusals, but `readline` and several streams are behind them | the suspension machine exists; what is missing is the `Generator<T>` object and §10's protocol |
 | `try`/`catch` | the largest *language* gap, and invisible in this table because the code that needs it does not reach the lowering | needs an unwinding decision — the runtime has none |
 
-Two rows in the corpus are meant to be zero. `invalid HIR` is 0. `uncompilable
-C` is ratcheted at 2 and only downward — see §14 for why 2 is not the true
-number and what the honest count costs.
+Two rows in the corpus are meant to be zero, and both are: `invalid HIR` and
+`uncompilable C`. Neither is ratcheted any more.
 
 ### What came off this list
 

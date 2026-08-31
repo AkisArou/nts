@@ -176,9 +176,13 @@ corpus() {
   #   function and is not reached by materializing the outer type either
   #   a quoted key on a generic function's returned object
   #
-  # Ratcheted rather than enforced, so that it can only go down. When it is
-  # zero this becomes a hard row like `invalid HIR`.
-  known=2
+  # It is zero, so this is a hard row now, as the note above it always said it
+  # would become. What made it zero was not the repair the note describes: the
+  # emitter was *dropping* a field whose type had no layout while the descriptor
+  # kept pointing at it, and a field nothing dereferences turns out to need only
+  # a pointer, not a layout. What is left of that repair -- the compiler
+  # computing its own byte offsets -- is now about LLVM rather than about this.
+  known=0
   now=$(awk '/uncompilable C/ { print $NF + 0 }' "$root/target/suite-report.txt")
   if [ "${now:-0}" -gt "$known" ]; then
     echo "  ^ uncompilable C rose from $known to $now"
