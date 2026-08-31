@@ -793,16 +793,12 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
     let mut baselined = false;
     for (one, at, tuple) in interleaved(testable) {
         {
-            let args: Vec<String> = tuple
-                .iter()
-                .zip(&one.params)
-                .map(|(value, (ty, _))| {
-                    if is_string(ty) {
-                        return c_string(string_at(*value));
-                    }
-                    format!("({}){}", c_type(ty), literal(*value))
-                })
-                .collect();
+            // A string argument is *made* here, so it is this driver's to give
+            // back. Built into named temporaries rather than inline so there is
+            // something to release: the liveness check at the end measures what
+            // the program holds, and a driver that kept every argument it built
+            // would report its own hoard as the program's leak. It did.
+            let (built, args, given_back) = arguments(one, &tuple);
             let call = format!(
                 "{}({})",
                 nts_codegen_c::c_identifier(&one.name),
@@ -828,7 +824,10 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
             } else {
                 format!("show(\"{}\", {at}, (double){call});", one.name)
             };
-            let _ = writeln!(main, "    if (++at_case >= from) {{ {show} }}");
+            let _ = writeln!(
+                main,
+                "    if (++at_case >= from) {{ {built}{show}{given_back} }}"
+            );
             // The baseline, taken after the first case rather than before it:
             // whatever a module sets up on the way to answering once is state
             // it is entitled to keep, and the question is only whether the
@@ -1088,6 +1087,33 @@ fn run_native(
         restarts += 1;
     }
     Ok(collected)
+}
+
+/// One case's arguments: what to build, what to pass, what to give back.
+///
+/// A string argument is *made* here, so it is this driver's to release. Built
+/// into named temporaries rather than passed inline because there has to be
+/// something to release -- the liveness check measures what the *program*
+/// holds, and a driver that kept every string it built reported its own hoard
+/// as the program's leak. It did, on three examples.
+fn arguments(one: &Testable, tuple: &[f64]) -> (String, Vec<String>, String) {
+    let mut built = String::new();
+    let mut given_back = String::new();
+    let mut args = Vec::new();
+    for (slot, (value, (ty, _))) in tuple.iter().zip(&one.params).enumerate() {
+        if is_string(ty) {
+            let _ = write!(
+                built,
+                "NtsString *arg{slot} = {}; ",
+                c_string(string_at(*value))
+            );
+            let _ = write!(given_back, " nts_release((NtsHeader *)arg{slot});");
+            args.push(format!("arg{slot}"));
+        } else {
+            args.push(format!("({}){}", c_type(ty), literal(*value)));
+        }
+    }
+    (built, args, given_back)
 }
 
 /// What the program still held, once and at the end, and whether it grew.

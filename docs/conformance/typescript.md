@@ -441,10 +441,16 @@ borrowed by that pass's convention. It is borrowed from whoever provided the
 reference, which is what makes giving it back at the finishing exits — and at
 none of the pausing ones — correct rather than double.
 
-### A frame object's contents, reached through another frame object
+### A frame object's contents are its own to give back
 
-Six examples hold objects they never give back, and one mechanism explains the
-one that was isolated:
+A frame object cannot be *moved*. Reference counting hands ownership to a slot
+when a value is stored and dies — the slot takes the reference the local was
+holding, and releasing the container releases it. A frame object has no
+reference to hand over: its storage ends with the frame whatever points at it,
+which escape analysis is what guarantees. So a store neither takes a count nor
+takes over the duty of giving the object's **fields** back.
+
+Treating it as moved dropped that duty:
 
 ```ts
 let text = "a";                                // a *managed* value
@@ -457,15 +463,14 @@ calls `nts_release` on it, which returns immediately for an immortal object.
 Nothing then releases the *cell's* string. The same cell holding a number is
 fine, because a number is not a reference.
 
-`hir::rc`'s `release_value` already knows a frame object gives up its **fields**
-rather than itself. What is missing is that a frame object reached through
-*another* frame object's field never gets that treatment.
+The container's own release loads the field and releases the *pointer*, which
+returns immediately for an immortal object, and the string the cell held was
+never given up. A number in the same cell was fine, because a number is not a
+reference.
 
 Not a cost of reference counting: before escape analysis learned to put a cell
-in the frame, the cell was on the heap and released normally. It is the two
-changes meeting.
-
-Named in `tooling/gate/rc.sh`, which is a ratchet — a new one breaks the gate.
+in the frame, the cell was on the heap and released normally. It was the two
+changes meeting, and neither was wrong alone.
 
 I first reported an async call as leaking `awaits + 1` objects under counting.
 It does not, and the correction is worth keeping: what accumulates is

@@ -20,29 +20,23 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # `invalid` and `unsupported` are not oracle cases under any provider: one does
 # not typecheck and the other refuses on purpose.
 #
-# The rest hold objects they should have given back, which the run now measures:
-# the driver records what is live after the first case and again at the end,
-# forcing a collection at both so that what is merely awaiting the cycle
-# collector is not counted as held. Growth between the two is a leak.
+# The other two hold objects they never give back, which the run measures: the
+# driver records what is live after the first case and again at the end, forcing
+# a collection at both so that what is merely awaiting the cycle collector is not
+# counted as held. Growth between the two is a leak.
 #
-# One mechanism, found by isolating `captured-by-reference` down to five lines:
+#   module-state  one object, appearing after the first case. Plausibly a module
+#                 global assigned on a later case and legitimately kept, which is
+#                 exactly why the baseline is taken after the first case and not
+#                 before it -- but it has not been shown, so it is listed.
+#   timers        fifty-eight. Pending timers hold their callbacks, and a timer
+#                 that never fires holds one at exit. Not yet separated from a
+#                 real leak.
 #
-#     let text = "a";                                  a *managed* value
-#     const grow = () => { text = text + "b"; };       captured and written
-#
-# The cell is frame-allocated -- escape analysis proved it does not escape --
-# so it is `NTS_IMMORTAL`, and the closure's own frame-release loads the field
-# and calls `nts_release` on it, which returns immediately for an immortal
-# object. Nothing then releases the *cell's* string. A number in the same cell
-# is fine, because a number is not a reference.
-#
-# `release_value` in `hir::rc` already knows a frame object must give up its
-# fields rather than itself. What is missing is that a frame object reached
-# *through another frame object's field* never gets that treatment.
-#
-# Not a regression from the counting itself: before escape analysis learned to
-# put a cell in the frame, the cell was on the heap and released normally.
-known_failing="arith captured-by-reference invalid module-state signatures strings timers unsupported"
+# Four others were here and are not: `captured-by-reference` was a frame object
+# whose fields nobody gave back, and `arith`, `strings` and `signatures` were
+# this driver keeping every string argument it built.
+known_failing="invalid module-state timers unsupported"
 
 crowded=8
 cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )

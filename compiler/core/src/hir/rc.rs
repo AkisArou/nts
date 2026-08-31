@@ -374,7 +374,26 @@ fn count_ops(
             // so it is never in a release set at all -- there is no release to
             // cancel against, and skipping the retain would hand the slot a
             // reference the caller is still counting as its own.
-            if owned(func, layouts, *stored) && live.dies_in(at, *stored) && moved.insert(*stored) {
+            // A *frame* object has no count to hand over, and no store can
+            // take over the duty of giving its fields back.
+            //
+            // Its storage ends with the frame whatever points at it -- escape
+            // analysis is what guarantees nothing outlives it -- so a retain
+            // would change nothing and a move would be a lie. Treating it as
+            // moved dropped the duty on the floor: the container's own release
+            // loads the field and releases the *pointer*, which returns
+            // immediately for an immortal object, and the references the frame
+            // object was holding were never given up. A cell holding a string,
+            // captured by a closure, leaked the string exactly this way.
+            if matches!(
+                func.values[stored.0 as usize].kind,
+                OpKind::ObjectNew { frame: true }
+            ) {
+                // Neither: its fields are released where its frame ends.
+            } else if owned(func, layouts, *stored)
+                && live.dies_in(at, *stored)
+                && moved.insert(*stored)
+            {
                 report.moves += 1;
             } else {
                 retain(func, &mut ops, *stored, report);
