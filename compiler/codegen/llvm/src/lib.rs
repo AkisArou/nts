@@ -72,6 +72,9 @@ pub fn emit(program: &Program) -> Emitted {
     // get wrong.
     let _ = writeln!(text, "declare i32 @nts_to_int32_fn(double)");
     let _ = writeln!(text, "declare i32 @nts_to_uint32_fn(double)");
+    for line in externals(program) {
+        let _ = writeln!(text, "{line}");
+    }
     for func in &program.funcs {
         match function(program, func) {
             Ok(rendered) => {
@@ -81,6 +84,67 @@ pub fn emit(program: &Program) -> Emitted {
         }
     }
     Emitted { text, diagnostics }
+}
+
+/// One `declare` per runtime helper the program calls.
+///
+/// The signature is read off the *call site* -- the argument types the lowering
+/// chose and the result type the operation carries -- rather than from the C
+/// header, which this backend cannot read. That is sound for the scalars and
+/// pointers it renders, and it is exactly where it would stop being sound for
+/// `NtsValue`: a sixteen-byte struct by value is where a hand-derived signature
+/// and clang's part company, which is why an erased value is refused before it
+/// reaches here.
+///
+/// Two call sites that disagree about a helper's signature would emit two
+/// conflicting declarations, so the first is kept and the conflict is reported
+/// rather than written out -- a program that fails to assemble with a clear
+/// reason beats one that assembles into the wrong call.
+fn externals(program: &Program) -> Vec<String> {
+    let mut seen: Vec<(String, String)> = Vec::new();
+    for func in &program.funcs {
+        for op in &func.values {
+            let OpKind::Call {
+                callee: Callee::External(target),
+                args,
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
+            let Ok(returns) = ty_of(&op.ty, func) else {
+                continue;
+            };
+            let mut types = Vec::new();
+            let mut whole = true;
+            for arg in args {
+                match ty_of(&func.values[arg.0 as usize].ty, func) {
+                    Ok(ty) => types.push(format!(
+                        "{ty} {}",
+                        extension(&func.values[arg.0 as usize].ty)
+                    )),
+                    Err(_) => whole = false,
+                }
+            }
+            if !whole {
+                continue;
+            }
+            let line = format!(
+                "declare {}{returns} {}({})",
+                extension(&op.ty),
+                symbol(target),
+                types
+                    .iter()
+                    .map(|ty| ty.trim_end().to_owned())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            if !seen.iter().any(|(name, _)| name == target) {
+                seen.push((target.clone(), line));
+            }
+        }
+    }
+    seen.into_iter().map(|(_, line)| line).collect()
 }
 
 /// The LLVM type a value of this HIR type lives in.
@@ -417,8 +481,13 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
         }
         OpKind::Call { callee, args, .. } => {
             let returns = ty_of(&op.ty, func)?;
-            let Callee::Direct(target) = callee else {
-                return Err(refuse(func, "a call this backend does not resolve yet"));
+            let target = match callee {
+                Callee::Direct(target) | Callee::External(target) => target,
+                // A dispatch through a method table. It needs the table, which
+                // needs a descriptor, which is the next thing to build.
+                Callee::Virtual { .. } | Callee::Closure { .. } => {
+                    return Err(refuse(func, "a dispatched call, which needs a method table"));
+                }
             };
             let mut rendered = Vec::new();
             for arg in args {
