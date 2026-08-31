@@ -10,6 +10,7 @@ publish.workspace = true
 anyhow.workspace = true
 camino.workspace = true
 nts-codegen-c.workspace = true
+nts-codegen-llvm.workspace = true
 nts-core.workspace = true
 nts-frontend-ts.workspace = true
 nts-semantic-schema.workspace = true

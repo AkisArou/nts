@@ -72,27 +72,17 @@ pub fn emit(program: &Program) -> Emitted {
     // for exactly this, and these two are the first things to cross the C-to-
     // LLVM boundary -- a double in, an `i32` out, the simplest ABI there is to
     // get wrong.
-    let _ = writeln!(text, "declare i32 @nts_to_int32_fn(double)");
-    let _ = writeln!(text, "declare i32 @nts_to_uint32_fn(double)");
-    let _ = writeln!(text, "declare ptr @nts_object_new(ptr)");
-    let _ = writeln!(text, "declare ptr @nts_array_new(ptr, double)");
-    let _ = writeln!(text, "declare i32 @nts_check_fn(ptr, i32)");
-    let _ = writeln!(text, "declare void @nts_retain(ptr)");
-    let _ = writeln!(text, "declare void @nts_release(ptr)");
-    let _ = writeln!(text, "declare ptr @nts_concat(ptr, ptr)");
-    let _ = writeln!(
-        text,
-        "declare zeroext i1 @nts_value_strict_eq(i32, i64, i32, i64)"
-    );
-    let _ = writeln!(text, "declare zeroext i1 @nts_string_truthy(ptr)");
-    let _ = writeln!(text, "declare zeroext i16 @nts_unit_fn(ptr, i32)");
-    let _ = writeln!(text, "declare double @nts_str_char_code_at_fn(ptr, double)");
-    let _ = writeln!(text, "declare double @llvm.fabs.f64(double)");
-    let _ = writeln!(text, "declare double @llvm.sqrt.f64(double)");
-    let _ = writeln!(text, "declare i32 @nts_index_fn(ptr, double)");
-    let _ = writeln!(text, "declare ptr @nts_array_new_uninitialized(ptr, double)");
-    // The runtime's own, shared by every array of references: each element is a
-    // pointer, so they are all the same shape and one descriptor serves them.
+    // Everything the backend may reach for, declared from the same table the
+    // program's own calls use -- one source of signatures, and the attributes
+    // come with them.
+    for helper in ALWAYS_DECLARED {
+        if let Some(line) = declaration(helper) {
+            let _ = writeln!(text, "{line}");
+        }
+    }
+    // The two intrinsics, which are LLVM's own and in no C header.
+    let _ = writeln!(text, "declare double @llvm.fabs.f64(double) nounwind");
+    let _ = writeln!(text, "declare double @llvm.sqrt.f64(double) nounwind");
     let _ = writeln!(text, "@nts_desc_ref = external constant %NtsDescriptor");
     for line in externals(program) {
         let _ = writeln!(text, "{line}");
@@ -410,6 +400,47 @@ fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
         .collect()
 }
 
+/// Runtime helpers this backend emits calls to without the program naming them.
+///
+/// A bounds check, a retain, an allocation: the lowering does not put these in
+/// `Callee::External`, the backend reaches for them. Declared from the same
+/// table as everything else so there is one place a signature comes from.
+const ALWAYS_DECLARED: &[&str] = &[
+    "nts_array_new",
+    "nts_array_new_uninitialized",
+    "nts_check_fn",
+    "nts_concat",
+    "nts_index_fn",
+    "nts_object_new",
+    "nts_release",
+    "nts_retain",
+    "nts_str_char_code_at_fn",
+    "nts_string_truthy",
+    "nts_to_int32_fn",
+    "nts_to_uint32_fn",
+    "nts_unit_fn",
+    "nts_value_strict_eq",
+];
+
+/// One `declare` line for a runtime helper, from the generated table.
+fn declaration(name: &str) -> Option<String> {
+    let known = signatures::signature(name)?;
+    // Nothing in this language unwinds -- there is no exception mechanism to
+    // unwind *with* -- so every call is `nounwind` whatever else it is. Saying
+    // so lets LLVM stop reasoning about paths that cannot exist.
+    let mut carried: Vec<&str> = known.attributes.to_vec();
+    if !carried.contains(&"nounwind") {
+        carried.insert(0, "nounwind");
+    }
+    let attributes = carried.join(" ");
+    Some(format!(
+        "declare {} {}({}) {attributes}",
+        known.returns,
+        symbol(name),
+        known.params.join(", ")
+    ))
+}
+
 /// One `declare` per runtime helper the program calls, from `signatures`.
 ///
 /// Read off the *call site* at first, which is sound only where the lowering's
@@ -420,7 +451,7 @@ fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
 /// `typeof v` answered "undefined" for a number. Found by the cross-backend
 /// test, which is the only thing that could have.
 fn externals(program: &Program) -> Vec<String> {
-    let mut seen: Vec<String> = Vec::new();
+    let mut seen: Vec<String> = ALWAYS_DECLARED.iter().map(|name| (*name).to_owned()).collect();
     let mut lines = Vec::new();
     for func in &program.funcs {
         for op in &func.values {
@@ -434,16 +465,11 @@ fn externals(program: &Program) -> Vec<String> {
             if seen.iter().any(|name| name == target) {
                 continue;
             }
-            let Some(known) = signatures::signature(target) else {
+            let Some(line) = declaration(target) else {
                 continue;
             };
             seen.push(target.clone());
-            lines.push(format!(
-                "declare {} {}({})",
-                known.returns,
-                symbol(target),
-                known.params.join(", ")
-            ));
+            lines.push(line);
         }
     }
     lines
@@ -583,9 +609,16 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
         }
     }
     let linkage = if func.exported { "" } else { "internal " };
+    // `nounwind` on everything this compiler defines, for the reason above: the
+    // language has no exceptions, so no frame here can be unwound through.
+    //
+    // Deliberately *not* `willreturn` or `mustprogress`. C guarantees forward
+    // progress and JavaScript does not -- `while (true) {}` is a program the
+    // checker accepts and this compiler compiles, and telling LLVM otherwise
+    // would licence it to delete the loop.
     let _ = writeln!(
         out,
-        "define {linkage}{}{returns} {}({}) {{",
+        "define {linkage}{}{returns} {}({}) nounwind {{",
         extension(&func.return_type),
         symbol(&func.name),
         params.join(", ")
@@ -622,10 +655,79 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
                 let _ = writeln!(out, "  {line}");
             }
         }
+        // Anything an outgoing edge has to convert, before the terminator that
+        // carries it: a phi's incoming value must be available in the
+        // predecessor, so this is the only place it can go.
+        for line in outgoing_conversions(func, id) {
+            let _ = writeln!(out, "  {line}");
+        }
         let _ = writeln!(out, "  {}", terminator(func, &block.terminator)?);
     }
     let _ = writeln!(out, "}}");
     Ok(out)
+}
+
+/// The name an edge supplies for one block parameter, and the conversion it
+/// needs to get there.
+///
+/// The verifier's `compatible` treats **any scalar as compatible with any
+/// other**: an `i32` may flow along an edge into an `f64` block parameter. That
+/// is sound for the C backend, which writes `v7 = v0;` and lets C convert, and
+/// it is not sound here -- a `phi double` taking an `i32` is not a module.
+///
+/// So the conversion is written out, in the *predecessor*, because that is
+/// where a phi's incoming value has to be available. It is the same thing C was
+/// doing silently, and the IR being under-specified about it is a real finding:
+/// nothing but a second backend could have noticed, because the first one's
+/// language happened to fill the gap.
+fn edge_value(func: &Func, from: BlockId, to: BlockId, slot: usize, value: ValueId) -> (String, Option<String>) {
+    let Some(param) = func.blocks[to.0 as usize].params.get(slot) else {
+        return (name(value), None);
+    };
+    let have = &func.values[value.0 as usize].ty;
+    let want = &func.values[param.0 as usize].ty;
+    if have == want {
+        return (name(value), None);
+    }
+    let (Ok(from_ty), Ok(to_ty)) = (ty_of(have, func), ty_of(want, func)) else {
+        return (name(value), None);
+    };
+    if from_ty == to_ty {
+        return (name(value), None);
+    }
+    let Ok(instruction) = conversion(have, want, func) else {
+        return (name(value), None);
+    };
+    let into = format!("%e{}_{}_{slot}", from.0, to.0);
+    let line = format!("{into} = {instruction} {from_ty} {} to {to_ty}", name(value));
+    (into, Some(line))
+}
+
+/// The conversions this block's outgoing edges need.
+fn outgoing_conversions(func: &Func, from: BlockId) -> Vec<String> {
+    let mut lines = Vec::new();
+    let collect = |to: BlockId, args: &[ValueId], lines: &mut Vec<String>| {
+        for (slot, value) in args.iter().enumerate() {
+            if let (_, Some(line)) = edge_value(func, from, to, slot, *value) {
+                lines.push(line);
+            }
+        }
+    };
+    match &func.blocks[from.0 as usize].terminator {
+        Terminator::Jump { target, args } => collect(*target, args, &mut lines),
+        Terminator::Branch {
+            then_target,
+            then_args,
+            else_target,
+            else_args,
+            ..
+        } => {
+            collect(*then_target, then_args, &mut lines);
+            collect(*else_target, else_args, &mut lines);
+        }
+        _ => {}
+    }
+    lines
 }
 
 /// Every `[value, %predecessor]` pair reaching one block parameter.
@@ -635,7 +737,8 @@ fn incoming_for(func: &Func, target: BlockId, slot: usize) -> Vec<String> {
         let from = BlockId(u32::try_from(index).unwrap_or(0));
         let mut add = |to: BlockId, args: &[ValueId]| {
             if to == target && let Some(value) = args.get(slot) {
-                pairs.push(format!("[ {}, %{} ]", name(*value), label(from)));
+                let (supplied, _) = edge_value(func, from, to, slot, *value);
+                pairs.push(format!("[ {supplied}, %{} ]", label(from)));
             }
         };
         match &block.terminator {
@@ -1191,16 +1294,29 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
                     _ => rendered.push(format!("{ty} {}{}", extension(arg_ty), name(*arg))),
                 }
             }
+            // The type the *callee* returns, which is not always the type the
+            // rest of the function wants: C converts a `double` result into an
+            // `int64_t` slot without a word, and the op carries the slot's type.
+            let declared = match callee {
+                Callee::External(target) => signatures::signature(target)
+                    .map(|known| known.returns.split_whitespace().last().unwrap_or(known.returns)),
+                _ => None,
+            };
+            let call_returns = declared.unwrap_or(returns);
             let call = format!(
-                "call {}{returns} {}({})",
+                "call {}{call_returns} {}({})",
                 extension(&op.ty),
                 symbol(target),
                 rendered.join(", ")
             );
             let call = if returns == "void" {
                 call
-            } else {
+            } else if call_returns == returns {
                 format!("{out} = {call}")
+            } else {
+                let raw = format!("{out}.r");
+                let fix = converted(&out, call_returns, returns, &raw, func)?;
+                format!("{raw} = {call}\n  {fix}")
             };
             if before.is_empty() {
                 call

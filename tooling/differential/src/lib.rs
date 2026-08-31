@@ -1022,6 +1022,59 @@ fn stopped(signal: Option<i32>, complaint: &str) -> Stopped {
     }
 }
 
+/// Write the program in whichever form the chosen backend produces, and hand
+/// back the file the final link should take.
+///
+/// The C path writes a translation unit; the LLVM path writes a module and
+/// assembles it here, so that a rejected module is reported as one rather than
+/// as a C error about a file clang was not expecting.
+fn render(
+    dir: &Utf8Path,
+    program: &hir::Program,
+    through_llvm: bool,
+    emitted: &nts_codegen_c::Emitted,
+) -> Result<Utf8PathBuf> {
+    Ok(if through_llvm {
+        let rendered = nts_codegen_llvm::emit(program);
+        if !rendered.diagnostics.is_empty() {
+            for diagnostic in rendered.diagnostics.iter().take(3) {
+                eprintln!("  not rendered: {} {}", diagnostic.code, diagnostic.message);
+            }
+            bail!(
+                "the LLVM backend declined {} function(s)",
+                rendered.diagnostics.len()
+            );
+        }
+        let path = dir.join("program.ll");
+        std::fs::write(&path, &rendered.text)?;
+        // Assembled here rather than handed to the final link, so that a
+        // rejected module is reported as one rather than as a C error about a
+        // file clang was not expecting.
+        let object = dir.join("program.o");
+        let assembled = std::process::Command::new("clang")
+            .args(["-x", "ir", "-c", "-w", "-O1"])
+            .arg(&path)
+            .arg("-o")
+            .arg(&object)
+            .output()
+            .context("assembling the emitted LLVM IR")?;
+        if !assembled.status.success() {
+            bail!(
+                "clang rejected the emitted LLVM IR: {}",
+                String::from_utf8_lossy(&assembled.stderr)
+                    .lines()
+                    .find(|line| line.contains("error"))
+                    .unwrap_or("no message")
+            );
+        }
+        object
+    } else {
+        let path = dir.join("program.c");
+        std::fs::write(&path, emitted.writer.text())?;
+        path
+        })
+}
+
 fn run_native(
     dir: &Utf8Path,
     program: &hir::Program,
@@ -1029,6 +1082,20 @@ fn run_native(
     refused: &mut Vec<usize>,
     aborts: &mut Vec<String>,
 ) -> Result<Vec<String>> {
+    // Which backend renders the program.
+    //
+    // `NTS_BACKEND=llvm` runs the whole differential -- every example, every
+    // case, the same hostile pool, the same comparison against node -- through
+    // the LLVM backend instead of the C one. That is a far stronger net than
+    // comparing the two backends against each other on a handful of fixtures:
+    // node is the oracle either way, and if both backends agree with node they
+    // agree with each other.
+    //
+    // A function the LLVM backend has not learned to render yet is *absent*,
+    // and the driver would fail to link, so an example is either wholly
+    // rendered or reported as declined. That makes "how many examples does the
+    // second backend carry" a number, which is the shape worth ratcheting.
+    let through_llvm = std::env::var("NTS_BACKEND").is_ok_and(|which| which == "llvm");
     let emitted = nts_codegen_c::emit(program);
     // The backend's own refusals, which used to be dropped on the floor here.
     // A function the emitter cannot write is *absent* from the C, and the
@@ -1050,8 +1117,7 @@ fn run_native(
             emitted.diagnostics.len()
         );
     }
-    let generated = dir.join("program.c");
-    std::fs::write(&generated, emitted.writer.text())?;
+    let generated = render(dir, program, through_llvm, &emitted)?;
     std::fs::write(
         dir.join(nts_codegen_c::RUNTIME_HEADER_NAME),
         nts_codegen_c::RUNTIME_HEADER,

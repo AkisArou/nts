@@ -642,6 +642,66 @@ a single-backend assumption:
 - **A field's representation is specialized**, so nothing outside the program
   may assume `number` means `double`.
 
+### The second backend runs the whole differential
+
+`NTS_BACKEND=llvm` drives every example, every case and the same hostile pool
+through `compiler/codegen/llvm` and compares against **node**. That is a
+stronger net than comparing the two backends to each other on a handful of
+fixtures — node is the oracle either way, and two backends that both agree with
+node agree with each other.
+
+An example is either wholly rendered or not attempted, because a function the
+backend has not learned is absent and the driver would fail to link. So the
+number is *examples carried*: **49 of 88**, and the gate ratchets it upward. The
+direction matters. The C backend's match is exhaustive, so adding an `OpKind`
+breaks its build; this one has a fallthrough that refuses, which is safe and is
+exactly how a second backend silently falls behind.
+
+### An attribute is a promise, and it is worth 5×
+
+The C backend gets facts for free that an LLVM module has no way to know.
+`NTS_READS_ONLY` is `__attribute__((pure))` on twenty-nine runtime
+declarations, and the header explains why it is not decoration:
+`text.indexOf("brown")` inside a loop is loop-invariant, and a compiler may hoist
+it only if it knows the call has no side effects. Generated C carries that fact
+because it includes the header. A module includes nothing.
+
+Measured on exactly that program, three million iterations:
+
+| | time |
+|---|---|
+| with `nounwind willreturn memory(read)` | **2.29 ms** |
+| without | 12.31 ms |
+
+Same checksum. The attributes come from clang rather than a manual — `pure` maps
+to `nounwind willreturn memory(read)`, and that mapping is clang's business —
+and they are carried in the same generated table as the signatures.
+
+One of them had to be taken *away*. `nts_check_fn` was declared
+`NTS_READS_ONLY`, which clang turns into `willreturn` — and a bounds check that
+fails does not return, it aborts. That would have licensed hoisting a trap out
+of the branch guarding it. An attribute is a promise, and a promise that is
+nearly true is worse than none.
+
+### Two things C was doing silently
+
+Both found by assembling what the second backend emitted, and both are facts
+about the *middle end* rather than about either backend.
+
+**The IR is under-specified about edges.** `verify::compatible` treats any
+scalar as compatible with any other, so specialization may send an `i32` along
+an edge into an `f64` block parameter. The C backend writes `v7 = v0;` and lets C
+convert; a `phi double` taking an `i32` is not a module. The conversion is
+written out now, in the predecessor, because that is where a phi's incoming
+value has to be available.
+
+**And about call results.** `nts_str_index_of` returns a `double` into an
+`int64_t` slot, and C converts without a word.
+
+Neither was wrong in the C output. Both were places where the IR relied on a
+property of C rather than stating what it meant, and only a second backend could
+have found them.
+
 ### `this` is a free variable of an arrow, and was the only one not treated as one
 
 Two rows in §15 looked like the case for structural dispatch: "a member `X`

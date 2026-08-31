@@ -665,8 +665,15 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
 /* The coercions as linkable symbols, for a backend that cannot read a C
  * header's `static inline`. See the definitions for why both exist. */
 int32_t nts_to_int32_fn(double x);
-NTS_READS_ONLY uint32_t nts_check_fn(const NtsArray *array, uint32_t index);
-NTS_READS_ONLY uint32_t nts_index_fn(const NtsArray *array, double index);
+/* *Not* `NTS_READS_ONLY`, and the distinction matters more here than it looks.
+ * A bounds check that fails does not return -- it prints and aborts -- and
+ * `pure` promises a function has no effect but its result. clang turns that
+ * promise into `willreturn`, which would licence hoisting the check out of the
+ * branch that guards it, and a program that aborts on an input it never
+ * reaches is a wrong answer of the worst kind. The two below read memory and
+ * are still not pure. */
+uint32_t nts_check_fn(const NtsArray *array, uint32_t index);
+uint32_t nts_index_fn(const NtsArray *array, double index);
 NTS_READS_ONLY uint16_t nts_unit_fn(const NtsString *s, uint32_t at);
 NTS_READS_ONLY double nts_str_char_code_at_fn(const NtsString *s, double at);
 /* A string is falsy when it is absent *or* empty -- a null test and a length

@@ -154,6 +154,46 @@ profile() {
   [ -n "$expected" ] && echo "  known invalid HIR: $expected"
   return 0
 }
+# The second backend, against the same oracle.
+#
+# `NTS_BACKEND=llvm` runs the whole differential through
+# `compiler/codegen/llvm`: every example, every case, the same hostile pool, the
+# same comparison against node. That is a stronger net than comparing the two
+# backends to each other -- node is the oracle either way, and two backends that
+# both agree with node agree with each other.
+#
+# An example is either wholly rendered or not attempted, because a function the
+# backend has not learned yet is absent and the driver would fail to link. So
+# this is a count of *examples carried*, and it ratchets **upward**: the C
+# backend's match is exhaustive and adding an `OpKind` breaks its build, while
+# this one has a fallthrough that refuses -- which is safe, and is exactly how a
+# second backend silently falls behind. A number that may not go down is what
+# turns that into a failed build.
+llvm() {
+  floor=49
+  passed=0
+  total=0
+  behind=""
+  for d in examples/*/tsconfig.json; do
+    n=$(basename "$(dirname "$d")")
+    case "$n" in
+      invalid|unsupported) continue ;;
+    esac
+    total=$((total + 1))
+    if NTS_BACKEND=llvm ./target/release/nts check "$d" >/dev/null 2>&1; then
+      passed=$((passed + 1))
+    else
+      behind="$behind $n"
+    fi
+  done
+  printf '  %s of %s examples agree with node through the LLVM backend\n' "$passed" "$total"
+  if [ "$passed" -lt "$floor" ]; then
+    echo "  ^ fell from $floor to $passed:$behind"
+    return 1
+  fi
+  [ "$passed" -gt "$floor" ] && printf '  ^ raise the floor in tooling/gate/all.sh to %s\n' "$passed"
+  return 0
+}
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
@@ -211,6 +251,7 @@ step "tests"   tests
 step "corpus"  corpus
 step "profile"  profile
 step "sweep"    sweep
+step "llvm"    llvm
 step "examples" ./tooling/gate/gate.sh
 # Last, and the most expensive step by some way -- about four minutes, against
 # two for everything before it. It is here rather than skipped because until it
