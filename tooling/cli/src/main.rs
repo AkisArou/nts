@@ -620,55 +620,9 @@ fn describe_node(record: &nts_semantic_schema::NodeRecord) -> String {
     }
 }
 
-fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
-    // Call resolution is not optional here: without it a call site has no known
-    // target and lowering refuses it.
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
-    let snapshot = source.snapshot(tsconfig)?;
 
-    // Warnings are printed whether or not the program typechecks. A partial
-    // type graph (NTS0002) makes every refusal below it suspect, so a consumer
-    // that showed diagnostics only on error would hide the one diagnostic that
-    // explains the others.
-    for diagnostic in &snapshot.diagnostics {
-        if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            println!("warning: {} {}", diagnostic.code, diagnostic.message);
-        }
-    }
-    if snapshot.has_errors() {
-        for diagnostic in &snapshot.diagnostics {
-            println!("{} {}", diagnostic.code, diagnostic.message);
-        }
-        bail!("the program does not typecheck");
-    }
-
-    // `--prepared` shows the program the backend actually receives, which is
-    // where every pass's output can be read at once; `--rc` adds the counting.
-    // Raw lowering stays the default because it is what maps onto the source.
-    let want_passes = std::env::args().any(|arg| arg == "--prepared" || arg == "--rc");
-    let (program, diagnostics) = if want_passes {
-        let options = hir::Options {
-            provider: if std::env::args().any(|arg| arg == "--rc") {
-                hir::Provider::ReferenceCounting
-            } else {
-                hir::Provider::NoGc
-            },
-            ..hir::Options::default()
-        };
-        // An invalid program is exactly the one worth reading, so the
-        // complaints are printed and the program is dumped anyway.
-        if let Err(problems) = hir::prepare_with(&snapshot, &options) {
-            for problem in &problems {
-                eprintln!("invalid HIR: {problem:?}");
-            }
-        }
-        let prepared = hir::prepare_unverified(&snapshot, &options);
-        (prepared.program, prepared.diagnostics)
-    } else {
-        let lowered = hir::lower::lower(&snapshot);
-        (lowered.program, lowered.diagnostics)
-    };
+/// One function per header, one block per label, one operation per line.
+fn print_program(program: &hir::Program) {
     for func in &program.funcs {
         let params: Vec<String> = func
             .params
@@ -701,6 +655,82 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         }
         println!("}}");
     }
+}
+/// The functions `--entry name,name` roots the program at.
+///
+/// Empty means every export, which is what a *library* is. An executable has
+/// one entry and so does a benchmark: `tooling/bench` roots at whatever its
+/// `nts.cpp` declares `extern "C"`.
+///
+/// It matters more than a flag usually does. Without it this printed a
+/// different program than the benchmark builds -- every export is a root, a
+/// root's signature is its published ABI, so nothing narrows. Reading that and
+/// concluding the compiler had missed something cost me a whole diagnosis: four
+/// conversions around a modulo that the real build does not have.
+fn requested_entry() -> Vec<String> {
+    std::env::args()
+        .skip_while(|arg| arg != "--entry")
+        .nth(1)
+        .map(|names| names.split(',').map(str::to_owned).collect())
+        .unwrap_or_default()
+}
+
+fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
+    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    // Call resolution is not optional here: without it a call site has no known
+    // target and lowering refuses it.
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let snapshot = source.snapshot(tsconfig)?;
+
+    // Warnings are printed whether or not the program typechecks. A partial
+    // type graph (NTS0002) makes every refusal below it suspect, so a consumer
+    // that showed diagnostics only on error would hide the one diagnostic that
+    // explains the others.
+    for diagnostic in &snapshot.diagnostics {
+        if diagnostic.severity == nts_diagnostics::Severity::Warning {
+            println!("warning: {} {}", diagnostic.code, diagnostic.message);
+        }
+    }
+    if snapshot.has_errors() {
+        for diagnostic in &snapshot.diagnostics {
+            println!("{} {}", diagnostic.code, diagnostic.message);
+        }
+        bail!("the program does not typecheck");
+    }
+
+    // `--prepared` shows the program the backend actually receives, which is
+    // where every pass's output can be read at once; `--rc` adds the counting.
+    // Raw lowering stays the default because it is what maps onto the source.
+    let want_passes = std::env::args().any(|arg| arg == "--prepared" || arg == "--rc");
+    let (program, diagnostics) = if want_passes {
+        let entry = requested_entry();
+        let options = hir::Options {
+            provider: if std::env::args().any(|arg| arg == "--rc") {
+                hir::Provider::ReferenceCounting
+            } else {
+                hir::Provider::NoGc
+            },
+            roots: if entry.is_empty() {
+                hir::reachable::Roots::EveryExport
+            } else {
+                hir::reachable::Roots::Entry(&entry)
+            },
+            ..hir::Options::default()
+        };
+        // An invalid program is exactly the one worth reading, so the
+        // complaints are printed and the program is dumped anyway.
+        if let Err(problems) = hir::prepare_with(&snapshot, &options) {
+            for problem in &problems {
+                eprintln!("invalid HIR: {problem:?}");
+            }
+        }
+        let prepared = hir::prepare_unverified(&snapshot, &options);
+        (prepared.program, prepared.diagnostics)
+    } else {
+        let lowered = hir::lower::lower(&snapshot);
+        (lowered.program, lowered.diagnostics)
+    };
+    print_program(&program);
 
     for diagnostic in &diagnostics {
         // With its location. A refusal without one is a scavenger hunt, and

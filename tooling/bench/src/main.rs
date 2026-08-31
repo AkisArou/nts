@@ -194,20 +194,20 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
             String::new()
         };
         let against_bun = if with_bun {
-            format!(" {} |", row.against_bun())
+            format!(" {} |", row.against(row.bun))
         } else {
             String::new()
         };
         let _ = writeln!(
             table,
-            "| {} | {} | **{}** | {} | {} |{bun} {:.2}x | {:.2}x |{against_bun}",
+            "| {} | {} | {} | **{}** | {} |{bun} {} | {} |{against_bun}",
             row.case,
             human(row.cpp),
             human(row.nts),
             row.llvm.map_or_else(|| "--".to_owned(), human),
             human(row.node),
-            row.nts / row.cpp,
-            row.nts / row.node,
+            row.against(Some(row.cpp)),
+            row.against(Some(row.node)),
         );
     }
 
@@ -221,8 +221,12 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         `--` there is a program it refuses, not a program it gets wrong — every \
         variant that *does* run must produce the same checksum as every other, \
         so a bench run is a cross-backend correctness check as well as a \
-        measurement. The ratio columns are the C backend's, because it is the \
-        one that renders every case.\n\n\
+        measurement.\n\n\
+        **The ratios are the LLVM backend's**, because a ratio is a claim about \
+        what a program compiled by this compiler costs, and that is the backend \
+        a program will be compiled by. Where it refuses one, the ratio is `--` \
+        rather than quietly reporting the other backend's number under the same \
+        heading.\n\n\
         The suite also measures the same TypeScript with number specialization \
         switched off — one program compiled two ways, which is what makes a \
         speedup a measurement rather than a claim. `cargo run -p nts-bench` \
@@ -273,11 +277,26 @@ struct Row {
 }
 
 impl Row {
-    /// How this case compares against Bun, in the same direction as the other
-    /// two ratios: lower is better, and 1.00 is parity.
-    fn against_bun(&self) -> String {
-        self.bun
-            .map_or_else(|| "--".to_owned(), |bun| format!("{:.2}x", self.nts / bun))
+    /// What the ratios are taken against: the **LLVM** backend, which is the
+    /// primary target, and `None` where it refuses the program.
+    ///
+    /// The C backend is the one that renders every case, so it was the obvious
+    /// column to divide by -- and the wrong one. A ratio is a claim about what
+    /// a program compiled by this compiler costs, and the backend a program
+    /// will be compiled by is the LLVM one. Where it refuses, the row says so
+    /// rather than quietly reporting the other backend's number under the same
+    /// heading.
+    fn primary(&self) -> Option<f64> {
+        self.llvm
+    }
+
+    /// How this case compares against another runtime: lower is better, 1.00 is
+    /// parity, `--` is a program the primary backend does not render yet.
+    fn against(&self, other: Option<f64>) -> String {
+        match (self.primary(), other) {
+            (Some(ours), Some(theirs)) => format!("{ours_over:.2}x", ours_over = ours / theirs),
+            _ => "--".to_owned(),
+        }
     }
 }
 
@@ -376,7 +395,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         bun: bun.map(|result| result.ns_per_op),
     };
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>8.2}x {:>8.2}x {:>9}",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
         row.case,
         human(row.cpp),
         human(row.nts),
@@ -384,9 +403,9 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         human(row.unspecialized),
         human(row.node),
         row.bun.map_or_else(|| "--".to_owned(), human),
-        row.nts / row.cpp,
-        row.nts / row.node,
-        row.against_bun(),
+        row.against(Some(row.cpp)),
+        row.against(Some(row.node)),
+        row.against(row.bun),
     );
     Ok(row)
 }

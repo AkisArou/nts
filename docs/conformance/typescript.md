@@ -750,6 +750,74 @@ characters, reference counting (a slice keeps its owner alive), and
 render a closure or a suspension. The measurement is here so the decision can be
 retaken rather than re-argued.
 
+### Why the awfy family is slow, and it is two things
+
+Five of the rows above 1.20x are one family -- small classes, and the C++ port
+declares their coordinates `int32_t` where we declare `double`. `Ball` is 56
+bytes of doubles against four `int32_t`. `fields::representations` exists to
+prevent exactly this and its own comment names the case, so the question is why
+it does not fire.
+
+Isolating says it is two independent causes:
+
+| | |
+|---|---|
+| `Plain` alone -- one field, assigned `7` in the constructor | **`int32_t`** |
+| `Plain` beside an unrelated `SelfRef` with the same field shape | `double` |
+| `SelfRef` alone -- `this.v = this.v + d`, then clamped | `double` |
+
+**Structural aliasing is too coarse.** `shares_storage` matches on a field's
+*name and type* along the prefix, so two classes that share no relationship at
+all are treated as aliasing storage, and one class with an unbounded field drags
+every similarly-shaped class down with it. The rule is justified as "exactly
+when a pointer to one is a pointer to the other", which is true of base-first
+*inheritance* -- but it never asks whether the two are related, only whether
+they look alike.
+
+**A self-referential field never tightens.** `this.v = this.v + d` reads the
+field, so on the first round the store is computed from `Facts::TOP` and is
+therefore TOP -- and TOP is a fixed point. `nts facts` shows it plainly:
+`field.get %0.0` is `[-inf, +inf] nan?` in `Ball#bounce` while
+`Ball#constructor` is 16/16 provably `i32`. `Random.seed` escapes only because
+its update ends in `& 65535`, which bounds the store whatever the input was --
+which is why field narrowing looked like it worked.
+
+The clamp `if (this.x > 500) this.x = 500` does bound it, and believing that
+means knowing what the field holds at function *exit* rather than joining every
+store regardless of order. That is a flow-sensitive field analysis, not a
+narrowing iteration, which is what I first prescribed.
+
+### `!invariant.load` is not what `readonly` means
+
+`Field::readonly` is "never written after construction, semantic not syntactic,
+so `Readonly<T>` counts", and its own comment lists *hoistable loads* among what
+it is for. So `!invariant.load` on those loads looks obvious.
+
+It is unsound. Given a load, a call that writes through the same pointer, and a
+second load, LLVM folds the second into the first:
+
+```llvm
+  %a = load double, ptr %p, !invariant.load !0
+  call void @construct(ptr %p)
+  %s = fsub double %a, %a          ; the second load is gone
+```
+
+The metadata licenses "the same value at **all** points where the location is
+dereferenceable", and for us that includes the zero an allocation leaves before
+the constructor runs. `hir::fields` says as much about itself: *"Zero is joined
+in as well, because that is what an allocation leaves. A well-typed TypeScript
+program cannot read a field before its constructor writes it, but proving that
+here would mean a definite-assignment analysis."* We assume it; we do not prove
+it, and this metadata would be relying on the proof.
+
+The tool for "written once at construction, invariant after" is
+`!invariant.group`, which is what clang uses for vtable pointers and which is
+scoped to handle exactly the construction window.
+
+And there is nothing to measure it on: **no benchmark case uses a `readonly`
+field**, by keyword or otherwise. An optimization with no case that exercises it
+is a claim, so the case comes first.
+
 ### A closure was 14x slower, and the reason verified cleanly
 
 With both backends in one bench run, `closures` came out at **16.33us through
