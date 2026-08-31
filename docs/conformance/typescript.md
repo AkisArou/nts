@@ -716,6 +716,40 @@ The LLVM gate row went **56 to 60** on the tightening alone, before any deletion
 four examples the second backend had been getting wrong were programs the IR had
 never been explicit enough to state.
 
+### What a sharing slice would be worth, and why not yet
+
+`substrings` is the worst row against hand-written C++, and the reason is in the
+case's own comment: `std::string_view::substr` returns another view of the same
+characters and allocates nothing, while every string this compiler makes owns
+its bytes.
+
+Before designing that, measure the ceiling. The same reference, once with
+`string_view` and once with `std::string`, on one driver:
+
+| word length | view | copy | penalty |
+|---:|---:|---:|---:|
+| 6 (this case) | 2.47us | 3.86us | **1.56x** |
+| 20 | 9.63us | 12.39us | 1.29x |
+| 60 | 18.25us | 21.72us | 1.19x |
+
+Two things fall out. The copy is worth about **1.56x** on the shape this
+benchmark has, so a perfect sharing slice would take the row from 2.10x C++ to
+roughly **1.35x** -- most of the gap, not all of it. And the penalty *shrinks*
+as words grow, because the scan that finds the boundaries is O(text) and it,
+not the copying, is what a long-word parser spends its time on. Note also that
+`std::string` at length 6 is inside its small-string buffer, so the C++ "copy"
+column is a copy *without* an allocation -- which is what frame placement
+already buys us.
+
+**Decided: not now.** A slice that shares storage is a change to the string
+representation itself -- a data pointer and an owner reference where there is
+now inline data -- and it reaches `NTS_ELEMENTS`, every helper that walks
+characters, reference counting (a slice keeps its owner alive), and
+`nts_str_place`, whose whole trick is that the caller already has the storage.
+1.35x is worth having and it is not worth having before the second backend can
+render a closure or a suspension. The measurement is here so the decision can be
+retaken rather than re-argued.
+
 ### A closure was 14x slower, and the reason verified cleanly
 
 With both backends in one bench run, `closures` came out at **16.33us through
