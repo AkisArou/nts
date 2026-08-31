@@ -53,6 +53,27 @@ pub const HEADER: Shape = Shape {
     align: POINTER,
 };
 
+/// Where `NtsHeader::length` sits, in bytes from the object's address.
+///
+/// The header is a descriptor pointer, the provider's word, `flags` and
+/// `length` -- so the count is the last four bytes of it. The C backend never
+/// needs this number, because it writes `a->header.length` and lets clang find
+/// it; a backend without a struct type does need it, which is why it is named
+/// here rather than spelled twice.
+///
+/// Checked by the same means as everything else: every emitted object asserts
+/// its first field is at `HEADER.size`, which cannot hold if the header's own
+/// shape is wrong.
+pub const LENGTH_OFFSET: u32 = 2 * POINTER + 4;
+
+/// Where `NtsArray::elements` sits.
+///
+/// The header, then `capacity` as a `uint32_t`, then the block pointer -- which
+/// the alignment pushes to the next word. The block is a separate allocation
+/// so that an array can grow without the object moving, which is the whole
+/// reason it is a pointer rather than a tail.
+pub const ELEMENTS_OFFSET: u32 = HEADER.size + POINTER;
+
 /// The shape of a value of this type in memory, or `None` where it has none.
 ///
 /// `Void` and `Never` have no storage; `Erased` is `NtsValue`, a tag beside a

@@ -605,6 +605,32 @@ Two things that test taught, and both are about not assuming:
 struct in seventeen runtime signatures — and it is refused rather than guessed
 at until its signatures come from clang the same way.
 
+Descriptors, arrays, module-scope globals and reference counting followed, and
+**67.8% of the 915 functions across `examples/` now render**, from 36.2% when
+calls into the runtime first worked. A descriptor is the one piece of the
+runtime a backend has to *build* rather than call — it is data the collector
+reads — and it is emitted as LLVM's own struct type with the runtime's field
+types in the runtime's order, so the two agree by construction rather than by a
+hand-computed offset. What goes *in* one was already shared: `cyclic_layouts`
+and `reference_fields` are the middle end's, the offsets are the layout
+engine's, and only the rendering belongs to a backend.
+
+Three more things the second backend has forced into the open, each of which was
+a single-backend assumption:
+
+- **The symbol name is part of the ABI.** `module#init` became `module__init` in
+  the C output and `@"module#init"` in the LLVM output, so a driver could link
+  against exactly one of them. The mangling — reserved words, header collisions,
+  punctuation no C identifier may carry — moved to
+  `nts_codegen_common::symbols` and both backends read it. It is still *C's*
+  rule, and that is right: the linkage name has to be one every toolchain on the
+  way to an executable can carry, and C's is the narrowest.
+- **A `static inline` is not a contract.** `nts_check` and `nts_index` joined
+  `nts_to_int32` in having a linkable form beside the inline. Reproducing a
+  bounds rule in a second place is a second implementation to keep in step.
+- **A field's representation is specialized**, so nothing outside the program
+  may assume `number` means `double`.
+
 ### `this` is a free variable of an arrow, and was the only one not treated as one
 
 Two rows in §15 looked like the case for structural dispatch: "a member `X`

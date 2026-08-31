@@ -665,6 +665,8 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
 /* The coercions as linkable symbols, for a backend that cannot read a C
  * header's `static inline`. See the definitions for why both exist. */
 int32_t nts_to_int32_fn(double x);
+NTS_READS_ONLY uint32_t nts_check_fn(const NtsArray *array, uint32_t index);
+NTS_READS_ONLY uint32_t nts_index_fn(const NtsArray *array, double index);
 uint32_t nts_to_uint32_fn(double x);
 
 NtsString *nts_number_to_string(double x);

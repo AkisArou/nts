@@ -72,8 +72,49 @@ pub fn emit(program: &Program) -> Emitted {
     // get wrong.
     let _ = writeln!(text, "declare i32 @nts_to_int32_fn(double)");
     let _ = writeln!(text, "declare i32 @nts_to_uint32_fn(double)");
+    let _ = writeln!(text, "declare ptr @nts_object_new(ptr)");
+    let _ = writeln!(text, "declare ptr @nts_array_new(ptr, double)");
+    let _ = writeln!(text, "declare i32 @nts_check_fn(ptr, i32)");
+    let _ = writeln!(text, "declare void @nts_retain(ptr)");
+    let _ = writeln!(text, "declare void @nts_release(ptr)");
+    let _ = writeln!(text, "declare i32 @nts_index_fn(ptr, double)");
+    let _ = writeln!(text, "declare ptr @nts_array_new_uninitialized(ptr, double)");
+    // The runtime's own, shared by every array of references: each element is a
+    // pointer, so they are all the same shape and one descriptor serves them.
+    let _ = writeln!(text, "@nts_desc_ref = external constant %NtsDescriptor");
     for line in externals(program) {
         let _ = writeln!(text, "{line}");
+    }
+    let _ = writeln!(text, "\n{}", descriptors(program));
+    // Module-scope storage. `internal` unless the program exports it, for the
+    // same reason the C backend makes it `static`: a name outside the program
+    // is a name something outside can collide with.
+    for (at, global) in program.globals.iter().enumerate() {
+        let Ok(ty) = ty_of(&global.ty, &program.funcs[0]) else {
+            continue;
+        };
+        let linkage = if global.exported { "" } else { "internal " };
+        let zero = if matches!(global.ty, HirType::Managed(_)) {
+            "null".to_owned()
+        } else if matches!(global.ty, HirType::Float { .. }) {
+            float_literal(global.initial)
+        } else {
+            // A global's recorded initial value is a double whatever the
+            // slot's width is, and an integer slot's is a whole number by
+            // construction -- `Global::initial` is what the lowering folded,
+            // not an arbitrary value.
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "an integer global's initial value is whole by construction"
+            )]
+            let whole = global.initial as i64;
+            format!("{whole}")
+        };
+        let _ = writeln!(
+            text,
+            "{} = {linkage}global {ty} {zero}",
+            symbol(&global_symbol(program, at))
+        );
     }
     for func in &program.funcs {
         match function(program, func) {
@@ -84,6 +125,194 @@ pub fn emit(program: &Program) -> Emitted {
         }
     }
     Emitted { text, diagnostics }
+}
+
+/// `NtsDescriptor`, as LLVM's own struct type.
+///
+/// The field *types* in the runtime's order, not hand-computed offsets. LLVM
+/// lays a struct out with the same rules clang does, so declaring the same
+/// fields in the same order matches by construction -- which is the whole
+/// difference between this and deriving an ABI, and it is why there is nothing
+/// here to get wrong by four bytes.
+const DESCRIPTOR_TYPE: &str =
+    "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, ptr }";
+
+/// `NTS_KIND_OBJECT`. The other kinds belong to the runtime's own types.
+const KIND_OBJECT: u32 = 2;
+
+/// Every descriptor the program needs, with the tables they point at.
+///
+/// What goes *in* one is already shared: `cyclic_layouts` and
+/// `reference_fields` are `nts_core::hir`'s, and the offsets are the layout
+/// engine's. Only the rendering is the backend's, which is what a backend is.
+fn descriptors(program: &Program) -> String {
+    let mut out = String::new();
+    let _ = writeln!(out, "{DESCRIPTOR_TYPE}");
+    let cyclic = program.cyclic_layouts();
+    for (index, layout) in program.layouts.iter().enumerate() {
+        let Some(placed) = nts_codegen_common::layout::place(&layout.fields) else {
+            continue;
+        };
+        let tag = descriptor_name(layout);
+        let mut offsets = |which: &str, wanted: &[u32]| -> String {
+            if wanted.is_empty() {
+                return "ptr null".to_owned();
+            }
+            let entries: Vec<String> = wanted.iter().map(|at| format!("i32 {at}")).collect();
+            let _ = writeln!(
+                out,
+                "@nts_{which}_{tag} = internal constant [{} x i32] [{}]",
+                wanted.len(),
+                entries.join(", ")
+            );
+            format!("ptr @nts_{which}_{tag}")
+        };
+        let references: Vec<u32> = layout
+            .fields
+            .iter()
+            .enumerate()
+            .filter(|(_, field)| field.ty.may_hold_a_reference())
+            .filter_map(|(at, _)| placed.offsets.get(at).copied())
+            .collect();
+        let erased: Vec<u32> = layout
+            .fields
+            .iter()
+            .enumerate()
+            .filter(|(_, field)| field.ty == HirType::Erased)
+            .filter_map(|(at, _)| placed.offsets.get(at).copied())
+            .collect();
+        let reference_table = offsets("refs", &references);
+        let erased_table = offsets("erased", &erased);
+        // The name is a C string, terminator and all: the runtime prints it.
+        let bytes = layout.name.len() + 1;
+        let _ = writeln!(
+            out,
+            "@nts_name_{tag} = internal constant [{bytes} x i8] c\"{}\\00\"",
+            layout.name
+        );
+        let is_cyclic = u32::from(cyclic.get(index).copied().unwrap_or(true));
+        let _ = writeln!(
+            out,
+            "@nts_desc_{tag} = internal constant %NtsDescriptor {{ i32 {KIND_OBJECT}, \
+             i32 {}, i32 {}, i32 {is_cyclic}, {reference_table}, ptr null, \
+             ptr @nts_name_{tag}, i32 {}, {erased_table} }}",
+            placed.size,
+            references.len(),
+            erased.len()
+        );
+    }
+    // One per scalar element type an array is made of. An array of references
+    // uses the runtime's `nts_desc_ref`, declared above.
+    let mut seen: Vec<String> = Vec::new();
+    for func in &program.funcs {
+        for op in &func.values {
+            if !matches!(op.kind, OpKind::ArrayNew { .. }) {
+                continue;
+            }
+            let HirType::Managed(nts_core::hir::ManagedType::Array(element)) = &op.ty else {
+                continue;
+            };
+            if element.is_managed() {
+                continue;
+            }
+            let Some(shape) = nts_codegen_common::layout::shape_of(element) else {
+                continue;
+            };
+            let tag = element_tag(element);
+            if seen.contains(&tag) {
+                continue;
+            }
+            seen.push(tag.clone());
+            let _ = writeln!(
+                out,
+                "@nts_name_arr_{tag} = internal constant [{} x i8] c\"{tag}[]\\00\"",
+                tag.len() + 3
+            );
+            // For an array, `erased` is a fact about *every* element rather
+            // than a table of offsets, exactly as `references` is. One that
+                // said zero would never be walked, and a string held in it
+            // would be released while something still pointed at it.
+            let erased = u32::from(**element == HirType::Erased);
+            let _ = writeln!(
+                out,
+                "@nts_desc_arr_{tag} = internal constant %NtsDescriptor {{ i32 0, i32 {}, \
+                 i32 0, i32 0, ptr null, ptr null, ptr @nts_name_arr_{tag}, i32 {erased}, \
+                 ptr null }}",
+                shape.size
+            );
+        }
+    }
+    out
+}
+
+/// A global's symbol, which is its source name.
+fn global_symbol(program: &Program, at: usize) -> String {
+    program
+        .globals
+        .get(at)
+        .map_or_else(|| format!("nts_global_{at}"), |global| global.name.clone())
+}
+
+/// The address of an array's element block, and the index into it.
+///
+/// Leaves `%out.blk` holding the address of the `elements` field and `%out.i`
+/// holding the checked index, which the caller loads and indexes through.
+fn index_lines(
+    func: &Func,
+    out: &str,
+    array: ValueId,
+    index: ValueId,
+    checked: bool,
+) -> Vec<String> {
+    let mut lines = vec![format!(
+        "{out}.blk = getelementptr i8, ptr {}, i64 {}",
+        name(array),
+        nts_codegen_common::layout::ELEMENTS_OFFSET
+    )];
+    let integral = matches!(func.values[index.0 as usize].ty, HirType::Int { .. });
+    if checked {
+        if integral {
+            lines.push(format!(
+                "{out}.i = call i32 @nts_check_fn(ptr {}, i32 {})",
+                name(array),
+                name(index)
+            ));
+        } else {
+            lines.push(format!(
+                "{out}.i = call i32 @nts_index_fn(ptr {}, double {})",
+                name(array),
+                name(index)
+            ));
+        }
+    } else if integral {
+        lines.push(format!("{out}.i = add i32 {}, 0", name(index)));
+    } else {
+        // Proven in range, so the conversion is exact whichever representation
+        // it arrived in.
+        lines.push(format!("{out}.i = fptoui double {} to i32", name(index)));
+    }
+    lines
+}
+
+/// A name for a scalar element type, for the descriptor it needs.
+fn element_tag(ty: &HirType) -> String {
+    match ty {
+        HirType::Bool => "bool".to_owned(),
+        HirType::Erased => "value".to_owned(),
+        HirType::Float { bits } => format!("f{bits}"),
+        HirType::Int { bits, signed: true } => format!("i{bits}"),
+        HirType::Int { bits, signed: false } => format!("u{bits}"),
+        other => format!("{other:?}"),
+    }
+}
+
+/// A layout's descriptor symbol, with anything LLVM dislikes replaced.
+fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
+    layout
+        .name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect()
 }
 
 /// One `declare` per runtime helper the program calls.
@@ -158,6 +387,10 @@ fn ty_of(ty: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
         HirType::Int { bits: 16, .. } => "i16",
         HirType::Int { bits: 32, .. } => "i32",
         HirType::Int { bits: 64, .. } => "i64",
+        // Exact, and 128 bits rather than arbitrary precision -- the same
+        // promise the C backend makes with `__int128`, which is where LLVM's
+        // `i128` is what clang lowers that to anyway.
+        HirType::BigInt => "i128",
         // One opaque pointer, whatever it points at. LLVM has had no other
         // kind since 17, and it is the same fact the C backend leans on when a
         // field's type has no layout: every managed value is a pointer.
@@ -226,22 +459,16 @@ fn label(block: BlockId) -> String {
     format!("b{}", block.0)
 }
 
-/// A function's name, quoted where LLVM needs it.
+/// A function's symbol, mangled the way the C backend mangles it.
 ///
-/// `#` is not a character an LLVM identifier may hold unquoted, and this
-/// compiler puts one in every name it invents: `fib#whole` for a specialized
-/// copy, `Closure3#call`, `module#init`. The character was chosen precisely
-/// because TypeScript cannot produce it, so the names are not going to change
-/// -- LLVM's quoted form is the place to absorb it.
+/// Not LLVM's quoted form, which was the first answer and the wrong one. An
+/// exported name is an ABI a human links against, so it cannot depend on which
+/// backend produced the object -- and `module#init` became `module__init` in
+/// one output and `@"module#init"` in the other, so a driver could link against
+/// exactly one of them. The rule lives in `nts_codegen_common::symbols` now and
+/// both backends read it.
 fn symbol(raw: &str) -> String {
-    let plain = raw
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '$');
-    if plain {
-        format!("@{raw}")
-    } else {
-        format!("@\"{raw}\"")
-    }
+    format!("@{}", nts_codegen_common::symbols::c_identifier(raw))
 }
 
 fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
@@ -422,6 +649,199 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
             )
         }
         OpKind::Unary { op: un, operand } => unary(func, &out, *un, *operand)?,
+        _ => return memory_operation(program, func, value, &out),
+    })
+}
+
+/// The two operations that make an object.
+///
+/// Both need a descriptor, which is the piece of the runtime a backend has to
+/// *build* rather than call: it is data the collector reads, so it is emitted
+/// here and everything in it comes from the middle end.
+///
+/// On the heap that is the allocator handed the descriptor; in the frame it is
+/// an `alloca` and the header written out, which is what the C backend's
+/// `v_frame.header.descriptor = ...` compiles to and one of the reasons escape
+/// analysis is worth having.
+fn allocation(
+    program: &Program,
+    func: &Func,
+    value: ValueId,
+    out: &str,
+) -> Result<String, Diagnostic> {
+    let op = &func.values[value.0 as usize];
+    let out = out.to_owned();
+    Ok(match &op.kind {
+        OpKind::ArrayNew { length, zeroed } => {
+            let HirType::Managed(nts_core::hir::ManagedType::Array(element)) = &op.ty else {
+                return Err(refuse(func, "an array of something with no element type"));
+            };
+            // Two entry points rather than a flag, so the branch is taken here
+            // rather than once per allocation at run time.
+            let allocate = if *zeroed {
+                "@nts_array_new"
+            } else {
+                "@nts_array_new_uninitialized"
+            };
+            let descriptor = if element.is_managed() {
+                "@nts_desc_ref".to_owned()
+            } else {
+                format!("@nts_desc_arr_{}", element_tag(element))
+            };
+            format!(
+                "{out} = call ptr {allocate}(ptr {descriptor}, double {})",
+                name(*length)
+            )
+        }
+        OpKind::ObjectNew { frame } => {
+            let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &op.ty else {
+                return Err(refuse(func, "an allocation of something that is not an object"));
+            };
+            let layout = program
+                .layouts
+                .iter()
+                .find(|layout| layout.types.contains(id))
+                .ok_or_else(|| refuse(func, "an allocation of a type with no layout"))?;
+            let placed = nts_codegen_common::layout::place(&layout.fields)
+                .ok_or_else(|| refuse(func, "an object whose fields cannot be placed"))?;
+            let tag = descriptor_name(layout);
+            if *frame {
+                // `NTS_IMMORTAL` in the count word, so the counting pass's
+                // release is a no-op on storage that was never allocated.
+                [
+                    format!("{out} = alloca i8, i64 {}, align {}", placed.size, placed.align),
+                    format!("store ptr @nts_desc_{tag}, ptr {out}"),
+                    format!("{out}.rc = getelementptr i8, ptr {out}, i64 8"),
+                    format!("store i64 -1, ptr {out}.rc"),
+                ]
+                .join("\n  ")
+            } else {
+                format!("{out} = call ptr @nts_object_new(ptr @nts_desc_{tag})")
+            }
+        }
+        other => {
+            return Err(refuse(
+                func,
+                &format!("the operation {other:?}, which does not allocate"),
+            ));
+        }
+    })
+}
+
+/// Reading and writing an array's elements.
+///
+/// The block is a separate allocation -- which is what lets an array grow
+/// without the object moving -- so this is a load of the block pointer and then
+/// an index into it.
+fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
+    let op = &func.values[value.0 as usize];
+    let out = out.to_owned();
+    Ok(match &op.kind {
+        OpKind::ArrayGet {
+            array,
+            index,
+            checked,
+        } => {
+            let element = ty_of(&op.ty, func)?;
+            let mut lines = index_lines(func, &out, *array, *index, *checked);
+            lines.push(format!("{out}.block = load ptr, ptr {out}.blk"));
+            lines.push(format!(
+                "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
+            ));
+            lines.push(format!("{out} = load {element}, ptr {out}.at"));
+            lines.join("\n  ")
+        }
+        OpKind::ArraySet {
+            array,
+            index,
+            value,
+            checked,
+        } => {
+            let element = ty_of(&func.values[value.0 as usize].ty, func)?;
+            let mut lines = index_lines(func, &out, *array, *index, *checked);
+            lines.push(format!("{out}.block = load ptr, ptr {out}.blk"));
+            lines.push(format!(
+                "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
+            ));
+            lines.push(format!("store {element} {}, ptr {out}.at", name(*value)));
+            lines.join("\n  ")
+        }
+        other => {
+            return Err(refuse(
+                func,
+                &format!("the operation {other:?}, which is not an element access"),
+            ));
+        }
+    })
+}
+
+/// Counting, and module-scope storage.
+///
+/// The counting pass decides where a retain and a release go and both backends
+/// emit one call each; under `NoGC` there are none, because the pass that would
+/// have inserted them did not run. A global is `internal` unless the program
+/// exports it, for the same reason the C backend makes it `static`.
+fn counting_or_global(program: &Program, func: &Func, value: ValueId, out: &str)
+    -> Result<String, Diagnostic>
+{
+    let op = &func.values[value.0 as usize];
+    let out = out.to_owned();
+    Ok(match &op.kind {
+        // Counting, which the memory provider decides and both backends emit
+        // the same way: one call each, and nothing under NoGC because the pass
+        // that would have inserted them did not run.
+        OpKind::Retain(object) => format!("call void @nts_retain(ptr {})", name(*object)),
+        OpKind::Release(object) => format!("call void @nts_release(ptr {})", name(*object)),
+        OpKind::GlobalGet(global) => {
+            let ty = ty_of(&op.ty, func)?;
+            format!(
+                "{out} = load {ty}, ptr {}",
+                symbol(&global_symbol(program, *global as usize))
+            )
+        }
+        OpKind::GlobalSet { global, value } => {
+            let ty = ty_of(&func.values[value.0 as usize].ty, func)?;
+            format!(
+                "store {ty} {}, ptr {}",
+                name(*value),
+                symbol(&global_symbol(program, *global as usize))
+            )
+        }
+        other => {
+            return Err(refuse(
+                func,
+                &format!("the operation {other:?}, which is neither counting nor a global"),
+            ));
+        }
+    })
+}
+
+/// The operations that read or write memory.
+///
+/// Split from the rest because this is the half of the backend that depends on
+/// `nts_codegen_common::layout` -- every one of these needs to know where
+/// something sits, and none of the arithmetic does.
+fn memory_operation(
+    program: &Program,
+    func: &Func,
+    value: ValueId,
+    out: &str,
+) -> Result<String, Diagnostic> {
+    let op = &func.values[value.0 as usize];
+    let out = out.to_owned();
+    Ok(match &op.kind {
+        // Making one is next door: an allocation needs a descriptor, which is
+        // data rather than code and the one piece of the runtime a backend has
+        // to build.
+        OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } => {
+            return allocation(program, func, value, &out);
+        }
+        OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
+            return element_access(func, value, &out);
+        }
+        OpKind::Retain(_) | OpKind::Release(_) | OpKind::GlobalGet(_) | OpKind::GlobalSet { .. } => {
+            return counting_or_global(program, func, value, &out);
+        }
         // A field, at the offset this compiler computed.
         //
         // The C backend writes `p->x` and lets clang place it; there is no
@@ -510,6 +930,33 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
                 format!("{out} = {call}")
             }
         }
+        // A null pointer, which is what an absent reference is: the one spare
+        // value a pointer has, and the whole reason `T | null` costs nothing.
+        OpKind::ConstNull | OpKind::ConstUndefined if matches!(op.ty, HirType::Managed(_)) => {
+            format!("{out} = inttoptr i64 0 to ptr")
+        }
+        // The count is the last four bytes of the header, whatever it belongs
+        // to: an array reaches through its header because it can grow, and a
+        // string *is* one.
+        OpKind::Length(of) => {
+            let returns = ty_of(&op.ty, func)?;
+            let at = format!("{out}.at");
+            let raw = format!("{out}.raw");
+            let offset = nts_codegen_common::layout::LENGTH_OFFSET;
+            let mut lines = vec![
+                format!("{at} = getelementptr i8, ptr {}, i64 {offset}", name(*of)),
+                format!("{raw} = load i32, ptr {at}"),
+            ];
+            lines.push(if returns == "i32" {
+                format!("{out} = add i32 {raw}, 0")
+            } else {
+                format!("{out} = uitofp i32 {raw} to {returns}")
+            });
+            lines.join("\n  ")
+        }
+        // Everything that touches memory is next door: it is the half of this
+        // backend that depends on the layout engine, and keeping it together
+        // is what makes that dependency visible.
         other => {
             return Err(refuse(
                 func,

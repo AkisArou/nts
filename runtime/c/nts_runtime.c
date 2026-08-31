@@ -1652,6 +1652,17 @@ NtsArray *nts_array_fill_ref(NtsArray *a, void *value) {
  */
 int32_t nts_to_int32_fn(double x) { return nts_to_int32(x); }
 
+/* The bounds checks, likewise. A backend that cannot read a C header cannot
+ * inline `nts_check`, and reproducing it would be a second implementation of
+ * the same rule to keep in step with the first. */
+uint32_t nts_check_fn(const NtsArray *array, uint32_t index) {
+  return nts_check(array, index);
+}
+
+uint32_t nts_index_fn(const NtsArray *array, double index) {
+  return nts_index(array, index);
+}
+
 uint32_t nts_to_uint32_fn(double x) { return nts_to_uint32(x); }
 
 /* `String.fromCharCode(x)`: one UTF-16 code unit, from `ToUint16(x)`.

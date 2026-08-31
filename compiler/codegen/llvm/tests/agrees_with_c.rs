@@ -264,3 +264,117 @@ int main(void) {
         "the backends read different bytes of the same object"
     );
 }
+
+/// Objects the program allocates itself, on the stack and on the heap.
+///
+/// Which needs a descriptor, and a descriptor is a struct the *runtime* reads.
+/// It is emitted as LLVM's own struct type with the runtime's field types in
+/// the runtime's order -- LLVM lays a struct out the way clang does, so the two
+/// agree by construction and there is nothing here to get wrong by four bytes.
+///
+/// What goes in one is already shared: `cyclic_layouts` and `reference_fields`
+/// are the middle end's and the offsets are the layout engine's. Only the
+/// rendering belongs to a backend.
+#[test]
+fn the_two_backends_agree_about_objects_they_allocate() {
+    let source = r"
+class Point {
+  x: number;
+  y: number;
+
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+
+  sum(): number {
+    return this.x + this.y;
+  }
+}
+
+// Does not escape, so it lives in the frame.
+export function inTheFrame(a: number, b: number): number {
+  const p = new Point(a, b);
+  return p.sum() * 3 + p.x;
+}
+
+// Escapes into the array, so it is allocated.
+export function onTheHeap(a: number, b: number): number {
+  const held: Point[] = [];
+  held.push(new Point(a, b));
+  const first = held[0]!;
+  return first.sum() - first.y;
+}
+";
+    let driver = r#"#include <stdio.h>
+double inTheFrame(double a, double b);
+int main(void) {
+  double xs[] = {0.0, 1.0, -1.0, 3.5, -0.0, 1e21, 1.0/0.0, 0.0/0.0, 9007199254740993.0};
+  for (int i = 0; i < 9; i++)
+    for (int j = 0; j < 9; j++)
+      printf("%a\n", inTheFrame(xs[i], xs[j]));
+  return 0;
+}
+"#;
+    let Some((llvm, c)) = both_backends("objects", source, driver) else {
+        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        return;
+    };
+    assert!(!llvm.is_empty(), "the run produced nothing");
+    assert_eq!(llvm, c, "the backends disagree about an object they built");
+}
+
+/// Module-scope storage, which outlives every call and so is neither a
+/// parameter nor a block argument.
+///
+/// The C backend makes it `static` file-scope storage; this makes it an
+/// `internal global`. Same reason in both: a name outside the program is a name
+/// something outside can collide with.
+#[test]
+fn the_two_backends_agree_about_module_scope_state() {
+    let source = r"
+let total = 0;
+let count = 0;
+
+export function add(x: number): number {
+  total = total + x;
+  count = count + 1;
+  return total;
+}
+
+export function mean(): number {
+  if (count === 0) {
+    return 0;
+  }
+  return total / count;
+}
+
+export function reset(): number {
+  const was = total;
+  total = 0;
+  count = 0;
+  return was;
+}
+";
+    let driver = r#"#include <stdio.h>
+double add(double x);
+double mean(void);
+double reset(void);
+void module__init(void);
+int main(void) {
+  module__init();
+  double xs[] = {0.0, 1.0, -1.0, 3.5, -0.0, 1e21, 0.0/0.0, 9007199254740993.0};
+  for (int i = 0; i < 8; i++) {
+    printf("%a %a\n", add(xs[i]), mean());
+    if (i % 3 == 2) printf("reset %a\n", reset());
+  }
+  return 0;
+}
+"#;
+    let Some((llvm, c)) = both_backends("globals", source, driver) else {
+        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        return;
+    };
+    assert!(!llvm.is_empty(), "the run produced nothing");
+    assert_eq!(llvm, c, "the backends disagree about module-scope state");
+}
