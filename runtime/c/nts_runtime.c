@@ -560,6 +560,17 @@ static bool nts_collecting = false;
 /* Collection runs when this many candidates have accumulated. Any threshold is
  * a guess; what it trades is promptness against how often the walk happens, and
  * a program that wants to decide for itself calls `nts_collect_cycles`. */
+/* PHP's `GC_ROOT_BUFFER_MAX_ENTRIES`, which implements the same paper. It is a
+ * bound for a program that makes cycles faster than it reaches a checkpoint;
+ * the checkpoint pass is what actually keeps a normal program flat.
+ *
+ * A generational scheme -- a small nursery, mature roots aged separately -- is
+ * the usual next step, and the measurement does not support building one here.
+ * 20,000 checkpoint collections cost 2ms with no live cycles kept and 3ms with
+ * five thousand, so the pass is already flat in the size of the live set: a
+ * candidate found live is taken out of the buffer and is not looked at again
+ * unless something decrements it. Generations pay for themselves where mature
+ * candidates *accumulate*, and here they do not. */
 #define NTS_COLLECT_THRESHOLD 10000u
 
 static void nts_push(NtsHeader ***buffer, size_t *len, size_t *cap,
