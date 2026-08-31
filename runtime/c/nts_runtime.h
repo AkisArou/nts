@@ -667,6 +667,12 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
 int32_t nts_to_int32_fn(double x);
 NTS_READS_ONLY uint32_t nts_check_fn(const NtsArray *array, uint32_t index);
 NTS_READS_ONLY uint32_t nts_index_fn(const NtsArray *array, double index);
+NTS_READS_ONLY uint16_t nts_unit_fn(const NtsString *s, uint32_t at);
+NTS_READS_ONLY double nts_str_char_code_at_fn(const NtsString *s, double at);
+/* A string is falsy when it is absent *or* empty -- a null test and a length
+ * test with a short circuit between them, which is why this is a function
+ * rather than something a backend inlines. */
+NTS_READS_ONLY bool nts_string_truthy(const NtsString *s);
 uint32_t nts_to_uint32_fn(double x);
 
 NtsString *nts_number_to_string(double x);

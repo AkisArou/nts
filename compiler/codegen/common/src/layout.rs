@@ -53,6 +53,19 @@ pub const HEADER: Shape = Shape {
     align: POINTER,
 };
 
+/// The count word's value for storage that must never be freed.
+///
+/// `NTS_IMMORTAL` in the runtime, which is `UINT32_MAX` -- **not** all ones.
+/// `reserved` is a `uintptr_t`, so a backend writing `-1` into it writes
+/// `0xFFFFFFFFFFFFFFFF`, which does not compare equal and would let the
+/// collector free a frame object or a string literal.
+///
+/// Which is not hypothetical: the LLVM backend wrote `-1` for exactly one
+/// commit, and every test passed because the default provider emits no release
+/// at all. Named here so both backends read one number, and asserted from the C
+/// backend so clang checks it against the macro.
+pub const IMMORTAL: u64 = u32::MAX as u64;
+
 /// Where `NtsHeader::length` sits, in bytes from the object's address.
 ///
 /// The header is a descriptor pointer, the provider's word, `flags` and

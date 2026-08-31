@@ -378,3 +378,55 @@ int main(void) {
     assert!(!llvm.is_empty(), "the run produced nothing");
     assert_eq!(llvm, c, "the backends disagree about module-scope state");
 }
+
+/// Strings: literals, concatenation, length, code units and truthiness.
+///
+/// A literal is static storage with an immortal count, emitted as code *units*
+/// rather than as an LLVM string constant -- an escape rule that is not
+/// JavaScript's is a different string, and a wide literal is not bytes at all.
+/// Both backends number the literal table the same way, so `nts_str_3` is the
+/// same string in both outputs.
+///
+/// Truthiness is the interesting one: a string is falsy when it is absent *or*
+/// empty, which is a short circuit, so it is a runtime call rather than
+/// something either backend inlines and gets subtly different.
+#[test]
+fn the_two_backends_agree_about_strings() {
+    let source = "
+export function pick(n: number): string {
+  return n > 0 ? \"alpha\" : \"beta\";
+}
+export function wide(n: number): string {
+  return n > 0 ? \"\u{4e2d}\u{6587}\" : \"x\";
+}
+export function joined(n: number): number {
+  const both = pick(n) + wide(n);
+  return both.length * 10 + pick(n).length;
+}
+export function unitAt(n: number): number {
+  const text = pick(n);
+  return text.charCodeAt(0) + text.length;
+}
+export function emptyIsFalsy(n: number): number {
+  const text = n > 0 ? \"\" : \"full\";
+  return text ? 1 : 0;
+}
+";
+    let driver = r#"#include <stdio.h>
+double joined(double n);
+double unitAt(double n);
+double emptyIsFalsy(double n);
+int main(void) {
+  double xs[] = {0.0, 1.0, -1.0, 3.5, -0.0, 0.0/0.0};
+  for (int i = 0; i < 6; i++)
+    printf("%a %a %a\n", joined(xs[i]), unitAt(xs[i]), emptyIsFalsy(xs[i]));
+  return 0;
+}
+"#;
+    let Some((llvm, c)) = both_backends("strings", source, driver) else {
+        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        return;
+    };
+    assert!(!llvm.is_empty(), "the run produced nothing");
+    assert_eq!(llvm, c, "the backends disagree about a string");
+}

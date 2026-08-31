@@ -948,6 +948,16 @@ fn emit_object_types(
         writer.blank(origin);
     }
 
+    // One number both backends write into a count word, checked against the
+    // macro that defines it. A backend that got this wrong would produce
+    // storage the collector believes it may free.
+    writer.line(
+        origin,
+        format!(
+            "_Static_assert(NTS_IMMORTAL == {}u, \"NTS_IMMORTAL is not what nts writes\");",
+            nts_codegen_common::layout::IMMORTAL
+        ),
+    );
     for layout in &program.layouts {
         let name = object_type_name(layout);
         writer.line(origin, format!("struct {name} {{"));

@@ -1663,6 +1663,23 @@ uint32_t nts_index_fn(const NtsArray *array, double index) {
   return nts_index(array, index);
 }
 
+/* Reading a code unit, and the truthiness of a string.
+ *
+ * Both are `static inline` in the header for C's benefit and unreadable to any
+ * other backend. Truthiness in particular is worth not reproducing: a string is
+ * falsy when it is absent *or* empty, which is a null test and a length test
+ * with a short circuit between them, and an LLVM backend that inlined it would
+ * have to invent a basic block to keep the load out of the null case. */
+uint16_t nts_unit_fn(const NtsString *s, uint32_t at) {
+  return nts_unit(s, at);
+}
+
+double nts_str_char_code_at_fn(const NtsString *s, double at) {
+  return nts_str_char_code_at(s, at);
+}
+
+bool nts_string_truthy(const NtsString *s) { return s != 0 && s->length != 0; }
+
 uint32_t nts_to_uint32_fn(double x) { return nts_to_uint32(x); }
 
 /* `String.fromCharCode(x)`: one UTF-16 code unit, from `ToUint16(x)`.

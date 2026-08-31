@@ -77,6 +77,12 @@ pub fn emit(program: &Program) -> Emitted {
     let _ = writeln!(text, "declare i32 @nts_check_fn(ptr, i32)");
     let _ = writeln!(text, "declare void @nts_retain(ptr)");
     let _ = writeln!(text, "declare void @nts_release(ptr)");
+    let _ = writeln!(text, "declare ptr @nts_concat(ptr, ptr)");
+    let _ = writeln!(text, "declare zeroext i1 @nts_string_truthy(ptr)");
+    let _ = writeln!(text, "declare zeroext i16 @nts_unit_fn(ptr, i32)");
+    let _ = writeln!(text, "declare double @nts_str_char_code_at_fn(ptr, double)");
+    let _ = writeln!(text, "declare double @llvm.fabs.f64(double)");
+    let _ = writeln!(text, "declare double @llvm.sqrt.f64(double)");
     let _ = writeln!(text, "declare i32 @nts_index_fn(ptr, double)");
     let _ = writeln!(text, "declare ptr @nts_array_new_uninitialized(ptr, double)");
     // The runtime's own, shared by every array of references: each element is a
@@ -86,6 +92,7 @@ pub fn emit(program: &Program) -> Emitted {
         let _ = writeln!(text, "{line}");
     }
     let _ = writeln!(text, "\n{}", descriptors(program));
+    let _ = writeln!(text, "{}", literals(program));
     // Module-scope storage. `internal` unless the program exports it, for the
     // same reason the C backend makes it `static`: a name outside the program
     // is a name something outside can collide with.
@@ -125,6 +132,68 @@ pub fn emit(program: &Program) -> Emitted {
         }
     }
     Emitted { text, diagnostics }
+}
+
+/// `NtsHeader`, as LLVM's own struct type: the same fields in the same order,
+/// so it is laid out the way clang lays out the C one.
+const HEADER_TYPE: &str = "%NtsHeader = type { ptr, i64, i32, i32 }";
+
+/// Every string literal in the program, in the order the C backend numbers
+/// them -- one table, so `nts_str_3` is the same string in both outputs.
+///
+/// A literal is static storage with an immortal count, so nothing ever tries to
+/// free it. Emitted as code *units* rather than as an LLVM string constant for
+/// the reason the C backend gives: an escape rule that is not JavaScript's is a
+/// different string, and a wide literal is not bytes at all.
+fn literals(program: &Program) -> String {
+    let mut out = String::new();
+    let _ = writeln!(out, "{HEADER_TYPE}");
+    let _ = writeln!(out, "@nts_desc_string1 = external constant %NtsDescriptor");
+    let _ = writeln!(out, "@nts_desc_string2 = external constant %NtsDescriptor");
+    for (index, text) in literal_table(program).iter().enumerate() {
+        let units: Vec<u16> = text.encode_utf16().collect();
+        let wide = units.iter().any(|unit| *unit > 0xFF);
+        let (element, descriptor, flags) = if wide {
+            ("i16", "@nts_desc_string2", 1)
+        } else {
+            ("i8", "@nts_desc_string1", 0)
+        };
+        // One more unit than the string holds, kept at zero, so a narrow one
+        // can be handed to C directly.
+        let mut data: Vec<String> = units
+            .iter()
+            .map(|unit| format!("{element} {unit}"))
+            .collect();
+        data.push(format!("{element} 0"));
+        let _ = writeln!(
+            out,
+            "@nts_str_{index} = internal constant {{ %NtsHeader, [{count} x {element}] }} \
+             {{ %NtsHeader {{ ptr {descriptor}, i64 {immortal}, i32 {flags}, i32 {length} }}, \
+             [{count} x {element}] [{}] }}",
+            data.join(", "),
+            count = data.len(),
+            immortal = nts_codegen_common::layout::IMMORTAL,
+            length = units.len(),
+        );
+    }
+    out
+}
+
+/// The literals a program holds, numbered the way the C backend numbers them.
+fn literal_table(program: &Program) -> Vec<String> {
+    let mut table: Vec<String> = Vec::new();
+    for func in &program.funcs {
+        for block in &func.blocks {
+            for value in &block.ops {
+                if let OpKind::ConstString(text) = &func.values[value.0 as usize].kind
+                    && !table.contains(text)
+                {
+                    table.push(text.clone());
+                }
+            }
+        }
+    }
+    table
 }
 
 /// `NtsDescriptor`, as LLVM's own struct type.
@@ -635,9 +704,29 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
             let ty = ty_of(&op.ty, func)?;
             format!("{out} = add {ty} 0, {number}")
         }
+        // The address of the static storage, which is what a string value is.
+        OpKind::ConstString(text) => {
+            let index = literal_table(program)
+                .iter()
+                .position(|known| known == text)
+                .unwrap_or(0);
+            format!("{out} = getelementptr i8, ptr @nts_str_{index}, i64 0")
+        }
         OpKind::ConstBool(flag) => {
             format!("{out} = add i1 0, {}", u8::from(*flag))
         }
+        // Two operators wear the `+` token and this is the other one: the
+        // lowering already decided which, from the result type, so there is
+        // nothing to work out here.
+        OpKind::Binary {
+            op: BinOp::Concat,
+            lhs,
+            rhs,
+        } => format!(
+            "{out} = call ptr @nts_concat(ptr {}, ptr {})",
+            name(*lhs),
+            name(*rhs)
+        ),
         OpKind::Binary { op: bin, lhs, rhs } => {
             let ty = ty_of(&func.values[lhs.0 as usize].ty, func)?;
             let float = matches!(func.values[lhs.0 as usize].ty, HirType::Float { .. });
@@ -712,7 +801,10 @@ fn allocation(
                     format!("{out} = alloca i8, i64 {}, align {}", placed.size, placed.align),
                     format!("store ptr @nts_desc_{tag}, ptr {out}"),
                     format!("{out}.rc = getelementptr i8, ptr {out}, i64 8"),
-                    format!("store i64 -1, ptr {out}.rc"),
+                    format!(
+                        "store i64 {}, ptr {out}.rc",
+                        nts_codegen_common::layout::IMMORTAL
+                    ),
                 ]
                 .join("\n  ")
             } else {
@@ -816,6 +908,67 @@ fn counting_or_global(program: &Program, func: &Func, value: ValueId, out: &str)
     })
 }
 
+/// Reading a length, and reading a code unit.
+///
+/// Both are a load through a header, and both differ from an array's rule in
+/// the same direction: a string is immutable and cannot grow, so its count is
+/// the header's own and an index out of range answers NaN rather than trapping.
+fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
+    let op = &func.values[value.0 as usize];
+    let out = out.to_owned();
+    Ok(match &op.kind {
+        // The count is the last four bytes of the header, whatever it belongs
+        // to: an array reaches through its header because it can grow, and a
+        // string *is* one.
+        // A code unit. Checked goes through the runtime, which answers NaN out
+        // of range rather than trapping -- a string's rule, and the opposite of
+        // an array's.
+        OpKind::StringUnitAt {
+            string,
+            index,
+            checked,
+        } => {
+            if *checked {
+                format!(
+                    "{out} = call double @nts_str_char_code_at_fn(ptr {}, double {})",
+                    name(*string),
+                    name(*index)
+                )
+            } else {
+                let raw = format!("{out}.u");
+                format!(
+                    "{raw} = call zeroext i16 @nts_unit_fn(ptr {}, i32 {})\n  \
+                     {out} = uitofp i16 {raw} to double",
+                    name(*string),
+                    name(*index)
+                )
+            }
+        }
+        OpKind::Length(of) => {
+            let returns = ty_of(&op.ty, func)?;
+            let at = format!("{out}.at");
+            let raw = format!("{out}.raw");
+            let offset = nts_codegen_common::layout::LENGTH_OFFSET;
+            let mut lines = vec![
+                format!("{at} = getelementptr i8, ptr {}, i64 {offset}", name(*of)),
+                format!("{raw} = load i32, ptr {at}"),
+            ];
+            lines.push(if returns == "i32" {
+                format!("{out} = add i32 {raw}, 0")
+            } else {
+                format!("{out} = uitofp i32 {raw} to {returns}")
+            });
+            lines.join("\n  ")
+        }
+        other => {
+            return Err(refuse(
+                func,
+                &format!("the operation {other:?}, which reads no length"),
+            ));
+        }
+    })
+}
+
 /// The operations that read or write memory.
 ///
 /// Split from the rest because this is the half of the backend that depends on
@@ -838,6 +991,9 @@ fn memory_operation(
         }
         OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
             return element_access(func, value, &out);
+        }
+        OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
+            return text_operation(func, value, &out);
         }
         OpKind::Retain(_) | OpKind::Release(_) | OpKind::GlobalGet(_) | OpKind::GlobalSet { .. } => {
             return counting_or_global(program, func, value, &out);
@@ -935,25 +1091,6 @@ fn memory_operation(
         OpKind::ConstNull | OpKind::ConstUndefined if matches!(op.ty, HirType::Managed(_)) => {
             format!("{out} = inttoptr i64 0 to ptr")
         }
-        // The count is the last four bytes of the header, whatever it belongs
-        // to: an array reaches through its header because it can grow, and a
-        // string *is* one.
-        OpKind::Length(of) => {
-            let returns = ty_of(&op.ty, func)?;
-            let at = format!("{out}.at");
-            let raw = format!("{out}.raw");
-            let offset = nts_codegen_common::layout::LENGTH_OFFSET;
-            let mut lines = vec![
-                format!("{at} = getelementptr i8, ptr {}, i64 {offset}", name(*of)),
-                format!("{raw} = load i32, ptr {at}"),
-            ];
-            lines.push(if returns == "i32" {
-                format!("{out} = add i32 {raw}, 0")
-            } else {
-                format!("{out} = uitofp i32 {raw} to {returns}")
-            });
-            lines.join("\n  ")
-        }
         // Everything that touches memory is next door: it is the half of this
         // backend that depends on the layout engine, and keeping it together
         // is what makes that dependency visible.
@@ -1028,7 +1165,7 @@ fn binary(op: BinOp, float: bool, func: &Func) -> Result<&'static str, Diagnosti
 /// reads 4294967295 as -1.
 fn conversion(from: &HirType, to: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
     Ok(match (from, to) {
-        (HirType::Int { signed: true, .. }, HirType::Float { .. }) => "sitofp",
+        (HirType::Int { signed: true, .. } | HirType::BigInt, HirType::Float { .. }) => "sitofp",
         // A bool is one unsigned bit, so it converts the way an unsigned
         // integer does -- the same instruction for the same reason, not two
         // cases that happen to agree.
@@ -1072,6 +1209,28 @@ fn unary(func: &Func, out: &str, op: UnOp, operand: ValueId) -> Result<String, D
         UnOp::Neg if float => format!("{out} = fneg {ty} {}", name(operand)),
         UnOp::Neg => format!("{out} = sub {ty} 0, {}", name(operand)),
         UnOp::Not => format!("{out} = xor i1 {}, true", name(operand)),
+        // An integer, a `bigint` and a reference are all "not the zero value".
+        // A double additionally has to exclude NaN, which is falsy and which a
+        // plain inequality would call true, since every comparison with a NaN
+        // is false -- `fcmp one` is *ordered* and not equal, which is exactly
+        // both conditions. And a string is falsy when absent *or* empty, which
+        // is a short circuit and so a call.
+        UnOp::Truthy => match &func.values[operand.0 as usize].ty {
+            HirType::Managed(nts_core::hir::ManagedType::String) => format!(
+                "{out} = call zeroext i1 @nts_string_truthy(ptr {})",
+                name(operand)
+            ),
+            HirType::Managed(_) => {
+                format!("{out} = icmp ne ptr {}, null", name(operand))
+            }
+            HirType::Int { .. } | HirType::BigInt => {
+                format!("{out} = icmp ne {ty} {}, 0", name(operand))
+            }
+            HirType::Bool => format!("{out} = add i1 {}, 0", name(operand)),
+            _ => format!("{out} = fcmp one {ty} {}, 0.0", name(operand)),
+        },
+        UnOp::Abs if float => format!("{out} = call double @llvm.fabs.f64(double {})", name(operand)),
+        UnOp::Sqrt => format!("{out} = call double @llvm.sqrt.f64(double {})", name(operand)),
         // ToInt32 and ToUint32 on something already an integer, which is the
         // case specialization exists to produce: reduce modulo 2^32 and
         // reinterpret. The C backend writes `(int32_t)(uint32_t)x` for exactly
