@@ -853,7 +853,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
     // collection is forced at each point so that what is merely awaiting the
     // cycle collector is not counted as held.
     main.push_str(
-        "#ifdef NTS_PROVIDER_RC\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count());\n         #endif\n         \x20   return 0;\n}\n",
+        "#ifdef NTS_PROVIDER_RC\n         \x20   nts_test_host_drain();\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count());\n         #endif\n         \x20   return 0;\n}\n",
     );
     main
 }

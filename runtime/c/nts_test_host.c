@@ -75,13 +75,18 @@ static bool nts_test_is_owner(void *state) {
   return true;
 }
 
-void nts_test_host_install(void) {
+void nts_test_host_drain(void) {
   for (uint32_t i = 0; i < nts_test_len; i++) {
     if (nts_test_slots[i].live && nts_test_slots[i].task.drop) {
       nts_test_slots[i].task.drop(nts_test_slots[i].task.state);
+      nts_test_dropped++;
     }
   }
   nts_test_len = 0;
+}
+
+void nts_test_host_install(void) {
+  nts_test_host_drain();
   nts_test_clock = 0.0;
   nts_test_next_id = 0;
   nts_test_dropped = 0;

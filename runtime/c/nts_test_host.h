@@ -44,4 +44,15 @@ double nts_test_host_now(void);
  * nothing was silently discarded. */
 uint32_t nts_test_host_dropped(void);
 
+/* Drop every task the host is still holding, without reinstalling it.
+ *
+ * A pending timer holds its callback, which is the host's state and not the
+ * program's -- and a check that measures "what the program still holds" at the
+ * end of a run has to say which it is counting. It did not: `examples/timers`
+ * reported 58 objects held, which is 29 cases times a timer and the closure it
+ * had not run yet, and the `rc` gate carried it as a known failure with a note
+ * explaining that it was not a leak. A note is not a separation. Draining first
+ * makes the number mean what it claims, so anything left is the program's. */
+void nts_test_host_drain(void);
+
 #endif /* NTS_TEST_HOST_H */

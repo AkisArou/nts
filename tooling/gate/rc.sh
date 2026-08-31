@@ -25,11 +25,12 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # a collection at both so that what is merely awaiting the cycle collector is not
 # counted as held. Growth between the two is a leak.
 #
-#   timers        29 cases times 2 objects, one pending 60-second timer each.
-#                 `scheduleWithoutClearing` leaves one on purpose -- the comment
-#                 above it says so -- and a pending timer holds its callback.
-#                 The sibling that calls `clearTimeout` shows no growth at all,
-#                 which is how the two were told apart. Not a leak.
+#   timers        Was 29 cases times 2 objects -- a pending 60-second timer and
+#                 the callback it had not run. The note here said "not a leak",
+#                 which was true and was not a separation: a pending timer is
+#                 the *host's* state, and the check claims to measure what the
+#                 program still holds. The driver now drains the host before it
+#                 measures, so the number means what it says and this is 0.
 #
 # Both stay listed rather than excused: the check cannot tell state a program
 # still needs from state it has lost, and a *change* in either number is worth
@@ -51,7 +52,7 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # nothing to compare and `agreed()` did not ask whether anything had been
 # checked. It does now, which is what surfaced `nts_map_set` handing back the
 # table without retaining it.
-known_failing="invalid timers unsupported"
+known_failing=""
 
 crowded=8
 cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )
@@ -63,18 +64,34 @@ trap 'rm -f "$results"' EXIT
 NTS_RC=1 ls examples/*/tsconfig.json | NTS_RC=1 xargs -P "$jobs" -n 1 sh -c '
   d=$1
   n=$(basename "$(dirname "$d")")
-  if NTS_RC=1 ./target/release/nts check "$d" >/dev/null 2>&1
-    then echo "ok   $n"
-    else echo "DIS  $n"
-  fi
+  case "$n" in
+    invalid|unsupported)
+      # Fixtures that must *not* compile, inverted exactly as `gate.sh` does.
+      # Listing them as "known failing under reference counting" said nothing
+      # about reference counting: one does not typecheck and the other is a
+      # refused construct, and neither would pass under any provider.
+      if NTS_RC=1 ./target/release/nts check "$d" >/dev/null 2>&1
+        then echo "DIS  $n (should not have passed)"
+        else echo "ok   $n (not an oracle case)"
+      fi ;;
+    *)
+      if NTS_RC=1 ./target/release/nts check "$d" >/dev/null 2>&1
+        then echo "ok   $n"
+        else echo "DIS  $n"
+      fi ;;
+  esac
 ' _ > "$results"
 
 failing=$(grep '^DIS' "$results" | awk '{print $2}' | sort | tr '\n' ' ')
-expected=$(printf '%s\n' $known_failing | sort | tr '\n' ' ')
+# Guarded: `printf '%s\n'` with no arguments still prints a newline, so an
+# empty list would compare as " " against an empty result.
+expected=""
+[ -n "$known_failing" ] && expected=$(printf '%s\n' $known_failing | sort | tr '\n' ' ')
 echo "$(grep -c '^ok' "$results" || true) of $(grep -c . "$results") pass under reference counting"
 if [ "$failing" != "$expected" ]; then
   echo "  expected these to fail: $expected"
   echo "  actually failing:       $failing"
   exit 1
 fi
-echo "  known failing: $expected"
+[ -n "$expected" ] && echo "  known failing: $expected"
+exit 0

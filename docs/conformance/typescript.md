@@ -538,6 +538,32 @@ its sibling that calls `clearTimeout` shows no growth at all. Both stay listed,
 because the check cannot tell state a program still needs from state it has
 lost, and a *change* in either number is worth stopping for.
 
+### What the `rc` list was counting
+
+It named `invalid`, `timers` and `unsupported`, and only one of those was about
+reference counting.
+
+`invalid` does not typecheck and `unsupported` is a refused construct. Both are
+fixtures that must *fail*, and `gate.sh` has always inverted them for exactly
+that reason -- the `rc` sweep did not, so two entries on a list of known
+reference-counting failures were programs that would fail under any provider.
+
+`timers` held 58 objects at the end: 29 cases times a pending 60-second timer
+and the callback it had not run. The note beside it said "not a leak", which was
+true and was not a *separation*. A pending timer is the **host's** state, and
+the check claims to measure what the program still holds; the host was never
+asked to give it back. The driver now drains the host before it measures, so the
+number means what it says, and it is 0.
+
+`module-state` came off earlier and was the reverse case: its note explained the
+extra object as an artifact of taking the baseline too early, and it was a real
+bug -- a module-scope initializer refused and silently dropped.
+
+The list is empty and 90 of 90 examples pass under reference counting. Which is
+worth one caution: an empty list is only as good as the check behind it, and
+this same week that check reported "agreed on every case" over a program that
+segfaulted before printing a line.
+
 ### The collector's blind spot was its own dying list
 
 `allOfTwo` returning 0 where node returns 1 was the symptom this was tracked
