@@ -670,6 +670,51 @@ reading of the same output found them. `String(null)` is `"null"` and
 `String(undefined)` is `"undefined"`; which one is a property of the type, and
 where the type is *nothing but* the absence there is no branch to emit at all.
 
+### A refused initializer was dropped and its readers were compiled
+
+A module-scope declaration whose initializer cannot lower is refused *by
+itself*, so that one bad declaration does not darken a whole module's
+evaluation. The variable was kept, though, and every function reading it was
+emitted — against a global that module evaluation never writes.
+
+```ts
+const source: unknown = { a: 1 };
+let rendered: string = String(source);   // refused: no conversion from unknown
+export function go(n: number): number {
+  return rendered.length + n;            // emitted, against a null pointer
+}
+```
+
+The refusal was printed. The program was produced. And the differential said
+`checked 0 of 29 cases` and `agreed on every case`, one line apart.
+
+Both halves are fixed. The declarations whose initializer cannot lower are found
+*before* any function is lowered and recorded on the module, so reading one
+refuses — asked before the global slot, because such a variable has both a slot
+and nothing to put in it. And `agreed()` now requires that something was
+checked: a run that reached nothing agreed on nothing. Every case declining is
+how a program that stops on all input looks from here.
+
+That second fix found the next one immediately. `examples/map-and-set` had been
+*segfaulting on every case* under reference counting while the gate counted it
+as passing, because stdout to a pipe is buffered and a crash loses it — zero
+lines, no diagnostic, and an agreement over an empty set.
+
+### `map.set` handed back the table it never retained
+
+The crash was `stringKeys` releasing the same `NtsMap` four times: once for the
+map and once for each `set`, because `set` returns its receiver so that
+`m.set(k, v).size` means something, and returning it hands out a reference the
+function never took.
+
+`get` had the mirror of it — the value came out of the slot unchanged, so
+reading one key five times released it five times while the table still held it
+— and so did both cursor reads a `for...of` uses. All four are the same
+sentence: a parameter is borrowed and a call's result is owned.
+
+Every function in that example stored *numbers*, which is why none of it ever
+showed. It now has three that store references.
+
 ### `fill` and `reverse` handed back a reference they never took
 
 A parameter is borrowed and a call's result is owned. Both work in place and
@@ -689,6 +734,43 @@ runs every example under the counting provider and asks whether the program
 returns to its baseline; that check has been green throughout, because no
 example had ever written the two calls in one expression. A conservation law is
 only as good as the programs it is asked about.
+
+### The profile had invalid HIR and no step read the line
+
+`invalid HIR 0` is the *corpus's* number, over single-file cases the suite
+generates. It says nothing about the largest body of TypeScript this compiler
+sees, and `nts hir` had been printing `the prepared program does NOT verify` for
+`path` and `url` with nothing reading it.
+
+The same shape as two things already recorded here: the profile itself existed
+as a measurement for months before any gate step emitted it, and `uncompilable
+C` was 15 and invisible. A number that counts one thing gets quoted as though it
+counted the others.
+
+The gate now verifies every profile module, ratcheted downward like the `rc`
+list. What remains is `MissingCallee { callee: "Closure34#call" }` in both:
+a closure's body is pruned before `monomorphize` rewrites the dispatch that
+reaches it into a direct call by name, so the call outlives its target. The pass
+order is at fault rather than either pass.
+
+Adding that check immediately caught a third module. `util` stopped verifying
+when `Boolean(x)` started lowering, on
+
+```ts
+Boolean(candidate._readableState || candidate.pipe && candidate.on)
+```
+
+— a `||` with an object on one arm and a boolean on another. The join takes the
+whole expression's type, so one arm agreed with it and the other was handed over
+unchanged, reaching the verifier as `expected: Managed(Object(606)), found:
+Bool`. `coerce` had a bare `return Ok(value)` as its last line, which said yes
+to everything left. It now refuses a scalar where a reference is wanted and the
+reverse; two managed types still pass, because base-first layout makes an upcast
+a no-op.
+
+Worth stating plainly: the refusal count *fell from 1,005 to 854* while that was
+happening, and 151 of that drop was functions being accepted with invalid HIR
+rather than refused. A number that only goes down is not the same as progress.
 
 ### The verifier accepted a multiplication of a tagged value
 
@@ -909,8 +991,8 @@ questions:
 | examples | the compiled program agrees with node, case by case | 90 of 90 |
 | sweep | a generated cross-product agrees with node, cell by cell | 9,570 cases across 330 functions |
 | corpus | arbitrary input produces no invalid IR and no C that will not compile | 49 lower cleanly; `invalid HIR` 0, `uncompilable C` 2 |
-| profile | how much of a real standard library lowers | 22 modules emit; 1,005 distinct refusal sites |
-| rc | the same examples hold nothing at exit under reference counting | 86 of 90, four named |
+| profile | how much of a real standard library lowers | 22 modules emit and verify but for two; 1,010 distinct refusal sites |
+| rc | the same examples hold nothing at exit under reference counting | 87 of 90, three named |
 
 Only the examples and the sweep check **correctness**, and they check it
 differently: an example covers what somebody thought to write down, a sweep
@@ -959,7 +1041,7 @@ rather than done quietly under a feature.
 
 ## 15. What to do next, ordered by evidence
 
-From the node profile's refusal sites — 1,005 of them, counted **once each**.
+From the node profile's refusal sites — 1,010 of them, counted **once each**.
 The raw sweep reports about five times that, because a module is re-compiled
 once per importer and `util/types.ts` is counted twenty-one times over. This is
 the only list ordered by what real code actually needs rather than by what looks

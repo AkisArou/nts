@@ -2705,11 +2705,22 @@ static void nts_map_rehash(NtsMap *map) {
  * The slot is returned whole. A map may legitimately hold `undefined` as a
  * value, so this cannot distinguish "absent" from "present and undefined" --
  * and neither can JavaScript's, which is why `has` exists. */
+/* What a table hands back is the *caller's*, so a reference in it is retained.
+ *
+ * A parameter is borrowed and a call's result is owned, and an erased value is
+ * counted like any other -- the compiler releases what `get` returned when the
+ * temporary dies. Returning the slot unchanged handed out a count nobody had
+ * taken, so reading one key five times released the value five times while the
+ * table still held it.
+ *
+ * The same for the two cursor reads below: a `for...of` over a table reads a
+ * key and a value per step and gives each back at the end of the step. */
 NtsValue nts_map_get(const NtsMap *map, NtsValue key) {
   int32_t at = nts_map_find(map, key, nts_hash_key(key, map->kind), 0);
   if (at < 0 || !map->values) {
     return nts_value_of_undefined();
   }
+  nts_value_retain(map->values[at]);
   return map->values[at];
 }
 
@@ -2733,6 +2744,24 @@ static NtsValue nts_map_normalize(NtsValue key) {
   return key;
 }
 
+/* Hand back the table that was passed in, as an *owned* reference.
+ *
+ * `nts_array_same`'s twin, and the same bug: `set` returns its receiver so that
+ * `m.set(k, v).size` means something, a parameter is borrowed and a call's
+ * result is owned, and returning it unchanged hands out a reference this
+ * function never took. The caller releases its own and this one, and the table
+ * is freed while still in use -- `stringKeys` released the same `NtsMap` four
+ * times, once for the map and once for each `set` that returned it.
+ *
+ * It had been that way since `Map` landed. `examples/map-and-set` ran under
+ * reference counting on every gate and the run was reported as agreeing on
+ * every case, because the driver segfaulted before flushing a single line and
+ * "agreed" did not ask whether anything had been checked. */
+static NtsMap *nts_map_same(NtsMap *map) {
+  nts_retain(&map->header);
+  return map;
+}
+
 NtsMap *nts_map_set(NtsMap *map, NtsValue key, NtsValue value) {
   key = nts_map_normalize(key);
   uint32_t hash = nts_hash_key(key, map->kind);
@@ -2746,7 +2775,7 @@ NtsMap *nts_map_set(NtsMap *map, NtsValue key, NtsValue value) {
       nts_value_release(map->values[at]);
       map->values[at] = value;
     }
-    return map;
+    return nts_map_same(map);
   }
   if (map->used == map->capacity) {
     nts_map_rehash(map);
@@ -2761,7 +2790,7 @@ NtsMap *nts_map_set(NtsMap *map, NtsValue key, NtsValue value) {
   map->index[slot] = (int32_t)map->used;
   map->used++;
   map->header.length++;
-  return map;
+  return nts_map_same(map);
 }
 
 bool nts_map_delete(NtsMap *map, NtsValue key) {
@@ -2852,11 +2881,16 @@ double nts_map_next(const NtsMap *map, double from) {
  * index would be a compiler bug rather than a program's, so it is not a check
  * this pays for on every element. */
 NtsValue nts_map_key_at(const NtsMap *map, double at) {
+  nts_value_retain(map->keys[(uint32_t)at]);
   return map->keys[(uint32_t)at];
 }
 
 NtsValue nts_map_value_at(const NtsMap *map, double at) {
-  return map->values ? map->values[(uint32_t)at] : nts_value_of_undefined();
+  if (!map->values) {
+    return nts_value_of_undefined();
+  }
+  nts_value_retain(map->values[(uint32_t)at]);
+  return map->values[(uint32_t)at];
 }
 
 /* How many code units the code point at `at` occupies.

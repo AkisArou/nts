@@ -114,10 +114,40 @@ profile() {
               fi
             done)
   printf '  %s modules emitted\n' "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)"
-  [ -z "$crashed" ] && return 0
-  echo "  the emitter panicked on:"
-  echo "$crashed" | sed 's/^/    /'
-  return 1
+  if [ -n "$crashed" ]; then
+    echo "  the emitter panicked on:"
+    echo "$crashed" | sed 's/^/    /'
+    return 1
+  fi
+
+  # And the SSA form the profile produces, which nothing here asked about.
+  #
+  # `invalid HIR 0` is the corpus's number, over single-file cases the suite
+  # generates. It says nothing about the largest body of TypeScript this
+  # compiler sees, and two of these modules have not verified for some time:
+  # `nts hir` prints it and no step read the line. The same shape as the
+  # profile itself, which existed as a measurement for months before any gate
+  # step emitted it, and as `uncompilable C`, which was 15 and invisible.
+  #
+  # Ratcheted downward only, like the `rc` list. `path` and `url` fail on
+  # `MissingCallee { callee: "Closure34#call" }`: a closure's body is pruned
+  # before `monomorphize` turns the dispatch that reaches it into a direct call
+  # by name, so the call survives its target. Neither the emitter nor the
+  # verifier is at fault -- the pass order is.
+  known_invalid="path url"
+  invalid=$(for m in "$root"/runtime/node/*/tsconfig.json; do
+              if ./target/release/nts hir "$m" 2>&1 | grep -q "does NOT verify"; then
+                basename "$(dirname "$m")"
+              fi
+            done | sort | tr '\n' ' ')
+  expected=$(printf '%s\n' $known_invalid | sort | tr '\n' ' ')
+  if [ "$invalid" != "$expected" ]; then
+    echo "  expected invalid HIR in: $expected"
+    echo "  actually invalid in:     $invalid"
+    return 1
+  fi
+  [ -n "$expected" ] && echo "  known invalid HIR: $expected"
+  return 0
 }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1

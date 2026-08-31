@@ -1300,9 +1300,22 @@ pub struct Report {
 
 impl Report {
     /// Whether the two sides agreed on everything they both reached.
+    ///
+    /// A run that reached *nothing* agreed on nothing, and this used not to
+    /// say so. Every case declining is how a program that stops on all input
+    /// looks from here, and the report printed `checked 0 of 29 cases` and
+    /// `agreed on every case` one line apart -- over a module whose global was
+    /// never initialized, because the initializer had been refused and the
+    /// functions reading it were emitted anyway.
+    ///
+    /// The declines themselves are legitimate and stay tolerated: `xs.at(i)!`
+    /// out of range is the program's own assertion failing, and node answers
+    /// `undefined` where the compiled program stops, so there is nothing to
+    /// compare. What is not legitimate is calling a run agreed when it is
+    /// *all* of them.
     #[must_use]
     pub fn agreed(&self) -> bool {
-        self.disagreements.is_empty() && self.aborts.is_empty()
+        self.checked > 0 && self.disagreements.is_empty() && self.aborts.is_empty()
     }
 }
 

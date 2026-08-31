@@ -174,3 +174,46 @@ export function identitySet(n: number): number {
   s.add(a);
   return s.size * 10 + (s.has(a) ? 1 : 0);
 }
+
+// A table whose values are *references*, which is where what it hands back
+// starts to matter. Every function above stores numbers, so nothing in this
+// file ever asked whether `get` gives up a count it never took -- and it did:
+// `set` returned the table without retaining it and `get` returned the slot
+// unchanged, so reading one key five times released the value five times while
+// the table still held it. Under NoGC nothing is freed and both were invisible.
+export function referenceValues(n: number): string {
+  const m = new Map<string, string>();
+  m.set("k", "value" + String(n));
+  m.set("j", "other");
+  let out = "";
+  for (let i = 0; i < 5; i = i + 1) {
+    const got = m.get("k");
+    out = out + String(String(got).length);
+  }
+  const missing = m.get("zz");
+  return out + String(m.get("k")) + String(missing) + String(m.size);
+}
+
+// `set` returns the table, so a chain of them is one table and not four. The
+// count has to say so.
+export function chainedSets(n: number): number {
+  const m = new Map<string, number>();
+  m.set("a", n).set("b", n + 1).set("c", n + 2);
+  return m.size * 1000 + (m.get("b") ?? -1);
+}
+
+// Walking a table hands out a key and a value per step, each of them the
+// caller's for the length of the step.
+export function walkedReferences(n: number): string {
+  const m = new Map<string, string>();
+  m.set("x", "1" + String(n));
+  m.set("y", "22");
+  m.set("z", "333");
+  let total = 0;
+  let keys = "";
+  for (const [key, value] of m) {
+    keys = keys + key;
+    total = total + value.length;
+  }
+  return keys + String(total);
+}

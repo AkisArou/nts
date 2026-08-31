@@ -80,6 +80,14 @@ fn check(rest: &[String]) -> Result<()> {
             report.aborts.len()
         )
     }
+    if report.checked == 0 {
+        bail!(
+            "no case was checked: all {} declined, so the two sides were \
+             never compared. A program that stops on every input looks \
+             exactly like this",
+            report.refused
+        )
+    }
     bail!(
         "{} case(s) disagree between the compiled program and node",
         report.disagreements.len()

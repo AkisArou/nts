@@ -25,11 +25,6 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # a collection at both so that what is merely awaiting the cycle collector is not
 # counted as held. Growth between the two is a leak.
 #
-#   module-state  Module-scope variables that hold references, which is the
-#                 whole subject of that example. One more is held at the end
-#                 than after the first case because different cases set
-#                 different globals, so the baseline this check takes after the
-#                 first case is simply too early for it. Not a leak.
 #   timers        29 cases times 2 objects, one pending 60-second timer each.
 #                 `scheduleWithoutClearing` leaves one on purpose -- the comment
 #                 above it says so -- and a pending timer holds its callback.
@@ -40,10 +35,23 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # still needs from state it has lost, and a *change* in either number is worth
 # stopping for even though the numbers themselves are correct.
 #
-# Four others were here and are not. `captured-by-reference` was a frame object
+# Five others were here and are not. `captured-by-reference` was a frame object
 # whose fields nobody gave back; `arith`, `strings` and `signatures` were the
 # differential's own driver keeping every string argument it built.
-known_failing="invalid module-state timers unsupported"
+#
+# `module-state` was the fifth, and it was not a baseline artifact after all --
+# the note here said it was. `let history: number[] = []` at module scope had
+# its initializer *refused* and silently dropped, so the array first appeared
+# when `replaced` ran: one object more at the end than after the first case,
+# exactly as a leak looks. Initializing it where the source says to made the
+# count stable, and the explanation written here for two months was wrong.
+#
+# One example was passing this check while segfaulting on every case:
+# `map-and-set`. The driver crashed before flushing a line, so the run had
+# nothing to compare and `agreed()` did not ask whether anything had been
+# checked. It does now, which is what surfaced `nts_map_set` handing back the
+# table without retaining it.
+known_failing="invalid timers unsupported"
 
 crowded=8
 cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )

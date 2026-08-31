@@ -55,6 +55,21 @@ static NtsValue str(const char *text) {
 
 static NtsValue num(double d) { return nts_value_of_number(d); }
 
+/* `set` and `add` return the table, and a call's result is the caller's -- so a
+ * test that ignores it holds one count too many and the table never dies.
+ *
+ * The retain is not ceremony: compiled code releases what a call returned, and
+ * without it `m.set(k, v)` handed out a count nobody had taken. `stringKeys` in
+ * `examples/map-and-set` released the same table four times. These wrappers are
+ * what the compiler emits, written out. */
+static void put(NtsMap *m, NtsValue key, NtsValue value) {
+  nts_release(&nts_map_set(m, key, value)->header);
+}
+
+static void add(NtsMap *m, NtsValue key) {
+  nts_release(&nts_set_add(m, key)->header);
+}
+
 /* The insertion order of the live keys, as a comma-joined ASCII string, so it
  * can be compared against what `[...m.keys()].join(",")` printed. */
 static void order_of(const NtsMap *map, char *out, size_t cap) {
@@ -87,14 +102,14 @@ int main(void) {
     NtsMap *m = nts_map_new(NTS_KEY_STRING);
     const char *keys[] = {"a", "b", "c", "d", "e"};
     for (int i = 0; i < 5; i++) {
-      nts_map_set(m, str(keys[i]), num(i));
+      put(m, str(keys[i]), num(i));
     }
     check("size counts what was inserted", m->header.length == 5);
     nts_map_delete(m, str("b"));
     nts_map_delete(m, str("d"));
     check("size falls with deletion", m->header.length == 3);
-    nts_map_set(m, str("b"), num(9));
-    nts_map_set(m, str("f"), num(10));
+    put(m, str("b"), num(9));
+    put(m, str("f"), num(10));
 
     char order[64];
     order_of(m, order, sizeof order);
@@ -113,15 +128,15 @@ int main(void) {
    *       z.set(-0,1); z.set(0,2);  Object.is(keys[0], -0) => false      */
   {
     NtsMap *m = nts_map_new(NTS_KEY_NUMBER);
-    nts_map_set(m, num(0.0 / 0.0), num(1));
-    nts_map_set(m, num(-0.0), num(2));
+    put(m, num(0.0 / 0.0), num(1));
+    put(m, num(-0.0), num(2));
     check("NaN is a key and finds itself",
           nts_value_number(nts_map_get(m, num(0.0 / 0.0))) == 1.0);
     check("-0 and +0 are one key",
           nts_value_number(nts_map_get(m, num(0.0))) == 2.0);
     check("and count as one entry", m->header.length == 2);
 
-    nts_map_set(m, num(0.0), num(3));
+    put(m, num(0.0), num(3));
     check("setting through the other zero replaces the value",
           nts_value_number(nts_map_get(m, num(-0.0))) == 3.0);
     check("and does not add an entry", m->header.length == 2);
@@ -141,7 +156,7 @@ int main(void) {
    * node: t.set("ab", 1); t.get("a" + "b") => 1                          */
   {
     NtsMap *m = nts_map_new(NTS_KEY_STRING);
-    nts_map_set(m, str("ab"), num(1));
+    put(m, str("ab"), num(1));
     NtsValue joined =
         keep(nts_concat((const NtsString *)nts_value_reference(str("a")),
                         (const NtsString *)nts_value_reference(str("b"))));
@@ -156,7 +171,7 @@ int main(void) {
    *       get is undefined for both absent and present-undefined         */
   {
     NtsMap *m = nts_map_new(NTS_KEY_ERASED);
-    nts_map_set(m, nts_value_of_undefined(), nts_value_of_undefined());
+    put(m, nts_value_of_undefined(), nts_value_of_undefined());
     check("undefined is a key", nts_map_has(m, nts_value_of_undefined()));
     check("and counts", m->header.length == 1);
     check("get cannot tell it from absent, and neither can node's",
@@ -164,8 +179,8 @@ int main(void) {
               NTS_TAG_UNDEFINED);
     check("an absent key is still absent", !nts_map_has(m, num(1)));
     /* A heterogeneous table: the number 3 and the string "3" are two keys. */
-    nts_map_set(m, num(3), num(100));
-    nts_map_set(m, str("3"), num(200));
+    put(m, num(3), num(100));
+    put(m, str("3"), num(200));
     check("a number and its spelling are different keys",
           m->header.length == 3 &&
               nts_value_number(nts_map_get(m, num(3))) == 100.0 &&
@@ -180,7 +195,7 @@ int main(void) {
     NtsMap *s = nts_set_new(NTS_KEY_NUMBER);
     const double vs[] = {3, 1, 3, 2, 1};
     for (int i = 0; i < 5; i++) {
-      nts_set_add(s, num(vs[i]));
+      add(s, num(vs[i]));
     }
     check("adding a present value does not add an entry",
           s->header.length == 3);
@@ -201,7 +216,7 @@ int main(void) {
   {
     NtsMap *m = nts_map_new(NTS_KEY_NUMBER);
     for (int i = 0; i < 1000; i++) {
-      nts_map_set(m, num(i), num(i * 2));
+      put(m, num(i), num(i * 2));
     }
     check("1,000 insertions all present", m->header.length == 1000);
     bool ordered = true, found = true;
@@ -221,7 +236,7 @@ int main(void) {
     }
     check("size after deleting 900", m->header.length == 100);
     for (int i = 0; i < 900; i++) {
-      nts_map_set(m, num(i), num(i));
+      put(m, num(i), num(i));
     }
     check("reinserting 900 restores the size", m->header.length == 1000);
     check("and the table did not grow unboundedly", m->capacity <= 4096u);
@@ -233,8 +248,8 @@ int main(void) {
     NtsString *shared = nts_string_from_utf8("shared", 6);
     uintptr_t before = shared->reserved;
     NtsMap *m = nts_map_new(NTS_KEY_STRING);
-    nts_map_set(m, nts_value_of_reference((NtsHeader *)shared, NTS_TAG_STRING),
-                nts_value_of_reference((NtsHeader *)shared, NTS_TAG_STRING));
+    put(m, nts_value_of_reference((NtsHeader *)shared, NTS_TAG_STRING),
+        nts_value_of_reference((NtsHeader *)shared, NTS_TAG_STRING));
     check("a map retains its key and its value",
           shared->reserved == before + 2);
     nts_map_delete(m,
@@ -247,13 +262,61 @@ int main(void) {
     NtsString *held = nts_string_from_utf8("held", 4);
     uintptr_t before = held->reserved;
     NtsMap *m = nts_map_new(NTS_KEY_STRING);
-    nts_map_set(m, str("k"),
-                nts_value_of_reference((NtsHeader *)held, NTS_TAG_STRING));
+    put(m, str("k"), nts_value_of_reference((NtsHeader *)held, NTS_TAG_STRING));
     check("a value is retained while the map lives",
           held->reserved == before + 1);
     nts_release(&m->header);
+    /* Collected, not merely released. A table that can hold references is a
+     * cycle candidate, so a release that leaves it above zero buffers it -- and
+     * `nts_release` says what happens next: an object that reaches zero while
+     * buffered is left for the collector, because freeing it would leave the
+     * buffer pointing at memory that is gone. Compiled code reaches the same
+     * point at its checkpoint, and a test that measures without collecting is
+     * measuring the buffer rather than the program. */
+    nts_collect_cycles();
     check("and released when the map dies", held->reserved == before);
     nts_release(held);
+  }
+
+  /* --- what a reader hands back ------------------------------------------
+   *
+   * A parameter is borrowed and a call's result is owned, so a reference
+   * coming *out* of the table is the caller's and the table's both. Returning
+   * the slot unchanged handed out a count nobody had taken, and compiled code
+   * released it: reading one key five times released the value five times
+   * while the table still held it. Under NoGC nothing is freed, so the whole
+   * of it was invisible until the differential ran a `Map<string, string>`. */
+  {
+    NtsString *value = nts_string_from_utf8("read-back", 9);
+    uintptr_t before = value->reserved;
+    NtsMap *m = nts_map_new(NTS_KEY_STRING);
+    put(m, str("r"),
+        nts_value_of_reference((NtsHeader *)value, NTS_TAG_STRING));
+    check("a stored value is the table's", value->reserved == before + 1);
+
+    NtsValue got = nts_map_get(m, str("r"));
+    check("and `get` hands out one of the caller's",
+          value->reserved == before + 2);
+    nts_release(nts_value_reference(got));
+
+    NtsValue walked = nts_map_value_at(m, 0);
+    check("as does a cursor read", value->reserved == before + 2);
+    nts_release(nts_value_reference(walked));
+
+    check("an absent key hands back nothing to give up",
+          nts_value_tag(nts_map_get(m, str("nope"))) == NTS_TAG_UNDEFINED);
+
+    /* And `set` returns the table, which is also the caller's. */
+    NtsMap *again = nts_map_set(m, str("s"), nts_value_of_number(1));
+    check("`set` hands back the table as the caller's",
+          again == m && m->header.reserved == 2);
+    nts_release(&again->header);
+
+    nts_release(&m->header);
+    nts_collect_cycles();
+    check("and the value is given up with the table",
+          value->reserved == before);
+    nts_release(value);
   }
 
   /* Every allocation above is gone, including the three side arrays each

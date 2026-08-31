@@ -1649,11 +1649,73 @@ fn evaluation_order(snapshot: &SemanticSnapshot) -> (Vec<usize>, Vec<Vec<usize>>
 /// as one function. Separate from `lower` because losing it has a consequence
 /// worth stating at length, and because it is the one lowering that is about
 /// the program rather than about a declaration in it.
+/// Find the declarations whose initializer cannot lower, and record them on the
+/// module so that reading one refuses.
+///
+/// Probed against a `Shared` built from the module as it stands and then folded
+/// back into it. Two of them and not one, because the second has to carry the
+/// answer the first was built to find, and this runs before any function is
+/// lowered so that the answer reaches them.
+fn mark_refused_initializers(
+    snapshot: &SemanticSnapshot,
+    module: &mut ModuleScope,
+    hierarchy: &Hierarchy,
+    closures: &[ClosureInfo],
+    lowered: &mut Lowered,
+) -> rustc_hash::FxHashSet<u32> {
+    let probing = Shared::whole_program(snapshot, module, hierarchy, closures);
+    let refused = refused_initializers(snapshot, &probing, lowered);
+    drop(probing);
+    for symbol in &refused {
+        module.unsupported.entry(*symbol).or_insert_with(|| {
+            "a module-scope variable whose initializer was refused above".to_owned()
+        });
+    }
+    refused
+}
+
+/// Which module-scope declarations have an initializer that cannot lower.
+///
+/// A module-scope declaration whose initializer cannot lower has to be refused
+/// *by itself*. It used to be, because it was never part of module evaluation;
+/// now that it is, one unrepresentable declaration would take the whole
+/// initializer with it -- every other module's evaluation included -- and `url`
+/// has one, so this is not hypothetical. Trying it apart costs lowering these
+/// expressions twice and buys a refusal that names the declaration rather than
+/// the program.
+///
+/// Apart is also *equivalent*: a module-scope initializer reads globals and
+/// constants, never a local, so it lowers the same alone as in sequence.
+///
+/// Asked *before* any function is lowered, which is the half that was missing.
+/// The initializer was dropped and the variable kept, so every function that
+/// read it was emitted against a global nothing had written -- a `let rendered:
+/// string = String(source)` whose conversion is refused left `rendered` a null
+/// pointer, and `rendered.length` was compiled and run. The refusal was
+/// printed, the program was produced, and the harness called it agreed on
+/// every case because every case had stopped.
+fn refused_initializers(
+    snapshot: &SemanticSnapshot,
+    shared: &Shared,
+    lowered: &mut Lowered,
+) -> rustc_hash::FxHashSet<u32> {
+    let mut refused = rustc_hash::FxHashSet::default();
+    for (symbol, initializer) in &shared.module.deferred {
+        let mut probe = shared.builder(snapshot, Substitution::default(), String::new());
+        if let Err(diagnostic) = probe.lower_expression(*initializer) {
+            lowered.diagnostics.push(diagnostic);
+            refused.insert(*symbol);
+        }
+    }
+    refused
+}
+
 fn lower_module_initializer(
     snapshot: &SemanticSnapshot,
     shared: &Shared,
     lowered: &mut Lowered,
     wanted: &mut std::collections::BTreeSet<usize>,
+    refused: &rustc_hash::FxHashSet<u32>,
 ) {
     // Module-level statements. Nothing above walks them: the loop finds
     // declarations, and `total = bump(41)` is not one -- so it was dropped, and
@@ -1662,27 +1724,6 @@ fn lower_module_initializer(
     // joins the worklist below rather than missing it.
     let (initializer, refusals) = module_statements(snapshot);
     lowered.diagnostics.extend(refusals);
-
-    // Each deferred initializer, tried in a builder of its own first.
-    //
-    // A module-scope declaration whose initializer cannot lower has to be
-    // refused *by itself*. It used to be, because it was never part of module
-    // evaluation; now that it is, one unrepresentable declaration would take
-    // the whole initializer with it -- every other module's evaluation
-    // included -- and `url` has one, so this is not hypothetical. Trying it
-    // apart costs lowering these expressions twice and buys a refusal that
-    // names the declaration rather than the program.
-    //
-    // Apart is also *equivalent*: a module-scope initializer reads globals and
-    // constants, never a local, so it lowers the same alone as in sequence.
-    let mut refused: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
-    for (symbol, initializer) in &shared.module.deferred {
-        let mut probe = shared.builder(snapshot, Substitution::default(), String::new());
-        if let Err(diagnostic) = probe.lower_expression(*initializer) {
-            lowered.diagnostics.push(diagnostic);
-            refused.insert(*symbol);
-        }
-    }
 
     if let Some((file, mut statements)) = initializer {
         // And the same for whole statements, for the same reason at a larger
@@ -1707,7 +1748,7 @@ fn lower_module_initializer(
         statements.retain(|statement| {
             let mut probe = shared.builder(snapshot, Substitution::default(), String::new());
             let attempt = if probe.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
-                probe.lower_module_binding(*statement, &refused)
+                probe.lower_module_binding(*statement, refused)
             } else {
                 probe.lower_statement(*statement)
             };
@@ -1740,7 +1781,7 @@ fn lower_module_initializer(
         }
 
         let mut builder = shared.builder(snapshot, Substitution::default(), String::new());
-        match builder.lower_module_init(file, &statements, &refused) {
+        match builder.lower_module_init(file, &statements, refused) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => {
                 // The consequence, said out loud. One refused statement loses
@@ -1775,7 +1816,7 @@ fn lower_module_initializer(
 #[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
-    let module = collect_module_scope(snapshot);
+    let mut module = collect_module_scope(snapshot);
     lowered.diagnostics.extend(module.refusals.iter().cloned());
     let closures = collect_closures(snapshot);
     let hierarchy = collect_hierarchy(snapshot, &closures);
@@ -1784,6 +1825,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
     let generic = generic_classes(snapshot);
+    let refused = mark_refused_initializers(snapshot, &mut module, &hierarchy, &closures, &mut lowered);
     let shared = Shared::whole_program(snapshot, &module, &hierarchy, &closures);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -1887,7 +1929,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         }
     }
 
-    lower_module_initializer(snapshot, &shared, &mut lowered, &mut wanted);
+    lower_module_initializer(snapshot, &shared, &mut lowered, &mut wanted, &refused);
 
     // Each closure something allocated, and each as a function of its own.
     // Nothing about it depends on the function that allocates it -- that is the
@@ -4393,6 +4435,26 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(
                     id,
                     "an erased value where a concrete representation is wanted",
+                ));
+            }
+            // Two managed types is an upcast, which base-first layout makes a
+            // no-op pointer cast -- the verifier accepts it for that reason,
+            // and the typechecker already decided it was legal. A managed value
+            // where a scalar is wanted, or a scalar where a reference is, is
+            // not a conversion at all, and passing it through is what put a
+            // `bool` on a block edge declared as an object pointer.
+            //
+            // `||` is where it comes from. `a || b || (typeof f === "function")`
+            // has an object on one arm and a boolean on another, and the join
+            // takes the whole expression's type -- so one arm agrees with it and
+            // the other is handed over unchanged. It reached the verifier as
+            // `EdgeType { expected: Managed(Object(606)), found: Bool }` and
+            // nothing before the verifier said a word, because this line was
+            // the last one and it said yes to everything left.
+            if have.is_managed() != want.is_managed() {
+                return Err(self.unsupported(
+                    id,
+                    &format!("a value of type {have:?} where {want:?} is wanted"),
                 ));
             }
             return Ok(value);
@@ -8687,6 +8749,16 @@ impl<'a> FuncBuilder<'a> {
             // called them unrepresentable instead, which cost four functions in
             // the node profile to the cascade that followed.
             .or_else(|| self.expecting.clone())
+            // And where nothing is expecting it, what its *position* says --
+            // the same question `null` asks, and the same answer. `expecting`
+            // is set by whatever is lowering the enclosing expression, which a
+            // class field's initializer has none of: `#calls: TrackedCall[] =
+            // []` and `this.#calls = []` were both refused as unrepresentable
+            // while `const calls: TrackedCall[] = []` was not. Eighteen sites,
+            // and `xs: T[] = []` is how a class declares a list.
+            //
+            // Last, so this can only decide what was previously refused.
+            .or_else(|| self.contextual_type(id, 0))
             .ok_or_else(|| self.unrepresentable(id, "an array literal"))?;
         // `[a, b]` where the slot is a tuple. Written the same way as an array
         // and meaning something else: a fixed number of slots of their own
@@ -11419,6 +11491,19 @@ impl<'a> FuncBuilder<'a> {
                     .and_then(|value| self.as_string(*argument, value)),
             );
         }
+        // `Boolean(x)` is `ToBoolean`, and `ToBoolean` is the test `if (x)`
+        // already performs -- so it is that operation rather than a conversion
+        // of its own, and it inherits whatever the truthiness rule already
+        // knows about each representation. Nineteen sites in the profile, every
+        // one of them turning an optional or an erased value into a flag to
+        // store.
+        if name == "Boolean" {
+            let value = match self.lower_expression(*argument) {
+                Ok(value) => value,
+                Err(problem) => return Some(Err(problem)),
+            };
+            return Some(Ok(self.truthy(id, value)));
+        }
         // `Number(x)`, the mirror of it and a much smaller job: the identity on
         // a number, and `ToNumber` on a boolean, which the specification gives
         // as 1 and 0. On a string it is a parse -- the same parse `parseFloat`
@@ -12735,15 +12820,20 @@ impl<'a> FuncBuilder<'a> {
         if let Some(constant) = self.module.constants.get(&symbol.0) {
             return Ok(self.push(OpKind::ConstFloat(*constant), HirType::NUMBER, origin));
         }
+        // Declared at module scope and not usable. Saying which is worth more
+        // than "a name declared outside this function", and it is only said for
+        // a name something actually reads.
+        //
+        // Asked *before* the global slot, because a variable can have both: a
+        // representable type, so a slot exists, and an initializer that was
+        // refused, so nothing ever writes it. Reading the slot would answer
+        // with the zero it still holds.
+        if let Some(reason) = self.module.unsupported.get(&symbol.0) {
+            return Err(self.unsupported(id, reason));
+        }
         if let Some(global) = self.module.variables.get(&symbol.0) {
             let ty = self.module.types[*global as usize].clone();
             return Ok(self.push(OpKind::GlobalGet(*global), ty, origin));
-        }
-        // Declared at module scope and not representable. Saying which is worth
-        // more than "a name declared outside this function", and it is only said
-        // for a name something actually reads.
-        if let Some(reason) = self.module.unsupported.get(&symbol.0) {
-            return Err(self.unsupported(id, reason));
         }
         // A named function used as a value. One static instance per
         // declaration, so two mentions of it are the same object.
