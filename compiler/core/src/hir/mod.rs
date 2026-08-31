@@ -45,6 +45,7 @@ pub mod unerase;
 pub mod lower;
 pub mod monomorphize;
 pub mod rc;
+pub mod runtime;
 pub mod reachable;
 pub mod signatures;
 pub mod simplify;

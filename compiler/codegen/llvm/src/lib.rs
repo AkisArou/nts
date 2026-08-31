@@ -618,6 +618,49 @@ const ALWAYS_DECLARED: &[&str] = &[
     "nts_value_strict_eq",
 ];
 
+/// The frame bound on a call whose result the escape analysis kept off the heap.
+///
+/// `benches/substrings` is a parser's shape -- one `substring` per word -- and
+/// without this the second backend allocated for every token while the first
+/// allocated for none. It ran 2.25x slower for exactly that reason.
+fn frame_units(func: &Func, value: ValueId) -> Option<u32> {
+    match &func.values[value.0 as usize].kind {
+        OpKind::Call {
+            frame: Some(units), ..
+        } => Some(*units),
+        _ => None,
+    }
+}
+
+/// Stack storage for a string the escape analysis kept out of the heap.
+///
+/// `NTS_FRAME_STRING(units)`: a header and `units + 1` code units, which is a
+/// *bound* rather than a length -- what the compiler knows is that a slice
+/// cannot exceed the string it came from, and how long it actually is only
+/// running finds out.
+fn frame_storage(out: &str, units: u32) -> String {
+    let bytes = u64::from(nts_codegen_common::layout::HEADER.size) + 2 * (u64::from(units) + 1);
+    format!(
+        "{out}.frame = alloca i8, i64 {bytes}, align {}",
+        nts_codegen_common::layout::POINTER
+    )
+}
+
+/// The name of a helper's frame-placed form.
+///
+/// `nts_str_slice_into` is a real function; `nts_str_substring_into` is a
+/// `static inline` fast path with a linkable companion beside it, the same
+/// arrangement `nts_to_int32_fn` has. Preferring the plain `_into` and falling
+/// back to `_into_fn` means the fast one is used wherever it is linkable.
+fn into_form(target: &str) -> String {
+    let into = format!("{target}_into");
+    if signatures::signature(&into).is_some() {
+        into
+    } else {
+        format!("{into}_fn")
+    }
+}
+
 /// One `declare` line for a runtime helper, from the generated table.
 fn declaration(name: &str) -> Option<String> {
     let known = signatures::signature(name)?;
@@ -653,18 +696,26 @@ fn externals(program: &Program) -> Vec<String> {
         for op in &func.values {
             let OpKind::Call {
                 callee: Callee::External(target),
+                frame,
                 ..
             } = &op.kind
             else {
                 continue;
             };
-            if seen.iter().any(|name| name == target) {
+            // A frame-placed call goes to the `_into` form, so that is the name
+            // that has to be declared -- not the one the operation carries.
+            let target = if frame.is_some() {
+                into_form(target)
+            } else {
+                target.clone()
+            };
+            if seen.contains(&target) {
                 continue;
             }
-            let Some(line) = declaration(target) else {
+            let Some(line) = declaration(&target) else {
                 continue;
             };
-            seen.push(target.clone());
+            seen.push(target);
             lines.push(line);
         }
     }
@@ -1464,6 +1515,62 @@ fn tagging(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic>
     })
 }
 
+/// Every argument to a call, at the type the callee declares.
+///
+/// Two things happen here that C does silently. An erased argument becomes
+/// *two* scalars, because that is how the platform passes a sixteen-byte
+/// struct. And an argument whose type is not the one the *runtime* declares is
+/// converted -- C does that at the call and says nothing, which is how
+/// `nts_tag_name(uint32_t)` came to be handed a double.
+///
+/// Only the runtime needs the second. A call inside this program is checked by
+/// `verify` to match the parameter it fills, so there is nothing left to
+/// decide; the runtime's signatures are C's and fixed, and adapting to them is
+/// not a decision either backend gets to make differently.
+fn arguments(
+    func: &Func,
+    out: &str,
+    args: &[ValueId],
+    before: &mut Vec<String>,
+) -> Result<Vec<String>, Diagnostic> {
+    let mut rendered: Vec<String> = Vec::new();
+    for arg in args {
+        let arg_ty = &func.values[arg.0 as usize].ty;
+        // Two scalars, because that is how the platform passes a
+        // sixteen-byte struct and how clang emits the same call.
+        if *arg_ty == HirType::Erased {
+            let tag = format!("{}.a{}", out, arg.0);
+            let bits = format!("{}.b{}", out, arg.0);
+            before.push(format!(
+                "{tag} = extractvalue {ERASED_TYPE} {}, 0",
+                name(*arg)
+            ));
+            before.push(format!(
+                "{bits} = extractvalue {ERASED_TYPE} {}, 1",
+                name(*arg)
+            ));
+            rendered.push(format!("i32 {tag}"));
+            rendered.push(format!("i64 {bits}"));
+            continue;
+        }
+        let ty = ty_of(arg_ty, func)?;
+        // What the callee actually declares. C converts at the call and
+        // says nothing; here the conversion has to be written down,
+        // which is the better of the two.
+        //
+        // The runtime's index is into `rendered` because an erased
+        // parameter is two entries there and one here; our own
+        // functions carry one parameter per argument.
+        // No conversion. `hir::runtime` gives the middle end the C runtime's
+        // declared types -- with the signedness the LLVM table cannot carry,
+        // because `i32` is both `int32_t` and `uint32_t` and the difference is
+        // `fptosi` against `fptoui` -- so an argument arrives already at the
+        // type the callee declares, for both backends, from one place.
+        rendered.push(format!("{ty} {}{}", extension(arg_ty), name(*arg)));
+    }
+    Ok(rendered)
+}
+
 /// A call, direct or into the runtime.
 ///
 /// Two things happen here that C does silently. An erased argument becomes
@@ -1485,54 +1592,29 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
                     return Err(refuse(func, "a dispatched call, which needs a method table"));
                 }
             };
+            let framed = frame_units(func, value);
+            // The `_into` form of the same helper, handed the storage above.
+            // `nts_str_substring_into` is `static inline`, so what this calls
+            // is the linkable companion beside it -- the same distinction
+            // `nts_to_int32_fn` exists for.
+            let called = if framed.is_some() {
+                into_form(target)
+            } else {
+                target.clone()
+            };
+            if framed.is_some() && signatures::signature(&called).is_none() {
+                return Err(refuse(
+                    func,
+                    &format!("a frame-placed {target}, which has no linkable `_into` form"),
+                ));
+            }
             let mut rendered = Vec::new();
             let mut before: Vec<String> = Vec::new();
-            for arg in args {
-                let arg_ty = &func.values[arg.0 as usize].ty;
-                // Two scalars, because that is how the platform passes a
-                // sixteen-byte struct and how clang emits the same call.
-                if *arg_ty == HirType::Erased {
-                    let tag = format!("{}.a{}", out, arg.0);
-                    let bits = format!("{}.b{}", out, arg.0);
-                    before.push(format!(
-                        "{tag} = extractvalue {ERASED_TYPE} {}, 0",
-                        name(*arg)
-                    ));
-                    before.push(format!(
-                        "{bits} = extractvalue {ERASED_TYPE} {}, 1",
-                        name(*arg)
-                    ));
-                    rendered.push(format!("i32 {tag}"));
-                    rendered.push(format!("i64 {bits}"));
-                    continue;
-                }
-                let ty = ty_of(arg_ty, func)?;
-                // What the callee actually declares. C converts at the call and
-                // says nothing; here the conversion has to be written down,
-                // which is the better of the two.
-                //
-                // The runtime's index is into `rendered` because an erased
-                // parameter is two entries there and one here; our own
-                // functions carry one parameter per argument.
-                let wanted = match callee {
-                    Callee::External(target) => signatures::signature(target)
-                        .and_then(|known| known.params.get(rendered.len()))
-                        .map(|spec| spec.split_whitespace().next().unwrap_or(spec)),
-                    // Nothing for a call inside this program: `verify` requires
-                    // an argument to match the parameter it fills, so there is
-                    // no conversion left to make. Only the runtime, whose
-                    // signatures are C's and not ours, still needs one.
-                    _ => None,
-                };
-                match wanted {
-                    Some(target_ty) if target_ty != ty => {
-                        let at = format!("{out}.c{}", arg.0);
-                        before.push(converted(&at, ty, target_ty, &name(*arg), func)?);
-                        rendered.push(format!("{target_ty} {at}"));
-                    }
-                    _ => rendered.push(format!("{ty} {}{}", extension(arg_ty), name(*arg))),
-                }
+            if let Some(units) = framed {
+                before.push(frame_storage(&out, units));
+                rendered.push(format!("ptr {out}.frame"));
             }
+            rendered.extend(arguments(func, &out, args, &mut before)?);
             // A helper the table does not carry is one this backend cannot
             // call. `nts_to_uint8` is `static inline` in the header, so there
             // is no symbol to link against and no signature to read -- and
@@ -1556,16 +1638,14 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
             // The type the *callee* returns, which is not always the type the
             // rest of the function wants: C converts a `double` result into an
             // `int64_t` slot without a word, and the op carries the slot's type.
-            let declared = match callee {
-                Callee::External(target) => signatures::signature(target)
-                    .map(|known| known.returns.split_whitespace().last().unwrap_or(known.returns)),
-                _ => None,
-            };
-            let call_returns = declared.unwrap_or(returns);
+            // The type the call is *written* at is the type the operation
+            // carries: `hir::runtime` reconciled it with what the runtime
+            // declares, the same way it did the arguments.
+            let call_returns = returns;
             let call = format!(
                 "call {}{call_returns} {}({})",
                 extension(&op.ty),
-                symbol(target),
+                symbol(&called),
                 rendered.join(", ")
             );
             let call = if returns == "void" {

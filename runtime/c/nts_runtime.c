@@ -1663,6 +1663,14 @@ uint32_t nts_index_fn(const NtsArray *array, double index) {
   return nts_index(array, index);
 }
 
+/* The frame-placed substring, likewise. Under `-flto` this is inlined and the
+ * fast path costs a backend that cannot read the header nothing; without it,
+ * one call -- still far cheaper than the allocation it replaces. */
+NtsString *nts_str_substring_into_fn(NtsHeader *into, const NtsString *s,
+                                     double from, double to) {
+  return nts_str_substring_into(into, s, from, to);
+}
+
 /* Reading a code unit, and the truthiness of a string.
  *
  * Both are `static inline` in the header for C's benefit and unreadable to any

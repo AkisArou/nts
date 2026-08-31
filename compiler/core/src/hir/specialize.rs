@@ -463,6 +463,26 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
                     let rhs = convert(func, &mut rewritten, &mut count, rhs, &joint);
                     Some(OpKind::Binary { op: bin, lhs, rhs })
                 }
+                OpKind::Call {
+                    callee: super::Callee::External(target),
+                    args,
+                    frame,
+                } => runtime_arguments(func, &mut rewritten, &mut count, &target, &args, frame),
+                // A number goes into an erased value as a `double`, because
+                // that is what the payload holds -- the union's first member,
+                // and the thing every reader of a `NTS_TAG_NUMBER` takes back
+                // out. An integer reaching here was converted by whichever
+                // backend was looking: C at the call to
+                // `nts_value_of_number(double)`, LLVM with an explicit
+                // `sitofp` in `payload_from`. It is one fact about the tag
+                // contract, so it belongs where the contract is.
+                OpKind::Erase { value: erased }
+                    if matches!(func.values[erased.0 as usize].ty, HirType::Int { .. }) =>
+                {
+                    let want = HirType::Float { bits: 64 };
+                    let erased = convert(func, &mut rewritten, &mut count, erased, &want);
+                    Some(OpKind::Erase { value: erased })
+                }
                 OpKind::ArraySet {
                     array,
                     index,
@@ -526,6 +546,42 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
 
     func.blocks = blocks;
     count + reconcile_edges(func) + reconcile_call_results(func, returns)
+}
+
+/// The arguments to a C runtime call, at the types C declares.
+///
+/// The signature is external and fixed -- `nts_array_new` takes a `double`
+/// length whatever specialization narrowed ours to -- so the conversion is
+/// forced rather than chosen. Forced or not, writing it in each backend is
+/// writing it twice, and the two can be written differently.
+fn runtime_arguments(
+    func: &mut Func,
+    rewritten: &mut Vec<ValueId>,
+    count: &mut usize,
+    target: &str,
+    args: &[ValueId],
+    frame: Option<u32>,
+) -> Option<OpKind> {
+    // A frame-placed call goes to the `_into` form, whose first parameter is
+    // the storage, so every later index shifts by one.
+    let (name, shift) = match frame {
+        Some(_) => (super::runtime::into_form(target), 1),
+        None => (target.to_owned(), 0),
+    };
+    let declared = super::runtime::parameters(&name)?;
+    let args = args
+        .iter()
+        .enumerate()
+        .map(|(at, arg)| match declared.get(at + shift) {
+            Some(Some(want)) => convert(func, rewritten, count, *arg, want),
+            _ => *arg,
+        })
+        .collect();
+    Some(OpKind::Call {
+        callee: super::Callee::External(target.to_owned()),
+        args,
+        frame,
+    })
 }
 
 /// The one type two operands of an operator meet at.
@@ -593,14 +649,28 @@ fn reconcile_call_results<S: std::hash::BuildHasher>(
         .iter()
         .enumerate()
         .filter_map(|(at, op)| {
-            let OpKind::Call {
-                callee: super::Callee::Direct(name),
-                ..
-            } = &op.kind
-            else {
-                return None;
+            let declared = match &op.kind {
+                OpKind::Call {
+                    callee: super::Callee::Direct(name),
+                    ..
+                } => returns.get(name)?.clone(),
+                // The runtime's return, for the same reason as its parameters:
+                // `nts_math_pow` returns a `double` into an operation carrying
+                // `bigint`, and C converted that at the assignment silently.
+                OpKind::Call {
+                    callee: super::Callee::External(name),
+                    frame,
+                    ..
+                } => {
+                    let name = match frame {
+                        Some(_) => super::runtime::into_form(name),
+                        None => name.clone(),
+                    };
+                    super::runtime::result(&name)?.clone()
+                }
+                _ => return None,
             };
-            let declared = returns.get(name)?;
+            let declared = &declared;
             // Two references are two pointers however their types relate, so
             // there is nothing between them to convert -- and manufacturing a
             // value for the upcast would give one object two SSA names, which

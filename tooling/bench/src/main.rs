@@ -522,9 +522,16 @@ fn emit(
 
     if llvm {
         let emitted = nts_codegen_llvm::emit(&prepared.program);
-        // Not printed. The second backend refuses whole categories of program
-        // and says so once per function; twenty cases' worth of that would bury
-        // the table it is printed above.
+        // Silent by default: the second backend refuses whole categories of
+        // program and says so once per function, and twenty cases' worth of
+        // that would bury the table printed above it. `NTS_DECLINES=1` asks,
+        // because a refusal nothing prints is how a *regression* looks exactly
+        // like a feature that was never built.
+        if std::env::var_os("NTS_DECLINES").is_some() {
+            for diagnostic in &emitted.diagnostics {
+                eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
+            }
+        }
         return Ok(emitted.text);
     }
     let emitted = nts_codegen_c::emit(&prepared.program);

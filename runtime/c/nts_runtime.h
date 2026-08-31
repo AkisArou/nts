@@ -709,6 +709,16 @@ int32_t nts_to_int32_fn(double x);
  * are still not pure. */
 uint32_t nts_check_fn(const NtsArray *array, uint32_t index);
 uint32_t nts_index_fn(const NtsArray *array, double index);
+/* `nts_str_substring_into` as a linkable symbol, for the same reason.
+ *
+ * The inline is a fast path -- a narrow string with whole, in-range bounds is a
+ * `memcpy` into storage the caller already has, with no call at all -- and a
+ * backend that cannot read the header got neither the fast path nor the frame:
+ * it called the allocating `nts_str_substring` once per word. That is a heap
+ * allocation for every token a parser produces, and it made
+ * `benches/substrings` 2.25x slower through LLVM than through C. */
+NtsString *nts_str_substring_into_fn(NtsHeader *into, const NtsString *s,
+                                     double from, double to);
 NTS_READS_ONLY uint16_t nts_unit_fn(const NtsString *s, uint32_t at);
 NTS_READS_ONLY double nts_str_char_code_at_fn(const NtsString *s, double at);
 /* A string is falsy when it is absent *or* empty -- a null test and a length

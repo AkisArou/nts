@@ -1582,10 +1582,26 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
     })
 }
 
+/// One function's signature, used for both its definition and its prototype.
+///
+/// `static` unless exported, which the globals next door have always been and
+/// functions never were. Same argument: a name a program keeps to itself should
+/// not become part of the artifact's ABI, and the linker can drop one nothing
+/// reads.
+///
+/// Not a speed change, and it was pursued as one. `accumulate` runs faster
+/// through the LLVM backend, which emits `internal` for the same function, so
+/// external linkage looked like the reason. It is not -- `tooling/bench` builds
+/// with `-flto`, where clang internalizes what nothing outside needs, so this
+/// was already happening. Measured before and after: 1.81us and 1.82us.
 fn signature(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     let returns = c_type_of(program, &func.return_type, &func.origin)?;
+    let visibility = if func.exported { "" } else { "static " };
     if func.params.is_empty() {
-        return Ok(format!("{returns} {}(void)", c_identifier(&func.name)));
+        return Ok(format!(
+            "{visibility}{returns} {}(void)",
+            c_identifier(&func.name)
+        ));
     }
     let mut params = Vec::new();
     for (index, param) in func.params.iter().enumerate() {
@@ -1596,7 +1612,7 @@ fn signature(program: &Program, func: &Func) -> Result<String, Diagnostic> {
         ));
     }
     Ok(format!(
-        "{returns} {}({})",
+        "{visibility}{returns} {}({})",
         c_identifier(&func.name),
         params.join(", ")
     ))
@@ -1821,7 +1837,7 @@ fn binary_text(
     // 128 bits wide: narrowing it to `int32_t` or returning it through a
     // `double` would each throw away most of it. So it counts as integral here,
     // and the cast below leaves it alone.
-    let integral = matches!(op.ty, HirType::Int { .. } | HirType::BigInt);
+    let integral = holds_an_integer(&op.ty);
     // Cast decided per *operand*, from its own type. Deciding it from the
     // result's would emit `v14 | v15` with `v15` a double, which is not C.
     let cast = |value: ValueId| {
@@ -1862,7 +1878,17 @@ fn binary_text(
         _ => None,
     };
     if let Some(helper) = helper {
-        return wrap(format!("{helper}({}, {})", cast(lhs), cast(rhs)));
+        // Cast to the slot the result goes in. `nts_ushr` answers a `uint32_t`
+        // -- `>>>` is defined to -- and the slot is an `int32_t`, so C narrowed
+        // it silently. That is safe only because a shift by one or more clears
+        // the top bit, which is an argument nobody had written down; `x >>> 0`
+        // is the case it does not cover. Saying it makes the one place that has
+        // to think about it visible.
+        // A shift's result is a scalar, so `c_type` answers it without the
+        // program; if it somehow could not, the unannotated call is what this
+        // emitted before and is no worse.
+        let slot = c_type(&op.ty, &op.origin).unwrap_or("");
+        return wrap(format!("({slot}){helper}({}, {})", cast(lhs), cast(rhs)));
     }
 
     // A comparison against the absent reference is a comparison of addresses,
@@ -1959,6 +1985,21 @@ fn binary_text(
         "{name} = {} {operator} {};",
         value_name(lhs),
         value_name(rhs)
+    )
+}
+
+/// Whether a bitwise result can be written without going through a `double`.
+///
+/// `Bool` counts. `a || b` lowers to a bitwise or of two comparisons, and
+/// leaving it out sent the result through a `double` on its way into a `bool`
+/// -- `(double)((int32_t)v31 | (int32_t)v33)` in a condition, so a float
+/// compare where an integer test would do. Twenty-eight of those across the
+/// examples, found by compiling the generated C with `-Wconversion`, which is a
+/// question nothing had asked it before.
+fn holds_an_integer(ty: &HirType) -> bool {
+    matches!(
+        ty,
+        HirType::Int { .. } | HirType::BigInt | HirType::Bool
     )
 }
 
