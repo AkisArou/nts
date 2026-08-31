@@ -14,7 +14,9 @@
 
 use rustc_hash::FxHashSet;
 
-use super::{Block, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, ValueId};
+use super::{
+    BinOp, Block, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, ValueId,
+};
 
 /// A way the IR was malformed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +63,24 @@ pub enum Invalid {
         func: String,
         what: &'static str,
         expected: HirType,
+        found: HirType,
+    },
+    /// An operator was applied to an operand it cannot be applied to.
+    ///
+    /// Arithmetic, ordering and the bitwise operators all read a *machine*
+    /// value; an erased one is a tag beside a payload and has to be read out
+    /// first. The backend does not check -- it emits `a * b` on whatever it was
+    /// given, and for a `NtsValue` that is a struct in a multiplication, which
+    /// C rejects with no source location and nothing naming the operator.
+    ///
+    /// Found by making a narrowing return the erased value where the checker
+    /// had narrowed it to `never`: the branch was unreachable, so nothing ran
+    /// wrongly, and `nts hir` still reported "all of it verifies" over a
+    /// multiplication of a tagged value. `invalid HIR 0` was counting a
+    /// question nobody had asked.
+    OperandType {
+        func: String,
+        op: &'static str,
         found: HirType,
     },
     /// A jump passed a different number of arguments than the target takes.
@@ -402,7 +422,54 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
         }
     }
 
+    check_operands(func, problems);
     check_dominance(func, &reachable, problems);
+}
+
+/// An operator's operands must be things it can be applied to.
+///
+/// Only the one rule that has a case behind it: arithmetic, ordering and the
+/// bitwise operators cannot read an erased value, because the payload has to be
+/// taken out of it first. `Eq` and `Ne` are excluded deliberately -- comparing
+/// two erased values is `nts_value_strict_eq`, which is the whole point of
+/// carrying a tag -- and `Concat` takes managed strings.
+fn check_operands(func: &Func, problems: &mut Vec<Invalid>) {
+    for op in &func.values {
+        let OpKind::Binary { op: bin, lhs, rhs } = &op.kind else {
+            continue;
+        };
+        let machine = match bin {
+            BinOp::Add => "+",
+            BinOp::Sub => "-",
+            BinOp::Mul => "*",
+            BinOp::Div => "/",
+            BinOp::Rem => "%",
+            BinOp::Lt => "<",
+            BinOp::Le => "<=",
+            BinOp::Gt => ">",
+            BinOp::Ge => ">=",
+            BinOp::BitAnd => "&",
+            BinOp::BitOr => "|",
+            BinOp::BitXor => "^",
+            BinOp::Shl => "<<",
+            BinOp::Shr => ">>",
+            BinOp::UShr => ">>>",
+            BinOp::Min => "Math.min",
+            BinOp::Max => "Math.max",
+            // `Eq` and `Ne` read a tag on purpose; `Concat` takes strings.
+            BinOp::Eq | BinOp::Ne | BinOp::Concat => continue,
+        };
+        for operand in [lhs, rhs] {
+            let found = &func.values[operand.0 as usize].ty;
+            if *found == HirType::Erased {
+                problems.push(Invalid::OperandType {
+                    func: func.name.clone(),
+                    op: machine,
+                    found: found.clone(),
+                });
+            }
+        }
+    }
 }
 
 /// Every jump must supply exactly the parameters its target declares, of the

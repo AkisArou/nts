@@ -4094,6 +4094,24 @@ impl<'a> FuncBuilder<'a> {
         if want == HirType::Erased {
             return Ok(value);
         }
+        // Narrowed to an absence, which is not a payload to read. After `v =
+        // undefined` the checker types every later read of `v` as `undefined`,
+        // whose representation is `Void` -- nothing at all. The erased value
+        // already *is* that answer, tag and all, so the read stands as it is.
+        //
+        // Widening rather than narrowing, and safe for the same reason the
+        // narrowing was: an erased value describes itself. `String(v)` reads
+        // the tag and spells "undefined", which is what node does.
+        //
+        // `Never` is *not* this, and letting it through here emitted C that
+        // would not compile. Inside `if (v !== undefined)` on a `v` the checker
+        // already knows is `undefined`, the narrowed type is `never` -- the
+        // branch is unreachable, and `never` is assignable to everything, so
+        // the erased value flowed into a multiplication typed `f64` and the
+        // backend cast a struct to a double. Refused instead, by the arm below.
+        if want == HirType::Void {
+            return Ok(value);
+        }
         if !matches!(
             want,
             HirType::Float { .. }
@@ -7966,10 +7984,70 @@ impl<'a> FuncBuilder<'a> {
     /// Everything else is refused. `String(true)` is `"true"` and an object's
     /// is `toString` off the prototype chain, and neither is a conversion this
     /// compiler has.
-    fn as_string(&mut self, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+    fn as_string(&mut self, from: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
         let text = HirType::Managed(ManagedType::String);
         match self.values[value.0 as usize].ty {
+            // A `string | null` is one pointer and the null in it is not a
+            // string. Passing it through handed the concatenation a null
+            // pointer, and the program aborted on the first thing that read it
+            // -- which the differential reports as a *declined* case rather
+            // than a disagreement, so "agreed on every case" was counting only
+            // the runs that reached the end.
+            //
+            // `String(null)` is "null" and `String(undefined)` is "undefined".
+            // Which one is a property of the type, exactly as it is for `===`.
+            HirType::Managed(ManagedType::String)
+                if matches!(self.absences_of(from).as_deref(), Some([_])) =>
+            {
+                let absent = self.absences_of(from).unwrap_or_default();
+                let spelling = if absent.first() == Some(&super::tags::NULL) {
+                    "null"
+                } else {
+                    "undefined"
+                };
+                let origin = self.origin(from);
+                let when_absent =
+                    self.push(OpKind::ConstString(spelling.to_owned()), text, origin);
+                // The type is that absence and nothing else -- what the checker
+                // leaves a binding at after `v = null`. There is no branch to
+                // build, and trying to build one asked for the representation
+                // of `null`, which there is none of.
+                if self.only_absences(from) {
+                    return Ok(when_absent);
+                }
+                let Some(condition) = self.absence_of(from, value) else {
+                    return Ok(value);
+                };
+                self.lower_branching_value(
+                    from,
+                    condition,
+                    Branch::Value(when_absent),
+                    Branch::Value(value),
+                )
+            }
             HirType::Managed(ManagedType::String) => Ok(value),
+            // An erased value carries the tag that says which spelling it
+            // wants, and five of the seven tags spell themselves exactly. The
+            // other two want `toString` off a prototype chain, so the question
+            // is asked of the *type* rather than left to the tag: a union of
+            // scalars and absences converts, one that can hold an object does
+            // not, and `String(unknown)` stays refused.
+            //
+            // `String(xs.pop())` is the case that made this necessary. The
+            // checker types it `number | undefined` and there is no doubling
+            // back from that: the absent answer has to survive the conversion.
+            HirType::Erased if self.spells_itself(from) => {
+                let origin = self.origin(from);
+                Ok(self.push(
+                    OpKind::Call {
+                        callee: Callee::External("nts_value_to_string".to_owned()),
+                        args: vec![value],
+                        frame: None,
+                    },
+                    text,
+                    origin,
+                ))
+            }
             // A `bool` and a `bigint` each have an exact spelling of their
             // own: two words, and decimal with no exponent however large.
             // Neither is something a double's formatter can be handed.
@@ -7979,7 +8057,7 @@ impl<'a> FuncBuilder<'a> {
                     HirType::BigInt => "nts_bigint_to_string",
                     _ => "nts_number_to_string",
                 };
-                let origin = self.origin(id);
+                let origin = self.origin(from);
                 Ok(self.push(
                     OpKind::Call {
                         callee: Callee::External(helper.to_owned()),
@@ -7990,8 +8068,45 @@ impl<'a> FuncBuilder<'a> {
                     origin,
                 ))
             }
-            _ => Err(self.unsupported(id, "a conversion to string from this type")),
+            _ => Err(self.unsupported(from, "a conversion to string from this type")),
         }
+    }
+
+    /// Whether every member of a node's type has an exact spelling as text.
+    ///
+    /// An object's is `toString` off the prototype chain -- `"[object Object]"`
+    /// for a plain one, the joined elements for an array -- which is §13's and
+    /// does not exist here. A number, a string, a boolean, a bigint, `null` and
+    /// `undefined` each spell themselves and nothing else is consulted.
+    fn spells_itself(&self, node: NodeId) -> bool {
+        let Some(ty) = self.snapshot.node_types.get(&node) else {
+            return false;
+        };
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return false;
+        };
+        let members: Vec<TypeId> = match &record.kind {
+            TypeKind::Union(members) => members.clone(),
+            _ => vec![*ty],
+        };
+        members.iter().all(|member| {
+            self.snapshot
+                .types
+                .get(member.0 as usize)
+                .is_some_and(|record| {
+                    matches!(
+                        record.kind,
+                        TypeKind::Number
+                            | TypeKind::String
+                            | TypeKind::Boolean
+                            | TypeKind::BigInt
+                            | TypeKind::Null
+                            | TypeKind::Undefined
+                            | TypeKind::Void
+                            | TypeKind::Literal(_)
+                    )
+                })
+        })
     }
 
     /// Put a value into a place.
@@ -10160,8 +10275,8 @@ impl<'a> FuncBuilder<'a> {
                 let (op, current, addend) = if matches!(op, BinOp::Add) && ty.is_managed() {
                     (
                         BinOp::Concat,
-                        self.as_string(id, current)?,
-                        self.as_string(id, addend)?,
+                        self.as_string(lhs_node, current)?,
+                        self.as_string(rhs_node, addend)?,
                     )
                 } else {
                     (op, current, addend)
@@ -10780,7 +10895,7 @@ impl<'a> FuncBuilder<'a> {
         ) {
             let name = self.node(*member).text.clone().unwrap_or_default();
             if name == "toString" && arguments.is_empty() {
-                return self.as_string(id, receiver);
+                return self.as_string(*receiver_node, receiver);
             }
             return Err(self.unsupported(id, &format!("`{name}` on a number")));
         }
@@ -11301,7 +11416,7 @@ impl<'a> FuncBuilder<'a> {
         if name == "String" {
             return Some(
                 self.lower_expression(*argument)
-                    .and_then(|value| self.as_string(id, value)),
+                    .and_then(|value| self.as_string(*argument, value)),
             );
         }
         // `Number(x)`, the mirror of it and a much smaller job: the identity on
@@ -11716,13 +11831,24 @@ impl<'a> FuncBuilder<'a> {
         }
         let array = HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)));
 
+        // `pop` and `at` answer `undefined` where there is nothing there, and
+        // the checker says so: both are typed `T | undefined`, which for a
+        // number is an *erased* value. They answered NaN instead, on the
+        // written claim that "undefined is NaN for a number" -- which is not
+        // true of anything the language does with it. `String([].pop())` is
+        // "undefined" in node and was "NaN" here; `?? 0` takes the one and not
+        // the other. Where a caller has narrowed the result back to a number
+        // the double-returning helper is still the one, and costs nothing.
+        let absent_result = self.type_of(id) == Some(HirType::Erased);
+
         // (runtime function, arguments after the receiver, result)
         let (helper, arity, ty) = match name.as_str() {
             // `push` returns the new length, which is what the expression is
-            // worth in JavaScript, and `pop` returns what it removed -- NaN from
-            // an empty array, because that is what `undefined` is for a number.
+            // worth in JavaScript.
             "push" => ("nts_array_push", 1, HirType::NUMBER),
+            "pop" if absent_result => ("nts_array_pop_value", 0, HirType::Erased),
             "pop" => ("nts_array_pop", 0, HirType::NUMBER),
+            "at" if absent_result => ("nts_array_at_value", 1, HirType::Erased),
             "indexOf" => ("nts_array_index_of", 1, HirType::NUMBER),
             "lastIndexOf" => ("nts_array_last_index_of", 1, HirType::NUMBER),
             "includes" => ("nts_array_includes", 1, HirType::Bool),
@@ -12841,7 +12967,10 @@ impl<'a> FuncBuilder<'a> {
         // the backend, because the conversion is a *call* and a backend that
         // synthesized one would be deciding a semantic question.
         let (lhs, rhs) = if token == syntax::PLUS_TOKEN && ty.is_managed() {
-            (self.as_string(id, lhs)?, self.as_string(id, rhs)?)
+            (
+                self.as_string(*lhs_node, lhs)?,
+                self.as_string(*rhs_node, rhs)?,
+            )
         } else {
             (lhs, rhs)
         };
@@ -12933,9 +13062,27 @@ impl<'a> FuncBuilder<'a> {
         written: u32,
     ) -> Option<Result<ValueId, Diagnostic>> {
         let carried = self.absences_of(value)?;
-        if !(carried.is_empty() || (strict_operator(operator) && !carried.contains(&written))) {
-            return None;
-        }
+        // Three ways the type settles it, and one way it does not.
+        //
+        // A type that is an absence and *nothing else* is the case the checker
+        // hands back after `v = undefined`: every later read is typed
+        // `undefined`, so `v !== undefined` is not a test, it is `false`. It
+        // was refused, while the same comparison on the wider `number |
+        // undefined` was answered — a value the checker knew *more* about
+        // being the one that could not be compiled.
+        let equal = if self.only_absences(value) && carried.len() == 1 {
+            // `===` asks whether it is that absence; `==` accepts either,
+            // since `null == undefined`.
+            Some(!strict_operator(operator) || carried[0] == written)
+        } else if carried.is_empty() || (strict_operator(operator) && !carried.contains(&written)) {
+            // Never absent, or a pointer asked about the absence it does not
+            // carry. Both are false.
+            Some(false)
+        } else {
+            // A pointer asked about the absence it does carry: a real test.
+            None
+        };
+        let equal = equal?;
         // The answer is known; the operand is still evaluated. Folding it away
         // made `next() === undefined` skip the call to `next`, which node
         // makes -- a constant is what the *comparison* is, not what the
@@ -12944,11 +13091,35 @@ impl<'a> FuncBuilder<'a> {
             return Some(Err(diagnostic));
         }
         let origin = self.origin(id);
-        let answer = matches!(
+        let negated = matches!(
             operator,
             syntax::EXCLAMATION_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
         );
+        let answer = if negated { !equal } else { equal };
         Some(Ok(self.push(OpKind::ConstBool(answer), HirType::Bool, origin)))
+    }
+
+    /// Whether a node's type is an absence and nothing else.
+    ///
+    /// `undefined` on its own, or `null` on its own -- what the checker leaves
+    /// a binding at once it has seen the assignment that set it. Distinct from
+    /// [`Self::absences_of`] being non-empty, which only says the type *admits*
+    /// one beside something real.
+    fn only_absences(&self, node: NodeId) -> bool {
+        let Some(ty) = self.snapshot.node_types.get(&node) else {
+            return false;
+        };
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return false;
+        };
+        let members: Vec<TypeId> = match &record.kind {
+            TypeKind::Union(members) => members.clone(),
+            _ => vec![*ty],
+        };
+        !members.is_empty()
+            && members
+                .iter()
+                .all(|member| absence_of_member(self.snapshot, *member).is_some())
     }
 
     /// `v === undefined` where `v` is erased, as the tag test it is.

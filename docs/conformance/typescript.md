@@ -630,6 +630,67 @@ table read as a backlog:
   isExtensible`, and `Object.prototype`'s methods. Each needs a property map
   and a prototype chain at run time; see §13.
 
+### `pop` and `at` answered NaN for `undefined`
+
+Both are typed `T | undefined` by the checker, and for a number that is an
+erased value with a tag of its own. They returned a `double` instead, with this
+written above them:
+
+```c
+/* Popping nothing is `undefined`, which for a number is NaN. */
+```
+
+It is not. `String([].pop())` is `"undefined"` in node and was `"NaN"` here;
+`?? 0` takes the one and not the other; `=== undefined` separates them. The
+comment asserted the equivalence rather than checking it, and nothing asked
+until the sweep grew a row for an **empty** array — every array cell in it had
+three elements, so the case that distinguishes them had never run.
+
+Both now answer from the tag, and the double-returning helpers remain for
+callers who narrowed the result back to a number, which costs those nothing.
+
+An `xs.at(i)!` is the one caller that can still be wrong, and it is wrong by its
+own assertion: the `!` tells the checker the index is in range, so the payload
+is read out directly, and when the index is not in range that read gets whatever
+is in the slot. It gets NaN — the same answer the numeric helper gives — rather
+than the zero an `undefined` value otherwise carries, so a program that lied
+gets one wrong answer instead of two different ones.
+
+### `String()` of an absent pointer handed a null to the concatenation
+
+A `string | null` is one pointer, and `String()` on it returned that pointer
+unchanged. For the null that is not text at all: the program aborted on the
+first thing that read it.
+
+Which is worth recording for *how* it hid. The differential reports an aborted
+case as **declined**, separately from a disagreement, because a program that
+stopped has no answer to compare — and "agreed on every case" is printed
+alongside. Seventeen declined cases sat under a green line, and only the second
+reading of the same output found them. `String(null)` is `"null"` and
+`String(undefined)` is `"undefined"`; which one is a property of the type, and
+where the type is *nothing but* the absence there is no branch to emit at all.
+
+### The verifier accepted a multiplication of a tagged value
+
+`nts hir` said "all of it verifies" over
+
+```
+%2 = const undefined : erased
+%5 = mul %2, %4 : f64
+```
+
+which the C backend then emitted as a cast of a struct to a double. The block
+was unreachable — the checker had narrowed the operand to `never` — so nothing
+would have run wrongly, but nothing would have *compiled* either.
+
+The verifier checked calls, stores, block arguments and dominance, and never an
+ordinary operator's operands. It does now, for the one rule with a case behind
+it: arithmetic, ordering and the bitwise operators cannot read an erased value.
+`Eq` and `Ne` are excluded deliberately — comparing two erased values is what
+carrying a tag is *for*.
+
+`invalid HIR 0` had been counting a question nobody asked.
+
 ### ES2026 additions, and the oracle's ceiling
 
 The examples gate compares against node, so an addition node does not have is
@@ -655,8 +716,15 @@ Measured, not assumed — three of these rows were wrong on the first pass.
   Absent: `at`, `split`, `replace`, `trim`, `padStart`/`padEnd`, case
   conversion, `match`, and indexing (`s[0]`).
 - **`Array.prototype`**: `at fill forEach includes indexOf lastIndexOf map pop
-  push reduce reverse slice length`. Absent: `concat`, `filter`, `find`,
-  `join`, `sort`, `shift`, `unshift`, `splice`, `some`, `every`, `flat`.
+  push reduce reverse slice length`, **on an array of numbers**. Absent:
+  `concat`, `filter`, `find`, `join`, `sort`, `shift`, `unshift`, `splice`,
+  `some`, `every`, `flat` — and all of them on an array of anything else, which
+  is 22 profile sites and the clearest unblocked row left. The helpers are
+  written against `double` elements; the descriptor already carries the element
+  `size` and whether elements are references, so `slice` and `reverse` are
+  generic in it, while `indexOf` needs an equality per element kind — strings
+  compare by *value*, so `["a"].indexOf("a")` is 0 across two different string
+  objects and a pointer comparison would answer -1.
 - **Typed arrays**: the constructor from a length, indexing, `length`,
   subclassing. Absent: construction from a value, `fill set subarray slice
   indexOf`, `buffer byteLength byteOffset` — 49 refusals in the node profile,
@@ -813,7 +881,7 @@ questions:
 | | what it says | today |
 |---|---|---|
 | examples | the compiled program agrees with node, case by case | 89 of 89 |
-| sweep | a generated cross-product agrees with node, cell by cell | 7,366 cases across 254 functions |
+| sweep | a generated cross-product agrees with node, cell by cell | 8,932 cases across 308 functions |
 | corpus | arbitrary input produces no invalid IR and no C that will not compile | 49 lower cleanly; `invalid HIR` 0, `uncompilable C` 2 |
 | profile | how much of a real standard library lowers | 22 modules emit; 1,013 distinct refusal sites |
 | rc | the same examples hold nothing at exit under reference counting | 85 of 89, four named |
@@ -831,6 +899,13 @@ expression has the most concrete representation its type allows. The same
 TypeScript type reaching a **parameter** can be represented differently, and
 that is where `typeof` on a declared signature answered `"object"`. Each cell
 now runs both ways.
+
+The two measure different things, and a stretch of work can move one and not the
+other. Four wrong answers were found and fixed in a run that took the profile
+from 1,013 sites to 1,012: `typeof` on a declared signature, `pop` and `at`
+answering NaN for `undefined`, `String()` handing a null pointer to a
+concatenation, and a verifier that accepted a multiplication of a tagged value.
+None of them was a refusal, so the reach number could not see any of them.
 
 The corpus checks robustness; the profile measures reach and runs nothing, so a
 function counted there is one that compiles rather than one known to be right —

@@ -658,6 +658,10 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  * as the same double, laid out the way the specification lays it out -- which
  * is not what any `printf` conversion produces. */
 NtsString *nts_number_to_string(double x);
+/* `String(v)` on a value carrying its own tag. Exact for `undefined`, `null`,
+ * a boolean, a number and a string; every other tag is a lowering that should
+ * have refused, and it aborts rather than guessing. */
+NtsString *nts_value_to_string(NtsValue value);
 
 /* The `Number` predicates. Exactly specified, unlike most of `Math` below.
  * `Number.isNaN` is absent because it is `x != x`, which the lowering emits
@@ -715,6 +719,12 @@ double nts_math_hypot(double a, double b);
  * are not inline: every reference anyone holds stays valid. */
 double nts_array_push(NtsArray *a, double value);
 double nts_array_pop(NtsArray *a);
+/* `pop` and `at` with the `undefined` the checker already gave them. A number
+ * has no bit pattern for absence, so `T | undefined` is an erased value and
+ * these are what produce one. The doubles above answer NaN and are reached
+ * only where the result was narrowed back to a number. */
+NtsValue nts_array_pop_value(NtsArray *a);
+NTS_READS_ONLY NtsValue nts_array_at_value(const NtsArray *a, double at);
 NTS_READS_ONLY double nts_array_index_of(const NtsArray *a, double needle);
 NTS_READS_ONLY double nts_array_last_index_of(const NtsArray *a, double needle);
 NTS_READS_ONLY bool nts_array_includes(const NtsArray *a, double needle);

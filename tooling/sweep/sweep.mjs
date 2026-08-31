@@ -56,6 +56,12 @@ const ASKS = {
   undef: (v) => `(${v} === undefined ? "T" : "F") + (${v} !== undefined ? "t" : "f")`,
   loose: (v) => `(${v} == null ? "T" : "F") + (${v} != null ? "t" : "f")`,
   nullish: (v) => `String(${v} ?? "D")`,
+  // Asked of every kind rather than listed per kind: node converts everything,
+  // so every cell is either an agreement or a refusal this compiler owns and
+  // can see. It is also where a `string | null` was caught being handed to a
+  // concatenation as a null pointer -- which aborts rather than disagreeing,
+  // and an aborted case is *not* counted in "agreed on every case".
+  text: (v) => `String(${v}) + "|" + \`\${${v}}\` + "|" + ("" + ${v})`,
 };
 
 // The second product: equality *between* two erased values, over every pair of
@@ -98,6 +104,71 @@ const PLUS = [
   ["string", '(n > 0 ? "a" : "b")', "number", "n"],
   ["number", "n", "string", '(n > 0 ? "a" : "b")'],
   ["bigint", "(n > 0 ? 2n : 3n)", "bigint", "5n"],
+];
+
+// A field, per field type. A field's representation comes from the class
+// layout rather than from the value written into it, which is the decision this
+// checks -- and a field is where a value with an absence lives longest, since
+// nothing narrows it between the write and the read.
+//
+// `init` fills it, `write` replaces it, and `show` is read before and after, so
+// a layout that stored the right thing and read back the wrong one is visible
+// rather than merely present.
+const FIELDS = [
+  { id: "num", ts: "number", init: "n", write: "n + 1", show: "String(b.f)" },
+  { id: "str", ts: "string", init: '(n > 0 ? "a" : "b")', write: '"z"', show: "b.f" },
+  { id: "bool", ts: "boolean", init: "n > 0", write: "n < 0", show: "String(b.f)" },
+  { id: "big", ts: "bigint", init: "(n > 0 ? 1n : 2n)", write: "3n", show: "String(b.f)" },
+  { id: "arr", ts: "number[]", init: "[n]", write: "[n, n + 1]", show: "String(b.f.length) + String(b.f[0])" },
+  { id: "obj", ts: "{ a: number }", init: "({ a: n })", write: "({ a: n + 1 })", show: "String(b.f.a)" },
+  { id: "s_null", ts: "string | null", init: '(n > 0 ? "a" : null)', write: "null", show: "String(b.f) + String(b.f === null)" },
+  { id: "s_undef", ts: "string | undefined", init: '(n > 0 ? "a" : undefined)', write: "undefined", show: "String(b.f) + String(b.f === undefined)" },
+  { id: "n_undef", ts: "number | undefined", init: "(n > 0 ? n : undefined)", write: "undefined", show: "String(b.f) + typeof b.f" },
+  { id: "unk", ts: "unknown", init: "(n as unknown)", write: '("z" as unknown)', show: "String(b.f) + typeof b.f" },
+];
+
+// An array method, per element type. The element's representation comes from
+// the array, so a method that builds or returns elements has to agree with it
+// -- `pop` returns `T | undefined`, which is a *different* representation from
+// `T` for every scalar `T`, and that is the cell worth having.
+const ARRAY_METHODS = [
+  ["length", "String(xs.length)"],
+  // Guarded, because `xs[-1]` on an empty array is TypeScript's unsoundness
+  // rather than a cell: it is typed `number`, node answers `undefined`, and
+  // this compiler's bounds check stops the program -- which is the right
+  // answer to a promise the checker made and the value did not keep. `at(-1)`
+  // is the spelling that is defined for it, and `at_far` asks that.
+  ["index_end", 'xs.length > 0 ? String(xs[xs.length - 1]) : "empty"'],
+  ["push", "xs.push(w) + \"|\" + String(xs.length) + \"|\" + String(xs[xs.length - 1])"],
+  ["pop", "String(xs.pop()) + \"|\" + String(xs.length) + \"|\" + String(xs.pop())"],
+  ["at_far", "String(xs.at(9)) + \"|\" + String(xs.at(0)) + \"|\" + String(xs.at(-1))"],
+  ["pop_absent", "String(xs.pop() === undefined) + \"|\" + String(xs.pop() ?? -7)"],
+  ["indexof", "String(xs.indexOf(w))"],
+  ["includes", "String(xs.includes(w))"],
+  ["join", "xs.join(\",\")"],
+  ["slice", "xs.slice(1).join(\",\")"],
+];
+
+// An empty array is its own row. `pop` and `at` answer `undefined` there, which
+// for a number is a *different representation* from every other answer they
+// give -- and NaN stood in for it, so `String([].pop())` said "NaN" where node
+// says "undefined". Nothing in this file reached an empty array until it did.
+const ARRAY_ELEMENTS = [
+  { id: "num", ts: "number", make: "[n, n + 1, n + 2]", w: "n + 1" },
+  { id: "empty", ts: "number", make: "[]", w: "n" },
+  { id: "str", ts: "string", make: '[(n > 0 ? "a" : "b"), "c", "d"]', w: '"c"' },
+  { id: "bool", ts: "boolean", make: "[n > 0, n < 0, n === 0]", w: "n < 0" },
+];
+
+// `+` where an operand's representation is *erased*. A `number | undefined`
+// narrowed to a number is still one word plus a tag until something unerases
+// it, and `+` is the operator that cannot be told which one it is: `Add` and
+// `Concat` are chosen by the result type, and an erased operand has none.
+const ERASED_PLUS = [
+  ["num_narrowed", "number | undefined", "(n > 0 ? n : undefined)", "x + 1", "0"],
+  ["str_narrowed", "string | undefined", '(n > 0 ? "a" : undefined)', 'x + "b"', '"-"'],
+  ["str_null", "string | null", '(n > 0 ? "a" : null)', 'x + "b"', '"-"'],
+  ["num_null", "number | null | undefined", "(n > 0 ? n : null)", "x + 1", "0"],
 ];
 
 // The fifth: turning a number into text, which has to be exact. The harness
@@ -179,7 +250,7 @@ let count = 0;
 // A parameter is also the only one of the two that a caller can pass an
 // absence to without the callee's declaration mentioning it.
 for (const kind of KINDS) {
-  for (const ask of kind.asks) {
+  for (const ask of [...kind.asks, "text"]) {
     count++;
     out.push(`export function ${kind.id}_${ask}(n: number): string {`);
     out.push(`  const v: ${kind.ts} = ${kind.expr};`);
@@ -247,6 +318,48 @@ for (const e of ELEMENTS) {
   out.push("");
 }
 
+for (const f of FIELDS) {
+  count++;
+  out.push(`class Held_${f.id} {`);
+  out.push(`  f: ${f.ts};`);
+  out.push(`  constructor(v: ${f.ts}) {`);
+  out.push(`    this.f = v;`);
+  out.push(`  }`);
+  out.push(`}`);
+  out.push(`export function field_${f.id}(n: number): string {`);
+  out.push(`  const b = new Held_${f.id}(${f.init});`);
+  out.push(`  const before = ${f.show};`);
+  out.push(`  b.f = ${f.write};`);
+  out.push(`  return before + "|" + ${f.show};`);
+  out.push(`}`);
+  out.push("");
+}
+
+for (const e of ARRAY_ELEMENTS) {
+  for (const [name, expr] of ARRAY_METHODS) {
+    count++;
+    out.push(`export function am_${e.id}_${name}(n: number): string {`);
+    out.push(`  const xs: ${e.ts}[] = ${e.make};`);
+    out.push(`  const w: ${e.ts} = ${e.w};`);
+    out.push(`  return ${expr};`);
+    out.push(`}`);
+    out.push("");
+  }
+}
+
+for (const [name, ts, make, expr, absent] of ERASED_PLUS) {
+  count++;
+  out.push(`export function eplus_${name}(n: number): string {`);
+  out.push(`  const v: ${ts} = ${make};`);
+  out.push(`  if (v === null || v === undefined) {`);
+  out.push(`    return String(${absent});`);
+  out.push(`  }`);
+  out.push(`  const x = v;`);
+  out.push(`  return String(${expr});`);
+  out.push(`}`);
+  out.push("");
+}
+
 for (const [lt, le, rt, re] of PLUS) {
   count++;
   const id = `plus_${lt}_${rt}`;
@@ -285,13 +398,8 @@ for (const [id, expr] of BIGINT) {
   out.push("");
 }
 
-// A boolean as text, in the three spellings that reach it.
-count++;
-out.push(`export function bool_text(n: number): string {`);
-out.push(`  const b: boolean = n > 0;`);
-out.push("  return String(b) + \"|\" + `${b}` + \"|\" + (b + \"\");");
-out.push(`}`);
-out.push("");
+// A boolean as text used to be written out here in the three spellings that
+// reach it. The `text` ask now does that for every kind, including this one.
 
 console.log(out.join("\n"));
 console.error(`${count} cases across ${KINDS.length} value kinds`);

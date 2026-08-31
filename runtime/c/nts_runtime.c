@@ -823,6 +823,45 @@ void nts_cell_unready(const char *name) {
   abort();
 }
 
+/* `String(v)` where `v` carries its own tag.
+ *
+ * Exact for every tag this can be reached with, and it can only be reached
+ * with those: the compiler admits the call when the value's *type* has no
+ * member whose spelling needs a `toString` -- no object, no array, no closure.
+ * `String({})` is "[object Object]" and `String([1,2])` is "1,2", and both are
+ * the prototype chain's answer rather than the value's, which is §13's and not
+ * this function's.
+ *
+ * So the `default` here is a compiler bug and says so, rather than inventing a
+ * spelling that would be wrong wherever it appeared.
+ *
+ * The returned string is owned by the caller. A string already in the value is
+ * retained rather than copied, which is what makes `String(s)` free when `s`
+ * was already text. */
+NtsString *nts_value_to_string(NtsValue value) {
+  switch (nts_value_tag(value)) {
+  case NTS_TAG_UNDEFINED:
+    return nts_string_from_utf8("undefined", 9);
+  case NTS_TAG_NULL:
+    return nts_string_from_utf8("null", 4);
+  case NTS_TAG_BOOLEAN:
+    return nts_bool_to_string(nts_value_boolean(value));
+  case NTS_TAG_NUMBER:
+    return nts_number_to_string(nts_value_number(value));
+  case NTS_TAG_STRING: {
+    NtsString *text = (NtsString *)nts_value_reference(value);
+    nts_retain((NtsHeader *)text);
+    return text;
+  }
+  default:
+    fprintf(stderr,
+            NTS_REFUSED "String() of tag %u, which the lowering should have "
+                        "refused\n",
+            nts_value_tag(value));
+    abort();
+  }
+}
+
 void nts_bounds(double index, uint32_t length) {
   fprintf(stderr, NTS_REFUSED "index %g is outside [0, %u)\n", index, length);
   abort();
@@ -929,12 +968,50 @@ double nts_array_push(NtsArray *a, double value) {
 }
 
 double nts_array_pop(NtsArray *a) {
-  /* Popping nothing is `undefined`, which for a number is NaN. */
+  /* Popping nothing is `undefined`. This one cannot say so -- it returns a
+   * double -- so it answers NaN, and the compiler calls it only where the
+   * checker has narrowed the result back to a number. `nts_array_pop_value` is
+   * the one that can say `undefined`, and it is what an un-narrowed `pop`
+   * lowers to. */
   if (a->header.length == 0) {
     return (double)NAN;
   }
   a->header.length--;
   return NTS_ITEMS(a, double)[a->header.length];
+}
+
+/* `pop` where the result keeps its `undefined`.
+ *
+ * `undefined` is not NaN. `String()` spells them differently, `??` takes one
+ * and not the other, `=== undefined` separates them, and node answers
+ * `String([].pop())` with "undefined" where this answered "NaN" -- a wrong
+ * answer, and the comment above it asserted the two were the same rather than
+ * checking.
+ *
+ * The checker already types `pop` as `T | undefined`, and for a number that is
+ * an erased value with a tag of its own. So the tag is what says it, and a
+ * caller that narrows back to a number pays nothing for this existing. */
+/* `undefined`, with NaN where the number would be.
+ *
+ * The tag is what says `undefined`, and every correct read goes through it.
+ * `xs.at(i)!` is the one that does not: the `!` tells the checker the index is
+ * in range, so lowering may read the payload straight out, and when the
+ * assertion is false that read gets whatever is there. Zero is a plausible
+ * number and NaN is not -- and NaN is what `nts_array_at` answers, so a
+ * program that lied gets one wrong answer rather than two different ones. */
+static NtsValue nts_absent_number(void) {
+  NtsValue value;
+  value.tag = NTS_TAG_UNDEFINED;
+  value.as.number = (double)NAN;
+  return value;
+}
+
+NtsValue nts_array_pop_value(NtsArray *a) {
+  if (a->header.length == 0) {
+    return nts_absent_number();
+  }
+  a->header.length--;
+  return nts_value_of_number(NTS_ITEMS(a, double)[a->header.length]);
 }
 
 /* Copy a string into two-byte slots, whichever way it was stored. */
@@ -1372,17 +1449,29 @@ bool nts_array_includes(const NtsArray *a, double needle) {
   return false;
 }
 
-double nts_array_at(const NtsArray *a, double at) {
-  /* Negative counts from the end, and out of range is `undefined` -- which
-   * for a number is NaN, the only value a double has to say "not one". */
+/* Where an index lands, or -1 for out of range. Negative counts from the end.
+ */
+static double nts_array_offset(const NtsArray *a, double at) {
   at = nts_to_integer(at);
   if (at < 0) {
     at += (double)a->header.length;
   }
-  if (at < 0 || at >= (double)a->header.length) {
-    return (double)NAN;
-  }
-  return nts_numbers(a)[(uint32_t)at];
+  return (at < 0 || at >= (double)a->header.length) ? -1.0 : at;
+}
+
+double nts_array_at(const NtsArray *a, double at) {
+  /* Out of range is `undefined`, and NaN is what a double has to say it with.
+   * See `nts_array_pop` -- the compiler calls this one only where the result
+   * was narrowed to a number. */
+  double offset = nts_array_offset(a, at);
+  return offset < 0 ? (double)NAN : nts_numbers(a)[(uint32_t)offset];
+}
+
+/* `at` where the result keeps its `undefined`. See `nts_array_pop_value`. */
+NtsValue nts_array_at_value(const NtsArray *a, double at) {
+  double offset = nts_array_offset(a, at);
+  return offset < 0 ? nts_absent_number()
+                    : nts_value_of_number(nts_numbers(a)[(uint32_t)offset]);
 }
 
 NtsArray *nts_array_fill(NtsArray *a, double value) {
