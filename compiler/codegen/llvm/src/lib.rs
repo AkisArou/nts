@@ -464,6 +464,22 @@ fn descriptors(program: &Program) -> String {
             .collect();
         let reference_table = offsets("refs", &references);
         let erased_table = offsets("erased", &erased);
+        // A named function used as a value is one object, so it is emitted
+        // rather than allocated: nothing in it but the header, and immortal.
+        // `NTS_IMMORTAL` in the count word is what keeps reference counting
+        // away from storage that was never allocated and must never be freed.
+        if wants_a_static_instance(program, layout) {
+            // The header spelled out rather than named: `%NtsHeader` is
+            // declared further down the module, and a named struct type has to
+            // exist before an initializer uses it.
+            let _ = writeln!(
+                out,
+                "@{} = internal global {{ ptr, i64, i32, i32 }} \
+                 {{ ptr @nts_desc_{tag}, i64 {}, i32 0, i32 0 }}",
+                static_closure_name(layout),
+                nts_codegen_common::layout::IMMORTAL
+            );
+        }
         // The name is a C string, terminator and all: the runtime prints it.
         let bytes = layout.name.len() + 1;
         let _ = writeln!(
@@ -588,6 +604,25 @@ fn element_tag(ty: &HirType) -> String {
 }
 
 /// A layout's descriptor symbol, with anything LLVM dislikes replaced.
+/// Whether anything in the program refers to this layout's single instance.
+///
+/// Asked of the IR rather than tracked alongside it: `ClosureStatic` is the
+/// only thing that reads one, so the ops that read it are the whole answer.
+fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) -> bool {
+    program.funcs.iter().any(|func| {
+        func.values.iter().any(|op| {
+            matches!(op.kind, OpKind::ClosureStatic)
+                && matches!(&op.ty, HirType::Managed(nts_core::hir::ManagedType::Object(ty))
+                    if layout.types.contains(ty))
+        })
+    })
+}
+
+/// The one instance of a closure class that captures nothing.
+fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
+    format!("nts_fnval_{}", descriptor_name(layout))
+}
+
 fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
     layout
         .name
@@ -1242,6 +1277,23 @@ fn allocation(
             ));
             before.join("\n  ")
         }
+        // The address of the static instance emitted beside its descriptor.
+        // No allocation and no counting: it is immortal and there is nothing
+        // in it.
+        OpKind::ClosureStatic => {
+            let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &op.ty else {
+                return Err(refuse(func, "a closure value that is not an object"));
+            };
+            let layout = program
+                .layouts
+                .iter()
+                .find(|layout| layout.types.contains(id))
+                .ok_or_else(|| refuse(func, "a closure value whose type has no layout"))?;
+            format!(
+                "{out} = getelementptr i8, ptr @{}, i64 0",
+                static_closure_name(layout)
+            )
+        }
         OpKind::ObjectNew { frame } => {
             let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &op.ty else {
                 return Err(refuse(func, "an allocation of something that is not an object"));
@@ -1769,7 +1821,7 @@ fn memory_operation(
         // Making one is next door: an allocation needs a descriptor, which is
         // data rather than code and the one piece of the runtime a backend has
         // to build.
-        OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } => {
+        OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } | OpKind::ClosureStatic => {
             return allocation(program, func, value, &out);
         }
         OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
