@@ -538,6 +538,42 @@ its sibling that calls `clearTimeout` shows no growth at all. Both stay listed,
 because the check cannot tell state a program still needs from state it has
 lost, and a *change* in either number is worth stopping for.
 
+### A hundred objects that were all the same object
+
+Escape analysis asks where a reference can be *reached from*. That is the right
+question and it is not the only one. A frame allocation is a single slot, so
+confining one is also a claim about *lifetime* — that at most one of its results
+is live at a time. True of a straight-line `new`; false of one inside a cycle,
+where the slot is reused and whatever kept the previous result is now looking at
+the current one.
+
+```ts
+const balls: Ball[] = new Array(100);
+for (let i = 0; i < 100; i += 1) {
+  balls[i] = new Ball(random);   // one frame slot, a hundred objects
+}
+```
+
+Every element pointed at the same slot and read back the last ball. The store
+rule deferred the stored value's escape to the container's, the container was a
+frame-local array, so the ball stayed in the frame — reachability said yes and
+lifetime said no.
+
+Found by `awfy-bounce`, which checks its own answer against the constant Are We
+Fast Yet recorded: **1117 where node says 1331**. It had been failing in the
+benchmark runner and the benchmark runner is not part of the gate. Nothing in
+`examples/` stored into a container in a loop, so nothing else asked.
+
+An allocation in a cycle can no longer be confined when something keeps it. A
+block is in a cycle when it can reach itself, which is all this needs to know —
+not which loop, not how many iterations — and it is used only to *refuse*
+confinement, so over-approximating costs a heap allocation and never an answer.
+
+It cost nothing where the analysis exists to help: `objects` 1.00x of
+hand-written C++, `closures` 1.01x, `pipeline` 0.97x, `awfy-list` 1.08x, all
+unchanged. An object allocated in a loop and *not* kept still lives in the
+frame, and `examples/objects` now pins all three cases.
+
 ### A crash and a declined case are not the same thing
 
 Twice this week the harness reported agreement over a program that had died.

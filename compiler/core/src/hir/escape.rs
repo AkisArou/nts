@@ -57,6 +57,53 @@ use super::{Callee, Func, OpKind, Program, Terminator, ValueId};
 /// this means a bug, and looping forever would hide it.
 const ROUND_CAP: u32 = 32;
 
+/// Values produced by an operation that can run more than once.
+///
+/// A frame allocation is a single slot, so confining one is a claim that at
+/// most one of its results is live at a time. That holds for a straight-line
+/// allocation and fails for one inside a cycle: the slot is reused, and
+/// anything that kept the previous result is now looking at the current one.
+///
+/// A block is in a cycle when it can reach itself. That is all this needs to
+/// know -- not which loop, not how many iterations. It is used only to *refuse*
+/// confinement, so an over-approximation costs a heap allocation and never an
+/// answer.
+fn repeats(func: &Func) -> FxHashSet<ValueId> {
+    let count = func.blocks.len();
+    // Reachability between blocks, transitively.
+    let mut reaches: Vec<FxHashSet<usize>> = vec![FxHashSet::default(); count];
+    for (at, block) in func.blocks.iter().enumerate() {
+        for target in block.terminator.successors() {
+            let target = target.0 as usize;
+            if target < count {
+                reaches[at].insert(target);
+            }
+        }
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for at in 0..count {
+            let seen: Vec<usize> = reaches[at].iter().copied().collect();
+            for step in seen {
+                let onward: Vec<usize> = reaches[step].iter().copied().collect();
+                for next in onward {
+                    if reaches[at].insert(next) {
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+    let mut repeated = FxHashSet::default();
+    for (at, block) in func.blocks.iter().enumerate() {
+        if reaches[at].contains(&at) {
+            repeated.extend(block.ops.iter().copied());
+        }
+    }
+    repeated
+}
+
 /// What escapes, per function.
 #[derive(Debug, Clone, Default)]
 pub struct Escapes {
@@ -169,6 +216,9 @@ fn analyze(
     // *container*, and the container can be shown to escape further down the
     // function than the store that filled it.
     let mut reachable_from: Vec<(ValueId, ValueId)> = Vec::new();
+    // Which allocations can run more than once with an earlier result still
+    // reachable. See `repeats`.
+    let repeated = repeats(func);
 
     for block in &func.blocks {
         for value in &block.ops {
@@ -198,10 +248,31 @@ fn analyze(
                     // somewhere the caller can see it however local `a` looks
                     // from in here -- and the same goes for a call's result, a
                     // block parameter and anything read back out of a field.
-                    if matches!(
-                        func.values[container.0 as usize].kind,
-                        OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
-                    ) {
+                    //
+                    // And only an allocation that runs *once* can be confined
+                    // at all when something keeps it. A frame allocation is one
+                    // slot; a loop that fills a container with a fresh object
+                    // each round needs one per round. Reachability said yes to
+                    // this and lifetime says no:
+                    //
+                    // ```ts
+                    // const balls: Ball[] = new Array(100);
+                    // for (let i = 0; i < 100; i += 1) {
+                    //   balls[i] = new Ball(random);   // one slot, 100 objects
+                    // }
+                    // ```
+                    //
+                    // Every element pointed at the same frame slot and read
+                    // back the last ball. `awfy-bounce` computed 1117 where
+                    // node computes 1331, which is how it was found -- the
+                    // benchmark checks its own answer, and nothing else here
+                    // had asked a program that stores in a loop.
+                    if !repeated.contains(stored)
+                        && matches!(
+                            func.values[container.0 as usize].kind,
+                            OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
+                        )
+                    {
                         reachable_from.push((*container, *stored));
                     } else {
                         escaped(&mut escapes, func, *stored);

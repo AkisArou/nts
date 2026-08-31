@@ -83,3 +83,62 @@ export function totalAges(): number {
   }
   return total;
 }
+
+// An object allocated in a loop and *kept*, which is the case escape analysis
+// gets wrong if it asks only where a reference can be reached from.
+//
+// A frame allocation is one slot. Confining one is a claim that at most one of
+// its results is live at a time, and that is true of a straight-line `new` and
+// false of a `new` inside a cycle: the slot is reused, and whatever kept the
+// previous result is now looking at the current one. Every element of `balls`
+// pointed at the same frame slot and read back the last ball, so a hundred
+// distinct objects answered as a hundred copies of one.
+//
+// Found by `awfy-bounce`, which checks its own answer against the constant Are
+// We Fast Yet recorded: 1117 where node says 1331. Nothing in this directory
+// had asked a program that stores into a container in a loop.
+class Ball {
+  x: number;
+  y: number;
+
+  constructor(seed: number) {
+    this.x = seed % 500;
+    this.y = (seed * 7) % 300;
+  }
+}
+
+export function keptFromALoop(n: number): number {
+  const count = 8;
+  const balls: Ball[] = new Array(count);
+  for (let i = 0; i < count; i += 1) {
+    balls[i] = new Ball(n + i);
+  }
+  // Every one has to be its own object, so this sum is eight different balls
+  // rather than eight readings of the last.
+  let total = 0;
+  for (let i = 0; i < count; i += 1) {
+    total = total * 3 + balls[i]!.x + balls[i]!.y;
+  }
+  return total;
+}
+
+// The straight-line case, which stays in the frame and must keep answering the
+// same: two `new`s are two slots.
+export function keptWithoutALoop(n: number): number {
+  const pair: Ball[] = new Array(2);
+  pair[0] = new Ball(n);
+  pair[1] = new Ball(n + 1);
+  return pair[0]!.x * 1000 + pair[1]!.x + pair[0]!.y - pair[1]!.y;
+}
+
+// And an object that is allocated in a loop and *not* kept, which is what the
+// analysis exists for: nothing outlives the iteration, so the slot is reused
+// correctly and this stays in the frame.
+export function notKept(n: number): number {
+  let total = 0;
+  for (let i = 0; i < 8; i += 1) {
+    const ball = new Ball(n + i);
+    total = total + ball.x - ball.y;
+  }
+  return total;
+}
