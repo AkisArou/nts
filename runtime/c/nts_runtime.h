@@ -477,6 +477,11 @@ extern const NtsDescriptor nts_desc_string2;
 #define NTS_WHITE 2u  /* Reachable only from within a cycle: garbage. */
 #define NTS_PURPLE 3u /* A candidate root. */
 #define NTS_BUFFERED 4u
+/* Already on the dying list, where the count word holds the list's *next
+ * pointer* rather than a count -- see `nts_destroy`. A retain or a release
+ * arriving after that would read and write a pointer as though it were a
+ * number, which is how the list came to run into freed memory. */
+#define NTS_DYING 8u
 
 /* Consider the candidates and reclaim whatever turns out to be garbage.
  *
@@ -658,6 +663,12 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  * as the same double, laid out the way the specification lays it out -- which
  * is not what any `printf` conversion produces. */
 NtsString *nts_number_to_string(double x);
+/* `String.fromCharCode` and `String.fromCodePoint`, which are two functions:
+ * the first takes a UTF-16 code *unit* through `ToUint16` and always returns
+ * one of them, the second takes a code *point* and returns a surrogate pair
+ * above 0xFFFF. */
+NtsString *nts_string_from_char_code(double code);
+NtsString *nts_string_from_code_point(double point);
 /* `String(v)` on a value carrying its own tag. Exact for `undefined`, `null`,
  * a boolean, a number and a string; every other tag is a lowering that should
  * have refused, and it aborts rather than guessing. */

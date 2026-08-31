@@ -11363,6 +11363,15 @@ impl<'a> FuncBuilder<'a> {
                 "isSafeInteger" => Intrinsic::UnaryCall("nts_is_safe_integer"),
                 _ => return None,
             }),
+            // Two functions rather than two names for one. `fromCharCode`
+            // takes a UTF-16 code *unit* through `ToUint16` and always yields
+            // one of them; `fromCodePoint` takes a code *point* and yields a
+            // surrogate pair above 0xFFFF.
+            "String" => Some(match member {
+                "fromCharCode" => Intrinsic::UnaryCall("nts_string_from_char_code"),
+                "fromCodePoint" => Intrinsic::UnaryCall("nts_string_from_code_point"),
+                _ => return None,
+            }),
             _ => None,
         }
     }
@@ -11683,7 +11692,12 @@ impl<'a> FuncBuilder<'a> {
             // are shapes this lowering does not accept yet, and quietly
             // producing the two-argument answer for a three-argument call would
             // be wrong in a way nothing downstream could detect.
-            _ => Err(self.unsupported(id, "a `Math` call with this many arguments")),
+            // Not only `Math` any more -- `String.fromCharCode(a, b)` reaches
+            // here too, and it is a real shape: the specification takes any
+            // number of code units. One at a time is what the runtime offers,
+            // so more than one is refused by name rather than answered with
+            // the first.
+            _ => Err(self.unsupported(id, "an intrinsic call with this many arguments")),
         }
     }
 

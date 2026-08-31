@@ -247,7 +247,8 @@ NtsHeader *nts_object_new(const NtsDescriptor *descriptor) {
  * Making it atomic would cost every retain a locked instruction to defend
  * against sharing the design does not permit. */
 void nts_retain(NtsHeader *object) {
-  if (!object || object->reserved == NTS_IMMORTAL) {
+  if (!object || object->reserved == NTS_IMMORTAL ||
+      (object->flags & NTS_DYING) != 0) {
     return;
   }
   object->reserved++;
@@ -503,6 +504,10 @@ static bool nts_draining = false;
 /* Destroy an object whose count has reached zero: give up what it holds, then
  * give the memory back. */
 static void nts_destroy(NtsHeader *object) {
+  /* Marked before the count word stops being one. Everything that reads a
+   * count has to know not to, and the flags word is the only part of the
+   * header still saying what this is. */
+  object->flags |= NTS_DYING;
   object->reserved = (uintptr_t)nts_dying;
   nts_dying = object;
   if (nts_draining) {
@@ -619,6 +624,19 @@ static void nts_possible_root(NtsHeader *object) {
 
 void nts_release(NtsHeader *object) {
   if (!object || object->reserved == NTS_IMMORTAL) {
+    return;
+  }
+  /* Already dying, so its count word is the dying list's next pointer and
+   * decrementing it would corrupt the list -- which is what freed
+   * `Promise.all`'s values array out from under a live reader.
+   *
+   * This arrives constantly and is not an error. `nts_release_contents` on one
+   * dying object walks a field pointing at another, and the collector puts
+   * every zero-count black root through this same drain in one pass, so two
+   * objects that die together will each release the other. Ignoring it is
+   * *right* rather than merely safe: the object is being freed either way, and
+   * the reference being given up is one the destroy already accounts for. */
+  if ((object->flags & NTS_DYING) != 0) {
     return;
   }
   if (object->reserved > 1) {
@@ -1617,6 +1635,56 @@ NtsArray *nts_array_fill_ref(NtsArray *a, void *value) {
     items[at] = value;
   }
   return nts_array_same(a);
+}
+
+/* `String.fromCharCode(x)`: one UTF-16 code unit, from `ToUint16(x)`.
+ *
+ * `ToUint16` rather than a cast. The specification truncates towards zero,
+ * takes the result modulo 2^16, and gives 0 for NaN and both infinities -- so
+ * `String.fromCharCode(65601)` is "A" and `String.fromCharCode(NaN)` is
+ * "\u0000". A `(uint16_t)` cast in C reaches the first of those by accident and
+ * the second is undefined behaviour, which is why the conversion is shared with
+ * the bitwise operators rather than written again here. */
+NtsString *nts_string_from_char_code(double code) {
+  uint16_t unit = nts_to_uint16(code);
+  int wide = unit > 0xFFu;
+  NtsString *out = nts_str_build(NULL, 1, wide);
+  if (wide) {
+    NTS_ELEMENTS(out, uint16_t)[0] = unit;
+    NTS_ELEMENTS(out, uint16_t)[1] = 0;
+  } else {
+    NTS_ELEMENTS(out, unsigned char)[0] = (unsigned char)unit;
+    NTS_ELEMENTS(out, unsigned char)[1] = 0;
+  }
+  return out;
+}
+
+/* `String.fromCodePoint(x)`, which is a different function and not a longer
+ * name for the one above.
+ *
+ * A code point above 0xFFFF is *two* code units, so this can return a string of
+ * length 2 where `fromCharCode` always returns one -- and node throws a
+ * RangeError for a value that is not an integer in [0, 0x10FFFF], which this
+ * cannot do, so it stops and says which value. Answering with a lone surrogate
+ * or a truncation would be a wrong string rather than a missing feature. */
+NtsString *nts_string_from_code_point(double point) {
+  if (!(point >= 0.0 && point <= 1114111.0) || point != nts_to_integer(point)) {
+    fprintf(stderr,
+            NTS_REFUSED "String.fromCodePoint(%g), which is not a code point\n",
+            point);
+    abort();
+  }
+  uint32_t value = (uint32_t)point;
+  if (value <= 0xFFFFu) {
+    return nts_string_from_char_code((double)value);
+  }
+  NtsString *out = nts_str_build(NULL, 2, 1);
+  uint16_t *units = NTS_ELEMENTS(out, uint16_t);
+  value -= 0x10000u;
+  units[0] = (uint16_t)(0xD800u + (value >> 10));
+  units[1] = (uint16_t)(0xDC00u + (value & 0x3FFu));
+  units[2] = 0;
+  return out;
 }
 
 /* Copy one string's code units into another at an offset, at its width. */

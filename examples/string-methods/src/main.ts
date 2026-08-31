@@ -131,3 +131,34 @@ export function replacingWideText(n: number): string {
     n
   );
 }
+
+// `String.fromCharCode` and `String.fromCodePoint` are two functions, not two
+// names for one. The first takes a UTF-16 code *unit* through `ToUint16` -- so
+// it truncates, wraps modulo 2^16, and answers the null character for NaN and
+// both infinities -- and always yields exactly one unit. The second takes a
+// code *point* and yields a surrogate pair above 0xFFFF, which is a string of
+// length two.
+export function fromOneCharCode(n: number): string {
+  return String.fromCharCode(n) + "|" + String(String.fromCharCode(n).length);
+}
+
+export function fromKnownCharCodes(n: number): string {
+  return (
+    String.fromCharCode(65) +
+    String.fromCharCode(0x4e2d) +
+    String.fromCharCode(65601) +
+    String.fromCharCode(0) +
+    String(n * 0)
+  );
+}
+
+export function fromCodePoints(n: number): string {
+  const wide = String.fromCodePoint(0x1f600);
+  return (
+    wide +
+    String(wide.length) +
+    String.fromCodePoint(65) +
+    String.fromCodePoint(0x4e2d) +
+    String(n * 0)
+  );
+}

@@ -538,6 +538,49 @@ its sibling that calls `clearTimeout` shows no growth at all. Both stay listed,
 because the check cannot tell state a program still needs from state it has
 lost, and a *change* in either number is worth stopping for.
 
+### The collector's blind spot was its own dying list
+
+`allOfTwo` returning 0 where node returns 1 was the symptom this was tracked
+under, and by the time it was looked at properly the wrong *answer* was gone --
+it returns 1. What was left was worse and quieter: `examples/async` under
+reference counting **checked 263 of its 928 cases and reported "agreed on every
+case"**, because the driver was segfaulting and the harness gave up after
+seventeen restarts.
+
+One ASAN stack named it:
+
+```
+nts_collect_at_checkpoint -> nts_collect_cycles -> nts_destroy
+  -> nts_release_contents -> nts_each_reference -> nts_release   [faults]
+```
+
+faulting on the values array `Promise.all` writes into.
+
+`nts_destroy` links an object onto the dying list by storing the list's next
+pointer **in the count word** -- there is nowhere else to put it, and the object
+is going away. So a release arriving afterwards decrements a *pointer*. That
+arrives constantly rather than rarely: `nts_release_contents` on one dying
+object walks a field pointing at another, and the collector puts every
+zero-count black root through the same drain in one pass, so two objects that
+die together each release the other. The list ran into freed memory and the next
+walk read it.
+
+`nts_retain` and `nts_release` now ignore an object already on the list, marked
+with a flag rather than inferred from the count word -- the flags are the only
+part of the header still saying what the object is. Ignoring the release is
+*right* rather than merely safe: the object is being freed either way, and the
+reference being given up is one the destroy already accounts for.
+
+928 of 928 cases now.
+
+The route the collector could not walk was not the microtask queue, which was
+the standing suspicion and is written up below as one. A queue is indeed no
+object at all, and `nts_promise_schedule` does move a reaction's state into one
+-- but it *moves* it, count and all, and a reference held outside the object
+graph is exactly what Bacon-Rajan's count subtraction is built to tolerate. The
+suspicion was reasonable and wrong, and the collector was wrong about something
+it owned outright.
+
 ### `Promise.all` freed its result array three times
 
 `nts_combinator_new` stored the values array without retaining it — a *move* —
