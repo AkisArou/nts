@@ -2705,28 +2705,37 @@ bool nts_has_pending_work(void) {
  * starvation is a program bug rather than a scheduling policy.
  *
  * Named for what a stack trace should call it. */
-/* Why there is no collection here, which is the obvious place for one.
+/* A collection where the program has gone quiet.
  *
- * Candidates are only examined when the buffer fills -- ten thousand roots --
- * so a program that ends before that ends holding every dead cycle it made. A
- * hundred async calls left four hundred promises alive that one forced pass
- * reclaimed to nothing, and from the outside that is indistinguishable from a
- * leak. The end of a checkpoint is where the program is idle and both queues
- * are empty, so it looks like exactly the right place.
+ * Candidates are otherwise only examined when the buffer fills -- ten thousand
+ * roots -- so a program that ends before that ends holding every dead cycle it
+ * made. A hundred async calls held four hundred promises that one forced pass
+ * reclaimed to nothing, which from the outside is indistinguishable from a
+ * leak.
  *
- * It was measured and it is faster: 50,000 async calls went from 14ms holding
- * 44 objects to 9ms holding none, because memory reused promptly beats memory
- * that grows.
+ * The end of a checkpoint is the natural place: both queues are empty by
+ * construction when it runs, so the program is between jobs and holding nothing
+ * it is in the middle of. It costs one comparison when nothing is buffered,
+ * which is the common case, and 50,000 async calls went from 14ms holding 44
+ * objects to 9ms holding none -- faster, because memory reused promptly beats
+ * memory that grows.
  *
- * And it makes `Promise.all` answer wrongly, on two cases of `examples/async`.
- * So something a combinator needs is reachable only through a route the
- * collector cannot walk, and the collector has never had to be right about it:
- * with a ten-thousand-root threshold it essentially never runs, and a hole in
- * its root set costs nothing until it does.
+ * It could not go in until `Promise.all` stopped freeing its result array three
+ * times. Running the collector disturbs the allocator, and freed memory nobody
+ * has reused still holds the right numbers: the bug was invisible until
+ * something else wanted the same bytes.
  *
- * That is the bug to find before this line goes back in, and it is worth more
- * than the milliseconds: a collector that frees a live object is worse than one
- * that runs rarely. `git log` has the measurements. */
+ * Not a replacement for the threshold. A program that never reaches a
+ * checkpoint -- no promises, no timers -- still relies on the buffer filling,
+ * and one that makes cycles far faster than it checkpoints still wants the
+ * bound the threshold gives it. */
+static void nts_collect_at_checkpoint(void) {
+  if (nts_collecting || nts_draining || nts_roots_len == 0) {
+    return;
+  }
+  nts_collect_cycles();
+}
+
 static void nts_process_ticks_and_rejections(void) {
   NtsTask task;
   do {
@@ -2737,6 +2746,7 @@ static void nts_process_ticks_and_rejections(void) {
       task.run(task.state);
     }
   } while (nts_tick_queue.len != 0);
+  nts_collect_at_checkpoint();
 }
 
 void nts_enter(void) { nts_depth++; }
@@ -3227,6 +3237,18 @@ static NtsPromise *nts_combinator_new(NtsArray *promises, NtsArray *values) {
   NtsCombinator *all = (NtsCombinator *)nts_object_new(&nts_desc_combinator);
   all->result = nts_promise_new();
   all->values = values;
+  /* Its own reference, because the caller keeps one. The compiler passes both
+   * arrays as arguments and releases them after the call -- they are borrowed,
+   * like every other argument -- while this field is listed in the descriptor
+   * and released when the combinator dies. Storing without retaining made that
+   * a reference nobody had taken, and the array was freed three times: once by
+   * the caller's release, once by the combinator's, and once by the result
+   * promise, which retains it at fulfilment.
+   *
+   * It read as a `Promise.all` that answered wrongly, and only when something
+   * else disturbed the allocator: freed memory that no one has reused still
+   * holds the right numbers. */
+  nts_retain((NtsHeader *)values);
   all->remaining = promises->header.length;
 
   /* `Promise.all([])` is fulfilled by the time it is returned, with an empty

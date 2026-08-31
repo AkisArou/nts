@@ -166,8 +166,9 @@ static void all_of_two_settled_costs_one_tick_more_than_a_then(void) {
   nts_promise_fulfill_number(elements[0], 1);
   nts_promise_fulfill_number(elements[1], 2);
   NtsArray *array = promise_array(elements, 2);
-  NtsPromise *all = nts_promise_all(
-      array, nts_array_new(&desc_numbers, array->header.length));
+  NtsArray *values = nts_array_new(&desc_numbers, array->header.length);
+  NtsPromise *all = nts_promise_all(array, values);
+  nts_release((NtsHeader *)values);
   then(all, "all", 0, 1);
   start_chain(3);
   nts_test_host_run(64);
@@ -193,8 +194,9 @@ static void all_reports_input_order_not_completion_order(void) {
   reset();
   NtsPromise *elements[2] = {nts_promise_new(), nts_promise_new()};
   NtsArray *array = promise_array(elements, 2);
-  NtsPromise *all = nts_promise_all(
-      array, nts_array_new(&desc_numbers, array->header.length));
+  NtsArray *values = nts_array_new(&desc_numbers, array->header.length);
+  NtsPromise *all = nts_promise_all(array, values);
+  nts_release((NtsHeader *)values);
   then(all, "all", 0, 1);
   then(elements[0], "a settled", 0, 0);
   then(elements[1], "b settled", 0, 0);
@@ -221,8 +223,9 @@ static void all_reports_input_order_not_completion_order(void) {
 static void an_empty_all_is_fulfilled_before_it_returns(void) {
   reset();
   NtsArray *array = nts_array_new(&nts_desc_ref, 0);
-  NtsPromise *all = nts_promise_all(
-      array, nts_array_new(&desc_numbers, array->header.length));
+  NtsArray *values = nts_array_new(&desc_numbers, array->header.length);
+  NtsPromise *all = nts_promise_all(array, values);
+  nts_release((NtsHeader *)values);
   then(all, "all", 0, 1);
   start_chain(2);
   nts_test_host_run(64);
@@ -271,8 +274,9 @@ static void all_rejects_on_the_first_rejection(void) {
   NtsHeader *reason = nts_object_new(&desc_step);
   nts_promise_reject(elements[0], reason);
   NtsArray *array = promise_array(elements, 2);
-  NtsPromise *all = nts_promise_all(
-      array, nts_array_new(&desc_numbers, array->header.length));
+  NtsArray *values = nts_array_new(&desc_numbers, array->header.length);
+  NtsPromise *all = nts_promise_all(array, values);
+  nts_release((NtsHeader *)values);
   then(all, "all", 0, 1);
   start_chain(3);
   nts_test_host_run(64);
@@ -326,8 +330,13 @@ static void combinators_give_their_memory_back(void) {
     nts_promise_fulfill_number(elements[0], 1);
     nts_promise_fulfill_number(elements[1], 2);
     NtsArray *array = promise_array(elements, 2);
-    NtsPromise *all = nts_promise_all(
-        array, nts_array_new(&desc_numbers, array->header.length));
+    /* Held so it can be released. `nts_promise_all` *borrows* both arrays --
+     * the compiler passes them as arguments and releases them after the call,
+     * like every other argument -- and the combinator takes its own reference
+     * to the one it keeps. Handing it over inline assumed a move, which is
+     * what the runtime used to do and what freed the array three times. */
+    NtsArray *values = nts_array_new(&desc_numbers, array->header.length);
+    NtsPromise *all = nts_promise_all(array, values);
     NtsPromise *race = nts_promise_race(array);
     NtsArray *empty = nts_array_new(&nts_desc_ref, 0);
     NtsPromise *stuck = nts_promise_race(empty);
@@ -336,6 +345,7 @@ static void combinators_give_their_memory_back(void) {
     nts_release((NtsHeader *)stuck);
     nts_release((NtsHeader *)empty);
     nts_release((NtsHeader *)all);
+    nts_release((NtsHeader *)values);
     nts_release((NtsHeader *)race);
     nts_release((NtsHeader *)array);
     nts_release((NtsHeader *)elements[0]);

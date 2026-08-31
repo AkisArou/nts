@@ -472,6 +472,25 @@ Not a cost of reference counting: before escape analysis learned to put a cell
 in the frame, the cell was on the heap and released normally. It was the two
 changes meeting, and neither was wrong alone.
 
+### `Promise.all` freed its result array three times
+
+`nts_combinator_new` stored the values array without retaining it — a *move* —
+while the compiler passes both arrays as ordinary arguments and releases them
+after the call. The combinator's descriptor lists that field, so it released
+what it had never acquired, and the array was freed three times: by the caller,
+by the combinator, and by the result promise, which retains it at fulfilment.
+
+It read as `Promise.all` answering wrongly, and only when something else
+disturbed the allocator — freed memory nobody has reused still holds the right
+numbers. Arguments are borrowed everywhere else in the runtime, so the fix is
+the retain, and the combinator suite's own calls were relying on the move.
+
+With it fixed, the cycle collector now runs at every **checkpoint**, where both
+queues are empty by construction and the program is between jobs. 50,000 async
+calls: 14ms holding 44 objects became 9ms holding none — faster, because memory
+reused promptly beats memory that grows. The ten-thousand-root threshold stays
+for programs that never reach a checkpoint.
+
 I first reported an async call as leaking `awaits + 1` objects under counting.
 It does not, and the correction is worth keeping: what accumulates is
 **promises**, which are cyclic-capable, so at a count of zero they go to the
