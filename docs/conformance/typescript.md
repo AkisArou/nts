@@ -787,6 +787,19 @@ means knowing what the field holds at function *exit* rather than joining every
 store regardless of order. That is a flow-sensitive field analysis, not a
 narrowing iteration, which is what I first prescribed.
 
+**Only one of the two is worth spending on.** Checked across all 26 benchmark
+cases: **no two layouts share a prefix** by accident, so the coarse aliasing
+costs nothing measurable here. It is still wrong, and it will bite the first
+program that has two unrelated classes beginning with the same field -- which
+is not a rare shape -- but the awfy cluster is entirely the second cause.
+
+And widening to a threshold is not the shortcut it looks like. Jumping to the
+`int32` bounds instead of infinity would make `width_for` accept the field, but
+widening is only sound when what it jumps to contains the true range, and
+nothing here proves that. Thresholds need a descending pass afterwards to
+confirm the result is a post-fixpoint; without it the answer is a guess that
+happens to typecheck.
+
 ### `!invariant.load` is not what `readonly` means
 
 `Field::readonly` is "never written after construction, semantic not syntactic,
