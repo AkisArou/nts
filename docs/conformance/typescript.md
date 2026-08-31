@@ -538,6 +538,30 @@ its sibling that calls `clearTimeout` shows no growth at all. Both stay listed,
 because the check cannot tell state a program still needs from state it has
 lost, and a *change* in either number is worth stopping for.
 
+### A crash and a declined case are not the same thing
+
+Twice this week the harness reported agreement over a program that had died.
+`examples/map-and-set` segfaulted on every case under reference counting;
+`examples/async` reached 263 of its 928 cases for the same reason, with the
+cycle collector's blind spot sitting behind it. Both were filed as *declines*,
+which do not fail a run.
+
+The rule that was missing is narrow and exact. A decline is the program refusing
+its input, and it **says so** -- `nts: refused: …` on stderr before it stops, so
+a bounds check that aborts is still a decline. What was not distinguished is a
+program killed by a signal that printed nothing at all. That is a crash, and it
+now fails.
+
+A timeout stays a decline: `timeout` exits of its own accord, so there is no
+signal on the child, and a case that takes too long is not reached rather than
+wrong.
+
+The classification is a function with a test, which the version it replaces was
+not: five cases, one per way a run has actually ended. And it was checked the
+only way worth checking a detector -- by putting the collector bug back and
+confirming the run fails, where the same program had previously reported
+"agreed on every case".
+
 ### What the `rc` list was counting
 
 It named `invalid`, `timers` and `unsupported`, and only one of those was about

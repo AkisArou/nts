@@ -943,6 +943,56 @@ const REFUSED: &str = "nts: refused: ";
 /// and the total says how many were.
 const EXHAUSTED: &str = "nts: out of memory";
 
+/// Why a run stopped before its last case.
+///
+/// Two outcomes, and conflating them is what let a segfault be reported as
+/// agreement. A *decline* is the program correctly refusing its input, and it
+/// says so on stderr before it stops. A *defect* is anything else.
+#[derive(Debug, PartialEq, Eq)]
+enum Stopped {
+    Declined,
+    Defect(String),
+}
+
+/// The signal that killed a child, if one did.
+fn signal_of(status: std::process::ExitStatus) -> Option<i32> {
+    std::os::unix::process::ExitStatusExt::signal(&status)
+}
+
+/// Classify a run that ended early, from how it died and what it said.
+///
+/// The rule that was missing: **a program killed by a signal that printed no
+/// refusal at all is a defect**, not a decline. Both of this week's worst bugs
+/// hid exactly there. `examples/map-and-set` segfaulted on every case under
+/// reference counting and the gate counted it as passing; `examples/async`
+/// reached 263 of 928 cases for the same reason, and the cycle collector's
+/// blind spot sat behind it. In both, stdout was buffered and lost with the
+/// crash, so there was nothing to compare and nothing to complain about.
+///
+/// A timeout is not a signal here -- `timeout` exits 124 of its own accord --
+/// so a case that takes too long stays what it was: not reached, and not a
+/// verdict. An `abort()` *after* a refusal keeps its refusal line and stays a
+/// decline, which is what every bounds check does.
+fn stopped(signal: Option<i32>, complaint: &str) -> Stopped {
+    if let Some(line) = complaint.lines().find(|line| {
+        line.starts_with("nts:")
+            && !line.starts_with(REFUSED)
+            && !line.starts_with(EXHAUSTED)
+    }) {
+        return Stopped::Defect(line.trim().to_owned());
+    }
+    let said_something = complaint
+        .lines()
+        .any(|line| line.starts_with(REFUSED) || line.starts_with(EXHAUSTED));
+    match signal {
+        Some(number) if !said_something => Stopped::Defect(format!(
+            "the program was killed by signal {number} without refusing \
+             anything -- a crash, not a declined case"
+        )),
+        _ => Stopped::Declined,
+    }
+}
+
 fn run_native(
     dir: &Utf8Path,
     program: &hir::Program,
@@ -1070,15 +1120,9 @@ fn run_native(
         if reached == total - from {
             break;
         }
-        if let Some(line) = complaint
-            .lines()
-            .find(|line| {
-                line.starts_with("nts:")
-                    && !line.starts_with(REFUSED)
-                    && !line.starts_with(EXHAUSTED)
-            })
-        {
-            aborts.push(line.trim().to_owned());
+        match stopped(signal_of(run.status), &complaint) {
+            Stopped::Declined => {}
+            Stopped::Defect(what) => aborts.push(what),
         }
         // The case after the last one that printed. A refusal leaves a gap on
         // this side, and the node side is trimmed to match by index below.
@@ -1361,5 +1405,42 @@ fn report(
         approximated,
         disagreements,
         aborts: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{stopped, Stopped};
+
+    /// The distinction the whole check rests on, asked of each case that has
+    /// actually occurred.
+    ///
+    /// Written because the classification it replaces had no test and was
+    /// wrong in the one direction that matters: a program that said nothing at
+    /// all was filed as a declined case, which is how a segfault on every case
+    /// came to be reported as agreement.
+    #[test]
+    fn a_silent_death_is_a_defect_and_a_refusal_is_not() {
+        // A bounds check: it refuses, prints, then aborts. SIGABRT with a
+        // refusal line is the program keeping the promise its `!` made.
+        assert_eq!(
+            stopped(Some(6), "nts: refused: index 9 is outside [0, 3)\n"),
+            Stopped::Declined,
+        );
+        // Out of the memory this harness allowed: not reached, not a verdict.
+        assert_eq!(
+            stopped(Some(9), "nts: out of memory\n"),
+            Stopped::Declined,
+        );
+        // A timeout. `timeout` exits of its own accord, so there is no signal
+        // on the child and nothing was printed.
+        assert_eq!(stopped(None, ""), Stopped::Declined);
+        // A segfault that printed nothing. This is the case that was missing.
+        assert!(matches!(stopped(Some(11), ""), Stopped::Defect(_)));
+        // And one that named itself is a defect however it died.
+        assert!(matches!(
+            stopped(None, "nts: `x` was read before its declaration ran\n"),
+            Stopped::Defect(_)
+        ));
     }
 }
