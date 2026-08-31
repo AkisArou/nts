@@ -719,6 +719,15 @@ uint32_t nts_index_fn(const NtsArray *array, double index);
  * `benches/substrings` 2.25x slower through LLVM than through C. */
 NtsString *nts_str_substring_into_fn(NtsHeader *into, const NtsString *s,
                                      double from, double to);
+/* The narrow coercions, likewise. `x | 0` on a `Uint8Array` element lowers to
+ * `nts_to_uint8`, which is `static inline` for C's benefit and invisible to any
+ * backend that cannot read a header -- so `benches/cases/bytes` was refused
+ * outright by the second backend for want of a symbol. Four of them, because
+ * the lowering emits all four. */
+int8_t nts_to_int8_fn(double x);
+uint8_t nts_to_uint8_fn(double x);
+int16_t nts_to_int16_fn(double x);
+uint16_t nts_to_uint16_fn(double x);
 NTS_READS_ONLY uint16_t nts_unit_fn(const NtsString *s, uint32_t at);
 NTS_READS_ONLY double nts_str_char_code_at_fn(const NtsString *s, double at);
 /* A string is falsy when it is absent *or* empty -- a null test and a length

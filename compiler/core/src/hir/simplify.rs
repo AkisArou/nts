@@ -46,8 +46,9 @@ pub fn simplify(func: &mut Func) -> usize {
             replacement.insert(id, target);
         }
     }
+    let folded = fold_conversions(func);
     if replacement.is_empty() {
-        return 0;
+        return folded;
     }
 
     let of = |value: ValueId| replacement.get(&value).copied().unwrap_or(value);
@@ -62,7 +63,68 @@ pub fn simplify(func: &mut Func) -> usize {
 
     // The replaced operations are now unread. Dead-code elimination is what
     // removes them, which is where removing things belongs.
-    replacement.len()
+    replacement.len() + folded
+}
+
+/// Collapse a conversion of a conversion, where the detour was exact.
+///
+/// The lowering converts to `number` because that is the expression's type, and
+/// specialization converts back because that is what the arithmetic wants.
+/// Neither can see the other, so a byte out of a `Uint8Array` reaches an `i32`
+/// add as `u8 -> f64 -> i32`: `uitofp i8 ... to double` and `fptosi double ...
+/// to i32` around a value that was already an integer.
+///
+/// `benches/cases/bytes` says in its own comment that "the byte that comes out
+/// of it is already an integer, so the arithmetic after it stays integer
+/// without anything having to prove it". It did not.
+///
+/// Sound only when the detour loses nothing *and* the destination could have
+/// held the source directly. An `f64` represents every integer up to 32 bits
+/// exactly, so the first is a width test; the second stops this turning an
+/// out-of-range `fptoui` -- which is poison -- into a defined truncation, which
+/// would be a different program even if a better-behaved one.
+fn fold_conversions(func: &mut Func) -> usize {
+    let mut folded = 0;
+    for index in 0..func.values.len() {
+        let OpKind::Convert(middle) = func.values[index].kind else {
+            continue;
+        };
+        let OpKind::Convert(source) = func.values[middle.0 as usize].kind else {
+            continue;
+        };
+        let detour = &func.values[middle.0 as usize].ty;
+        let from = &func.values[source.0 as usize].ty;
+        let to = &func.values[index].ty;
+        if exact_through(from, detour) && fits(from, to) {
+            func.values[index].kind = OpKind::Convert(source);
+            folded += 1;
+        }
+    }
+    folded
+}
+
+/// Whether every value of `from` survives a trip through `detour` unchanged.
+fn exact_through(from: &HirType, detour: &HirType) -> bool {
+    matches!(detour, HirType::Float { bits: 64 })
+        && matches!(from, HirType::Int { bits, .. } if *bits <= 32)
+}
+
+/// Whether every value of `from` is a value of `to`, so the direct conversion
+/// is the same operation the detour performed.
+fn fits(from: &HirType, to: &HirType) -> bool {
+    let (HirType::Int { bits: narrow, signed: from_signed }, HirType::Int { bits: wide, signed: to_signed }) =
+        (from, to)
+    else {
+        return false;
+    };
+    if from_signed == to_signed {
+        narrow <= wide
+    } else if *to_signed {
+        // An unsigned source needs a bit for the sign it does not have.
+        narrow < wide
+    } else {
+        false
+    }
 }
 
 /// The operand an operation returns unchanged, if it returns one.

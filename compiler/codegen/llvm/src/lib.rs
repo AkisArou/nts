@@ -884,6 +884,28 @@ fn one_frame(out: &str, units: u32) -> String {
     )
 }
 
+/// The name this backend can actually call.
+///
+/// A helper the lowering names may be `static inline` in the header, which is
+/// right for C and invisible here -- there is no symbol. The runtime puts a
+/// linkable companion beside each one, spelled `_fn`, and this prefers the
+/// original so that C keeps its inline and only the second backend pays a call
+/// that `-flto` removes anyway.
+///
+/// `nts_to_uint8` is why: `x | 0` on a `Uint8Array` element lowers to it, and
+/// `benches/cases/bytes` was refused outright for want of one symbol.
+fn linkable(target: &str) -> String {
+    if signatures::signature(target).is_some() {
+        return target.to_owned();
+    }
+    let companion = format!("{target}_fn");
+    if signatures::signature(&companion).is_some() {
+        companion
+    } else {
+        target.to_owned()
+    }
+}
+
 /// The name of a helper's frame-placed form.
 ///
 /// `nts_str_slice_into` is a real function; `nts_str_substring_into` is a
@@ -945,7 +967,7 @@ fn externals(program: &Program) -> Vec<String> {
             let target = if frame.is_some() {
                 into_form(target)
             } else {
-                target.clone()
+                linkable(target)
             };
             if seen.contains(&target) {
                 continue;
@@ -1893,7 +1915,7 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
             let called = if framed.is_some() {
                 into_form(target)
             } else {
-                target.clone()
+                linkable(target)
             };
             if framed.is_some() && signatures::signature(&called).is_none() {
                 return Err(refuse(
@@ -1918,7 +1940,8 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
             // The same distinction the `_fn` companions exist for: a `static
             // inline` is not a contract another code generator can read.
             match callee {
-                Callee::External(target) if signatures::signature(target).is_none() => {
+                Callee::External(_) if signatures::signature(&called).is_none() => {
+                    let target = &called;
                     return Err(refuse(
                         func,
                         &format!(
@@ -2258,16 +2281,24 @@ fn conversion(from: &HirType, to: &HirType, func: &Func) -> Result<&'static str,
         (HirType::Float { bits: 32 }, HirType::Float { bits: 64 }) => "fpext",
         (HirType::Float { bits: 64 }, HirType::Float { bits: 32 }) => "fptrunc",
         (HirType::Bool, HirType::Int { .. }) => "zext",
+        // Widening reads the *source's* signedness, not the destination's. A
+        // `uint8_t` becoming an `int32_t` is `zext`: bytes 128..255 are 128..255
+        // and not negatives, however the slot they land in is spelled.
+        //
+        // This asked the destination, which was unreachable while every integer
+        // conversion went through `f64` on its way -- and wrong the moment
+        // `simplify` learned to collapse that detour. `benches/cases/bytes`
+        // answered -131008 where node answered 1090394752.
         (
-            HirType::Int { bits: wide, .. },
             HirType::Int {
-                bits: narrow,
-                signed,
+                bits: from,
+                signed: from_signed,
             },
+            HirType::Int { bits: to, .. },
         ) => {
-            if wide > narrow {
+            if from > to {
                 "trunc"
-            } else if *signed {
+            } else if *from_signed {
                 "sext"
             } else {
                 "zext"

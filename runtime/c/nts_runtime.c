@@ -1672,6 +1672,16 @@ nts_str_substring_into_fn(NtsHeader *into, const NtsString *s, double from,
   return nts_str_substring_into(into, s, from, to);
 }
 
+/* The narrow coercions as linkable symbols. Each is one instruction around the
+ * `uint32` reduction they already share, so out of line they cost a call that
+ * `-flto` removes -- and in exchange a backend that cannot read a `static
+ * inline` can compile `Uint8Array` arithmetic at all. `benches/cases/bytes` was
+ * refused outright for want of one symbol. */
+int8_t nts_to_int8_fn(double x) { return nts_to_int8(x); }
+uint8_t nts_to_uint8_fn(double x) { return nts_to_uint8(x); }
+int16_t nts_to_int16_fn(double x) { return nts_to_int16(x); }
+uint16_t nts_to_uint16_fn(double x) { return nts_to_uint16(x); }
+
 /* Reading a code unit, and the truthiness of a string.
  *
  * Both are `static inline` in the header for C's benefit and unreadable to any
