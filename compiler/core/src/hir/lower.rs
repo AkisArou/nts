@@ -408,6 +408,18 @@ struct ClosureInfo {
     wraps: bool,
 }
 
+/// The symbol a captured `this` is filed under.
+///
+/// `this` is not a name a program declares, so it has no symbol of its own --
+/// and it is captured for exactly the reasons every other free name is: an
+/// arrow does not bind one, so the `this` in its body belongs to the enclosing
+/// method and has to travel with the closure.
+///
+/// Reserved rather than synthesised, because both sides of a capture look it up
+/// by symbol and one number has to mean the same thing in both. No real symbol
+/// reaches `u32::MAX`: symbols index a table the frontend built.
+const THIS_CAPTURE: u32 = u32::MAX;
+
 /// A name the closure body reads and the enclosing scope binds.
 #[derive(Clone, Debug)]
 struct Capture {
@@ -746,6 +758,35 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
 
         let mut subtree = Vec::new();
         probe.subtree(id, &mut subtree);
+
+        // `this` first, so its field index is stable and a layout dump reads
+        // the way the program does.
+        //
+        // An arrow does not bind `this`; it inherits the enclosing one, which
+        // makes it a free variable like any other and it was the only one not
+        // treated as such. `self.this` inside a closure was the *closure
+        // object*, so `this.emit(...)` looked for `emit` on the closure's own
+        // layout and did not find it -- 17 sites named `emit`, 8 `#inScope`,
+        // and the whole of the "`v`, which `an anonymous type` does not
+        // declare" row, which is the same thing said about a field.
+        //
+        // `mentions_this` already knew how to ask: it stops at anything that
+        // rebinds `this` and descends through arrows, which is the rule.
+        if let Some(at) = probe
+            .node(id)
+            .children
+            .iter()
+            .find_map(|child| probe.first_this(*child))
+        {
+            info.captures.push(Capture {
+                symbol: THIS_CAPTURE,
+                name: "this".to_owned(),
+                at,
+                forward: false,
+                by_reference: false,
+            });
+        }
+
         for read in &subtree {
             let Some(symbol) = probe.node(*read).symbol else {
                 continue;
@@ -4086,6 +4127,31 @@ impl<'a> FuncBuilder<'a> {
         found
     }
 
+    /// The first `this` in a subtree that belongs to the enclosing scope.
+    ///
+    /// [`Self::mentions_this`] answers whether there is one; this returns it,
+    /// because a capture needs a node to take its *type* from and the arrow's
+    /// own node has the arrow's type. Same walk, same rule about what rebinds.
+    fn first_this(&self, id: NodeId) -> Option<NodeId> {
+        match self.kind_of(id) {
+            Some(syntax::THIS_KEYWORD) => return Some(id),
+            Some(
+                syntax::FUNCTION_EXPRESSION
+                | syntax::FUNCTION_DECLARATION
+                | syntax::METHOD_DECLARATION
+                | syntax::CONSTRUCTOR
+                | syntax::GET_ACCESSOR
+                | syntax::SET_ACCESSOR
+                | syntax::CLASS_DECLARATION,
+            ) => return None,
+            _ => {}
+        }
+        self.node(id)
+            .children
+            .iter()
+            .find_map(|child| self.first_this(*child))
+    }
+
     /// `this` in a subtree, not counting one that rebinds it.
     fn mentions_this(&self, id: NodeId, found: &mut bool) {
         if *found {
@@ -5010,7 +5076,13 @@ impl<'a> FuncBuilder<'a> {
                 ty.clone(),
                 origin.clone(),
             );
-            self.bindings.insert(capture.symbol, value);
+            if capture.symbol == THIS_CAPTURE {
+                // Not a name in `bindings` -- `this` is not looked up that way
+                // -- but the receiver every `this` in this body means.
+                self.this = Some(value);
+            } else {
+                self.bindings.insert(capture.symbol, value);
+            }
             // The field itself is never reassigned either way: by value it is
             // the captured value, and by reference it is a pointer to storage
             // that is written *through* rather than replaced.
@@ -9570,6 +9642,32 @@ impl<'a> FuncBuilder<'a> {
             // the collector only allowed a capture of something declared
             // outside the arrow and never assigned -- so by the time the arrow
             // is reached, the binding exists and is final.
+            // `this` is not in `bindings` and never was: it is the enclosing
+            // function's receiver, which is exactly what an arrow inherits.
+            if capture.symbol == THIS_CAPTURE {
+                let value = self.this.ok_or_else(|| {
+                    self.unsupported(capture.at, "`this` outside a method")
+                })?;
+                let field_ty = self.values[value.0 as usize].ty.clone();
+                self.push(
+                    OpKind::FieldSet {
+                        object,
+                        field: u32::try_from(at).unwrap_or(0),
+                        value,
+                    },
+                    HirType::Void,
+                    origin.clone(),
+                );
+                // The layout this side builds has to have the same fields in
+                // the same order as the one the body builds, or every index
+                // after this one is off by a field.
+                fields.push(Field {
+                    name: capture.name.clone(),
+                    ty: field_ty,
+                    readonly: true,
+                });
+                continue;
+            }
             if !self.bindings.contains_key(&capture.symbol) {
                 self.open_cell_early(capture.symbol, capture.at);
             }

@@ -91,3 +91,75 @@ export function applyToAll(v: number, times: number): number {
   }
   return total;
 }
+
+// `this` is a free variable of an arrow, and was the only one not treated as
+// one.
+//
+// An arrow does not bind `this`; it inherits the enclosing method's. The
+// closure's own receiver is the closure *object*, so a body that said
+// `this.emit(...)` was looking for `emit` on the closure's layout and not
+// finding it -- reported as "a method with no declaration in the hierarchy",
+// and for a field as "`v`, which `an anonymous type` does not declare". Those
+// two rows were 64 and 72 sites in the node profile and are one bug: 17 of them
+// were `this.emit` inside a callback, which is how every stream in that
+// codebase reports an error.
+//
+// It travels as a capture like any other name, first in the object so its field
+// index is stable.
+class Counter {
+  #count: number;
+  step: number;
+
+  constructor(step: number) {
+    this.#count = 0;
+    this.step = step;
+  }
+
+  #bump(by: number): number {
+    this.#count += by;
+    return this.#count;
+  }
+
+  // A field, a method and a *private* method, all through a captured `this`.
+  run(times: number): number {
+    const once = () => this.#bump(this.step);
+    let last = 0;
+    for (let i = 0; i < times; i += 1) {
+      last = once();
+    }
+    return last;
+  }
+
+  // `this` beside an ordinary capture, to pin that the field order holds when
+  // there is more than one.
+  scaled(by: number): number {
+    const factor = by * 2;
+    const compute = () => this.step * factor + this.#count;
+    return compute();
+  }
+
+  // An arrow inside an arrow: both inherit the same `this`.
+  nested(): number {
+    const outer = () => {
+      const inner = () => this.step;
+      return inner() + this.step;
+    };
+    return outer();
+  }
+}
+
+export function capturedThis(n: number): number {
+  const c = new Counter((n % 7) + 1);
+  return c.run(3) * 1000 + c.scaled(n % 5) * 10 + c.nested();
+}
+
+// A closure that outlives the method it was made in still holds its `this`,
+// which is what makes the capture a reference count rather than a borrow.
+function later(make: (n: number) => number, n: number): number {
+  return make(n);
+}
+
+export function escapingThis(n: number): number {
+  const c = new Counter(3);
+  return later((x) => c.scaled(x), n % 4) + c.nested();
+}

@@ -538,6 +538,38 @@ its sibling that calls `clearTimeout` shows no growth at all. Both stay listed,
 because the check cannot tell state a program still needs from state it has
 lost, and a *change* in either number is worth stopping for.
 
+### `this` is a free variable of an arrow, and was the only one not treated as one
+
+Two rows in §15 looked like the case for structural dispatch: "a member `X`
+which `Y` does not declare" at 72 sites, and "a method `X` with no declaration in
+the hierarchy" at 64. Counting what was behind them says otherwise. They are one
+bug, and it is not about interfaces.
+
+An arrow does not bind `this`; it inherits the enclosing method's. Inside a
+lowered closure `this` was the *closure object* — parameter zero of its `call` —
+so a body saying `this.emit(...)` looked for `emit` on the closure's own layout
+and did not find it. The same sentence about a field reads "`v`, which `an
+anonymous type` does not declare", which is why the two rows never looked
+related. Seventeen of them were `this.emit` inside a callback, which is how
+every stream in that codebase reports an error.
+
+```ts
+nts_net_read_start(this._handle, (bytes) => this.#inScope(() => { … }));
+```
+
+`this` travels as a capture like any other name now, first in the closure object
+so its field index is stable. The machinery was already there — `mentions_this`
+knew to stop at anything that rebinds `this` and to descend through arrows,
+which is exactly the rule — it had only ever been used to explain a refusal for
+`function` expressions.
+
+The rows went 72 → 62 and 64 → 37, and the profile 1,095 → 1,065. What is left
+of them is the part that really is structural.
+
+This is the sharpest instance yet of the rule that a tall row is usually one
+thing repeated. The plan was to build an interface dispatch table for these
+sites. Ninety-three of them wanted a capture.
+
 ### A hundred objects that were all the same object
 
 Escape analysis asks where a reference can be *reached from*. That is the right
