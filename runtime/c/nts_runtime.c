@@ -2705,6 +2705,28 @@ bool nts_has_pending_work(void) {
  * starvation is a program bug rather than a scheduling policy.
  *
  * Named for what a stack trace should call it. */
+/* Why there is no collection here, which is the obvious place for one.
+ *
+ * Candidates are only examined when the buffer fills -- ten thousand roots --
+ * so a program that ends before that ends holding every dead cycle it made. A
+ * hundred async calls left four hundred promises alive that one forced pass
+ * reclaimed to nothing, and from the outside that is indistinguishable from a
+ * leak. The end of a checkpoint is where the program is idle and both queues
+ * are empty, so it looks like exactly the right place.
+ *
+ * It was measured and it is faster: 50,000 async calls went from 14ms holding
+ * 44 objects to 9ms holding none, because memory reused promptly beats memory
+ * that grows.
+ *
+ * And it makes `Promise.all` answer wrongly, on two cases of `examples/async`.
+ * So something a combinator needs is reachable only through a route the
+ * collector cannot walk, and the collector has never had to be right about it:
+ * with a ten-thousand-root threshold it essentially never runs, and a hole in
+ * its root set costs nothing until it does.
+ *
+ * That is the bug to find before this line goes back in, and it is worth more
+ * than the milliseconds: a collector that frees a live object is worse than one
+ * that runs rarely. `git log` has the measurements. */
 static void nts_process_ticks_and_rejections(void) {
   NtsTask task;
   do {
