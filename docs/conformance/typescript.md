@@ -472,6 +472,22 @@ Not a cost of reference counting: before escape analysis learned to put a cell
 in the frame, the cell was on the heap and released normally. It was the two
 changes meeting, and neither was wrong alone.
 
+### What a program still holds at exit
+
+`tooling/gate/rc.sh` runs every example under reference counting and records
+what is live after the first case and again at the end, forcing a collection at
+both. Growth between the two is a leak — agreement cannot see one, because a
+function that never gives an object back answers exactly as well as one that
+does.
+
+Two examples grow and neither is a leak, which took separating rather than
+assuming: `module-state` holds module-scope references, which is its subject,
+and different cases set different globals; `timers` leaves one pending
+60-second timer per case on purpose, and a pending timer holds its callback —
+its sibling that calls `clearTimeout` shows no growth at all. Both stay listed,
+because the check cannot tell state a program still needs from state it has
+lost, and a *change* in either number is worth stopping for.
+
 ### `Promise.all` freed its result array three times
 
 `nts_combinator_new` stored the values array without retaining it — a *move* —
