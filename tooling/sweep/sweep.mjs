@@ -145,7 +145,8 @@ const ARRAY_METHODS = [
   ["pop_absent", "String(xs.pop() === undefined) + \"|\" + String(xs.pop() ?? -7)"],
   ["indexof", "String(xs.indexOf(w))"],
   ["includes", "String(xs.includes(w))"],
-  ["join", "xs.join(\",\")"],
+  ["join", 'xs.join(",") + "|" + xs.join("") + "|" + xs.join()'],
+  ["push_many", 'String(xs.push(w, w)) + "|" + String(xs.length) + "|" + String(xs[xs.length - 1])'],
   ["slice", "xs.slice(1).join(\",\")"],
 ];
 
@@ -158,6 +159,11 @@ const ARRAY_ELEMENTS = [
   { id: "empty", ts: "number", make: "[]", w: "n" },
   { id: "str", ts: "string", make: '[(n > 0 ? "a" : "b"), "c", "d"]', w: '"c"' },
   { id: "bool", ts: "boolean", make: "[n > 0, n < 0, n === 0]", w: "n < 0" },
+  // A reference element, where `indexOf` compares by *value* for a string and
+  // by identity for everything else. `w` is built separately from the array's
+  // own elements on purpose: for the string row it must still be found, and for
+  // the object row it must not.
+  { id: "ref", ts: "string", make: '["a" + String(n), "b", "c"]', w: '"a" + String(n)' },
 ];
 
 // `+` where an operand's representation is *erased*. A `number | undefined`

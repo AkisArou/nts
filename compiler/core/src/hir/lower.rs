@@ -11826,6 +11826,19 @@ impl<'a> FuncBuilder<'a> {
         if name == "fill" && !matches!(element, HirType::Float { .. } | HirType::Int { .. }) {
             return self.lower_wide_fill(id, receiver, element, arguments);
         }
+        // An array of references, where the element is a pointer rather than a
+        // double. Every one of the twenty-two profile sites that wanted a
+        // method on a non-numeric array wanted this -- strings, objects,
+        // closures, an `Int32Array` -- and not one wanted an array of
+        // booleans, which is why there is no third family.
+        //
+        // `pop` and `at` answer the element type directly here rather than an
+        // erased value: `T | undefined` for a reference *is* the null pointer.
+        if let HirType::Managed(managed) = element.clone() {
+            return self.lower_reference_array_method(
+                id, member, &name, receiver, &managed, arguments,
+            );
+        }
         if !matches!(element, HirType::Float { .. } | HirType::Int { .. }) {
             return Err(self.unsupported(member, "an array method on a non-numeric array"));
         }
@@ -11841,11 +11854,14 @@ impl<'a> FuncBuilder<'a> {
         // the double-returning helper is still the one, and costs nothing.
         let absent_result = self.type_of(id) == Some(HirType::Erased);
 
+        // `push` returns the new length, which is what the expression is worth
+        // in JavaScript, and takes as many elements as it was given.
+        if name == "push" {
+            return self.lower_pushes(id, "nts_array_push", receiver, arguments);
+        }
+
         // (runtime function, arguments after the receiver, result)
         let (helper, arity, ty) = match name.as_str() {
-            // `push` returns the new length, which is what the expression is
-            // worth in JavaScript.
-            "push" => ("nts_array_push", 1, HirType::NUMBER),
             "pop" if absent_result => ("nts_array_pop_value", 0, HirType::Erased),
             "pop" => ("nts_array_pop", 0, HirType::NUMBER),
             "at" if absent_result => ("nts_array_at_value", 1, HirType::Erased),
@@ -11876,6 +11892,141 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "an array method with this many arguments"));
         }
 
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::External(helper.to_owned()),
+                args,
+                frame: None,
+            },
+            ty,
+            origin,
+        ))
+    }
+
+    /// `push` with more than one argument, which appends each in turn.
+    ///
+    /// `headers.push(name, value)` is how a flat key-value list is built and it
+    /// appears twice in the node profile. The runtime helper takes one element,
+    /// which is the right shape -- appending two is appending one twice -- so
+    /// this is a loop here rather than a variadic there. The value of the
+    /// expression is the length after the last, which is what the last call
+    /// returns.
+    fn lower_pushes(
+        &mut self,
+        id: NodeId,
+        helper: &str,
+        receiver: ValueId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let mut length = None;
+        for argument in arguments {
+            let value = self.lower_expression(*argument)?;
+            length = Some(self.push(
+                OpKind::Call {
+                    callee: Callee::External(helper.to_owned()),
+                    args: vec![receiver, value],
+                    frame: None,
+                },
+                HirType::NUMBER,
+                origin.clone(),
+            ));
+        }
+        length.map_or_else(
+            || {
+                // `xs.push()` appends nothing and is the current length.
+                Ok(self.push(OpKind::Length(receiver), HirType::NUMBER, origin))
+            },
+            Ok,
+        )
+    }
+
+    /// An array method where the elements are references.
+    ///
+    /// The same shape as the numeric family and a different set of helpers,
+    /// because three of the questions change with the element:
+    ///
+    /// - `pop` and `at` answer `T | undefined`, which for a reference is the
+    ///   null pointer -- so they return the element type and need no tag,
+    ///   where the numeric pair had to return an erased value.
+    /// - `indexOf` and `includes` compare by `===`, and `===` on a string is
+    ///   *value* equality. `["a"].indexOf("a")` is 0 across two separately
+    ///   built strings, so a shared identity comparison answers -1 for exactly
+    ///   the case a string array is written for.
+    /// - `slice` retains each element it copies, and `push` retains what it is
+    ///   given. `pop` retains nothing: the array is handing over its own count
+    ///   with the element.
+    fn lower_reference_array_method(
+        &mut self,
+        id: NodeId,
+        member: NodeId,
+        name: &str,
+        receiver: ValueId,
+        element: &ManagedType,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let of_element = HirType::Managed(element.clone());
+        let array = HirType::Managed(ManagedType::Array(Box::new(of_element.clone())));
+        let text = matches!(element, ManagedType::String);
+        if name == "push" {
+            return self.lower_pushes(id, "nts_array_push_ref", receiver, arguments);
+        }
+        // `join`, whose separator defaults to a comma rather than to the
+        // infinity the arity filling below supplies. Only on strings: every
+        // other element needs a conversion per element, which is the question
+        // `String()` on an erased value answers and not this one.
+        if name == "join" && text {
+            let origin = self.origin(id);
+            let separator = match arguments.first() {
+                Some(argument) => self.lower_expression(*argument)?,
+                None => self.push(
+                    OpKind::ConstString(",".to_owned()),
+                    HirType::Managed(ManagedType::String),
+                    origin.clone(),
+                ),
+            };
+            return Ok(self.push(
+                OpKind::Call {
+                    callee: Callee::External("nts_array_join_str".to_owned()),
+                    args: vec![receiver, separator],
+                    frame: None,
+                },
+                HirType::Managed(ManagedType::String),
+                origin,
+            ));
+        }
+        let (helper, arity, ty) = match name {
+            "pop" => ("nts_array_pop_ref", 0, of_element),
+            "at" => ("nts_array_at_ref", 1, of_element),
+            "indexOf" if text => ("nts_array_index_of_str", 1, HirType::NUMBER),
+            "indexOf" => ("nts_array_index_of_ref", 1, HirType::NUMBER),
+            "includes" if text => ("nts_array_includes_str", 1, HirType::Bool),
+            "includes" => ("nts_array_includes_ref", 1, HirType::Bool),
+            "slice" => ("nts_array_slice_ref", 2, array),
+            "reverse" => ("nts_array_reverse_ref", 0, array),
+            _ => {
+                return Err(self.unsupported(
+                    member,
+                    &format!("`{name}` on an array of references"),
+                ));
+            }
+        };
+        let mut args = vec![receiver];
+        for argument in arguments {
+            args.push(self.lower_expression(*argument)?);
+        }
+        let origin = self.origin(id);
+        while args.len() < arity + 1 {
+            let end = self.push(
+                OpKind::ConstFloat(f64::INFINITY),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            args.push(end);
+        }
+        if args.len() != arity + 1 {
+            return Err(self.unsupported(id, "an array method with this many arguments"));
+        }
         Ok(self.push(
             OpKind::Call {
                 callee: Callee::External(helper.to_owned()),

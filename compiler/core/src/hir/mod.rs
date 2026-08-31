@@ -1159,14 +1159,38 @@ pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) ->
         .any(|op| matches!(&op.kind, OpKind::Call { args, .. } if args.contains(&array)))
 }
 
+/// Whether a runtime helper can change an array's length.
+///
+/// By *family* rather than by exact name, and deliberately. Missing one is a
+/// wrong answer: every `array.len` on an allocation then folds to the size it
+/// was made with, so `xs.pop(); xs.length` reads the old length. Naming one too
+/// many costs an optimisation and nothing else.
+///
+/// It was an exact list of two, and it went wrong the first time the family
+/// grew -- `nts_array_pop_value`, the `pop` that answers `undefined` rather
+/// than NaN, is a `pop` that the list did not recognise. The `_ref` family
+/// would have been the second time. `shift`, `unshift` and `splice` are named
+/// here before they exist, so that building one cannot repeat it.
+fn changes_array_length(name: &str) -> bool {
+    [
+        "nts_array_push",
+        "nts_array_pop",
+        "nts_array_shift",
+        "nts_array_unshift",
+        "nts_array_splice",
+    ]
+    .iter()
+    .any(|family| name.starts_with(family))
+}
+
 /// Whether any array in this program can change length.
 ///
-/// Only two operations do, and a program that calls neither has arrays whose
-/// length is decided where they are allocated and true forever after. That is a
-/// coarse question to ask about a whole program, and it is asked that way on
-/// purpose: the precise version is a may-grow fixpoint over parameters and
-/// fields, and this answers "no" for every program that never pushes -- which
-/// is most of them, and all of Are We Fast Yet.
+/// A program that changes none has arrays whose length is decided where they
+/// are allocated and true forever after. That is a coarse question to ask about
+/// a whole program, and it is asked that way on purpose: the precise version is
+/// a may-grow fixpoint over parameters and fields, and this answers "no" for
+/// every program that never pushes -- which is most of them, and all of Are We
+/// Fast Yet.
 #[must_use]
 pub fn arrays_can_grow(program: &Program) -> bool {
     program.funcs.iter().any(|func| {
@@ -1174,7 +1198,7 @@ pub fn arrays_can_grow(program: &Program) -> bool {
             matches!(
                 &op.kind,
                 OpKind::Call { callee: Callee::External(name), .. }
-                    if name == "nts_array_push" || name == "nts_array_pop"
+                    if changes_array_length(name)
             )
         })
     })

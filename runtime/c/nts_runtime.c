@@ -931,7 +931,22 @@ NtsArray *nts_array_new_uninitialized(const NtsDescriptor *descriptor,
   return array;
 }
 
-double nts_array_push(NtsArray *a, double value) {
+/* Where an index lands, or -1 for out of range. Negative counts from the end.
+ */
+static double nts_array_offset(const NtsArray *a, double at) {
+  at = nts_to_integer(at);
+  if (at < 0) {
+    at += (double)a->header.length;
+  }
+  return (at < 0 || at >= (double)a->header.length) ? -1.0 : at;
+}
+
+/* Make room for one more element, whatever its width.
+ *
+ * Split out of `nts_array_push` so that an array of references grows the same
+ * way an array of numbers does. Nothing here reads an element: the size comes
+ * from the descriptor, which is why the split costs nothing. */
+static void nts_array_reserve(NtsArray *a) {
   if (a->header.length == a->capacity) {
     /* Doubling, so a loop of pushes is linear rather than quadratic. The first
      * growth moves the elements out of the block the array itself lives in, and
@@ -962,9 +977,102 @@ double nts_array_push(NtsArray *a, double value) {
     a->elements = moved;
     a->capacity = wanted;
   }
+}
+
+double nts_array_push(NtsArray *a, double value) {
+  nts_array_reserve(a);
   NTS_ITEMS(a, double)[a->header.length] = value;
   a->header.length++;
   return (double)a->header.length;
+}
+
+/* The same methods on an array of references.
+ *
+ * Every one of the twenty-two profile sites that wanted an array method on a
+ * non-numeric array wanted a *reference* element -- strings, objects,
+ * closures, an `Int32Array`. Not one wanted an array of booleans, so there is
+ * no `_bool` family here: a rule with no case behind it is one nothing keeps
+ * honest.
+ *
+ * `void *` rather than `NtsHeader *` in the argument positions for the reason
+ * `nts_array_fill_ref` already uses it: C converts any object pointer to and
+ * from `void *` without a cast, so the emitter passes an `NtsString *` or a
+ * class pointer straight through and the prototype is the only place the
+ * difference would have to be written down.
+ *
+ * The reference counting is the part worth stating. A parameter is borrowed
+ * and a call's result is owned, so `push` retains what it is given, `at`
+ * retains what it hands back, `pop` retains nothing -- the array is giving up
+ * its own count along with the element -- and `slice` retains each element it
+ * copies. `reverse` moves pointers within one array and changes no count. */
+double nts_array_push_ref(NtsArray *a, void *value) {
+  nts_array_reserve(a);
+  nts_retain((NtsHeader *)value);
+  NTS_ITEMS(a, void *)[a->header.length] = value;
+  a->header.length++;
+  return (double)a->header.length;
+}
+
+/* `pop` on an array of references.
+ *
+ * A null is what it answers for an empty array, and it needs no tag to do it:
+ * `T | undefined` for a reference *is* the null pointer, which is the whole
+ * reason a `string | null` costs nothing. So this returns the element type
+ * directly where the numeric `pop` had to return an erased value. */
+void *nts_array_pop_ref(NtsArray *a) {
+  if (a->header.length == 0) {
+    return NULL;
+  }
+  a->header.length--;
+  return NTS_ITEMS(a, void *)[a->header.length];
+}
+
+void *nts_array_at_ref(const NtsArray *a, double at) {
+  double offset = nts_array_offset(a, at);
+  if (offset < 0) {
+    return NULL;
+  }
+  void *element = NTS_ITEMS(a, void *)[(uint32_t)offset];
+  nts_retain((NtsHeader *)element);
+  return element;
+}
+
+/* `indexOf` and `includes` by identity, which is what `===` is for an object.
+ *
+ * Two separately made objects with the same contents are not equal and this
+ * finds neither in the other's place. There is no NaN case to part them over,
+ * so unlike the numeric pair these two agree on everything. */
+double nts_array_index_of_ref(const NtsArray *a, const void *needle) {
+  void *const *items = NTS_ITEMS(a, void *);
+  for (uint32_t at = 0; at < a->header.length; at++) {
+    if (items[at] == needle) {
+      return (double)at;
+    }
+  }
+  return -1.0;
+}
+
+bool nts_array_includes_ref(const NtsArray *a, const void *needle) {
+  return nts_array_index_of_ref(a, needle) >= 0.0;
+}
+
+/* And by *value*, which is what `===` is for a string.
+ *
+ * `["a"].indexOf("a")` is 0 in node across two separately built strings, so an
+ * identity comparison would answer -1 -- the one cell of this that a shared
+ * implementation gets wrong, and the reason strings have their own pair. */
+double nts_array_index_of_str(const NtsArray *a, const NtsString *needle) {
+  const NtsString *const *items = NTS_ITEMS(a, const NtsString *);
+  for (uint32_t at = 0; at < a->header.length; at++) {
+    if (items[at] == needle || nts_string_eq(items[at], needle)) {
+      return (double)at;
+    }
+  }
+  return -1.0;
+}
+
+bool nts_array_includes_str(const NtsArray *a, const NtsString *needle) {
+  return nts_array_index_of_str(a, needle) >= 0.0;
 }
 
 double nts_array_pop(NtsArray *a) {
@@ -1449,16 +1557,6 @@ bool nts_array_includes(const NtsArray *a, double needle) {
   return false;
 }
 
-/* Where an index lands, or -1 for out of range. Negative counts from the end.
- */
-static double nts_array_offset(const NtsArray *a, double at) {
-  at = nts_to_integer(at);
-  if (at < 0) {
-    at += (double)a->header.length;
-  }
-  return (at < 0 || at >= (double)a->header.length) ? -1.0 : at;
-}
-
 double nts_array_at(const NtsArray *a, double at) {
   /* Out of range is `undefined`, and NaN is what a double has to say it with.
    * See `nts_array_pop` -- the compiler calls this one only where the result
@@ -1474,6 +1572,23 @@ NtsValue nts_array_at_value(const NtsArray *a, double at) {
                     : nts_value_of_number(nts_numbers(a)[(uint32_t)offset]);
 }
 
+/* Hand back the array that was passed in, as an *owned* reference.
+ *
+ * `fill` and `reverse` work in place and return their receiver, which is what
+ * makes `xs.fill(0).length` mean something. A parameter is borrowed and a
+ * call's result is owned, so returning it unchanged hands out a reference this
+ * function never took: the caller releases its own *and* this one, and the
+ * array is freed while it is still in use.
+ *
+ * Invisible under NoGC, which frees nothing. Under reference counting it read
+ * as a live count that went negative and an array whose elements came back as
+ * whatever was allocated over them -- found by giving `examples/arrays` a
+ * `slice` and a `reverse` in one expression. */
+static NtsArray *nts_array_same(NtsArray *a) {
+  nts_retain(&a->header);
+  return a;
+}
+
 NtsArray *nts_array_fill(NtsArray *a, double value) {
   double *items = nts_numbers(a);
   for (uint32_t at = 0; at < a->header.length; at++) {
@@ -1481,7 +1596,7 @@ NtsArray *nts_array_fill(NtsArray *a, double value) {
   }
   /* In place, returning what it was given -- which is what makes
    * `xs.fill(0).length` mean something. */
-  return a;
+  return nts_array_same(a);
 }
 
 NtsArray *nts_array_fill_bool(NtsArray *a, bool value) {
@@ -1489,7 +1604,7 @@ NtsArray *nts_array_fill_bool(NtsArray *a, bool value) {
   for (uint32_t at = 0; at < a->header.length; at++) {
     items[at] = value;
   }
-  return a;
+  return nts_array_same(a);
 }
 
 NtsArray *nts_array_fill_ref(NtsArray *a, void *value) {
@@ -1501,7 +1616,79 @@ NtsArray *nts_array_fill_ref(NtsArray *a, void *value) {
     nts_release((NtsHeader *)items[at]);
     items[at] = value;
   }
-  return a;
+  return nts_array_same(a);
+}
+
+/* Copy one string's code units into another at an offset, at its width. */
+static void nts_copy_units(NtsString *out, uint32_t offset,
+                           const NtsString *from, int wide) {
+  if (wide) {
+    nts_widen(NTS_ELEMENTS(out, uint16_t) + offset, from);
+  } else {
+    memcpy(NTS_ELEMENTS(out, unsigned char) + offset,
+           NTS_ELEMENTS(from, unsigned char), from->length);
+  }
+}
+
+/* `join`, on an array whose elements are strings.
+ *
+ * Two passes, because a string is one allocation of a known length rather than
+ * a builder: the first adds up the code units and asks whether any of them
+ * needs two bytes, the second writes. Repeated `nts_concat` would reach the
+ * same answer in quadratic time, leaving every intermediate behind.
+ *
+ * node writes an empty string for a `null` or `undefined` element, which a
+ * `string[]` cannot hold -- and the compiler calls this only where the element
+ * type says as much, so there is no absence to spell here. */
+NtsString *nts_array_join_str(const NtsArray *a, const NtsString *sep) {
+  const NtsString *const *items = NTS_ITEMS(a, const NtsString *);
+  uint32_t count = a->header.length;
+  uint32_t total = count > 1u ? sep->length * (count - 1u) : 0u;
+  int wide = count > 1u && (sep->flags & NTS_TWO_BYTE) != 0;
+  for (uint32_t at = 0; at < count; at++) {
+    total += items[at]->length;
+    wide |= (items[at]->flags & NTS_TWO_BYTE) != 0;
+  }
+  NtsString *out = nts_str_build(NULL, total, wide);
+  uint32_t written = 0;
+  for (uint32_t at = 0; at < count; at++) {
+    if (at != 0) {
+      nts_copy_units(out, written, sep, wide);
+      written += sep->length;
+    }
+    nts_copy_units(out, written, items[at], wide);
+    written += items[at]->length;
+  }
+  if (wide) {
+    NTS_ELEMENTS(out, uint16_t)[total] = 0;
+  } else {
+    NTS_ELEMENTS(out, unsigned char)[total] = 0;
+  }
+  return out;
+}
+
+NtsArray *nts_array_slice_ref(const NtsArray *a, double from, double to) {
+  uint32_t start = nts_str_clamp(from, a->header.length, 1);
+  uint32_t end = nts_str_clamp(to, a->header.length, 1);
+  uint32_t count = end > start ? end - start : 0u;
+  NtsArray *out = nts_array_new(a->header.descriptor, (double)count);
+  void *const *items = NTS_ITEMS(a, void *);
+  void **into = NTS_ITEMS(out, void *);
+  for (uint32_t at = 0; at < count; at++) {
+    into[at] = items[start + at];
+    nts_retain((NtsHeader *)into[at]);
+  }
+  return out;
+}
+
+NtsArray *nts_array_reverse_ref(NtsArray *a) {
+  void **items = NTS_ITEMS(a, void *);
+  for (uint32_t at = 0; at * 2u + 1u < a->header.length; at++) {
+    void *swap = items[at];
+    items[at] = items[a->header.length - 1u - at];
+    items[a->header.length - 1u - at] = swap;
+  }
+  return nts_array_same(a);
 }
 
 NtsArray *nts_array_reverse(NtsArray *a) {
@@ -1511,7 +1698,7 @@ NtsArray *nts_array_reverse(NtsArray *a) {
     items[at] = items[a->header.length - 1u - at];
     items[a->header.length - 1u - at] = swap;
   }
-  return a;
+  return nts_array_same(a);
 }
 
 NtsArray *nts_array_slice(const NtsArray *a, double from, double to) {

@@ -725,6 +725,26 @@ double nts_array_pop(NtsArray *a);
  * only where the result was narrowed back to a number. */
 NtsValue nts_array_pop_value(NtsArray *a);
 NTS_READS_ONLY NtsValue nts_array_at_value(const NtsArray *a, double at);
+/* The same methods on an array of *references*, where the element is a pointer
+ * rather than a double. `T | undefined` for a reference is the null pointer, so
+ * `pop` and `at` need no erased value to answer with. `indexOf` and `includes`
+ * come in two: a string compares by value and everything else by identity. */
+double nts_array_push_ref(NtsArray *a, void *value);
+void *nts_array_pop_ref(NtsArray *a);
+NTS_READS_ONLY void *nts_array_at_ref(const NtsArray *a, double at);
+NTS_READS_ONLY double nts_array_index_of_ref(const NtsArray *a,
+                                             const void *needle);
+NTS_READS_ONLY bool nts_array_includes_ref(const NtsArray *a,
+                                           const void *needle);
+NTS_READS_ONLY double nts_array_index_of_str(const NtsArray *a,
+                                             const NtsString *needle);
+NTS_READS_ONLY bool nts_array_includes_str(const NtsArray *a,
+                                           const NtsString *needle);
+NtsArray *nts_array_slice_ref(const NtsArray *a, double from, double to);
+/* `join` on an array of strings. Only strings: every other element type needs a
+ * conversion per element, which is a different question from this one. */
+NtsString *nts_array_join_str(const NtsArray *a, const NtsString *sep);
+NtsArray *nts_array_reverse_ref(NtsArray *a);
 NTS_READS_ONLY double nts_array_index_of(const NtsArray *a, double needle);
 NTS_READS_ONLY double nts_array_last_index_of(const NtsArray *a, double needle);
 NTS_READS_ONLY bool nts_array_includes(const NtsArray *a, double needle);

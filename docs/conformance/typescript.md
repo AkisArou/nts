@@ -670,6 +670,26 @@ reading of the same output found them. `String(null)` is `"null"` and
 `String(undefined)` is `"undefined"`; which one is a property of the type, and
 where the type is *nothing but* the absence there is no branch to emit at all.
 
+### `fill` and `reverse` handed back a reference they never took
+
+A parameter is borrowed and a call's result is owned. Both work in place and
+return their receiver — which is what makes `xs.fill(0).length` mean something
+— and neither retained it, so the caller released its own reference *and* the
+one it was handed, and the array was freed while still in use.
+
+Invisible under NoGC, which frees nothing, and invisible under reference
+counting too until an expression used the array on both sides of the call:
+`xs.slice(1)` and `xs.reverse()[0]` in one `return`. Then the live count went
+*negative* and the sliced elements read back as whatever had been allocated over
+them. Five helpers had it — the three `fill`s and both `reverse`s — and it had
+been there as long as they had.
+
+The lesson is about where it was found rather than what it was. `examples/rc`
+runs every example under the counting provider and asks whether the program
+returns to its baseline; that check has been green throughout, because no
+example had ever written the two calls in one expression. A conservation law is
+only as good as the programs it is asked about.
+
 ### The verifier accepted a multiplication of a tagged value
 
 `nts hir` said "all of it verifies" over
@@ -716,15 +736,21 @@ Measured, not assumed — three of these rows were wrong on the first pass.
   Absent: `at`, `split`, `replace`, `trim`, `padStart`/`padEnd`, case
   conversion, `match`, and indexing (`s[0]`).
 - **`Array.prototype`**: `at fill forEach includes indexOf lastIndexOf map pop
-  push reduce reverse slice length`, **on an array of numbers**. Absent:
-  `concat`, `filter`, `find`, `join`, `sort`, `shift`, `unshift`, `splice`,
-  `some`, `every`, `flat` — and all of them on an array of anything else, which
-  is 22 profile sites and the clearest unblocked row left. The helpers are
-  written against `double` elements; the descriptor already carries the element
-  `size` and whether elements are references, so `slice` and `reverse` are
-  generic in it, while `indexOf` needs an equality per element kind — strings
-  compare by *value*, so `["a"].indexOf("a")` is 0 across two different string
-  objects and a pointer comparison would answer -1.
+  push reduce reverse slice length` on an array of numbers, and `at includes
+  indexOf pop push reverse slice length` — plus `join` — on an array of
+  *references*. `push` takes as many elements as it is given. Absent: `concat`,
+  `filter`, `find`, `sort`, `shift`, `unshift`, `splice`, `some`, `every`,
+  `flat`, and everything on an array of booleans.
+
+  The 22 profile sites that wanted a method on a non-numeric array all wanted a
+  reference element — strings, objects, closures, an `Int32Array` — and not one
+  wanted booleans, so there is no `_bool` family. Three questions change with
+  the element and nothing else does: `pop` and `at` answer `T | undefined`,
+  which for a reference *is* the null pointer and needs no tag; `indexOf`
+  compares by `===`, which on a string is value equality, so
+  `["a"].indexOf("a")` is 0 across two separately built strings and a pointer
+  comparison would answer -1; and every element crossing the boundary is a
+  reference count.
 - **Typed arrays**: the constructor from a length, indexing, `length`,
   subclassing. Absent: construction from a value, `fill set subarray slice
   indexOf`, `buffer byteLength byteOffset` — 49 refusals in the node profile,
@@ -880,11 +906,11 @@ questions:
 
 | | what it says | today |
 |---|---|---|
-| examples | the compiled program agrees with node, case by case | 89 of 89 |
-| sweep | a generated cross-product agrees with node, cell by cell | 8,932 cases across 308 functions |
+| examples | the compiled program agrees with node, case by case | 90 of 90 |
+| sweep | a generated cross-product agrees with node, cell by cell | 9,570 cases across 330 functions |
 | corpus | arbitrary input produces no invalid IR and no C that will not compile | 49 lower cleanly; `invalid HIR` 0, `uncompilable C` 2 |
-| profile | how much of a real standard library lowers | 22 modules emit; 1,013 distinct refusal sites |
-| rc | the same examples hold nothing at exit under reference counting | 85 of 89, four named |
+| profile | how much of a real standard library lowers | 22 modules emit; 1,005 distinct refusal sites |
+| rc | the same examples hold nothing at exit under reference counting | 86 of 90, four named |
 
 Only the examples and the sweep check **correctness**, and they check it
 differently: an example covers what somebody thought to write down, a sweep
@@ -933,7 +959,7 @@ rather than done quietly under a feature.
 
 ## 15. What to do next, ordered by evidence
 
-From the node profile's refusal sites — 1,013 of them, counted **once each**.
+From the node profile's refusal sites — 1,005 of them, counted **once each**.
 The raw sweep reports about five times that, because a module is re-compiled
 once per importer and `util/types.ts` is counted twenty-one times over. This is
 the only list ordered by what real code actually needs rather than by what looks
@@ -955,6 +981,7 @@ blocks on, not to start building.
 | the async iterator protocol | 63, all `AsyncIterableIterator` — and a **second** 62-site row is the same thing under another message, a property `#lineObjectStream` of type `AsyncIterableIterator \| undefined`. One property, counted 62 times | §10 plus the suspension machine, which `async` already has |
 | `symbol` | 46 — `string \| symbol` as a property key, 30 as a parameter and 16 as a property | a representation, and a decision about whether well-known symbols are values or names |
 | a method not in the hierarchy | 52 — `emit` 8, then a long tail | structural dispatch, which is the same question as the anonymous-type row above |
+| ~~array methods on a non-numeric array~~ | **done**, 22 → 4. Every site wanted a *reference* element, so there is a `_ref` family and no `_bool` one | what is left is four single-site methods that do not exist for any element type: `shift`, `splice`, `toSorted`, and one unnamed |
 | string methods | 15 — `toLowerCase` 12, `normalize` 2, `toUpperCase` 1. `split`, `trim`, `replace` and `replaceAll` are done | what is left wants a Unicode case table and normalization, which is a different order of work from the rest |
 | generators | 4 refusals, but `readline` and several streams are behind them | the suspension machine exists; what is missing is the `Generator<T>` object and §10's protocol |
 | `try`/`catch` | the largest *language* gap, and invisible in this table because the code that needs it does not reach the lowering | needs an unwinding decision — the runtime has none |
