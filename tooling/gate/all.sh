@@ -129,18 +129,23 @@ profile() {
   # profile itself, which existed as a measurement for months before any gate
   # step emitted it, and as `uncompilable C`, which was 15 and invisible.
   #
-  # Ratcheted downward only, like the `rc` list. `path` and `url` fail on
-  # `MissingCallee { callee: "Closure34#call" }`: a closure's body is pruned
-  # before `monomorphize` turns the dispatch that reaches it into a direct call
-  # by name, so the call survives its target. Neither the emitter nor the
-  # verifier is at fault -- the pass order is.
-  known_invalid="path url"
+  # Ratcheted downward only, like the `rc` list, and empty. `path` and `url`
+  # were on it for one commit: `drop_callers_of_refused` removes a closure whose
+  # body calls something refused, and `monomorphize` then wrote that closure's
+  # name into a `Callee::Direct` for a clone -- a call that outlived its target,
+  # which nothing looked at again. A clone is only worth making while the name
+  # it is built around still refers to something.
+  known_invalid=""
   invalid=$(for m in "$root"/runtime/node/*/tsconfig.json; do
               if ./target/release/nts hir "$m" 2>&1 | grep -q "does NOT verify"; then
                 basename "$(dirname "$m")"
               fi
             done | sort | tr '\n' ' ')
-  expected=$(printf '%s\n' $known_invalid | sort | tr '\n' ' ')
+  # Guarded, because `printf '%s\n'` with no arguments still prints a newline
+  # -- so an empty list compared as " " against an empty result and the step
+  # failed on the run that emptied it.
+  expected=""
+  [ -n "$known_invalid" ] && expected=$(printf '%s\n' $known_invalid | sort | tr '\n' ' ')
   if [ "$invalid" != "$expected" ]; then
     echo "  expected invalid HIR in: $expected"
     echo "  actually invalid in:     $invalid"

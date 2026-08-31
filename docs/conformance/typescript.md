@@ -748,10 +748,14 @@ C` was 15 and invisible. A number that counts one thing gets quoted as though it
 counted the others.
 
 The gate now verifies every profile module, ratcheted downward like the `rc`
-list. What remains is `MissingCallee { callee: "Closure34#call" }` in both:
-a closure's body is pruned before `monomorphize` rewrites the dispatch that
-reaches it into a direct call by name, so the call outlives its target. The pass
-order is at fault rather than either pass.
+list, and the list is empty. Both were `MissingCallee { callee:
+"Closure34#call" }`: `drop_callers_of_refused` removes a closure whose body
+calls something refused, and the dispatch that reached it is handled --
+reachability nulls a table entry naming a function that is gone -- but
+`monomorphize` then wrote that same name into a `Callee::Direct` for a clone,
+and nothing looks at a direct call again. A clone exists to turn a dispatch into
+a call by name and is only worth making while the name still refers to
+something.
 
 Adding that check immediately caught a third module. `util` stopped verifying
 when `Boolean(x)` started lowering, on
@@ -771,6 +775,12 @@ a no-op.
 Worth stating plainly: the refusal count *fell from 1,005 to 854* while that was
 happening, and 151 of that drop was functions being accepted with invalid HIR
 rather than refused. A number that only goes down is not the same as progress.
+
+It then rose to 1,097 when the two modules were fixed, because a module that
+does not verify does not finish emitting either, and the refusals past the point
+it stopped were never counted. Both movements are the same fact: the reach
+number is only meaningful over programs that are valid, and nothing had been
+asking whether they were.
 
 ### The verifier accepted a multiplication of a tagged value
 
@@ -991,7 +1001,7 @@ questions:
 | examples | the compiled program agrees with node, case by case | 90 of 90 |
 | sweep | a generated cross-product agrees with node, cell by cell | 9,570 cases across 330 functions |
 | corpus | arbitrary input produces no invalid IR and no C that will not compile | 49 lower cleanly; `invalid HIR` 0, `uncompilable C` 2 |
-| profile | how much of a real standard library lowers | 22 modules emit and verify but for two; 1,010 distinct refusal sites |
+| profile | how much of a real standard library lowers | 22 modules emit and verify; 1,097 distinct refusal sites |
 | rc | the same examples hold nothing at exit under reference counting | 87 of 90, three named |
 
 Only the examples and the sweep check **correctness**, and they check it
@@ -1041,7 +1051,7 @@ rather than done quietly under a feature.
 
 ## 15. What to do next, ordered by evidence
 
-From the node profile's refusal sites — 1,010 of them, counted **once each**.
+From the node profile's refusal sites — 1,097 of them, counted **once each**.
 The raw sweep reports about five times that, because a module is re-compiled
 once per importer and `util/types.ts` is counted twenty-one times over. This is
 the only list ordered by what real code actually needs rather than by what looks

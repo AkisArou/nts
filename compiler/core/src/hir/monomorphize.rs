@@ -72,6 +72,30 @@ pub fn monomorphize(program: &mut Program) -> usize {
             break;
         }
 
+        // A clone exists to turn a dispatch into a direct call by name, so it
+        // is only worth making while that name still refers to something.
+        //
+        // `drop_callers_of_refused` runs before this and removes a closure
+        // whose body calls something refused. The dispatch that reached it is
+        // handled -- reachability nulls a table entry naming a function that is
+        // gone -- but a *clone* would write the name into a `Callee::Direct`
+        // afterwards, and nothing looks at that again. `path` and `url` both
+        // reached the verifier as `MissingCallee { callee: "Closure34#call" }`
+        // for exactly this, and had done for as long as the profile step did
+        // not verify.
+        //
+        // Recorded as serving itself, so the same request is not found again.
+        if super::is_closure_type(request.concrete)
+            && !program
+                .funcs
+                .iter()
+                .any(|func| func.name == super::lower::closure_method(request.concrete))
+        {
+            let original = program.funcs[request.callee].name.clone();
+            clones.insert((original.clone(), request.slot, request.concrete), original);
+            continue;
+        }
+
         let name = clone_name(program, &request);
         let source = &program.funcs[request.callee];
         let mut clone = source.clone();
