@@ -217,7 +217,7 @@ pub fn emit(program: &Program) -> Emitted {
     // The runtime, and nothing else -- notably not <stdlib.h>, which declares
     // `div`, a name a TypeScript program is entitled to use.
     writer.line(&origin, format!("#include \"{RUNTIME_HEADER_NAME}\""));
-    emit_object_types(&mut writer, &origin, program);
+    emit_object_types(&mut writer, &origin, program, &mut diagnostics);
 
     // Forward declarations, so a call does not depend on definition order — and
     // only for functions that actually have a definition. Before the
@@ -1204,7 +1204,12 @@ fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
 /// A real struct rather than manual offsets, so the C compiler decides padding
 /// and alignment and the emitted field access is `p->x` — which is both faster
 /// to read and impossible to get wrong by an offset.
-fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+fn emit_object_types(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
     // Every object type is forward-declared first, so a field may point at a
     // type declared later -- or at its own, which a linked structure does.
     for layout in &program.layouts {
@@ -1222,7 +1227,26 @@ fn emit_object_types(writer: &mut CodeWriter, origin: &Origin, program: &Program
         // provider can read the descriptor without knowing the type (RFC 8.2).
         writer.line(origin, "    NtsHeader header;");
         for field in &layout.fields {
+            // A field whose C type cannot be computed used to be *dropped
+            // from the struct*, silently, while the descriptor beside it kept
+            // taking an `offsetof` into it. Ninety-three of them across the
+            // node profile, and not obscure ones: a cell's `value`, a closure's
+            // captured `callback`, `Agent.requests`. A struct missing a field
+            // the reference map still points at is not a smaller object, it is
+            // a wrong one.
+            //
+            // Named instead. The layout is the thing that is unrepresentable,
+            // so the diagnostic is about the layout rather than about whichever
+            // function happened to touch it first.
             let Ok(ty) = c_type_of(program, &field.ty, origin) else {
+                diagnostics.push(Diagnostic::error(
+                    "NTS2006",
+                    format!(
+                        "no layout for the type of `{}.{}`",
+                        layout.name, field.name
+                    ),
+                    origin.location,
+                ));
                 continue;
             };
             // `readonly` is semantic, not syntactic — `Readonly<T>` counts — but

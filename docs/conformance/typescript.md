@@ -1134,13 +1134,31 @@ before quoting it:
   representation used to default to `void`, so those functions were being
   counted as lowered while emitting C that does not compile.
 
-`uncompilable C` has the same shape of problem and still does. It is ratcheted
-at 2, and 2 is not the true count: the emitter *silently drops* a struct field
-whose C type it cannot compute, while the descriptor beside it keeps taking an
-`offsetof` into it. Making that a diagnostic reads **5**, all saying `an object
-type with no layout`. The honest repair — every object-typed field must have a
-layout — costs 40 profile functions, which is why it is written down here
-rather than done quietly under a feature.
+`uncompilable C` had the same shape of problem. The emitter *silently dropped* a
+struct field whose C type it could not compute, while the descriptor beside it
+kept taking an `offsetof` into it — a struct missing a field the reference map
+still points at is not a smaller object, it is a wrong one.
+
+It is named now, and the count is **93** across the node profile, not the five
+this section used to claim. Nor are they obscure: a cell's `value`, a closure's
+captured `callback`, `Agent.requests`. Naming them cost nothing — 90 of 90
+examples still agree.
+
+What it did surface is that `uncompilable C` was two different things in one
+number. The check returned a single error for "the backend declined" and "clang
+rejected what we wrote", so a *named refusal* was counted as malformed output.
+Those are not the same failure: the first emitted nothing and said why, which is
+what every refusal does. They are separate now — `uncompilable C` stays at 2 and
+means clang, and a backend refusal is reported as one. A number is only worth
+ratcheting if everything in it is the thing the number is named after, which is
+the same lesson the `rc` list taught two sections up.
+
+The repair itself is still ahead, and it is bigger than a bug fix: **the
+compiler has never computed a byte offset.** `Layout.fields` carries a name, a
+type and `readonly`, and the backend derives offsets with `offsetof` on the
+stated principle that the compiler which laid the struct out is the one that
+says where its fields are. That principle is exactly right while C owns layout.
+It stops being available the moment anything else does.
 
 ## 15. What to do next, ordered by evidence
 

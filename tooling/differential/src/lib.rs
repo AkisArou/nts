@@ -878,39 +878,68 @@ const TEST_HOST_SOURCE: &str = include_str!("../../../runtime/c/nts_test_host.c"
 /// # Errors
 ///
 /// The backend's own refusal, or clang's first line.
-pub fn compiles(program: &hir::Program, dir: &Utf8Path) -> Result<(), String> {
+/// Why the backend did not produce C that compiles.
+///
+/// Two outcomes, and they are not the same failure. The backend *declining* is
+/// a refusal like any other -- it named a construct and emitted nothing -- and
+/// belongs in the refusal bucket. clang rejecting what we wrote means the
+/// output is malformed, which is the row that must reach zero.
+///
+/// They were one `Err(String)`, so a named backend refusal was counted as
+/// `uncompilable C`. That is the same category error as the `rc` list carrying
+/// two fixtures that must fail: a number is only worth ratcheting if everything
+/// in it is the thing the number is named after.
+#[derive(Debug)]
+pub enum NotC {
+    Refused(String),
+    Rejected(String),
+}
+
+impl std::fmt::Display for NotC {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Refused(what) | Self::Rejected(what) => f.write_str(what),
+        }
+    }
+}
+
+pub fn compiles(program: &hir::Program, dir: &Utf8Path) -> Result<(), NotC> {
     let emitted = nts_codegen_c::emit(program);
     if !emitted.diagnostics.is_empty() {
-        return Err(emitted
-            .diagnostics
-            .iter()
-            .map(|diagnostic| diagnostic.message.clone())
-            .collect::<Vec<_>>()
-            .join("; "));
+        return Err(NotC::Refused(
+            emitted
+                .diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.message.clone())
+                .collect::<Vec<_>>()
+                .join("; "),
+        ));
     }
     let generated = dir.join("program.c");
-    std::fs::write(&generated, emitted.writer.text()).map_err(|error| error.to_string())?;
+    std::fs::write(&generated, emitted.writer.text()).map_err(|error| NotC::Rejected(error.to_string()))?;
     std::fs::write(
         dir.join(nts_codegen_c::RUNTIME_HEADER_NAME),
         nts_codegen_c::RUNTIME_HEADER,
     )
-    .map_err(|error| error.to_string())?;
+    .map_err(|error| NotC::Rejected(error.to_string()))?;
     let build = std::process::Command::new("clang")
         .args(["-std=c11", "-fsyntax-only", "-w"])
         .arg("-I")
         .arg(dir)
         .arg(&generated)
         .output()
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| NotC::Rejected(error.to_string()))?;
     if build.status.success() {
         return Ok(());
     }
-    Err(String::from_utf8_lossy(&build.stderr)
-        .lines()
-        .find(|line| line.contains("error"))
-        .unwrap_or("clang rejected the generated C")
-        .trim()
-        .to_owned())
+    Err(NotC::Rejected(
+        String::from_utf8_lossy(&build.stderr)
+            .lines()
+            .find(|line| line.contains("error"))
+            .unwrap_or("clang rejected the generated C")
+            .trim()
+            .to_owned(),
+    ))
 }
 
 /// How the runtime says "the program correctly declined", as opposed to

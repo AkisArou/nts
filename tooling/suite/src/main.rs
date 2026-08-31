@@ -286,10 +286,21 @@ fn examine(file: &Utf8Path, workspace: &Workspace, tsgo: &str) -> Examined {
                 // Ask clang whether what the backend produced is C. The IR being
                 // well formed does not make the output well formed, and nothing
                 // else here would notice.
-                if let Err(error) = nts_differential::compiles(&prepared.program, &workspace.built)
-                {
-                    uncompilable = true;
-                    notes.push(format!("UNCOMPILABLE C: {file}: {error}"));
+                // A backend *refusal* is not malformed output. It named a
+                // construct and emitted nothing, which is what every other
+                // refusal does; counting it here made `uncompilable C` a number
+                // with two different things in it, and a number is only worth
+                // ratcheting if everything in it is what the number is named
+                // after.
+                match nts_differential::compiles(&prepared.program, &workspace.built) {
+                    Ok(()) => {}
+                    Err(nts_differential::NotC::Refused(what)) => {
+                        notes.push(format!("BACKEND REFUSED: {file}: {what}"));
+                    }
+                    Err(nts_differential::NotC::Rejected(error)) => {
+                        uncompilable = true;
+                        notes.push(format!("UNCOMPILABLE C: {file}: {error}"));
+                    }
                 }
                 if prepared.diagnostics.is_empty() {
                     Outcome::Lowered
