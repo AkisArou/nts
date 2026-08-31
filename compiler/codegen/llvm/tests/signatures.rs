@@ -95,10 +95,17 @@ fn from_clang(root: &std::path::Path) -> Option<Vec<Declared>> {
         }
         let Some(open) = line.find('(') else { continue };
         let before = &line[..open];
-        let Some(start) = before.rfind(|c: char| !(c.is_alphanumeric() || c == '_')) else {
-            continue;
-        };
-        let name = &before[start + 1..];
+        // Where the name starts. `rfind` answering nothing means the whole of
+        // `before` *is* the name -- a declaration whose return type wrapped to
+        // the previous line, which is what clang-format does once a line gets
+        // long enough. That used to `continue`, so adding an attribute to
+        // `nts_array_new_uninitialized` reflowed its declaration, dropped it
+        // from the table, and left the backend emitting a call to a helper it
+        // then neither declared nor converted the argument for.
+        let start = before
+            .rfind(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .map_or(0, |at| at + 1);
+        let name = &before[start..];
         if !name.starts_with("nts_") || names.iter().any(|known| known == name) {
             continue;
         }
@@ -249,8 +256,15 @@ fn the_table_still_matches_the_header() {
     for declared in &fresh {
         let name = &declared.name;
         let Some(known) = SIGNATURES.iter().find(|known| known.name == *name) else {
-            // A function the table does not carry is one the backend cannot
-            // call, which is a refusal rather than a wrong call. Not an error.
+            // A helper the backend *reaches for* must be here. Missing, its
+            // call is emitted with no declaration and no argument conversion --
+            // an invalid module, not a refusal. Anything else the table does
+            // not carry is a refusal, which is fine.
+            assert!(
+                !nts_codegen_llvm::ALWAYS_DECLARED.contains(&name.as_str()),
+                "`{name}` is reached for by the backend but missing from the table; \
+                 rerun with NTS_REGENERATE=1"
+            );
             continue;
         };
         assert_eq!(

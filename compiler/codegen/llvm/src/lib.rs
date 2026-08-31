@@ -570,35 +570,44 @@ fn index_lines(
     array: ValueId,
     index: ValueId,
     checked: bool,
-) -> Vec<String> {
+) -> Result<Vec<String>, Diagnostic> {
     let mut lines = vec![format!(
         "{out}.blk = getelementptr i8, ptr {}, i64 {}",
         name(array),
         nts_codegen_common::layout::ELEMENTS_OFFSET
     )];
-    let integral = matches!(func.values[index.0 as usize].ty, HirType::Int { .. });
+    let held = &func.values[index.0 as usize].ty;
+    let integral = matches!(held, HirType::Int { .. });
     if checked {
-        if integral {
-            lines.push(format!(
-                "{out}.i = call i32 @nts_check_fn(ptr {}, i32 {})",
-                name(array),
-                name(index)
-            ));
+        // The index at the width the check declares. `matches!(Int { .. })` is
+        // true of an `i64` as well, and this used to hand one straight to
+        // `nts_check_fn(ptr, uint32_t)` as an `i32` -- an index wide enough to
+        // need narrowing is exactly the one where saying `i32` and meaning
+        // `i64` is wrong. Found by a benchmark whose counter is bounded by a
+        // length rather than a constant.
+        let helper = if integral {
+            "nts_check_fn"
         } else {
-            lines.push(format!(
-                "{out}.i = call i32 @nts_index_fn(ptr {}, double {})",
-                name(array),
-                name(index)
-            ));
-        }
+            "nts_index_fn"
+        };
+        let at = helper_operand(func, out, helper, 1, index, &mut lines)?;
+        lines.push(format!(
+            "{out}.i = call i32 @{helper}(ptr {}, {at})",
+            name(array)
+        ));
     } else if integral {
-        lines.push(format!("{out}.i = add i32 {}, 0", name(index)));
+        let have = ty_of(held, func)?;
+        lines.push(if have == "i32" {
+            format!("{out}.i = add i32 {}, 0", name(index))
+        } else {
+            converted(&format!("{out}.i"), have, "i32", &name(index), func)?
+        });
     } else {
         // Proven in range, so the conversion is exact whichever representation
         // it arrived in.
         lines.push(format!("{out}.i = fptoui double {} to i32", name(index)));
     }
-    lines
+    Ok(lines)
 }
 
 /// A name for a scalar element type, for the descriptor it needs.
@@ -804,7 +813,7 @@ fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
 /// A bounds check, a retain, an allocation: the lowering does not put these in
 /// `Callee::External`, the backend reaches for them. Declared from the same
 /// table as everything else so there is one place a signature comes from.
-const ALWAYS_DECLARED: &[&str] = &[
+pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_array_new",
     "nts_array_new_uninitialized",
     "nts_cell_unready",
@@ -1528,7 +1537,7 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             // the one on the write took its type from the *stored value* and
             // put `store i64` into an array of doubles.
             let element = ty_of(array_element(func, *array)?, func)?;
-            let mut lines = index_lines(func, &out, *array, *index, *checked);
+            let mut lines = index_lines(func, &out, *array, *index, *checked)?;
             lines.push(format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")));
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
@@ -1543,7 +1552,7 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             checked,
         } => {
             let element = ty_of(array_element(func, *array)?, func)?;
-            let mut lines = index_lines(func, &out, *array, *index, *checked);
+            let mut lines = index_lines(func, &out, *array, *index, *checked)?;
             lines.push(format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")));
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"

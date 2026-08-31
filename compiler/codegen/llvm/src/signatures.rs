@@ -65,6 +65,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_array_join_str", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_last_index_of", returns: "double", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_array_new", returns: "noalias nonnull ptr", params: &["ptr", "double"], attributes: &[] },
+    Signature { name: "nts_array_new_uninitialized", returns: "noalias nonnull ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_pop", returns: "double", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_pop_ref", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_pop_value", returns: "{ i32, i64 }", params: &["ptr"], attributes: &[] },
