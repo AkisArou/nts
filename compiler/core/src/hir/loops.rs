@@ -68,6 +68,21 @@ pub fn accumulator_caps(func: &Func, analysis: &Analysis) -> FxHashMap<ValueId, 
         let Some(loop_shape) = shape(func, &predecessors, header) else {
             continue;
         };
+        // The counter is bounded by its own guard, whatever the trip count
+        // turns out to be. Those are two different facts and they were coupled:
+        // a loop over `xs.length` has up to 4294967295 trips, `MAX_TRIPS` is
+        // 1e9, so `trip_count` gave up -- and the counter lost its bound along
+        // with the accumulators, though `i < xs.length` bounds it exactly.
+        //
+        // A counter left unbounded is not a small loss. Unbounded is not a
+        // whole number, so it stays a `double`, every index becomes an
+        // `fptoui` of a floating-point induction variable, and LLVM's scalar
+        // evolution cannot model one -- so the loop never vectorizes. See
+        // `benches/cases/elementwise`.
+        if let Some((counter, bound)) = counter_bound(func, analysis, header, &loop_shape) {
+            caps.insert(counter, bound);
+        }
+
         let Some(trips) = trip_count(func, analysis, &predecessors, header, &loop_shape) else {
             continue;
         };
@@ -206,6 +221,50 @@ fn shape(
 ///
 /// Returned as facts rather than a value, because `i--` gains `-1` and there is
 /// no value in the function holding that.
+/// Whether `value` is `param`, or a copy of it carried through block
+/// parameters.
+///
+/// `i++` does not reach the latch as `i + 1`. The body jumps to a join block
+/// first, so the counter arrives there as *that* block's parameter and the
+/// increment reads the copy: `b3(%3)` fed `%2`, and the latch is `%3 + 1`.
+/// Comparing identity says that is not an induction variable, so the loop got
+/// no trip count and its counter no bound -- and an unbounded counter is not a
+/// whole number, so it stays a `double` and the loop never vectorizes.
+///
+/// Only where *every* predecessor passes something that resolves to `param`. A
+/// join whose paths disagree is a merge, which the arm below handles by joining
+/// the steps rather than by pretending it is a copy.
+fn copies(
+    func: &Func,
+    predecessors: &[Vec<(BlockId, Vec<ValueId>)>],
+    value: ValueId,
+    param: ValueId,
+    depth: u32,
+) -> bool {
+    if value == param {
+        return true;
+    }
+    if depth == 0 {
+        return false;
+    }
+    let OpKind::BlockParam(slot) = func.values[value.0 as usize].kind else {
+        return false;
+    };
+    let Some(block) = func
+        .blocks
+        .iter()
+        .position(|block| block.params.contains(&value))
+    else {
+        return false;
+    };
+    let incoming = &predecessors[block];
+    !incoming.is_empty()
+        && incoming.iter().all(|(_, args)| {
+            args.get(slot as usize)
+                .is_some_and(|arg| copies(func, predecessors, *arg, param, depth - 1))
+        })
+}
+
 fn step_of(
     func: &Func,
     analysis: &Analysis,
@@ -227,19 +286,21 @@ fn step_of(
             op: BinOp::Add,
             lhs,
             rhs,
-        } if lhs == param => Some(analysis.get(rhs)),
+        } if copies(func, predecessors, lhs, param, depth) => Some(analysis.get(rhs)),
         OpKind::Binary {
             op: BinOp::Add,
             lhs,
             rhs,
-        } if rhs == param => Some(analysis.get(lhs)),
+        } if copies(func, predecessors, rhs, param, depth) => Some(analysis.get(lhs)),
         // `param - x` steps by `-x`. `x - param` is not an induction variable:
         // it reflects around `x` rather than advancing.
         OpKind::Binary {
             op: BinOp::Sub,
             lhs,
             rhs,
-        } if lhs == param => Some(super::facts::neg(analysis.get(rhs))),
+        } if copies(func, predecessors, lhs, param, depth) => {
+            Some(super::facts::neg(analysis.get(rhs)))
+        }
 
         // A merge. `if (found) { total += 1 }` inside a loop reaches the latch
         // through a block parameter whose incoming values are the accumulator
@@ -276,6 +337,68 @@ fn step_of(
 }
 
 /// How many times the loop can run.
+/// What the header's own guard says about the counter.
+///
+/// `i < limit` means `i` never exceeds `limit`'s largest value -- and the value
+/// that flows back to the header is one step past whatever passed the guard, so
+/// the bound carries one step of slack. Monotonic in the step's direction, so
+/// the other end is where it started.
+///
+/// Independent of the trip count on purpose. Iteration counting answers "how
+/// far can an accumulator have moved", which needs to know how many times; this
+/// answers "how large can the counter be", which the guard already said.
+fn counter_bound(
+    func: &Func,
+    analysis: &Analysis,
+    header: BlockId,
+    shape: &Shape,
+) -> Option<(ValueId, Facts)> {
+    let Terminator::Branch { cond, .. } = func.blocks[header.0 as usize].terminator else {
+        return None;
+    };
+    let OpKind::Binary {
+        op: comparison,
+        lhs: counter,
+        rhs: limit,
+    } = func.values[cond.0 as usize].kind
+    else {
+        return None;
+    };
+    let ascending = match comparison {
+        BinOp::Lt | BinOp::Le => true,
+        BinOp::Gt | BinOp::Ge => false,
+        _ => return None,
+    };
+    let params = &func.blocks[header.0 as usize].params;
+    let slot = params.iter().position(|param| *param == counter)?;
+    let start = analysis.get(*shape.entry_args.get(slot)?);
+    let bound = analysis.get(limit);
+
+    // The step has to be a fixed amount moving toward the bound, or the counter
+    // is not one and the guard says nothing about how far it goes.
+    let step = step_of(
+        func,
+        analysis,
+        &predecessors(func),
+        counter,
+        shape.latch_args.get(slot).copied(),
+        MERGE_DEPTH,
+    )?;
+    if !step.is_singleton() || (ascending && step.lo <= 0.0) || (!ascending && step.lo >= 0.0) {
+        return None;
+    }
+
+    let (lo, hi) = if ascending {
+        (start.lo, bound.hi + step.lo)
+    } else {
+        (bound.lo + step.lo, start.hi)
+    };
+    if !lo.is_finite() || !hi.is_finite() {
+        return None;
+    }
+    Some((counter, Facts::new(lo, hi, false, true, true)))
+}
+
 fn trip_count(
     func: &Func,
     analysis: &Analysis,

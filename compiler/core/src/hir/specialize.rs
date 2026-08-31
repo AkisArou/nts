@@ -344,6 +344,15 @@ fn width_of(
         }
         | OpKind::ConstFloat(_)
         | OpKind::BlockParam(_)
+        // A length is a `uint32_t` in the header and cannot be anything else:
+        // integral by construction, in `[0, 2^32 - 1]` by construction, never
+        // NaN. Leaving it out mattered more than it looks -- a comparison joins
+        // its two sides into one class, so `i < xs.length` put the counter in a
+        // class with the length, and a class is only as good as its worst
+        // member. The counter stayed a `double`, every index became an `fptoui`
+        // of a floating-point induction variable, and LLVM's scalar evolution
+        // cannot model one, so `benches/cases/elementwise` never vectorized.
+        | OpKind::Length(_)
         // A code unit proven inside its string is a `uint16`: integral, in
         // range, and not NaN. Leaving it a double drags whatever it is
         // multiplied into and added to along with it, and a loop-carried

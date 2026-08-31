@@ -1680,10 +1680,17 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
                 format!("{at} = getelementptr i8, ptr {}, i64 {offset}", name(*of)),
                 format!("{raw} = load i32, ptr {at}{}", tbaa("i32")),
             ];
+            // A length is a `uint32_t`, so widening it is `zext` and turning
+            // it into a float is `uitofp` -- and the difference is not
+            // cosmetic: `uitofp i32 ... to i64` is not an instruction. This
+            // wrote `uitofp` for everything that was not `i32`, which nothing
+            // noticed while a length was only ever compared against a double.
+            // Specializing it made `i64` reachable and the module stopped
+            // verifying.
             lines.push(if returns == "i32" {
                 format!("{out} = add i32 {raw}, 0")
             } else {
-                format!("{out} = uitofp i32 {raw} to {returns}")
+                converted(&out, "i32", returns, &raw, func)?
             });
             lines.join("\n  ")
         }
