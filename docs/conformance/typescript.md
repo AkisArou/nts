@@ -375,7 +375,7 @@ of the surface therefore costs nothing.
 | ✅ | `as`, `satisfies`, `as const`, `!` |
 | ✅ | `namespace` |
 | ✅ | `declare` (ambient) |
-| ✅ | `enum` |
+| ✗ | `enum` — the mark was ✅ and it is not. Every shape is refused: numeric, `const`, and string alike. `Colour.Red` resolves `Colour`, which is a type and not a value |
 | ✗ | `const enum` |
 | ✗ | decorators |
 
