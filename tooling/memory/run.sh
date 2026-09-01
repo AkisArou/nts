@@ -6,12 +6,21 @@
 # elision pass is trying to remove -- and it needs no quiet machine and no
 # calibration, so it can run in seconds rather than in half an hour.
 #
-# Three numbers per case, and the third is the point:
+# Two measurements, each against a floor that is an argument rather than a
+# number, and the arguments are the point:
 #
 #   naive   what a correctness-first implementation emits, from `NTS_RC_NAIVE=1`
-#   actual  what this compiler emits today
+#   actual  the reference-counting operations this compiler emits today
 #   ideal   what a person can *justify* as necessary, written down in `expected`
 #           beside the argument for it
+#   alloc   heap allocations of every kind in the measured run
+#   floor   the same, for allocation: `allocated` in `expected`
+#
+# Counting was the first question and is nearly answered. Allocation is the
+# second and is untouched by any of it: `awfy-bounce` spends five counting
+# operations in the whole program and makes a hundred objects an iteration, so
+# no elision could ever have reached it. A suite whose cases are all at their
+# floor on one column has stopped being a ratchet, which is why there are two.
 #
 # `actual / naive` is the ratio Lobster reports when it says it eliminates 95%
 # of reference operations. `actual - ideal` is the work queue. Without the third
@@ -37,7 +46,8 @@ out=target/memory
 mkdir -p "$out"
 
 fail=0
-printf '%-20s %8s %8s %8s %7s   %s\n' case naive actual ideal gone ''
+printf '%-20s %7s %7s %7s %6s %7s %6s   %s\n' \
+  case naive actual ideal gone alloc floor ''
 
 for dir in tooling/memory/cases/*/; do
   name=$(basename "$dir")
@@ -72,7 +82,11 @@ for dir in tooling/memory/cases/*/; do
   }
 
   # Every case directory gets a row, whatever happened to it.
-  short() { printf '%-20s %8s %8s %8s %7s   %s\n' "$name" "?" "?" "?" "--" "$1"; fail=1; }
+  short() {
+    printf '%-20s %7s %7s %7s %6s %7s %6s   %s\n' \
+      "$name" "?" "?" "?" "--" "?" "?" "$1"
+    fail=1
+  }
   elided=$(measure elided -u NTS_RC_NAIVE) || { short "DID NOT RUN"; continue; }
   naive=$(measure naive NTS_RC_NAIVE=1) || { short "DID NOT RUN under NTS_RC_NAIVE"; continue; }
 
@@ -82,22 +96,35 @@ for dir in tooling/memory/cases/*/; do
   leaked=$(read_num "$elided" leaked)
   answer=$(read_num "$elided" answer)
   naive_answer=$(read_num "$naive" answer)
+  alloc=$(read_num "$elided" allocated)
   ideal=$(grep '^ideal ' "$dir/expected" | awk '{print $2}')
+  floor=$(grep '^allocated ' "$dir/expected" | awk '{print $2}')
 
   note=""
   # Elision that changes the answer is not elision.
   [ "$answer" = "$naive_answer" ] || { note="ANSWER CHANGED: $naive_answer -> $answer"; fail=1; }
   [ "$leaked" = "0" ] || { note="LEAKED $leaked"; fail=1; }
-  [ -z "$note" ] && [ "$a" -gt "$ideal" ] && note="$((a - ideal)) above ideal"
+  [ -n "$floor" ] || { note='no "allocated" line in expected'; fail=1; }
+  # Below a floor means the argument beside it is wrong, not the measurement.
+  # Four ideals in this suite were too high before anyone noticed, and every one
+  # was caught here rather than by reading them again.
   [ -z "$note" ] && [ "$a" -lt "$ideal" ] && { note="BELOW ideal -- the argument in expected is wrong"; fail=1; }
+  [ -z "$note" ] && [ -n "$floor" ] && [ "$alloc" -lt "$floor" ] && { note="BELOW allocation floor -- the argument in expected is wrong"; fail=1; }
+  if [ -z "$note" ]; then
+    over=""
+    [ "$a" -gt "$ideal" ] && over="$((a - ideal)) ops"
+    [ -n "$floor" ] && [ "$alloc" -gt "$floor" ] && over="${over:+$over, }$((alloc - floor)) allocations"
+    [ -n "$over" ] && note="$over above"
+  fi
 
   ratio="--"
   [ "$n" -gt 0 ] && ratio=$(awk -v a="$a" -v n="$n" 'BEGIN { printf "%d%%", (n - a) * 100 / n }')
-  printf '%-20s %8s %8s %8s %7s   %s\n' "$name" "$n" "$a" "$ideal" "$ratio" "$note"
+  printf '%-20s %7s %7s %7s %6s %7s %6s   %s\n' \
+    "$name" "$n" "$a" "$ideal" "$ratio" "$alloc" "$floor" "$note"
 done
 
 if [ "$fail" -ne 0 ]; then
   printf '\n\033[31mFAILED\033[0m: memory\n'
   exit 1
 fi
-printf '\n\033[32mgreen\033[0m: nothing leaked, no answer changed, none below its ideal\n'
+printf '\n\033[32mgreen\033[0m: nothing leaked, no answer changed, nothing below a floor\n'

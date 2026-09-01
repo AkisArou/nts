@@ -1,7 +1,11 @@
 ideal 17
+allocated 17
 because seventeen links, one reference each, and the walk owes nothing.
 because
 because Building the list is all moves: `made` dies into `tail.next`, and `tail`
 because is a borrow of a slot that was just written. Walking it holds no store
 because and no call, so every step is a borrow of the link before it, back to
 because `head` -- which the frame owns for the whole loop and both ways out.
+because
+because Allocations: seventeen links. Leaving the walk early changes nothing
+because about the list.

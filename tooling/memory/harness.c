@@ -10,6 +10,12 @@
  * Counting fewer operations while leaking is not an improvement, and a suite
  * that reported only the count would call it one.
  *
+ * And the count is no longer the only number. Reference counting is what an
+ * elision pass removes; *allocation* is what it cannot touch at all --
+ * `awfy-bounce` has five counting operations in the whole program and makes a
+ * hundred objects an iteration. So the allocations of the measured run are
+ * reported beside the operations, against their own floor.
+ *
  * The collection before each reading is not optional. A release that reaches
  * zero on an object already buffered as a cycle candidate returns *without*
  * destroying it -- the collector frees it instead -- so a self-referential type
@@ -46,11 +52,13 @@ int main(void) {
      first time round. */
   size_t retains = nts_counted_retains();
   size_t releases = nts_counted_releases();
+  size_t allocated = nts_counted_allocations();
   nts_collect_cycles();
   size_t after = nts_live_count();
 
   (void)settled;
-  printf("retains=%zu releases=%zu leaked=%zd answer=%.0f\n", retains, releases,
-         (ptrdiff_t)after - (ptrdiff_t)before, answer);
+  printf("retains=%zu releases=%zu allocated=%zu leaked=%zd answer=%.0f\n",
+         retains, releases, allocated, (ptrdiff_t)after - (ptrdiff_t)before,
+         answer);
   return 0;
 }

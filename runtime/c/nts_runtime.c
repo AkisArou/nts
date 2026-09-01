@@ -20,6 +20,22 @@ static size_t nts_reclaimed = 0;
 
 size_t nts_live_count(void) { return nts_allocated - nts_reclaimed; }
 
+/* The same allocations again, in a window a measurement can zero.
+ *
+ * `nts_allocated` cannot be zeroed: `nts_live_count` is the difference between
+ * it and `nts_reclaimed`, so resetting one half would read the whole heap as
+ * freed and the leak check would go quiet. */
+static size_t nts_allocations = 0;
+
+size_t nts_counted_allocations(void) { return nts_allocations; }
+
+/* One place, so a fifth allocator cannot arrive and be counted by one of these
+ * and not the other. Objects, arrays, strings and maps all come through it. */
+static void nts_note_allocation(void) {
+  nts_allocated++;
+  nts_allocations++;
+}
+
 /* Every call to `nts_retain` and `nts_release`, counted where it arrives rather
  * than where it has an effect.
  *
@@ -42,6 +58,7 @@ size_t nts_counted_releases(void) { return nts_releases; }
 void nts_counting_reset(void) {
   nts_retains = 0;
   nts_releases = 0;
+  nts_allocations = 0;
 }
 
 /* Cyclic, because one descriptor serves every array of references and says
@@ -259,7 +276,7 @@ NtsHeader *nts_object_new(const NtsDescriptor *descriptor) {
   object->descriptor = descriptor;
   /* One reference: the caller's. */
   object->reserved = 1;
-  nts_allocated++;
+  nts_note_allocation();
   return object;
 }
 
@@ -953,7 +970,7 @@ static NtsArray *nts_array_allocate(const NtsDescriptor *descriptor,
   NtsArray *array = (NtsArray *)nts_alloc(bytes);
   array->header.descriptor = descriptor;
   array->header.reserved = 1;
-  nts_allocated++;
+  nts_note_allocation();
   array->header.flags = 0;
   array->header.length = count;
   array->capacity = count;
@@ -1298,7 +1315,7 @@ static NtsString *nts_str_raw(uint32_t length, int wide) {
       (NtsString *)nts_alloc(sizeof(NtsHeader) + ((size_t)length + 1) * width);
   out->descriptor = wide ? &nts_desc_string2 : &nts_desc_string1;
   out->reserved = 1;
-  nts_allocated++;
+  nts_note_allocation();
   out->flags = wide ? NTS_TWO_BYTE : 0u;
   out->length = length;
   if (wide) {
@@ -2757,7 +2774,7 @@ static NtsMap *nts_map_alloc(uint32_t kind, bool holds_values) {
   map->header.reserved = 1;
   map->header.flags = 0;
   map->header.length = 0;
-  nts_allocated++;
+  nts_note_allocation();
   map->used = 0;
   map->capacity = 0;
   map->slots = 0;

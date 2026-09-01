@@ -1,4 +1,5 @@
 ideal 18
+allocated 18
 because seventeen cells and the array that holds them, one reference each.
 because
 because Zero retains. `push` is handed a cell that is dying at the point it is
@@ -9,3 +10,8 @@ because
 because The releases are the array's teardown: dropping it walks the elements
 because once, which is one release per cell, and the array itself is the
 because eighteenth.
+because
+because Allocations: seventeen cells and the array holding them. The array is
+because built by `push`, so its length is not known where it is made and its
+because elements cannot live inline; the cells outlive the iterations that made
+because them.

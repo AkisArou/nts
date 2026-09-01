@@ -1,6 +1,11 @@
 ideal 33
+allocated 33
 because the same teardown floor as `traversal`: thirty three links to give back.
 because The call to `weigh` should cost nothing at all -- it performs no store,
 because so it cannot overwrite the slot the walk is borrowing from, and the
 because interprocedural summary is what says so. Any operation here beyond the
 because teardown is a borrow that a call ended for no reason.
+because
+because Allocations: thirty three links. A list built in a loop outlives every
+because iteration that made one, so no frame holds it -- this is the shape that
+because genuinely needs a heap.

@@ -560,6 +560,11 @@ size_t nts_live_count(void);
  * it is what `tooling/memory` measures. `nts_counting_reset` zeroes both. */
 size_t nts_counted_retains(void);
 size_t nts_counted_releases(void);
+/* Heap allocations of every kind -- objects, arrays, strings, maps -- since the
+   last `nts_counting_reset`. What escape analysis is trying to remove, and the
+   thing reference counting cannot: `awfy-bounce` has five counting operations
+   in the whole program and allocates a hundred objects an iteration. */
+size_t nts_counted_allocations(void);
 void nts_counting_reset(void);
 void nts_release(NtsHeader *object);
 NTS_ALLOCATES NtsArray *nts_array_new(const NtsDescriptor *descriptor,

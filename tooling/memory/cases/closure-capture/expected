@@ -1,4 +1,5 @@
 ideal 17
+allocated 0
 because seventeen boxes, one reference each to give back. The closures cost
 because nothing: nothing lets one escape the iteration that built it, so each
 because lives in the frame and is never an object at all.
@@ -12,3 +13,7 @@ because
 because No retain is justified either. `box` is named once more after it is
 because built, by the capture, and never again, so the frame's reference moves
 because into the closure rather than being copied.
+because
+because Allocations: nothing. The box and the closure both die with the
+because iteration that made them, and neither is named outside it, so a frame
+because slot holds each in turn.

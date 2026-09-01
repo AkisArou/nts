@@ -1,4 +1,5 @@
 ideal 34
+allocated 0
 because thirty four `Base` objects -- two an iteration -- and one reference each
 because to give back. The `Derived` costs nothing: it does not escape, so it
 because lives in the frame and never reaches the allocator.
@@ -20,3 +21,6 @@ because `b` are one object under two types, and `d.left` and `b.left` are the
 because same eight bytes; telling slots apart by *type* would decide the store
 because cannot disturb the load, elide the retain, and free `got` while it is
 because still named. The read of `got.tag` is what would notice.
+because
+because Allocations: nothing. The `Derived` is a frame object already, and the
+because two `Base` objects an iteration die with it.

@@ -1,4 +1,5 @@
 ideal 18
+allocated 0
 because one retain and one release for each of nine iterations.
 because
 because `b` is not named after it is stored, so the frame's reference to it
@@ -10,3 +11,7 @@ because
 because Below eighteen is not an improvement. Both objects are left at a count
 because of one, held only by each other, and that is exactly what the collector
 because reads to decide they are garbage. Take either count away and it cannot.
+because
+because Allocations: nothing. Each pair dies with its iteration. That they point
+because at each other does not change it: a cycle among frame objects is gone
+because when the frame is, and the collector never has to hear about it.

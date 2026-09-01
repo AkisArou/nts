@@ -1,4 +1,5 @@
 ideal 2
+allocated 0
 because the two things, one reference each, given back when the frame ends.
 because
 because The pair costs nothing. It never escapes `work`, so it lives in the
@@ -17,3 +18,7 @@ because and each reference is handed to the other slot. Nothing is ever
 because reachable twice, so nothing needs a count. Borrowing cannot see this --
 because the value has to outlive the slot it came from -- and it is what
 because `load [take]` is for.
+because
+because Allocations: nothing. The pair and the two things live the whole
+because function, there are exactly three of them, and none escapes -- which is
+because every condition a frame needs.

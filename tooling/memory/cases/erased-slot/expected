@@ -1,4 +1,5 @@
 ideal 0
+allocated 0
 because nothing here reaches the allocator. The box does not escape the
 because iteration that built it, so it lives in the frame, and a frame object
 because owes nothing to anybody: its storage ends with the frame.
@@ -17,3 +18,7 @@ because instrument had to say so twice before I wrote it down.
 because
 because If this case ever needs an operation, erasure is costing an ownership
 because kind of its own and record 0024 is wrong about it.
+because
+because Allocations: nothing, and this one already reaches it -- the box is a
+because frame object today, which is why all sixty eight of its counting
+because operations were on something that never saw the allocator.

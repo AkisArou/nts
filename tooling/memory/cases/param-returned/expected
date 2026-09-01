@@ -1,4 +1,5 @@
 ideal 34
+allocated 0
 because thirty four boxes, one reference each to give back.
 because
 because Parameters are borrowed -- the caller holds them across a synchronous
@@ -8,3 +9,6 @@ because are still named by the caller's frame when the result is read.
 because
 because No retain is justified. Every one this case reports is a call ending a
 because borrow that outlives it.
+because
+because Allocations: nothing. Two boxes an iteration, handed to a call that only
+because reads them and hands one back, and neither outlives the iteration.

@@ -1,4 +1,5 @@
 ideal 33
+allocated 33
 because building the chain owes nothing: each `made` is stored into `tail.next`
 because and dies there, which is a transfer rather than a retain, and `tail` is
 because an alias the loop never outlives. The walk owes nothing either -- it
@@ -9,3 +10,7 @@ because and each one's `next` is a reference some object still holds until it is
 because released. One release per link is the floor for reference counting; the
 because way past it is not to count better but to not allocate thirty three
 because objects, which is a different pass.
+because
+because Allocations: thirty three links. A list built in a loop outlives every
+because iteration that made one, so no frame holds it -- this is the shape that
+because genuinely needs a heap.

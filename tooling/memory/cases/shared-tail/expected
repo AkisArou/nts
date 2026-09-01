@@ -1,4 +1,5 @@
 ideal 3
+allocated 17
 because one retain, and two references given back. The chain itself is not on
 because this bill, and that is not an elision -- it is who does the work.
 because
@@ -26,3 +27,6 @@ because And this case still cannot reach zero, which is what it is for. Take
 because either count away and the tail is either freed while the second head
 because still points at it -- which the answer would catch -- or never freed at
 because all, which the leak check would.
+because
+because Allocations: seventeen links. The two heads die with the call and belong
+because in the frame; the chain is a list built in a loop and does not.
