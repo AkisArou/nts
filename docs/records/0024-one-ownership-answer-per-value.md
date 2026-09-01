@@ -19,26 +19,29 @@ what a person can justify as necessary written down beside the argument for it.
 | case | naive | actual | ideal | eliminated |
 | --- | --- | --- | --- | --- |
 | `array-of-objects` | 52 | 18 | 18 | 65% — at ideal |
-| `borrowed-call` | 134 | 67 | 33 | 50% |
+| `borrowed-call` | 134 | 33 | 33 | 75% — at ideal |
 | `closure-capture` | 51 | 17 | 17 | 66% — at ideal |
 | `cycle` | 36 | 18 | 18 | 50% — at ideal |
-| `early-return` | 17 | 17 | 17 | — at ideal |
+| `early-return` | 17 | 17 | 17 | at ideal |
 | `erased-slot` | 68 | 0 | 0 | 100% — at ideal |
 | `global-array` | 34 | 0 | 0 | 100% — at ideal |
-| `local-anchor` | 68 | 35 | 17 | 48% |
-| `loop-break` | 53 | 35 | 17 | 33% |
+| `local-anchor` | 68 | 17 | 17 | 75% — at ideal |
+| `loop-break` | 53 | 17 | 17 | 67% — at ideal |
 | `param-returned` | 68 | 34 | 34 | 50% — at ideal |
-| `shared-tail` | 111 | 39 | 21 | 64% |
+| `shared-tail` | 111 | 5 | 3 | 95% |
 | `store-elsewhere` | 134 | 33 | 33 | 75% — at ideal |
 | `subclass-field` | 68 | 34 | 34 | 50% — at ideal |
 | `swap` | 104 | 2 | 2 | 98% — at ideal |
-| `traversal` | 134 | 67 | 33 | 50% |
+| `traversal` | 134 | 33 | 33 | 75% — at ideal |
 
-Lobster reports eliminating about 95% of reference operations. Ten of these
-fifteen are at their floor and two are still at zero, which is what the rest of
-this record is about. Every one of the eight moved because a fact the compiler
-already had was being thrown away at a boundary -- an edge, a call, a slot -- and
-not because a new fact was discovered.
+Lobster reports eliminating about 95% of reference operations. Fourteen of these
+fifteen are now at their floor, and the fifteenth is two operations above one
+that escape analysis rather than counting has to close.
+
+Not one of them moved because a new fact was discovered. Every single one moved
+because a fact the compiler already had was being thrown away at a boundary --
+an edge, a call, a slot, a block -- which is the argument this record was
+written to make, arriving as fourteen measurements instead of an opinion.
 
 ## What the four analyses actually have in common
 
@@ -554,7 +557,40 @@ Both of those are today separate wishlist items. Under one ownership answer they
 are the same query with different consumers, which is the argument for doing this
 before either of them.
 
-## The five that are left are one thing
+## The five that were left were one thing, and a store over a zero closed them
+
+Written when `traversal`, `borrowed-call`, `local-anchor`, `loop-break` and
+`shared-tail` were 122 operations above their floors, all of it the same two
+lines in the loop that builds a list. The section below is what it said, and
+then what it turned out to have missed.
+
+The missing piece was already computed. **A store that writes over a zero adds
+an edge and removes none**, so it cannot disconnect anything from anything --
+and `freshness` had been proving `tail.next` is null before that store since two
+commits earlier. So the chain from the head only ever grows, and a link put into
+it by such a store is reachable from the head for as long as the head lives.
+
+Three consequences, and each closed cases:
+
+- An initializing store cannot end any borrow, so it drops out of the effect
+  scan entirely.
+- A value an initializing store has put inside something anchored is itself
+  anchored (`housed_safely`), so the link a list has just been extended with can
+  travel round the loop as a **borrow**. That is `loop-break` at its floor.
+- A value the function *returns* can anchor. It was excluded from the anchor set
+  to stop it being released at the same exit that hands it back -- but that is
+  only about the live-range stretch, and drawing the line in the wrong place
+  cost `traversal` and `local-anchor` their entire walk, because both build a
+  list in a helper and hand back the head.
+
+So the claim below -- that this needed a per-point ownership map -- was wrong,
+and wrong in an instructive way: what looked like a limit of the *representation*
+was a fact computed two commits earlier and never connected. The set really can
+say it, because the value does not change hands after all. The store hands the
+reference to the slot, and the value is a borrow from that moment on and an
+owner before it -- but nothing reads the answer in between.
+
+## What the five looked like from the other side
 
 `traversal` and `borrowed-call` at 67 against 33, `local-anchor`, `loop-break`
 and `shared-tail` at 18 above theirs. Every one of those 122 operations is the
@@ -580,9 +616,15 @@ identity cannot express. `field_name` compares names rather than types for a
 reason that still holds; what it cannot do is tell two objects of the same class
 apart.
 
-So the last 122 operations are the case for `hir::own` rather than an argument
-against it: a per-value, per-point ownership map, with anchors that are places
-and not values. Everything above was reachable without it. This is not.
+That was the reasoning, and the last paragraph of it said these 122 operations
+were the case for `hir::own` -- that everything else had been reachable without
+it and this was not. It was not. See the section above: the answer was a fact
+about stores over zeros, and the set could carry it.
+
+What survives of the argument is narrower and still true. The *reason* it works
+is that nothing ever asks about the value in the window where its ownership is
+changing, so a whole-function answer happens to be enough. A model that had to
+answer at every point would not have needed the coincidence.
 
 ## Getting there without a flag day
 
