@@ -73,6 +73,35 @@ impl Liveness {
         &self.available[block.0 as usize]
     }
 
+    /// Hold a value live until every exit.
+    ///
+    /// A borrow is only good while the place it came from is, so a local that
+    /// *anchors* one has to outlive it. Stretching the range here rather than
+    /// special-casing it where releases are placed means every rule that reads
+    /// liveness agrees about it -- where a release goes, and whether handing a
+    /// value on is a move or a copy. Two rules disagreeing about one value is
+    /// how a reference gets consumed twice.
+    ///
+    /// Only sound for a value the *entry* block defines, which runs exactly
+    /// once, so the value names one object for the whole call. A value defined
+    /// in a loop names a different one each time round and must die each time
+    /// round with it.
+    pub fn hold_to_every_exit(&mut self, func: &Func, value: ValueId) {
+        for (index, block) in func.blocks.iter().enumerate() {
+            self.available[index].insert(value);
+            if index != 0 {
+                self.live_in[index].insert(value);
+            }
+            if block.terminator.successors().is_empty() {
+                // Nowhere left to go, so this is where it dies and where the
+                // release belongs.
+                self.live_out[index].remove(&value);
+            } else {
+                self.live_out[index].insert(value);
+            }
+        }
+    }
+
     /// Whether a value's last read is inside this block.
     ///
     /// True when it is available in the block — defined there, or arriving live

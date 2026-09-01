@@ -168,18 +168,72 @@ fn field_name<'a>(
 /// and no call mutates, the borrow is good everywhere and the block structure
 /// stops mattering.
 ///
-/// # Why the container must be a parameter
+/// # What the container may be
 ///
 /// A borrow is alive because its container's slot still holds it, so the
-/// container has to be alive for a reason nothing here can affect. A parameter
-/// is: the caller holds a reference for the length of the call, and this
-/// module never releases one. A value the *function* allocated is not -- it can
-/// die here, and the borrow with it.
+/// container has to be alive for the whole borrow. A parameter is, for free:
+/// the caller holds a reference for the length of the call and this module
+/// never releases one.
+///
+/// A value the function allocated is not, for free -- it can die here, and the
+/// borrow with it. It can be *made* to be, which is what [`entry_owned`] and
+/// `hold_to_every_exit` are between them. That is not a detail: refusing it
+/// meant every walk over a list a function built itself paid full price, which
+/// `local-anchor` measures at 0 of 85 against `traversal`'s 40% for the same
+/// loop over a list handed in as a parameter.
+/// What a borrow stands on: what may anchor it, and what can still run after it.
+///
+/// `settled` and `owned` mean opposite things and are both anchors. `settled`
+/// holds borrows -- a container that is one is alive for whatever reason its
+/// own anchor is. `owned` holds values the frame is keeping anyway, whose live
+/// range this pass stretches to every exit so that borrowing from them is safe.
+///
+/// `reaches` is the other half. A borrow can only be invalidated by something
+/// that runs *after* it, so the scan below is over the blocks reachable from
+/// the load's own block and not over the whole function.
+struct Standing<'a> {
+    settled: &'a rustc_hash::FxHashSet<ValueId>,
+    owned: &'a rustc_hash::FxHashSet<ValueId>,
+    /// Which block defines each value.
+    defined_in: &'a [Option<usize>],
+    /// Which blocks each block can reach, itself included when it is in a loop.
+    reaches: &'a [rustc_hash::FxHashSet<usize>],
+}
+
+/// Which block each value is defined in, and which blocks each block reaches.
+///
+/// The second is a transitive closure over successors, computed once per
+/// function. Functions here are small enough that a breadth-first walk per
+/// block is cheaper than being clever, and the walk is what `verify` already
+/// does with dominators next door.
+fn control_flow(func: &Func) -> (Vec<Option<usize>>, Vec<rustc_hash::FxHashSet<usize>>) {
+    let mut defined_in = vec![None; func.values.len()];
+    for (at, block) in func.blocks.iter().enumerate() {
+        for value in block.params.iter().chain(block.ops.iter()) {
+            defined_in[value.0 as usize] = Some(at);
+        }
+    }
+    let mut reaches = Vec::with_capacity(func.blocks.len());
+    for start in &func.blocks {
+        let mut seen = rustc_hash::FxHashSet::default();
+        let mut queue = start.terminator.successors();
+        while let Some(block) = queue.pop() {
+            let at = block.0 as usize;
+            if at >= func.blocks.len() || !seen.insert(at) {
+                continue;
+            }
+            queue.extend(func.blocks[at].terminator.successors());
+        }
+        reaches.push(seen);
+    }
+    (defined_in, reaches)
+}
+
 fn survives_the_function(
     func: &Func,
     layouts: &[Layout],
     mutates: &rustc_hash::FxHashSet<String>,
-    settled: &rustc_hash::FxHashSet<ValueId>,
+    standing: &Standing<'_>,
     unobserved: &rustc_hash::FxHashSet<ValueId>,
     value: ValueId,
 ) -> bool {
@@ -193,14 +247,37 @@ fn survives_the_function(
     // the chain ends at a parameter -- so `bodies[i]` qualifies once `bodies`
     // does, which is the shape `NBodySystem#advance` is made of.
     if !matches!(func.values[container.0 as usize].kind, OpKind::Param(_))
-        && !settled.contains(&container)
+        && !standing.settled.contains(&container)
+        && !standing.owned.contains(&container)
     {
         return false;
     }
     let ours = from_field.and_then(|field| field_name(func, layouts, container, field));
+    // Only what can run after the load. A borrow is invalidated by a store or a
+    // call that happens *later*, and scanning the whole function charged it for
+    // everything that happened earlier too -- which is most of a function that
+    // builds a structure and then walks it. `local-anchor` builds a list with a
+    // call that stores and then walks it with no call at all, and paid for the
+    // build on every step of the walk.
+    let after = standing
+        .defined_in
+        .get(value.0 as usize)
+        .copied()
+        .flatten()
+        .map(|at| &standing.reaches[at]);
     !func.values.iter().enumerate().any(|(index, op)| {
-        if unobserved.contains(&ValueId(u32::try_from(index).unwrap_or(u32::MAX))) {
+        let each = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
+        if unobserved.contains(&each) {
             return false;
+        }
+        // Its own block counts: a loop reaches itself, and on the next time
+        // round what came before the load comes after the one before it.
+        let theirs = standing.defined_in.get(index).copied().flatten();
+        if let (Some(reachable), Some(theirs)) = (after, theirs) {
+            let mine = standing.defined_in[value.0 as usize].unwrap_or(theirs);
+            if theirs != mine && !reachable.contains(&theirs) {
+                return false;
+            }
         }
         match &op.kind {
         OpKind::Call {
@@ -221,6 +298,117 @@ fn survives_the_function(
         _ => false,
         }
     })
+}
+
+/// Owned values the entry block defines.
+///
+/// The entry block runs exactly once per call, so a value defined there names
+/// exactly one object for the whole call -- which is what makes it safe to
+/// stretch its live range to every exit and let borrows anchor to it. A value
+/// defined in a loop names a different object each time round and cannot: one
+/// release at one exit would give back one reference for however many objects
+/// the loop made.
+///
+/// Excludes anything a `Return` hands back. That reference belongs to the
+/// caller, and a value both returned and released at the same exit is consumed
+/// twice.
+///
+/// Excludes loads, which are borrow candidates and are anchored by `settled`
+/// one step further up instead.
+fn entry_owned(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<ValueId> {
+    let returned: rustc_hash::FxHashSet<ValueId> = func
+        .blocks
+        .iter()
+        .filter_map(|block| match block.terminator {
+            super::Terminator::Return(Some(value)) => Some(value),
+            _ => None,
+        })
+        .collect();
+    let Some(entry) = func.blocks.first() else {
+        return rustc_hash::FxHashSet::default();
+    };
+    entry
+        .ops
+        .iter()
+        .copied()
+        .filter(|value| {
+            !returned.contains(value)
+                && counted(func, layouts, *value)
+                && !is_load(&func.values[value.0 as usize].kind)
+                // A function parameter is an op in the entry block like any
+                // other, and it is the one thing here that must never be
+                // released: the caller holds it for the length of the call.
+                // Sweeping them in meant every closure's `this` had its live
+                // range stretched to the exits and a release emitted there, so
+                // `aCellPerIteration` gave 4 where node gives 9 -- a cell freed
+                // while it was still being written through.
+                //
+                // They need no help from this set. `survives_the_function`
+                // anchors to a parameter by name, one line above where it asks
+                // about `owned` at all.
+                && !matches!(func.values[value.0 as usize].kind, OpKind::Param(_))
+        })
+        .collect()
+}
+
+/// The owned values that borrows actually depend on, and so have to be kept.
+///
+/// Two ways to become one: being the container a settled load reads out of,
+/// and being handed to a block parameter that settled. The second is the one
+/// that matters for a walk -- the head of a list is passed into the loop and
+/// never named again, so without this its reference dies on that edge and the
+/// cursor would outlive it.
+///
+/// Only the ones that are used. Stretching every entry-block value to every
+/// exit would delay frees nothing asked to delay and turn moves into copies.
+fn anchors(
+    func: &Func,
+    crossing: &rustc_hash::FxHashSet<ValueId>,
+    owned: &rustc_hash::FxHashSet<ValueId>,
+) -> rustc_hash::FxHashSet<ValueId> {
+    let mut kept = rustc_hash::FxHashSet::default();
+    for &value in crossing {
+        let container = match &func.values[value.0 as usize].kind {
+            OpKind::FieldGet { object, .. } => Some(*object),
+            OpKind::ArrayGet { array, .. } => Some(*array),
+            _ => None,
+        };
+        if let Some(container) = container
+            && owned.contains(&container)
+        {
+            kept.insert(container);
+        }
+    }
+    for block in &func.blocks {
+        let carries = block.params.iter().any(|param| crossing.contains(param));
+        if !carries {
+            continue;
+        }
+        for other in &func.blocks {
+            let args = match &other.terminator {
+                super::Terminator::Jump { args, .. } => vec![args],
+                super::Terminator::Branch {
+                    then_args,
+                    else_args,
+                    ..
+                } => vec![then_args, else_args],
+                _ => Vec::new(),
+            };
+            for list in args {
+                for (slot, arg) in list.iter().enumerate() {
+                    if block
+                        .params
+                        .get(slot)
+                        .is_some_and(|param| crossing.contains(param))
+                        && owned.contains(arg)
+                    {
+                        kept.insert(*arg);
+                    }
+                }
+            }
+        }
+    }
+    kept
 }
 
 /// The borrows that outlive their own block, and the block parameters carrying
@@ -258,6 +446,7 @@ fn crossing_borrows(
     func: &Func,
     layouts: &[Layout],
     mutates: &rustc_hash::FxHashSet<String>,
+    owned: &rustc_hash::FxHashSet<ValueId>,
 ) -> rustc_hash::FxHashSet<ValueId> {
     // Operations in a block that control never leaves. A `throw` lowers to a
     // call and an `Unreachable`, and nothing after it runs -- so whatever it
@@ -302,12 +491,19 @@ fn crossing_borrows(
     // is -- that load included. Asked from below the circle has no entrance;
     // asked from above it survives unless something outside it objects.
     let incoming = super::loops::predecessors(func);
+    let (defined_in, reaches) = control_flow(func);
     loop {
         let mut shrank = false;
         let mut doomed: Vec<ValueId> = Vec::new();
+        let standing = Standing {
+            settled: &crossing,
+            owned,
+            defined_in: &defined_in,
+            reaches: &reaches,
+        };
         for &value in &crossing {
             if is_load(&func.values[value.0 as usize].kind)
-                && !survives_the_function(func, layouts, mutates, &crossing, &unobserved, value)
+                && !survives_the_function(func, layouts, mutates, &standing, &unobserved, value)
             {
                 doomed.push(value);
             }
@@ -318,10 +514,16 @@ fn crossing_borrows(
                 continue;
             }
             for (slot, param) in block.params.iter().enumerate() {
+                // An argument that is an owned anchor is as good as a
+                // borrow: the frame is holding it and this pass keeps it held.
+                // Without that, a walk over a list the function built loses its
+                // cursor on the entry edge -- the head is an allocation, not a
+                // borrow, and every step after it is counted.
                 if crossing.contains(param)
-                    && !arriving
-                        .iter()
-                        .all(|(_, args)| args.get(slot).is_some_and(|arg| crossing.contains(arg)))
+                    && !arriving.iter().all(|(_, args)| {
+                        args.get(slot)
+                            .is_some_and(|arg| crossing.contains(arg) || owned.contains(arg))
+                    })
                 {
                     doomed.push(*param);
                 }
@@ -617,9 +819,18 @@ fn ambient(
     layouts: &[Layout],
     mutates: &rustc_hash::FxHashSet<String>,
 ) -> Ambient {
+    let owned = entry_owned(func, layouts);
+    let crossing = crossing_borrows(func, layouts, mutates, &owned);
+    let mut live = liveness::analyze(func);
+    // Held *after* liveness is computed and before anything reads it, so every
+    // rule below sees one answer. An anchor that some rules think is dead and
+    // others think is live is a reference consumed twice.
+    for anchor in anchors(func, &crossing, &owned) {
+        live.hold_to_every_exit(func, anchor);
+    }
     Ambient {
-        live: liveness::analyze(func),
-        crossing: crossing_borrows(func, layouts, mutates),
+        live,
+        crossing,
         receives: func
             .blocks
             .iter()
@@ -863,6 +1074,20 @@ fn count_ops(
             ) {
                 // Neither: its fields are released where its frame ends.
             } else if owned(func, layouts, *stored)
+                // A borrow has no reference to give away. `crossing` says
+                // nothing releases this value and no edge retains for it, and
+                // a store claiming the move is a third rule disagreeing with
+                // both -- the slot ends up holding a reference nobody counted.
+                //
+                // That is not a hypothetical either. `aCellPerIteration`
+                // stores its `sum` cell into a fresh closure once per
+                // iteration; the store moved and the loop's back edge retained
+                // to make up for it. The moment the edge stopped retaining --
+                // because the value carrying the cell had become a borrow --
+                // the closure and the frame both gave back one reference for
+                // the one that was left, and the answer came out 4 where node
+                // says 9.
+                && !around.crossing.contains(stored)
                 && around.live.dies_in(at, *stored)
                 && moved.insert(*stored)
             {

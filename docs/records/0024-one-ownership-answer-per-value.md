@@ -25,11 +25,11 @@ what a person can justify as necessary written down beside the argument for it.
 | `early-return` | 23 | 23 | 17 | **0%** |
 | `erased-slot` | 68 | 68 | 17 | **0%** |
 | `global-array` | 34 | 0 | 0 | 100% — at ideal |
-| `local-anchor` | 85 | 85 | 17 | **0%** |
-| `loop-break` | 69 | 69 | 17 | **0%** |
+| `local-anchor` | 85 | 51 | 17 | 40% |
+| `loop-break` | 69 | 51 | 17 | 26% |
 | `param-returned` | 68 | 68 | 34 | **0%** |
 | `shared-tail` | 131 | 57 | 21 | 56% |
-| `store-elsewhere` | 168 | 168 | 33 | **0%** |
+| `store-elsewhere` | 168 | 101 | 33 | 39% |
 | `subclass-field` | 85 | 85 | 53 | **0%** |
 | `swap` | 104 | 70 | 3 | 32% |
 | `traversal` | 167 | 99 | 33 | 40% |
@@ -205,6 +205,42 @@ So the anchor is not a value, it is a *place with a lifetime*, and
 it cannot say this. That map is `hir::own`, and lengthening an anchor's live
 range to cover what borrows from it is the one thing the current pass has no
 vocabulary for at all.
+
+### An anchor and an effect window are one mechanism, not two
+
+Built, and the first half on its own did nothing at all. Letting an owned local
+anchor a borrow moved no number: the walk in `local-anchor` is in the same
+function as the call to `build`, `build` stores, and `survives_the_function`
+scans the *whole function* for a store or a mutating call. The anchor was found
+and the effect check threw it away.
+
+Making that scan flow-sensitive -- only what the load's block can reach, because
+a borrow can only be invalidated by something that runs after it -- moved no
+number either, on its own. There was no borrow left to keep.
+
+Together they moved three: `local-anchor` 0% to 40%, `loop-break` 0% to 26%, and
+`store-elsewhere` 0% to 39%, which was not predicted. So these are not two steps
+that happen to compose. They are one claim -- *a borrow is good while its anchor
+is alive and nothing that runs afterwards disturbs the slot* -- and the old code
+was refusing on both halves of it independently.
+
+### The third rule that had to agree
+
+`crossing` already carried a warning: nothing releases one of these and no edge
+retains for one, "so every place that decides either has to agree." A third
+place decided and did not.
+
+`aCellPerIteration` stores its `sum` cell into a fresh closure once per
+iteration. The store *moved* the reference in, and the loop's back edge retained
+to make up for it -- two rules, one balance. The moment the value carrying the
+cell became a borrow the edge stopped retaining, correctly, while the store went
+on claiming a move. One reference, two consumers: the closure and the frame each
+gave one back, and the answer came out 4 where node says 9.
+
+A store may not move a borrow, because a borrow has no reference to give away.
+That is one line, and finding it took reading the emitted C for one function
+with the change and without -- the counts were balanced, the suite was green on
+fifteen cases, and only an oracle with a different answer said anything at all.
 
 ## A load has three flavors and we emit two
 
