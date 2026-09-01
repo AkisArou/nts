@@ -143,8 +143,38 @@ fn provably_in_bounds(
 ///
 /// Only where the allocated length is exact: a growable array's length is what
 /// `push` has made it, not what it was asked for.
+/// Whether two values name the same array.
+///
+/// Two loads of one global are two SSA values and one array.
+/// `for (i = 0; i < A.length; i++) A[i]` reads a module-level `A` twice, once
+/// for the length and once for the element, so comparing the ids alone left
+/// every bounds check standing -- while the identical loop over a *parameter*
+/// had none, because there the array is one value.
+///
+/// Sound while nothing writes that global. A store between the two reads could
+/// leave a shorter array in the slot, and then the length proved of the first
+/// does not bound the second. Asked of the whole function rather than of the
+/// span between them, which is coarser and needs no order.
+fn same_array(func: &Func, a: ValueId, b: ValueId) -> bool {
+    if a == b {
+        return true;
+    }
+    let (OpKind::GlobalGet(one), OpKind::GlobalGet(two)) = (
+        &func.values[a.0 as usize].kind,
+        &func.values[b.0 as usize].kind,
+    ) else {
+        return false;
+    };
+    one == two
+        && !func.values.iter().any(|op| {
+            matches!(op.kind, OpKind::GlobalSet { global, .. } if global == *one)
+        })
+}
+
 fn names_the_length_of(func: &Func, growable: bool, array: ValueId, candidate: ValueId) -> bool {
-    if matches!(func.values[candidate.0 as usize].kind, OpKind::Length(of) if of == array) {
+    if let OpKind::Length(of) = func.values[candidate.0 as usize].kind
+        && same_array(func, of, array)
+    {
         return true;
     }
     matches!(
