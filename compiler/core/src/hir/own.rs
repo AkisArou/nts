@@ -114,7 +114,7 @@ pub struct Map {
     settled: rustc_hash::FxHashSet<ValueId>,
     initializing: rustc_hash::FxHashSet<ValueId>,
     nulls: Vec<rustc_hash::FxHashSet<ValueId>>,
-    zeroed: rustc_hash::FxHashSet<(ValueId, u32)>,
+    inert: rustc_hash::FxHashSet<(ValueId, u32)>,
 }
 
 impl Map {
@@ -148,12 +148,11 @@ impl Map {
         self.initializing.contains(&store)
     }
 
-    /// Whether a slot is still zero for the whole life of its object, so the
-    /// walk that gives a frame object's fields back can skip it. See
-    /// [`never_written`].
+    /// Whether a slot never holds anything that has to be given back, so the
+    /// walk over a frame object's fields can skip it. See [`inert_slots`].
     #[must_use]
-    pub fn zeroed(&self, object: ValueId, field: u32) -> bool {
-        self.zeroed.contains(&(object, field))
+    pub fn inert(&self, object: ValueId, field: u32) -> bool {
+        self.inert.contains(&(object, field))
     }
 
     /// Values proven null on entry to a block, where releasing is a call and a
@@ -194,6 +193,7 @@ pub fn analyze(
     }
 
     let live = &*live;
+    let inert = inert_slots(func, layouts, &summaries.harmless);
     let mut of = vec![Ownership::Unowned; func.values.len()];
     let mut settled = rustc_hash::FxHashSet::default();
 
@@ -215,7 +215,21 @@ pub fn analyze(
             }
         }
         for (index, value) in block.ops.iter().enumerate() {
-            if !owned(func, layouts, *value) {
+            // A *read* of a slot that only ever holds frame objects is one of
+            // them, and there is nothing to give back. See `inert_slots`.
+            //
+            // Only a read. `costs_nothing` also says yes to a frame object
+            // itself, and that is true of the object and false of its *fields*:
+            // a frame object holding references still needs the walk that gives
+            // them up, which is exactly what `owned` is saying when it asks
+            // whether it has any. Skipping it here leaked the whole of
+            // `store-elsewhere`'s list -- thirty three disks whose only root was
+            // a table nobody walked.
+            let read_from_inert = matches!(
+                &func.values[value.0 as usize].kind,
+                OpKind::FieldGet { object, field, .. } if inert.contains(&(*object, *field))
+            );
+            if !owned(func, layouts, *value) || read_from_inert {
                 continue;
             }
             let kind = &func.values[value.0 as usize].kind;
@@ -274,7 +288,7 @@ pub fn analyze(
         settled,
         initializing,
         nulls: nulls(func),
-        zeroed: never_written(func, layouts, &summaries.harmless),
+        inert: inert.clone(),
     }
 }
 
@@ -601,49 +615,57 @@ fn nulls(func: &Func) -> Vec<rustc_hash::FxHashSet<ValueId>> {
         .collect()
 }
 
-/// Reference slots that are still zero for the whole life of their object.
+/// Slots whose contents never need a count, and the values read out of them.
 ///
-/// A frame object has no runtime destructor, so the counting pass emits the
-/// walk that gives its fields back by hand -- and a field nobody ever wrote is
-/// a load and a release of the null its constructor put there. `subclass-field`
-/// started paying thirty four of those the moment its `Base` objects stopped
-/// being heap objects: a cost arriving as the reward for removing a bigger one.
+/// A frame object has no runtime destructor, so the counting pass emits by hand
+/// the walk that gives its fields back. When a field holds *another* frame
+/// object that walk is a load, a call and a branch to decide nothing -- the
+/// storage of both ends with the frame whatever points at either.
 ///
-/// # Why being stored somewhere does not matter
+/// `swap` is two such fields and `closure-capture` is one per iteration, and
+/// together with `cycle` and `subclass-field` they were ninety operations, all
+/// of them releases aimed at something that never reached the allocator.
 ///
-/// The first version asked whether the object had been handed anywhere, and the
-/// answer for these was yes -- they are stored into a field. That is the wrong
-/// question. Storing `x` into `y.f` lets somebody reach `x`; it does not let
-/// anybody *write through* it. What has to be ruled out is a store aimed at
-/// this object's slot, and a store can only be aimed by naming something.
+/// # Why it has to be a fixpoint
 ///
-/// So: every `FieldSet` in the function must name an allocation or a parameter
-/// directly. Then a store hits exactly the object it names -- two allocations
-/// are two objects, and a parameter was bound before any of them existed -- and
-/// the writes recorded here are all the writes there are. A store through a
-/// value that came out of a *load* could be aimed anywhere, and gives up.
+/// `swap` stores `pair.b` into `pair.a` and back again, so what a slot holds is
+/// a *load from another slot*, and neither can be settled before the other.
+/// Assumed inert and contradicted, like every other safety property here: a
+/// slot stops being inert when something is stored into it that is not a null,
+/// not a frame object, and not a load from a slot that is still inert.
 ///
-/// Callees are ruled out the same way: every call must be `harmless`, which is
-/// to say it writes no reference into any slot at all.
-fn never_written(
+/// # What makes it sound
+///
+/// A store can only be aimed by naming something. If every `FieldSet` in the
+/// function names an allocation or a parameter directly, a store hits exactly
+/// the object it names -- two allocations are two objects, and a parameter was
+/// bound before either existed -- so the stores recorded here are all the
+/// stores there are. A store through a value that came out of a load could be
+/// aimed anywhere, and gives up; so does a global, and so does a call that is
+/// not `harmless`.
+fn inert_slots(
     func: &Func,
     layouts: &[Layout],
     harmless: &rustc_hash::FxHashSet<String>,
 ) -> rustc_hash::FxHashSet<(ValueId, u32)> {
-    let mut written = rustc_hash::FxHashSet::default();
+    let mut stored: rustc_hash::FxHashMap<(ValueId, u32), Vec<ValueId>> =
+        rustc_hash::FxHashMap::default();
     for block in &func.blocks {
         for value in &block.ops {
             match &func.values[value.0 as usize].kind {
-                OpKind::FieldSet { object, field, .. } => {
+                OpKind::FieldSet {
+                    object,
+                    field,
+                    value: put,
+                    ..
+                } => {
                     if !matches!(
                         func.values[object.0 as usize].kind,
                         OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } | OpKind::Param(_)
                     ) {
-                        // Aimed through something this cannot name, so it could
-                        // be aimed at anything.
                         return rustc_hash::FxHashSet::default();
                     }
-                    written.insert((*object, *field));
+                    stored.entry((*object, *field)).or_default().push(*put);
                 }
                 OpKind::Call {
                     callee: super::Callee::Direct(name),
@@ -659,23 +681,52 @@ fn never_written(
         }
     }
 
-    let mut zeroed = rustc_hash::FxHashSet::default();
+    // Every reference slot of every allocation, assumed inert.
+    let mut inert: rustc_hash::FxHashSet<(ValueId, u32)> = rustc_hash::FxHashSet::default();
     for block in &func.blocks {
         for value in &block.ops {
-            if !matches!(
+            if matches!(
                 func.values[value.0 as usize].kind,
                 OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
             ) {
-                continue;
-            }
-            for field in reference_fields(func, layouts, *value) {
-                if !written.contains(&(*value, field)) {
-                    zeroed.insert((*value, field));
+                for field in reference_fields(func, layouts, *value) {
+                    inert.insert((*value, field));
                 }
             }
         }
     }
-    zeroed
+
+    loop {
+        let mut doomed = Vec::new();
+        for slot in &inert {
+            let Some(puts) = stored.get(slot) else { continue };
+            if !puts.iter().all(|put| costs_nothing(func, &inert, *put)) {
+                doomed.push(*slot);
+            }
+        }
+        if doomed.is_empty() {
+            return inert;
+        }
+        for slot in doomed {
+            inert.remove(&slot);
+        }
+    }
+}
+
+/// Whether a value is one nothing has to give back.
+///
+/// A null, an object that lives in the frame, or a read of a slot that only
+/// ever holds one of those.
+fn costs_nothing(
+    func: &Func,
+    inert: &rustc_hash::FxHashSet<(ValueId, u32)>,
+    value: ValueId,
+) -> bool {
+    match &func.values[value.0 as usize].kind {
+        OpKind::ConstNull | OpKind::ConstUndefined | OpKind::ObjectNew { frame: true } => true,
+        OpKind::FieldGet { object, field, .. } => inert.contains(&(*object, *field)),
+        _ => false,
+    }
 }
 
 /// Stores that write over a zero, evaluated at the point each one stands.
@@ -1208,9 +1259,15 @@ fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHas
         layouts: &[Layout],
         harmless: &rustc_hash::FxHashSet<String>,
     ) -> bool {
-        func.blocks
-            .iter()
-            .all(|block| !matches!(block.terminator, super::Terminator::Return(Some(_))))
+        // Returning a *number* hands out no reference, so it says nothing about
+        // what the function did to what it was given. Refusing it left every
+        // accessor and every closure body outside the set -- `Closure0__call`
+        // reads one field and returns a double, and its being excluded was the
+        // whole of `closure-capture`'s seventeen operations.
+        func.blocks.iter().all(|block| match block.terminator {
+            super::Terminator::Return(Some(value)) => !counted(func, layouts, value),
+            _ => true,
+        })
             && func.values.iter().all(|op| match &op.kind {
                 OpKind::FieldSet { value: stored, .. }
                 | OpKind::ArraySet { value: stored, .. } => !counted(func, layouts, *stored),

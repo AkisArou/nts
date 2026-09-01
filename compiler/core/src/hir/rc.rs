@@ -208,6 +208,7 @@ fn insert_into(func: &mut Func, layouts: &[Layout], summaries: &own::Summaries) 
             dying.retain(|value| {
                 !moved.contains(value)
                     && !map.borrowed(*value)
+                    && !matches!(map.of(*value), Ownership::Unowned)
                     // Nothing to give back. See `own::Map::null_in`.
                     && !here.is_some_and(|proven| proven.contains(value))
             });
@@ -232,6 +233,7 @@ fn insert_into(func: &mut Func, layouts: &[Layout], summaries: &own::Summaries) 
                         !live.live_in(successor).contains(value)
                             && !moved.contains(value)
                             && !map.borrowed(*value)
+                            && !matches!(map.of(*value), Ownership::Unowned)
                             // Nothing to give back. See `nulls`.
                             //
                             // Indexed by the *successor*: this release is on
@@ -633,10 +635,10 @@ fn release_value(
     }
     let origin = func.values[value.0 as usize].origin.clone();
     for field in own::reference_fields(func, layouts, value) {
-        // A slot nothing ever wrote still holds the null its constructor put
-        // there, and loading it to release it is a load, a call and a branch to
-        // decide nothing. See `own::Map::zeroed`.
-        if map.zeroed(value, field) {
+        // A slot that only ever holds a null or another frame object has
+        // nothing to give back, and loading it to release it is a load, a call
+        // and a branch to decide nothing. See `own::Map::inert`.
+        if map.inert(value, field) {
             continue;
         }
         let ty = field_type(func, layouts, value, field);
