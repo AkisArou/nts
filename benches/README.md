@@ -95,34 +95,41 @@ is printed with the provider it used.
 
 `NTS_BENCH_RC=1` runs **every** case under reference counting whatever it
 declares. That is worth doing regularly, because the default answers a question
-no real program asks. Measured against the same C++ references:
+no real program asks — and when it was first asked, the table changed shape.
 
-| row | NoGC vs C++ | RC vs C++ | RC vs node | RC vs bun |
-|---|---:|---:|---:|---:|
-| `awfy-list` | 1.07x | **12.97x** | 5.97x | 7.27x |
-| `awfy-towers` | 1.31x | **8.67x** | 3.40x | 5.29x |
-| `awfy-bounce` | 1.55x | **4.06x** | 1.35x | 1.54x |
-| `awfy-queens` | 1.40x | **3.85x** | 1.06x | 1.25x |
-| `awfy-permute` | 1.33x | **3.07x** | 1.36x | 1.74x |
-| `awfy-nbody` | 1.14x | **2.13x** | 0.19x | 1.06x |
-| `array-methods` | 0.55x | 1.25x | | |
-| `accumulate`, `checksum`, `closures`, `dispatch`, `elementwise`, `loop`, `mandelbrot` | | *unchanged* | | |
+The middle column is what NoGC was hiding. The right one is what elision
+recovered, in one night, from a pass that had none:
 
-Every row that moved allocates; every row that did not, does not. The two worst
-are the two that build linked structures, which is the shape reference counting
-is least good at and the shape a tracing collector is built for.
+| row | NoGC vs C++ | RC, before elision | RC, after |
+|---|---:|---:|---:|
+| `awfy-list` | 1.07x | **12.97x** | **1.79x** (0.82x node) |
+| `awfy-queens` | 1.40x | 3.85x | **1.32x** |
+| `awfy-permute` | 1.33x | 3.07x | **1.34x** |
+| `awfy-nbody` | 1.14x | 2.13x | **1.87x** |
+| `awfy-bounce` | 1.55x | 4.06x | 3.96x |
+| `awfy-towers` | 1.31x | 8.67x | 7.82x |
+| `accumulate`, `checksum`, `closures`, `dispatch`, `elementwise`, `loop`, `mandelbrot` | | *unchanged* | |
 
-Read this as a statement about **`hir::rc`**, not about the benchmarks. It says
-so itself: *"Many of the pairs cancel; that is what an optimizer is for, and
-correctness first is what RFC §9.2 asks of a first implementation."* There is no
-elision pass. `borrows_safely` already declines to retain a load whose last use
-is close by, and gives up the moment a `Call` falls in between — which every
-traversal of a linked structure has. Its comment names what is missing: knowing
-what a callee can reach.
+Every row that moved allocates; every row that did not, does not. On `queens`
+and `permute` reference counting now costs **nothing** — both land at their own
+NoGC baselines, so reclamation is free on them.
 
-So the honest reading of the headline table is that it is measured with
-reclamation off, and the honest reading of this one is that reclamation is
-currently the largest single cost this compiler has.
+Three changes did that, and all three came from reading the generated C rather
+than reasoning about the pass: `counted()` was counting compile-time nulls (65%
+of `awfy-list`'s operations); a function that contains no store, no call and no
+allocation cannot invalidate a borrow anywhere in its body, so it needs no
+counting at all; and a store *into* a container cannot invalidate the container.
+Then an interprocedural summary let a borrow survive a call to a function that
+stores nothing, which took `Element#length` to zero operations.
+
+`awfy-towers` is the row that refused all three, and two experiments say why it
+is *not* what it looks like. Raising `NTS_COLLECT_THRESHOLD` to infinity moved
+it 98.50us to 98.25us, so the cycle collector is not the cost. Disabling
+candidate buffering outright — unsound, and reverted — moved it to 81.5us, so
+that is 17%. What is left is the sheer number of operations, at about 1.5 cycles
+each. Its hot pair call nothing, so the interprocedural summary cannot reach
+them; what blocks them is a store, and the next question is whether that store
+could alias the slot the borrow came from at all.
 
 ### `objects` and what a column can and cannot say
 
