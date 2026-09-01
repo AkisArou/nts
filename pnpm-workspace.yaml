@@ -1,14 +1,12 @@
 packages:
-  - "tooling/*"
-  - "libraries/*"
-  - "examples/library"
-
-catalogMode: strict
-cleanupUnusedCatalogs: true
+  - tooling/*
+  - libraries/*
+  - examples/library
 
 catalog:
-  "@types/node": "24.13.3"
-  # Must match the tag of the third_party/typescript-go submodule. The compiler's
-  # frontend speaks to that exact tsgo build, so a second TypeScript version in
-  # the workspace would mean two checkers disagreeing about one program.
-  typescript: "7.0.2"
+  '@types/node': 24.13.3
+  typescript: 7.0.2
+
+catalogMode: strict
+
+cleanupUnusedCatalogs: true
