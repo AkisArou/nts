@@ -553,6 +553,9 @@ struct Surroundings<'a> {
     /// Callees that leave an object as fresh as it arrived. See
     /// [`initializing_only`].
     harmless: &'a rustc_hash::FxHashSet<String>,
+    /// Callees whose result is one of the arguments the caller passed in. See
+    /// [`hands_back_a_parameter`].
+    hands_back: &'a rustc_hash::FxHashSet<String>,
     /// Borrows good for the whole function, which therefore cross blocks. See
     /// [`crossing_borrows`]: nothing releases one and no edge retains for one,
     /// so every place that decides either has to agree.
@@ -604,13 +607,14 @@ pub fn insert(program: &mut Program) -> Report {
     let layouts = program.layouts.clone();
     let mutates = mutating(program);
     let harmless = initializing_only(program, &layouts);
+    let hands_back = hands_back_a_parameter(program, &layouts);
     for func in &mut program.funcs {
         // Nothing an inert function does can invalidate a borrow, so nothing in
         // it needs a count -- except what leaves. See `inert`.
         let one = if inert(func) {
-            count_only_returns(func, &layouts)
+            count_only_returns(func, &layouts, &hands_back)
         } else {
-            insert_into(func, &layouts, &mutates, &harmless)
+            insert_into(func, &layouts, &mutates, &harmless, &hands_back)
         };
         report.retains += one.retains;
         report.releases += one.releases;
@@ -924,11 +928,64 @@ fn taking(
     (takes, settled)
 }
 
+/// Callees that hand back one of their own parameters.
+///
+/// The `returns` column of record 0024's per-function summary. A parameter is
+/// borrowed -- the caller holds it for the length of the call -- so a function
+/// that returns one is handing back something the caller is already holding.
+/// Today it retains before returning and the caller releases afterwards, which
+/// is two operations to give somebody a reference they never let go of.
+///
+/// Restricted to inert functions, which is where the pattern lives: accessors,
+/// pickers, and the small helpers a traversal is made of. An inert function
+/// cannot store, call or allocate, so there is nothing it could do to the
+/// argument between taking it and handing it back -- and it is the path whose
+/// counting is decided in one place, `count_only_returns`, rather than woven
+/// through the general one.
+///
+/// Every counted return must be a parameter. A function returning a parameter
+/// on one path and something fresh on another hands back two different kinds of
+/// thing, and the caller has one decision to make.
+fn hands_back_a_parameter(
+    program: &Program,
+    layouts: &[Layout],
+) -> rustc_hash::FxHashSet<String> {
+    program
+        .funcs
+        .iter()
+        .filter(|func| inert(func))
+        .filter(|func| {
+            let mut any = false;
+            let every = func.blocks.iter().all(|block| {
+                let super::Terminator::Return(Some(value)) = block.terminator else {
+                    return true;
+                };
+                if !counted(func, layouts, value) {
+                    return true;
+                }
+                any = true;
+                matches!(func.values[value.0 as usize].kind, OpKind::Param(_))
+            });
+            any && every
+        })
+        .map(|func| func.name.clone())
+        .collect()
+}
+
 /// What an inert function still owes: a reference on whatever it hands back.
 ///
 /// Its caller is owed an owned reference, and every value inside was borrowed.
-fn count_only_returns(func: &mut Func, layouts: &[Layout]) -> Report {
+fn count_only_returns(
+    func: &mut Func,
+    layouts: &[Layout],
+    hands_back: &rustc_hash::FxHashSet<String>,
+) -> Report {
     let mut report = Report::default();
+    // Unless what it hands back is a parameter, which the caller is holding
+    // already. See `hands_back_a_parameter`.
+    if hands_back.contains(&func.name) {
+        return report;
+    }
     let returned: Vec<(usize, ValueId)> = func
         .blocks
         .iter()
@@ -998,6 +1055,7 @@ fn insert_into(
     layouts: &[Layout],
     mutates: &rustc_hash::FxHashSet<String>,
     harmless: &rustc_hash::FxHashSet<String>,
+    hands_back: &rustc_hash::FxHashSet<String>,
 ) -> Report {
     let mut report = Report::default();
     let Ambient {
@@ -1009,6 +1067,7 @@ fn insert_into(
         live: &live,
         mutates,
         harmless,
+        hands_back,
         crossing: &crossing,
     };
     let blocks = std::mem::take(&mut func.blocks);
@@ -1273,6 +1332,31 @@ fn count_ops(
                 && (around.crossing.contains(value)
                     || borrows_safely(func, original, index, *value, at, terminator, around))
             {
+                borrowed.insert(*value);
+                report.borrows += 1;
+            } else {
+                retain(func, &mut ops, *value, report);
+            }
+        // A call that hands back one of its arguments hands back something this
+        // function is already holding, so there is nothing to take and nothing
+        // to give up. `borrows_safely` asks the same question of it as of a
+        // load: does it die here, and can anything in between disturb it.
+        //
+        // The `else` is not optional, and leaving it out was a use-after-free.
+        // The callee stops retaining *unconditionally* -- that is what being in
+        // `hands_back` means -- so a caller that cannot prove the borrow safe
+        // must take a reference of its own rather than fall through to
+        // releasing one nobody ever gave it. `nullable` frees a string and then
+        // reads it, and ASan is what said so while eighty nine programs went on
+        // agreeing with node.
+        } else if let OpKind::Call {
+            callee: super::Callee::Direct(name),
+            ..
+        } = &kind
+            && around.hands_back.contains(name)
+            && owned(func, layouts, *value)
+        {
+            if borrows_safely(func, original, index, *value, at, terminator, around) {
                 borrowed.insert(*value);
                 report.borrows += 1;
             } else {

@@ -95,7 +95,18 @@ format() {
   echo "  run: clang-format --style=file -i runtime/c/*.c runtime/c/*.h runtime/c/tests/*.c"
   return 1
 }
-tests() { cargo test --workspace >/dev/null 2>&1; }
+# Output kept, and printed when it fails.
+#
+# This threw the whole gate away with the word "FAILED" and nothing else, and
+# the run that came after it was green -- so the only thing to go on was that
+# something had once been wrong. A check that cannot say what it found is the
+# same defect as one that cannot fail: `>/dev/null 2>&1` on the step that runs
+# every unit test in the tree.
+tests() {
+  report=$(cargo test --workspace 2>&1) && return 0
+  echo "$report" | grep -E "^(error|warning: unused|test .* FAILED|failures:|---- )" -A 4 | head -60
+  return 1
+}
 
 # The cross-product of value kinds and the operations that read them, settled
 # by node.

@@ -27,7 +27,7 @@ what a person can justify as necessary written down beside the argument for it.
 | `global-array` | 34 | 0 | 0 | 100% — at ideal |
 | `local-anchor` | 85 | 51 | 17 | 40% |
 | `loop-break` | 69 | 51 | 17 | 26% |
-| `param-returned` | 68 | 68 | 34 | **0%** |
+| `param-returned` | 68 | 34 | 34 | 50% — at ideal |
 | `shared-tail` | 129 | 55 | 21 | 57% |
 | `store-elsewhere` | 135 | 33 | 33 | 75% — at ideal |
 | `subclass-field` | 85 | 85 | 53 | **0%** |
@@ -370,6 +370,28 @@ The last column is the whole of the `borrowed-call` zero. A function that
 returns `list.head` returns a borrow of parameter 0, and a caller that knows
 that can keep borrowing across the call instead of retaining at it. Nothing in
 the compiler can currently say that sentence.
+
+### `returns`, measured, and the third time one rule disagreed with another
+
+`param-returned` went from 68 to **34**, its floor, and the prediction landed
+exactly for the first time in this record.
+
+It also produced a use-after-free, in the same shape as the other two. The
+callee stops retaining *unconditionally* -- that is what being in the set means
+-- while the caller only borrowed *when it could prove the borrow safe*. A
+caller that could not fell through to releasing a reference nobody had given it.
+The `else` branch that retains instead is the whole fix.
+
+Three times now: a store that moved a borrow, an edge that stopped retaining
+while a store went on moving, and a callee that stopped retaining while a caller
+went on releasing. Every one of them is two halves of one convention changed
+separately, which is the argument for computing ownership **once** rather than
+deciding it at each site -- the thing this record exists to propose.
+
+And it was found by AddressSanitizer while 89 programs went on agreeing with
+node. `rc` compares answers and leak counts; neither notices a read of freed
+memory that happens to return the right bytes. The `execute` suite builds under
+`-fsanitize=address`, and it is the only gate step that would have caught this.
 
 Slots are named by *field name, never by type* — that rule is already in
 `field_name` and it exists because a subclass shares its base's layout, so two
