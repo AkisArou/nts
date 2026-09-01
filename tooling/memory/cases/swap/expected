@@ -1,4 +1,4 @@
-ideal 2
+ideal 0
 allocated 0
 because the two things, one reference each, given back when the frame ends.
 because
@@ -22,3 +22,11 @@ because
 because Allocations: nothing. The pair and the two things live the whole
 because function, there are exactly three of them, and none escapes -- which is
 because every condition a frame needs.
+because
+because Operations: none, and that follows from the allocation floor rather than
+because from a separate argument. Nothing here reaches the allocator, and a
+because frame object has no count to change: its storage ends with the frame
+because whatever points at it, and a reference *to* one is a release the
+because compiler can see is a no-op. An allocation floor of zero forces an
+because operation floor of zero, and `run.sh` now refuses an `expected` that
+because says otherwise.

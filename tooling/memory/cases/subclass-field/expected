@@ -1,4 +1,4 @@
-ideal 34
+ideal 0
 allocated 0
 because thirty four `Base` objects -- two an iteration -- and one reference each
 because to give back. The `Derived` costs nothing: it does not escape, so it
@@ -24,3 +24,11 @@ because still named. The read of `got.tag` is what would notice.
 because
 because Allocations: nothing. The `Derived` is a frame object already, and the
 because two `Base` objects an iteration die with it.
+because
+because Operations: none, and that follows from the allocation floor rather than
+because from a separate argument. Nothing here reaches the allocator, and a
+because frame object has no count to change: its storage ends with the frame
+because whatever points at it, and a reference *to* one is a release the
+because compiler can see is a no-op. An allocation floor of zero forces an
+because operation floor of zero, and `run.sh` now refuses an `expected` that
+because says otherwise.

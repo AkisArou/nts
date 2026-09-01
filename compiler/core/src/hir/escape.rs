@@ -130,6 +130,29 @@ impl Escapes {
     }
 }
 
+/// Which parameter slots a function returns.
+///
+/// Returning a parameter hands the caller back something it is already holding.
+/// It does not make the object outlive the *caller's* frame, which is the only
+/// thing "escapes" means -- and marking the slot escaping said it did, so every
+/// argument to `pick(a, b, first)` went to the heap. That was all thirty four
+/// allocations of `param-returned`.
+///
+/// The obligation does not vanish, it moves: the caller's *result* is one of its
+/// arguments, so if the result escapes the argument does. That is an edge in the
+/// same fixpoint the stores use, and it is stated where the alias is.
+fn returned_params(func: &Func) -> FxHashSet<u32> {
+    let mut slots = FxHashSet::default();
+    for block in &func.blocks {
+        if let Terminator::Return(Some(value)) = block.terminator
+            && let OpKind::Param(slot) = func.values[value.0 as usize].kind
+        {
+            slots.insert(slot);
+        }
+    }
+    slots
+}
+
 /// Analyze every function, letting the answer cross between them.
 #[must_use]
 pub fn analyze_program(program: &Program) -> Vec<Escapes> {
@@ -147,6 +170,7 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
     // function whose whole life is one call.
     let in_slot = program.slot_targets();
     let arity: Vec<usize> = program.funcs.iter().map(|func| func.params.len()).collect();
+    let handed_back: Vec<FxHashSet<u32>> = program.funcs.iter().map(returned_params).collect();
 
     // Every parameter starts held, and is released to `escapes` by evidence.
     let mut escaping_params: Vec<FxHashSet<u32>> =
@@ -157,7 +181,7 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
         results = program
             .funcs
             .iter()
-            .map(|func| analyze(func, &by_name, &in_slot, &arity, &escaping_params))
+            .map(|func| analyze(func, &by_name, &in_slot, &arity, &escaping_params, &handed_back))
             .collect();
 
         let mut changed = false;
@@ -209,6 +233,7 @@ fn analyze(
     in_slot: &FxHashMap<u32, Vec<usize>>,
     arity: &[usize],
     escaping_params: &[FxHashSet<u32>],
+    handed_back: &[FxHashSet<u32>],
 ) -> Escapes {
     let mut escapes = Escapes::default();
     // What each store makes reachable, and from where. Deferred rather than
@@ -216,6 +241,9 @@ fn analyze(
     // *container*, and the container can be shown to escape further down the
     // function than the store that filled it.
     let mut reachable_from: Vec<(ValueId, ValueId)> = Vec::new();
+    // What a call handed straight back: if the result escapes, so does the
+    // argument it *is*. See `returned_params`.
+    let mut aliased_by: Vec<(ValueId, ValueId)> = Vec::new();
     // Which allocations can run more than once with an earlier result still
     // reachable. See `repeats`.
     let repeated = repeats(func);
@@ -319,6 +347,11 @@ fn analyze(
                             arity,
                             escaping_params,
                         );
+                        for slot in &handed_back[*target] {
+                            if let Some(argument) = args.get(*slot as usize) {
+                                aliased_by.push((*value, *argument));
+                            }
+                        }
                     }
                     // A dispatch reaches one of several bodies, and which is
                     // decided by a receiver this cannot see -- so an argument
@@ -332,6 +365,16 @@ fn analyze(
                             continue;
                         };
                         escape_into(&mut escapes, args, targets, arity, escaping_params);
+                        // Which body runs is decided by a receiver this cannot
+                        // see, so an argument is aliased by the result if *any*
+                        // of them hands it back.
+                        for target in targets {
+                            for slot in &handed_back[*target] {
+                                if let Some(argument) = args.get(*slot as usize) {
+                                    aliased_by.push((*value, *argument));
+                                }
+                            }
+                        }
                     }
                 },
                 // A suspension hands the frame to the runtime, which stores it
@@ -354,24 +397,7 @@ fn analyze(
             }
         }
 
-        // A block parameter is a value this analysis does not follow, so
-        // anything handed to one is treated as gone. `Return` is the real thing:
-        // the reference is the caller's now.
-        match &block.terminator {
-            Terminator::Return(Some(value)) => {
-                escapes.values.insert(*value);
-            }
-            Terminator::Jump { args, .. } => escapes.values.extend(args.iter().copied()),
-            Terminator::Branch {
-                then_args,
-                else_args,
-                ..
-            } => {
-                escapes.values.extend(then_args.iter().copied());
-                escapes.values.extend(else_args.iter().copied());
-            }
-            Terminator::Return(None) | Terminator::Unreachable | Terminator::FellThrough => {}
-        }
+        escape_through(&mut escapes, func, &block.terminator);
     }
 
     // Now the stores, once every other reason to escape is known.
@@ -390,11 +416,46 @@ fn analyze(
                 escaped(&mut escapes, func, *stored);
             }
         }
+        for (result, argument) in &aliased_by {
+            if escapes.escapes(*result) {
+                escaped(&mut escapes, func, *argument);
+            }
+        }
         if escapes.values.len() == before {
             break;
         }
     }
     escapes
+}
+
+/// What leaving a block does to what it carries.
+///
+/// A block parameter is a value this analysis does not follow, so anything
+/// handed to one is treated as gone -- which is the same blind spot
+/// `crossing_borrows` had and `own` no longer has. Fixing it here is worth two
+/// allocations in `shared-tail` and is not yet done.
+///
+/// `Return` is the real thing: the reference is the caller's now -- unless it
+/// is a parameter, which the caller was holding before the call. See
+/// [`returned_params`].
+fn escape_through(escapes: &mut Escapes, func: &Func, terminator: &Terminator) {
+    match terminator {
+        Terminator::Return(Some(value)) => {
+            if !matches!(func.values[value.0 as usize].kind, OpKind::Param(_)) {
+                escapes.values.insert(*value);
+            }
+        }
+        Terminator::Jump { args, .. } => escapes.values.extend(args.iter().copied()),
+        Terminator::Branch {
+            then_args,
+            else_args,
+            ..
+        } => {
+            escapes.values.extend(then_args.iter().copied());
+            escapes.values.extend(else_args.iter().copied());
+        }
+        Terminator::Return(None) | Terminator::Unreachable | Terminator::FellThrough => {}
+    }
 }
 
 /// Mark the arguments that any of a call's possible targets lets escape.

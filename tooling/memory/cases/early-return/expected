@@ -1,4 +1,4 @@
-ideal 17
+ideal 0
 allocated 0
 because seventeen boxes, one reference each, whichever way they leave.
 because
@@ -9,3 +9,11 @@ because
 because Allocations: nothing. One box an iteration, escaping `maybe` but never
 because `work`, so once the call is seen through there is no lifetime here a
 because frame cannot hold.
+because
+because Operations: none, and that follows from the allocation floor rather than
+because from a separate argument. Nothing here reaches the allocator, and a
+because frame object has no count to change: its storage ends with the frame
+because whatever points at it, and a reference *to* one is a release the
+because compiler can see is a no-op. An allocation floor of zero forces an
+because operation floor of zero, and `run.sh` now refuses an `expected` that
+because says otherwise.

@@ -105,6 +105,12 @@ for dir in tooling/memory/cases/*/; do
   [ "$answer" = "$naive_answer" ] || { note="ANSWER CHANGED: $naive_answer -> $answer"; fail=1; }
   [ "$leaked" = "0" ] || { note="LEAKED $leaked"; fail=1; }
   [ -n "$floor" ] || { note='no "allocated" line in expected'; fail=1; }
+  # The two floors are not independent. Nothing on the frame has a count to
+  # change, so an allocation floor of zero forces an operation floor of zero --
+  # and six `expected` files said otherwise, because they were written when
+  # every object in them was a heap object.
+  [ -z "$note" ] && [ "$floor" = "0" ] && [ "$ideal" != "0" ] &&
+    { note="expected contradicts itself: 0 allocations cannot need $ideal operations"; fail=1; }
   # Below a floor means the argument beside it is wrong, not the measurement.
   # Four ideals in this suite were too high before anyone noticed, and every one
   # was caught here rather than by reading them again.
