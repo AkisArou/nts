@@ -194,13 +194,12 @@ pub fn analyze(
 
     let live = &*live;
     let inert = inert_slots(func, layouts, &summaries.harmless);
+    let absent = nulls(func);
+    let (takes, settled) = taking(func, layouts, &crossing, &summaries.harmless, &absent);
     let mut of = vec![Ownership::Unowned; func.values.len()];
-    let mut settled = rustc_hash::FxHashSet::default();
 
     for (at, block) in func.blocks.iter().enumerate() {
         let here = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
-        let (takes, gave) = taking(func, layouts, &crossing, &summaries.harmless, &block.ops);
-        settled.extend(gave);
         let around = Surroundings {
             live,
             mutates: &summaries.mutates,
@@ -287,7 +286,7 @@ pub fn analyze(
         of,
         settled,
         initializing,
-        nulls: nulls(func),
+        nulls: absent,
         inert: inert.clone(),
     }
 }
@@ -1391,18 +1390,57 @@ fn taking(
     layouts: &[Layout],
     crossing: &rustc_hash::FxHashSet<ValueId>,
     harmless: &rustc_hash::FxHashSet<String>,
-    ops: &[ValueId],
+    absent: &[rustc_hash::FxHashSet<ValueId>],
 ) -> (
     rustc_hash::FxHashSet<ValueId>,
     rustc_hash::FxHashSet<ValueId>,
 ) {
-    let mut held: rustc_hash::FxHashMap<Slot, ValueId> = rustc_hash::FxHashMap::default();
     let mut takes = rustc_hash::FxHashSet::default();
     let mut settled = rustc_hash::FxHashSet::default();
     if !eliding() {
         return (takes, settled);
     }
-    for &value in ops {
+    let incoming = super::loops::predecessors(func);
+    let mut leaving: Vec<rustc_hash::FxHashMap<Slot, ValueId>> =
+        vec![rustc_hash::FxHashMap::default(); func.blocks.len()];
+
+    for (at, block) in func.blocks.iter().enumerate() {
+        let mut held: rustc_hash::FxHashMap<Slot, ValueId> = rustc_hash::FxHashMap::default();
+        // Carried in from a single predecessor, for the values the *other* arms
+        // of its branch prove are null.
+        //
+        // A take says the slot has given up what it held. If the store that
+        // overwrites the slot does not happen on some path, the slot still holds
+        // the reference while the value claims it, and one of the two loses.
+        // Unless the value is null there, which costs nothing to claim -- and a
+        // nullable reference in TypeScript is *tested* before it is used, so the
+        // arm where the test says no is exactly where the compiler already knows
+        // it is null.
+        //
+        // That is the whole of `popDiskFrom`: read `slots[at]`, return early if
+        // it is null, and otherwise overwrite the slot in the block after the
+        // branch. One block at a time could never pair the two.
+        if let [(from, _)] = incoming[at].as_slice() {
+            let before = from.0 as usize;
+            if before < at {
+                let elsewhere: Vec<super::BlockId> = func.blocks[before]
+                    .terminator
+                    .successors()
+                    .into_iter()
+                    .filter(|to| to.0 as usize != at)
+                    .collect();
+                for (slot, carried) in &leaving[before] {
+                    if elsewhere.iter().all(|to| {
+                        absent
+                            .get(to.0 as usize)
+                            .is_some_and(|null| null.contains(carried))
+                    }) {
+                        held.insert(*slot, *carried);
+                    }
+                }
+            }
+        }
+        for &value in &block.ops {
         // A borrow may not also take. `crossing` says nothing releases this
         // value and no edge retains for it; taking would make it owned, and
         // three rules disagreeing about one value is how a reference gets
@@ -1472,7 +1510,9 @@ fn taking(
                     held.clear();
                 }
             }
+            }
         }
+        leaving[at] = held;
     }
     (takes, settled)
 }
