@@ -23,7 +23,7 @@ what a person can justify as necessary written down beside the argument for it.
 | `closure-capture` | 51 | 17 | 17 | 66% — at ideal |
 | `cycle` | 45 | 27 | 18 | 40% |
 | `early-return` | 23 | 23 | 17 | **0%** |
-| `erased-slot` | 68 | 68 | 17 | **0%** |
+| `erased-slot` | 68 | 0 | 0 | 100% — at ideal |
 | `global-array` | 34 | 0 | 0 | 100% — at ideal |
 | `local-anchor` | 85 | 51 | 17 | 40% |
 | `loop-break` | 69 | 51 | 17 | 26% |
@@ -397,6 +397,23 @@ So conditional ownership belongs in lowering, and the lattice stays at three
 elements. What erasure does cost is recorded elsewhere and is not this: an
 erased value has no known uniqueness, so it can never be reused in place, which
 is a real entry in the precision ledger in `typescript.md` §16.
+
+### Measured, and it costs nothing at all now
+
+`Erase` packs a pointer beside a tag and `Unerase` reads it back out. Neither
+allocates and neither copies, so the result is the operand under another name --
+borrowable on exactly the terms a load is, and a store *of* it is still a
+transfer that owes a reference of its own.
+
+`erased-slot` went from 68 operations to **0**. Not one of them was ever doing
+anything: the box never reaches the allocator, so all sixty eight were retains
+and releases on a frame object, each returning on its first line after a call
+and a branch.
+
+That is the third `ideal` in this suite I have written too high, and all three
+were the same mistake -- counting objects that do not escape as though they were
+objects. The measurement caught every one by refusing a number below the
+argument, which is what the third column is for.
 
 ## Linearity is local here, and identity is not
 

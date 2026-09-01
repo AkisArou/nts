@@ -1269,7 +1269,7 @@ fn count_ops(
                 // The reference moved out of the slot rather than being
                 // copied, and the store that overwrites gives nothing back.
                 report.moves += 1;
-            } else if is_load(&kind)
+            } else if (is_load(&kind) || repackages(&kind))
                 && (around.crossing.contains(value)
                     || borrows_safely(func, original, index, *value, at, terminator, around))
             {
@@ -1302,6 +1302,23 @@ struct Counted {
 /// A global is a slot like a field is, and the strongest case of the rule: it
 /// outlives every function, so a reference read out of one is owned by the
 /// global and not by the reader.
+/// Whether an operation renames a reference rather than producing one.
+///
+/// `Erase` packs a pointer beside a tag and `Unerase` reads it back out.
+/// Neither allocates and neither copies, so the result is the operand under
+/// another name -- which makes it borrowable on exactly the terms a load is:
+/// what it names is kept alive by whoever was already keeping the operand
+/// alive, and a store *of* it is still a transfer that owes a reference of its
+/// own, which `borrows_safely` refuses for it as it does for a load.
+///
+/// Worth naming because it was not free. `erased-slot` puts a box into an
+/// `unknown` and reads it straight back out, and paid four counting operations
+/// per object for a round trip that moves no memory: a retain for the erased
+/// name, a retain for the unerased one, and both given back.
+fn repackages(kind: &OpKind) -> bool {
+    matches!(kind, OpKind::Erase { .. } | OpKind::Unerase { .. })
+}
+
 fn is_load(kind: &OpKind) -> bool {
     matches!(
         kind,
