@@ -2402,8 +2402,21 @@ fn binary(op: BinOp, float: bool, wraps: bool, func: &Func) -> Result<&'static s
         (BinOp::Mul, false) if wraps => "mul",
         (BinOp::Mul, false) => "mul nsw",
         (BinOp::Div, true) => "fdiv",
+        // LLVM's integer types carry no sign, so the *instruction* is where the
+        // signedness has to be said -- and these six said "signed" whatever the
+        // IR held. `bytes` computes `(a + data[i]) % 65521` on a `u32` and got
+        // `srem`, which clang cannot turn into the multiply-and-shift an
+        // unsigned remainder by a constant becomes: 686us against the C
+        // backend's 423us on the same HIR.
+        //
+        // The slowness is the cheap half. `srem` and `urem` *disagree* above
+        // 2^31, as do `slt` and `ult`, so this was a wrong answer waiting for a
+        // program that reached one. Nothing in the corpus does, which is why
+        // nothing caught it.
+        (BinOp::Div, false) if wraps => "udiv",
         (BinOp::Div, false) => "sdiv",
         (BinOp::Rem, true) => "frem",
+        (BinOp::Rem, false) if wraps => "urem",
         (BinOp::Rem, false) => "srem",
         // `ordered` comparisons, which answer false when either side is NaN --
         // which is what JavaScript's relational operators do.
@@ -2413,9 +2426,16 @@ fn binary(op: BinOp, float: bool, wraps: bool, func: &Func) -> Result<&'static s
         (BinOp::Ge, true) => "fcmp oge",
         (BinOp::Eq, true) => "fcmp oeq",
         (BinOp::Ne, true) => "fcmp une",
+        // And the same for the relations. `i1` makes it plainest: `slt` reads a
+        // `true` as -1, so an unsigned comparison is not an optimization here
+        // but the only correct spelling.
+        (BinOp::Lt, false) if wraps => "icmp ult",
         (BinOp::Lt, false) => "icmp slt",
+        (BinOp::Le, false) if wraps => "icmp ule",
         (BinOp::Le, false) => "icmp sle",
+        (BinOp::Gt, false) if wraps => "icmp ugt",
         (BinOp::Gt, false) => "icmp sgt",
+        (BinOp::Ge, false) if wraps => "icmp uge",
         (BinOp::Ge, false) => "icmp sge",
         (BinOp::Eq, false) => "icmp eq",
         (BinOp::Ne, false) => "icmp ne",
