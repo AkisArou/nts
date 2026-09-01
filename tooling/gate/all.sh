@@ -188,6 +188,43 @@ profile() {
 # this one has a fallthrough that refuses -- which is safe, and is exactly how a
 # second backend silently falls behind. A number that may not go down is what
 # turns that into a failed build.
+# The same examples, through the second backend, with reference counting on.
+#
+# Nothing covered this pair. `llvm` and `examples` both run the default
+# provider, where `rc::insert` never runs, and `rc.sh` runs the C backend -- so
+# the counting the primary-backend-in-waiting emits was executed by no gate step
+# at all. The only thing exercising it was `nts-bench` with `NTS_BENCH_RC=1`,
+# incidentally, because its C and LLVM columns must agree on a checksum.
+#
+# It found a module that did not compile the first time it was pointed here: an
+# erased value handed to `nts_release`, which takes a pointer, where a tagged
+# value needs `nts_value_release` and the tag decides which half is a reference.
+llvm_rc() {
+  floor=77
+  passed=0
+  total=0
+  behind=""
+  for d in examples/*/tsconfig.json; do
+    n=$(basename "$(dirname "$d")")
+    case "$n" in
+      invalid|unsupported) continue ;;
+    esac
+    total=$((total + 1))
+    if NTS_BACKEND=llvm NTS_RC=1 ./target/release/nts check "$d" >/dev/null 2>&1; then
+      passed=$((passed + 1))
+    else
+      behind="$behind $n"
+    fi
+  done
+  printf '  %s of %s examples agree with node through the LLVM backend, counting\n' "$passed" "$total"
+  if [ "$passed" -lt "$floor" ]; then
+    echo "  ^ fell from $floor to $passed:$behind"
+    return 1
+  fi
+  [ "$passed" -gt "$floor" ] && printf '  ^ raise the floor in tooling/gate/all.sh to %s\n' "$passed"
+  return 0
+}
+
 llvm() {
   floor=77
   passed=0
@@ -271,6 +308,7 @@ step "corpus"  corpus
 step "profile"  profile
 step "sweep"    sweep
 step "llvm"    llvm
+step "llvm-rc" llvm_rc
 step "examples" ./tooling/gate/gate.sh
 # Last, and the most expensive step by some way -- about four minutes, against
 # two for everything before it. It is here rather than skipped because until it

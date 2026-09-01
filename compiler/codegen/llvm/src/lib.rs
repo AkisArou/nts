@@ -852,6 +852,8 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_to_int32_fn",
     "nts_to_uint32_fn",
     "nts_unit_fn",
+    "nts_value_release",
+    "nts_value_retain",
     "nts_value_strict_eq",
 ];
 
@@ -1690,6 +1692,27 @@ fn counting_or_global(
         // Counting, which the memory provider decides and both backends emit
         // the same way: one call each, and nothing under NoGC because the pass
         // that would have inserted them did not run.
+        // A tagged value is not a pointer, and which of its sixteen bytes is a
+        // reference is a question about its tag -- so the runtime answers it,
+        // and the C backend calls the same pair for the same reason. Passing
+        // the value straight to `nts_release` produced a module that did not
+        // compile, and nothing noticed because no gate step runs the second
+        // backend under reference counting.
+        OpKind::Retain(object) | OpKind::Release(object)
+            if func.values[object.0 as usize].ty == HirType::Erased =>
+        {
+            let helper = if matches!(op.kind, OpKind::Retain(_)) {
+                "nts_value_retain"
+            } else {
+                "nts_value_release"
+            };
+            format!(
+                "{out}.t = extractvalue {ERASED_TYPE} {0}, 0\n  \
+                 {out}.p = extractvalue {ERASED_TYPE} {0}, 1\n  \
+                 call void @{helper}(i32 {out}.t, i64 {out}.p)",
+                name(*object)
+            )
+        }
         OpKind::Retain(object) => format!("call void @nts_retain(ptr {})", name(*object)),
         OpKind::Release(object) => format!("call void @nts_release(ptr {})", name(*object)),
         OpKind::GlobalGet(global) => {
