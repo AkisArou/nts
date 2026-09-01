@@ -95,11 +95,101 @@ pub struct Report {
 }
 
 /// Insert retains and releases across a program.
+/// Which functions can overwrite a slot, directly or through anything they call.
+///
+/// # Why a borrow needs this
+///
+/// A reference read out of a slot belongs to that slot, and stays good while
+/// the slot still holds it. `borrows_safely` therefore gives up the moment a
+/// call falls between a load and its use, and its comment says why: *"Ruling
+/// that out needs to know what a callee can reach, which is a larger analysis
+/// than this one."* This is that analysis, in the smallest form that answers
+/// the question.
+///
+/// A callee that stores nothing cannot overwrite the slot. It cannot free the
+/// container either: under this module's convention a parameter is *borrowed*,
+/// so a callee releases only what it owns, and the container is owned by
+/// whatever the caller read it from. So "stores nothing, transitively" is
+/// exactly the property a borrow needs to survive a call.
+///
+/// # Why the lattice is a boolean
+///
+/// `hir::interprocedural` needs widening because a range has infinite height.
+/// This has two values, so the least fixpoint from "stores nothing" terminates
+/// in at most one pass per edge of the call graph and needs no widening.
+///
+/// # Where it stays conservative
+///
+/// A **virtual** call reaches whichever implementation the receiver has, and
+/// the receiver is not known here -- so it mutates. An **external** call has no
+/// body in this program, so it mutates too. That second one is coarser than it
+/// needs to be: the runtime already marks its read-only helpers
+/// `NTS_READS_ONLY`, and `hir::runtime` could carry that alongside the types it
+/// already carries. Until it does, an external call ends a borrow.
+/// What a counting decision needs about the world outside the block it is in.
+///
+/// Two facts that are computed once and read everywhere: which values are live
+/// where, and which functions can overwrite a slot. Passed together because
+/// they are always wanted together, and because threading them separately put
+/// two functions over the argument limit -- which is the lint noticing the same
+/// thing.
+struct Surroundings<'a> {
+    live: &'a liveness::Liveness,
+    mutates: &'a rustc_hash::FxHashSet<String>,
+}
+
+fn mutating(program: &Program) -> rustc_hash::FxHashSet<String> {
+    let mut mutates: rustc_hash::FxHashSet<String> = program
+        .funcs
+        .iter()
+        .filter(|func| {
+            func.values.iter().any(|op| {
+                matches!(
+                    op.kind,
+                    OpKind::FieldSet { .. } | OpKind::ArraySet { .. } | OpKind::GlobalSet { .. }
+                )
+            })
+        })
+        .map(|func| func.name.clone())
+        .collect();
+
+    loop {
+        let mut grew = false;
+        for func in &program.funcs {
+            if mutates.contains(&func.name) {
+                continue;
+            }
+            let reaches = func.values.iter().any(|op| match &op.kind {
+                OpKind::Call {
+                    callee: super::Callee::Direct(name),
+                    ..
+                } => mutates.contains(name),
+                OpKind::Call { .. } => true,
+                _ => false,
+            });
+            if reaches {
+                mutates.insert(func.name.clone());
+                grew = true;
+            }
+        }
+        if !grew {
+            return mutates;
+        }
+    }
+}
+
 pub fn insert(program: &mut Program) -> Report {
     let mut report = Report::default();
     let layouts = program.layouts.clone();
+    let mutates = mutating(program);
     for func in &mut program.funcs {
-        let one = insert_into(func, &layouts);
+        // Nothing an inert function does can invalidate a borrow, so nothing in
+        // it needs a count -- except what leaves. See `inert`.
+        let one = if inert(func) {
+            count_only_returns(func, &layouts)
+        } else {
+            insert_into(func, &layouts, &mutates)
+        };
         report.retains += one.retains;
         report.releases += one.releases;
         report.moves += one.moves;
@@ -143,7 +233,15 @@ fn counted(func: &Func, layouts: &[Layout], value: ValueId) -> bool {
         // five-line loop that spent four of its six retains and four of its ten
         // releases on a constant the compiler had just written two lines above
         // as `(NtsObj_Element *)0`.
-        OpKind::ConstString(_) | OpKind::ConstNull | OpKind::ConstUndefined => false,
+        // A named function used as a value is one object for the whole program:
+        // the C backend emits it `static ... = {{&desc, NTS_IMMORTAL, 0, 0}}`
+        // rather than allocating it, and the runtime reads that word and stops.
+        // So it was already never counted at *run* time; this stops paying the
+        // call to find out.
+        OpKind::ConstString(_)
+        | OpKind::ConstNull
+        | OpKind::ConstUndefined
+        | OpKind::ClosureStatic => false,
         // A frame object has no count of its own -- it goes away when the frame
         // does, and counting it would at best be wasted work and at worst call
         // `free` on a stack address. But it still *ends*, and if it holds
@@ -247,7 +345,8 @@ fn inert(func: &Func) -> bool {
 /// What an inert function still owes: a reference on whatever it hands back.
 ///
 /// Its caller is owed an owned reference, and every value inside was borrowed.
-fn count_only_returns(func: &mut Func, layouts: &[Layout], report: &mut Report) {
+fn count_only_returns(func: &mut Func, layouts: &[Layout]) -> Report {
+    let mut report = Report::default();
     let returned: Vec<(usize, ValueId)> = func
         .blocks
         .iter()
@@ -262,21 +361,24 @@ fn count_only_returns(func: &mut Func, layouts: &[Layout], report: &mut Report) 
     let mut blocks = std::mem::take(&mut func.blocks);
     for (at, value) in returned {
         let mut ops = std::mem::take(&mut blocks[at].ops);
-        retain(func, &mut ops, value, report);
+        retain(func, &mut ops, value, &mut report);
         blocks[at].ops = ops;
     }
     func.blocks = blocks;
+    report
 }
 
-fn insert_into(func: &mut Func, layouts: &[Layout]) -> Report {
+fn insert_into(
+    func: &mut Func,
+    layouts: &[Layout],
+    mutates: &rustc_hash::FxHashSet<String>,
+) -> Report {
     let mut report = Report::default();
-    // Nothing here can invalidate a borrow, so nothing here needs a count --
-    // except what leaves. See `inert`.
-    if inert(func) {
-        count_only_returns(func, layouts, &mut report);
-        return report;
-    }
     let live = liveness::analyze(func);
+    let around = Surroundings {
+        live: &live,
+        mutates,
+    };
     let blocks = std::mem::take(&mut func.blocks);
     let mut rebuilt = Vec::with_capacity(blocks.len());
     // Blocks created to hold an edge's releases. Appended after the originals,
@@ -296,7 +398,7 @@ fn insert_into(func: &mut Func, layouts: &[Layout]) -> Report {
             at,
             &block.ops,
             &block.terminator,
-            &live,
+            &around,
             &mut report,
         );
 
@@ -416,7 +518,7 @@ fn count_ops(
     at: BlockId,
     original: &[ValueId],
     terminator: &super::Terminator,
-    live: &liveness::Liveness,
+    around: &Surroundings<'_>,
     report: &mut Report,
 ) -> Counted {
     let mut ops = Vec::with_capacity(original.len());
@@ -478,7 +580,7 @@ fn count_ops(
             ) {
                 // Neither: its fields are released where its frame ends.
             } else if owned(func, layouts, *stored)
-                && live.dies_in(at, *stored)
+                && around.live.dies_in(at, *stored)
                 && moved.insert(*stored)
             {
                 report.moves += 1;
@@ -501,7 +603,8 @@ fn count_ops(
         // demonstrably good for as long as it is used, in which case the
         // function can just read the slot.
         if owned(func, layouts, *value) && !produces_owned(&kind) {
-            if is_load(&kind) && borrows_safely(func, original, index, *value, at, terminator, live)
+            if is_load(&kind)
+                && borrows_safely(func, original, index, *value, at, terminator, around)
             {
                 borrowed.insert(*value);
                 report.borrows += 1;
@@ -572,9 +675,9 @@ fn borrows_safely(
     value: ValueId,
     block: BlockId,
     terminator: &super::Terminator,
-    live: &liveness::Liveness,
+    around: &Surroundings<'_>,
 ) -> bool {
-    if !live.dies_in(block, value) {
+    if !around.live.dies_in(block, value) {
         return false;
     }
     // Handed on by the terminator, so its reference goes somewhere.
@@ -590,10 +693,37 @@ fn borrows_safely(
     }
 
     !original[at + 1..=last].iter().any(|other| {
-        matches!(
-            func.values[other.0 as usize].kind,
-            OpKind::Call { .. } | OpKind::FieldSet { .. } | OpKind::ArraySet { .. }
-        )
+        match &func.values[other.0 as usize].kind {
+            // A callee that stores nothing, anywhere it can reach, cannot
+            // overwrite the slot this was read from -- see `mutating`.
+            OpKind::Call {
+                callee: super::Callee::Direct(name),
+                ..
+            } => around.mutates.contains(name),
+            OpKind::Call { .. } => true,
+            // A store *into* this value cannot invalidate it. It overwrites a
+            // slot inside the container and leaves the reference that names the
+            // container alone: `piles[i] = disk` overwrites an element, and
+            // `piles` is still held by the `this.piles` it was read from.
+            //
+            // What a store *can* invalidate is a borrow read from the slot
+            // being written -- and that is a different value, which this still
+            // refuses because the container of that store is not it.
+            //
+            // Storing the borrowed value itself is a transfer, and a transfer
+            // needs a reference of its own however the store is aimed.
+            OpKind::FieldSet {
+                object,
+                value: stored,
+                ..
+            } => *object != value || *stored == value,
+            OpKind::ArraySet {
+                array,
+                value: stored,
+                ..
+            } => *array != value || *stored == value,
+            _ => false,
+        }
     })
 }
 

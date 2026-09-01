@@ -46,7 +46,26 @@ if [ -n "${NTS_JOBS:-}" ]; then
   export NTS_SUITE_JOBS="$NTS_JOBS"
 fi
 
+# `NTS_GATE_STEPS` selects a subset, space separated. Everything runs when it is
+# unset, which is what a commit needs.
+#
+# The reason it exists: `rc::insert` runs only under `Provider::ReferenceCounting`
+# (see `hir/mod.rs`), so for a change confined to `hir/rc.rs` the `llvm` and
+# `examples` steps execute a pass that was never inserted -- 877 of the gate's
+# 1200 seconds measuring a code path the change cannot reach. `rc` is the only
+# step that runs the counting *and* measures live objects, which is the only way
+# a leak or a double-free is visible at all.
+#
+# A narrower gate is not the same as a weaker one, and it is not licence to skip
+# the full run before committing. It is licence not to wait twenty minutes for a
+# four-minute question -- which is what made building underneath a running gate
+# look reasonable twice in one night, invalidating both.
 step() {
+  case " ${NTS_GATE_STEPS-} " in
+    "  ") ;;
+    *" $1 "*) ;;
+    *) return 0 ;;
+  esac
   printf '\n\033[1m%s\033[0m\n' "$1"
   shift
   started=$(date +%s)
