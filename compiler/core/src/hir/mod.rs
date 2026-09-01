@@ -44,6 +44,9 @@ pub mod unerase;
 
 pub mod lower;
 pub mod monomorphize;
+/// Who owns what, and for how long: one answer per value, which the counting
+/// pass reads and does no reasoning of its own about.
+pub mod own;
 pub mod rc;
 pub mod runtime;
 pub mod reachable;

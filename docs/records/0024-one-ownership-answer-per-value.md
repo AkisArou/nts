@@ -626,6 +626,58 @@ is that nothing ever asks about the value in the window where its ownership is
 changing, so a whole-function answer happens to be enough. A model that had to
 answer at every point would not have needed the coincidence.
 
+## Built: `hir::own`
+
+It exists. `compiler/core/src/hir/own.rs` computes one [`Ownership`] per value
+-- `Unowned`, `Produced`, `Copied`, `Taken`, `Borrowed` -- and `rc.rs` reads it
+and emits. The decision that used to be four predicates consulted at four sites
+is now:
+
+    match map.of(value) {
+        Copied   => retain(...),
+        Taken    => report.moves += 1,
+        Borrowed => report.borrows += 1,
+        Produced | Unowned => {}
+    }
+
+`survives_the_function` is deleted; it had become two lines wrapping `anchored`
+and `slot_survives`, and inlining it surfaced something worth spelling out -- a
+global is a slot with no container to anchor to, so it is never borrowed for a
+whole function, only block by block.
+
+`crossing_borrows` and `borrows_safely` survive as *private steps* of
+`own::analyze`, one for the whole-function answer and one for the block-local
+one. Nothing outside the module can consult either, which is the property that
+mattered: a set of predicates cannot be inconsistent with itself in only one
+place if only one function asks them.
+
+`mutating` is one column of `Summaries` rather than a free-standing predicate.
+This record argues it should become per-slot, and it should -- but it has no
+number to move today. Every case in `tooling/memory` is at its floor with the
+boolean, and the benchmark rows still above 1.30x are slow from allocation.
+Building it now would be a change whose proof is that nothing happens, which is
+the one kind of step this project has agreed not to take on faith.
+
+**The proof of the refactor is that every number is identical.** Fifteen cases,
+the same counts before and after, and the gate green. That is the standard this
+record set for the edge-mode change it then argued out of, and it is the right
+standard for a restructuring: if a rearrangement moves a number, it was not a
+rearrangement.
+
+## What is not built, and why
+
+**Edge modes.** Proposed here as the first thing to build, on the argument that
+a fact about a value dies at a block-parameter edge. Two things happened. The
+fixpoint direction turned out to be worth more, for thirty lines against thirty
+six construction sites. And freshness now *does* cross an edge -- `Fresh::across`
+maps each argument's facts onto the parameter that receives it -- which is the
+identity this section wanted, computed rather than spelled.
+
+What edge modes would still buy is the *transfer* half: whether an edge hands
+over a reference or lends one. That is currently decided by the counting pass
+and re-derived rather than read. It is worth doing when something needs it, and
+nothing does yet.
+
 ## Getting there without a flag day
 
 The rule that everything else in this tree is built on is measure, one change,
