@@ -18,16 +18,27 @@ what a person can justify as necessary written down beside the argument for it.
 
 | case | naive | actual | ideal | eliminated |
 | --- | --- | --- | --- | --- |
-| `borrowed-call` | 167 | 167 | 33 | **0%** |
-| `no-escape` | 0 | 0 | 0 | — |
+| `array-of-objects` | 86 | 52 | 18 | 39% |
+| `borrowed-call` | 167 | 99 | 33 | 40% |
+| `closure-capture` | 51 | 17 | 17 | 66% — at ideal |
+| `cycle` | 54 | 36 | 18 | 33% |
+| `early-return` | 23 | 23 | 17 | **0%** |
+| `erased-slot` | 68 | 68 | 17 | **0%** |
+| `global-array` | 34 | 0 | 0 | 100% — at ideal |
+| `local-anchor` | 85 | 85 | 17 | **0%** |
+| `loop-break` | 69 | 69 | 17 | **0%** |
+| `param-returned` | 68 | 68 | 34 | **0%** |
 | `shared-tail` | 131 | 57 | 21 | 56% |
 | `store-elsewhere` | 168 | 168 | 33 | **0%** |
+| `subclass-field` | 85 | 85 | 53 | **0%** |
+| `swap` | 104 | 70 | 3 | 32% |
 | `traversal` | 167 | 99 | 33 | 40% |
 
-Lobster reports eliminating about 95% of reference operations. The best column
-here is 56%, two cases are at zero, and the two zeros are not the same bug. That
-is the whole motivation: the gap is not one missing rule, and adding a sixth
-predicate beside the five that exist is how it got here.
+Lobster reports eliminating about 95% of reference operations. Two cases are at
+ideal, the best of the rest is 56%, and seven are at zero for at least four
+different reasons. That is the whole motivation: the gap is not one missing
+rule, and adding a sixth predicate beside the five that exist is how it got
+here.
 
 ## What the four analyses actually have in common
 
@@ -77,6 +88,19 @@ The cost is real and should be stated: every pass that builds or rewrites blocks
 has to say which mode it means. `simplify` and `specialize` rewrite edges today
 and would have to. That is the price of the fact being in the IR instead of in
 five places that each rediscover it.
+
+### It is not the precondition this section implied
+
+Written as the first thing to build, and it should not be. Flipping the fixpoint
+direction below — thirty lines in one function, no IR change at all — took
+`borrowed-call` from 0% to 40%, which is everything that was claimed for
+following a value across an edge in a loop. A change that touches thirty six
+construction sites and is proved by *no number moving* has to come after the
+one that moves numbers, not before it.
+
+What is still owed to an edge is narrower than "identity": it is that a value
+handed to a block parameter and never named again has its reference **move**
+there. `local-anchor` is that, and it is the next section.
 
 ## The lattice, and the two relations under it
 
@@ -137,6 +161,50 @@ The loop circularity dissolves once the anchor is resolved with the rule that
 join of its arguments' anchors over *forward* edges only, and the back edge is
 checked against that assumption rather than consulted for it. That is exactly
 what a greatest fixpoint does, and it is why it has to be one.
+
+### Measured
+
+`borrowed-call` went from **0% to 40%**, 167 operations to 99, the moment the
+loop ran downward instead of upward. It is now exactly level with `traversal`,
+which is the same walk without a call in it — so a call in the middle of a
+traversal costs nothing at all any more, which was the entire claim.
+
+What keeps it sound is the seed rather than the direction. Only function
+parameters, loads and block parameters are ever candidates; an allocation and a
+call result are owned and never enter the set, so a block parameter that
+receives one is removed on the first pass and takes its whole circle with it.
+89 programs agree with node under counting, and nothing in the suite leaked.
+
+## An anchor does not have to be a parameter
+
+`survives_the_function` will only anchor a borrow to a function parameter, and
+says why: a parameter is alive because the caller holds it for the length of the
+call, while "a value the *function* allocated ... can die here, and the borrow
+with it."
+
+That is true and it is not a reason to refuse. `local-anchor` walks a list the
+function built, one line different from `traversal`, and eliminates **0 of 85**
+where `traversal` eliminates 40% — and the difference is only that one head
+arrives as a parameter and the other is a local.
+
+It was worth being wrong about first. `loop-break` was written to blame the
+join: a block parameter reached by two edges, one of them not the back edge.
+It is not the join. The same walk with the `break` removed also eliminates
+nothing, and a walk over a *parameter* with a `break` added still eliminates
+28%. The join is fine.
+
+What actually happens is in the IR. The head is passed as a block argument into
+the walk and never named again, so its reference **dies on that edge** — and a
+cursor borrowed from it would outlive the thing it borrowed from. Refusing is
+correct. Extending is the fix: the frame owns the head, nothing else releases
+it, and an anchor whose lifetime is stretched to cover its borrows is exactly
+what a borrow means.
+
+So the anchor is not a value, it is a *place with a lifetime*, and
+`crossing_borrows` returning a set rather than a map from value to anchor is why
+it cannot say this. That map is `hir::own`, and lengthening an anchor's live
+range to cover what borrows from it is the one thing the current pass has no
+vocabulary for at all.
 
 ## A load has three flavors and we emit two
 
@@ -316,10 +384,9 @@ The `actual` column of `tooling/memory` is the ratchet, down only, the way the
 
 ## What would say this is wrong
 
-- **The greatest fixpoint does not move `borrowed-call`.** The claim is that a
-  circular justification is the only thing stopping it. If flipping the direction
-  leaves it near zero, the anchor model is missing something and no amount of
-  per-parameter effects will find it.
+- ~~**The greatest fixpoint does not move `borrowed-call`.**~~ Tested. It moved
+  it from 0% to 40% with no other change, and `rc` stayed at 91 of 91. The
+  direction was the whole of that case.
 - **Edge modes cannot be maintained.** If `simplify` or `specialize` cannot state
   a mode for an edge they rewrite without a fixpoint of their own, then the fact
   does not belong in the IR and the honest answer is one shared analysis rather

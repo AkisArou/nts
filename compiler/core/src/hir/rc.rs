@@ -230,8 +230,30 @@ fn survives_the_function(
 /// value read there is a different one. If every argument arriving at a
 /// parameter is a borrow that needs no count, neither does the parameter --
 /// and if any of them is not, the parameter is counted and the edges retain
-/// for it as they always did. That is a least fixpoint, and it terminates
-/// because the set only grows.
+/// for it as they always did.
+///
+/// # Which way the fixpoint runs
+///
+/// Downward. This starts by assuming every candidate *is* a borrow and removes
+/// the ones evidence contradicts, and it terminates because the set only
+/// shrinks.
+///
+/// It ran upward first -- assume nothing, add what can be proved -- and that is
+/// wrong in a way no amount of seeding fixes. Borrowing is a safety property:
+/// it says *nothing on any path kills the anchor*, and a property quantified
+/// over all paths is a greatest fixpoint. Started from below, a loop-carried
+/// borrow can never be established, because the only justification available is
+/// circular: `at` is good if the load `at.next` is, and that load is good if
+/// `at` is. Nothing enters that circle from outside it. The obligation to
+/// *release*, by contrast, genuinely accumulates and genuinely is a least
+/// fixpoint -- the two halves want opposite directions and shared one.
+///
+/// What keeps the optimism sound is the seed, not the loop. Only function
+/// parameters, loads and block parameters are ever candidates. An allocation
+/// and a call result are owned and are never in the set, so a block parameter
+/// that receives one loses on the first pass and takes its whole circle with
+/// it. A load survives only while `survives_the_function` holds, which is a
+/// whole-function claim about stores and calls and is not circular at all.
 fn crossing_borrows(
     func: &Func,
     layouts: &[Layout],
@@ -252,45 +274,42 @@ fn crossing_borrows(
     if !eliding() {
         return crossing;
     }
-    // A parameter is borrowed by this module's own convention: never retained
-    // on entry, never released on exit, because the caller holds it for the
-    // length of the call. Seeding them is what lets the fixpoint below start at
-    // all -- without a value that is good before anything is proved, a loop
-    // variable can never settle.
+    // The seed is the soundness argument. A function parameter is borrowed by
+    // this module's own convention -- never retained on entry, never released
+    // on exit, because the caller holds it for the length of the call. A load
+    // and a block parameter are *candidates*: they may turn out to be borrows,
+    // and the loop below decides. Nothing else is ever in the set, which is
+    // what stops an allocation or a call result from being assumed away.
     for (index, op) in func.values.iter().enumerate() {
-        if matches!(op.kind, OpKind::Param(_)) {
-            let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
-            if counted(func, layouts, value) {
-                crossing.insert(value);
+        let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
+        if (matches!(op.kind, OpKind::Param(_)) || is_load(&op.kind))
+            && counted(func, layouts, value)
+        {
+            crossing.insert(value);
+        }
+    }
+    for block in &func.blocks {
+        for param in &block.params {
+            if counted(func, layouts, *param) {
+                crossing.insert(*param);
             }
         }
     }
-    // Loads and block parameters in **one** fixpoint, not two.
-    //
-    // In a loop they depend on each other circularly: `at` is a block parameter
-    // carrying `head` and `at.next`, the load `at.next` is good only if `at`
-    // is, and `at` is good only if every argument arriving at it is -- that
-    // load included. Settling loads to convergence *first* and parameters
-    // afterwards cannot break the circle, because the load is asked before its
-    // container has been considered at all.
-    //
-    // That is not hypothetical: with the two separated, a walk whose step goes
-    // through a call eliminated **nothing**, 167 operations of 167, while the
-    // same walk without the call eliminated 40%. `tooling/memory` is what said
-    // so.
+    // Loads and block parameters in **one** fixpoint, not two, and running
+    // down rather than up. In a loop they depend on each other circularly:
+    // `at` is a block parameter carrying `head` and `at.next`, the load is good
+    // only if `at` is, and `at` is good only if every argument arriving at it
+    // is -- that load included. Asked from below the circle has no entrance;
+    // asked from above it survives unless something outside it objects.
     let incoming = super::loops::predecessors(func);
     loop {
-        let mut grew = false;
-        for index in 0..func.values.len() {
-            let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
-            if crossing.contains(&value) || !counted(func, layouts, value) {
-                continue;
-            }
-            if is_load(&func.values[index].kind)
-                && survives_the_function(func, layouts, mutates, &crossing, &unobserved, value)
+        let mut shrank = false;
+        let mut doomed: Vec<ValueId> = Vec::new();
+        for &value in &crossing {
+            if is_load(&func.values[value.0 as usize].kind)
+                && !survives_the_function(func, layouts, mutates, &crossing, &unobserved, value)
             {
-                crossing.insert(value);
-                grew = true;
+                doomed.push(value);
             }
         }
         for (at, block) in func.blocks.iter().enumerate() {
@@ -299,19 +318,21 @@ fn crossing_borrows(
                 continue;
             }
             for (slot, param) in block.params.iter().enumerate() {
-                if crossing.contains(param) || !counted(func, layouts, *param) {
-                    continue;
-                }
-                if arriving
-                    .iter()
-                    .all(|(_, args)| args.get(slot).is_some_and(|arg| crossing.contains(arg)))
+                if crossing.contains(param)
+                    && !arriving
+                        .iter()
+                        .all(|(_, args)| args.get(slot).is_some_and(|arg| crossing.contains(arg)))
                 {
-                    crossing.insert(*param);
-                    grew = true;
+                    doomed.push(*param);
                 }
             }
         }
-        if !grew {
+        for value in doomed {
+            if crossing.remove(&value) {
+                shrank = true;
+            }
+        }
+        if !shrank {
             return crossing;
         }
     }

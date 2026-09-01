@@ -1,9 +1,11 @@
-// A borrow that is live across a `break`, which is a block parameter with two
-// predecessors and no back edge on one of them.
+// A borrow that is live across a `break`: a block parameter reached by two
+// edges, one of which is not the back edge.
 //
-// The walk is the same one `traversal` does; what is different is that it
-// leaves early, so the value carried around the loop reaches the exit block by
-// two different routes. An analysis that gives up at a join gives up here.
+// Written to isolate the join, and it does not -- which is worth leaving here
+// as the record of a wrong guess. This eliminates nothing, and so does the same
+// walk with the `break` taken out; a walk over a *parameter* with a `break` put
+// in still eliminates 28%. The join is fine. What stops both is that the head
+// is a local, which `local-anchor` isolates without the confounder.
 
 class Link {
   value: number;
