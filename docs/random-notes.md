@@ -1,2 +1,3 @@
 - [].map(...).filter(...) -> Skip intermediate arrays if no side-effect
 - have a linter that suggests/warn about optimizations and analyzes code, ofcourse based on the already working code of our compiler
+- an lsp or something, to show memory management analysis
