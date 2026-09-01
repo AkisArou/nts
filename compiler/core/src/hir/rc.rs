@@ -131,9 +131,19 @@ fn counted(func: &Func, layouts: &[Layout], value: ValueId) -> bool {
         return false;
     }
     match op.kind {
-        // Static data with no count to change, and the runtime treats it as
-        // immortal anyway.
-        OpKind::ConstString(_) => false,
+        // A constant with no count to change.
+        //
+        // A string is static data the runtime treats as immortal. A null is not
+        // an object at all: `nts_retain` and `nts_release` both return
+        // immediately for one, so counting it was never *wrong* -- it was an
+        // out-of-line call per occurrence to decide nothing, and every
+        // `x !== null` inside a loop has one.
+        //
+        // `List#isShorterThan` is the whole argument for the second: a
+        // five-line loop that spent four of its six retains and four of its ten
+        // releases on a constant the compiler had just written two lines above
+        // as `(NtsObj_Element *)0`.
+        OpKind::ConstString(_) | OpKind::ConstNull | OpKind::ConstUndefined => false,
         // A frame object has no count of its own -- it goes away when the frame
         // does, and counting it would at best be wasted work and at worst call
         // `free` on a stack address. But it still *ends*, and if it holds
@@ -187,9 +197,86 @@ fn produces_owned(kind: &OpKind) -> bool {
     )
 }
 
+/// Whether nothing in this function can invalidate a borrow.
+///
+/// A reference read out of a slot belongs to that slot, and stays good while
+/// the slot still holds it and the container still exists. What can break that
+/// is a store, a call that might store, or a release. A function containing
+/// none of them breaks neither, for its whole body rather than for a stretch of
+/// one block -- which is the difference that matters, because the shape this
+/// exists for carries its value across a loop's back edge.
+///
+/// Allocation is excluded too, and not because it invalidates anything: an
+/// allocated object is *owned*, and owning one thing means the function has
+/// counting to do after all. Excluding it is what makes the answer here "count
+/// nothing" rather than "count almost nothing".
+///
+/// `List#isShorterThan` is the shape: `xTail = xTail.next` in a loop, no store
+/// and no call anywhere in it, and sixteen reference-counting operations in a
+/// five-line body. Every one of them is unnecessary, and `borrows_safely`
+/// cannot say so because it reasons one block at a time.
+fn inert(func: &Func) -> bool {
+    func.values.iter().all(|op| match &op.kind {
+        OpKind::Param(_)
+        | OpKind::BlockParam(_)
+        | OpKind::ConstInt(_)
+        | OpKind::ConstFloat(_)
+        | OpKind::ConstBool(_)
+        | OpKind::ConstString(_)
+        | OpKind::ConstNull
+        | OpKind::ConstUndefined
+        | OpKind::ClosureStatic
+        | OpKind::TagOf { .. }
+        | OpKind::Unerase { .. }
+        | OpKind::Unary { .. }
+        | OpKind::Convert(_)
+        | OpKind::Length(_)
+        | OpKind::FieldGet { .. }
+        | OpKind::ArrayGet { .. }
+        | OpKind::GlobalGet(_)
+        | OpKind::StringUnitAt { .. } => true,
+        // Concatenation allocates. Every other binary is arithmetic or a
+        // comparison.
+        OpKind::Binary { op, .. } => !matches!(op, super::BinOp::Concat),
+        // Everything else stores, calls, allocates, or suspends. `Erase` is
+        // here for being a boxing operation rather than for being unsafe.
+        _ => false,
+    })
+}
+
+/// What an inert function still owes: a reference on whatever it hands back.
+///
+/// Its caller is owed an owned reference, and every value inside was borrowed.
+fn count_only_returns(func: &mut Func, layouts: &[Layout], report: &mut Report) {
+    let returned: Vec<(usize, ValueId)> = func
+        .blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(at, block)| match block.terminator {
+            super::Terminator::Return(Some(value)) => Some((at, value)),
+            _ => None,
+        })
+        .filter(|(_, value)| counted(func, layouts, *value))
+        .collect();
+
+    let mut blocks = std::mem::take(&mut func.blocks);
+    for (at, value) in returned {
+        let mut ops = std::mem::take(&mut blocks[at].ops);
+        retain(func, &mut ops, value, report);
+        blocks[at].ops = ops;
+    }
+    func.blocks = blocks;
+}
+
 fn insert_into(func: &mut Func, layouts: &[Layout]) -> Report {
-    let live = liveness::analyze(func);
     let mut report = Report::default();
+    // Nothing here can invalidate a borrow, so nothing here needs a count --
+    // except what leaves. See `inert`.
+    if inert(func) {
+        count_only_returns(func, layouts, &mut report);
+        return report;
+    }
+    let live = liveness::analyze(func);
     let blocks = std::mem::take(&mut func.blocks);
     let mut rebuilt = Vec::with_capacity(blocks.len());
     // Blocks created to hold an edge's releases. Appended after the originals,
