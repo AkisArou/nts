@@ -125,7 +125,7 @@ pub fn accumulator_caps(func: &Func, analysis: &Analysis) -> FxHashMap<ValueId, 
 }
 
 /// Which blocks jump to each block, and with what arguments.
-fn predecessors(func: &Func) -> Vec<Vec<(BlockId, Vec<ValueId>)>> {
+pub(super) fn predecessors(func: &Func) -> Vec<Vec<(BlockId, Vec<ValueId>)>> {
     let mut incoming = vec![Vec::new(); func.blocks.len()];
     for (index, block) in func.blocks.iter().enumerate() {
         let from = BlockId(u32::try_from(index).unwrap_or(0));

@@ -126,6 +126,164 @@ pub struct Report {
 /// needs to be: the runtime already marks its read-only helpers
 /// `NTS_READS_ONLY`, and `hir::runtime` could carry that alongside the types it
 /// already carries. Until it does, an external call ends a borrow.
+/// What a field is called, which is how two slots are told apart.
+///
+/// Not by type, and this is the trap: TypeScript here is structurally typed and
+/// a subclass that adds storage gets a *different* layout, so `B extends A`
+/// gives `FieldSet` on a `B` and `FieldGet` on an `A` different `HirType`s --
+/// while they are the same object at run time, with `A`'s fields first and at
+/// the same offsets. Comparing types calls that safe and it is not.
+///
+/// Names answer it: a subclass inherits its base's field names, so one slot has
+/// one name however it is viewed. Two unrelated classes that both have an `x`
+/// are called a hazard, which loses precision and keeps the answer sound.
+fn field_name<'a>(
+    func: &Func,
+    layouts: &'a [Layout],
+    object: ValueId,
+    field: u32,
+) -> Option<&'a str> {
+    let HirType::Managed(ManagedType::Object(id)) = &func.values[object.0 as usize].ty else {
+        return None;
+    };
+    let layout = layouts.iter().find(|layout| layout.types.contains(id))?;
+    layout
+        .fields
+        .get(field as usize)
+        .map(|field| field.name.as_str())
+}
+
+/// Whether a borrow of this load is good for the whole function.
+///
+/// `borrows_safely` answers one block at a time and opens with `dies_in`, so a
+/// value used after its own block keeps a count however harmless it is. That is
+/// most of what `awfy-towers` and `awfy-nbody` still pay: `pushDisk` reads
+/// `this.piles` in its first block and writes through it in its last, and
+/// `advance` reads `this.bodies` once and uses it all the way down.
+///
+/// The question those need is not "is this block quiet" but "can *anything*
+/// here reach the slot". A store can only name a field of the same index in
+/// the same containing type, or -- for an element -- any array at all, because
+/// two arrays cannot be told apart here. If no store in the function qualifies
+/// and no call mutates, the borrow is good everywhere and the block structure
+/// stops mattering.
+///
+/// # Why the container must be a parameter
+///
+/// A borrow is alive because its container's slot still holds it, so the
+/// container has to be alive for a reason nothing here can affect. A parameter
+/// is: the caller holds a reference for the length of the call, and this
+/// module never releases one. A value the *function* allocated is not -- it can
+/// die here, and the borrow with it.
+fn survives_the_function(
+    func: &Func,
+    layouts: &[Layout],
+    mutates: &rustc_hash::FxHashSet<String>,
+    settled: &rustc_hash::FxHashSet<ValueId>,
+    value: ValueId,
+) -> bool {
+    let (container, from_field) = match &func.values[value.0 as usize].kind {
+        OpKind::FieldGet { object, field, .. } => (*object, Some(*field)),
+        OpKind::ArrayGet { array, .. } => (*array, None),
+        _ => return false,
+    };
+    // A parameter is alive because the caller holds it. A container that is
+    // *itself* a settled borrow is alive for the same reason one step up, and
+    // the chain ends at a parameter -- so `bodies[i]` qualifies once `bodies`
+    // does, which is the shape `NBodySystem#advance` is made of.
+    if !matches!(func.values[container.0 as usize].kind, OpKind::Param(_))
+        && !settled.contains(&container)
+    {
+        return false;
+    }
+    let ours = from_field.and_then(|field| field_name(func, layouts, container, field));
+    !func.values.iter().any(|op| match &op.kind {
+        OpKind::Call {
+            callee: super::Callee::Direct(name),
+            ..
+        } => mutates.contains(name),
+        OpKind::Call { .. } => true,
+        OpKind::FieldSet { object, field, .. } => match (ours, from_field) {
+            // An element borrow is never a field, and a field slot is named.
+            (_, None) => false,
+            // A layout this cannot find is a slot it cannot rule out.
+            (None, Some(_)) => true,
+            (Some(ours), Some(_)) => {
+                field_name(func, layouts, *object, *field).is_none_or(|theirs| ours == theirs)
+            }
+        },
+        OpKind::ArraySet { .. } => from_field.is_none(),
+        _ => false,
+    })
+}
+
+/// The borrows that outlive their own block, and the block parameters carrying
+/// them.
+///
+/// A value reaches a later block by being passed as a block *argument*, so the
+/// value read there is a different one. If every argument arriving at a
+/// parameter is a borrow that needs no count, neither does the parameter --
+/// and if any of them is not, the parameter is counted and the edges retain
+/// for it as they always did. That is a least fixpoint, and it terminates
+/// because the set only grows.
+fn crossing_borrows(
+    func: &Func,
+    layouts: &[Layout],
+    mutates: &rustc_hash::FxHashSet<String>,
+) -> rustc_hash::FxHashSet<ValueId> {
+    let mut crossing = rustc_hash::FxHashSet::default();
+    // Loads first, and to a fixpoint: a load out of a settled borrow settles
+    // too, so one pass would answer in definition order rather than by the
+    // chain.
+    loop {
+        let mut grew = false;
+        for index in 0..func.values.len() {
+            let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
+            if crossing.contains(&value) {
+                continue;
+            }
+            if counted(func, layouts, value)
+                && is_load(&func.values[index].kind)
+                && survives_the_function(func, layouts, mutates, &crossing, value)
+            {
+                crossing.insert(value);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    if crossing.is_empty() {
+        return crossing;
+    }
+    let incoming = super::loops::predecessors(func);
+    loop {
+        let mut grew = false;
+        for (at, block) in func.blocks.iter().enumerate() {
+            let arriving = &incoming[at];
+            if arriving.is_empty() {
+                continue;
+            }
+            for (slot, param) in block.params.iter().enumerate() {
+                if crossing.contains(param) || !counted(func, layouts, *param) {
+                    continue;
+                }
+                if arriving
+                    .iter()
+                    .all(|(_, args)| args.get(slot).is_some_and(|arg| crossing.contains(arg)))
+                {
+                    crossing.insert(*param);
+                    grew = true;
+                }
+            }
+        }
+        if !grew {
+            return crossing;
+        }
+    }
+}
+
 /// What a counting decision needs about the world outside the block it is in.
 ///
 /// Two facts that are computed once and read everywhere: which values are live
@@ -136,6 +294,10 @@ pub struct Report {
 struct Surroundings<'a> {
     live: &'a liveness::Liveness,
     mutates: &'a rustc_hash::FxHashSet<String>,
+    /// Borrows good for the whole function, which therefore cross blocks. See
+    /// [`crossing_borrows`]: nothing releases one and no edge retains for one,
+    /// so every place that decides either has to agree.
+    crossing: &'a rustc_hash::FxHashSet<ValueId>,
 }
 
 fn mutating(program: &Program) -> rustc_hash::FxHashSet<String> {
@@ -368,16 +530,55 @@ fn count_only_returns(func: &mut Func, layouts: &[Layout]) -> Report {
     report
 }
 
+/// Everything about a function that is settled before a single count is placed.
+///
+/// Read here rather than in the loop below because `insert_into` takes the
+/// blocks out of the function to rebuild them, so `func.blocks` is empty for
+/// the rest of it -- and an edge still has to ask what its successor receives.
+struct Ambient {
+    live: liveness::Liveness,
+    crossing: rustc_hash::FxHashSet<ValueId>,
+    /// The parameters of each block, by block.
+    receives: Vec<Vec<ValueId>>,
+}
+
+fn ambient(
+    func: &Func,
+    layouts: &[Layout],
+    mutates: &rustc_hash::FxHashSet<String>,
+) -> Ambient {
+    Ambient {
+        live: liveness::analyze(func),
+        crossing: crossing_borrows(func, layouts, mutates),
+        receives: func
+            .blocks
+            .iter()
+            .map(|block| block.params.clone())
+            .collect(),
+    }
+}
+
+// Over the line, and split further it would read worse. What follows is one
+// decision made twice: what a block owes when it leaves the function, and what
+// it owes on each edge. They share `moved`, `borrowed` and `crossing`, and
+// separating them puts three sets through a signature to keep two halves of one
+// rule apart.
+#[allow(clippy::too_many_lines)]
 fn insert_into(
     func: &mut Func,
     layouts: &[Layout],
     mutates: &rustc_hash::FxHashSet<String>,
 ) -> Report {
     let mut report = Report::default();
-    let live = liveness::analyze(func);
+    let Ambient {
+        live,
+        crossing,
+        receives,
+    } = ambient(func, layouts, mutates);
     let around = Surroundings {
         live: &live,
         mutates,
+        crossing: &crossing,
     };
     let blocks = std::mem::take(&mut func.blocks);
     let mut rebuilt = Vec::with_capacity(blocks.len());
@@ -409,7 +610,9 @@ fn insert_into(
             // Leaving the function. What is returned is handed to the caller and
             // everything else is dropped -- and a value that is both is moved.
             let mut dying = ordered(func, layouts, live.available(at));
-            dying.retain(|value| !moved.contains(value) && !borrowed.contains(value));
+            dying.retain(|value| {
+                !moved.contains(value) && !borrowed.contains(value) && !crossing.contains(value)
+            });
             let transfers: Vec<ValueId> = super::operands_of_terminator(&block.terminator)
                 .into_iter()
                 .filter(|value| counted(func, layouts, *value))
@@ -431,11 +634,21 @@ fn insert_into(
                         !live.live_in(successor).contains(value)
                             && !moved.contains(value)
                             && !borrowed.contains(value)
+                            && !crossing.contains(value)
                     })
                     .collect();
+                // An edge hands its argument to a parameter, and a parameter
+                // that is itself a crossing borrow keeps no count -- so
+                // retaining for it would be a reference nothing gives back.
+                let landed = &receives[successor.0 as usize];
                 let transfers: Vec<ValueId> = args
                     .into_iter()
-                    .filter(|value| counted(func, layouts, *value))
+                    .enumerate()
+                    .filter(|(slot, value)| {
+                        counted(func, layouts, *value)
+                            && !landed.get(*slot).is_some_and(|param| crossing.contains(param))
+                    })
+                    .map(|(_, value)| value)
                     .collect();
                 let retains = settle(&transfers, &mut dying);
                 if retains.is_empty() && dying.is_empty() {
@@ -604,7 +817,8 @@ fn count_ops(
         // function can just read the slot.
         if owned(func, layouts, *value) && !produces_owned(&kind) {
             if is_load(&kind)
-                && borrows_safely(func, original, index, *value, at, terminator, around)
+                && (around.crossing.contains(value)
+                    || borrows_safely(func, original, index, *value, at, terminator, around))
             {
                 borrowed.insert(*value);
                 report.borrows += 1;
