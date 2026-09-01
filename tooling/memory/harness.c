@@ -21,7 +21,19 @@
 
 double work(double iterations);
 
+/* Weak, because the compiler emits it only for a module that has state: a case
+ * with no globals has no initializer to call and would not link against one.
+ *
+ * Called once, before the baseline, so what a module allocates when it is
+ * evaluated is part of the ground the two runs are compared against rather
+ * than something `work` is charged for. Until a case had a global nothing here
+ * needed it, and the first one that did read a null array and segfaulted. */
+__attribute__((weak)) void module__init(void);
+
 int main(void) {
+  if (module__init) {
+    module__init();
+  }
   double settled = work(1);
   nts_collect_cycles();
   size_t before = nts_live_count();

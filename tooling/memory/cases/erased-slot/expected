@@ -1,0 +1,9 @@
+ideal 17
+because seventeen boxes, one reference each to give back.
+because
+because The erased local is the same reference under a tag, not a second one.
+because Storing into it is a move -- `box` is not named again -- and reading it
+because back out is a borrow of the slot it is sitting in.
+because
+because If this case ever needs more than one operation per object, erasure is
+because costing an ownership kind of its own and record 0024 is wrong about it.

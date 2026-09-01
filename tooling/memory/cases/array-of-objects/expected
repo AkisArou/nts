@@ -1,0 +1,11 @@
+ideal 18
+because seventeen cells and the array that holds them, one reference each.
+because
+because Zero retains. `push` is handed a cell that is dying at the point it is
+because handed over, so the reference moves into the element slot. The reading
+because loop holds no store and no call between the load and the use, so the
+because array cannot go away and the element cannot be replaced.
+because
+because The releases are the array's teardown: dropping it walks the elements
+because once, which is one release per cell, and the array itself is the
+because eighteenth.

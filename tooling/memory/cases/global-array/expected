@@ -1,0 +1,7 @@
+ideal 0
+because the array is built once when the module is evaluated and outlives every
+because call, so a call allocates nothing and owes nothing.
+because
+because A global is a slot that outlives every function -- record 0022 -- so a
+because load out of one is borrowed for the same reason a load out of a
+because parameter is, and there is no store anywhere in this program to end it.

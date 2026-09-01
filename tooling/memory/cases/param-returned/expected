@@ -1,0 +1,10 @@
+ideal 34
+because thirty four boxes, one reference each to give back.
+because
+because Parameters are borrowed -- the caller holds them across a synchronous
+because call and cannot release them until it returns -- so `pick` owes nothing
+because on the way in. What it returns is one of them, still borrowed, and both
+because are still named by the caller's frame when the result is read.
+because
+because No retain is justified. Every one this case reports is a call ending a
+because borrow that outlives it.

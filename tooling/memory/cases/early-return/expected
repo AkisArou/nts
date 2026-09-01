@@ -1,0 +1,6 @@
+ideal 17
+because seventeen boxes, one reference each, whichever way they leave.
+because
+because On the `null` path `made` is dropped where it is built. On the other it
+because is moved into the return, and the caller's local drops it. Neither path
+because needs a retain, and no path may consume it twice.

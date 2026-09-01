@@ -1,0 +1,13 @@
+ideal 53
+because seventeen `Derived` and thirty four `Base`, fifty one objects at one
+because reference each, and the borrow that cannot be one.
+because
+because `got` reads `b.left` and is used *after* `d.left` is overwritten, and
+because the overwrite releases what the slot held. So this is the case where a
+because retain is genuinely owed: one retain and one release per iteration would
+because be thirty four more, but the second `Base` can move into the slot and
+because the first can move out into `got`, leaving one pair that cannot go --
+because `got` outlives the store, and nothing else keeps it.
+because
+because Stated as a floor rather than a target. What this case is really for is
+because the answer: elide by type and `got.tag` reads freed memory.

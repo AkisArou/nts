@@ -1,0 +1,11 @@
+ideal 3
+because the pair and the two things it holds, one reference each, given back
+because when the frame drops the pair.
+because
+because The loop is free. Seventeen iterations move two references between two
+because slots and create none: `pair.a` is read into `held` and immediately
+because overwritten, `pair.b` is read and immediately overwritten, and `held` is
+because moved back in. Nothing is ever reachable twice, so nothing needs a count.
+because
+because This is the smallest case in the suite that borrowing cannot close, and
+because the distance from three is the price of not having `load [take]`.

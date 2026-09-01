@@ -59,11 +59,22 @@ for dir in tooling/memory/cases/*/; do
       echo "  $name: did not compile" >&2
       return 1
     }
-    "$where/run"
+    # Not `"$where/run"` bare. A case whose program *crashes* used to fail this
+    # function without saying anything, and the loop below then skipped it
+    # entirely -- so `global-array` segfaulted on a null module global and the
+    # report simply had one fewer row than the suite had cases. A missing row
+    # is the quietest way a check can not happen.
+    out=$("$where/run") || {
+      echo "  $name: the program exited $? without reporting" >&2
+      return 1
+    }
+    echo "$out"
   }
 
-  elided=$(measure elided -u NTS_RC_NAIVE) || { fail=1; continue; }
-  naive=$(measure naive NTS_RC_NAIVE=1) || { fail=1; continue; }
+  # Every case directory gets a row, whatever happened to it.
+  short() { printf '%-20s %8s %8s %8s %7s   %s\n' "$name" "?" "?" "?" "--" "$1"; fail=1; }
+  elided=$(measure elided -u NTS_RC_NAIVE) || { short "DID NOT RUN"; continue; }
+  naive=$(measure naive NTS_RC_NAIVE=1) || { short "DID NOT RUN under NTS_RC_NAIVE"; continue; }
 
   read_num() { echo "$1" | tr ' ' '\n' | grep "^$2=" | cut -d= -f2; }
   a=$(( $(read_num "$elided" retains) + $(read_num "$elided" releases) ))

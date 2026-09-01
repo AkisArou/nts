@@ -1,0 +1,14 @@
+ideal 17
+because seventeen boxes, one reference each to give back. The closures cost
+because nothing: nothing lets one escape the iteration that built it, so each
+because lives in the frame and is never an object at all.
+because
+because Written as thirty four first -- seventeen boxes and seventeen heap
+because closures -- and the suite rejected it for being *below* what the
+because compiler already does. It was the argument that was wrong, not the
+because measurement, which is the whole reason the third column is a sentence
+because and not a number.
+because
+because No retain is justified either. `box` is named once more after it is
+because built, by the capture, and never again, so the frame's reference moves
+because into the closure rather than being copied.
