@@ -19,22 +19,22 @@ what a person can justify as necessary written down beside the argument for it.
 | case | naive | actual | ideal | eliminated |
 | --- | --- | --- | --- | --- |
 | `array-of-objects` | 52 | 18 | 18 | 65% — at ideal |
-| `borrowed-call` | 135 | 67 | 33 | 50% |
+| `borrowed-call` | 134 | 67 | 33 | 50% |
 | `closure-capture` | 51 | 17 | 17 | 66% — at ideal |
 | `cycle` | 36 | 18 | 18 | 50% — at ideal |
-| `early-return` | 23 | 23 | 17 | **0%** |
+| `early-return` | 17 | 17 | 17 | — at ideal |
 | `erased-slot` | 68 | 0 | 0 | 100% — at ideal |
 | `global-array` | 34 | 0 | 0 | 100% — at ideal |
-| `local-anchor` | 69 | 35 | 17 | 49% |
+| `local-anchor` | 68 | 35 | 17 | 48% |
 | `loop-break` | 53 | 35 | 17 | 33% |
 | `param-returned` | 68 | 34 | 34 | 50% — at ideal |
-| `shared-tail` | 113 | 39 | 21 | 65% |
-| `store-elsewhere` | 135 | 33 | 33 | 75% — at ideal |
+| `shared-tail` | 111 | 39 | 21 | 64% |
+| `store-elsewhere` | 134 | 33 | 33 | 75% — at ideal |
 | `subclass-field` | 68 | 34 | 34 | 50% — at ideal |
 | `swap` | 104 | 2 | 2 | 98% — at ideal |
-| `traversal` | 135 | 67 | 33 | 50% |
+| `traversal` | 134 | 67 | 33 | 50% |
 
-Lobster reports eliminating about 95% of reference operations. Nine of these
+Lobster reports eliminating about 95% of reference operations. Ten of these
 fifteen are at their floor and two are still at zero, which is what the rest of
 this record is about. Every one of the eight moved because a fact the compiler
 already had was being thrown away at a boundary -- an edge, a call, a slot -- and
@@ -553,6 +553,36 @@ the precondition.
 Both of those are today separate wishlist items. Under one ownership answer they
 are the same query with different consumers, which is the argument for doing this
 before either of them.
+
+## The five that are left are one thing
+
+`traversal` and `borrowed-call` at 67 against 33, `local-anchor`, `loop-break`
+and `shared-tail` at 18 above theirs. Every one of those 122 operations is the
+same two lines, in the loop that builds a list:
+
+    nts_retain(made);      // for the edge that carries it on as `tail`
+    nts_release(old_tail); // giving up the one before
+
+`tail` should be a *borrow*, anchored at the head, which the frame owns and
+whose lifetime this pass already stretches to every exit. Every link in the list
+is reachable from that head, so nothing in the loop can free one.
+
+What blocks it is that `made` is stored into `tail.next` *before* it is carried
+on, so it is owned before that store and borrowed after it -- and
+`crossing_borrows` returns a **set**, one answer per value for a whole function.
+There is no room in a set for a value that changes hands halfway through a
+block. That is not a missing rule; it is the shape of the answer.
+
+And proving it safe needs more than the anchor. The borrow's anchor is the slot
+`tail.next`, and the same loop writes `.next` every time round -- on a *different
+object* each time, which is why it is actually safe, and which name-based slot
+identity cannot express. `field_name` compares names rather than types for a
+reason that still holds; what it cannot do is tell two objects of the same class
+apart.
+
+So the last 122 operations are the case for `hir::own` rather than an argument
+against it: a per-value, per-point ownership map, with anchors that are places
+and not values. Everything above was reachable without it. This is not.
 
 ## Getting there without a flag day
 

@@ -300,6 +300,61 @@ fn survives_the_function(
     })
 }
 
+/// Values that are null on entry to each block.
+///
+/// A block reached only by the arm of an `x === null` test that says *yes*
+/// holds a null in `x`, and releasing a null is a call and a branch to decide
+/// nothing. `counted` already refuses a null that is spelled as a constant;
+/// this is the one that arrives as the result of a call and is then tested,
+/// which is what every `T | null` return looks like at the point it is checked.
+///
+/// Managed references only. For an erased value the null is a *tag*, and
+/// whether the payload beside it is a reference is a different question.
+///
+/// Agreement across every incoming edge, because a block reached one way with a
+/// proven null and another way without one has no proof at all.
+fn nulls(func: &Func) -> Vec<rustc_hash::FxHashSet<ValueId>> {
+    let incoming = super::loops::predecessors(func);
+    (0..func.blocks.len())
+        .map(|at| {
+            let arriving = &incoming[at];
+            let mut agreed: Option<rustc_hash::FxHashSet<ValueId>> = None;
+            for (from, _) in arriving {
+                let mut here = rustc_hash::FxHashSet::default();
+                if let super::Terminator::Branch {
+                    cond,
+                    then_target,
+                    else_target,
+                    ..
+                } = &func.blocks[from.0 as usize].terminator
+                    && let OpKind::Binary { op, lhs, rhs } = &func.values[cond.0 as usize].kind
+                {
+                    let against_null = |one: ValueId, other: ValueId| {
+                        (matches!(func.values[other.0 as usize].kind, OpKind::ConstNull)
+                            && matches!(func.values[one.0 as usize].ty, HirType::Managed(_)))
+                        .then_some(one)
+                    };
+                    if let Some(subject) = against_null(*lhs, *rhs).or_else(|| against_null(*rhs, *lhs))
+                    {
+                        let yes = then_target.0 as usize == at && else_target.0 as usize != at;
+                        let no = else_target.0 as usize == at && then_target.0 as usize != at;
+                        if (matches!(op, super::BinOp::Eq) && yes)
+                            || (matches!(op, super::BinOp::Ne) && no)
+                        {
+                            here.insert(subject);
+                        }
+                    }
+                }
+                agreed = Some(match agreed {
+                    None => here,
+                    Some(before) => before.intersection(&here).copied().collect(),
+                });
+            }
+            agreed.unwrap_or_default()
+        })
+        .collect()
+}
+
 /// Owned values the entry block defines.
 ///
 /// The entry block runs exactly once per call, so a value defined there names
@@ -1080,6 +1135,8 @@ fn count_only_returns(
 struct Ambient {
     live: liveness::Liveness,
     crossing: rustc_hash::FxHashSet<ValueId>,
+    /// Values proven null on entry to each block. See [`nulls`].
+    nulls: Vec<rustc_hash::FxHashSet<ValueId>>,
     /// Which slots are still zero on entry to each block.
     entering: Vec<Fresh>,
     /// The parameters of each block, by block.
@@ -1104,6 +1161,7 @@ fn ambient(
     Ambient {
         live,
         crossing,
+        nulls: nulls(func),
         entering: freshness(func, harmless),
         receives: func
             .blocks
@@ -1130,6 +1188,7 @@ fn insert_into(
     let Ambient {
         live,
         crossing,
+        nulls,
         entering,
         receives,
     } = ambient(func, layouts, mutates, harmless);
@@ -1171,8 +1230,13 @@ fn insert_into(
             // Leaving the function. What is returned is handed to the caller and
             // everything else is dropped -- and a value that is both is moved.
             let mut dying = ordered(func, layouts, live.available(at));
+            let here = nulls.get(at.0 as usize);
             dying.retain(|value| {
-                !moved.contains(value) && !borrowed.contains(value) && !crossing.contains(value)
+                !moved.contains(value)
+                    && !borrowed.contains(value)
+                    && !crossing.contains(value)
+                    // Nothing to give back. See `nulls`.
+                    && !here.is_some_and(|proven| proven.contains(value))
             });
             let transfers: Vec<ValueId> = super::operands_of_terminator(&block.terminator)
                 .into_iter()
@@ -1196,6 +1260,16 @@ fn insert_into(
                             && !moved.contains(value)
                             && !borrowed.contains(value)
                             && !crossing.contains(value)
+                            // Nothing to give back. See `nulls`.
+                            //
+                            // Indexed by the *successor*: this release is on
+                            // the edge, and what the test proved is true on the
+                            // far side of it. Asking about the block the branch
+                            // is in gets nothing, because that is where the
+                            // question was asked rather than answered.
+                            && !nulls
+                                .get(successor.0 as usize)
+                                .is_some_and(|proven| proven.contains(value))
                     })
                     .collect();
                 // An edge hands its argument to a parameter, and a parameter
