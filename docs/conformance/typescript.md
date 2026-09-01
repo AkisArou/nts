@@ -1902,6 +1902,30 @@ the one that comes next has no way to start.
 
 ## 15. What to do next, ordered by evidence
 
+### First, by whether anything can check it
+
+The queue splits on a line that has nothing to do with difficulty: **node 24
+strips types, it does not transform them**, so it refuses to *run* a file
+containing a construct that has to be emitted rather than erased.
+`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`, before a single test executes.
+
+- **`enum`, `const enum`, and `namespace` with code — no oracle.** Node will not
+  run the file at all. The differential, which this project calls its oracle,
+  has nothing to compare against, so building these means shipping constructs
+  only the corpus sees. About 10 of the queue. That is a decision about tooling
+  -- transform with tsgo before handing the file to node -- and not about the
+  lowering.
+- **Everything else — checkable today.** `console.log`, a `Date` property, a
+  rest parameter, a tagged template, `for...in`, `for...of` destructuring, a
+  method on an object literal: node runs all of them, verified together in one
+  file. About 28 of the queue.
+
+Build the second group first. Not because it is easier, but because a refusal
+replaced by an unverified answer is the trade this file exists to refuse.
+
+### Then, by what real code needs
+
+
 From the node profile's refusal sites — 1,097 of them, counted **once each**.
 The raw sweep reports about five times that, because a module is re-compiled
 once per importer and `util/types.ts` is counted twenty-one times over. This is
