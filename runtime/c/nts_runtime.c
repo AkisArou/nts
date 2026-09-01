@@ -768,6 +768,13 @@ static NtsHeader **nts_dead = 0;
 static size_t nts_dead_len = 0;
 static size_t nts_dead_cap = 0;
 
+/* Candidates that reached zero while the buffer held them. They are reclaimed
+ * at the very end of a collection and never during one -- see the reclaim pass
+ * in `nts_collect_cycles` for why the timing is the whole point. */
+static NtsHeader **nts_zeroed = 0;
+static size_t nts_zeroed_len = 0;
+static size_t nts_zeroed_cap = 0;
+
 static void nts_collect_white_child(NtsHeader *child) { nts_work_push(child); }
 
 static void nts_gather_white(NtsHeader *root) {
@@ -804,7 +811,14 @@ void nts_collect_cycles(void) {
     }
     root->flags &= ~NTS_BUFFERED;
     if (nts_color(root) == NTS_BLACK && root->reserved == 0) {
-      nts_destroy(root);
+      /* Set aside, not destroyed. Destroying here runs real releases in the
+       * middle of trial deletion, and a release that takes an already-gray
+       * root to zero repaints it black -- after which `nts_scan` skips it for
+       * not being gray, `nts_gather_white` skips it for not being white, and
+       * emptying the buffer below drops the last pointer to it. One object per
+       * collection, leaked in a way no count disagrees about: a linked list
+       * built head-first leaked exactly one link at every length above two. */
+      nts_push(&nts_zeroed, &nts_zeroed_len, &nts_zeroed_cap, root);
     }
   }
   nts_roots_len = kept;
@@ -834,6 +848,21 @@ void nts_collect_cycles(void) {
     nts_free(nts_dead[index]);
   }
   nts_dead_len = 0;
+
+  /* Now, with every count settled and the buffer already empty, reclaim what
+   * was found dead at the start. Ordinary release handles the cascade, and
+   * nothing here can free memory the walks above still name: a zeroed root's
+   * references were never trial-deleted, so every child of one keeps a count
+   * it did not get from inside the subgraph and cannot have been painted
+   * white. Garbage held only by one of these is reclaimed a collection later
+   * than it could be, which is the price of never perturbing a count mid-walk.
+   *
+   * These cannot reach each other -- a zeroed object is one nothing points at
+   * -- so no entry in this list is freed twice. */
+  for (size_t index = 0; index < nts_zeroed_len; index++) {
+    nts_destroy(nts_zeroed[index]);
+  }
+  nts_zeroed_len = 0;
   nts_collecting = false;
 }
 

@@ -19,7 +19,15 @@
 #
 # And every count is paired with a leak check, because zero operations is
 # trivially reachable and catastrophically wrong. A case that counts less and
-# leaks fails.
+# leaks fails. That check earned itself on its second day: `store-elsewhere`
+# leaked one object per call, at every chain length above two, in a collector
+# that had been green on every other suite -- and no count disagreed, because
+# the counts balanced perfectly while one object was never freed.
+#
+# What is counted is *operations emitted*, not objects touched: a retain or a
+# release of null is a call and a branch that ran, and proving a reference
+# non-null is the compiler's job too. So these numbers are larger than the
+# object graph, and they should be.
 set -eu
 cd "$(cd "$(dirname "$0")/../.." && pwd)"
 

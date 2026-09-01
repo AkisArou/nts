@@ -1,0 +1,17 @@
+ideal 21
+because nineteen objects are born -- seventeen links and the two heads -- and a
+because birth reference costs nothing to make and one release to give back. That
+because would be nineteen if the tail were not shared.
+because
+because It is shared, and the arithmetic of sharing is fixed: every increment is
+because paid for by a decrement, so the total is nineteen plus twice the number
+because of retains. Two edges point at the tail and only one birth reference
+because exists to fill them, so at least one retain is unavoidable -- the other
+because edge can take the local's reference by moving it, since `right.next` is
+because its last use. One retain, twenty releases, twenty one operations, and no
+because arrangement of the same program does better.
+because
+because This case exists to be *unable* to reach zero. If it ever does, either
+because the tail is being freed while the second head still points at it -- which
+because the answer would catch -- or it is not being freed at all, which the
+because leak check would.

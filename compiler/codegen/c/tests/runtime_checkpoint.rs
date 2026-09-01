@@ -234,3 +234,23 @@ fn the_map_table_agrees_with_node() {
         checks(&report)
     );
 }
+
+/// The cycle collector, on heap states built by hand.
+///
+/// Reference counting, necessarily: there is no collector without it.
+///
+/// The odd one out in this file, because it has no oracle to transcribe from —
+/// node has no observable cycle collector. What it checks instead is the
+/// property the whole provider rests on: memory comes back, and nothing that is
+/// still pointed at goes away. Both checks are regressions of one ordering bug
+/// that leaked a link out of every head-first list and, in a heap one shape
+/// further along, freed an object a live candidate still held.
+#[test]
+fn the_collector_reclaims_a_chain_and_keeps_what_is_still_held() {
+    let report = run_suite("cycles", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 3,
+        "expected at least 3 collector checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}

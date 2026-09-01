@@ -316,5 +316,11 @@ step "examples" ./tooling/gate/gate.sh
 # found a wrong answer the first time it was pointed at the examples. Set
 # NTS_GATE_JOBS to dial the parallelism.
 step "rc"       ./tooling/gate/rc.sh
+# Cheap -- seconds -- and it answers a question no other step asks: not whether
+# the counting is *right*, which `rc` covers, but how much of it there is. It
+# fails on a leak, on a changed answer, and on a count below the argument
+# written down beside it. It caught a collector bug that leaked one link out of
+# every list built head first while every count balanced perfectly.
+step "memory"   ./tooling/memory/run.sh
 
 printf '\n\033[32mgreen\033[0m\n'
