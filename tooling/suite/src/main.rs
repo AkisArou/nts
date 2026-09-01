@@ -305,10 +305,21 @@ fn examine(file: &Utf8Path, workspace: &Workspace, tsgo: &str) -> Examined {
                 if prepared.diagnostics.is_empty() {
                     Outcome::Lowered
                 } else {
+                    // Causes only. `NTS1003` and `NTS1005` are *consequences*
+                    // -- a caller of something refused above, and a module
+                    // statement lost because its own cause is already in this
+                    // list -- so counting them ranks a feature queue by how
+                    // often something went wrong rather than by what is
+                    // missing. The consequence codes put "this statement" at
+                    // the top of the corpus with 37 of 184 files, which named
+                    // nothing anybody could build.
                     Outcome::Refused(
                         prepared
                             .diagnostics
                             .iter()
+                            .filter(|diagnostic| {
+                                !matches!(diagnostic.code.as_str(), "NTS1003" | "NTS1005")
+                            })
                             .map(|diagnostic| shorten(&diagnostic.message))
                             .collect(),
                     )

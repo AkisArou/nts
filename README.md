@@ -106,7 +106,6 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 
 | refused | files |
 | --- | ---: |
-| this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it | 37 |
 | a module-scope variable with no initializer | 14 |
 | `console.log`, a global member with no definition here | 7 |
 | a module declaration, which has code in it | 6 |
@@ -118,6 +117,7 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | a `for...of` binding by property name, which is object destructuring | 3 |
 | a method on an object literal | 3 |
 | a parameter of unrepresentable type (any) | 3 |
+| this statement | 3 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->

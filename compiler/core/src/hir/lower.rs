@@ -1809,8 +1809,14 @@ fn lower_module_initializer(
         });
         for (statement, diagnostic) in lost {
             lowered.diagnostics.push(diagnostic);
+            // A *consequence*, and coded as one. The cause is the diagnostic
+            // pushed just above; this says what losing the statement costs.
+            // Sharing `NTS1001` with the causes made it the largest row in the
+            // corpus histogram -- 37 of 184 files -- which read as a feature
+            // thirty-seven programs were waiting on and was a tally of how
+            // often anything at all went wrong at module scope.
             lowered.diagnostics.push(Diagnostic::error(
-                "NTS1001",
+                "NTS1005",
                 "this statement, which module evaluation therefore skips; the rest of the \
                  module's evaluation still runs, and every value this line would have \
                  computed keeps whatever it held before it"
