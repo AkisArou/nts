@@ -1110,6 +1110,25 @@ fn storable(probe: &mut FuncBuilder<'_>, name: NodeId, ty: &HirType) -> Result<(
         .map_err(|diagnostic| diagnostic.message)
 }
 
+/// A name for a module global that no other module global has.
+///
+/// Two module-scope bindings can share a spelling and be different variables:
+/// `for (let x of ...)` twice over declares two `x`, each scoped to its own
+/// loop. They are separate symbols and need separate storage, and taking the
+/// source text for both emitted a translation unit with `x` defined twice.
+///
+/// Latent until the declarations reached here at all -- a loop variable has no
+/// initializer, and that was refused before it could collide.
+fn unshared_name(existing: &[super::Global], spelling: Option<String>, at: u32) -> String {
+    let Some(spelling) = spelling else {
+        return format!("global{at}");
+    };
+    if existing.iter().any(|global| global.name == spelling) {
+        return format!("{spelling}{at}");
+    }
+    spelling
+}
+
 fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
     let mut scope = ModuleScope::default();
     let mut probe = FuncBuilder::new(snapshot);
@@ -1151,16 +1170,14 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
         // which `module#init` then tried to lower as an expression -- and it
         // made `let x = y` a declaration with no initializer at all, because
         // `y` is an identifier too.
-        let Some(initializer) = children.iter().rev().find(|child| {
-            **child != *name_node
-                && !syntax::is_type_node(probe.kind_of(**child).unwrap_or_default())
-        }) else {
-            scope.unsupported.insert(
-                symbol.0,
-                "a module-scope variable with no initializer".to_owned(),
-            );
-            continue;
-        };
+        let initializer = children
+            .iter()
+            .rev()
+            .find(|child| {
+                **child != *name_node
+                    && !syntax::is_type_node(probe.kind_of(**child).unwrap_or_default())
+            })
+            .copied();
 
         // An erased global's initial value needs a *tag*, and `Global.initial`
         // is one `f64` with no room for one. So a constant initializer is not
@@ -1171,16 +1188,35 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
         // source initialised to a number -- which the differential caught
         // against node.
         let erased = probe.type_of(*name_node) == Some(HirType::Erased);
-        let constant = if erased {
-            None
-        } else {
-            probe.constant_value(*initializer, &scope.constants)
+
+        // `let x: number;` -- declared here, written later. There is nothing to
+        // fold and nothing to defer, and the storage starts at the type's zero,
+        // which is what `hir::fields` already does for a class field written in
+        // its constructor: "zero, because that is what the allocator leaves".
+        //
+        // An *erased* one is refused, and now says which of the two it is. Its
+        // initial value would have to be `undefined`, which is a tag, and there
+        // is nowhere to put one -- so this is the representation talking rather
+        // than a lowering nobody wrote yet.
+        if initializer.is_none() && erased {
+            scope.unsupported.insert(
+                symbol.0,
+                "a module-scope variable with no initializer, whose type has no \
+                 representation for the `undefined` it starts as"
+                    .to_owned(),
+            );
+            continue;
+        }
+
+        let constant = match initializer {
+            Some(initializer) if !erased => probe.constant_value(initializer, &scope.constants),
+            _ => None,
         };
-        if constant.is_none() {
+        if let (None, Some(initializer)) = (constant, initializer) {
             // Code, rather than data this file happens not to use. Reported
             // here because nothing downstream will: the methods of an object
             // literal are not walked, so they are not lowered and not refused.
-            if let Some(member) = probe.method_of_an_object_literal(*initializer) {
+            if let Some(member) = probe.method_of_an_object_literal(initializer) {
                 scope
                     .refusals
                     .push(probe.unsupported(member, "a method on an object literal"));
@@ -1222,12 +1258,9 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
             continue;
         }
         let global = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
+        let spelling = probe.node(*name_node).text.clone();
         scope.globals.push(super::Global {
-            name: probe
-                .node(*name_node)
-                .text
-                .clone()
-                .unwrap_or_else(|| format!("global{global}")),
+            name: unshared_name(&scope.globals, spelling, global),
             ty: ty.clone(),
             initial: value,
             exported: false,
@@ -1235,8 +1268,10 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
         });
         scope.variables.insert(symbol.0, global);
         scope.types.push(ty);
-        if constant.is_none() {
-            scope.deferred.insert(symbol.0, *initializer);
+        // Only where there is one to lower. A declaration with no initializer
+        // has nothing deferred; its storage is already the zero above.
+        if let (None, Some(initializer)) = (constant, initializer) {
+            scope.deferred.insert(symbol.0, initializer);
         }
     }
     // What materializing the globals' types produced. Nothing else collects
