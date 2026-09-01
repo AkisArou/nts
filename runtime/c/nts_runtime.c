@@ -1074,13 +1074,23 @@ double nts_array_push(NtsArray *a, double value) {
  * difference would have to be written down.
  *
  * The reference counting is the part worth stating. A parameter is borrowed
- * and a call's result is owned, so `push` retains what it is given, `at`
- * retains what it hands back, `pop` retains nothing -- the array is giving up
- * its own count along with the element -- and `slice` retains each element it
- * copies. `reverse` moves pointers within one array and changes no count. */
+ * and a call's result is owned, so `at` retains what it hands back, `pop`
+ * retains nothing -- the array is giving up its own count along with the
+ * element -- and `slice` retains each element it copies. `reverse` moves
+ * pointers within one array and changes no count.
+ *
+ * `push` is the exception: it *consumes*. The reference it is given moves into
+ * the element slot and the array gives it back when it is dropped, so the
+ * caller has nothing left to give up. It used to retain, and the caller
+ * released its own a moment later -- two operations to move a reference one
+ * slot, on every element of every array of objects a program builds.
+ *
+ * The compiler is the only thing that calls this, from `lower_pushes`, and it
+ * knows: `rc::consumes` names this function and the argument it takes. A caller
+ * whose value is still live afterwards retains before handing it over, exactly
+ * as it would for a store. */
 double nts_array_push_ref(NtsArray *a, void *value) {
   nts_array_reserve(a);
-  nts_retain((NtsHeader *)value);
   NTS_ITEMS(a, void *)[a->header.length] = value;
   a->header.length++;
   return (double)a->header.length;

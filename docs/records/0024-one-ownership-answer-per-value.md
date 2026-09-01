@@ -18,27 +18,27 @@ what a person can justify as necessary written down beside the argument for it.
 
 | case | naive | actual | ideal | eliminated |
 | --- | --- | --- | --- | --- |
-| `array-of-objects` | 86 | 52 | 18 | 39% |
-| `borrowed-call` | 167 | 99 | 33 | 40% |
+| `array-of-objects` | 52 | 18 | 18 | 65% — at ideal |
+| `borrowed-call` | 135 | 67 | 33 | 50% |
 | `closure-capture` | 51 | 17 | 17 | 66% — at ideal |
-| `cycle` | 45 | 27 | 18 | 40% |
+| `cycle` | 36 | 18 | 18 | 50% — at ideal |
 | `early-return` | 23 | 23 | 17 | **0%** |
 | `erased-slot` | 68 | 0 | 0 | 100% — at ideal |
 | `global-array` | 34 | 0 | 0 | 100% — at ideal |
-| `local-anchor` | 85 | 51 | 17 | 40% |
-| `loop-break` | 69 | 51 | 17 | 26% |
+| `local-anchor` | 69 | 35 | 17 | 49% |
+| `loop-break` | 53 | 35 | 17 | 33% |
 | `param-returned` | 68 | 34 | 34 | 50% — at ideal |
-| `shared-tail` | 129 | 55 | 21 | 57% |
+| `shared-tail` | 113 | 39 | 21 | 65% |
 | `store-elsewhere` | 135 | 33 | 33 | 75% — at ideal |
 | `subclass-field` | 85 | 85 | 53 | **0%** |
 | `swap` | 104 | 2 | 2 | 98% — at ideal |
-| `traversal` | 167 | 99 | 33 | 40% |
+| `traversal` | 135 | 67 | 33 | 50% |
 
-Lobster reports eliminating about 95% of reference operations. Two cases are at
-ideal, the best of the rest is 56%, and seven are at zero for at least four
-different reasons. That is the whole motivation: the gap is not one missing
-rule, and adding a sixth predicate beside the five that exist is how it got
-here.
+Lobster reports eliminating about 95% of reference operations. Eight of these
+fifteen are at their floor and two are still at zero, which is what the rest of
+this record is about. Every one of the eight moved because a fact the compiler
+already had was being thrown away at a boundary -- an edge, a call, a slot -- and
+not because a new fact was discovered.
 
 ## What the four analyses actually have in common
 
@@ -195,6 +195,56 @@ It is deliberately conservative -- a call of its own could store the object
 anywhere, so a function containing one is not in the set however harmless it
 looks. That wants the real summary, with escape per argument, and `escape.rs`
 already computes it.
+
+## `consumes`, and a helper that retained what it was handed
+
+`nts_array_push_ref` retained the element, and the caller released its own a
+moment later: two operations to move a reference one slot, on every element of
+every array of objects a program builds. The runtime's own comment stated the
+convention -- "`push` retains what it is given" -- and it was simply the wrong
+convention for the one helper that keeps what it is handed.
+
+It consumes now. `rc::consumes` names the function and the argument, the caller
+moves the reference in where the value dies at the call and retains where it does
+not, and `array-of-objects` went from 52 to **18**, its floor. There is exactly
+one emitter, `lower_pushes`, so the two cannot drift silently.
+
+That is the third column of the summary, for the functions that have no HIR to
+read it off.
+
+## Facts have to survive an edge, and now some of them do
+
+`Fresh` knows which slots are still zero. It was one block at a time, and the
+comment above it said the fix was a forward dataflow with union at joins, "and
+the reason it is not here is that a wrong answer does not fail loudly."
+
+That reason expired when `tooling/memory` started failing on a leak in twenty
+seconds and the `execute` suite started running under AddressSanitizer. So the
+dataflow is written, and it moved five cases: `traversal` and `borrowed-call`
+from 99 to 67, `local-anchor` and `loop-break` from 51 to 35, `shared-tail` from
+55 to 39, and `cycle` to its floor.
+
+Three things had to be got right, and each was wrong first, and each was visible
+within a minute because the suite is twenty seconds:
+
+**A fresh allocation forgets its old slots.** A value allocated inside a loop
+arrived at its own block carrying the writes the *last* time round made to it,
+so the first store to each field stopped being an initializing one. It made
+`store-elsewhere` twice as expensive as it had been an hour earlier.
+
+**A block parameter forgets its previous binding.** Same shape, one level up: a
+list built head-first writes `tail.next` every time round, and carrying that
+fact back made the *next* `tail` -- a different link entirely -- look like a slot
+already written.
+
+**A store does not end a value's freshness; a load does.** Storing `x` into
+`y.f` writes *`y`*'s slot and leaves `x`'s alone, so `x` is still an object whose
+fields are known. What it stops being is unaliased -- a load can now produce `x`
+under another name, and a store through that name is a write this cannot
+attribute. So the base survives the store and the first load of any kind takes it
+away. That distinction is the whole of the five cases: the loop that builds a
+list contains no load at all, which is exactly why it can be built without
+counting.
 
 ## What is left is a fact that dies on an edge
 

@@ -556,6 +556,8 @@ struct Surroundings<'a> {
     /// Callees whose result is one of the arguments the caller passed in. See
     /// [`hands_back_a_parameter`].
     hands_back: &'a rustc_hash::FxHashSet<String>,
+    /// Which slots are still zero on entry to each block. See [`freshness`].
+    entering: &'a [Fresh],
     /// Borrows good for the whole function, which therefore cross blocks. See
     /// [`crossing_borrows`]: nothing releases one and no edge retains for one,
     /// so every place that decides either has to agree.
@@ -829,6 +831,26 @@ fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHas
         .collect()
 }
 
+/// Runtime helpers that take ownership of an argument, and which one.
+///
+/// The `consumes` column of record 0024's per-function summary, for the
+/// functions that have no HIR to read it off. `push` puts the reference in the
+/// element slot and the array gives it back when it is dropped, so the caller
+/// has nothing left to give up: the birth reference moves in.
+///
+/// It used to retain what it was given while the caller released its own a
+/// moment later -- two operations to move a reference one slot, on every
+/// element of every array of objects a program builds.
+///
+/// There is exactly one emitter, `lower_pushes`, and the runtime's own comment
+/// states the convention, so the two cannot drift silently.
+fn consumes(name: &str) -> Option<usize> {
+    match name {
+        "nts_array_push_ref" => Some(1),
+        _ => None,
+    }
+}
+
 /// Loads that take the slot's reference rather than copying it.
 ///
 /// A load out of a slot that is overwritten before anything else can reach the
@@ -1015,6 +1037,8 @@ fn count_only_returns(
 struct Ambient {
     live: liveness::Liveness,
     crossing: rustc_hash::FxHashSet<ValueId>,
+    /// Which slots are still zero on entry to each block.
+    entering: Vec<Fresh>,
     /// The parameters of each block, by block.
     receives: Vec<Vec<ValueId>>,
 }
@@ -1023,6 +1047,7 @@ fn ambient(
     func: &Func,
     layouts: &[Layout],
     mutates: &rustc_hash::FxHashSet<String>,
+    harmless: &rustc_hash::FxHashSet<String>,
 ) -> Ambient {
     let owned = entry_owned(func, layouts);
     let crossing = crossing_borrows(func, layouts, mutates, &owned);
@@ -1036,6 +1061,7 @@ fn ambient(
     Ambient {
         live,
         crossing,
+        entering: freshness(func, harmless),
         receives: func
             .blocks
             .iter()
@@ -1061,13 +1087,15 @@ fn insert_into(
     let Ambient {
         live,
         crossing,
+        entering,
         receives,
-    } = ambient(func, layouts, mutates);
+    } = ambient(func, layouts, mutates, harmless);
     let around = Surroundings {
         live: &live,
         mutates,
         harmless,
         hands_back,
+        entering: &entering,
         crossing: &crossing,
     };
     let blocks = std::mem::take(&mut func.blocks);
@@ -1225,13 +1253,46 @@ fn count_ops(
     report: &mut Report,
 ) -> Counted {
     let mut ops = Vec::with_capacity(original.len());
-    let mut fresh = Fresh::entering(func, at);
+    let mut fresh = around
+        .entering
+        .get(at.0 as usize)
+        .cloned()
+        .unwrap_or_default();
     let mut moved = rustc_hash::FxHashSet::default();
     let mut borrowed = rustc_hash::FxHashSet::default();
     let (takes, settled) = taking(func, layouts, around.crossing, original);
 
     for (index, value) in original.iter().enumerate() {
         let kind = func.values[value.0 as usize].kind.clone();
+
+        // A helper that takes ownership of an argument is a store with a
+        // different spelling, and owes exactly what a store owes: move the
+        // reference in if the value dies here, take one of its own if it does
+        // not. See `consumes`.
+        let consumed = match &kind {
+            OpKind::Call {
+                callee: super::Callee::External(name),
+                args,
+                ..
+            } => consumes(name).and_then(|slot| args.get(slot).copied()),
+            _ => None,
+        };
+        if let Some(given) = consumed
+            && counted(func, layouts, given)
+        {
+            if owned(func, layouts, given)
+                && !around.crossing.contains(&given)
+                && around.live.dies_in(at, given)
+                && moved.insert(given)
+            {
+                report.moves += 1;
+            } else {
+                retain(func, &mut ops, given, report);
+            }
+            fresh.observe(func, *value, &kind, around.harmless);
+            ops.push(*value);
+            continue;
+        }
 
         // A store takes its own reference to what it stores, and gives up the
         // one the slot was already holding.
@@ -1510,24 +1571,103 @@ fn borrows_safely(
 ///
 /// # What it knows, and what it does not
 ///
-/// One block at a time, in order, which makes it obviously sound and misses
-/// exactly one thing worth naming: a constructor that writes a field from inside
-/// an `if` gets no benefit, because the store is not in the entry block. Fixing
-/// that is a forward dataflow over the CFG with union at joins -- a slot is
-/// known-zero only where it is zero on *every* path -- and the reason it is not
-/// here is that a wrong answer does not fail loudly. Too eager and a reference
-/// leaks; too eager the other way is worse. Block-local is the version that can
-/// be read and believed.
+/// It was one block at a time, and the comment here said the fix was "a forward
+/// dataflow over the CFG with union at joins -- a slot is known-zero only where
+/// it is zero on *every* path -- and the reason it is not here is that a wrong
+/// answer does not fail loudly."
+///
+/// That reason has expired. `tooling/memory` fails on a leak in seconds and the
+/// `execute` suite builds under `AddressSanitizer`, so being too eager here is
+/// now exactly as loud as being wrong anywhere else. [`freshness`] is that dataflow.
+///
+/// What it was costing: a list built head-first stores through `tail`, which is
+/// a block parameter, so every link's `next` was loaded and released on the way
+/// past -- releasing the null the constructor had just written. Thirty two
+/// operations of `traversal`'s ninety nine, and the same in four other cases.
 ///
 /// A reference stops being fresh the moment it is handed to anything that could
 /// store through it. Reading a field, reading an element and asking for a length
 /// are not that; a call, a store, an edge and a return are.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq)]
 struct Fresh {
     /// Objects and arrays whose slots this block still knows about.
     bases: rustc_hash::FxHashSet<ValueId>,
     /// Slots already written, so the second store to one is not initializing.
     written: rustc_hash::FxHashSet<(ValueId, u64)>,
+    /// Bases that have been stored somewhere, and so can be read back out.
+    ///
+    /// Storing `x` into `y.f` writes *`y`*'s slot and leaves `x`'s alone, so `x`
+    /// is still an object whose fields this knows about -- which is the whole of
+    /// why a list built head-first can be built without counting. What it is no
+    /// longer is *unaliased*: a load can now produce `x` under another name, and
+    /// a store through that name would be a write this cannot attribute.
+    ///
+    /// So they stay, and the first load of any kind takes all of them away.
+    escaped: rustc_hash::FxHashSet<ValueId>,
+}
+
+
+/// What is known on entry to every block, as a forward must-analysis.
+///
+/// A base is fresh on entry only where it is fresh on *every* path in, and a
+/// slot counts as written where it is written on *any* of them: `initializing`
+/// asks whether a store is writing over a zero, so both halves have to be true
+/// everywhere for the answer to be yes.
+///
+/// Block parameters are what make this worth doing. A value carried around a
+/// loop is a different value each time it arrives, so a fact about it dies on
+/// the edge unless something carries it across -- and every list built
+/// head-first stores through exactly such a value. Each edge maps its arguments
+/// onto the successor's parameters and the facts travel with them.
+///
+/// Optimistic on unvisited predecessors, which is what makes it terminate at
+/// the *greatest* fixpoint rather than refusing to enter a loop: the back edge
+/// is checked against the assumption rather than consulted before it exists.
+/// The same shape, and the same reason, as `crossing_borrows`.
+fn freshness(func: &Func, harmless: &rustc_hash::FxHashSet<String>) -> Vec<Fresh> {
+    /// Enough rounds for any reducible graph; reaching it would be a bug, and
+    /// looping forever would hide it.
+    const ROUNDS: usize = 1024;
+
+    let count = func.blocks.len();
+    let incoming = super::loops::predecessors(func);
+    let mut entry: Vec<Option<Fresh>> = vec![None; count];
+    if count > 0 {
+        entry[0] = Some(Fresh::entering(func, BlockId(0)));
+    }
+
+    for _ in 0..ROUNDS {
+        let mut changed = false;
+        for at in 1..count {
+            let mut merged: Option<Fresh> = None;
+            for (from, args) in &incoming[at] {
+                let Some(before) = entry[from.0 as usize].clone() else {
+                    // Not reached yet: assume it agrees rather than let it
+                    // decide, which is what keeps a loop enterable.
+                    continue;
+                };
+                let mut after = before;
+                for value in &func.blocks[from.0 as usize].ops {
+                    let kind = func.values[value.0 as usize].kind.clone();
+                    after.observe(func, *value, &kind, harmless);
+                }
+                let carried = after.across(&func.blocks[at].params, args);
+                merged = Some(match merged {
+                    None => carried,
+                    Some(other) => other.both(&carried),
+                });
+            }
+            let Some(merged) = merged else { continue };
+            if entry[at].as_ref() != Some(&merged) {
+                entry[at] = Some(merged);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    entry.into_iter().map(Option::unwrap_or_default).collect()
 }
 
 impl Fresh {
@@ -1550,6 +1690,54 @@ impl Fresh {
             fresh.bases.insert(ValueId(0));
         }
         fresh
+    }
+
+    /// The same facts, seen from the far side of an edge.
+    ///
+    /// A value the predecessor knew about is still that value in the successor
+    /// -- SSA, so a name means one thing everywhere -- and on top of that, each
+    /// argument hands its facts to the parameter that receives it.
+    fn across(&self, params: &[ValueId], args: &[ValueId]) -> Self {
+        let mut carried = self.clone();
+        // A block parameter is re-bound on arrival, so nothing known about what
+        // it held last time survives the edge. Around a back edge those facts
+        // are stale by exactly one iteration, and the one that matters is
+        // `written`: a list built head-first writes `tail.next` every time
+        // round, and carrying that back made the *next* `tail` -- a different
+        // link entirely -- look like a slot that had already been written.
+        for param in params {
+            carried.bases.remove(param);
+            carried.escaped.remove(param);
+            carried.written.retain(|(held, _)| held != param);
+        }
+        for (slot, param) in params.iter().enumerate() {
+            let Some(arg) = args.get(slot) else { continue };
+            if self.bases.contains(arg) {
+                carried.bases.insert(*param);
+            }
+            if self.escaped.contains(arg) {
+                carried.escaped.insert(*param);
+            }
+            for (held, field) in &self.written {
+                if held == arg {
+                    carried.written.insert((*param, *field));
+                }
+            }
+        }
+        carried
+    }
+
+    /// What two paths into one block agree about.
+    ///
+    /// Fresh where both are fresh, written where either is: `initializing` says
+    /// yes only when the slot is a zero however the block was reached.
+    fn both(&self, other: &Self) -> Self {
+        Self {
+            bases: self.bases.intersection(&other.bases).copied().collect(),
+            written: self.written.union(&other.written).copied().collect(),
+            // Reachable on either path is reachable.
+            escaped: self.escaped.union(&other.escaped).copied().collect(),
+        }
     }
 
     /// Whether this store is writing over a zero.
@@ -1588,24 +1776,62 @@ impl Fresh {
         match kind {
             OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } => {
                 self.bases.insert(value);
+                self.escaped.remove(&value);
+                // Every slot of it is zero again. This is only observable now
+                // that facts travel around a back edge: an allocation inside a
+                // loop arrived at its own block carrying the writes the *last*
+                // time round made to it, so the first store to each field
+                // stopped being an initializing one and loaded and released a
+                // null. It made `store-elsewhere` twice as expensive as it had
+                // been an hour earlier, which is the sort of thing a suite that
+                // runs in twenty seconds says immediately.
+                self.written.retain(|(held, _)| *held != value);
             }
             OpKind::FieldSet { object, field, .. } => {
                 self.written.insert((*object, u64::from(*field)));
             }
-            OpKind::ArraySet { array, index, .. } => match slot_of(func, *index) {
-                Some(slot) => {
+            OpKind::ArraySet { array, index, .. } => {
+                if let Some(slot) = slot_of(func, *index) {
                     self.written.insert((*array, slot));
-                }
-                // An index this pass cannot name could be any of them, so the
-                // whole array stops being something it knows about.
-                None => {
+                } else {
+                    // An index this pass cannot name could be any of them, so
+                    // the whole array stops being something it knows about.
                     self.bases.remove(array);
+                    self.escaped.remove(array);
                 }
-            },
+            }
+            // A load can hand back something that was stored, under a name this
+            // cannot connect to the original -- and a store through *that* name
+            // would be a write attributed to the wrong value. So the first load
+            // gives up everything that has been stored anywhere.
+            OpKind::FieldGet { .. } | OpKind::ArrayGet { .. } | OpKind::GlobalGet(_) => {
+                for value in std::mem::take(&mut self.escaped) {
+                    self.bases.remove(&value);
+                }
+            }
             _ => {}
         }
-        for escaped in escaping_operands(kind) {
-            self.bases.remove(&escaped);
+        // A call that is not `harmless` can do both: store through what it is
+        // given, and read back what somebody else stored.
+        if matches!(kind, OpKind::Call { .. }) {
+            for value in std::mem::take(&mut self.escaped) {
+                self.bases.remove(&value);
+            }
+        }
+        for value in escaping_operands(kind) {
+            // A store keeps the base and only marks it reachable. Everything
+            // else that hands a reference somewhere gives it up outright.
+            if matches!(
+                kind,
+                OpKind::FieldSet { .. } | OpKind::ArraySet { .. } | OpKind::GlobalSet { .. }
+            ) {
+                if self.bases.contains(&value) {
+                    self.escaped.insert(value);
+                }
+            } else {
+                self.bases.remove(&value);
+                self.escaped.remove(&value);
+            }
         }
     }
 }
