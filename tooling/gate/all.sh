@@ -200,7 +200,7 @@ profile() {
 # erased value handed to `nts_release`, which takes a pointer, where a tagged
 # value needs `nts_value_release` and the tag decides which half is a reference.
 llvm_rc() {
-  floor=77
+  floor=78
   passed=0
   total=0
   behind=""
@@ -226,7 +226,7 @@ llvm_rc() {
 }
 
 llvm() {
-  floor=77
+  floor=78
   passed=0
   total=0
   behind=""

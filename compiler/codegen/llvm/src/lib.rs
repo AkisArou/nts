@@ -687,10 +687,14 @@ fn suspension(
             format!("{out}.at = getelementptr i8, ptr {}, i64 {at}", name(*cell)),
             format!("{out}.ready = load i8, ptr {out}.at{}", tbaa("i8")),
             format!("{out}.is = icmp ne i8 {out}.ready, 0"),
-            format!("br i1 {out}.is, label %{out}.ok, label %{out}.no"),
+            // `out` already carries its `%`, and the label definitions below
+            // strip it. Adding one here made `label %%v2.ok`, which is not a
+            // token clang accepts -- the emitter was unreachable *and* could
+            // never have produced a valid module.
+            format!("br i1 {out}.is, label {out}.ok, label {out}.no"),
             format!("{}.no:", out.trim_start_matches('%')),
             format!("  call void @nts_cell_unready(ptr {text})"),
-            format!("  br label %{out}.ok"),
+            format!("  br label {out}.ok"),
             format!("{}.ok:", out.trim_start_matches('%')),
         ]
         .join("\n  ")
@@ -2190,6 +2194,13 @@ fn memory_operation(
         | OpKind::ArrayNew { .. }
         | OpKind::ClosureStatic
         | OpKind::Await { .. }
+        // `CellReady` belongs with the other two halves of the suspension
+        // machine, and was the one kind missing from this list -- so it fell
+        // through to "does not render yet" while `suspension` implemented it
+        // in full, four functions of `examples/captured-by-reference` away.
+        // An implementation nothing routes to reads exactly like one that was
+        // never written.
+        | OpKind::CellReady { .. }
         | OpKind::Suspend { .. } => {
             return allocation(program, func, value, &out);
         }
