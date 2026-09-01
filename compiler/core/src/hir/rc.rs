@@ -180,6 +180,7 @@ fn survives_the_function(
     layouts: &[Layout],
     mutates: &rustc_hash::FxHashSet<String>,
     settled: &rustc_hash::FxHashSet<ValueId>,
+    unobserved: &rustc_hash::FxHashSet<ValueId>,
     value: ValueId,
 ) -> bool {
     let (container, from_field) = match &func.values[value.0 as usize].kind {
@@ -197,7 +198,11 @@ fn survives_the_function(
         return false;
     }
     let ours = from_field.and_then(|field| field_name(func, layouts, container, field));
-    !func.values.iter().any(|op| match &op.kind {
+    !func.values.iter().enumerate().any(|(index, op)| {
+        if unobserved.contains(&ValueId(u32::try_from(index).unwrap_or(u32::MAX))) {
+            return false;
+        }
+        match &op.kind {
         OpKind::Call {
             callee: super::Callee::Direct(name),
             ..
@@ -214,6 +219,7 @@ fn survives_the_function(
         },
         OpKind::ArraySet { .. } => from_field.is_none(),
         _ => false,
+        }
     })
 }
 
@@ -231,6 +237,17 @@ fn crossing_borrows(
     layouts: &[Layout],
     mutates: &rustc_hash::FxHashSet<String>,
 ) -> rustc_hash::FxHashSet<ValueId> {
+    // Operations in a block that control never leaves. A `throw` lowers to a
+    // call and an `Unreachable`, and nothing after it runs -- so whatever it
+    // did, nothing observes. Guard clauses are everywhere in real code, and
+    // every one of them was ending a borrow for the whole function around it.
+    let mut unobserved = rustc_hash::FxHashSet::default();
+    for block in &func.blocks {
+        if matches!(block.terminator, super::Terminator::Unreachable) {
+            unobserved.extend(block.ops.iter().copied());
+        }
+    }
+
     let mut crossing = rustc_hash::FxHashSet::default();
     // Loads first, and to a fixpoint: a load out of a settled borrow settles
     // too, so one pass would answer in definition order rather than by the
@@ -244,7 +261,9 @@ fn crossing_borrows(
             }
             if counted(func, layouts, value)
                 && is_load(&func.values[index].kind)
-                && survives_the_function(func, layouts, mutates, &crossing, value)
+                && survives_the_function(
+                    func, layouts, mutates, &crossing, &unobserved, value,
+                )
             {
                 crossing.insert(value);
                 grew = true;
