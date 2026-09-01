@@ -644,7 +644,7 @@ fn check_arguments(func: &Func, id: BlockId, block: &Block, problems: &mut Vec<I
     }
 }
 
-fn reachable_blocks(func: &Func) -> FxHashSet<BlockId> {
+pub(super) fn reachable_blocks(func: &Func) -> FxHashSet<BlockId> {
     let mut seen = FxHashSet::default();
     let mut worklist = vec![BlockId(0)];
     while let Some(block) = worklist.pop() {
@@ -660,7 +660,7 @@ fn reachable_blocks(func: &Func) -> FxHashSet<BlockId> {
 ///
 /// `idom[i]` is the immediate dominator of block `i`, or `None` for the entry and
 /// for unreachable blocks.
-fn dominators(func: &Func, reachable: &FxHashSet<BlockId>) -> Vec<Option<BlockId>> {
+pub(super) fn dominators(func: &Func, reachable: &FxHashSet<BlockId>) -> Vec<Option<BlockId>> {
     let count = func.blocks.len();
     let mut predecessors: Vec<Vec<BlockId>> = vec![Vec::new(); count];
     for (index, block) in func.blocks.iter().enumerate() {

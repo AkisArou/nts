@@ -192,8 +192,11 @@ fn insert_into(func: &mut Func, layouts: &[Layout], summaries: &own::Summaries) 
             layouts,
             at,
             &block.ops,
-            &map,
-            &live,
+            &block.terminator,
+            &Settled {
+                map: &map,
+                live: &live,
+            },
             &mut report,
         );
 
@@ -339,39 +342,53 @@ fn count_ops(
     layouts: &[Layout],
     at: BlockId,
     original: &[ValueId],
-    map: &own::Map,
-    live: &liveness::Liveness,
+    terminator: &super::Terminator,
+    settled: &Settled<'_>,
     report: &mut Report,
 ) -> Counted {
+    let Settled { map, live } = settled;
     let mut ops = Vec::with_capacity(original.len());
     let mut moved = rustc_hash::FxHashSet::default();
 
-    for value in original {
+    for (index, value) in original.iter().enumerate() {
         let kind = func.values[value.0 as usize].kind.clone();
 
         // A helper that takes ownership of an argument is a store with a
         // different spelling, and owes exactly what a store owes: move the
         // reference in if the value dies here, take one of its own if it does
         // not. See `consumes`.
-        let consumed = match &kind {
-            OpKind::Call {
-                callee: super::Callee::External(name),
-                args,
-                ..
-            } => own::consumes(name).and_then(|slot| args.get(slot).copied()),
-            _ => None,
-        };
-        if let Some(given) = consumed
-            && own::counted(func, layouts, given)
-        {
-            if own::owned(func, layouts, given)
-                && !map.borrowed(given)
-                && live.dies_in(at, given)
-                && moved.insert(given)
-            {
-                report.moves += 1;
-            } else {
-                retain(func, &mut ops, given, report);
+        let handed_over = map.hands_over(*value).to_vec();
+        if !handed_over.is_empty() {
+            for given in handed_over {
+                if !own::counted(func, layouts, given) {
+                    continue;
+                }
+                // `dies_in` says the value's last read is somewhere in this
+                // block, not that it is *here*. A store can lean on that,
+                // because it claims the death and nothing after it reads what
+                // was stored. A call cannot: `new Node(i)` hands `node` to a
+                // constructor that keeps it, and the very next line reads
+                // `node.next`.
+                //
+                // Handing over a reference that is read again afterwards leaves
+                // the caller using something it no longer holds. In `cycles`
+                // that made every self-cycle uncollectable rather than
+                // dangling: the object's only reference became the one inside
+                // itself, so no count ever fell, no candidate was ever buffered,
+                // and a hundred objects a run leaked in silence.
+                let read_again = original[index + 1..].iter().any(|later| {
+                    super::verify::operands(&func.values[later.0 as usize].kind).contains(&given)
+                }) || super::operands_of_terminator(terminator).contains(&given);
+                if !read_again
+                    && (own::owned(func, layouts, given) || map.owns(given))
+                    && !map.borrowed(given)
+                    && live.dies_in(at, given)
+                    && moved.insert(given)
+                {
+                    report.moves += 1;
+                } else {
+                    retain(func, &mut ops, given, report);
+                }
             }
             ops.push(*value);
             continue;
@@ -441,7 +458,7 @@ fn count_ops(
                 OpKind::ObjectNew { frame: true }
             ) {
                 // Neither: its fields are released where its frame ends.
-            } else if own::owned(func, layouts, *stored)
+            } else if (own::owned(func, layouts, *stored) || map.owns(*stored))
                 // A borrow has no reference to give away. `crossing` says
                 // nothing releases this value and no edge retains for it, and
                 // a store claiming the move is a third rule disagreeing with
@@ -489,6 +506,16 @@ fn count_ops(
         }
     }
     Counted { ops, moved }
+}
+
+/// What one block's counting reads from the rest of the function.
+///
+/// Two things, and only two: the ownership map, which says what every value
+/// holds, and liveness, which says where a value's range ends. Everything else
+/// this pass used to consult is inside the map.
+struct Settled<'a> {
+    map: &'a own::Map,
+    live: &'a liveness::Liveness,
 }
 
 /// What counting one block produced.

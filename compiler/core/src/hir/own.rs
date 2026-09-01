@@ -86,6 +86,8 @@ pub struct Summaries {
     harmless: rustc_hash::FxHashSet<String>,
     /// Functions whose result is one of their own parameters.
     hands_back: rustc_hash::FxHashSet<String>,
+    /// Parameter slots each function takes ownership of, by function name.
+    consumes: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
 }
 
 impl Summaries {
@@ -94,6 +96,12 @@ impl Summaries {
     #[must_use]
     pub fn hands_back(&self, name: &str) -> bool {
         self.hands_back.contains(name)
+    }
+
+    /// Which parameter slots a function takes ownership of. See [`consuming`].
+    #[must_use]
+    pub fn consumes(&self, name: &str) -> Option<&rustc_hash::FxHashSet<u32>> {
+        self.consumes.get(name)
     }
 }
 
@@ -104,6 +112,14 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
         mutates: mutating(program),
         harmless: initializing_only(program, layouts),
         hands_back: hands_back_a_parameter(program, layouts),
+        consumes: program
+            .funcs
+            .iter()
+            .filter_map(|func| {
+                let slots = consuming(func, layouts);
+                (!slots.is_empty()).then(|| (func.name.clone(), slots))
+            })
+            .collect(),
     }
 }
 
@@ -115,6 +131,11 @@ pub struct Map {
     initializing: rustc_hash::FxHashSet<ValueId>,
     nulls: Vec<rustc_hash::FxHashSet<ValueId>>,
     inert: rustc_hash::FxHashSet<(ValueId, u32)>,
+    /// Parameters of *this* function that arrive owned, because every caller
+    /// hands the reference over. See [`consuming`].
+    owns: rustc_hash::FxHashSet<ValueId>,
+    /// What each call takes ownership of, by the call's own value.
+    hands_over: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
 }
 
 impl Map {
@@ -148,6 +169,20 @@ impl Map {
         self.initializing.contains(&store)
     }
 
+    /// Whether a parameter of this function arrives owned, so storing it hands
+    /// the reference on rather than needing one of its own.
+    #[must_use]
+    pub fn owns(&self, value: ValueId) -> bool {
+        self.owns.contains(&value)
+    }
+
+    /// What a call takes ownership of: arguments the callee keeps, which the
+    /// caller therefore moves or retains exactly as a store does.
+    #[must_use]
+    pub fn hands_over(&self, call: ValueId) -> &[ValueId] {
+        self.hands_over.get(&call).map_or(&[], Vec::as_slice)
+    }
+
     /// Whether a slot never holds anything that has to be given back, so the
     /// walk over a frame object's fields can skip it. See [`inert_slots`].
     #[must_use]
@@ -161,6 +196,50 @@ impl Map {
     pub fn null_in(&self, block: BlockId) -> Option<&rustc_hash::FxHashSet<ValueId>> {
         self.nulls.get(block.0 as usize)
     }
+}
+
+/// What each call in a function takes ownership of, by the call's own value.
+///
+/// A runtime helper says so in [`consumes`]; a function with a body says so by
+/// storing the parameter on every path out, which is [`consuming`]. Either way
+/// the caller owes the callee a reference, and hands over the one it is holding
+/// where it can.
+fn handing_over(
+    func: &Func,
+    summaries: &Summaries,
+) -> rustc_hash::FxHashMap<ValueId, Vec<ValueId>> {
+    let mut over: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> = rustc_hash::FxHashMap::default();
+    for block in &func.blocks {
+        for value in &block.ops {
+            let OpKind::Call { callee, args, .. } = &func.values[value.0 as usize].kind else {
+                continue;
+            };
+            let taken: Vec<ValueId> = match callee {
+                super::Callee::External(name) => consumes(name)
+                    .and_then(|slot| args.get(slot).copied())
+                    .into_iter()
+                    .collect(),
+                super::Callee::Direct(name) => summaries
+                    .consumes(name)
+                    .map(|slots| {
+                        let mut slots: Vec<u32> = slots.iter().copied().collect();
+                        slots.sort_unstable();
+                        slots
+                            .into_iter()
+                            .filter_map(|slot| args.get(slot as usize).copied())
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                // Which body a dispatch reaches is decided by a receiver this
+                // cannot see, and they need not agree about what they keep.
+                super::Callee::Virtual { .. } | super::Callee::Closure { .. } => Vec::new(),
+            };
+            if !taken.is_empty() {
+                over.insert(*value, taken);
+            }
+        }
+    }
+    over
 }
 
 /// Work out who owns what.
@@ -177,6 +256,10 @@ pub fn analyze(
     summaries: &Summaries,
     live: &mut liveness::Liveness,
 ) -> Map {
+    let owns: rustc_hash::FxHashSet<ValueId> = consuming(func, layouts)
+        .into_iter()
+        .map(ValueId)
+        .collect();
     let held = entry_owned(func, layouts);
     let entering = freshness(func, &summaries.harmless);
     let initializing = initializing_stores(func, &entering, &summaries.harmless);
@@ -187,12 +270,14 @@ pub fn analyze(
         &held,
         &initializing,
         &summaries.harmless,
+        &owns,
     );
     for anchor in anchors(func, &crossing, &held) {
         live.hold_to_every_exit(func, anchor);
     }
 
     let live = &*live;
+    let hands_over = handing_over(func, summaries);
     let inert = inert_slots(func, layouts, &summaries.harmless);
     let absent = nulls(func);
     let (takes, settled) = taking(func, layouts, &crossing, &summaries.harmless, &absent);
@@ -288,6 +373,8 @@ pub fn analyze(
         initializing,
         nulls: absent,
         inert: inert.clone(),
+        owns,
+        hands_over,
     }
 }
 
@@ -917,6 +1004,7 @@ fn crossing_borrows(
     owned: &rustc_hash::FxHashSet<ValueId>,
     initializing: &rustc_hash::FxHashSet<ValueId>,
     harmless: &rustc_hash::FxHashSet<String>,
+    owns: &rustc_hash::FxHashSet<ValueId>,
 ) -> rustc_hash::FxHashSet<ValueId> {
     // Operations in a block that control never leaves. A `throw` lowers to a
     // call and an `Unreachable`, and nothing after it runs -- so whatever it
@@ -943,6 +1031,10 @@ fn crossing_borrows(
         let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
         if (matches!(op.kind, OpKind::Param(_)) || is_load(&op.kind))
             && counted(func, layouts, value)
+            // Except a parameter this function *keeps*, which arrives owned
+            // rather than borrowed and is handed on to the slot it is stored
+            // into. See `consuming`.
+            && !owns.contains(&value)
         {
             crossing.insert(value);
         }
@@ -1515,6 +1607,79 @@ fn taking(
         leaving[at] = held;
     }
     (takes, settled)
+}
+
+/// Parameter slots a function takes ownership of.
+///
+/// The `consumes` column of record 0024's summary, for the functions that have
+/// HIR to read it off -- `consumes` already answers it for the runtime helpers
+/// that do not.
+///
+/// A parameter stored into a slot is one the callee is keeping. Today the callee
+/// retains it, because a parameter is borrowed and a store needs a reference of
+/// its own, and the caller releases the value a moment later: two operations to
+/// move a reference across a call. `Piles#push` is that on every one of its
+/// hundred and thirty eight calls, and `pushDisk` on every one of `awfy-towers`'
+/// eight thousand.
+///
+/// # Exactly one store, dominating every return
+///
+/// The two sides have to agree unconditionally -- the callee stops retaining
+/// whatever happens, so the caller must hand over a reference whatever happens.
+/// That needs the store to run on *every* path out, which is what dominating
+/// each `Return` means, and to run *once*, which is why a second store anywhere
+/// disqualifies the parameter: two stores need two references and the caller is
+/// handing over one.
+fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
+    let mut consumed = rustc_hash::FxHashSet::default();
+    let reachable = super::verify::reachable_blocks(func);
+    let idom = super::verify::dominators(func, &reachable);
+    let dominates = |over: BlockId, under: BlockId| {
+        let mut at = Some(under);
+        while let Some(block) = at {
+            if block == over {
+                return true;
+            }
+            at = idom[block.0 as usize];
+        }
+        false
+    };
+
+    for (slot, _) in func.params.iter().enumerate() {
+        let Ok(slot) = u32::try_from(slot) else { continue };
+        let parameter = ValueId(slot);
+        if !counted(func, layouts, parameter) {
+            continue;
+        }
+        let mut stores = Vec::new();
+        for (at, block) in func.blocks.iter().enumerate() {
+            for value in &block.ops {
+                let put = match &func.values[value.0 as usize].kind {
+                    OpKind::FieldSet { value: put, .. }
+                    | OpKind::ArraySet { value: put, .. }
+                    | OpKind::GlobalSet { value: put, .. } => *put,
+                    _ => continue,
+                };
+                if put == parameter {
+                    stores.push(BlockId(u32::try_from(at).unwrap_or(u32::MAX)));
+                }
+            }
+        }
+        let [only] = stores.as_slice() else { continue };
+        let returns_covered = func
+            .blocks
+            .iter()
+            .enumerate()
+            .filter(|(at, block)| {
+                matches!(block.terminator, super::Terminator::Return(_))
+                    && reachable.contains(&BlockId(u32::try_from(*at).unwrap_or(u32::MAX)))
+            })
+            .all(|(at, _)| dominates(*only, BlockId(u32::try_from(at).unwrap_or(u32::MAX))));
+        if returns_covered {
+            consumed.insert(slot);
+        }
+    }
+    consumed
 }
 
 /// Callees that hand back one of their own parameters.
