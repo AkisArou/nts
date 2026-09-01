@@ -219,7 +219,7 @@ fn insert_into(func: &mut Func, layouts: &[Layout], summaries: &own::Summaries) 
                 retain(func, &mut ops, value, &mut report);
             }
             for value in dying {
-                release_value(func, layouts, &mut ops, value, &mut report);
+                release_value(func, layouts, &map, &mut ops, value, &mut report);
             }
         } else {
             // With one edge it cannot be critical, so its work can go at the end
@@ -267,14 +267,14 @@ fn insert_into(func: &mut Func, layouts: &[Layout], summaries: &own::Summaries) 
                         retain(func, &mut ops, value, &mut report);
                     }
                     for value in dying {
-                        release_value(func, layouts, &mut ops, value, &mut report);
+                        release_value(func, layouts, &map, &mut ops, value, &mut report);
                     }
                 } else {
                     for value in retains {
                         retain(func, &mut edge_ops, value, &mut report);
                     }
                     for value in dying {
-                        release_value(func, layouts, &mut edge_ops, value, &mut report);
+                        release_value(func, layouts, &map, &mut edge_ops, value, &mut report);
                     }
                     let landing = BlockId(
                         u32::try_from(original_count + split_blocks.len()).unwrap_or(u32::MAX),
@@ -619,6 +619,7 @@ fn retain(func: &mut Func, ops: &mut Vec<ValueId>, value: ValueId, report: &mut 
 fn release_value(
     func: &mut Func,
     layouts: &[Layout],
+    map: &own::Map,
     ops: &mut Vec<ValueId>,
     value: ValueId,
     report: &mut Report,
@@ -632,6 +633,12 @@ fn release_value(
     }
     let origin = func.values[value.0 as usize].origin.clone();
     for field in own::reference_fields(func, layouts, value) {
+        // A slot nothing ever wrote still holds the null its constructor put
+        // there, and loading it to release it is a load, a call and a branch to
+        // decide nothing. See `own::Map::zeroed`.
+        if map.zeroed(value, field) {
+            continue;
+        }
         let ty = field_type(func, layouts, value, field);
         let loaded = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
         func.values.push(Op {

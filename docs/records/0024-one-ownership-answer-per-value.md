@@ -626,6 +626,48 @@ is that nothing ever asks about the value in the window where its ownership is
 changing, so a whole-function answer happens to be enough. A model that had to
 answer at every point would not have needed the coincidence.
 
+## The second column, and what it found
+
+Fourteen of fifteen cases reached their counting floor, which makes a suite a
+regression test rather than a ratchet. `tooling/memory` counts allocations now,
+against a floor argued in `expected` beside the operation one.
+
+The floors were written before the first measurement. The rule: an allocation is
+necessary when an object's lifetime is not bounded by a scope with a statically
+known count -- a loop building a structure that outlives its iterations.
+Everything else belongs in the frame. Ten cases were already there; 122
+allocations were not, and every one was an object dying with the iteration that
+made it.
+
+**A per-iteration container may hold a per-iteration value.** `escape` refuses to
+confine anything made in a loop and stored, because a frame allocation is one
+slot and `balls[i] = new Ball(...)` would put a hundred objects through it --
+which it once did, computing 1117 where node computes 1331. But that failure
+needs the *container* made once and the value made many times. A fresh closure
+holding a fresh cell is two slots reused in lockstep. Correcting the condition
+took `closure-capture`, `cycle` and `subclass-field` to zero allocations: 69 of
+the 122.
+
+**Being stored somewhere is not being written through.** `subclass-field`'s
+operations then doubled, because a frame object has no runtime destructor and
+the compiler emits the walk that gives its fields back -- thirty four loads and
+releases of a null its constructor wrote. The first attempt to skip them asked
+whether the object had been handed anywhere, and the answer was yes: they are
+stored into a field. Wrong question. Storing `x` into `y.f` lets somebody
+*reach* `x`; it does not let anybody write through it.
+
+What has to be ruled out is a store *aimed at* the slot, and a store can only be
+aimed by naming something. If every `FieldSet` in a function names an allocation
+or a parameter directly, a store hits exactly the object it names -- two
+allocations are two objects, and a parameter was bound before either existed --
+so the writes recorded are all the writes there are. `subclass-field` is back at
+34 operations and at zero allocations.
+
+That is the same distinction the freshness dataflow drew a week earlier, in the
+opposite direction: *a store does not end a value's freshness; a load does*.
+Reaching and writing are different powers, and conflating them costs in both
+directions.
+
 ## Built: `hir::own`
 
 It exists. `compiler/core/src/hir/own.rs` computes one [`Ownership`] per value

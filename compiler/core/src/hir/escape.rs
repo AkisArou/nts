@@ -267,12 +267,25 @@ fn analyze(
                     // node computes 1331, which is how it was found -- the
                     // benchmark checks its own answer, and nothing else here
                     // had asked a program that stores in a loop.
-                    if !repeated.contains(stored)
-                        && matches!(
-                            func.values[container.0 as usize].kind,
-                            OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
-                        )
-                    {
+                    //
+                    // What fails is one slot holding many objects, and that
+                    // needs the *container* to be made once while the value is
+                    // made many times. When both are made per iteration there
+                    // is no reuse to get wrong: a fresh closure holding a fresh
+                    // cell is two slots reused in lockstep, iteration k's
+                    // container holds iteration k's value, and the pair dies
+                    // together. Refusing that case sent every object a loop
+                    // puts inside another one to the heap.
+                    //
+                    // The container's own escape is still decided on its own
+                    // evidence, and the fixpoint below carries it to whatever
+                    // it holds -- so a container that does outlive the loop
+                    // takes the value with it.
+                    let confinable = matches!(
+                        func.values[container.0 as usize].kind,
+                        OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
+                    ) && (!repeated.contains(stored) || repeated.contains(container));
+                    if confinable {
                         reachable_from.push((*container, *stored));
                     } else {
                         escaped(&mut escapes, func, *stored);

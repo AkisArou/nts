@@ -114,6 +114,7 @@ pub struct Map {
     settled: rustc_hash::FxHashSet<ValueId>,
     initializing: rustc_hash::FxHashSet<ValueId>,
     nulls: Vec<rustc_hash::FxHashSet<ValueId>>,
+    zeroed: rustc_hash::FxHashSet<(ValueId, u32)>,
 }
 
 impl Map {
@@ -145,6 +146,14 @@ impl Map {
     #[must_use]
     pub fn initializes(&self, store: ValueId) -> bool {
         self.initializing.contains(&store)
+    }
+
+    /// Whether a slot is still zero for the whole life of its object, so the
+    /// walk that gives a frame object's fields back can skip it. See
+    /// [`never_written`].
+    #[must_use]
+    pub fn zeroed(&self, object: ValueId, field: u32) -> bool {
+        self.zeroed.contains(&(object, field))
     }
 
     /// Values proven null on entry to a block, where releasing is a call and a
@@ -265,6 +274,7 @@ pub fn analyze(
         settled,
         initializing,
         nulls: nulls(func),
+        zeroed: never_written(func, layouts, &summaries.harmless),
     }
 }
 
@@ -589,6 +599,83 @@ fn nulls(func: &Func) -> Vec<rustc_hash::FxHashSet<ValueId>> {
             agreed.unwrap_or_default()
         })
         .collect()
+}
+
+/// Reference slots that are still zero for the whole life of their object.
+///
+/// A frame object has no runtime destructor, so the counting pass emits the
+/// walk that gives its fields back by hand -- and a field nobody ever wrote is
+/// a load and a release of the null its constructor put there. `subclass-field`
+/// started paying thirty four of those the moment its `Base` objects stopped
+/// being heap objects: a cost arriving as the reward for removing a bigger one.
+///
+/// # Why being stored somewhere does not matter
+///
+/// The first version asked whether the object had been handed anywhere, and the
+/// answer for these was yes -- they are stored into a field. That is the wrong
+/// question. Storing `x` into `y.f` lets somebody reach `x`; it does not let
+/// anybody *write through* it. What has to be ruled out is a store aimed at
+/// this object's slot, and a store can only be aimed by naming something.
+///
+/// So: every `FieldSet` in the function must name an allocation or a parameter
+/// directly. Then a store hits exactly the object it names -- two allocations
+/// are two objects, and a parameter was bound before any of them existed -- and
+/// the writes recorded here are all the writes there are. A store through a
+/// value that came out of a *load* could be aimed anywhere, and gives up.
+///
+/// Callees are ruled out the same way: every call must be `harmless`, which is
+/// to say it writes no reference into any slot at all.
+fn never_written(
+    func: &Func,
+    layouts: &[Layout],
+    harmless: &rustc_hash::FxHashSet<String>,
+) -> rustc_hash::FxHashSet<(ValueId, u32)> {
+    let mut written = rustc_hash::FxHashSet::default();
+    for block in &func.blocks {
+        for value in &block.ops {
+            match &func.values[value.0 as usize].kind {
+                OpKind::FieldSet { object, field, .. } => {
+                    if !matches!(
+                        func.values[object.0 as usize].kind,
+                        OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } | OpKind::Param(_)
+                    ) {
+                        // Aimed through something this cannot name, so it could
+                        // be aimed at anything.
+                        return rustc_hash::FxHashSet::default();
+                    }
+                    written.insert((*object, *field));
+                }
+                OpKind::Call {
+                    callee: super::Callee::Direct(name),
+                    ..
+                } if harmless.contains(name) => {}
+                // A global is reachable from inside any callee, and a call that
+                // is not harmless can write through whatever it is handed.
+                OpKind::GlobalSet { .. } | OpKind::Call { .. } => {
+                    return rustc_hash::FxHashSet::default();
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut zeroed = rustc_hash::FxHashSet::default();
+    for block in &func.blocks {
+        for value in &block.ops {
+            if !matches!(
+                func.values[value.0 as usize].kind,
+                OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
+            ) {
+                continue;
+            }
+            for field in reference_fields(func, layouts, *value) {
+                if !written.contains(&(*value, field)) {
+                    zeroed.insert((*value, field));
+                }
+            }
+        }
+    }
+    zeroed
 }
 
 /// Stores that write over a zero, evaluated at the point each one stands.
