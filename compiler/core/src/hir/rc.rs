@@ -747,8 +747,16 @@ fn eliding() -> bool {
 /// five-line body. Every one of them is unnecessary, and `borrows_safely`
 /// cannot say so because it reasons one block at a time.
 fn inert(func: &Func) -> bool {
-    eliding()
-        && func.values.iter().all(|op| match &op.kind {
+    eliding() && func.values.iter().all(|op| quiet(&op.kind))
+}
+
+/// Whether one operation can store, call, allocate or suspend.
+///
+/// The per-operation half of [`inert`], which asks it of a whole function.
+/// Extracted because [`taking`] needs the same question of one operation at a
+/// time: anything that can run other code can reach any slot.
+fn quiet(kind: &OpKind) -> bool {
+    match kind {
         OpKind::Param(_)
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
@@ -772,8 +780,107 @@ fn inert(func: &Func) -> bool {
         OpKind::Binary { op, .. } => !matches!(op, super::BinOp::Concat),
         // Everything else stores, calls, allocates, or suspends. `Erase` is
         // here for being a boxing operation rather than for being unsafe.
-            _ => false,
-        })
+        _ => false,
+    }
+}
+
+/// Loads that take the slot's reference rather than copying it.
+///
+/// A load out of a slot that is overwritten before anything else can reach the
+/// slot does not need to duplicate a count. The reference *moves* out of the
+/// slot into the value, and the store that overwrites owes no release, because
+/// by then the slot is holding nothing. Swift spells this `load [take]`, and it
+/// is the third thing a load can be -- beside copying and borrowing, which are
+/// the only two this pass could say before.
+///
+/// Borrowing cannot do this job. `swap` reads `pair.a` and has to keep it alive
+/// *after* `pair.a` is overwritten, so there is no window in which the slot
+/// still holds it and no borrow to be had. The 70 operations it took to move
+/// two references between two slots were all of them this.
+///
+/// A slot is named by its container's *value* and its index. That is exact
+/// rather than conservative -- one SSA value is one object, whatever its type
+/// says, so the subclass hazard that makes `field_name` compare names does not
+/// arise -- and two containers that are the same object under different values
+/// simply fail to pair up, which costs precision and never correctness.
+///
+/// Returns the loads that take, and the stores that must give nothing back.
+fn taking(
+    func: &Func,
+    layouts: &[Layout],
+    crossing: &rustc_hash::FxHashSet<ValueId>,
+    ops: &[ValueId],
+) -> (
+    rustc_hash::FxHashSet<ValueId>,
+    rustc_hash::FxHashSet<ValueId>,
+) {
+    let mut held: rustc_hash::FxHashMap<(ValueId, u64), ValueId> =
+        rustc_hash::FxHashMap::default();
+    let mut takes = rustc_hash::FxHashSet::default();
+    let mut settled = rustc_hash::FxHashSet::default();
+    if !eliding() {
+        return (takes, settled);
+    }
+    for &value in ops {
+        // A borrow may not also take. `crossing` says nothing releases this
+        // value and no edge retains for it; taking would make it owned, and
+        // three rules disagreeing about one value is how a reference gets
+        // consumed twice.
+        let takeable = counted(func, layouts, value) && !crossing.contains(&value);
+        match &func.values[value.0 as usize].kind {
+            OpKind::FieldGet { object, field, .. } => {
+                if takeable {
+                    held.insert((*object, u64::from(*field)), value);
+                }
+            }
+            OpKind::ArrayGet { array, index, .. } => match slot_of(func, *index) {
+                Some(slot) if takeable => {
+                    held.insert((*array, slot), value);
+                }
+                // An index this cannot name could be any of them.
+                _ => held.clear(),
+            },
+            OpKind::FieldSet {
+                object,
+                field,
+                value: stored,
+                ..
+            } => {
+                let slot = (*object, u64::from(*field));
+                if let Some(&taken) = held.get(&slot)
+                    && taken != *stored
+                {
+                    takes.insert(taken);
+                    settled.insert(value);
+                }
+                held.remove(&slot);
+            }
+            OpKind::ArraySet {
+                array,
+                index,
+                value: stored,
+                ..
+            } => match slot_of(func, *index) {
+                Some(index) => {
+                    let slot = (*array, index);
+                    if let Some(&taken) = held.get(&slot)
+                        && taken != *stored
+                    {
+                        takes.insert(taken);
+                        settled.insert(value);
+                    }
+                    held.remove(&slot);
+                }
+                None => held.clear(),
+            },
+            other => {
+                if !quiet(other) {
+                    held.clear();
+                }
+            }
+        }
+    }
+    (takes, settled)
 }
 
 /// What an inert function still owes: a reference on whatever it hands back.
@@ -1019,6 +1126,7 @@ fn count_ops(
     let mut fresh = Fresh::entering(func, at);
     let mut moved = rustc_hash::FxHashSet::default();
     let mut borrowed = rustc_hash::FxHashSet::default();
+    let (takes, settled) = taking(func, layouts, around.crossing, original);
 
     for (index, value) in original.iter().enumerate() {
         let kind = func.values[value.0 as usize].kind.clone();
@@ -1039,7 +1147,10 @@ fn count_ops(
         | OpKind::GlobalSet { value: stored, .. } = &kind
             && counted(func, layouts, *stored)
         {
-            let previous = if fresh.initializing(func, &kind) {
+            // Nothing to give back when the slot's reference has already
+            // been taken out of it by a load above, and nothing to give back
+            // when the slot was still zero.
+            let previous = if settled.contains(value) || fresh.initializing(func, &kind) {
                 None
             } else {
                 load_slot(func, &mut ops, &kind)
@@ -1111,7 +1222,11 @@ fn count_ops(
         // demonstrably good for as long as it is used, in which case the
         // function can just read the slot.
         if owned(func, layouts, *value) && !produces_owned(&kind) {
-            if is_load(&kind)
+            if takes.contains(value) {
+                // The reference moved out of the slot rather than being
+                // copied, and the store that overwrites gives nothing back.
+                report.moves += 1;
+            } else if is_load(&kind)
                 && (around.crossing.contains(value)
                     || borrows_safely(func, original, index, *value, at, terminator, around))
             {

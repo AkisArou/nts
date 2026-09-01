@@ -29,9 +29,9 @@ what a person can justify as necessary written down beside the argument for it.
 | `loop-break` | 69 | 51 | 17 | 26% |
 | `param-returned` | 68 | 68 | 34 | **0%** |
 | `shared-tail` | 131 | 57 | 21 | 56% |
-| `store-elsewhere` | 168 | 101 | 33 | 39% |
+| `store-elsewhere` | 168 | 66 | 33 | 60% |
 | `subclass-field` | 85 | 85 | 53 | **0%** |
-| `swap` | 104 | 70 | 3 | 32% |
+| `swap` | 104 | 2 | 2 | 98% — at ideal |
 | `traversal` | 167 | 99 | 33 | 40% |
 
 Lobster reports eliminating about 95% of reference operations. Two cases are at
@@ -274,8 +274,25 @@ of it, which is a dominance question over facts `verify.rs` already computes.
 Every retain in `store-elsewhere` is a missing `take`, and the same shape is
 every `push_front`, every accumulator swap, and every list splice in the corpus.
 
-Predicted, not measured: `take` alone takes `store-elsewhere` from 168 to 33.
-The releases are the teardown floor and no rule removes those.
+### Measured, and the prediction was half right
+
+`swap` went from 104 operations to **2**, which is its floor: two things to give
+back, and a pair that never escapes and so is never an object at all. 98%. The
+loop is free, which is what the case was written to ask for.
+
+`store-elsewhere` went from 168 to 66, not to 33. The prediction named the right
+mechanism and the wrong total.
+
+What is left is one release per iteration, of `made.next`, which the constructor
+had just set to null. `Fresh` tracks which slots are still zero and stops
+tracking an object the moment it is handed to a call -- so a constructor, which
+is the one call that certainly *only* initializes, is exactly the call that
+loses the fact. That is callee effects, and it belongs to the per-parameter
+summary rather than here.
+
+So the floor of 33 stands and the distance to it has moved from `take` to
+`writes`. A prediction that lands on the right mechanism and the wrong number is
+worth more than one that lands on neither, and it is still wrong.
 
 ## Effects: one summary per function, with per-parameter columns
 
@@ -427,9 +444,9 @@ The `actual` column of `tooling/memory` is the ratchet, down only, the way the
   a mode for an edge they rewrite without a fixpoint of their own, then the fact
   does not belong in the IR and the honest answer is one shared analysis rather
   than a spelled one.
-- **`take` does not close `store-elsewhere`.** 168 to 33 is arithmetic on an
-  argument, not a measurement. If it lands short, the teardown floor is not what
-  the `expected` file claims and the ideal is wrong before the pass is.
+- ~~**`take` does not close `store-elsewhere`.**~~ Tested, and it landed short:
+  168 to 66. The ideal was right and the attribution was not -- the remainder is
+  a constructor's writes, not a load's flavor.
 - **The suite is measuring the wrong thing.** Operation counts are not time.
   Every case here should have a benchmark row before any of this is called a win;
   `awfy-list` went from 12.97x to 1.80x on elision, so the two do track — but

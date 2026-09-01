@@ -1,11 +1,19 @@
-ideal 3
-because the pair and the two things it holds, one reference each, given back
-because when the frame drops the pair.
+ideal 2
+because the two things, one reference each, given back when the frame ends.
 because
-because The loop is free. Seventeen iterations move two references between two
-because slots and create none: `pair.a` is read into `held` and immediately
-because overwritten, `pair.b` is read and immediately overwritten, and `held` is
-because moved back in. Nothing is ever reachable twice, so nothing needs a count.
+because The pair costs nothing. It never escapes `work`, so it lives in the
+because frame and is never an object the allocator sees -- what has to be given
+because back is what its fields hold, which is the two things and nothing else.
 because
-because This is the smallest case in the suite that borrowing cannot close, and
-because the distance from three is the price of not having `load [take]`.
+because Written as three first, counting the pair as an object because it is
+because spelled like one. The suite rejected it for being below what the
+because compiler already does, which is the second time that column has been
+because wrong in my hand and right in the measurement.
+because
+because The loop is free, and that is the point. Seventeen iterations move two
+because references between two slots and create none: `pair.a` is read and
+because immediately overwritten, `pair.b` is read and immediately overwritten,
+because and each reference is handed to the other slot. Nothing is ever
+because reachable twice, so nothing needs a count. Borrowing cannot see this --
+because the value has to outlive the slot it came from -- and it is what
+because `load [take]` is for.
