@@ -22,43 +22,56 @@ them, so read the ratios rather than the absolute times.
 
 ### How fast it is
 
+**Measured with memory reclamation on**, which is why every row is marked
+`(rc)`. The alternative the harness offers is a bump allocator that never frees;
+it produces better numbers and no real program runs that way, so it is a
+diagnostic rather than a headline. Turning reclamation on cost `awfy-list` a
+factor of twelve when it was first measured, and most of that has since been
+given back by eliding reference counting the compiler can prove unnecessary —
+see [`benches/README.md`](benches/README.md) for what each row is made of.
+
 <!-- benchmarks:start -->
 | case | C++ | nts (C) | nts (LLVM) | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| accumulate | 1.09 us | **1.47 us** | 1.08 us | 2.78 us | 20.96 us | 1.35x | 0.53x | 0.07x |
-| array-methods | 2.47 us | **1.36 us** | 1.37 us | 5.72 us | 6.50 us | 0.55x | 0.24x | 0.21x |
-| arrays | 1.32 us | **1.39 us** | 1.39 us | 2.62 us | 2.08 us | 1.05x | 0.53x | 0.67x |
-| awfy-bounce | 4.17 us | **6.38 us** | 6.39 us | 12.22 us | 10.74 us | 1.53x | 0.52x | 0.59x |
-| awfy-list | 7.39 us | **7.91 us** | 7.92 us | 15.97 us | 13.21 us | 1.07x | 0.50x | 0.60x |
-| awfy-mandelbrot | 22.57 ms | **22.52 ms** | 22.45 ms | 21.93 ms | 21.91 ms | 1.00x | 1.03x | 1.03x |
-| awfy-nbody | 6.99 ms | **6.60 ms** | 7.94 ms | 77.97 ms | 14.12 ms | 0.94x | 0.08x | 0.47x |
-| awfy-permute | 9.19 us | **12.11 us** | 12.15 us | 21.21 us | 16.69 us | 1.32x | 0.57x | 0.73x |
-| awfy-queens | 4.62 us | **6.32 us** | 6.46 us | 16.75 us | 14.25 us | 1.37x | 0.38x | 0.44x |
-| awfy-sieve | 3.71 us | **4.59 us** | 4.56 us | 10.07 us | 9.00 us | 1.24x | 0.46x | 0.51x |
-| awfy-towers | 12.52 us | **18.07 us** | 16.38 us | 32.09 us | 20.53 us | 1.44x | 0.56x | 0.88x |
-| bytes | 423.03 us | **433.13 us** | -- | 509.05 us | 722.78 us | 1.02x | 0.85x | 0.60x |
-| checksum | 4.78 us | **4.78 us** | 4.78 us | 5.47 us | 22.80 us | 1.00x | 0.87x | 0.21x |
-| closures | 1.11 us | **1.13 us** | 1.13 us | 2.93 us | 18.28 us | 1.02x | 0.39x | 0.06x |
-| dispatch | 27.85 us | **21.31 us** | 21.33 us | 41.23 us | 13.69 us | 0.77x | 0.52x | 1.56x |
-| elementwise | 155.62 us | **193.98 us** | 193.25 us | 909.47 us | 588.82 us | 1.25x | 0.21x | 0.33x |
-| erasure-stored-typed | 67.21 us | **70.99 us** | 70.94 us | 110.34 us | 69.03 us | 1.06x | 0.64x | 1.03x |
-| erasure-stored-unknown | 67.19 us | **70.40 us** | 70.40 us | 87.43 us | 68.89 us | 1.05x | 0.81x | 1.02x |
-| erasure-typed | 133.73 us | **133.75 us** | 133.72 us | 136.04 us | 87.47 us | 1.00x | 0.98x | 1.53x |
-| erasure-unknown | 133.75 us | **133.76 us** | 133.75 us | 136.03 us | 87.12 us | 1.00x | 0.98x | 1.54x |
-| fib | 304.74 us | **517.54 us** | 517.40 us | 995.24 us | 657.84 us | 1.70x | 0.52x | 0.79x |
-| loop | 653.5 ns | **649.3 ns** | 649.3 ns | 664.8 ns | 669.5 ns | 0.99x | 0.98x | 0.97x |
-| objects (rc) | 1.52 us | **1.52 us** | 1.52 us | 1.82 us | 1.43 us | 1.00x | 0.83x | 1.06x |
-| pipeline (rc) | 28.69 us | **28.05 us** | 27.87 us | 116.85 us | 120.99 us | 0.98x | 0.24x | 0.23x |
-| strings | 337.6 ns | **210.7 ns** | 213.3 ns | 2.29 us | 2.72 us | 0.62x | 0.09x | 0.08x |
-| substrings (rc) | 1.71 us | **3.49 us** | 3.83 us | 6.66 us | 23.87 us | 2.04x | 0.52x | 0.15x |
+| accumulate (rc) | 1.09 us | 1.47 us | **1.08 us** | 2.78 us | 20.99 us | 0.99x | 0.39x | 0.05x |
+| array-methods (rc) | 2.34 us | 3.02 us | **--** | 5.73 us | 7.86 us | -- | -- | -- |
+| arrays (rc) | 1.31 us | 1.46 us | **1.46 us** | 2.57 us | 2.08 us | 1.11x | 0.57x | 0.70x |
+| awfy-bounce (rc) | 4.14 us | 16.73 us | **16.99 us** | 12.37 us | 10.78 us | 4.10x | 1.37x | 1.58x |
+| awfy-list (rc) | 7.27 us | 13.12 us | **13.03 us** | 16.13 us | 12.95 us | 1.79x | 0.81x | 1.01x |
+| awfy-mandelbrot (rc) | 22.56 ms | 22.53 ms | **22.46 ms** | 21.96 ms | 21.90 ms | 1.00x | 1.02x | 1.03x |
+| awfy-nbody (rc) | 6.96 ms | 11.36 ms | **12.65 ms** | 78.15 ms | 14.10 ms | 1.82x | 0.16x | 0.90x |
+| awfy-permute (rc) | 9.23 us | 12.03 us | **12.07 us** | 21.09 us | 16.58 us | 1.31x | 0.57x | 0.73x |
+| awfy-queens (rc) | 4.64 us | 6.67 us | **6.10 us** | 16.73 us | 14.21 us | 1.31x | 0.36x | 0.43x |
+| awfy-sieve (rc) | 3.71 us | 3.56 us | **3.54 us** | 9.96 us | 9.02 us | 0.95x | 0.36x | 0.39x |
+| awfy-towers (rc) | 12.55 us | 98.60 us | **98.57 us** | 32.00 us | 20.53 us | 7.85x | 3.08x | 4.80x |
+| bytes (rc) | 421.99 us | 423.44 us | **686.65 us** | 508.87 us | 721.33 us | 1.63x | 1.35x | 0.95x |
+| checksum (rc) | 4.78 us | 4.78 us | **4.78 us** | 5.47 us | 22.77 us | 1.00x | 0.87x | 0.21x |
+| closures (rc) | 1.12 us | 1.13 us | **1.13 us** | 2.93 us | 17.75 us | 1.01x | 0.39x | 0.06x |
+| dispatch (rc) | 27.84 us | 27.85 us | **23.04 us** | 40.87 us | 13.69 us | 0.83x | 0.56x | 1.68x |
+| elementwise (rc) | 150.94 us | 192.96 us | **192.58 us** | 907.42 us | 588.79 us | 1.28x | 0.21x | 0.33x |
+| erasure-stored-typed (rc) | 67.17 us | 67.44 us | **67.45 us** | 118.07 us | 68.67 us | 1.00x | 0.57x | 0.98x |
+| erasure-stored-unknown (rc) | 67.20 us | 67.09 us | **67.09 us** | 87.65 us | 68.77 us | 1.00x | 0.77x | 0.98x |
+| erasure-typed (rc) | 133.71 us | 133.71 us | **133.72 us** | 136.01 us | 87.18 us | 1.00x | 0.98x | 1.53x |
+| erasure-unknown (rc) | 133.71 us | 133.72 us | **--** | 136.01 us | 87.14 us | -- | -- | -- |
+| fib (rc) | 304.19 us | 517.43 us | **516.09 us** | 996.47 us | 658.67 us | 1.70x | 0.52x | 0.78x |
+| loop (rc) | 653.4 ns | 649.2 ns | **649.2 ns** | 666.9 ns | 667.3 ns | 0.99x | 0.97x | 0.97x |
+| node-utf8 (rc) | -- | 111.90 us | **111.37 us** | 37.56 us | 33.07 us | -- | 2.97x | 3.37x |
+| objects (rc) | 1.51 us | 1.51 us | **1.51 us** | 1.80 us | 1.43 us | 1.00x | 0.84x | 1.06x |
+| pipeline (rc) | 28.65 us | 27.86 us | **27.87 us** | 116.66 us | 118.19 us | 0.97x | 0.24x | 0.24x |
+| strings (rc) | 337.4 ns | 210.6 ns | **213.1 ns** | 2.39 us | 2.62 us | 0.63x | 0.09x | 0.08x |
+| substrings (rc) | 1.70 us | 3.49 us | **3.83 us** | 6.66 us | 23.81 us | 2.25x | 0.58x | 0.16x |
 
 Every ratio is nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and `nts/Bun` under 1.00 beat those engines.
 
-There are two backends and both are measured, in the same run on the same machine: `nts (C)` is the C backend and `nts (LLVM)` is the LLVM one, which is the primary target and is still learning constructs. A `--` there is a program it refuses, not a program it gets wrong — every variant that *does* run must produce the same checksum as every other, so a bench run is a cross-backend correctness check as well as a measurement. The ratio columns are the C backend's, because it is the one that renders every case.
+There are two backends and both are measured, in the same run on the same machine: `nts (C)` is the C backend and `nts (LLVM)` is the LLVM one, which is the primary target and is still learning constructs. A `--` there is a program it refuses, not a program it gets wrong — every variant that *does* run must produce the same checksum as every other, so a bench run is a cross-backend correctness check as well as a measurement.
+
+**The ratios are the LLVM backend's**, because a ratio is a claim about what a program compiled by this compiler costs, and that is the backend a program will be compiled by. Where it refuses one, the ratio is `--` rather than quietly reporting the other backend's number under the same heading.
 
 The suite also measures the same TypeScript with number specialization switched off — one program compiled two ways, which is what makes a speedup a measurement rather than a claim. `cargo run -p nts-bench` prints it; it is not published here, because it answers a question about this compiler's insides rather than about how fast the result is.
 
 `C++` is one hand-written reference per case, being what a C++ programmer would actually write for that program; each `ref.cpp` says why in a comment. Every variant returns a checksum and the runner refuses to report a case whose variants disagree, so a backend cannot win by computing the wrong answer quickly.
+
+A case may have **no** reference, and then `nts/C++` is `--`. `node-utf8` is the first: it imports Node's own UTF-8 converter unmodified from this repository, and a C++ transcription of a WHATWG decoder would have to match its exact placement of U+FFFD on malformed input or the checksum gate would reject it — a second implementation to keep correct rather than a reference to divide by. The row is worth having against node and bun without one, because it is the only row that is neither a port nor a probe: real code, written to *be* Node by someone not thinking about this compiler.
 
 **The table keeps the cases this compiler loses.** A benchmark suite that held only its wins would be an advertisement rather than an instrument, and the rows above 1.50x are the work queue: each is a shape where the emitted code costs more than the C++ a person would write, and the reason is worth finding rather than hiding.
 
