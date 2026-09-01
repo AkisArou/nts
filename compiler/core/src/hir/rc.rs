@@ -550,6 +550,9 @@ fn crossing_borrows(
 struct Surroundings<'a> {
     live: &'a liveness::Liveness,
     mutates: &'a rustc_hash::FxHashSet<String>,
+    /// Callees that leave an object as fresh as it arrived. See
+    /// [`initializing_only`].
+    harmless: &'a rustc_hash::FxHashSet<String>,
     /// Borrows good for the whole function, which therefore cross blocks. See
     /// [`crossing_borrows`]: nothing releases one and no edge retains for one,
     /// so every place that decides either has to agree.
@@ -600,13 +603,14 @@ pub fn insert(program: &mut Program) -> Report {
     let mut report = Report::default();
     let layouts = program.layouts.clone();
     let mutates = mutating(program);
+    let harmless = initializing_only(program, &layouts);
     for func in &mut program.funcs {
         // Nothing an inert function does can invalidate a borrow, so nothing in
         // it needs a count -- except what leaves. See `inert`.
         let one = if inert(func) {
             count_only_returns(func, &layouts)
         } else {
-            insert_into(func, &layouts, &mutates)
+            insert_into(func, &layouts, &mutates, &harmless)
         };
         report.retains += one.retains;
         report.releases += one.releases;
@@ -784,6 +788,43 @@ fn quiet(kind: &OpKind) -> bool {
     }
 }
 
+/// Callees that leave an object exactly as fresh as it arrived.
+///
+/// The first column of the per-function summary record 0024 asks for, in its
+/// narrowest useful form: a function that writes no reference into any slot,
+/// hands the object to nobody, and returns nothing. Every constructor generated
+/// for a class whose fields are numbers and nullable references is one.
+///
+/// It matters because `Fresh` stops tracking an object the moment it is handed
+/// to a call, and a constructor is the one call that certainly *only*
+/// initializes. So the first real store to a field loaded the slot and released
+/// what it found -- which is the null the constructor had just put there. One
+/// wasted call per field per object, in every program that allocates: thirty
+/// two of `traversal`'s ninety nine, and every operation `store-elsewhere` had
+/// left above its floor.
+///
+/// Conservative on purpose. A call of its own could store the object anywhere,
+/// so a function containing one is not here however harmless it looks; that
+/// wants the real summary, with escape per argument, and this does not.
+fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHashSet<String> {
+    program
+        .funcs
+        .iter()
+        .filter(|func| {
+            func.blocks
+                .iter()
+                .all(|block| !matches!(block.terminator, super::Terminator::Return(Some(_))))
+                && func.values.iter().all(|op| match &op.kind {
+                    OpKind::FieldSet { value: stored, .. }
+                    | OpKind::ArraySet { value: stored, .. } => !counted(func, layouts, *stored),
+                    OpKind::GlobalSet { .. } => false,
+                    other => quiet(other),
+                })
+        })
+        .map(|func| func.name.clone())
+        .collect()
+}
+
 /// Loads that take the slot's reference rather than copying it.
 ///
 /// A load out of a slot that is overwritten before anything else can reach the
@@ -956,6 +997,7 @@ fn insert_into(
     func: &mut Func,
     layouts: &[Layout],
     mutates: &rustc_hash::FxHashSet<String>,
+    harmless: &rustc_hash::FxHashSet<String>,
 ) -> Report {
     let mut report = Report::default();
     let Ambient {
@@ -966,6 +1008,7 @@ fn insert_into(
     let around = Surroundings {
         live: &live,
         mutates,
+        harmless,
         crossing: &crossing,
     };
     let blocks = std::mem::take(&mut func.blocks);
@@ -1206,14 +1249,14 @@ fn count_ops(
             } else {
                 retain(func, &mut ops, *stored, report);
             }
-            fresh.observe(func, *value, &kind);
+            fresh.observe(func, *value, &kind, around.harmless);
             ops.push(*value);
             if let Some(previous) = previous {
                 release(func, &mut ops, previous, report);
             }
             continue;
         }
-        fresh.observe(func, *value, &kind);
+        fresh.observe(func, *value, &kind, around.harmless);
 
         ops.push(*value);
 
@@ -1424,7 +1467,23 @@ impl Fresh {
     }
 
     /// Take an operation into account.
-    fn observe(&mut self, func: &Func, value: ValueId, kind: &OpKind) {
+    fn observe(
+        &mut self,
+        func: &Func,
+        value: ValueId,
+        kind: &OpKind,
+        harmless: &rustc_hash::FxHashSet<String>,
+    ) {
+        // A call that only initializes leaves its argument as fresh as it
+        // arrived. See `initializing_only`.
+        if let OpKind::Call {
+            callee: super::Callee::Direct(name),
+            ..
+        } = kind
+            && harmless.contains(name)
+        {
+            return;
+        }
         match kind {
             OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } => {
                 self.bases.insert(value);

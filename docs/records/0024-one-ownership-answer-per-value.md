@@ -21,15 +21,15 @@ what a person can justify as necessary written down beside the argument for it.
 | `array-of-objects` | 86 | 52 | 18 | 39% |
 | `borrowed-call` | 167 | 99 | 33 | 40% |
 | `closure-capture` | 51 | 17 | 17 | 66% — at ideal |
-| `cycle` | 54 | 36 | 18 | 33% |
+| `cycle` | 45 | 27 | 18 | 40% |
 | `early-return` | 23 | 23 | 17 | **0%** |
 | `erased-slot` | 68 | 68 | 17 | **0%** |
 | `global-array` | 34 | 0 | 0 | 100% — at ideal |
 | `local-anchor` | 85 | 51 | 17 | 40% |
 | `loop-break` | 69 | 51 | 17 | 26% |
 | `param-returned` | 68 | 68 | 34 | **0%** |
-| `shared-tail` | 131 | 57 | 21 | 56% |
-| `store-elsewhere` | 168 | 66 | 33 | 60% |
+| `shared-tail` | 129 | 55 | 21 | 57% |
+| `store-elsewhere` | 135 | 33 | 33 | 75% — at ideal |
 | `subclass-field` | 85 | 85 | 53 | **0%** |
 | `swap` | 104 | 2 | 2 | 98% — at ideal |
 | `traversal` | 167 | 99 | 33 | 40% |
@@ -174,6 +174,57 @@ parameters, loads and block parameters are ever candidates; an allocation and a
 call result are owned and never enter the set, so a block parameter that
 receives one is removed on the first pass and takes its whole circle with it.
 89 programs agree with node under counting, and nothing in the suite leaked.
+
+## The first column of the summary, and what it cost to not have
+
+`Fresh` knows which slots are still zero, and a store over a zero owes no load
+and no release. It stops knowing the moment the object is handed to a call --
+and a constructor is the one call that certainly *only* initializes.
+
+So the first real store to a field loaded the slot and released what it found,
+which was the null the constructor had just written. One wasted call per field
+per object, in every program that allocates.
+
+`initializing_only` is the `writes` column in its narrowest useful form: a
+function that writes no reference into any slot, hands the object to nobody, and
+returns nothing. Every constructor generated for a class of numbers and nullable
+references is one. It took `store-elsewhere` from 66 to **33**, which is its
+floor, and moved `cycle` and `shared-tail` with it.
+
+It is deliberately conservative -- a call of its own could store the object
+anywhere, so a function containing one is not in the set however harmless it
+looks. That wants the real summary, with escape per argument, and `escape.rs`
+already computes it.
+
+## What is left is a fact that dies on an edge
+
+`traversal` and `borrowed-call` sit at 99 against a floor of 33, and they are
+now the largest single block left. Both spend it in `chain`, three operations
+an iteration:
+
+    v20 = v5->next;      // the null the constructor wrote
+    v5->next = v12;
+    nts_release(v20);    // released anyway
+    nts_retain(v12);     // tail = made
+    nts_release(v5);     // giving up the old tail
+
+The first is the same defect the section above fixed, and it is not fixed here,
+because the store goes through `tail` -- a block parameter. `Fresh` knows `made`
+is freshly constructed and loses that the instant it is carried around the loop.
+
+The second is the same shape one level up. `made` is stored into `tail.next`
+before it is passed on, so by the time the edge carries it, the list already
+holds it; a value whose reference has moved into a slot is thereafter a *borrow*
+of that slot, and could travel as one. `crossing_borrows` cannot say that
+because it drops any block parameter whose incoming argument is an allocation,
+which this is.
+
+So: the ordering claim above stands -- the fixpoint direction was worth more
+than edge modes and cost thirty lines against thirty six construction sites.
+What has changed is that identity across an edge is no longer a nice-to-have
+argued from a comment in `escape.rs`. It is the binding constraint on the two
+biggest remaining numbers, and both of them want the same thing: a fact
+established about a value before an edge, still true about the value after it.
 
 ## An anchor does not have to be a parameter
 
