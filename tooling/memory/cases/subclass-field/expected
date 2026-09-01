@@ -1,13 +1,22 @@
-ideal 53
-because seventeen `Derived` and thirty four `Base`, fifty one objects at one
-because reference each, and the borrow that cannot be one.
+ideal 34
+because thirty four `Base` objects -- two an iteration -- and one reference each
+because to give back. The `Derived` costs nothing: it does not escape, so it
+because lives in the frame and never reaches the allocator.
 because
-because `got` reads `b.left` and is used *after* `d.left` is overwritten, and
-because the overwrite releases what the slot held. So this is the case where a
-because retain is genuinely owed: one retain and one release per iteration would
-because be thirty four more, but the second `Base` can move into the slot and
-because the first can move out into `got`, leaving one pair that cannot go --
-because `got` outlives the store, and nothing else keeps it.
+because Zero retains. The first store writes over a zero, because a constructor
+because that only initializes leaves the slot as it found it and `super()` does
+because not change that. The read of `b.left` *takes*: the slot is overwritten
+because before anything else can reach it, so the reference moves out rather
+because than being copied, and the store that overwrites owes nothing. One
+because `Base` is then given back where `got` dies and the other where the frame
+because ends.
 because
-because Stated as a floor rather than a target. What this case is really for is
-because the answer: elide by type and `got.tag` reads freed memory.
+because Written as fifty three first, counting the `Derived` as an object
+because because it is spelled like one. That is the fourth ideal in this suite I
+because have put too high and the fourth time for the same reason.
+because
+because What this case is really for is the answer rather than the count. `d` and
+because `b` are one object under two types, and `d.left` and `b.left` are the
+because same eight bytes; telling slots apart by *type* would decide the store
+because cannot disturb the load, elide the retain, and free `got` while it is
+because still named. The read of `got.tag` is what would notice.

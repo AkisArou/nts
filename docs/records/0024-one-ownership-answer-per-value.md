@@ -30,11 +30,11 @@ what a person can justify as necessary written down beside the argument for it.
 | `param-returned` | 68 | 34 | 34 | 50% — at ideal |
 | `shared-tail` | 113 | 39 | 21 | 65% |
 | `store-elsewhere` | 135 | 33 | 33 | 75% — at ideal |
-| `subclass-field` | 85 | 85 | 53 | **0%** |
+| `subclass-field` | 68 | 34 | 34 | 50% — at ideal |
 | `swap` | 104 | 2 | 2 | 98% — at ideal |
 | `traversal` | 135 | 67 | 33 | 50% |
 
-Lobster reports eliminating about 95% of reference operations. Eight of these
+Lobster reports eliminating about 95% of reference operations. Nine of these
 fifteen are at their floor and two are still at zero, which is what the rest of
 this record is about. Every one of the eight moved because a fact the compiler
 already had was being thrown away at a boundary -- an edge, a call, a slot -- and

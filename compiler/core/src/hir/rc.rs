@@ -809,26 +809,49 @@ fn quiet(kind: &OpKind) -> bool {
 /// two of `traversal`'s ninety nine, and every operation `store-elsewhere` had
 /// left above its floor.
 ///
-/// Conservative on purpose. A call of its own could store the object anywhere,
-/// so a function containing one is not here however harmless it looks; that
-/// wants the real summary, with escape per argument, and this does not.
+/// Transitive, because a constructor calls its base's constructor. `super(t)`
+/// is a call, and refusing every function that contains one left every derived
+/// class outside the set -- so the first store to a field of a `Derived` loaded
+/// the slot and released the null `Base` had written into it. A call to a
+/// function that is itself in the set can do nothing this one could not.
+///
+/// A least fixpoint, so a recursive constructor never qualifies. That is the
+/// safe direction and costs nothing real: a constructor that calls itself is
+/// not the shape this exists for.
 fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHashSet<String> {
-    program
-        .funcs
-        .iter()
-        .filter(|func| {
-            func.blocks
-                .iter()
-                .all(|block| !matches!(block.terminator, super::Terminator::Return(Some(_))))
-                && func.values.iter().all(|op| match &op.kind {
-                    OpKind::FieldSet { value: stored, .. }
-                    | OpKind::ArraySet { value: stored, .. } => !counted(func, layouts, *stored),
-                    OpKind::GlobalSet { .. } => false,
-                    other => quiet(other),
-                })
-        })
-        .map(|func| func.name.clone())
-        .collect()
+    fn qualifies(
+        func: &Func,
+        layouts: &[Layout],
+        harmless: &rustc_hash::FxHashSet<String>,
+    ) -> bool {
+        func.blocks
+            .iter()
+            .all(|block| !matches!(block.terminator, super::Terminator::Return(Some(_))))
+            && func.values.iter().all(|op| match &op.kind {
+                OpKind::FieldSet { value: stored, .. }
+                | OpKind::ArraySet { value: stored, .. } => !counted(func, layouts, *stored),
+                OpKind::GlobalSet { .. } => false,
+                OpKind::Call {
+                    callee: super::Callee::Direct(name),
+                    ..
+                } => harmless.contains(name),
+                other => quiet(other),
+            })
+    }
+
+    let mut harmless = rustc_hash::FxHashSet::default();
+    loop {
+        let mut grew = false;
+        for func in &program.funcs {
+            if !harmless.contains(&func.name) && qualifies(func, layouts, &harmless) {
+                harmless.insert(func.name.clone());
+                grew = true;
+            }
+        }
+        if !grew {
+            return harmless;
+        }
+    }
 }
 
 /// Runtime helpers that take ownership of an argument, and which one.
@@ -876,6 +899,7 @@ fn taking(
     func: &Func,
     layouts: &[Layout],
     crossing: &rustc_hash::FxHashSet<ValueId>,
+    harmless: &rustc_hash::FxHashSet<String>,
     ops: &[ValueId],
 ) -> (
     rustc_hash::FxHashSet<ValueId>,
@@ -940,8 +964,27 @@ fn taking(
                 }
                 None => held.clear(),
             },
+            // A call that only initializes cannot reach a slot this is
+            // watching. Clearing for one lost the take in every constructor
+            // shaped like `x = o.f; o.f = new T(...)`, which is most of them:
+            // the allocation is fine and the constructor call between the load
+            // and the store is what threw the pairing away.
+            OpKind::Call {
+                callee: super::Callee::Direct(name),
+                ..
+            } if harmless.contains(name) => {}
             other => {
-                if !quiet(other) {
+                // `quiet` is the wrong question here, and asking it cost every
+                // take in `x = o.f; o.f = new T(...)` -- the commonest shape
+                // there is. `quiet` means "cannot store, call, allocate or
+                // suspend", because `inert` needs a function that makes no
+                // garbage. What this needs is narrower: cannot write a *slot*.
+                // An allocation writes nothing that already exists, and a
+                // repackaging is one pointer under another name.
+                let cannot_write = quiet(other)
+                    || repackages(other)
+                    || matches!(other, OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. });
+                if !cannot_write {
                     held.clear();
                 }
             }
@@ -1260,7 +1303,7 @@ fn count_ops(
         .unwrap_or_default();
     let mut moved = rustc_hash::FxHashSet::default();
     let mut borrowed = rustc_hash::FxHashSet::default();
-    let (takes, settled) = taking(func, layouts, around.crossing, original);
+    let (takes, settled) = taking(func, layouts, around.crossing, around.harmless, original);
 
     for (index, value) in original.iter().enumerate() {
         let kind = func.values[value.0 as usize].kind.clone();
