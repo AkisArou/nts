@@ -840,6 +840,8 @@ fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
 pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_array_new",
     "nts_array_new_uninitialized",
+    "nts_bigint_shl",
+    "nts_bigint_shr",
     "nts_cell_unready",
     "nts_check_fn",
     "nts_concat",
@@ -1380,39 +1382,7 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
         } if func.values[lhs.0 as usize].ty == HirType::Erased => {
             return tagging(func, value, &out);
         }
-        // Two operators wear the `+` token and this is the other one. The
-        // lowering already decided which, from the result type, so there is
-        // nothing to work out here.
-        OpKind::Binary {
-            op: BinOp::Concat,
-            lhs,
-            rhs,
-        } => format!(
-            "{out} = call ptr @nts_concat(ptr {}, ptr {})",
-            name(*lhs),
-            name(*rhs)
-        ),
-        // `Math.min` and `Math.max`. Two integers cannot be NaN and have no
-        // second zero, so the whole reason the helper exists is absent and a
-        // comparison will do -- the same split the C backend makes, and the
-        // same reason it makes it.
-        OpKind::Binary {
-            op: bin @ (BinOp::Min | BinOp::Max),
-            lhs,
-            rhs,
-        } => extremum(func, &out, *bin, *lhs, *rhs)?,
-        OpKind::Binary { op: bin, lhs, rhs } => {
-            // One type, taken from an operand and trusted. `verify` requires
-            // both operands and the result to agree, so there is nothing here
-            // to decide -- which is the point. This used to carry C's usual
-            // arithmetic conversions, because the IR allowed a `double` and an
-            // `i64` to reach one `+` and somebody had to pick. That somebody is
-            // the middle end now.
-            let ty = ty_of(&func.values[lhs.0 as usize].ty, func)?;
-            let float = matches!(func.values[lhs.0 as usize].ty, HirType::Float { .. });
-            let instruction = binary(*bin, float, wraps(&func.values[lhs.0 as usize].ty), func)?;
-            format!("{out} = {instruction} {ty} {}, {}", name(*lhs), name(*rhs))
-        }
+        OpKind::Binary { op: bin, lhs, rhs } => arithmetic(func, &out, *bin, *lhs, *rhs)?,
         OpKind::Unary { op: un, operand } => unary(func, &out, value, *un, *operand)?,
         // A representation change specialization decided on. The C backend
         // spells it as a cast; LLVM makes the direction explicit, which is the
@@ -2312,6 +2282,70 @@ fn wraps(ty: &HirType) -> bool {
 /// There is no `nuw` anywhere, and its absence is the point: unsigned overflow
 /// in C is *defined* to wrap, so claiming otherwise would be the one place this
 /// backend promised more than the oracle does.
+/// A binary operator, and the three that are not one instruction.
+///
+/// Concatenation and the two extrema are calls; a `bigint` shift is a call
+/// because JavaScript's rule is not the machine's. Everything else takes its
+/// type from an operand and is trusted: `verify` requires both operands and the
+/// result to agree, so there is nothing here to decide -- which is the point.
+/// This used to carry C's usual arithmetic conversions, because the IR allowed
+/// a `double` and an `i64` to reach one `+` and somebody had to pick. That
+/// somebody is the middle end now.
+fn arithmetic(
+    func: &Func,
+    out: &str,
+    op: BinOp,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> Result<String, Diagnostic> {
+    // Two operators wear the `+` token and this is the other one. The lowering
+    // already decided which, from the result type.
+    if matches!(op, BinOp::Concat) {
+        return Ok(format!(
+            "{out} = call ptr @nts_concat(ptr {}, ptr {})",
+            name(lhs),
+            name(rhs)
+        ));
+    }
+    if matches!(op, BinOp::Shl | BinOp::Shr) && func.values[lhs.0 as usize].ty == HirType::BigInt {
+        return Ok(wide_shift(out, op, lhs, rhs));
+    }
+    if matches!(op, BinOp::Min | BinOp::Max) {
+        return extremum(func, out, op, lhs, rhs);
+    }
+    let ty = ty_of(&func.values[lhs.0 as usize].ty, func)?;
+    let float = matches!(func.values[lhs.0 as usize].ty, HirType::Float { .. });
+    let instruction = binary(op, float, wraps(&func.values[lhs.0 as usize].ty), func)?;
+    Ok(format!(
+        "{out} = {instruction} {ty} {}, {}",
+        name(lhs),
+        name(rhs)
+    ))
+}
+
+/// A `bigint` shift, which is not a machine shift.
+///
+/// JavaScript reverses the direction for a negative count and saturates for one
+/// at or past the width, where LLVM's `shl` and `ashr` are *poison*. So the
+/// runtime spells the rule and both backends call it -- emitting the
+/// instruction rendered a module that compiled and then disagreed with node on
+/// 28 cases of `examples/bigint`.
+///
+/// `>>>` has no `bigint` form: JavaScript throws for it, so there is nothing
+/// here to route.
+fn wide_shift(out: &str, op: BinOp, lhs: ValueId, rhs: ValueId) -> String {
+    let helper = if matches!(op, BinOp::Shl) {
+        "nts_bigint_shl"
+    } else {
+        "nts_bigint_shr"
+    };
+    format!(
+        "{out} = call i128 @{helper}(i128 {}, i128 {})",
+        name(lhs),
+        name(rhs)
+    )
+}
+
 /// `Math.min` and `Math.max`, which are not one instruction in either backend.
 ///
 /// Two integers cannot be NaN and have no second zero, so the whole reason the
@@ -2446,7 +2480,11 @@ fn conversion(from: &HirType, to: &HirType, func: &Func) -> Result<&'static str,
         // integer does -- the same instruction for the same reason, not two
         // cases that happen to agree.
         (HirType::Int { signed: false, .. } | HirType::Bool, HirType::Float { .. }) => "uitofp",
-        (HirType::Float { .. }, HirType::Int { signed: true, .. }) => "fptosi",
+        // `BigInt` is `__int128` and signed, and it is *not* `HirType::Int`, so
+        // it has to be named here or the conversion is refused outright. The C
+        // backend writes `(__int128)x`, which truncates toward zero exactly as
+        // `fptosi` does.
+        (HirType::Float { .. }, HirType::Int { signed: true, .. } | HirType::BigInt) => "fptosi",
         (HirType::Float { .. }, HirType::Int { signed: false, .. }) => "fptoui",
         (HirType::Float { bits: 32 }, HirType::Float { bits: 64 }) => "fpext",
         (HirType::Float { bits: 64 }, HirType::Float { bits: 32 }) => "fptrunc",
