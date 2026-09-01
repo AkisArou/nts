@@ -1866,8 +1866,23 @@ impl Fresh {
                 // runs in twenty seconds says immediately.
                 self.written.retain(|(held, _)| *held != value);
             }
-            OpKind::FieldSet { object, field, .. } => {
-                self.written.insert((*object, u64::from(*field)));
+            OpKind::FieldSet {
+                object,
+                field,
+                value: stored,
+                ..
+            } => {
+                // Storing a null puts the slot back the way the allocator left
+                // it, so the *next* store to it writes over a zero and owes no
+                // release. Recording it as written meant a field cleared and
+                // refilled in a loop loaded and released a null every time
+                // round -- `nulled-field` pays one an iteration for exactly
+                // that.
+                if matches!(func.values[stored.0 as usize].kind, OpKind::ConstNull) {
+                    self.written.remove(&(*object, u64::from(*field)));
+                } else {
+                    self.written.insert((*object, u64::from(*field)));
+                }
             }
             OpKind::ArraySet { array, index, .. } => {
                 if let Some(slot) = slot_of(func, *index) {
