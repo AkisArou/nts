@@ -50,7 +50,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{Callee, Func, OpKind, Program, Terminator, ValueId};
+use super::{BlockId, Callee, Func, OpKind, Program, Terminator, ValueId};
 
 /// A bound on the call-graph iteration. Convergence takes a handful of rounds --
 /// the lattice is two points per parameter and only moves one way -- so reaching
@@ -244,6 +244,9 @@ fn analyze(
     // What a call handed straight back: if the result escapes, so does the
     // argument it *is*. See `returned_params`.
     let mut aliased_by: Vec<(ValueId, ValueId)> = Vec::new();
+    // What an edge handed to a block parameter: if the parameter escapes, so
+    // does the argument it arrived as. See `escape_through`.
+    let mut carried: Vec<(ValueId, ValueId)> = Vec::new();
     // Which allocations can run more than once with an earlier result still
     // reachable. See `repeats`.
     let repeated = repeats(func);
@@ -325,58 +328,37 @@ fn analyze(
                 OpKind::GlobalSet { value: stored, .. } => {
                     escaped(&mut escapes, func, *stored);
                 }
-                OpKind::Call { callee, args, .. } => match callee {
-                    // A body that is not here could do anything with what it is
-                    // given.
-                    Callee::External(_) => {
+                OpKind::Call { callee, args, .. } => {
+                    let reached: Option<&[usize]> = match callee {
+                        // A body that is not here could do anything with what
+                        // it is given.
+                        Callee::External(_) => None,
+                        Callee::Direct(name) => {
+                            by_name.get(name.as_str()).map(std::slice::from_ref)
+                        }
+                        // A dispatch reaches one of several bodies, and which
+                        // is decided by a receiver this cannot see -- so an
+                        // argument escapes if *any* of them lets it. A union
+                        // rather than a guess, because the table is complete.
+                        Callee::Virtual { slot, .. } | Callee::Closure { slot } => {
+                            in_slot.get(slot).map(Vec::as_slice)
+                        }
+                    };
+                    let Some(targets) = reached else {
                         for argument in args {
                             escaped(&mut escapes, func, *argument);
                         }
-                    }
-                    Callee::Direct(name) => {
-                        let Some(target) = by_name.get(name.as_str()) else {
-                            for argument in args {
-                                escaped(&mut escapes, func, *argument);
-                            }
-                            continue;
-                        };
-                        escape_into(
-                            &mut escapes,
-                            args,
-                            std::slice::from_ref(target),
-                            arity,
-                            escaping_params,
-                        );
+                        continue;
+                    };
+                    escape_into(&mut escapes, args, targets, arity, escaping_params);
+                    for target in targets {
                         for slot in &handed_back[*target] {
                             if let Some(argument) = args.get(*slot as usize) {
                                 aliased_by.push((*value, *argument));
                             }
                         }
                     }
-                    // A dispatch reaches one of several bodies, and which is
-                    // decided by a receiver this cannot see -- so an argument
-                    // escapes if *any* of them lets it. That is a union rather
-                    // than a guess, because the table is the complete list.
-                    Callee::Virtual { slot, .. } | Callee::Closure { slot } => {
-                        let Some(targets) = in_slot.get(slot) else {
-                            for argument in args {
-                                escaped(&mut escapes, func, *argument);
-                            }
-                            continue;
-                        };
-                        escape_into(&mut escapes, args, targets, arity, escaping_params);
-                        // Which body runs is decided by a receiver this cannot
-                        // see, so an argument is aliased by the result if *any*
-                        // of them hands it back.
-                        for target in targets {
-                            for slot in &handed_back[*target] {
-                                if let Some(argument) = args.get(*slot as usize) {
-                                    aliased_by.push((*value, *argument));
-                                }
-                            }
-                        }
-                    }
-                },
+                }
                 // A suspension hands the frame to the runtime, which stores it
                 // in a promise's reaction list and calls back into it after
                 // this function has returned. That is the *definition* of
@@ -397,7 +379,7 @@ fn analyze(
             }
         }
 
-        escape_through(&mut escapes, func, &block.terminator);
+        escape_through(&mut escapes, func, &repeated, &mut carried, &block.terminator);
     }
 
     // Now the stores, once every other reason to escape is known.
@@ -421,6 +403,11 @@ fn analyze(
                 escaped(&mut escapes, func, *argument);
             }
         }
+        for (param, argument) in &carried {
+            if escapes.escapes(*param) {
+                escaped(&mut escapes, func, *argument);
+            }
+        }
         if escapes.values.len() == before {
             break;
         }
@@ -430,31 +417,91 @@ fn analyze(
 
 /// What leaving a block does to what it carries.
 ///
-/// A block parameter is a value this analysis does not follow, so anything
-/// handed to one is treated as gone -- which is the same blind spot
-/// `crossing_borrows` had and `own` no longer has. Fixing it here is worth two
-/// allocations in `shared-tail` and is not yet done.
+/// A value handed to a block parameter has not gone anywhere: it is still in
+/// this frame, under the name the successor knows it by. So it escapes exactly
+/// when that parameter does, which is another edge in the fixpoint below rather
+/// than a reason to give up.
+///
+/// This used to mark every argument of every edge as escaped -- the same blind
+/// spot `crossing_borrows` had, and its comment said so. It cost `total(head)`
+/// its parameter: `at = head` hands the list to a loop variable, so every list
+/// ever walked was a heap list, and both heads of `shared-tail` with it.
+///
+/// # The one thing an edge does have to refuse
+///
+/// A frame allocation is one slot. An allocation made *inside a loop* is that
+/// slot reused, and carrying it on an edge is what brings the previous result
+/// back to life -- iteration k's object read through a name that now points at
+/// iteration k+1's. Nothing else here refuses it: `repeats` is consulted for
+/// stores, and `place_allocations` asks only whether the value escapes. So
+/// the edge is where it has to be said.
 ///
 /// `Return` is the real thing: the reference is the caller's now -- unless it
 /// is a parameter, which the caller was holding before the call. See
 /// [`returned_params`].
-fn escape_through(escapes: &mut Escapes, func: &Func, terminator: &Terminator) {
+fn escape_through(
+    escapes: &mut Escapes,
+    func: &Func,
+    repeated: &FxHashSet<ValueId>,
+    carried: &mut Vec<(ValueId, ValueId)>,
+    terminator: &Terminator,
+) {
     match terminator {
         Terminator::Return(Some(value)) => {
             if !matches!(func.values[value.0 as usize].kind, OpKind::Param(_)) {
                 escapes.values.insert(*value);
             }
         }
-        Terminator::Jump { args, .. } => escapes.values.extend(args.iter().copied()),
+        Terminator::Jump { target, args } => {
+            hand_on(escapes, func, repeated, carried, *target, args);
+        }
         Terminator::Branch {
+            then_target,
             then_args,
+            else_target,
             else_args,
             ..
         } => {
-            escapes.values.extend(then_args.iter().copied());
-            escapes.values.extend(else_args.iter().copied());
+            hand_on(escapes, func, repeated, carried, *then_target, then_args);
+            hand_on(escapes, func, repeated, carried, *else_target, else_args);
         }
         Terminator::Return(None) | Terminator::Unreachable | Terminator::FellThrough => {}
+    }
+}
+
+/// One edge: pair each argument with the parameter that receives it.
+fn hand_on(
+    escapes: &mut Escapes,
+    func: &Func,
+    repeated: &FxHashSet<ValueId>,
+    carried: &mut Vec<(ValueId, ValueId)>,
+    target: BlockId,
+    args: &[ValueId],
+) {
+    let params = func
+        .blocks
+        .get(target.0 as usize)
+        .map(|block| block.params.as_slice())
+        .unwrap_or_default();
+    for (slot, argument) in args.iter().enumerate() {
+        let reused = repeated.contains(argument)
+            && matches!(
+                func.values[argument.0 as usize].kind,
+                OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
+            );
+        match params.get(slot) {
+            // An allocation from inside a loop, carried on: one slot, two live
+            // results. See the note above.
+            Some(_) if reused => {
+                escapes.values.insert(*argument);
+            }
+            Some(param) => carried.push((*param, *argument)),
+            // An argument with no parameter to land in is one this does not
+            // model, and what is not modelled is assumed to escape.
+            None => {
+                escapes.values.insert(*argument);
+            }
+        }
     }
 }
 
