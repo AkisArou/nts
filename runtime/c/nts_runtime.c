@@ -20,6 +20,30 @@ static size_t nts_reclaimed = 0;
 
 size_t nts_live_count(void) { return nts_allocated - nts_reclaimed; }
 
+/* Every call to `nts_retain` and `nts_release`, counted where it arrives rather
+ * than where it has an effect.
+ *
+ * That distinction is the whole measurement. A retain of a null pointer returns
+ * on its first line and changes nothing -- and sixty-five percent of the
+ * reference-counting operations in `awfy-list` were exactly that, emitted for a
+ * constant the compiler had written two lines above. Counting effects would
+ * have called that free. It was not free: it was a call.
+ *
+ * So this measures what the *compiler asked for*, which is the thing an elision
+ * pass is trying to make smaller. */
+static size_t nts_retains = 0;
+static size_t nts_releases = 0;
+
+size_t nts_counted_retains(void) { return nts_retains; }
+size_t nts_counted_releases(void) { return nts_releases; }
+
+/* Zeroed between phases, so a measurement can exclude set-up it did not mean to
+ * charge the program for. */
+void nts_counting_reset(void) {
+  nts_retains = 0;
+  nts_releases = 0;
+}
+
 /* Cyclic, because one descriptor serves every array of references and says
    nothing about what the elements point at. */
 const NtsDescriptor nts_desc_ref = {
@@ -247,6 +271,7 @@ NtsHeader *nts_object_new(const NtsDescriptor *descriptor) {
  * Making it atomic would cost every retain a locked instruction to defend
  * against sharing the design does not permit. */
 void nts_retain(NtsHeader *object) {
+  nts_retains++;
   if (!object || object->reserved == NTS_IMMORTAL ||
       (object->flags & NTS_DYING) != 0) {
     return;
@@ -623,6 +648,7 @@ static void nts_possible_root(NtsHeader *object) {
 }
 
 void nts_release(NtsHeader *object) {
+  nts_releases++;
   if (!object || object->reserved == NTS_IMMORTAL) {
     return;
   }

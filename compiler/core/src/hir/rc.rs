@@ -249,36 +249,50 @@ fn crossing_borrows(
     }
 
     let mut crossing = rustc_hash::FxHashSet::default();
-    // Loads first, and to a fixpoint: a load out of a settled borrow settles
-    // too, so one pass would answer in definition order rather than by the
-    // chain.
+    if !eliding() {
+        return crossing;
+    }
+    // A parameter is borrowed by this module's own convention: never retained
+    // on entry, never released on exit, because the caller holds it for the
+    // length of the call. Seeding them is what lets the fixpoint below start at
+    // all -- without a value that is good before anything is proved, a loop
+    // variable can never settle.
+    for (index, op) in func.values.iter().enumerate() {
+        if matches!(op.kind, OpKind::Param(_)) {
+            let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
+            if counted(func, layouts, value) {
+                crossing.insert(value);
+            }
+        }
+    }
+    // Loads and block parameters in **one** fixpoint, not two.
+    //
+    // In a loop they depend on each other circularly: `at` is a block parameter
+    // carrying `head` and `at.next`, the load `at.next` is good only if `at`
+    // is, and `at` is good only if every argument arriving at it is -- that
+    // load included. Settling loads to convergence *first* and parameters
+    // afterwards cannot break the circle, because the load is asked before its
+    // container has been considered at all.
+    //
+    // That is not hypothetical: with the two separated, a walk whose step goes
+    // through a call eliminated **nothing**, 167 operations of 167, while the
+    // same walk without the call eliminated 40%. `tooling/memory` is what said
+    // so.
+    let incoming = super::loops::predecessors(func);
     loop {
         let mut grew = false;
         for index in 0..func.values.len() {
             let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
-            if crossing.contains(&value) {
+            if crossing.contains(&value) || !counted(func, layouts, value) {
                 continue;
             }
-            if counted(func, layouts, value)
-                && is_load(&func.values[index].kind)
-                && survives_the_function(
-                    func, layouts, mutates, &crossing, &unobserved, value,
-                )
+            if is_load(&func.values[index].kind)
+                && survives_the_function(func, layouts, mutates, &crossing, &unobserved, value)
             {
                 crossing.insert(value);
                 grew = true;
             }
         }
-        if !grew {
-            break;
-        }
-    }
-    if crossing.is_empty() {
-        return crossing;
-    }
-    let incoming = super::loops::predecessors(func);
-    loop {
-        let mut grew = false;
         for (at, block) in func.blocks.iter().enumerate() {
             let arriving = &incoming[at];
             if arriving.is_empty() {
@@ -476,6 +490,21 @@ fn produces_owned(kind: &OpKind) -> bool {
     )
 }
 
+/// Whether to elide at all.
+///
+/// `NTS_RC_NAIVE=1` turns every elision off and emits the counting a
+/// correctness-first implementation would. Nothing else changes: the program
+/// still runs and still agrees with node, it simply pays for every reference.
+///
+/// That is the denominator `tooling/memory` divides by. A count on its own says
+/// nothing -- `awfy-bounce` has five reference-counting operations and is one of
+/// the worst rows in the table, while `awfy-list` had thirty-eight and is among
+/// the best. What says whether the elision is good is the *ratio*, which is what
+/// Lobster means when it reports eliminating 95% of them.
+fn eliding() -> bool {
+    std::env::var_os("NTS_RC_NAIVE").is_none()
+}
+
 /// Whether nothing in this function can invalidate a borrow.
 ///
 /// A reference read out of a slot belongs to that slot, and stays good while
@@ -495,7 +524,8 @@ fn produces_owned(kind: &OpKind) -> bool {
 /// five-line body. Every one of them is unnecessary, and `borrows_safely`
 /// cannot say so because it reasons one block at a time.
 fn inert(func: &Func) -> bool {
-    func.values.iter().all(|op| match &op.kind {
+    eliding()
+        && func.values.iter().all(|op| match &op.kind {
         OpKind::Param(_)
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
@@ -519,8 +549,8 @@ fn inert(func: &Func) -> bool {
         OpKind::Binary { op, .. } => !matches!(op, super::BinOp::Concat),
         // Everything else stores, calls, allocates, or suspends. `Erase` is
         // here for being a boxing operation rather than for being unsafe.
-        _ => false,
-    })
+            _ => false,
+        })
 }
 
 /// What an inert function still owes: a reference on whatever it hands back.
@@ -910,7 +940,7 @@ fn borrows_safely(
     terminator: &super::Terminator,
     around: &Surroundings<'_>,
 ) -> bool {
-    if !around.live.dies_in(block, value) {
+    if !eliding() || !around.live.dies_in(block, value) {
         return false;
     }
     // Handed on by the terminator, so its reference goes somewhere.

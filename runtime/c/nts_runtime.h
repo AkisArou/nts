@@ -554,6 +554,13 @@ void nts_retain(NtsHeader *object);
  * without bound under NoGC, and the difference is visible from inside the
  * program rather than inferred from its memory use. */
 size_t nts_live_count(void);
+/* Calls to `nts_retain` and `nts_release`, counted on arrival rather than by
+ * effect -- a retain of a null returns immediately and is still a call the
+ * compiler emitted. This is what an elision pass is trying to make smaller, so
+ * it is what `tooling/memory` measures. `nts_counting_reset` zeroes both. */
+size_t nts_counted_retains(void);
+size_t nts_counted_releases(void);
+void nts_counting_reset(void);
 void nts_release(NtsHeader *object);
 NTS_ALLOCATES NtsArray *nts_array_new(const NtsDescriptor *descriptor,
                                       double length);

@@ -1,0 +1,9 @@
+ideal 0
+because the `Point` never leaves `work`: it is not returned, not stored into
+because anything that outlives the iteration, and not passed anywhere that could
+because keep it. Escape analysis already answers this -- the HIR should say
+because `object.new frame` -- and a frame object has no count to change, because
+because its storage ends with the frame whatever points at it.
+because
+because Any number above zero here is counting on something that was never on
+because the heap.
