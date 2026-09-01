@@ -67,9 +67,12 @@ step() {
     *) return 0 ;;
   esac
   printf '\n\033[1m%s\033[0m\n' "$1"
+  name=$1
   shift
   started=$(date +%s)
-  "$@" || { printf '\033[31mFAILED\033[0m: %s\n' "$1"; exit 1; }
+  # `$name`, not `$1`: the shift above already ate the step name, so this line
+  # spent its life reporting the command it ran instead of the step that failed.
+  "$@" || { printf '\033[31mFAILED\033[0m: %s\n' "$name"; exit 1; }
   printf '  %ss\n' "$(($(date +%s) - started))"
 }
 
@@ -199,24 +202,46 @@ profile() {
 # It found a module that did not compile the first time it was pointed here: an
 # erased value handed to `nts_release`, which takes a pointer, where a tagged
 # value needs `nts_value_release` and the tag decides which half is a reference.
-llvm_rc() {
-  floor=79
-  passed=0
-  total=0
-  behind=""
-  for d in examples/*/tsconfig.json; do
+# Eight workers, the way `gate.sh` and `rc.sh` do it.
+#
+# These two steps run the same differential those two run, and ran it one
+# example at a time while both of them used eight. That was 1923 seconds of a
+# 2408-second gate -- eighty per cent of it -- to answer a question the C steps
+# beside them answered in 366. The header of this file already claimed each step
+# was "already parallel inside"; two of them were not.
+#
+# Capped at eight for the reason `gate.sh` states: enough frontends at once
+# kills one inside Go's collector, and a gate that is fast and occasionally
+# wrong is worth less than one that is slow and never is.
+crowded=8
+cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )
+jobs=${NTS_GATE_JOBS:-$( [ "$cores" -lt "$crowded" ] && echo "$cores" || echo "$crowded" )}
+
+# `$1` the floor, `$2` how to say what was compared. The backend is selected by
+# the environment, which the callers export inside a subshell so it reaches the
+# workers and does not outlive the step -- `examples` and `rc` run after these
+# two and would otherwise inherit a backend nobody asked them for.
+llvm_examples() {
+  floor=$1
+  said=$2
+  results=$(mktemp)
+  ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
+    d=$1
     n=$(basename "$(dirname "$d")")
     case "$n" in
-      invalid|unsupported) continue ;;
+      invalid|unsupported) exit 0 ;;
     esac
-    total=$((total + 1))
-    if NTS_BACKEND=llvm NTS_RC=1 ./target/release/nts check "$d" >/dev/null 2>&1; then
-      passed=$((passed + 1))
+    if ./target/release/nts check "$d" >/dev/null 2>&1; then
+      echo "ok $n"
     else
-      behind="$behind $n"
+      echo "no $n"
     fi
-  done
-  printf '  %s of %s examples agree with node through the LLVM backend, counting\n' "$passed" "$total"
+  ' _ > "$results"
+  passed=$(grep -c '^ok ' "$results" || true)
+  total=$(grep -c . "$results" || true)
+  behind=$(awk '/^no /{printf " %s", $2}' "$results")
+  rm -f "$results"
+  printf '  %s of %s examples agree with node %s\n' "$passed" "$total" "$said"
   if [ "$passed" -lt "$floor" ]; then
     echo "  ^ fell from $floor to $passed:$behind"
     return 1
@@ -225,31 +250,11 @@ llvm_rc() {
   return 0
 }
 
-llvm() {
-  floor=79
-  passed=0
-  total=0
-  behind=""
-  for d in examples/*/tsconfig.json; do
-    n=$(basename "$(dirname "$d")")
-    case "$n" in
-      invalid|unsupported) continue ;;
-    esac
-    total=$((total + 1))
-    if NTS_BACKEND=llvm ./target/release/nts check "$d" >/dev/null 2>&1; then
-      passed=$((passed + 1))
-    else
-      behind="$behind $n"
-    fi
-  done
-  printf '  %s of %s examples agree with node through the LLVM backend\n' "$passed" "$total"
-  if [ "$passed" -lt "$floor" ]; then
-    echo "  ^ fell from $floor to $passed:$behind"
-    return 1
-  fi
-  [ "$passed" -gt "$floor" ] && printf '  ^ raise the floor in tooling/gate/all.sh to %s\n' "$passed"
-  return 0
-}
+llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
+  llvm_examples 79 "through the LLVM backend, counting" ); }
+
+llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
+  llvm_examples 79 "through the LLVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
