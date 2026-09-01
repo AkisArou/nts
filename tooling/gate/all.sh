@@ -170,7 +170,7 @@ profile() {
 # second backend silently falls behind. A number that may not go down is what
 # turns that into a failed build.
 llvm() {
-  floor=73
+  floor=76
   passed=0
   total=0
   behind=""

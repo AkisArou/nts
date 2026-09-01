@@ -139,7 +139,15 @@ fn main() -> Result<()> {
 
     println!(
         "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
-        "case", "C++", "nts C", "nts LLVM", "nts f64", "node", "bun", "nts/C++", "nts/node",
+        "case",
+        "C++",
+        "nts C",
+        "nts LLVM",
+        "nts f64",
+        "node",
+        "bun",
+        "nts/C++",
+        "nts/node",
         "nts/bun"
     );
     println!("{}", "-".repeat(124));
@@ -202,11 +210,11 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
             table,
             "| {} | {} | {} | **{}** | {} |{bun} {} | {} |{against_bun}",
             row.case,
-            human(row.cpp),
+            row.cpp.map_or_else(|| "--".to_owned(), human),
             human(row.nts),
             row.llvm.map_or_else(|| "--".to_owned(), human),
             human(row.node),
-            row.against(Some(row.cpp)),
+            row.against(row.cpp),
             row.against(Some(row.node)),
         );
     }
@@ -264,7 +272,11 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
 /// the terminal showed.
 struct Row {
     case: String,
-    cpp: f64,
+    /// The hand-written reference. `None` where the case has no `ref.cpp`,
+    /// which real-world code taken from elsewhere generally will not: writing
+    /// a second implementation of it in C++ to have something to divide by is
+    /// a correctness burden rather than a reference.
+    cpp: Option<f64>,
     nts: f64,
     unspecialized: f64,
     node: f64,
@@ -300,6 +312,28 @@ impl Row {
     }
 }
 
+/// Which memory provider a case runs under.
+///
+/// A case that allocates per iteration declares `rc` in a file beside its
+/// `tsconfig.json`; the default is `NoGC`, which never frees, so a run calibrated
+/// to a hundred milliseconds of work would measure page faults rather than the
+/// code.
+///
+/// `NTS_BENCH_RC=1` overrides that and runs every case under reference counting
+/// whatever it declares. `NoGC` is not a scenario any real program has, so what
+/// reclamation costs each row is a question this table should be able to answer
+/// rather than one it avoids by default -- and the answer was 12x on the row
+/// that builds a linked list.
+fn provider_for(case: &Utf8Path) -> hir::Provider {
+    if std::env::var_os("NTS_BENCH_RC").is_some() {
+        return hir::Provider::ReferenceCounting;
+    }
+    match std::fs::read_to_string(case.join("provider")) {
+        Ok(text) if text.trim() == "rc" => hir::Provider::ReferenceCounting,
+        _ => hir::Provider::NoGc,
+    }
+}
+
 fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     let name = case.file_name().context("a case needs a name")?;
     let tsconfig = case.join("tsconfig.json");
@@ -308,10 +342,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     // never free, so a run calibrated to a hundred milliseconds would measure
     // page faults rather than the code -- and the provider is a property of the
     // workload, not of the compiler.
-    let provider = match std::fs::read_to_string(case.join("provider")) {
-        Ok(text) if text.trim() == "rc" => hir::Provider::ReferenceCounting,
-        _ => hir::Provider::NoGc,
-    };
+    let provider = provider_for(case);
     let defines: &[&str] = match provider {
         hir::Provider::ReferenceCounting => &["-DNTS_PROVIDER_RC"],
         hir::Provider::NoGc => &[],
@@ -325,8 +356,11 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     let plain = out.join(format!("{name}.plain.c"));
     let rendered = out.join(format!("{name}.specialized.ll"));
     let entry = entry_points(case)?;
-    std::fs::write(&specialized, emit(&tsconfig, &entry, true, provider, false)?)
-        .with_context(|| format!("writing {specialized}"))?;
+    std::fs::write(
+        &specialized,
+        emit(&tsconfig, &entry, true, provider, false)?,
+    )
+    .with_context(|| format!("writing {specialized}"))?;
     std::fs::write(&plain, emit(&tsconfig, &entry, false, provider, false)?)
         .with_context(|| format!("writing {plain}"))?;
     // The second backend is allowed to fail here and further down. Anything it
@@ -342,10 +376,17 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
             "{name}.{}",
             variant.label.replace([' ', '(', ')'], "")
         ));
-        let cpp = vec![
-            case.join(variant.source),
-            root.join("benches/common/main.cpp"),
-        ];
+        // A case may have no hand-written reference. Real-world code taken from
+        // somewhere else is the reason: transcribing a WHATWG decoder into C++
+        // to have something to divide by is a second implementation to keep
+        // correct, and the row is worth having against node and bun without it.
+        // The ratio renders `--`, which is what every other absent column does.
+        let source = case.join(variant.source);
+        if !source.exists() {
+            results.push(None);
+            continue;
+        }
+        let cpp = vec![source, root.join("benches/common/main.cpp")];
         let mut c = vec![out.join(nts_codegen_c::RUNTIME_SOURCE_NAME)];
         match variant.generated {
             Generated::Specialized => c.push(specialized.clone()),
@@ -387,23 +428,29 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     };
     let row = Row {
         case: shown,
-        cpp: required(2)?,
+        cpp: results
+            .get(2)
+            .and_then(Option::as_ref)
+            .map(|it| it.ns_per_op),
         nts: required(0)?,
         unspecialized: required(1)?,
         node: node.ns_per_op,
-        llvm: results.get(3).and_then(Option::as_ref).map(|it| it.ns_per_op),
+        llvm: results
+            .get(3)
+            .and_then(Option::as_ref)
+            .map(|it| it.ns_per_op),
         bun: bun.map(|result| result.ns_per_op),
     };
     println!(
         "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
         row.case,
-        human(row.cpp),
+        row.cpp.map_or_else(|| "--".to_owned(), human),
         human(row.nts),
         row.llvm.map_or_else(|| "--".to_owned(), human),
         human(row.unspecialized),
         human(row.node),
         row.bun.map_or_else(|| "--".to_owned(), human),
-        row.against(Some(row.cpp)),
+        row.against(row.cpp),
         row.against(Some(row.node)),
         row.against(row.bun),
     );

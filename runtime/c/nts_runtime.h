@@ -700,6 +700,18 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
 /* The coercions as linkable symbols, for a backend that cannot read a C
  * header's `static inline`. See the definitions for why both exist. */
 int32_t nts_to_int32_fn(double x);
+/* `Math.round`, likewise. `floor`, `ceil` and `trunc` are LLVM intrinsics and
+ * need nothing here; rounding is not, because JavaScript rounds a half toward
+ * positive infinity and C rounds it away from zero, so `Math.round(-1.5)` is
+ * -1 where `round(-1.5)` is -2. Reproducing the difference in a backend would
+ * be a second implementation of it. */
+double nts_round_fn(double x);
+/* `Math.min` and `Math.max`, likewise. Neither is `llvm.minnum`: that intrinsic
+ * returns the operand that is not NaN, where JavaScript propagates the NaN, and
+ * it is free to ignore the sign of a zero, where `Math.min(0, -0)` is -0 and
+ * `1 / -0` can still tell. */
+double nts_min_fn(double a, double b);
+double nts_max_fn(double a, double b);
 /* *Not* `NTS_READS_ONLY`, and the distinction matters more here than it looks.
  * A bounds check that fails does not return -- it prints and aborts -- and
  * `pure` promises a function has no effect but its result. clang turns that

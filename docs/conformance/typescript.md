@@ -2033,31 +2033,62 @@ and no benchmark could price it. That is the general hazard with this section:
 lowers.** Check that a construct compiles before pricing what its type could
 buy.
 
-### The one that is not stated, and what it would take
+### The one that is not stated, and what it is actually made of
 
-`Ball` carries four `number` fields that hold `int32` values and are stored as
-`double` — a 56-byte object where the C++ reference has 40. It is the whole of
-`awfy-bounce`'s 1.53×, and the fixpoint cannot close it because the store is
-self-referential: `x = x + xVel` reads the field it writes, so the analysis
-starts at `TOP` and `TOP` is a fixed point.
+This entry was written twice. The first version said `awfy-bounce`'s 1.53× was
+`Ball` carrying four `number` fields that hold `int32` values, gave a
+flow-sensitive fixpoint that would prove it, and was wrong about the cause. It
+is kept here as written and then corrected, because the correction is the more
+useful half.
 
-The HIR shows the way out. `bounce` clamps on every path — `if (x > 500) x =
-500` and `if (x < 0) x = 0` — so the value at *exit* does not depend on the
-value at entry. A field analysis that tracks a per-method exit fact separately
-from the set of stored values converges in two rounds:
+The claim was testable without writing the analysis: state the conclusion in
+the source and measure. A throwaway copy of `bounce.ts` with every field store
+written through `| 0` makes `hir::fields` narrow all four to `i32` — checked in
+the HIR, and the runner's checksum confirmed the program was unchanged. It is
+not checked in: `| 0` is not what a TypeScript programmer writes, and a
+diagnostic that lives in the benchmark directory eventually gets read as one of
+the benchmarks.
 
-```
-round 0   entry = [0,499]                         from the constructor alone
-round 1   x + xVel = [-150,648]                   stored, so storage widens
-          exit    = [0,500]                       the clamps, for any entry
-          entry   = [0,500]
-round 2   x + xVel = [-150,649];  exit = [0,500]  stable
-```
+| | nts (C) | vs C++ |
+|---|---:|---:|
+| `awfy-bounce`, fields `f64` | 6.37 us | 1.55× |
+| `awfy-bounce-int`, fields `i32` | 5.92 us | 1.43× |
 
-`[-150,649]` is an `i32`. This is flow-sensitivity *within* a method plus a
-join across methods — not the narrowing iteration first prescribed for it,
-which cannot work: joining every store field-insensitively re-derives `TOP` on
-the first intermediate store no matter how the fixpoint is seeded.
+**7%.** Real, and not the gap. So the reference was worth reading rather than
+summarising: C++ `Ball` is four `int32_t` — 16 bytes, not the 40 first claimed
+here — and the hundred of them are a `std::array<Ball, 100>` **inline on the
+stack**. nts allocates a hundred separate objects, each behind a 24-byte
+header, reached through an array of pointers.
+
+Compiling the reference four ways separates the two costs:
+
+| | | |
+|---|---:|---|
+| inline `int32`, as the reference is written | 5.75 us | |
+| inline `double` | 6.46 us | the field width costs **1.12×** |
+| boxed `int32` | 8.77 us | the boxing costs **1.52×** |
+| boxed `double` | 10.81 us | together, 1.88× |
+
+Boxing is the cause and field width is a rounding error beside it. The numbers
+reconcile: scaled into this harness nts sits at about 8.9us, which is *boxed
+int32* almost exactly — the bump allocator already lays the hundred objects
+down contiguously, so what is left is the header spacing them apart and the
+pointer array reaching them.
+
+**What that makes the work.** Not a range fixpoint. An array whose element type
+is a class, whose objects never escape the function that fills it, and which is
+never assigned an element from elsewhere, can hold the *fields* contiguously
+rather than a hundred pointers to a hundred headers. `hir::escape` already
+computes the escape half; the element type is exactly what `Ball[]` states.
+This is the same shape as every other entry in this section — a fact the
+checker states, dropped on the way to a layout — and it is worth more than
+every field-narrowing entry above it put together.
+
+Two lessons, both paid for. **Read the reference, do not summarise it**: the
+40-byte figure was invented and the `std::array` was the whole answer, sitting
+in a header nobody had opened. And **price a fix by stating its conclusion in
+the source before building the analysis that would derive it** — `| 0` cost one
+file and refuted a week of work.
 
 ### What a representation costs when no analysis can remove it
 

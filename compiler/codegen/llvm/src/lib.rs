@@ -44,7 +44,9 @@ pub mod signatures;
 
 use std::fmt::Write as _;
 
-use nts_core::hir::{BinOp, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId};
+use nts_core::hir::{
+    BinOp, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId,
+};
 use nts_diagnostics::Diagnostic;
 
 /// What the backend produced, and what it declined to.
@@ -83,6 +85,17 @@ pub fn emit(program: &Program) -> Emitted {
     // The two intrinsics, which are LLVM's own and in no C header.
     let _ = writeln!(text, "declare double @llvm.fabs.f64(double) nounwind");
     let _ = writeln!(text, "declare double @llvm.sqrt.f64(double) nounwind");
+    // Integer magnitude. The second argument says whether `INT_MIN` is poison;
+    // it is not, because `hir` widens the operand before asking -- `Math.abs`
+    // of an `i32` does not fit one, and the HIR types the result `i64`.
+    let _ = writeln!(text, "declare i64 @llvm.abs.i64(i64, i1) nounwind");
+    let _ = writeln!(text, "declare i32 @llvm.abs.i32(i32, i1) nounwind");
+    // Rounding toward each infinity and toward zero. `Math.round` is *not*
+    // among them -- see `nts_round_fn`, which the runtime offers because
+    // JavaScript rounds a half the other way from C.
+    let _ = writeln!(text, "declare double @llvm.floor.f64(double) nounwind");
+    let _ = writeln!(text, "declare double @llvm.ceil.f64(double) nounwind");
+    let _ = writeln!(text, "declare double @llvm.trunc.f64(double) nounwind");
     let _ = writeln!(text, "@nts_desc_ref = external constant %NtsDescriptor");
     for line in externals(program) {
         let _ = writeln!(text, "{line}");
@@ -266,7 +279,10 @@ fn tbaa(ty: &str) -> &'static str {
 fn array_element(func: &Func, array: ValueId) -> Result<&HirType, Diagnostic> {
     match &func.values[array.0 as usize].ty {
         HirType::Managed(nts_core::hir::ManagedType::Array(element)) => Ok(element),
-        _ => Err(refuse(func, "an element access on something that is not an array")),
+        _ => Err(refuse(
+            func,
+            "an element access on something that is not an array",
+        )),
     }
 }
 
@@ -537,7 +553,7 @@ fn descriptors(program: &Program) -> String {
             );
             // For an array, `erased` is a fact about *every* element rather
             // than a table of offsets, exactly as `references` is. One that
-                // said zero would never be walked, and a string held in it
+            // said zero would never be walked, and a string held in it
             // would be released while something still pointed at it.
             let erased = u32::from(**element == HirType::Erased);
             let _ = writeln!(
@@ -617,7 +633,10 @@ fn element_tag(ty: &HirType) -> String {
         HirType::Erased => "value".to_owned(),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Int { bits, signed: true } => format!("i{bits}"),
-        HirType::Int { bits, signed: false } => format!("u{bits}"),
+        HirType::Int {
+            bits,
+            signed: false,
+        } => format!("u{bits}"),
         other => format!("{other:?}"),
     }
 }
@@ -767,9 +786,10 @@ fn vtable(out: &mut String, layout: &nts_core::hir::Layout, tag: &str) -> String
         .methods
         .iter()
         .map(|method| {
-            method
-                .as_ref()
-                .map_or_else(|| "ptr null".to_owned(), |name| format!("ptr {}", symbol(name)))
+            method.as_ref().map_or_else(
+                || "ptr null".to_owned(),
+                |name| format!("ptr {}", symbol(name)),
+            )
         })
         .collect();
     let _ = writeln!(
@@ -822,8 +842,11 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_promise_subscribe",
     "nts_index_fn",
     "nts_object_new",
+    "nts_max_fn",
+    "nts_min_fn",
     "nts_release",
     "nts_retain",
+    "nts_round_fn",
     "nts_str_char_code_at_fn",
     "nts_string_truthy",
     "nts_to_int32_fn",
@@ -950,7 +973,10 @@ fn declaration(name: &str) -> Option<String> {
 /// `typeof v` answered "undefined" for a number. Found by the cross-backend
 /// test, which is the only thing that could have.
 fn externals(program: &Program) -> Vec<String> {
-    let mut seen: Vec<String> = ALWAYS_DECLARED.iter().map(|name| (*name).to_owned()).collect();
+    let mut seen: Vec<String> = ALWAYS_DECLARED
+        .iter()
+        .map(|name| (*name).to_owned())
+        .collect();
     let mut lines = Vec::new();
     for func in &program.funcs {
         for op in &func.values {
@@ -1150,12 +1176,7 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
                     &format!("a block parameter no edge supplies, in {}", label(id)),
                 ));
             }
-            let _ = writeln!(
-                out,
-                "  {} = phi {ty} {}",
-                name(*param),
-                incoming.join(", ")
-            );
+            let _ = writeln!(out, "  {} = phi {ty} {}", name(*param), incoming.join(", "));
         }
         for value in &block.ops {
             let line = operation(program, func, *value)?;
@@ -1209,7 +1230,9 @@ fn incoming_for(func: &Func, target: BlockId, slot: usize) -> Vec<String> {
     for (index, block) in func.blocks.iter().enumerate() {
         let from = BlockId(u32::try_from(index).unwrap_or(0));
         let mut add = |to: BlockId, args: &[ValueId]| {
-            if to == target && let Some(value) = args.get(slot) {
+            if to == target
+                && let Some(value) = args.get(slot)
+            {
                 pairs.push(format!("[ {}, %{} ]", edge_value(*value), label(from)));
             }
         };
@@ -1255,7 +1278,10 @@ fn terminator(func: &Func, term: &Terminator) -> Result<String, Diagnostic> {
         // Not a claim, an absence -- and the C backend's note explains what
         // rendering it as a licence cost once. Refused rather than rendered.
         Terminator::FellThrough => {
-            return Err(refuse(func, "a block that falls out of the end of a function"));
+            return Err(refuse(
+                func,
+                "a block that falls out of the end of a function",
+            ));
         }
     })
 }
@@ -1360,6 +1386,15 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
             name(*lhs),
             name(*rhs)
         ),
+        // `Math.min` and `Math.max`. Two integers cannot be NaN and have no
+        // second zero, so the whole reason the helper exists is absent and a
+        // comparison will do -- the same split the C backend makes, and the
+        // same reason it makes it.
+        OpKind::Binary {
+            op: bin @ (BinOp::Min | BinOp::Max),
+            lhs,
+            rhs,
+        } => extremum(func, &out, *bin, *lhs, *rhs)?,
         OpKind::Binary { op: bin, lhs, rhs } => {
             // One type, taken from an operand and trusted. `verify` requires
             // both operands and the result to agree, so there is nothing here
@@ -1423,6 +1458,33 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
             format!(
                 "{out}.half = insertvalue {ERASED_TYPE} undef, i32 {tag}, 0\n  \
                  {out} = insertvalue {ERASED_TYPE} {out}.half, i64 0, 1"
+            )
+        }
+        // An absence that reached a *scalar* slot, which happens where the
+        // lowering proved the receiver present and left the other arm behind:
+        // `o?.level` on a fresh object tests it against null, and the branch
+        // that would produce the absence is unreachable.
+        //
+        // Zero rather than NaN, which is what `undefined` coerces to, because
+        // the C backend writes `(TYPE)0` here and a value neither backend can
+        // observe is the worst possible place for them to disagree. If the
+        // invariant ever breaks, the differential against node is what says so
+        // -- and it says it about both backends at once rather than reporting a
+        // checksum mismatch between them.
+        OpKind::ConstNull | OpKind::ConstUndefined => {
+            let ty = ty_of(&op.ty, func)?;
+            let zero = if matches!(op.ty, HirType::Float { .. }) {
+                "0.0"
+            } else {
+                "0"
+            };
+            format!(
+                "{out} = {} {ty} {zero}, {zero}",
+                if matches!(op.ty, HirType::Float { .. }) {
+                    "fadd"
+                } else {
+                    "add"
+                }
             )
         }
         _ => return memory_operation(program, func, value, &out),
@@ -1500,7 +1562,10 @@ fn allocation(
         }
         OpKind::ObjectNew { frame } => {
             let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &op.ty else {
-                return Err(refuse(func, "an allocation of something that is not an object"));
+                return Err(refuse(
+                    func,
+                    "an allocation of something that is not an object",
+                ));
             };
             let layout = program
                 .layouts
@@ -1514,7 +1579,10 @@ fn allocation(
                 // `NTS_IMMORTAL` in the count word, so the counting pass's
                 // release is a no-op on storage that was never allocated.
                 [
-                    format!("{out} = alloca i8, i64 {}, align {}", placed.size, placed.align),
+                    format!(
+                        "{out} = alloca i8, i64 {}, align {}",
+                        placed.size, placed.align
+                    ),
                     format!("store ptr @nts_desc_{tag}, ptr {out}{}", tbaa("ptr")),
                     format!("{out}.rc = getelementptr i8, ptr {out}, i64 8"),
                     format!(
@@ -1560,11 +1628,17 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             // put `store i64` into an array of doubles.
             let element = ty_of(array_element(func, *array)?, func)?;
             let mut lines = index_lines(func, &out, *array, *index, *checked)?;
-            lines.push(format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")));
+            lines.push(format!(
+                "{out}.block = load ptr, ptr {out}.blk{}",
+                tbaa("ptr")
+            ));
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
-            lines.push(format!("{out} = load {element}, ptr {out}.at{}", tbaa(element)));
+            lines.push(format!(
+                "{out} = load {element}, ptr {out}.at{}",
+                tbaa(element)
+            ));
             lines.join("\n  ")
         }
         OpKind::ArraySet {
@@ -1575,7 +1649,10 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
         } => {
             let element = ty_of(array_element(func, *array)?, func)?;
             let mut lines = index_lines(func, &out, *array, *index, *checked)?;
-            lines.push(format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")));
+            lines.push(format!(
+                "{out}.block = load ptr, ptr {out}.blk{}",
+                tbaa("ptr")
+            ));
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
@@ -1601,9 +1678,12 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
 /// emit one call each; under `NoGC` there are none, because the pass that would
 /// have inserted them did not run. A global is `internal` unless the program
 /// exports it, for the same reason the C backend makes it `static`.
-fn counting_or_global(program: &Program, func: &Func, value: ValueId, out: &str)
-    -> Result<String, Diagnostic>
-{
+fn counting_or_global(
+    program: &Program,
+    func: &Func,
+    value: ValueId,
+    out: &str,
+) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -1676,7 +1756,11 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             // second carries `zeroext`.
             let known = signatures::signature(helper)
                 .ok_or_else(|| refuse(func, "a string read with no declared helper"))?;
-            let produced = known.returns.split_whitespace().last().unwrap_or(known.returns);
+            let produced = known
+                .returns
+                .split_whitespace()
+                .last()
+                .unwrap_or(known.returns);
             let mut lines = Vec::new();
             let at = helper_operand(func, &out, helper, 1, *index, &mut lines)?;
             let call = format!(
@@ -1749,8 +1833,14 @@ fn tagging(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic>
                 .enumerate()
                 .flat_map(|(at, held)| {
                     [
-                        format!("{out}.t{at} = extractvalue {ERASED_TYPE} {}, 0", name(**held)),
-                        format!("{out}.p{at} = extractvalue {ERASED_TYPE} {}, 1", name(**held)),
+                        format!(
+                            "{out}.t{at} = extractvalue {ERASED_TYPE} {}, 0",
+                            name(**held)
+                        ),
+                        format!(
+                            "{out}.p{at} = extractvalue {ERASED_TYPE} {}, 1",
+                            name(**held)
+                        ),
                     ]
                 })
                 .collect();
@@ -1812,15 +1902,24 @@ fn method_pointer(out: &str, args: &[ValueId], slot: u32, before: &mut Vec<Strin
     let receiver = args
         .first()
         .map_or_else(|| "null".to_owned(), |value| name(*value));
-    before.push(format!("{out}.desc = load ptr, ptr {receiver}{}", tbaa("ptr")));
+    before.push(format!(
+        "{out}.desc = load ptr, ptr {receiver}{}",
+        tbaa("ptr")
+    ));
     before.push(format!(
         "{out}.tab.at = getelementptr %NtsDescriptor, ptr {out}.desc, i32 0, i32 5"
     ));
-    before.push(format!("{out}.tab = load ptr, ptr {out}.tab.at{}", tbaa("ptr")));
+    before.push(format!(
+        "{out}.tab = load ptr, ptr {out}.tab.at{}",
+        tbaa("ptr")
+    ));
     before.push(format!(
         "{out}.fn.at = getelementptr ptr, ptr {out}.tab, i32 {slot}"
     ));
-    before.push(format!("{out}.fn = load ptr, ptr {out}.fn.at{}", tbaa("ptr")));
+    before.push(format!(
+        "{out}.fn = load ptr, ptr {out}.fn.at{}",
+        tbaa("ptr")
+    ));
     format!("{out}.fn")
 }
 
@@ -1988,7 +2087,10 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
             }
         }
         other => {
-            return Err(refuse(func, &format!("the operation {other:?}, which is not a call")));
+            return Err(refuse(
+                func,
+                &format!("the operation {other:?}, which is not a call"),
+            ));
         }
     })
 }
@@ -2026,12 +2128,7 @@ fn payload_from(
 ///
 /// Unchecked by construction, exactly as the C backend's union read is: the
 /// licence comes from the narrowing and from nothing else.
-fn payload_into(
-    func: &Func,
-    out: &str,
-    bits: &str,
-    want: &HirType,
-) -> Result<String, Diagnostic> {
+fn payload_into(func: &Func, out: &str, bits: &str, want: &HirType) -> Result<String, Diagnostic> {
     Ok(match want {
         HirType::Float { .. } => format!("{out} = bitcast i64 {bits} to double"),
         HirType::Int { signed, .. } => {
@@ -2079,7 +2176,10 @@ fn memory_operation(
         OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
             return text_operation(func, value, &out);
         }
-        OpKind::Retain(_) | OpKind::Release(_) | OpKind::GlobalGet(_) | OpKind::GlobalSet { .. } => {
+        OpKind::Retain(_)
+        | OpKind::Release(_)
+        | OpKind::GlobalGet(_)
+        | OpKind::GlobalSet { .. } => {
             return counting_or_global(program, func, value, &out);
         }
         // A field, at the offset this compiler computed.
@@ -2178,12 +2278,51 @@ fn wraps(ty: &HirType) -> bool {
 /// There is no `nuw` anywhere, and its absence is the point: unsigned overflow
 /// in C is *defined* to wrap, so claiming otherwise would be the one place this
 /// backend promised more than the oracle does.
-fn binary(
-    op: BinOp,
-    float: bool,
-    wraps: bool,
+/// `Math.min` and `Math.max`, which are not one instruction in either backend.
+///
+/// Two integers cannot be NaN and have no second zero, so the whole reason the
+/// helper exists is absent and a comparison will do -- the same split the C
+/// backend makes, and the same reason it makes it. Anything else is a call,
+/// because `llvm.minnum` returns the operand that is *not* NaN where JavaScript
+/// propagates it, and is free to ignore the sign of a zero where `1 / -0` is
+/// still not `1 / 0`.
+fn extremum(
     func: &Func,
-) -> Result<&'static str, Diagnostic> {
+    out: &str,
+    op: BinOp,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> Result<String, Diagnostic> {
+    let ty = ty_of(&func.values[lhs.0 as usize].ty, func)?;
+    let smallest = matches!(op, BinOp::Min);
+    let integers = matches!(func.values[lhs.0 as usize].ty, HirType::Int { .. })
+        && matches!(func.values[rhs.0 as usize].ty, HirType::Int { .. });
+    if !integers {
+        let helper = if smallest { "nts_min_fn" } else { "nts_max_fn" };
+        return Ok(format!(
+            "{out} = call double @{helper}(double {}, double {})",
+            name(lhs),
+            name(rhs)
+        ));
+    }
+    let signed = matches!(
+        func.values[lhs.0 as usize].ty,
+        HirType::Int { signed: true, .. }
+    );
+    let test = match (smallest, signed) {
+        (true, true) => "slt",
+        (true, false) => "ult",
+        (false, true) => "sgt",
+        (false, false) => "ugt",
+    };
+    Ok(format!(
+        "{out}.c = icmp {test} {ty} {0}, {1}\n  {out} = select i1 {out}.c, {ty} {0}, {ty} {1}",
+        name(lhs),
+        name(rhs)
+    ))
+}
+
+fn binary(op: BinOp, float: bool, wraps: bool, func: &Func) -> Result<&'static str, Diagnostic> {
     Ok(match (op, float) {
         (BinOp::Add, true) => "fadd",
         (BinOp::Add, false) if wraps => "add",
@@ -2248,9 +2387,9 @@ fn converted(
         // one unsigned bit and widens the way an unsigned integer does. A code
         // unit is a `uint16_t` and widens the same way, which is what a string
         // read needs when specialization has narrowed its result.
-        ("i32" | "i1" | "i16" | "i8", "i64")
-        | ("i1" | "i16" | "i8", "i32")
-        | ("i8", "i16") => "zext",
+        ("i32" | "i1" | "i16" | "i8", "i64") | ("i1" | "i16" | "i8", "i32") | ("i8", "i16") => {
+            "zext"
+        }
         _ => {
             return Err(refuse(
                 func,
@@ -2272,10 +2411,7 @@ fn conversion(from: &HirType, to: &HirType, func: &Func) -> Result<&'static str,
         // A bool is one unsigned bit, so it converts the way an unsigned
         // integer does -- the same instruction for the same reason, not two
         // cases that happen to agree.
-        (
-            HirType::Int { signed: false, .. } | HirType::Bool,
-            HirType::Float { .. },
-        ) => "uitofp",
+        (HirType::Int { signed: false, .. } | HirType::Bool, HirType::Float { .. }) => "uitofp",
         (HirType::Float { .. }, HirType::Int { signed: true, .. }) => "fptosi",
         (HirType::Float { .. }, HirType::Int { signed: false, .. }) => "fptoui",
         (HirType::Float { bits: 32 }, HirType::Float { bits: 64 }) => "fpext",
@@ -2309,6 +2445,98 @@ fn conversion(from: &HirType, to: &HirType, func: &Func) -> Result<&'static str,
                 func,
                 &format!("a conversion from {from:?} to {to:?}"),
             ));
+        }
+    })
+}
+
+/// `ToInt32` and `ToUint32`, which are a reduction and then a widening.
+///
+/// Lifted out of `unary` for its length rather than for its shape: the two
+/// steps are one operation and splitting them further would separate the
+/// coercion from the sign it establishes.
+fn coercion(
+    func: &Func,
+    out: &str,
+    value: ValueId,
+    op: UnOp,
+    operand: ValueId,
+    ty: &str,
+    float: bool,
+) -> Result<String, Diagnostic> {
+    Ok({
+        // LLVM's integer types carry no sign, so both coercions land in
+        // `i32` and only the *widening* differs: `sext` keeps a negative
+        // number negative, `zext` does not.
+        let signed = matches!(op, UnOp::ToInt32);
+        let want = ty_of(&func.values[value.0 as usize].ty, func)?;
+        // The coercion *is* a reduction to thirty-two bits, so that happens
+        // first -- and then the result goes into whatever slot the middle
+        // end gave it, which is not always a thirty-two bit one.
+        //
+        // Producing `i32` and calling it the result's type made a value
+        // whose emitted width disagreed with its recorded one. Nothing
+        // complained at the definition; every later reader converted from
+        // the width the HIR claimed, and `%v22`, an `i32`, was truncated
+        // from `i64`. One hardcoded type, and the module stopped verifying
+        // several instructions away from the cause.
+        let reduced = if want == "i32" {
+            out.to_owned()
+        } else {
+            format!("{out}.n")
+        };
+        let reduce = if float {
+            // A genuine double: the ten-instruction reduction the runtime
+            // spells out, called rather than reproduced. Inlining it here
+            // would be a second implementation of ToInt32 to keep in step
+            // with the first, and the differential would only find the
+            // difference after it shipped.
+            let helper = if signed {
+                "nts_to_int32_fn"
+            } else {
+                "nts_to_uint32_fn"
+            };
+            format!("{reduced} = call i32 @{helper}(double {})", name(operand))
+        } else {
+            let HirType::Int { bits, .. } = func.values[operand.0 as usize].ty else {
+                return Err(refuse(func, "a width-changing coercion of a non-integer"));
+            };
+            match bits.cmp(&32) {
+                std::cmp::Ordering::Greater => {
+                    format!("{reduced} = trunc {ty} {} to i32", name(operand))
+                }
+                // Already thirty-two bits: the reinterpretation is free and
+                // LLVM's types carry no sign, so there is nothing to emit.
+                std::cmp::Ordering::Equal => {
+                    format!("{reduced} = add {ty} {}, 0", name(operand))
+                }
+                std::cmp::Ordering::Less if signed => {
+                    format!("{reduced} = sext {ty} {} to i32", name(operand))
+                }
+                std::cmp::Ordering::Less => {
+                    format!("{reduced} = zext {ty} {} to i32", name(operand))
+                }
+            }
+        };
+        if want == "i32" {
+            reduce
+        } else {
+            // The widening keeps the sign the coercion just established:
+            // a `ToInt32` result is signed and a `ToUint32` result is not.
+            // Backwards here reads 4294967295 as -1.
+            let land = match want {
+                "i64" if signed => "sext",
+                "i64" => "zext",
+                "i16" | "i8" => "trunc",
+                "double" if signed => "sitofp",
+                "double" => "uitofp",
+                _ => {
+                    return Err(refuse(
+                        func,
+                        &format!("a thirty-two bit coercion landing in {want}"),
+                    ));
+                }
+            };
+            format!("{reduce}\n  {out} = {land} i32 {reduced} to {want}")
         }
     })
 }
@@ -2356,8 +2584,69 @@ fn unary(
             HirType::Bool => format!("{out} = add i1 {}, 0", name(operand)),
             _ => format!("{out} = fcmp one {ty} {}, 0.0", name(operand)),
         },
-        UnOp::Abs if float => format!("{out} = call double @llvm.fabs.f64(double {})", name(operand)),
-        UnOp::Sqrt => format!("{out} = call double @llvm.sqrt.f64(double {})", name(operand)),
+        UnOp::Abs if float => format!(
+            "{out} = call double @llvm.fabs.f64(double {})",
+            name(operand)
+        ),
+        // The same ones the C backend answers without a library call: an
+        // integer is already rounded, and its magnitude is an intrinsic rather
+        // than a `fabs` around two conversions.
+        //
+        // At the *result's* width, not the operand's. `Math.abs` of an `i32`
+        // does not fit one -- the middle end knows that and gives the result a
+        // wider slot -- so taking the magnitude at the operand's width and
+        // calling the answer the result is the mistake `ToInt32` documents
+        // below, and it fails several instructions away from here.
+        UnOp::Abs => {
+            let want = ty_of(&func.values[value.0 as usize].ty, func)?;
+            if want == ty {
+                format!(
+                    "{out} = call {ty} @llvm.abs.{ty}({ty} {}, i1 false)",
+                    name(operand)
+                )
+            } else {
+                let signed = matches!(
+                    func.values[operand.0 as usize].ty,
+                    HirType::Int { signed: true, .. }
+                );
+                let ext = if signed { "sext" } else { "zext" };
+                format!(
+                    "{out}.w = {ext} {ty} {} to {want}\n  {out} = call {want} @llvm.abs.{want}({want} {out}.w, i1 false)",
+                    name(operand)
+                )
+            }
+        }
+        UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round
+            if matches!(func.values[operand.0 as usize].ty, HirType::Int { .. }) =>
+        {
+            format!("{out} = add {ty} {}, 0", name(operand))
+        }
+        // A genuine double. Three are intrinsics; `Math.round` is a call,
+        // because JavaScript rounds a half toward positive infinity and C
+        // rounds it away from zero -- and because the runtime's definition
+        // also settles a value already integral near 2^53 and the negative
+        // zero that [-0.5, 0) produces. Reproducing that here would be a
+        // second implementation to keep in step with the first.
+        UnOp::Floor => format!(
+            "{out} = call double @llvm.floor.f64(double {})",
+            name(operand)
+        ),
+        UnOp::Ceil => format!(
+            "{out} = call double @llvm.ceil.f64(double {})",
+            name(operand)
+        ),
+        UnOp::Trunc => format!(
+            "{out} = call double @llvm.trunc.f64(double {})",
+            name(operand)
+        ),
+        UnOp::Round => format!(
+            "{out} = call double @nts_round_fn(double {})",
+            name(operand)
+        ),
+        UnOp::Sqrt => format!(
+            "{out} = call double @llvm.sqrt.f64(double {})",
+            name(operand)
+        ),
         // ToInt32 and ToUint32 on something already an integer, which is the
         // case specialization exists to produce: reduce modulo 2^32 and
         // reinterpret. The C backend writes `(int32_t)(uint32_t)x` for exactly
@@ -2367,87 +2656,6 @@ fn unary(
         // out, called rather than reproduced. Inlining it here would be a
         // second implementation of ToInt32 to keep in step with the first, and
         // the differential would only find the difference after it shipped.
-        UnOp::ToInt32 | UnOp::ToUint32 => {
-            // LLVM's integer types carry no sign, so both coercions land in
-            // `i32` and only the *widening* differs: `sext` keeps a negative
-            // number negative, `zext` does not.
-            let signed = matches!(op, UnOp::ToInt32);
-            let want = ty_of(&func.values[value.0 as usize].ty, func)?;
-            // The coercion *is* a reduction to thirty-two bits, so that happens
-            // first -- and then the result goes into whatever slot the middle
-            // end gave it, which is not always a thirty-two bit one.
-            //
-            // Producing `i32` and calling it the result's type made a value
-            // whose emitted width disagreed with its recorded one. Nothing
-            // complained at the definition; every later reader converted from
-            // the width the HIR claimed, and `%v22`, an `i32`, was truncated
-            // from `i64`. One hardcoded type, and the module stopped verifying
-            // several instructions away from the cause.
-            let reduced = if want == "i32" {
-                out.to_owned()
-            } else {
-                format!("{out}.n")
-            };
-            let reduce = if float {
-                // A genuine double: the ten-instruction reduction the runtime
-                // spells out, called rather than reproduced. Inlining it here
-                // would be a second implementation of ToInt32 to keep in step
-                // with the first, and the differential would only find the
-                // difference after it shipped.
-                let helper = if signed {
-                    "nts_to_int32_fn"
-                } else {
-                    "nts_to_uint32_fn"
-                };
-                format!("{reduced} = call i32 @{helper}(double {})", name(operand))
-            } else {
-                let HirType::Int { bits, .. } = func.values[operand.0 as usize].ty else {
-                    return Err(refuse(func, "a width-changing coercion of a non-integer"));
-                };
-                match bits.cmp(&32) {
-                    std::cmp::Ordering::Greater => {
-                        format!("{reduced} = trunc {ty} {} to i32", name(operand))
-                    }
-                    // Already thirty-two bits: the reinterpretation is free and
-                    // LLVM's types carry no sign, so there is nothing to emit.
-                    std::cmp::Ordering::Equal => {
-                        format!("{reduced} = add {ty} {}, 0", name(operand))
-                    }
-                    std::cmp::Ordering::Less if signed => {
-                        format!("{reduced} = sext {ty} {} to i32", name(operand))
-                    }
-                    std::cmp::Ordering::Less => {
-                        format!("{reduced} = zext {ty} {} to i32", name(operand))
-                    }
-                }
-            };
-            if want == "i32" {
-                reduce
-            } else {
-                // The widening keeps the sign the coercion just established:
-                // a `ToInt32` result is signed and a `ToUint32` result is not.
-                // Backwards here reads 4294967295 as -1.
-                let land = match want {
-                    "i64" if signed => "sext",
-                    "i64" => "zext",
-                    "i16" | "i8" => "trunc",
-                    "double" if signed => "sitofp",
-                    "double" => "uitofp",
-                    _ => {
-                        return Err(refuse(
-                            func,
-                            &format!("a thirty-two bit coercion landing in {want}"),
-                        ));
-                    }
-                };
-                format!("{reduce}\n  {out} = {land} i32 {reduced} to {want}")
-            }
-        }
-        other => {
-            return Err(refuse(
-                func,
-                &format!("the unary operator {other:?}, which this backend does not render yet"),
-            ));
-        }
+        UnOp::ToInt32 | UnOp::ToUint32 => coercion(func, out, value, op, operand, ty, float)?,
     })
 }

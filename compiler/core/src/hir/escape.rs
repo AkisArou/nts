@@ -654,11 +654,11 @@ mod tests {
 
         let escapes = analyze_program(&program);
         let stash = &escapes[0];
-        assert!(stash.escapes(ValueId(1)), "the erasure is stored in a global");
         assert!(
-            stash.escapes(ValueId(0)),
-            "and so is the object it carries",
+            stash.escapes(ValueId(1)),
+            "the erasure is stored in a global"
         );
+        assert!(stash.escapes(ValueId(0)), "and so is the object it carries");
         assert!(!stash.is_frame_local(ValueId(0)));
     }
 

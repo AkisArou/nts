@@ -324,6 +324,7 @@ pub fn is_type_node(kind: u16) -> bool {
 /// first attempt off by one: two entries carry trailing comments, the parse
 /// skipped them, and every name after came out shifted. `216` read as a type
 /// assertion when it is a tagged template.
+#[must_use]
 pub fn name_of(kind: u16) -> Option<&'static str> {
     KIND_NAMES
         .binary_search_by(|(known, _)| known.cmp(&kind))

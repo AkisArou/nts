@@ -11830,15 +11830,42 @@ impl<'a> FuncBuilder<'a> {
                 let rhs = self.lower_expression(*right)?;
                 Ok(self.runtime_call(name, vec![lhs, rhs], ty, origin))
             }
+            // `String.fromCharCode` takes any number of code units and the
+            // runtime offers one at a time, so the n-ary call is the fold.
+            // Concatenation is associative and exact on strings, which is what
+            // makes folding this one right where folding `Math.hypot` would
+            // not be -- `sqrt(sqrt(a^2+b^2)^2+c^2)` is the same number only in
+            // arithmetic that has no rounding.
+            //
+            // It is the shape real code uses, and refusing it stopped Node's
+            // own UTF-8 decoder: a code point above the BMP is written
+            // `fromCharCode(0xd800 + (c >> 10), 0xdc00 + (c & 0x3ff))`, which
+            // is the surrogate pair, and there is no one-at-a-time spelling of
+            // it that does not allocate the same two strings anyway.
+            (Intrinsic::UnaryCall(name), [first, rest @ ..])
+                if !rest.is_empty() && name == "nts_string_from_char_code" =>
+            {
+                let operand = self.lower_expression(*first)?;
+                let mut folded = self.runtime_call(name, vec![operand], ty.clone(), origin.clone());
+                for argument in rest {
+                    let operand = self.lower_expression(*argument)?;
+                    let unit = self.runtime_call(name, vec![operand], ty.clone(), origin.clone());
+                    folded = self.push(
+                        OpKind::Binary {
+                            op: BinOp::Concat,
+                            lhs: folded,
+                            rhs: unit,
+                        },
+                        ty.clone(),
+                        origin.clone(),
+                    );
+                }
+                Ok(folded)
+            }
             // `Math.min()` is `Infinity` and `Math.min(a, b, c)` folds, but both
             // are shapes this lowering does not accept yet, and quietly
             // producing the two-argument answer for a three-argument call would
             // be wrong in a way nothing downstream could detect.
-            // Not only `Math` any more -- `String.fromCharCode(a, b)` reaches
-            // here too, and it is a real shape: the specification takes any
-            // number of code units. One at a time is what the runtime offers,
-            // so more than one is refused by name rather than answered with
-            // the first.
             _ => Err(self.unsupported(id, "an intrinsic call with this many arguments")),
         }
     }

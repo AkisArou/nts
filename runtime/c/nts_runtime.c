@@ -1652,6 +1652,18 @@ NtsArray *nts_array_fill_ref(NtsArray *a, void *value) {
  */
 int32_t nts_to_int32_fn(double x) { return nts_to_int32(x); }
 
+/* Rounding, for the same reason and with more in it: the header's definition
+ * carries three cases a backend would have to get right on its own -- the half
+ * that goes toward positive infinity, the value already integral near 2^53, and
+ * the negative zero that `1 / x` can still tell apart. */
+double nts_round_fn(double x) { return nts_round(x); }
+
+/* The two comparisons, for the same reason. A backend that lowered these to
+ * `llvm.minnum` would be right on ordinary numbers and wrong on both of the
+ * cases these definitions exist for. */
+double nts_min_fn(double a, double b) { return nts_min(a, b); }
+double nts_max_fn(double a, double b) { return nts_max(a, b); }
+
 /* The bounds checks, likewise. A backend that cannot read a C header cannot
  * inline `nts_check`, and reproducing it would be a second implementation of
  * the same rule to keep in step with the first. */
