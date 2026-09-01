@@ -1315,6 +1315,56 @@ pub(super) fn consumes(name: &str) -> Option<usize> {
     }
 }
 
+/// Name the element a load or store is aimed at.
+fn element(func: &Func, array: ValueId, index: ValueId) -> Slot {
+    match slot_of(func, index) {
+        Some(at) => Slot::At(array, at),
+        None => Slot::Through(array, index),
+    }
+}
+
+/// A store overwriting a slot a load came out of: the reference moves.
+fn pair(
+    held: &mut rustc_hash::FxHashMap<Slot, ValueId>,
+    takes: &mut rustc_hash::FxHashSet<ValueId>,
+    settled: &mut rustc_hash::FxHashSet<ValueId>,
+    slot: Slot,
+    store: ValueId,
+    stored: ValueId,
+) {
+    if let Some(&taken) = held.get(&slot)
+        && taken != stored
+    {
+        takes.insert(taken);
+        settled.insert(store);
+    }
+    held.remove(&slot);
+}
+
+/// A slot a load can be taken out of, and a store aimed at.
+///
+/// A field is named by its container and its index. An element is named by its
+/// array and either a constant or -- and this is the point -- the *value* the
+/// index was computed into. Two reads of `slots[at]` with the same `at` are the
+/// same slot, because SSA says one value is one number.
+///
+/// Two reads through *different* values might also be the same slot, which is
+/// why a store through one gives up every element of that array rather than
+/// only the one it names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Slot {
+    Field(ValueId, u32),
+    At(ValueId, u64),
+    Through(ValueId, ValueId),
+}
+
+impl Slot {
+    /// Whether this is an element rather than a field.
+    fn is_element(self) -> bool {
+        !matches!(self, Self::Field(..))
+    }
+}
+
 /// Loads that take the slot's reference rather than copying it.
 ///
 /// A load out of a slot that is overwritten before anything else can reach the
@@ -1346,8 +1396,7 @@ fn taking(
     rustc_hash::FxHashSet<ValueId>,
     rustc_hash::FxHashSet<ValueId>,
 ) {
-    let mut held: rustc_hash::FxHashMap<(ValueId, u64), ValueId> =
-        rustc_hash::FxHashMap::default();
+    let mut held: rustc_hash::FxHashMap<Slot, ValueId> = rustc_hash::FxHashMap::default();
     let mut takes = rustc_hash::FxHashSet::default();
     let mut settled = rustc_hash::FxHashSet::default();
     if !eliding() {
@@ -1362,49 +1411,43 @@ fn taking(
         match &func.values[value.0 as usize].kind {
             OpKind::FieldGet { object, field, .. } => {
                 if takeable {
-                    held.insert((*object, u64::from(*field)), value);
+                    held.insert(Slot::Field(*object, *field), value);
                 }
             }
-            OpKind::ArrayGet { array, index, .. } => match slot_of(func, *index) {
-                Some(slot) if takeable => {
-                    held.insert((*array, slot), value);
+            OpKind::ArrayGet { array, index, .. } => {
+                if takeable {
+                    held.insert(element(func, *array, *index), value);
                 }
-                // An index this cannot name could be any of them.
-                _ => held.clear(),
-            },
+            }
             OpKind::FieldSet {
                 object,
                 field,
                 value: stored,
                 ..
             } => {
-                let slot = (*object, u64::from(*field));
-                if let Some(&taken) = held.get(&slot)
-                    && taken != *stored
-                {
-                    takes.insert(taken);
-                    settled.insert(value);
-                }
-                held.remove(&slot);
+                pair(&mut held, &mut takes, &mut settled, Slot::Field(*object, *field), value, *stored);
             }
             OpKind::ArraySet {
                 array,
                 index,
                 value: stored,
                 ..
-            } => match slot_of(func, *index) {
-                Some(index) => {
-                    let slot = (*array, index);
-                    if let Some(&taken) = held.get(&slot)
-                        && taken != *stored
-                    {
-                        takes.insert(taken);
-                        settled.insert(value);
-                    }
-                    held.remove(&slot);
-                }
-                None => held.clear(),
-            },
+            } => {
+                let slot = element(func, *array, *index);
+                pair(&mut held, &mut takes, &mut settled, slot, value, *stored);
+                // Every element read so far gives up, whatever array it came
+                // from. Two arrays are told apart here by the *value* naming
+                // them, and two loads of `this.slots` are two values naming one
+                // array -- so a store through either can overwrite a slot read
+                // through the other, and taking from it afterwards would give
+                // away a reference the store had already given up.
+                //
+                // The old code kept slots of other arrays for exactly this
+                // reason and was wrong about it too, at constant indices; the
+                // hazard was just rarer. A field store cannot reach an element,
+                // so fields stay.
+                held.retain(|held_slot, _| !held_slot.is_element());
+            }
             // A call that only initializes cannot reach a slot this is
             // watching. Clearing for one lost the take in every constructor
             // shaped like `x = o.f; o.f = new T(...)`, which is most of them:
