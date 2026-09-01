@@ -388,10 +388,18 @@ fn count_ops(
         // A store writing over a zero skips the load and the release: there is
         // nothing in the slot to give up. Every store an object literal or a
         // constructor makes is one of those.
+        // Asked of the *slot*, not of the new value. `counted` says no to a
+        // constant null -- rightly, since storing one takes no reference -- and
+        // guarding the whole branch on it meant `x.f = null` skipped the load
+        // and release of what `x.f` was holding. Every reference nulled out of
+        // a field leaked, in every program, under naive counting too.
+        //
+        // `popDiskFrom` ends `top.next = null`, so `awfy-towers` leaked a disk
+        // per move: 8191 of them, in the worst row in the benchmark table.
         if let OpKind::FieldSet { value: stored, .. }
         | OpKind::ArraySet { value: stored, .. }
         | OpKind::GlobalSet { value: stored, .. } = &kind
-            && own::counted(func, layouts, *stored)
+            && func.values[stored.0 as usize].ty.may_hold_a_reference()
         {
             // Nothing to give back when the slot's reference has already
             // been taken out of it by a load above, and nothing to give back
@@ -425,7 +433,10 @@ fn count_ops(
             // immediately for an immortal object, and the references the frame
             // object was holding were never given up. A cell holding a string,
             // captured by a closure, leaked the string exactly this way.
-            if matches!(
+            if !own::counted(func, layouts, *stored) {
+                // A null takes no reference of its own, and the slot has
+                // already given up what it held.
+            } else if matches!(
                 func.values[stored.0 as usize].kind,
                 OpKind::ObjectNew { frame: true }
             ) {

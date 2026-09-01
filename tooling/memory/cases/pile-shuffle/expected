@@ -1,0 +1,21 @@
+ideal 11
+allocated 11
+because ten disks and the array of three slots that holds them, one reference
+because each to give back. The `Piles` object does not escape and lives in the
+because frame; the array does not, because an array's elements are a block of
+because its own and no frame slot holds one.
+because
+because The moving is free, and that is the whole point. A hundred and
+because twenty-eight moves create nothing: `pop` reads `slots[at]` and
+because overwrites that very slot on the next line, which is a *take* -- the
+because reference moves out rather than being copied, and the store that
+because overwrites owes nothing. `push` reads `here[at]` into `disk.next` and
+because overwrites it with `disk`, which is the same shape one step along.
+because
+because What stops it today is the index. A slot is named by its container and a
+because *constant* index, and `at` is a parameter -- so two reads of `slots[at]`
+because with the same `at` are the same slot, SSA says so, and nothing says it.
+because
+because This is `awfy-towers` with the arithmetic taken out: 8191 moves of
+because fourteen disks between three piles, allocating nothing after the first
+because fourteen, and the worst row in the table at 6.36x C++.

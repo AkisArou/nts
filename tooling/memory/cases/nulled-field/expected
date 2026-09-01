@@ -1,0 +1,20 @@
+ideal 17
+allocated 17
+because seventeen links -- the head and sixteen hung off it -- and one
+because reference each to give back.
+because
+because The head is made once, before the loop, and never escapes, so it lives
+because in the frame. Each `made` is a fresh object in a loop stored into a
+because container that is *not* per-iteration, so one frame slot cannot hold
+because them and they need the heap: sixteen of those, and the head is the
+because seventeenth allocation only because `new Link(0)` is what the loop hangs
+because things off. Seventeen allocations, sixteen releases when each is cut
+because loose, and one more for the head's own field at the end.
+because
+because The point of the case is the cut. `head.next = null` overwrites a slot
+because holding the only reference to `made`, and if that store does not give it
+because back nothing ever will. It did not: the branch was guarded on whether
+because the value being stored needed counting, and a constant null does not.
+because
+because A leak here is silent in every other instrument. The answer is right --
+because a leaked list computes the same sum -- so only a live count notices.
