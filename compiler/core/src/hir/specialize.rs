@@ -154,6 +154,9 @@ pub fn specialize(
         };
     }
 
+    let pinned = pinned_widths(func, &mut classes, count);
+    refuse_classes_that_disagree_with_a_pinned_member(&pinned, &mut verdict);
+
     // A class with no arithmetic in it has nothing to make faster. Specializing
     // one costs a conversion at every use and saves nothing — which is exactly
     // what a lone `const 5` compared against a double was doing.
@@ -192,10 +195,19 @@ pub fn specialize(
         if !worthwhile.get(&root).copied().unwrap_or(false) {
             continue;
         }
+        // An already-integer member is why the class could be specialized at
+        // this width at all; it keeps the type it arrived with, signedness
+        // included, because that type is the thing being agreed *with*.
+        if let HirType::Int { .. } = func.values[index].ty {
+            continue;
+        }
         report.specialized += 1;
         func.values[index].ty = HirType::Int {
             bits,
-            signed: !unsigned.contains(&root),
+            signed: match pinned.get(&root).copied().flatten() {
+                Some((_, signed)) => signed,
+                None => !unsigned.contains(&root),
+            },
         };
         // A float constant that is provably whole is an integer constant. Left
         // as a float it would be converted back on every use.
@@ -277,6 +289,56 @@ fn edges(block: &Block) -> Vec<(usize, &[ValueId])> {
 }
 
 /// The narrowest integer this value is provably within, if any.
+/// Sink any class that cannot land on exactly what its pinned member is.
+fn refuse_classes_that_disagree_with_a_pinned_member(
+    pinned: &FxHashMap<u32, Option<(u8, bool)>>,
+    verdict: &mut FxHashMap<u32, Option<u8>>,
+) {
+    for (root, requirement) in pinned {
+        let allowed = match requirement {
+            Some((bits, _)) => verdict.get(root).copied().flatten() == Some(*bits),
+            None => false,
+        };
+        if !allowed {
+            verdict.insert(*root, None);
+        }
+    }
+}
+
+/// What an already-integer member requires of its class.
+///
+/// Its type is not this pass's to change: a parameter's is the signature, an
+/// array element's was decided by `elements`, a field's by `fields`. So a class
+/// containing one may only be specialized *at that exact type* -- and if two
+/// such members disagree, or the floats in the class need something wider, the
+/// class stays as it is.
+///
+/// `None` for a root means "disagreeing members, refuse"; an absent root has no
+/// integer member and is free.
+fn pinned_widths(
+    func: &Func,
+    classes: &mut Classes,
+    count: usize,
+) -> FxHashMap<u32, Option<(u8, bool)>> {
+    let mut pinned: FxHashMap<u32, Option<(u8, bool)>> = FxHashMap::default();
+    for index in 0..count {
+        let HirType::Int { bits, signed } = func.values[index].ty else {
+            continue;
+        };
+        let root = classes.find(u32::try_from(index).unwrap_or(0));
+        match pinned.get(&root) {
+            Some(Some(existing)) if *existing != (bits, signed) => {
+                pinned.insert(root, None);
+            }
+            Some(None) => {}
+            _ => {
+                pinned.insert(root, Some((bits, signed)));
+            }
+        }
+    }
+    pinned
+}
+
 fn width_of(
     func: &Func,
     analysis: &Analysis,
@@ -284,6 +346,23 @@ fn width_of(
     index: usize,
 ) -> Option<u8> {
     let id = ValueId(u32::try_from(index).unwrap_or(0));
+    // A value that is *already* an integer is not a candidate -- its
+    // representation was decided elsewhere -- but it is not an obstacle either,
+    // and returning `None` for it made it one. A class is only as good as its
+    // worst member, so a loop counter joined by an edge to a parameter that
+    // `signatures` had just narrowed to `i32` was sunk to `f64` by the most
+    // integral value in the function.
+    //
+    // `for (let i = start; i < end; i++)` over a parameter `start` is that
+    // shape, and it is every scanning function that takes an offset. The
+    // counter came out a double, entered the loop through a `convert`, was
+    // converted back at the comparison, and incremented in floating point.
+    //
+    // So it contributes its own width and `pinned_width` refuses any class that
+    // wants a different one, because that width is somebody else's decision.
+    if let HirType::Int { bits, .. } = func.values[index].ty {
+        return Some(bits);
+    }
     if !matches!(func.values[index].ty, HirType::Float { .. }) {
         return None;
     }

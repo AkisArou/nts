@@ -118,6 +118,63 @@ for one value in a billion, and nothing in this repository would have noticed.
 all vendored, all compiled in, none reachable from a program. They are wiring
 rather than algorithms now.
 
-`node-utf8` at 1.31x node is the only row still behind, and it was measured as a
-codegen gap rather than a string one: stripping the string building out of the
-decoder made the ratio *worse*, 1.21x to 1.28x.
+## `node-utf8`, and three diagnoses that were all wrong
+
+The last row behind node, at 1.31x, and I do not know why.
+
+What it is **not**, each refuted by a measurement rather than by argument:
+
+- **Not cons strings.** The hypothesis on record was that V8 answers `.length`
+  from an unflattened rope. `utf8Write` builds no string at all and is also
+  behind, at 1.06x on the C backend.
+- **Not the append path.** Splitting the decoder in two: with the string
+  building it is 1.24x node, and with the string building *removed* it is
+  1.30x. Taking the strings out makes the ratio worse, so the string work is
+  the better half of that program.
+- **Not the loop counter's representation.** The prepared HIR showed
+  `decodeCounting(bytes, start: i32, end: f64)` with the counter at `f64`, so
+  every `i++` was a floating-point add. That was true, it was a real defect
+  (below), fixing it made the counter an `i32` -- and the benchmark did not
+  move at all.
+
+Three hypotheses, three refutations. The honest state is that only the
+eliminations are known. A fourth guess without a profiler would be a fourth
+hypothesis, and this machine has neither `perf` nor `valgrind`.
+
+One thing worth recording against a future attempt: a hand-written C decoder
+using the same runtime measured **106us per 64 decodes against the generated
+code's 32**, because it reached for `nts_string_from_char_code` and
+`nts_str_append` where the compiler emits frame-placed storage. The generated
+code is not naive; whatever the gap is, it is not that.
+
+## The defect that fix found, which bought nothing
+
+`specialize::width_of` returned `None` for any value that is not a `Float` --
+including a parameter `signatures` had just narrowed to `i32`. A class is only
+as good as its worst member, so **the most integral value in a function was the
+one sinking its class to a double**.
+
+It fires exactly when a loop counter starts from a parameter:
+
+    for (let i = 0; i < end; i++)          the counter is an i32
+    for (let i = start; i < end; i++)      the counter is an f64
+
+which is every scanning function that takes an offset. The counter entered the
+loop through a `convert`, was converted back at the comparison, and incremented
+in floating point.
+
+The module already had this reasoning for *comparisons* -- "joining to a
+parameter can only drag the other side down with it" -- and the edge union
+simply lacked the same guard. An already-integer member now contributes its
+width instead of `None`, and `pinned_widths` refuses any class that would need a
+different type, so a parameter's ABI cannot be rewritten underneath it.
+
+**Measured: essentially nothing.** On `node-utf8`, conversions 100 -> 98 and
+double locals 333 -> 327 -- six values out of 533. Wall clock across
+`node-utf8`, `bytes`, `checksum`, `elementwise`, `awfy-sieve`, `accumulate` and
+`fib`: unchanged within noise.
+
+Kept anyway, and the distinction matters: the rule it replaces was *wrong*, not
+merely unprofitable. `0027` deleted a pass that made the analysis worse; this
+one makes it correct and the benchmarks do not care. Presenting it as the fix
+for `node-utf8` would have been the failure this record exists to avoid.
