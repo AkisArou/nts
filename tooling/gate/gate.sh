@@ -56,15 +56,32 @@ ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
         else echo "ok   $n (not an oracle case)"
       fi ;;
     *)
-      if ./target/release/nts check "$d" >/dev/null 2>&1
-        then echo "ok   $n"
-        else echo "DIS  $n"
+      # Kept, not discarded: an example with no exported function taking and
+      # returning scalars has nothing for the differential to drive, and
+      # `nts check` says so and exits 0. Six of them did, and they counted
+      # toward "91 of 91 agree with node" while agreeing about nothing.
+      #
+      # They are not failures -- `classes` holds an `enum` and `jsx` holds JSX,
+      # and node will not run either, so there can be no oracle for them. They
+      # are lowering fixtures, and the point is that the headline should not
+      # call them agreements.
+      out=$(./target/release/nts check "$d" 2>&1)
+      if [ $? -ne 0 ]
+        then echo "DIS  $n"
+      elif [ "${out#*nothing to check}" != "$out" ]
+        then echo "bare $n"
+        else echo "ok   $n"
       fi ;;
   esac
 ' _ > "$results"
 
 sort "$results" | grep '^DIS' || true
 agreed=$(grep -c '^ok' "$results" || true)
+bare=$(grep -c '^bare' "$results" || true)
 total=$(grep -c . "$results" || true)
-echo "$agreed of $total agree with node"
-[ "$agreed" = "$total" ]
+echo "$agreed of $((total - bare)) agree with node"
+if [ "$bare" -gt 0 ]; then
+  echo "  $bare compared nothing (no exported function with scalar arguments and a\
+ scalar result):$(grep '^bare' "$results" | awk '{printf " %s", $2}')"
+fi
+[ "$agreed" = "$((total - bare))" ]

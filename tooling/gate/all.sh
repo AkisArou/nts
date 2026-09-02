@@ -242,17 +242,24 @@ llvm_examples() {
     case "$n" in
       invalid|unsupported) exit 0 ;;
     esac
-    if ./target/release/nts check "$d" >/dev/null 2>&1; then
-      echo "ok $n"
-    else
+    out=$(./target/release/nts check "$d" 2>&1)
+    if [ $? -ne 0 ]; then
       echo "no $n"
+    elif [ "${out#*nothing to check}" != "$out" ]; then
+      # Nothing for the differential to drive, so it exits 0 without comparing
+      # an answer -- and would count as agreement in either backend. Six do.
+      echo "bare $n"
+    else
+      echo "ok $n"
     fi
   ' _ > "$results"
   passed=$(grep -c '^ok ' "$results" || true)
-  total=$(grep -c . "$results" || true)
+  bare=$(grep -c '^bare ' "$results" || true)
+  total=$(($(grep -c . "$results" || true) - bare))
   behind=$(awk '/^no /{printf " %s", $2}' "$results")
   rm -f "$results"
   printf '  %s of %s examples agree with node %s\n' "$passed" "$total" "$said"
+  [ "$bare" -gt 0 ] && printf '  %s compared nothing\n' "$bare"
   if [ "$passed" -lt "$floor" ]; then
     echo "  ^ fell from $floor to $passed:$behind"
     return 1
@@ -261,11 +268,21 @@ llvm_examples() {
   return 0
 }
 
+# 80 of 89 for the same reason its sibling below was: six examples that compare
+# nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  llvm_examples 80 "through the LLVM backend, counting" ); }
+  llvm_examples 74 "through the LLVM backend, counting" ); }
 
+# The floor was 80 of 89 until six examples that *compare nothing* stopped being
+# counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
+# `promise-constructor` and `types` have no exported function taking and
+# returning scalars, so `nts check` exits 0 without ever asking node. Several
+# cannot be differential at all: node will not run an `enum` or JSX.
+#
+# 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
+# writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  llvm_examples 80 "through the LLVM backend" ); }
+  llvm_examples 74 "through the LLVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \

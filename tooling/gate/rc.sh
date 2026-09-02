@@ -75,9 +75,18 @@ NTS_RC=1 ls examples/*/tsconfig.json | NTS_RC=1 xargs -P "$jobs" -n 1 sh -c '
         else echo "ok   $n (not an oracle case)"
       fi ;;
     *)
-      if NTS_RC=1 ./target/release/nts check "$d" >/dev/null 2>&1
-        then echo "ok   $n"
-        else echo "DIS  $n"
+      # An example with nothing for the differential to drive exits 0 without
+      # comparing an answer, so counting it as a pass overstates this number
+      # exactly as it overstated the one in gate.sh.
+      #
+      # No apostrophes in here: this whole block is the body of `sh -c` inside
+      # single quotes, and one closes the string.
+      out=$(NTS_RC=1 ./target/release/nts check "$d" 2>&1)
+      if [ $? -ne 0 ]
+        then echo "DIS  $n"
+      elif [ "${out#*nothing to check}" != "$out" ]
+        then echo "bare $n"
+        else echo "ok   $n"
       fi ;;
   esac
 ' _ > "$results"
@@ -87,7 +96,9 @@ failing=$(grep '^DIS' "$results" | awk '{print $2}' | sort | tr '\n' ' ')
 # empty list would compare as " " against an empty result.
 expected=""
 [ -n "$known_failing" ] && expected=$(printf '%s\n' $known_failing | sort | tr '\n' ' ')
-echo "$(grep -c '^ok' "$results" || true) of $(grep -c . "$results") pass under reference counting"
+bare=$(grep -c '^bare' "$results" || true)
+echo "$(grep -c '^ok' "$results" || true) of $(($(grep -c . "$results") - bare)) pass under reference counting"
+[ "$bare" -gt 0 ] && echo "  $bare compared nothing"
 if [ "$failing" != "$expected" ]; then
   echo "  expected these to fail: $expected"
   echo "  actually failing:       $failing"
