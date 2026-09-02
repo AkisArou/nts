@@ -30,6 +30,13 @@ use nts_semantic_schema::Origin;
 /// helpers this program reaches" apparatus be deleted.
 pub const RUNTIME_HEADER_NAME: &str = "nts_runtime.h";
 pub const RUNTIME_HEADER: &str = include_str!("../../../../runtime/c/nts_runtime.h");
+/// The shortest-decimal algorithm, which `nts_runtime.c` includes.
+///
+/// A header rather than a translation unit for the same reason `quickjs/dtoa.c`
+/// is: the several places that build a program name their `.c` files, and one
+/// of them is not this session's to change.
+pub const GRISU_HEADER_NAME: &str = "nts_grisu.h";
+pub const GRISU_HEADER: &str = include_str!("../../../../runtime/c/nts_grisu.h");
 pub const RUNTIME_SOURCE_NAME: &str = "nts_runtime.c";
 pub const RUNTIME_SOURCE: &str = include_str!("../../../../runtime/c/nts_runtime.c");
 
@@ -133,6 +140,7 @@ pub fn support_files(needs_unicode: bool) -> Vec<Support> {
         one(CUTILS_HEADER_NAME, CUTILS_HEADER, false),
         one(DTOA_HEADER_NAME, DTOA_HEADER, false),
         one(DTOA_SOURCE_NAME, DTOA_SOURCE, false),
+        one(GRISU_HEADER_NAME, GRISU_HEADER, false),
         one(RUNTIME_SOURCE_NAME, RUNTIME_SOURCE, true),
     ];
     if needs_unicode {

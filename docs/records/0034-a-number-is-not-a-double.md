@@ -73,14 +73,51 @@ necessary: a converted string's length is its input's, and no compile-time bound
 exists. One primitive, two helpers, two different floors, and the reason is a
 property of the operation rather than of the compiler.
 
+## And then the doubles
+
+`number-format-double` said **1.28x node**, and `js_dtoa` is why: bignum
+arithmetic -- `mpb_t`, `limb_t` -- exact by construction and therefore
+unconditionally slow. 83ns to print `0.009765625`, 120ns for pi.
+
+Grisu3 does the same work in fixed 64/128-bit arithmetic. It is in
+`runtime/c/nts_grisu.h` as nts's own code, with `js_dtoa` kept as the fallback,
+so `runtime/c/quickjs` stays unmodified and updating it is still a file copy.
+
+    0.009765625        83.1 ns -> 15.2 ns   5.5x
+    pi                120.0 ns -> 24.4 ns   4.9x
+    1/7               82.9 ns -> 24.3 ns    3.4x
+
+    number-format-double     11.37 us -> 4.60 us     1.27x node -> 0.51x node
+
+**A fallback only protects you if the algorithm cannot be wrong.** Grisu3's
+weeding step accepts a digit string only when it can show the string reads back,
+so it can decline but not lie -- which is what makes "fall back to the exact one"
+a proof rather than a hope.
+
+Asserted before it shipped, and not against node: 4,166,499 doubles -- random
+bit patterns, values programs actually print, every edge worth naming -- checked
+against `js_dtoa` character for character *and* round-tripped through `strtod`.
+Zero disagreements, zero failed round trips, 0.220% declined.
+
+That harness earned itself immediately. Three transcription errors against the
+reference algorithm, none of which a casual test would have found:
+
+- the cached-power index was missing its `+ kQ - 1` term, which printed `0.1` as
+  `1844674407370955300` -- the unscaled significand, `2^64/10`;
+- the lower boundary was treated as closer for denormals, which it is not;
+- `one` was built from the boundary's exponent rather than `w`'s.
+
+The 88-entry table of cached powers was **generated** with exact integer
+arithmetic rather than transcribed. A mistyped constant there is a wrong answer
+for one value in a billion, and nothing in this repository would have noticed.
+
 ## What is left
 
-**Doubles are 1.28× node**, and `number-format-double` is the row that says so.
-`js_dtoa` is bignum arithmetic — `mpb_t`, `limb_t`, exact and unconditionally
-slow at 80–100ns for any value that is not an integer. It takes 83ns to print
-`0.009765625`. Grisu3 or Ryū do the same work in fixed 64/128-bit arithmetic at
-roughly a third of that, and V8 uses the former.
+`toFixed`, `toPrecision`, `toExponential`, `parseFloat` and `parseInt` are
+`js_dtoa`'s `FORMAT_FIXED`/`FORMAT_FRAC` with the `EXP_*` flags and `js_atod` --
+all vendored, all compiled in, none reachable from a program. They are wiring
+rather than algorithms now.
 
-That is the next substitution, and the condition on it is assertion rather than
-faith: a replacement must round-trip through `strtod` and agree with `js_dtoa`
-across millions of random doubles before node ever sees it.
+`node-utf8` at 1.31x node is the only row still behind, and it was measured as a
+codegen gap rather than a string one: stripping the string building out of the
+decoder made the ratio *worse*, 1.21x to 1.28x.

@@ -68,6 +68,9 @@
 #pragma GCC diagnostic pop
 #endif
 
+/* And ours, which replaces `js_dtoa` for everything it can prove. */
+#include "nts_grisu.h"
+
 /* Allocated and reclaimed, so that a test can see reference counting balance
  * from inside the program rather than infer it from memory use. */
 static size_t nts_allocated = 0;
@@ -2410,19 +2413,72 @@ NtsString *nts_number_to_string_into(NtsHeader *into, double x) {
     return out;
   }
 
+  /* Grisu3 for anything finite, `js_dtoa` for what it declines and for the
+   * values it is not asked about -- NaN and the infinities, which it spells
+   * itself. The two produce the same characters; see `nts_grisu.h` for the
+   * measurement that says so. */
+  char digits[32];
+  int length;
+  int point;
+  if (isfinite(x) && nts_grisu(x < 0 ? -x : x, digits, &length, &point)) {
+    char buf[JS_DTOA_MAX_DIGITS + 32];
+    char *q = buf;
+    if (x < 0) {
+      *q++ = '-';
+    }
+    /* ECMAScript's Number::toString, step by step: every digit and the zeros
+     * that place them, the point inside the digits, a leading `0.` and some
+     * zeros, or an exponent. The thresholds -- 21 above and -6 below -- are the
+     * specification's, not a formatting preference. */
+    if (point >= length && point <= 21) {
+      memcpy(q, digits, (size_t)length);
+      q += length;
+      memset(q, '0', (size_t)(point - length));
+      q += point - length;
+    } else if (point > 0 && point <= 21) {
+      memcpy(q, digits, (size_t)point);
+      q += point;
+      *q++ = '.';
+      memcpy(q, digits + point, (size_t)(length - point));
+      q += length - point;
+    } else if (point > -6 && point <= 0) {
+      *q++ = '0';
+      *q++ = '.';
+      memset(q, '0', (size_t)(-point));
+      q += -point;
+      memcpy(q, digits, (size_t)length);
+      q += length;
+    } else {
+      *q++ = digits[0];
+      if (length != 1) {
+        *q++ = '.';
+        memcpy(q, digits + 1, (size_t)(length - 1));
+        q += length - 1;
+      }
+      *q++ = 'e';
+      const int exponent = point - 1;
+      *q++ = exponent < 0 ? '-' : '+';
+      q += nts_u32toa(q, (uint32_t)(exponent < 0 ? -exponent : exponent));
+    }
+    const uint32_t total = (uint32_t)(q - buf);
+    NtsString *out =
+        nts_str_build(total <= NTS_NUMBER_STRING_MAX ? into : NULL, total, 0);
+    memcpy(NTS_ELEMENTS(out, unsigned char), buf, (size_t)total);
+    return out;
+  }
+
   char buf[JS_DTOA_MAX_DIGITS + 32];
   JSDTOATempMem tmp;
-  const int length =
+  const int exact =
       js_dtoa(buf, x, 10, 0, JS_DTOA_FORMAT_FREE | JS_DTOA_EXP_AUTO, &tmp);
   /* The caller's storage is sized by `NTS_NUMBER_STRING_MAX`, which is an
-   * argument about the longest thing `js_dtoa` can write and not a measurement
-   * of it. If that argument is ever wrong, this takes the heap rather than
-   * writing past a frame slot: a lost optimisation instead of a smashed
-   * stack. */
-  NtsHeader *where = (length <= NTS_NUMBER_STRING_MAX) ? into : NULL;
-  /* Always one byte: every character `js_dtoa` writes in radix 10 is ASCII. */
-  NtsString *out = nts_str_build(where, (uint32_t)length, 0);
-  memcpy(NTS_ELEMENTS(out, unsigned char), buf, (size_t)length);
+   * argument about the longest thing this can write and not a measurement of
+   * it. If that argument is ever wrong, this takes the heap rather than writing
+   * past a frame slot: a lost optimisation instead of a smashed stack. */
+  NtsHeader *where = (exact <= NTS_NUMBER_STRING_MAX) ? into : NULL;
+  /* Always one byte: every character written in radix 10 is ASCII. */
+  NtsString *out = nts_str_build(where, (uint32_t)exact, 0);
+  memcpy(NTS_ELEMENTS(out, unsigned char), buf, (size_t)exact);
   return out;
 }
 
