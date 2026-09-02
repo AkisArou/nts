@@ -88,6 +88,9 @@ pub struct Summaries {
     hands_back: rustc_hash::FxHashSet<String>,
     /// Parameter slots each function takes ownership of, by function name.
     consumes: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
+    /// Parameter fields every caller has already zeroed, by function name. See
+    /// [`zeroed_parameters`].
+    zeroed: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<(u32, u32)>>,
 }
 
 impl Summaries {
@@ -108,9 +111,11 @@ impl Summaries {
 /// Read every function once, before any of them is counted.
 #[must_use]
 pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
+    let harmless = initializing_only(program, layouts);
     Summaries {
+        zeroed: zeroed_parameters(program, layouts, &harmless),
         mutates: mutating(program),
-        harmless: initializing_only(program, layouts),
+        harmless,
         hands_back: hands_back_a_parameter(program, layouts),
         consumes: program
             .funcs
@@ -261,7 +266,12 @@ pub fn analyze(
         .map(ValueId)
         .collect();
     let held = entry_owned(func, layouts);
-    let entering = freshness(func, &summaries.harmless);
+    let vouched = summaries
+        .zeroed
+        .get(&func.name)
+        .cloned()
+        .unwrap_or_default();
+    let entering = freshness(func, layouts, &summaries.harmless, &vouched);
     let initializing = initializing_stores(func, &entering, &summaries.harmless);
     let crossing = crossing_borrows(
         func,
@@ -1609,6 +1619,156 @@ fn taking(
     (takes, settled)
 }
 
+/// Fields of a returned object that are null on the way out.
+///
+/// `popDiskFrom` ends `top.next = null; return top`, so it hands back a disk
+/// whose `next` is a zero -- and the caller that links it into a list can store
+/// over that slot without giving anything back.
+fn returns_nulled(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
+    let mut agreed: Option<rustc_hash::FxHashSet<u32>> = None;
+    for block in &func.blocks {
+        let super::Terminator::Return(Some(handed)) = block.terminator else {
+            continue;
+        };
+        // A path that hands back a null constrains nothing: there is no object
+        // for a caller to store into. Bailing on it gave up on every
+        // `T | null` function, which is every one this matters for.
+        if !counted(func, layouts, handed) {
+            continue;
+        }
+        // Last write wins, and only a write this function can see counts: the
+        // same "a store is aimed by naming something" rule `inert_slots` uses.
+        let mut nulled = rustc_hash::FxHashSet::default();
+        for other in &func.blocks {
+            for value in &other.ops {
+                match &func.values[value.0 as usize].kind {
+                    OpKind::FieldSet {
+                        object,
+                        field,
+                        value: put,
+                        ..
+                    } if *object == handed => {
+                        if matches!(func.values[put.0 as usize].kind, OpKind::ConstNull) {
+                            nulled.insert(*field);
+                        } else {
+                            nulled.remove(field);
+                        }
+                    }
+                    // A store aimed at a directly-named allocation or
+                    // parameter hits that object and no other, so it says
+                    // nothing about this one.
+                    OpKind::FieldSet { object, .. }
+                        if matches!(
+                            func.values[object.0 as usize].kind,
+                            OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } | OpKind::Param(_)
+                        ) => {}
+                    // Anything else is aimed through a value that came out of a
+                    // load, which could be this object under another name.
+                    OpKind::FieldSet { .. } => {
+                        return rustc_hash::FxHashSet::default();
+                    }
+                    _ => {}
+                }
+            }
+        }
+        agreed = Some(match agreed {
+            None => nulled,
+            Some(before) => before.intersection(&nulled).copied().collect(),
+        });
+    }
+    agreed.unwrap_or_default()
+}
+
+/// Parameter fields every caller has already zeroed.
+///
+/// A store into `p.f` gives back what `p.f` was holding, and a parameter is
+/// opaque -- so linking a freshly detached node into a list pays a load and a
+/// release of a null on every call. `pushDisk` does exactly that on each of
+/// `awfy-towers`' eight thousand moves, and pricing it with an unsound control
+/// put the row at 2.36x C++ against 3.05x.
+///
+/// A greatest fixpoint over call sites: assumed zero, and contradicted by a
+/// caller that passes something it cannot vouch for. A function nothing calls
+/// keeps the assumption, which is safe -- there is no caller to be wrong about.
+///
+/// What a caller can vouch for: a fresh allocation whose field it has not
+/// written, and the result of a call that nulls the field on its way out.
+fn zeroed_parameters(
+    program: &Program,
+    layouts: &[Layout],
+    harmless: &rustc_hash::FxHashSet<String>,
+) -> rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<(u32, u32)>> {
+    let nulled: rustc_hash::FxHashMap<&str, rustc_hash::FxHashSet<u32>> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.as_str(), returns_nulled(func, layouts)))
+        .collect();
+
+    let mut zeroed: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<(u32, u32)>> = program
+        .funcs
+        .iter()
+        .map(|func| {
+            let mut slots = rustc_hash::FxHashSet::default();
+            for (slot, _) in func.params.iter().enumerate() {
+                let Ok(slot) = u32::try_from(slot) else {
+                    continue;
+                };
+                for field in reference_fields(func, layouts, ValueId(slot)) {
+                    slots.insert((slot, field));
+                }
+            }
+            (func.name.clone(), slots)
+        })
+        .collect();
+
+    loop {
+        let mut doomed: Vec<(String, (u32, u32))> = Vec::new();
+        for caller in &program.funcs {
+            let mut fresh = Fresh::entering(caller, layouts, BlockId(0), &rustc_hash::FxHashSet::default());
+            for block in &caller.blocks {
+                for value in &block.ops {
+                    let kind = caller.values[value.0 as usize].kind.clone();
+                    if let OpKind::Call {
+                        callee: super::Callee::Direct(name),
+                        args,
+                        ..
+                    } = &kind
+                        && let Some(claimed) = zeroed.get(name)
+                    {
+                        for (slot, field) in claimed {
+                            let Some(given) = args.get(*slot as usize) else {
+                                continue;
+                            };
+                            let vouched = match &caller.values[given.0 as usize].kind {
+                                OpKind::Call {
+                                    callee: super::Callee::Direct(from),
+                                    ..
+                                } => nulled.get(from.as_str()).is_some_and(|f| f.contains(field)),
+                                _ => {
+                                    fresh.bases.contains(given)
+                                        && !fresh.written.contains(&(*given, u64::from(*field)))
+                                }
+                            };
+                            if !vouched {
+                                doomed.push((name.clone(), (*slot, *field)));
+                            }
+                        }
+                    }
+                    fresh.observe(caller, *value, &kind, harmless);
+                }
+            }
+        }
+        if doomed.is_empty() {
+            return zeroed;
+        }
+        for (name, slot) in doomed {
+            if let Some(slots) = zeroed.get_mut(&name) {
+                slots.remove(&slot);
+            }
+        }
+    }
+}
+
 /// Parameter slots a function takes ownership of.
 ///
 /// The `consumes` column of record 0024's summary, for the functions that have
@@ -1908,7 +2068,12 @@ struct Fresh {
 /// the *greatest* fixpoint rather than refusing to enter a loop: the back edge
 /// is checked against the assumption rather than consulted before it exists.
 /// The same shape, and the same reason, as `crossing_borrows`.
-fn freshness(func: &Func, harmless: &rustc_hash::FxHashSet<String>) -> Vec<Fresh> {
+fn freshness(
+    func: &Func,
+    layouts: &[Layout],
+    harmless: &rustc_hash::FxHashSet<String>,
+    zeroed: &rustc_hash::FxHashSet<(u32, u32)>,
+) -> Vec<Fresh> {
     /// Enough rounds for any reducible graph; reaching it would be a bug, and
     /// looping forever would hide it.
     const ROUNDS: usize = 1024;
@@ -1917,7 +2082,7 @@ fn freshness(func: &Func, harmless: &rustc_hash::FxHashSet<String>) -> Vec<Fresh
     let incoming = super::loops::predecessors(func);
     let mut entry: Vec<Option<Fresh>> = vec![None; count];
     if count > 0 {
-        entry[0] = Some(Fresh::entering(func, BlockId(0)));
+        entry[0] = Some(Fresh::entering(func, layouts, BlockId(0), zeroed));
     }
 
     for _ in 0..ROUNDS {
@@ -1956,8 +2121,28 @@ fn freshness(func: &Func, harmless: &rustc_hash::FxHashSet<String>) -> Vec<Fresh
 
 impl Fresh {
     /// What is known on entry to a block.
-    fn entering(func: &Func, block: BlockId) -> Self {
+    fn entering(
+        func: &Func,
+        layouts: &[Layout],
+        block: BlockId,
+        zeroed: &rustc_hash::FxHashSet<(u32, u32)>,
+    ) -> Self {
         let mut fresh = Self::default();
+        // A parameter whose fields every caller has already zeroed is, for
+        // those fields, exactly as good as a fresh allocation. See
+        // `zeroed_parameters`. The fields nobody vouched for are marked written
+        // straight away, so the base says only what was actually promised.
+        if block == BlockId(0) {
+            for (slot, _) in zeroed {
+                let parameter = ValueId(*slot);
+                fresh.bases.insert(parameter);
+                for field in reference_fields(func, layouts, parameter) {
+                    if !zeroed.contains(&(*slot, field)) {
+                        fresh.written.insert((parameter, u64::from(field)));
+                    }
+                }
+            }
+        }
         // A constructor's receiver arrives freshly allocated. Only in the entry
         // block: a later block may be reached by a path that already wrote.
         // Parameter `i` is value `i`, which the whole backend relies on -- but
