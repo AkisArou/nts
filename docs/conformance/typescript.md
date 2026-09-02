@@ -1688,7 +1688,7 @@ starts, whether it is still going, what it reads. That is what let `break`,
 | ✅ | over a `Set`, and over `map.keys()` / `map.values()` — the table read directly, no iterator allocated |
 | ✅ | over a `Map` and `map.entries()`, bound as `[key, value]` — two names, two reads, no pair built |
 | ✅ | over a string, **by code point**: `"a\u{1F600}b"` yields three items, not four |
-| ✅ | array and object destructuring, including nested and renamed |
+| ✅ | array and object destructuring, including nested and renamed — in a declaration **and in the head**: `for (const { from: { x }, weight } of segments)` binds by property off the element, where `[key, value]` over a table stays positional because those two names take two reads and no pair is ever built |
 | ✅ | mutation during a walk: an entry appended is visited, one deleted ahead is not |
 | ✗ | `[Symbol.iterator]()`, `.next()`, `{ value, done }` — the object itself |
 | ✗ | iterator **closing** (`.return()` on abrupt completion) — a correctness detail, not a convenience |

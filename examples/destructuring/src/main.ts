@@ -137,3 +137,60 @@ export function tupleValue(n: number): number {
   const pair: [number, number] = [n, n * 7];
   return pair[0]! * 1000 + pair[1]!;
 }
+
+// The same patterns in a `for...of` head.
+//
+// A head is not a different feature from a declaration: it binds off the one
+// value the walk produces, which is exactly what the declarations above do.
+// This was refused because the head reported the names it bound *in order*, and
+// an order is the one thing an object pattern does not have -- `[k, v]` over a
+// table needs it, because those two names take the two values the walk reads
+// without ever building the pair.
+
+interface Segment {
+  from: Point;
+  weight: number;
+}
+
+export function byNameInAWalk(n: number): number {
+  const points: Point[] = [{ x: n, y: 2 }, { x: 3, y: n * 5 }];
+  let total = 0;
+  for (const { x, y } of points) {
+    total = total * 100 + x * 10 + y;
+  }
+  return total;
+}
+
+// Renamed, so a lowering that bound by position rather than by property would
+// still have to get the names right to agree.
+export function renamedInAWalk(n: number): number {
+  const points: Point[] = [{ x: n, y: 2 }, { x: 3, y: n * 5 }];
+  let total = 0;
+  for (const { x: across, y: down } of points) {
+    total = total * 100 + down * 10 + across;
+  }
+  return total;
+}
+
+// Nested, and with a bound name the body writes to -- which is the case where
+// the loop has to know the head declared it rather than carrying it round.
+export function nestedInAWalk(n: number): number {
+  // The inner points are named rather than written in place. Two object
+  // literals nested inside two more get an anonymous type each, and the array's
+  // element type is a third: same fields, different types, and the emitter has
+  // no cast to reconcile them. That is the anonymous-type row in
+  // `docs/conformance/typescript.md`, not this feature.
+  const near: Point = { x: n, y: 2 };
+  const far: Point = { x: 3, y: n };
+  const segments: Segment[] = [
+    { from: near, weight: 5 },
+    { from: far, weight: 7 },
+  ];
+  let total = 0;
+  for (const { from: { x, y }, weight } of segments) {
+    let scaled = x * 100 + y * 10 + weight;
+    scaled = scaled + 1;
+    total = total + scaled;
+  }
+  return total;
+}

@@ -607,6 +607,14 @@ fn closure_type(index: usize) -> TypeId {
     TypeId(id)
 }
 
+/// What a `for...of` head binds. See [`Lowering::for_of_head`].
+enum Head {
+    /// Names taking the values the walk produces, in order.
+    InOrder(Vec<NodeId>),
+    /// A pattern applied to the one value the walk produces.
+    Pattern(NodeId),
+}
+
 /// The name of the `n`th closure's class, and of its one method.
 /// The function holding a module's top-level statements.
 ///
@@ -7461,14 +7469,20 @@ impl<'a> FuncBuilder<'a> {
         }]
     }
 
-    /// The names a `for...of` head binds, in order.
+    /// What a `for...of` head binds.
     ///
     /// One identifier is the ordinary case. An array pattern is
-    /// `for (const [k, v] of map)`. Everything else -- a default, a rest, a
-    /// nested pattern, a hole, an object pattern -- is refused by the shape it
-    /// is, because each is a separate feature and a reader deciding what to
-    /// implement next cannot rank "a binding of this shape".
-    fn for_of_names(&self, initializer: NodeId) -> Result<Vec<NodeId>, Diagnostic> {
+    /// `for (const [k, v] of map)`, whose two names are the two values the walk
+    /// over a table produces -- positional, and read directly rather than
+    /// through a pair object that would be built only to be taken apart.
+    ///
+    /// An **object** pattern is not positional. `for (const { x, y } of points)`
+    /// binds by property name off the one value the walk produces, which is
+    /// what [`Self::bind_pattern`] already does for `const { x, y } = p` --
+    /// renames, nesting and all. It was refused here only because this returned
+    /// names in order, and an order is the one thing an object pattern does not
+    /// have.
+    fn for_of_head(&self, initializer: NodeId) -> Result<Head, Diagnostic> {
         let declaration = self
             .children(initializer)
             .into_iter()
@@ -7480,16 +7494,14 @@ impl<'a> FuncBuilder<'a> {
             .copied()
             .find(|part| self.kind_of(*part) == Some(syntax::IDENTIFIER))
         {
-            return Ok(vec![name]);
+            return Ok(Head::InOrder(vec![name]));
         }
-        if parts
+        if let Some(pattern) = parts
             .iter()
-            .any(|part| self.kind_of(*part) == Some(syntax::OBJECT_BINDING_PATTERN))
+            .copied()
+            .find(|part| self.kind_of(*part) == Some(syntax::OBJECT_BINDING_PATTERN))
         {
-            return Err(self.unsupported(
-                initializer,
-                "a `for...of` binding by property name, which is object destructuring",
-            ));
+            return Ok(Head::Pattern(pattern));
         }
         let pattern = parts
             .iter()
@@ -7516,7 +7528,53 @@ impl<'a> FuncBuilder<'a> {
             }
             names.push(*name);
         }
-        Ok(names)
+        Ok(Head::InOrder(names))
+    }
+
+    /// Every symbol a binding pattern declares, however deeply.
+    ///
+    /// The loop needs them so that a name the head binds is not mistaken for one
+    /// the body carries round.
+    fn pattern_symbols(&self, pattern: NodeId, into: &mut Vec<u32>) {
+        for child in self.children(pattern) {
+            match self.kind_of(child) {
+                Some(syntax::IDENTIFIER) => {
+                    if let Some(symbol) = self.node(child).symbol {
+                        into.push(symbol.0);
+                    }
+                }
+                _ => self.pattern_symbols(child, into),
+            }
+        }
+    }
+
+    /// Give a `for...of` head the values the walk produced.
+    ///
+    /// Names take them in order. A pattern takes the one value there is and
+    /// goes through [`Self::bind_pattern`], the same function a declaration
+    /// uses, so a rename or a nested pattern needs nothing here.
+    fn bind_head(
+        &mut self,
+        id: NodeId,
+        head: &Head,
+        symbols: &[u32],
+        values: Vec<ValueId>,
+    ) -> Result<(), Diagnostic> {
+        match head {
+            Head::InOrder(_) => {
+                for (symbol, value) in symbols.iter().zip(values) {
+                    self.bindings.insert(*symbol, value);
+                }
+                Ok(())
+            }
+            Head::Pattern(pattern) => {
+                let [element] = values.as_slice() else {
+                    return Err(self.unsupported(id, "a `for...of` pattern over a walk of pairs"));
+                };
+                let (pattern, element) = (*pattern, *element);
+                self.bind_pattern(pattern, element)
+            }
+        }
     }
 
     fn lower_for_of(&mut self, id: NodeId) -> Result<(), Diagnostic> {
@@ -7528,17 +7586,26 @@ impl<'a> FuncBuilder<'a> {
         };
         let (initializer, sequence, body) = (*initializer, *sequence, *body);
 
-        // What the head binds: one name, or the two of `[key, value]`.
-        let names = self.for_of_names(initializer)?;
-        let mut element_symbols = Vec::with_capacity(names.len());
-        for name in &names {
-            element_symbols.push(
-                self.node(*name)
-                    .symbol
-                    .ok_or_else(|| self.unsupported(*name, "a `for...of` name with no symbol"))?
-                    .0,
-            );
+        // What the head binds: one name, the two of `[key, value]`, or a
+        // pattern taken apart from the single value the walk produces.
+        let head = self.for_of_head(initializer)?;
+        let mut element_symbols = Vec::new();
+        if let Head::InOrder(names) = &head {
+            for name in names {
+                element_symbols.push(
+                    self.node(*name)
+                        .symbol
+                        .ok_or_else(|| self.unsupported(*name, "a `for...of` name with no symbol"))?
+                        .0,
+                );
+            }
         }
+        // A pattern reads one value and takes it apart; the names in it are not
+        // what the walk hands over.
+        let wanted = match &head {
+            Head::InOrder(names) => names.len(),
+            Head::Pattern(_) => 1,
+        };
 
         // `for (const k of m.keys())` reads the table directly. Lowering the
         // call would build an iterator object, step it once per element and
@@ -7546,7 +7613,7 @@ impl<'a> FuncBuilder<'a> {
         // it -- so the method is recognized here and never lowered.
         let (sequence, forced) = self.table_source(sequence);
         let sequence_value = self.lower_expression(sequence)?;
-        let walk = self.walk_of(sequence, sequence_value, forced, element_symbols.len())?;
+        let walk = self.walk_of(sequence, sequence_value, forced, wanted)?;
 
         let origin = self.origin(id);
         // The cursor. A double, like the counter a hand-written `for` produces,
@@ -7572,6 +7639,9 @@ impl<'a> FuncBuilder<'a> {
         let mut carried = vec![index];
         self.assigned_symbols(body, &mut carried);
         let mut declared = element_symbols.clone();
+        if let Head::Pattern(pattern) = &head {
+            self.pattern_symbols(*pattern, &mut declared);
+        }
         self.declared_symbols(body, &mut declared);
         carried.retain(|symbol| *symbol == index || !declared.contains(symbol));
 
@@ -7618,9 +7688,7 @@ impl<'a> FuncBuilder<'a> {
         self.switch_to(record.body);
 
         let values = self.read_element(&walk, sequence_value, at, &origin);
-        for (symbol, value) in element_symbols.iter().zip(values) {
-            self.bindings.insert(*symbol, value);
-        }
+        self.bind_head(id, &head, &element_symbols, values)?;
 
         self.lower_statement(body)?;
         self.end_loop(
