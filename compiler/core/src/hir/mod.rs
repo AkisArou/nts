@@ -1890,6 +1890,14 @@ fn frame_capacity(func: &Func, value: ValueId) -> Option<u32> {
     else {
         return None;
     };
+    // One code unit, whatever the argument is: `fromCharCode` truncates to
+    // sixteen bits and yields exactly one. The other helpers below are bounded
+    // by a string they were given, which is what `string_span` reads; this one
+    // is bounded by what it *is*, and asking `string_span` about a `double`
+    // argument would get no answer.
+    if name == "nts_string_from_char_code" {
+        return Some(1);
+    }
     // The helpers with an `_into` form: each returns a *fresh* string, so
     // nothing else can hold the one this builds.
     if !matches!(

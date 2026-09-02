@@ -796,6 +796,11 @@ NtsString *nts_number_to_string(double x);
  * one of them, the second takes a code *point* and returns a surrogate pair
  * above 0xFFFF. */
 NtsString *nts_string_from_char_code(double code);
+/* The same, into storage the caller supplies. One code unit, always -- which is
+ * the easiest bound in the language and the reason this has an `_into` form at
+ * all: `out += String.fromCharCode(c)` allocates one of these per code point,
+ * and every one of them dies on the next line. */
+NtsString *nts_string_from_char_code_into(NtsHeader *into, double code);
 NtsString *nts_string_from_code_point(double point);
 /* `String(v)` on a value carrying its own tag. Exact for `undefined`, `null`,
  * a boolean, a number and a string; every other tag is a lowering that should

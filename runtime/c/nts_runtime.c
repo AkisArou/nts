@@ -1890,9 +1890,13 @@ uint32_t nts_to_uint32_fn(double x) { return nts_to_uint32(x); }
  * the second is undefined behaviour, which is why the conversion is shared with
  * the bitwise operators rather than written again here. */
 NtsString *nts_string_from_char_code(double code) {
+  return nts_string_from_char_code_into(NULL, code);
+}
+
+NtsString *nts_string_from_char_code_into(NtsHeader *into, double code) {
   uint16_t unit = nts_to_uint16(code);
   int wide = unit > 0xFFu;
-  NtsString *out = nts_str_build(NULL, 1, wide);
+  NtsString *out = nts_str_build(into, 1, wide);
   if (wide) {
     NTS_ELEMENTS(out, uint16_t)[0] = unit;
     NTS_ELEMENTS(out, uint16_t)[1] = 0;

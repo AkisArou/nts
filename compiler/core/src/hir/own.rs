@@ -1501,10 +1501,17 @@ fn counted_here(func: &Func, layouts: &[Layout], value: ValueId) -> bool {
         // rather than allocating it, and the runtime reads that word and stops.
         // So it was already never counted at *run* time; this stops paying the
         // call to find out.
+        // A string built into the caller's frame belongs here too, and for the
+        // reason above it: `place_allocations` gives a call that storage only
+        // where the result does not outlive the frame, `nts_str_place` marks it
+        // `NTS_IMMORTAL`, and a string holds no references. Seventeen of these
+        // were counted in `string-build` -- one release an iteration, for
+        // storage that was never allocated.
         OpKind::ConstString(_)
         | OpKind::ConstNull
         | OpKind::ConstUndefined
-        | OpKind::ClosureStatic => false,
+        | OpKind::ClosureStatic
+        | OpKind::Call { frame: Some(_), .. } => false,
         // A frame object has no count of its own -- it goes away when the frame
         // does, and counting it would at best be wasted work and at worst call
         // `free` on a stack address. But it still *ends*, and if it holds

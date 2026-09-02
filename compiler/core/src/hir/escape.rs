@@ -383,9 +383,7 @@ fn analyze(
                 }
                 OpKind::Call { callee, args, .. } => {
                     let Some(targets) = bodies_reached(callee, by_name, in_slot) else {
-                        for argument in args {
-                            escaped(&mut escapes, func, *argument);
-                        }
+                        gone_into_the_unknown(&mut escapes, func, callee, args);
                         continue;
                     };
                     escape_into(&mut escapes, args, targets, arity, escaping_params);
@@ -635,6 +633,42 @@ fn hand_on(
 }
 
 /// Mark the arguments that any of a call's possible targets lets escape.
+/// What a call this analysis cannot follow does to its arguments.
+///
+/// Everything, by default: a body that is not here could store any of them
+/// anywhere. Unless it is one of ours -- the helpers in `runtime/c` are read,
+/// and `runtime::keeps` says which slots each may let outlive the call.
+///
+/// `out += String.fromCharCode(c)` is why that list exists. The one-unit string
+/// on the right dies on the next line and could sit in the frame, and nothing
+/// could put it there while handing it to `nts_str_append` counted as losing
+/// it.
+fn gone_into_the_unknown(
+    escapes: &mut Escapes,
+    func: &Func,
+    callee: &Callee,
+    args: &[ValueId],
+) {
+    let kept = match callee {
+        Callee::External(name) => super::runtime::keeps(name),
+        _ => None,
+    };
+    match kept {
+        Some(slots) => {
+            for slot in slots {
+                if let Some(argument) = args.get(*slot) {
+                    escaped(escapes, func, *argument);
+                }
+            }
+        }
+        None => {
+            for argument in args {
+                escaped(escapes, func, *argument);
+            }
+        }
+    }
+}
+
 /// The bodies one call can reach, or `None` for "anything at all".
 ///
 /// A dispatch reaches one of several and which is decided by a receiver this

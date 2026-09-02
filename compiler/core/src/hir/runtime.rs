@@ -145,6 +145,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_str_substring_into_fn", &[None, None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
     ("nts_string_eq", &[None, None], Some(HirType::Bool)),
     ("nts_string_from_char_code", &[Some(HirType::Float { bits: 64 })], None),
+    ("nts_string_from_char_code_into", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_string_from_code_point", &[Some(HirType::Float { bits: 64 })], None),
     ("nts_string_from_utf8", &[None, Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_string_truthy", &[None], Some(HirType::Bool)),
@@ -199,6 +200,33 @@ pub fn parameters(name: &str) -> Option<&'static [Option<HirType>]> {
 #[must_use]
 pub fn result(name: &str) -> Option<&'static HirType> {
     declared(name).and_then(|it| it.2.as_ref())
+}
+
+/// Argument slots a runtime helper may let outlive the call.
+///
+/// `escape` escapes every argument of every external call, because a body it
+/// cannot see could do anything with what it is handed. These it can see: they
+/// are in `runtime/c`, and what they do with a string is *read* it.
+///
+/// That blanket was measured once and found to cost nothing, on a suite where
+/// no case handed a string to a helper. `out += String.fromCharCode(c)` is that
+/// case: the one-unit string on the right dies on the next line, and could sit
+/// in the frame if anything knew that `nts_str_append` does not keep it.
+///
+/// `None` is the honest default and means every argument. An entry is a promise
+/// about a function in this repository, checked by nothing but the reading of
+/// it, so the list is short and only grows where a measurement asks.
+#[must_use]
+pub fn keeps(name: &str) -> Option<&'static [usize]> {
+    match name {
+        // Both read, neither kept: the result is a fresh string.
+        "nts_concat" | "nts_string_eq" | "nts_str_index_of" | "nts_str_last_index_of"
+        | "nts_str_includes" | "nts_str_starts_with" | "nts_str_ends_with" => Some(&[]),
+        // The left is consumed and the result may *be* it, so it is kept; the
+        // right is only read.
+        "nts_str_append" => Some(&[0]),
+        _ => None,
+    }
 }
 
 /// The name of a helper's frame-placed form.

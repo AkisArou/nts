@@ -83,3 +83,53 @@ shape `flow::string_span` exists to prove.
 
 `substrings` 2.22x -> 2.14x and `strings` 0.64x -> 0.63x, both predicted not to
 move, because slicing and scanning do not append.
+
+## The temporary on the right
+
+`String.fromCharCode` yields exactly one code unit, whatever it is given: the
+argument is truncated to sixteen bits. That is the easiest bound in the
+language, and a bound plus "does not outlive the frame" is exactly what frame
+storage asks for -- the pair that already keeps a tokenizer's substrings out of
+the heap. So it grew an `_into` form like the four helpers that had one, and
+`frame_capacity` answers `1` for it directly rather than asking
+`flow::string_span`, which reads a *string* argument and would have nothing to
+say about a `double`.
+
+The harder half was that it could not be placed anyway. `escape` escapes every
+argument of every external call, because a body it cannot see could do anything
+with what it is handed -- and `nts_str_append` is one it *can* see, in
+`runtime/c`, where what it does with its right-hand argument is read it. So
+`runtime::keeps` says which slots a helper may let outlive the call, `None`
+meaning the honest default of all of them.
+
+That blanket was measured once in `0028` and found to cost exactly nothing: a
+probe removing it moved one case, wrongly. The measurement was right and its
+scope was the suite it ran on, where nothing handed a string to a helper. This
+is the case it did not contain, and the refusal was worth reopening the moment
+there was one.
+
+Then seventeen operations remained, one per iteration: a release for storage
+that was never allocated. `own::counted` already answers "nothing to give back"
+for a frame *object* with no reference fields, and a frame-placed string is the
+same answer for the same reason -- `nts_str_place` marks it `NTS_IMMORTAL` and a
+string holds no references.
+
+    string-build   18 -> 1 operations, 6 allocations, both at the floor
+    node-utf8      2.36x -> 1.48x node
+    substrings     2.14x -> 1.88x C++
+
+`substrings` moved because its slices are frame-placed too, and every one of
+them was being counted on the way out.
+
+## Where strings stand
+
+    node-utf8   3.14x -> 1.48x node      over the whole audit
+    substrings  2.22x -> 1.88x C++
+
+Twenty-two memory cases at both floors, two of them strings. What is left is the
+operations table: `padStart`, `padEnd`, `valueOf`, `isWellFormed` and
+`toWellFormed` are pure code-unit work and absent for no reason, and three
+decisions stand behind the rest -- Unicode tables for case and normalization, a
+regex engine for `match`, `matchAll`, `search` and the pattern forms of
+`replace` and `split`, and ICU for `localeCompare`. Each deserves a refusal with
+a reason rather than a checkbox.
