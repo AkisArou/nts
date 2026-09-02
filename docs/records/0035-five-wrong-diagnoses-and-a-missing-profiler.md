@@ -1,4 +1,4 @@
-# 0035 — The simplest loop was the slowest
+# 0035 — Five wrong diagnoses, and why this row needs a profiler
 
 `node-utf8` is the last row behind node. Three sessions of hypotheses about it
 were wrong; a bisect finally located it, and the location is not where anyone
@@ -36,28 +36,48 @@ no expensive state machine: there is one loop that we compile badly.
 `nts_index` per element on a `double`, and a floating-point increment. Nothing
 about that vectorises. 0.87ns an iteration against node's 0.29.
 
-## Why `end` is a double, all the way down
+## And then the attribution fell over
 
-    end             is the parameter, f64
-      <- written    is `utf8Write(...)`, whose result is TOP
-      <- utf8Write  is an exported root, so `guards` wraps it: the result is the
-                    join of the clone's and the *slow path's*, and the slow path
-                    exists for arguments nothing is known about
-      <- so a caller that passes literally whole numbers still learns nothing
+The obvious reading of that table is that the byte-sum loop compiles badly. It
+does not. The **same loop**, same length of buffer, same `round & 7` call
+pattern, in a program that does not import the encoder:
 
-A caller that can prove the guard's own test could call the clone directly and
-inherit its facts. That was built, and it is **not** the answer here: the test
-is `ToInt32(n) == n`, and `utf8Write`'s `max` argument is `utf8Length(str)`,
-whose result is at most `4 * str.length` where a string's length is a `u32`. It
-genuinely can exceed `int32`, so the redirect correctly refuses.
+    in `node-utf8`'s program      6.83 us   node 2.66 us    2.57x
+    the same loop in isolation    0.38 us   node 2.58 us    0.15x
 
-Bounding it needs the *string's* length to survive a call — the argument is a
-concatenation of literals and is 113 characters — and interprocedural facts
-carry numbers, not string lengths. `flow::string_span` knows a string's length
-locally; nothing carries it across a boundary.
+Eighteen times faster per byte, and *six times faster than node*, from moving
+the identical function into a smaller program. Whatever is happening, it is not
+the loop: it is what the surrounding program does to the C compiler's inlining
+and vectorisation decisions.
 
-**That is the next change, and it has a number attached: 3.03x on the simplest
-loop in the decoder.**
+Two more hypotheses died on the way to that:
+
+- **`end` being a double.** It is, in that program, because `utf8Write` is an
+  exported root whose result is the join of its clone's and its slow path's.
+  Two probes differing *only* in that -- confirmed in the prepared HIR as
+  `end: i32` against `end: f64` -- measured 377.1ns and 379.5ns. It costs
+  nothing.
+- **node hoisting a loop-invariant call.** `decode(buffer, 0, written)` is the
+  same call every round, so node could have stopped doing the work. Making the
+  argument vary with `round & 7` changed our ratio from 3.03x to 2.57x and left
+  the shape of the table alone.
+
+`guards::redirect` was built on the first of those, and is reverted: sound,
+fires nowhere in this program, and aimed at something that costs nothing anyway.
+
+## What this record is actually worth
+
+An honest account of five wrong diagnoses and the eliminations they bought,
+which is less than it set out to be and more than another guess would have been.
+
+The measurement that would settle it is a profile, and this machine has neither
+`perf` nor `valgrind`. Every probe built to stand in for one has either folded
+to a constant, hoisted out of its loop, changed the byte distribution, or
+changed the program's inlining -- each caught, each after it had already
+produced a confident-looking number. That is the honest difficulty here, and it
+is worth writing down: **this row cannot be attributed with the instruments
+available**, and the next person should get a profiler before spending a day on
+it as I did.
 
 ## Two changes made along the way, and what they were worth
 
@@ -78,7 +98,14 @@ rather than shipped, by the same rule that deleted the inliner in `0027`.
 - Not V8's cons strings: the encode half builds no string and is also behind.
 - Not the append path: removing the string building makes the ratio *worse*.
 - Not the loop counter's representation: fixing that moved nothing.
-- Not the state machine's shape: a synthetic version of the same machine is
-  0.56x node, and the difference was the buffer, not the code.
+- Not the loop bound's representation: `end: i32` and `end: f64` measure the
+  same to within 3ns.
+- Not the state machine's shape: the same machine in a smaller program is
+  0.56x node.
 - Not naive codegen: a hand-written C decoder over the same runtime measured
   106us per 64 decodes against the generated code's 32.
+- Not node hoisting: forcing the call to vary per round left the table's shape
+  unchanged.
+
+What is left, and unexplained: the same function is eighteen times faster per
+byte when the program around it is smaller.
