@@ -1523,13 +1523,15 @@ static uint32_t nts_round_up_pow2(uint32_t n) {
   if (n > NTS_STRING_DOUBLE_TO) {
     return (n + (NTS_STRING_CHUNK - 1u)) & ~(NTS_STRING_CHUNK - 1u);
   }
-  n--;
-  n |= n >> 1;
-  n |= n >> 2;
-  n |= n >> 4;
-  n |= n >> 8;
-  n |= n >> 16;
-  return n + 1u;
+  /* The next power of two at or above `n`, from the bit position of the
+   * highest one in `n - 1`. `n > NTS_STRING_FLOOR` above, so `n - 1` is at
+   * least sixteen and the count is defined.
+   *
+   * The smear this replaced -- five shifts and five ors -- is the textbook
+   * spelling and was already the fast half of a fix. It is still ten
+   * instructions to rediscover a capacity, on every append, and the machine
+   * has had the instruction since 2003. */
+  return 1u << (32 - (uint32_t)__builtin_clz(n - 1u));
 }
 
 /* How many code units this string can hold without moving. See `NTS_GROWN`. */
@@ -1537,7 +1539,8 @@ static uint32_t nts_str_capacity(const NtsString *s) {
   return (s->flags & NTS_GROWN) != 0 ? nts_round_up_pow2(s->length) : s->length;
 }
 
-NtsString *nts_str_append(NtsString *a, const NtsString *b) {
+__attribute__((always_inline)) NtsString *nts_str_append(NtsString *a,
+                                                         const NtsString *b) {
   uint32_t total = a->length + b->length;
   int wide = ((a->flags | b->flags) & NTS_TWO_BYTE) != 0;
   int already_wide = (a->flags & NTS_TWO_BYTE) != 0;
@@ -1549,13 +1552,32 @@ NtsString *nts_str_append(NtsString *a, const NtsString *b) {
    * write. */
   if (a->reserved == 1u && wide == already_wide &&
       total <= nts_str_capacity(a)) {
+    /* One unit on the right, spelled out rather than handed to a copy.
+     *
+     * `out += c` is the shape a decoder writes, once per code point, and the
+     * right-hand side of it is a string of length one. `memcpy` of one byte is
+     * a call into the C library's vector dispatch, which reads its length,
+     * picks a strategy and moves a byte: on `benches/cases/node-utf8` that was
+     * 494,776 calls to `__memcpy_avx_unaligned_erms`, seven per cent of the
+     * whole program, to do 494,776 bytes of work.
+     *
+     * The branch is free where it does not hit -- one compare against a length
+     * already loaded -- and where it does it is a store. */
     if (wide) {
       uint16_t *units = NTS_ELEMENTS(a, uint16_t);
-      nts_widen(units + a->length, b);
+      if (b->length == 1u) {
+        units[a->length] = nts_unit(b, 0);
+      } else {
+        nts_widen(units + a->length, b);
+      }
       units[total] = 0;
     } else {
       unsigned char *bytes = NTS_ELEMENTS(a, unsigned char);
-      memcpy(bytes + a->length, NTS_ELEMENTS(b, unsigned char), b->length);
+      if (b->length == 1u) {
+        bytes[a->length] = NTS_ELEMENTS(b, unsigned char)[0];
+      } else {
+        memcpy(bytes + a->length, NTS_ELEMENTS(b, unsigned char), b->length);
+      }
       bytes[total] = 0;
     }
     a->length = total;
@@ -1984,22 +2006,25 @@ NtsValue nts_array_at_value(const NtsArray *a, double at) {
                     : nts_value_of_number(nts_numbers(a)[(uint32_t)offset]);
 }
 
-/* Hand back the array that was passed in, as an *owned* reference.
+/* Hand back the array that was passed in, *borrowed*.
  *
  * `fill` and `reverse` work in place and return their receiver, which is what
- * makes `xs.fill(0).length` mean something. A parameter is borrowed and a
- * call's result is owned, so returning it unchanged hands out a reference this
- * function never took: the caller releases its own *and* this one, and the
- * array is freed while it is still in use.
+ * makes `xs.fill(0).length` mean something. The receiver is a parameter, and
+ * this function holds it only because its caller does.
  *
- * Invisible under NoGC, which frees nothing. Under reference counting it read
- * as a live count that went negative and an array whose elements came back as
- * whatever was allocated over them -- found by giving `examples/arrays` a
- * `slice` and a `reverse` in one expression. */
-static NtsArray *nts_array_same(NtsArray *a) {
-  nts_retain(&a->header);
-  return a;
-}
+ * There was a retain here, and it was right for as long as a call's result was
+ * unconditionally owned: without it the caller released its own reference *and*
+ * this one, and the array was freed while still in use -- a live count that
+ * went negative and elements that came back as whatever was allocated over
+ * them, found by giving `examples/arrays` a `slice` and a `reverse` in one
+ * expression. Invisible under NoGC, which frees nothing.
+ *
+ * What changed is the caller, not the argument. `own::RUNTIME_HANDS_BACK` names
+ * these functions, so the result is recognized as one of the arguments and
+ * borrowed -- and where the borrow cannot be proved safe the caller takes a
+ * reference of its own rather than assuming this one. Retaining here as well
+ * would be the same bug pointing the other way. */
+static NtsArray *nts_array_same(NtsArray *a) { return a; }
 
 NtsArray *nts_array_fill(NtsArray *a, double value) {
   double *items = nts_numbers(a);
@@ -3091,7 +3116,8 @@ static uint32_t nts_hash_number(double number) {
   return nts_hash_mix(bits);
 }
 
-static uint32_t nts_hash_key(NtsValue key, uint32_t kind) {
+static inline __attribute__((always_inline)) uint32_t
+nts_hash_key(NtsValue key, uint32_t kind) {
   switch (kind) {
   case NTS_KEY_STRING:
     return nts_hash_string((const NtsString *)nts_value_reference(key));
@@ -3130,7 +3156,8 @@ static bool nts_same_value_zero(double a, double b) {
   return a == b || (a != a && b != b);
 }
 
-static bool nts_key_eq(NtsValue a, NtsValue b, uint32_t kind) {
+static inline __attribute__((always_inline)) bool
+nts_key_eq(NtsValue a, NtsValue b, uint32_t kind) {
   switch (kind) {
   case NTS_KEY_STRING:
     return nts_string_eq((const NtsString *)nts_value_reference(a),
@@ -3200,8 +3227,8 @@ NtsMap *nts_set_new(double kind) {
  * `insert_at` receives the slot a fresh key would take: the first DELETED slot
  * on the chain if there was one, so that deleting and reinserting does not
  * make the table grow, and the terminating EMPTY otherwise. */
-static int32_t nts_map_find(const NtsMap *map, NtsValue key, uint32_t hash,
-                            uint32_t *insert_at) {
+static inline __attribute__((always_inline)) int32_t nts_map_find(
+    const NtsMap *map, NtsValue key, uint32_t hash, uint32_t *insert_at) {
   if (map->slots == 0) {
     if (insert_at) {
       *insert_at = 0;
@@ -3394,23 +3421,19 @@ static NtsValue nts_map_normalize(NtsValue key) {
   return key;
 }
 
-/* Hand back the table that was passed in, as an *owned* reference.
+/* Hand back the table that was passed in, *borrowed*. `nts_array_same`'s twin,
+ * and under the same convention for the same reason.
  *
- * `nts_array_same`'s twin, and the same bug: `set` returns its receiver so that
- * `m.set(k, v).size` means something, a parameter is borrowed and a call's
- * result is owned, and returning it unchanged hands out a reference this
- * function never took. The caller releases its own and this one, and the table
- * is freed while still in use -- `stringKeys` released the same `NtsMap` four
- * times, once for the map and once for each `set` that returned it.
+ * The retain this used to do was covering a real crash: `stringKeys` released
+ * the same `NtsMap` four times, once for the map and once for each `set` that
+ * returned it. It had been that way since `Map` landed, and every gate reported
+ * `examples/map-and-set` as agreeing on every case, because the driver
+ * segfaulted before flushing a single line and "agreed" did not ask whether
+ * anything had been checked.
  *
- * It had been that way since `Map` landed. `examples/map-and-set` ran under
- * reference counting on every gate and the run was reported as agreeing on
- * every case, because the driver segfaulted before flushing a single line and
- * "agreed" did not ask whether anything had been checked. */
-static NtsMap *nts_map_same(NtsMap *map) {
-  nts_retain(&map->header);
-  return map;
-}
+ * The count is balanced at the caller now -- see `nts_array_same` -- which is
+ * the end of it a `set` in a loop can be free at. */
+static NtsMap *nts_map_same(NtsMap *map) { return map; }
 
 NtsMap *nts_map_set(NtsMap *map, NtsValue key, NtsValue value) {
   key = nts_map_normalize(key);

@@ -337,7 +337,7 @@ fn classify(
             of[value.0 as usize] = if decided.takes.contains(value) {
                 Ownership::Taken
             } else if let OpKind::Call {
-                callee: super::Callee::Direct(name),
+                callee: super::Callee::Direct(name) | super::Callee::External(name),
                 ..
             } = kind
             {
@@ -345,6 +345,11 @@ fn classify(
                 // something this function is already holding, so there is
                 // nothing to take and nothing to give up -- when the borrow can
                 // be proved safe.
+                //
+                // `External` as well as `Direct`, because the runtime is where
+                // most of these are: `set` and `add` and `fill` and `reverse`
+                // return their receiver, and no pass reads their bodies. They
+                // are named in `RUNTIME_HANDS_BACK` instead.
                 //
                 // When it cannot, the caller takes one of its own. `Produced`
                 // would be wrong and is a use-after-free: the callee stops
@@ -2230,6 +2235,32 @@ fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
 /// Every counted return must be a parameter. A function returning a parameter
 /// on one path and something fresh on another hands back two different kinds of
 /// thing, and the caller has one decision to make.
+/// Runtime helpers whose result is the receiver they were handed.
+///
+/// [`hands_back_a_parameter`] reads the program's own functions, and these are
+/// not among them: they are C, and the compiler knows them by name only. Each
+/// returns its receiver because JavaScript says the call evaluates to it --
+/// `m.set(k, v)` *is* `m`, which is what lets `m.set(a, 1).set(b, 2)` chain --
+/// and almost every call site throws that away.
+///
+/// Unnamed here, each discarded result cost a retain in the callee and a
+/// release in the caller for a reference the caller held the whole time. On
+/// `map-and-set` that was 436,590 calls into `nts_release`, an eighth of the
+/// benchmark, to hand back a table that was never going anywhere.
+///
+/// Adding a name here is half a change. The callee has to stop retaining, or
+/// the count goes the other way -- see `nts_map_same` and `nts_array_same`,
+/// which is where the retain used to be and why.
+const RUNTIME_HANDS_BACK: &[&str] = &[
+    "nts_array_fill",
+    "nts_array_fill_bool",
+    "nts_array_fill_ref",
+    "nts_array_reverse",
+    "nts_array_reverse_ref",
+    "nts_map_set",
+    "nts_set_add",
+];
+
 fn hands_back_a_parameter(
     program: &Program,
     layouts: &[Layout],
@@ -2253,6 +2284,7 @@ fn hands_back_a_parameter(
             any && every
         })
         .map(|func| func.name.clone())
+        .chain(RUNTIME_HANDS_BACK.iter().map(|name| (*name).to_string()))
         .collect()
 }
 

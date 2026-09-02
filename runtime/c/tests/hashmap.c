@@ -55,20 +55,25 @@ static NtsValue str(const char *text) {
 
 static NtsValue num(double d) { return nts_value_of_number(d); }
 
-/* `set` and `add` return the table, and a call's result is the caller's -- so a
- * test that ignores it holds one count too many and the table never dies.
+/* `set` and `add` return the table *borrowed*: it is the receiver, which the
+ * caller is already holding, so there is nothing here to give back.
  *
- * The retain is not ceremony: compiled code releases what a call returned, and
- * without it `m.set(k, v)` handed out a count nobody had taken. `stringKeys` in
- * `examples/map-and-set` released the same table four times. These wrappers are
- * what the compiler emits, written out. */
+ * These wrappers are what the compiler emits, written out, and they used to
+ * release -- a call's result was owned whatever it was, and `set` retained on
+ * the way out to pay for it. Both halves went together:
+ * `own::RUNTIME_HANDS_BACK` names these functions now, the caller borrows, and
+ * `nts_map_same` stops retaining. Releasing here as well would take the table's
+ * last count while the test still holds it.
+ *
+ * The convention this replaced was not wrong, only expensive. It cost a retain
+ * and a release per `set`, which on `benches/cases/map-and-set` was 436,590
+ * trips through `nts_release` -- an eighth of the benchmark -- for a table that
+ * was never going anywhere. */
 static void put(NtsMap *m, NtsValue key, NtsValue value) {
-  nts_release(&nts_map_set(m, key, value)->header);
+  nts_map_set(m, key, value);
 }
 
-static void add(NtsMap *m, NtsValue key) {
-  nts_release(&nts_set_add(m, key)->header);
-}
+static void add(NtsMap *m, NtsValue key) { nts_set_add(m, key); }
 
 /* The insertion order of the live keys, as a comma-joined ASCII string, so it
  * can be compared against what `[...m.keys()].join(",")` printed. */
@@ -306,11 +311,13 @@ int main(void) {
     check("an absent key hands back nothing to give up",
           nts_value_tag(nts_map_get(m, str("nope"))) == NTS_TAG_UNDEFINED);
 
-    /* And `set` returns the table, which is also the caller's. */
+    /* And `set` returns the table borrowed: the same pointer, and not a count
+     * more than the caller walked in with. `reserved == 2` here for as long as
+     * the result was owned, and the test asserting it is how the convention
+     * stays honest -- change one end and this says so. */
     NtsMap *again = nts_map_set(m, str("s"), nts_value_of_number(1));
-    check("`set` hands back the table as the caller's",
-          again == m && m->header.reserved == 2);
-    nts_release(&again->header);
+    check("`set` hands back the table borrowed",
+          again == m && m->header.reserved == 1);
 
     nts_release(&m->header);
     nts_collect_cycles();

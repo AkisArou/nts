@@ -1,4 +1,4 @@
-ideal 104
+ideal 2
 allocated 17
 because seventeen blocks, and they were invisible until this case existed.
 because
@@ -24,16 +24,25 @@ because
 because Fewer is possible only by being told the size in advance, and nothing
 because tells it: `new Map()` says nothing about what goes in.
 because
-because Operations: the table holds tagged values, so every key and every value
-because it takes is retained and every one it drops is released -- thirty-four
-because for the seventeen `set` calls, seventeen for the `add`s, thirty-four
-because more for the seventeen overwrites, which release an old value and retain
-because a new one, and the rest when the two containers die. A key that is a
-because number retains nothing at run time and is still an emitted call, which
-because is what this column counts.
+because Operations: two. The `Map` and the `Set` are each released once, where
+because `work` returns and the last thing holding them lets go. Nothing else in
+because this function touches a count.
 because
-because Written *after* measuring, which is the wrong order and is recorded
-because here rather than hidden: the suite prints the numbers when `expected` is
-because absent, and it was absent because this case was new. The seventeen is
-because derived above and matches; the hundred and four is described rather than
-because derived, and that is the weaker half of this argument.
+because Not the keys and not the values, because they are numbers. A number
+because erased into an `NtsValue` carries a number tag, and `nts_value_retain`
+because reads that tag and returns without reaching `nts_retain` -- an emitted
+because call, and not an operation this column counts.
+because
+because Not the fifty-one `set` and `add` calls either, and that is the whole
+because of the difference from the naive column. `m.set(k, v)` evaluates to `m`
+because so that calls chain, and a call's result used to be owned whatever it
+because was: the callee retained on the way out and the caller released what it
+because had thrown away. Fifty-one calls at two operations each is a hundred
+because and two, and with the two above it is the hundred and four the naive
+because column still reports. `own::RUNTIME_HANDS_BACK` names these functions
+because now, so the result is recognized as the argument it already is.
+because
+because This half of the argument used to read "described rather than derived,
+because and that is the weaker half". It derives exactly now, which is how the
+because hundred and two were found: a number nobody could justify is a number
+because worth looking at.
