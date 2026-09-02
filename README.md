@@ -108,8 +108,8 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | --- | ---: |
 | `console.log`, a global member with no definition here | 7 |
 | a module declaration, which has code in it | 6 |
-| this statement | 5 |
 | `MyEnum`, an enum | 4 |
+| a `function declaration` | 4 |
 | a module-scope variable with no initializer, whose type has no representation for the `undefined` it starts as | 4 |
 | a property `timestamp` of unrepresentable type (`Date`) | 4 |
 | a rest parameter whose element type has no representation | 4 |

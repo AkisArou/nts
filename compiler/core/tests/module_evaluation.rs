@@ -369,10 +369,12 @@ fn every_refused_expression_names_its_construct() {
     }
 }
 
-/// A `function` expression is told whether an arrow would do, not asked.
+/// A `function` expression lowers exactly when it has no `this` of its own.
 ///
-/// The refusal is the same either way -- neither lowers -- but which one it is
-/// decides whether the suggestion is *safe*. `util.deprecate` wraps a method by
+/// This used to be a question about the *wording* of a refusal -- neither form
+/// lowered, and the message said which one an arrow could replace. Now the same
+/// predicate decides whether it lowers at all, so getting it wrong is a wrong
+/// program rather than a wrong suggestion. `util.deprecate` wraps a method by
 /// writing `function (this: unknown, ...args)` and forwarding the caller's
 /// receiver; an arrow there would silently rebind `this` to the module scope,
 /// and a deprecated method quietly operating on the wrong object is worse than
@@ -396,8 +398,8 @@ fn a_function_expression_says_whether_an_arrow_would_do() {
     };
     assert_eq!(
         says("it uses no `this`"),
-        1,
-        "one function expression is convertible: {:?}",
+        0,
+        "the convertible one lowers rather than suggesting a rewrite: {:?}",
         refusals(&lowered),
     );
     assert_eq!(

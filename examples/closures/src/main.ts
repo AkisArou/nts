@@ -163,3 +163,35 @@ export function escapingThis(n: number): number {
   const c = new Counter(3);
   return later((x) => c.scaled(x), n % 4) + c.nested();
 }
+
+// A `function` expression is a closure too, when it has no `this` of its own.
+//
+// The difference between the two spellings is exactly the receiver: an arrow
+// inherits the enclosing `this`, which is why it is captured like any other
+// free name, and a `function` binds its own. One that never mentions `this`
+// has no such binding to be wrong about, so it is the same object with the
+// same captures. This used to be refused with a message telling the author
+// that "an arrow function with the same body lowers today", which is a
+// compiler asking to have its input retyped.
+export function functionExpression(n: number): number {
+  const twice = function (x: number): number {
+    return x * 2;
+  };
+  return twice(n) + twice(n + 1);
+}
+
+// Capturing, so the closure has a field rather than being a bare code pointer.
+export function functionExpressionCapturing(n: number): number {
+  const bump = function (x: number): number {
+    return x + n;
+  };
+  return bump(1) + bump(2) * 10;
+}
+
+// And passed straight to something that calls it, which is where the shape
+// usually turns up.
+export function functionExpressionPassed(n: number): number {
+  return later(function (x: number): number {
+    return x * 3;
+  }, n % 5);
+}

@@ -137,7 +137,7 @@ counter, not by reading the emitted C.
 | ✅ | `async`/`await` — under both providers |
 | ✅ | type predicates (`x is T`) and `asserts x is T` |
 | ✅ | rest parameters | the call gathers its trailing arguments into the array |
-| ✗ | `function` expressions — an arrow with the same body lowers |
+| ✅ | `function` expressions that do not bind their own `this` — the same closure an arrow is, with the same captures. One that *does* use `this` is still refused, and that is the whole of the difference |
 | ✅ | closures over a variable something **assigns to** — the variable moves into a cell |
 | ✗ | a closure over a `for` loop's own variable, which JavaScript rebinds per iteration |
 | ✅ | a closure written *above* the declaration of a local it reads |

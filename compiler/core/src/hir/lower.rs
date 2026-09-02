@@ -749,10 +749,26 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
 
     let mut closures = Vec::new();
     for (index, node) in snapshot.nodes.iter().enumerate() {
-        if node.kind != NodeKind::Syntax(syntax::ARROW_FUNCTION) {
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        // An arrow, and a `function` expression that does not bind its own
+        // `this`.
+        //
+        // The refusal for the second used to say it out loud -- "it uses no
+        // `this`, so an arrow function with the same body lowers today" -- and
+        // that is a message telling the author to retype their program. The
+        // difference between the two forms is exactly `this`: an arrow inherits
+        // the enclosing one, which is why it is captured here like any other
+        // free name, and a `function` binds its own. One that never mentions
+        // `this` has no such binding to be wrong about, so it is the same
+        // closure.
+        let is_closure = match node.kind {
+            NodeKind::Syntax(syntax::ARROW_FUNCTION) => true,
+            NodeKind::Syntax(syntax::FUNCTION_EXPRESSION) => !probe.binds_this(id),
+            _ => false,
+        };
+        if !is_closure {
             continue;
         }
-        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
         let mut info = ClosureInfo {
             node: id,
             captures: Vec::new(),
@@ -4186,9 +4202,11 @@ impl<'a> FuncBuilder<'a> {
                     does not have"
                 .to_owned();
         }
-        "a `function` expression; it uses no `this`, so an arrow function with the same body \
-         lowers today"
-            .to_owned()
+        // Unreachable from the statement dispatch, which lowers this case now.
+        // Kept because the collector and the dispatch ask `binds_this`
+        // separately, and a disagreement between them should say something
+        // rather than reach `lower_arrow` and fail to find a closure.
+        "a `function` expression the closure collector did not see".to_owned()
     }
 
     /// Whether a function expression's own `this` is reachable from its body.
@@ -8818,7 +8836,23 @@ impl<'a> FuncBuilder<'a> {
                 Ok(())
             }
             Some(syntax::VARIABLE_STATEMENT) => self.lower_variable_statement(id),
-            _ => Err(self.unsupported(id, "this statement")),
+            // Named, not "this statement". Five sites in the corpus shared
+            // that message and no reader could rank them -- which is the
+            // mistake `describe_name` exists to undo one field over, and the
+            // one `typescript.md` §15 warns about in as many words: the first
+            // move on a row is to name what it blocks on. `for...in` and
+            // `try` are different features and a count that adds them together
+            // ranks neither.
+            _ => {
+                let what = self
+                    .kind_of(id)
+                    .and_then(nts_semantic_schema::syntax::name_of)
+                    .map_or_else(
+                        || "this statement".to_owned(),
+                        |name| format!("a `{name}`"),
+                    );
+                Err(self.unsupported(id, &what))
+            }
         }
     }
 
@@ -8916,7 +8950,14 @@ impl<'a> FuncBuilder<'a> {
             // two differ in `this` and `arguments`, and
             // `internal/deprecate.ts` is a case that genuinely needs the
             // first -- which is why this says "when" rather than "so".
-            Some(syntax::FUNCTION_EXPRESSION) => Err(self.unsupported(id, &self.why_not_arrow(id))),
+            // One that binds its own `this` is still refused, and says so.
+            Some(syntax::FUNCTION_EXPRESSION) => {
+                if self.binds_this(id) {
+                    Err(self.unsupported(id, &self.why_not_arrow(id)))
+                } else {
+                    self.lower_arrow(id)
+                }
+            }
             Some(syntax::REGULAR_EXPRESSION_LITERAL) => Err(self.unsupported(
                 id,
                 "a regular expression literal, which needs a regular expression engine",
