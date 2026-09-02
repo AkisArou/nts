@@ -223,7 +223,7 @@ fn insert_into(func: &mut Func, layouts: &[Layout], summaries: &own::Summaries) 
                 retain(func, &mut ops, value, &mut report);
             }
             for value in dying {
-                release_value(func, layouts, &map, &mut ops, value, &mut report);
+                release_value(func, layouts, &map, at, &mut ops, value, &mut report);
             }
         } else {
             // With one edge it cannot be critical, so its work can go at the end
@@ -272,14 +272,14 @@ fn insert_into(func: &mut Func, layouts: &[Layout], summaries: &own::Summaries) 
                         retain(func, &mut ops, value, &mut report);
                     }
                     for value in dying {
-                        release_value(func, layouts, &map, &mut ops, value, &mut report);
+                        release_value(func, layouts, &map, at, &mut ops, value, &mut report);
                     }
                 } else {
                     for value in retains {
                         retain(func, &mut edge_ops, value, &mut report);
                     }
                     for value in dying {
-                        release_value(func, layouts, &map, &mut edge_ops, value, &mut report);
+                        release_value(func, layouts, &map, at, &mut edge_ops, value, &mut report);
                     }
                     let landing = BlockId(
                         u32::try_from(original_count + split_blocks.len()).unwrap_or(u32::MAX),
@@ -660,6 +660,7 @@ fn release_value(
     func: &mut Func,
     layouts: &[Layout],
     map: &own::Map,
+    at: BlockId,
     ops: &mut Vec<ValueId>,
     value: ValueId,
     report: &mut Report,
@@ -676,7 +677,7 @@ fn release_value(
         // A slot that only ever holds a null or another frame object has
         // nothing to give back, and loading it to release it is a load, a call
         // and a branch to decide nothing. See `own::Map::inert`.
-        if map.inert(value, field) {
+        if map.inert(value, field) || map.still_zero(at, value, field) {
             continue;
         }
         let ty = field_type(func, layouts, value, field);

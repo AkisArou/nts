@@ -136,6 +136,9 @@ pub struct Map {
     initializing: rustc_hash::FxHashSet<ValueId>,
     nulls: Vec<rustc_hash::FxHashSet<ValueId>>,
     inert: rustc_hash::FxHashSet<(ValueId, u32)>,
+    /// Slots that are still a zero where each block ends. See
+    /// [`initializing_stores`].
+    still_zero: Vec<rustc_hash::FxHashSet<(ValueId, u32)>>,
     /// Parameters of *this* function that arrive owned, because every caller
     /// hands the reference over. See [`consuming`].
     owns: rustc_hash::FxHashSet<ValueId>,
@@ -186,6 +189,16 @@ impl Map {
     #[must_use]
     pub fn hands_over(&self, call: ValueId) -> &[ValueId] {
         self.hands_over.get(&call).map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether a slot holds a zero where this block ends, so the walk over a
+    /// frame object's fields can skip it there. A field cleared on the way out
+    /// is the common shape: a cursor, a free list, a `next` set back to null.
+    #[must_use]
+    pub fn still_zero(&self, block: BlockId, object: ValueId, field: u32) -> bool {
+        self.still_zero
+            .get(block.0 as usize)
+            .is_some_and(|zero| zero.contains(&(object, field)))
     }
 
     /// Whether a slot never holds anything that has to be given back, so the
@@ -247,6 +260,101 @@ fn handing_over(
     over
 }
 
+/// What `analyze` has settled before it says what each value holds.
+struct Decided<'a> {
+    /// Borrowed for their whole life. See [`crossing_borrows`].
+    crossing: &'a rustc_hash::FxHashSet<ValueId>,
+    /// Slots holding nothing that needs a count. See [`inert_slots`].
+    inert: &'a rustc_hash::FxHashSet<(ValueId, u32)>,
+    /// Loads that take the slot's reference. See [`taking`].
+    takes: &'a rustc_hash::FxHashSet<ValueId>,
+}
+
+/// One [`Ownership`] per value, from what has already been settled.
+fn classify(
+    func: &Func,
+    layouts: &[Layout],
+    summaries: &Summaries,
+    live: &liveness::Liveness,
+    decided: &Decided<'_>,
+    of: &mut [Ownership],
+) {
+    for (at, block) in func.blocks.iter().enumerate() {
+        let here = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
+        let around = Surroundings {
+            live,
+            mutates: &summaries.mutates,
+        };
+        for param in &block.params {
+            if owned(func, layouts, *param) {
+                of[param.0 as usize] = if decided.crossing.contains(param) {
+                    Ownership::Borrowed
+                } else {
+                    Ownership::Produced
+                };
+            }
+        }
+        for (index, value) in block.ops.iter().enumerate() {
+            // A *read* of a slot that only ever holds frame objects is one of
+            // them, and there is nothing to give back. Only a read: a frame
+            // object holding references still needs the walk that gives them
+            // up, which is what `owned` is asking when it checks whether it has
+            // any. Skipping that leaked the whole of `store-elsewhere`'s list.
+            let read_from_inert = matches!(
+                &func.values[value.0 as usize].kind,
+                OpKind::FieldGet { object, field, .. } if decided.inert.contains(&(*object, *field))
+            );
+            if !owned(func, layouts, *value) || read_from_inert {
+                continue;
+            }
+            let kind = &func.values[value.0 as usize].kind;
+            let safely = || {
+                borrows_safely(
+                    func,
+                    &block.ops,
+                    index,
+                    *value,
+                    here,
+                    &block.terminator,
+                    &around,
+                )
+            };
+            of[value.0 as usize] = if decided.takes.contains(value) {
+                Ownership::Taken
+            } else if let OpKind::Call {
+                callee: super::Callee::Direct(name),
+                ..
+            } = kind
+            {
+                // A call that hands back one of its arguments hands back
+                // something this function is already holding, so there is
+                // nothing to take and nothing to give up -- when the borrow can
+                // be proved safe.
+                //
+                // When it cannot, the caller takes one of its own. `Produced`
+                // would be wrong and is a use-after-free: the callee stops
+                // retaining *unconditionally*, so there is no reference here to
+                // have been produced.
+                if !summaries.hands_back.contains(name) {
+                    Ownership::Produced
+                } else if safely() {
+                    Ownership::Borrowed
+                } else {
+                    Ownership::Copied
+                }
+            } else if produces_owned(kind) {
+                Ownership::Produced
+            } else if (is_load(kind) || repackages(kind))
+                && (decided.crossing.contains(value) || safely())
+            {
+                Ownership::Borrowed
+            } else {
+                Ownership::Copied
+            };
+        }
+    }
+}
+
 /// Work out who owns what.
 ///
 /// Takes liveness by `&mut` because it changes it: an anchor has to outlive
@@ -272,7 +380,8 @@ pub fn analyze(
         .cloned()
         .unwrap_or_default();
     let entering = freshness(func, layouts, &summaries.harmless, &vouched);
-    let initializing = initializing_stores(func, &entering, &summaries.harmless);
+    let (initializing, still_zero) =
+        initializing_stores(func, layouts, &entering, &summaries.harmless);
     let crossing = crossing_borrows(
         func,
         layouts,
@@ -293,89 +402,18 @@ pub fn analyze(
     let (takes, settled) = taking(func, layouts, &crossing, &summaries.harmless);
     let mut of = vec![Ownership::Unowned; func.values.len()];
 
-    for (at, block) in func.blocks.iter().enumerate() {
-        let here = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
-        let around = Surroundings {
-            live,
-            mutates: &summaries.mutates,
-        };
-        for param in &block.params {
-            if owned(func, layouts, *param) {
-                of[param.0 as usize] = if crossing.contains(param) {
-                    Ownership::Borrowed
-                } else {
-                    Ownership::Produced
-                };
-            }
-        }
-        for (index, value) in block.ops.iter().enumerate() {
-            // A *read* of a slot that only ever holds frame objects is one of
-            // them, and there is nothing to give back. See `inert_slots`.
-            //
-            // Only a read. `costs_nothing` also says yes to a frame object
-            // itself, and that is true of the object and false of its *fields*:
-            // a frame object holding references still needs the walk that gives
-            // them up, which is exactly what `owned` is saying when it asks
-            // whether it has any. Skipping it here leaked the whole of
-            // `store-elsewhere`'s list -- thirty three disks whose only root was
-            // a table nobody walked.
-            let read_from_inert = matches!(
-                &func.values[value.0 as usize].kind,
-                OpKind::FieldGet { object, field, .. } if inert.contains(&(*object, *field))
-            );
-            if !owned(func, layouts, *value) || read_from_inert {
-                continue;
-            }
-            let kind = &func.values[value.0 as usize].kind;
-            let safely = || {
-                borrows_safely(
-                    func,
-                    &block.ops,
-                    index,
-                    *value,
-                    here,
-                    &block.terminator,
-                    &around,
-                )
-            };
-            of[value.0 as usize] = if takes.contains(value) {
-                Ownership::Taken
-            } else if let OpKind::Call {
-                callee: super::Callee::Direct(name),
-                ..
-            } = kind
-            {
-                // A call that hands back one of its arguments hands back
-                // something this function is already holding, so there is
-                // nothing to take and nothing to give up -- when the borrow can
-                // be proved safe.
-                //
-                // When it cannot, the caller takes one of its own. `Produced`
-                // would be wrong and is a use-after-free: the callee stops
-                // retaining *unconditionally*, so there is no reference here to
-                // have been produced. Writing `Produced` in this arm broke
-                // `nullable` again, in the same place and for the same reason
-                // as before the map existed -- which is the point of the map,
-                // because this time it was one arm of one match instead of two
-                // rules in two files.
-                if !summaries.hands_back.contains(name) {
-                    Ownership::Produced
-                } else if safely() {
-                    Ownership::Borrowed
-                } else {
-                    Ownership::Copied
-                }
-            } else if produces_owned(kind) {
-                Ownership::Produced
-            } else if (is_load(kind) || repackages(kind))
-                && (crossing.contains(value) || safely())
-            {
-                Ownership::Borrowed
-            } else {
-                Ownership::Copied
-            };
-        }
-    }
+    classify(
+        func,
+        layouts,
+        summaries,
+        live,
+        &Decided {
+            crossing: &crossing,
+            inert: &inert,
+            takes: &takes,
+        },
+        &mut of,
+    );
 
     Map {
         of,
@@ -383,6 +421,7 @@ pub fn analyze(
         initializing,
         nulls: absent,
         inert: inert.clone(),
+        still_zero,
         owns,
         hands_over,
     }
@@ -751,6 +790,40 @@ fn absent_on_entry(func: &Func) -> Vec<rustc_hash::FxHashSet<ValueId>> {
     known
 }
 
+/// Whether every store in this function can be attributed to one object.
+///
+/// A store is aimed by naming something. If every `FieldSet` names an
+/// allocation or a parameter directly, it hits exactly the object it names --
+/// two allocations are two objects, and a parameter was bound before either
+/// existed -- so the writes a pass records are all the writes there are.
+///
+/// A store through anything else could be aimed at a slot under another name,
+/// and `loop-break` is why this is a *function-wide* question rather than a
+/// per-store one: it writes `tail.next` where `tail` is a block parameter
+/// carrying the head, so recording the write against `tail` leaves `head.next`
+/// looking untouched. Believing that dropped the walk that gives the list back
+/// and leaked all sixteen links.
+fn stores_are_aimed(func: &Func, harmless: &rustc_hash::FxHashSet<String>) -> bool {
+    func.blocks.iter().all(|block| {
+        block.ops.iter().all(|value| {
+            match &func.values[value.0 as usize].kind {
+                OpKind::FieldSet { object, .. } => matches!(
+                    func.values[object.0 as usize].kind,
+                    OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } | OpKind::Param(_)
+                ),
+                OpKind::Call {
+                    callee: super::Callee::Direct(name),
+                    ..
+                } => harmless.contains(name),
+                // A global is reachable from inside any callee, and a call that
+                // is not harmless can write through whatever it is handed.
+                OpKind::GlobalSet { .. } | OpKind::Call { .. } => false,
+                _ => true,
+            }
+        })
+    })
+}
+
 /// Slots whose contents never need a count, and the values read out of them.
 ///
 /// A frame object has no runtime destructor, so the counting pass emits by hand
@@ -878,10 +951,21 @@ fn costs_nothing(
 /// proved is null, so the chain from the head only ever grows.
 fn initializing_stores(
     func: &Func,
+    layouts: &[Layout],
     entering: &[Fresh],
     harmless: &rustc_hash::FxHashSet<String>,
-) -> rustc_hash::FxHashSet<ValueId> {
+) -> (
+    rustc_hash::FxHashSet<ValueId>,
+    Vec<rustc_hash::FxHashSet<(ValueId, u32)>>,
+) {
     let mut settled = rustc_hash::FxHashSet::default();
+    let mut still_zero = vec![rustc_hash::FxHashSet::default(); func.blocks.len()];
+    // `initializing` is safe without this: `Fresh` drops a base the moment it is
+    // handed anywhere, so a store *through* a name it is tracking is one it saw.
+    // Claiming a slot is still a zero at the end is the stronger statement, and
+    // needs every write in the function to be attributable. See
+    // `stores_are_aimed`.
+    let attributable = stores_are_aimed(func, harmless);
     for (at, block) in func.blocks.iter().enumerate() {
         let mut fresh = entering.get(at).cloned().unwrap_or_default();
         for value in &block.ops {
@@ -893,8 +977,21 @@ fn initializing_stores(
             }
             fresh.observe(func, *value, &kind, harmless);
         }
+        // What is still a zero where the block ends, which is where a frame
+        // object's fields are given back. A field the program cleared on its
+        // way out holds nothing, and walking it is a load and a release to
+        // decide that.
+        if attributable {
+            for base in &fresh.bases {
+                for field in reference_fields(func, layouts, *base) {
+                    if !fresh.written.contains(&(*base, u64::from(field))) {
+                        still_zero[at].insert((*base, field));
+                    }
+                }
+            }
+        }
     }
-    settled
+    (settled, still_zero)
 }
 
 /// Owned values the entry block defines.
