@@ -290,7 +290,7 @@ pub fn analyze(
     let hands_over = handing_over(func, summaries);
     let inert = inert_slots(func, layouts, &summaries.harmless);
     let absent = nulls(func);
-    let (takes, settled) = taking(func, layouts, &crossing, &summaries.harmless, &absent);
+    let (takes, settled) = taking(func, layouts, &crossing, &summaries.harmless);
     let mut of = vec![Ownership::Unowned; func.values.len()];
 
     for (at, block) in func.blocks.iter().enumerate() {
@@ -676,31 +676,7 @@ fn nulls(func: &Func) -> Vec<rustc_hash::FxHashSet<ValueId>> {
             let arriving = &incoming[at];
             let mut agreed: Option<rustc_hash::FxHashSet<ValueId>> = None;
             for (from, _) in arriving {
-                let mut here = rustc_hash::FxHashSet::default();
-                if let super::Terminator::Branch {
-                    cond,
-                    then_target,
-                    else_target,
-                    ..
-                } = &func.blocks[from.0 as usize].terminator
-                    && let OpKind::Binary { op, lhs, rhs } = &func.values[cond.0 as usize].kind
-                {
-                    let against_null = |one: ValueId, other: ValueId| {
-                        (matches!(func.values[other.0 as usize].kind, OpKind::ConstNull)
-                            && matches!(func.values[one.0 as usize].ty, HirType::Managed(_)))
-                        .then_some(one)
-                    };
-                    if let Some(subject) = against_null(*lhs, *rhs).or_else(|| against_null(*rhs, *lhs))
-                    {
-                        let yes = then_target.0 as usize == at && else_target.0 as usize != at;
-                        let no = else_target.0 as usize == at && then_target.0 as usize != at;
-                        if (matches!(op, super::BinOp::Eq) && yes)
-                            || (matches!(op, super::BinOp::Ne) && no)
-                        {
-                            here.insert(subject);
-                        }
-                    }
-                }
+                let here = proves_null(func, *from, at);
                 agreed = Some(match agreed {
                     None => here,
                     Some(before) => before.intersection(&here).copied().collect(),
@@ -709,6 +685,70 @@ fn nulls(func: &Func) -> Vec<rustc_hash::FxHashSet<ValueId>> {
             agreed.unwrap_or_default()
         })
         .collect()
+}
+
+/// What one edge's branch proves about a value being absent.
+///
+/// A block reached only by the arm of an `x === null` that says yes holds a null
+/// in `x`. Managed references only: for an erased value the null is a *tag*, and
+/// whether the payload beside it is a reference is a different question.
+fn proves_null(func: &Func, from: BlockId, to: usize) -> rustc_hash::FxHashSet<ValueId> {
+    let mut here = rustc_hash::FxHashSet::default();
+    let super::Terminator::Branch {
+        cond,
+        then_target,
+        else_target,
+        ..
+    } = &func.blocks[from.0 as usize].terminator
+    else {
+        return here;
+    };
+    let OpKind::Binary { op, lhs, rhs } = &func.values[cond.0 as usize].kind else {
+        return here;
+    };
+    let against_null = |one: ValueId, other: ValueId| {
+        (matches!(func.values[other.0 as usize].kind, OpKind::ConstNull)
+            && matches!(func.values[one.0 as usize].ty, HirType::Managed(_)))
+        .then_some(one)
+    };
+    if let Some(subject) = against_null(*lhs, *rhs).or_else(|| against_null(*rhs, *lhs)) {
+        let yes = then_target.0 as usize == to && else_target.0 as usize != to;
+        let no = else_target.0 as usize == to && then_target.0 as usize != to;
+        if (matches!(op, super::BinOp::Eq) && yes) || (matches!(op, super::BinOp::Ne) && no) {
+            here.insert(subject);
+        }
+    }
+    here
+}
+
+/// Values absent on entry to each block, carried forward.
+///
+/// `proves_null` answers it for one edge; a value it proved absent stays absent
+/// through the block it lands in and out the other side, because SSA gives one
+/// value one meaning. That is what lets a take survive a *join*: the arm that
+/// tested the value and found nothing still says so two blocks later.
+fn absent_on_entry(func: &Func) -> Vec<rustc_hash::FxHashSet<ValueId>> {
+    let incoming = super::loops::predecessors(func);
+    let mut known: Vec<rustc_hash::FxHashSet<ValueId>> =
+        vec![rustc_hash::FxHashSet::default(); func.blocks.len()];
+    // Index order, and a predecessor that has not been reached yet contributes
+    // nothing -- which is the safe direction for a *must* fact and stops a back
+    // edge from claiming anything.
+    for at in 0..func.blocks.len() {
+        let mut agreed: Option<rustc_hash::FxHashSet<ValueId>> = None;
+        for (from, _) in &incoming[at] {
+            let mut here = proves_null(func, *from, at);
+            if (from.0 as usize) < at {
+                here.extend(known[from.0 as usize].iter().copied());
+            }
+            agreed = Some(match agreed {
+                None => here,
+                Some(before) => before.intersection(&here).copied().collect(),
+            });
+        }
+        known[at] = agreed.unwrap_or_default();
+    }
+    known
 }
 
 /// Slots whose contents never need a count, and the values read out of them.
@@ -1466,6 +1506,70 @@ impl Slot {
     }
 }
 
+/// The pending takes that reach a block, agreed across every way in.
+///
+/// A predecessor must either carry the take, or say the value is not there on
+/// its own edge -- in which case taking it costs nothing on that path.
+///
+/// A join is where `Towers#pushDisk` lives: it reads the slot, tests two things
+/// about what it found, and stores in the block after both arms come back
+/// together. One predecessor at a time could never get a take that far.
+fn arriving_at(
+    func: &Func,
+    at: usize,
+    incoming: &[Vec<(BlockId, Vec<ValueId>)>],
+    leaving: &[rustc_hash::FxHashMap<Slot, ValueId>],
+    known_absent: &[rustc_hash::FxHashSet<ValueId>],
+) -> rustc_hash::FxHashMap<Slot, ValueId> {
+    let mut arriving: Option<rustc_hash::FxHashMap<Slot, ValueId>> = None;
+    for (from, _) in &incoming[at] {
+        let before = from.0 as usize;
+        // A predecessor not yet reached is a back edge: it carries nothing, and
+        // the meet below drops whatever it cannot vouch for.
+        let carried: rustc_hash::FxHashMap<Slot, ValueId> = if before < at {
+            let elsewhere: Vec<BlockId> = func.blocks[before]
+                .terminator
+                .successors()
+                .into_iter()
+                .filter(|to| to.0 as usize != at)
+                .collect();
+            leaving[before]
+                .iter()
+                .filter(|(_, pending)| {
+                    elsewhere.iter().all(|to| {
+                        // A block that throws is not somewhere a value has to
+                        // be accounted for: `nts_thrown` calls `abort`, so
+                        // nothing after it is observed. The same reason
+                        // `crossing_borrows` treats an operation in an
+                        // unreachable block as unobserved.
+                        func.blocks.get(to.0 as usize).is_some_and(|block| {
+                            matches!(block.terminator, super::Terminator::Unreachable)
+                        }) || proves_null(func, *from, to.0 as usize).contains(*pending)
+                            || known_absent[before].contains(*pending)
+                    })
+                })
+                .map(|(slot, pending)| (*slot, *pending))
+                .collect()
+        } else {
+            rustc_hash::FxHashMap::default()
+        };
+        let mut absent_here = proves_null(func, *from, at);
+        if before < at {
+            absent_here.extend(known_absent[before].iter().copied());
+        }
+        arriving = Some(match arriving {
+            None => carried,
+            Some(so_far) => so_far
+                .into_iter()
+                .filter(|(slot, pending)| {
+                    carried.get(slot) == Some(pending) || absent_here.contains(pending)
+                })
+                .collect(),
+        });
+    }
+    arriving.unwrap_or_default()
+}
+
 /// Loads that take the slot's reference rather than copying it.
 ///
 /// A load out of a slot that is overwritten before anything else can reach the
@@ -1492,7 +1596,6 @@ fn taking(
     layouts: &[Layout],
     crossing: &rustc_hash::FxHashSet<ValueId>,
     harmless: &rustc_hash::FxHashSet<String>,
-    absent: &[rustc_hash::FxHashSet<ValueId>],
 ) -> (
     rustc_hash::FxHashSet<ValueId>,
     rustc_hash::FxHashSet<ValueId>,
@@ -1503,45 +1606,23 @@ fn taking(
         return (takes, settled);
     }
     let incoming = super::loops::predecessors(func);
+    let known_absent = absent_on_entry(func);
     let mut leaving: Vec<rustc_hash::FxHashMap<Slot, ValueId>> =
         vec![rustc_hash::FxHashMap::default(); func.blocks.len()];
 
     for (at, block) in func.blocks.iter().enumerate() {
-        let mut held: rustc_hash::FxHashMap<Slot, ValueId> = rustc_hash::FxHashMap::default();
-        // Carried in from a single predecessor, for the values the *other* arms
-        // of its branch prove are null.
-        //
         // A take says the slot has given up what it held. If the store that
         // overwrites the slot does not happen on some path, the slot still holds
-        // the reference while the value claims it, and one of the two loses.
-        // Unless the value is null there, which costs nothing to claim -- and a
+        // the reference while the value claims it, and one of the two loses --
+        // unless the value is null there, which costs nothing to claim. A
         // nullable reference in TypeScript is *tested* before it is used, so the
         // arm where the test says no is exactly where the compiler already knows
-        // it is null.
+        // it is absent.
         //
         // That is the whole of `popDiskFrom`: read `slots[at]`, return early if
         // it is null, and otherwise overwrite the slot in the block after the
-        // branch. One block at a time could never pair the two.
-        if let [(from, _)] = incoming[at].as_slice() {
-            let before = from.0 as usize;
-            if before < at {
-                let elsewhere: Vec<super::BlockId> = func.blocks[before]
-                    .terminator
-                    .successors()
-                    .into_iter()
-                    .filter(|to| to.0 as usize != at)
-                    .collect();
-                for (slot, carried) in &leaving[before] {
-                    if elsewhere.iter().all(|to| {
-                        absent
-                            .get(to.0 as usize)
-                            .is_some_and(|null| null.contains(carried))
-                    }) {
-                        held.insert(*slot, *carried);
-                    }
-                }
-            }
-        }
+        // branch. See `arriving_at`.
+        let mut held = arriving_at(func, at, &incoming, &leaving, &known_absent);
         for &value in &block.ops {
         // A borrow may not also take. `crossing` says nothing releases this
         // value and no edge retains for it; taking would make it owned, and
