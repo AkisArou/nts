@@ -129,11 +129,70 @@ The evidence that nothing is left on the table is the column this goal added:
 twenty of twenty cases at their **allocation** floor, each floor argued in
 `expected` before it was measured.
 
+**And the strongest form left is worth zero, measured.** The arguments above
+are about the edge the goal named. There is one place `escape` could read a fact
+`own` holds without any cycle at all: every argument to an **external** call
+escapes, unconditionally, and `own::consumes` is a static table of what the
+runtime helpers do with what they are handed -- written down, not derived from
+`escape`.
+
+So the ceiling was measured rather than argued. Removing the blanket entirely --
+unsound, as a probe -- moves exactly one case:
+
+    array-of-objects   18 allocations -> 1, BELOW allocation floor
+
+That is `nts_array_push_ref`, the one helper that genuinely stores its argument
+and the one entry `own::consumes` already has. Every other case is unchanged,
+because no other one hands an object to a helper in a position a frame could
+hold. A sound version of this edge would therefore buy nothing: the blanket
+costs nothing anywhere except where it is load-bearing, and there it is right.
+
+The probe is also the check checking itself. An unsound placement showed up
+immediately as `BELOW allocation floor -- the argument in expected is wrong`,
+which is the column existing to say so.
+
 The premise survived into a goal because the module's own header still said
 `- passed along an edge, because a block parameter is a value this analysis does
 not follow`, three hundred lines above a function whose doc says it stopped
 doing that and what it cost. A stale comment is not a small thing when a comment
 is what the next reader plans from. It now says what the code does.
+
+## And the corpus count is the wrong ratchet, with a number
+
+The goal this record belongs to ends "then close `typescript.md`: 48 of 184
+corpus cases still refuse". Closing the `for...of` row was the first test of
+that ratchet and it failed in a way worth writing down: the row went 3 to 0, was
+verified against node over 493 cases, and **no case flipped**. All three reached
+their next refusal instead.
+
+That is not particular to `for...of`:
+
+    99 refusal sites, 52 distinct messages, across 48 refusing cases -- 2.1 each
+
+So the tallest row, `console.log` at 7 sites, would complete approximately no
+cases: it removes 7 of 99, and each of those cases carries another blocker
+behind it. And 52 distinct messages over 48 cases is a flat tail, not a queue.
+
+The corpus is TypeScript's own test suite, written to stress the *checker*. Its
+cases stress it deliberately: the rest-parameter row is `...args: any[]` inside
+a generic mixin whose point is declaration emit, and the `console.log` row
+includes a regression test for `asserts condition` predicates. In each the named
+refusal is the first one hit, not what the case needs.
+
+`typescript.md` §15 already says the better queue is beside it -- the node
+profile's 1,097 sites, "the only list ordered by what real code actually needs
+rather than by what looks incomplete" -- and says to name what a row blocks on
+before building it. Naming them, from the refusals as they stand:
+
+| row | what it actually blocks on |
+|---|---|
+| rest parameter (4) | nothing about rest parameters: they lower today as an ordinary array parameter, and every refusal is `...args: any[]` or a generic constrained to `unknown[]`. It is `any` and instantiation |
+| `console.log` (7) | `any[]` rest, a value formatter, and a way to check it -- the differential compares returned values by bit pattern, so printing is outside what the oracle sees |
+| `Date` property (4+2) | a `Date` representation |
+| tagged template (4) | the strings array object, which is the first thing here that wants an allocation with identity across calls |
+| `for...in` (3) | key enumeration. For a sealed layout the keys are a static list, and the body's `obj[k]` is the real gap: a field read by a name known only at run time |
+| a method on an object literal (3) | `this` on a literal, which is a binding rule rather than a lowering |
+| `enum`, `namespace` with code (10) | **no oracle.** Node strips types rather than transforming them and refuses to run the file at all. §15 says build these last, and it is right |
 
 ## What moved, and what had to move with it
 
