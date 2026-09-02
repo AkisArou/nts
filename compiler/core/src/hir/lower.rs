@@ -8810,8 +8810,24 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::FOR_OF_STATEMENT) => self.lower_for_of(id),
             Some(syntax::BREAK_STATEMENT) => self.lower_break(id),
             Some(syntax::CONTINUE_STATEMENT) => self.lower_continue(id),
-            // `;` on its own. Nothing to lower and nothing wrong with it.
-            Some(syntax::EMPTY_STATEMENT) => Ok(()),
+            // Two kinds with nothing to run, for two different reasons.
+            //
+            // `;` on its own has nothing to lower and nothing wrong with it.
+            //
+            // A function declared inside a body is lowered by the walk in
+            // `lower`, which visits *every* `FUNCTION_DECLARATION` in the file
+            // and not only the top-level ones -- so the statement is a
+            // declaration here exactly as `is_module_declaration` says it is at
+            // module scope: its body is its own business. Hoisting comes free
+            // with that. The name is a function in the program before any
+            // statement here executes, so a call above the declaration resolves
+            // like any other.
+            //
+            // One that reads a local of the function around it is refused, and
+            // by the walk rather than here: lowered on its own it has a free
+            // name, and "`base`, a name from an enclosing scope" says which.
+            // That is a closure, and this is not the path that builds one.
+            Some(syntax::EMPTY_STATEMENT | syntax::FUNCTION_DECLARATION) => Ok(()),
             Some(syntax::THROW_STATEMENT) => self.lower_throw(id),
             Some(syntax::EXPRESSION_STATEMENT) => {
                 let Some(expression) = self.children(id).first().copied() else {
@@ -8836,6 +8852,7 @@ impl<'a> FuncBuilder<'a> {
                 Ok(())
             }
             Some(syntax::VARIABLE_STATEMENT) => self.lower_variable_statement(id),
+
             // Named, not "this statement". Five sites in the corpus shared
             // that message and no reader could rank them -- which is the
             // mistake `describe_name` exists to undo one field over, and the

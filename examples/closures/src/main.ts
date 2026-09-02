@@ -195,3 +195,48 @@ export function functionExpressionPassed(n: number): number {
     return x * 3;
   }, n % 5);
 }
+
+// The third spelling, and the one that is *not* a closure.
+//
+// A function declared inside a body is lowered by the walk in `hir::lower`,
+// which visits every `FUNCTION_DECLARATION` in the file rather than only the
+// top-level ones. So it is already in the program before any statement runs,
+// the declaration statement has nothing to execute, and hoisting falls out
+// rather than being arranged: a call above the declaration resolves like any
+// other name.
+//
+// What it cannot do is read a local of the function around it. That is a
+// closure, this is not the path that builds one, and the refusal says which
+// name: "`base`, a name from an enclosing scope".
+// The name is `doubled` and not `twice` because this file already has a
+// top-level `twice`: a nested declaration goes into the same flat namespace as
+// every other function in the file, so the two collide and *both* are refused
+// -- "a second function named `twice` in the same file". Correct, and a
+// limitation: the name is not qualified by the function it is written in.
+export function nestedDeclaration(n: number): number {
+  function doubled(x: number): number {
+    return x * 2;
+  }
+  return doubled(n) + doubled(n + 1);
+}
+
+export function calledBeforeItIsDeclared(n: number): number {
+  const first = declaredLater(n);
+  function declaredLater(x: number): number {
+    return x + 7;
+  }
+  return first + declaredLater(n * 2);
+}
+
+// Two that call each other, which needs both to exist before either body runs.
+export function mutuallyRecursive(n: number): number {
+  function isEven(x: number): number {
+    return x <= 0 ? 1 : isOdd(x - 1);
+  }
+  function isOdd(x: number): number {
+    return x <= 0 ? 0 : isEven(x - 1);
+  }
+  // Every comparison is false for a NaN, so this lands on 0 and terminates.
+  const bounded = n >= 0 && n <= 20 ? n : 0;
+  return isEven(bounded);
+}
