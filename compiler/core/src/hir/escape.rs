@@ -130,6 +130,45 @@ impl Escapes {
     }
 }
 
+/// Parameters a function stores into another parameter's field.
+///
+/// `Config#constructor` is `this.label = label`, which is every constructor that
+/// takes a reference. The store's container is a *parameter*, so it is not an
+/// allocation this function can confine, and the value went to the heap -- for
+/// every caller, however local its object was.
+///
+/// It is not this function's question. What the stored value escapes into is
+/// the container, and whether *that* outlives anything is the caller's answer.
+/// So the pair is published and the caller adds the edge, which is the same
+/// "if the container escapes, so does what is in it" the stores already use --
+/// one call further out.
+fn stores_into(func: &Func) -> Vec<(u32, u32)> {
+    let mut pairs = Vec::new();
+    for block in &func.blocks {
+        for value in &block.ops {
+            let (container, stored) = match &func.values[value.0 as usize].kind {
+                OpKind::FieldSet {
+                    object,
+                    value: stored,
+                    ..
+                }
+                | OpKind::ArraySet {
+                    array: object,
+                    value: stored,
+                    ..
+                } => (*object, *stored),
+                _ => continue,
+            };
+            if let OpKind::Param(into) = func.values[container.0 as usize].kind
+                && let OpKind::Param(what) = func.values[stored.0 as usize].kind
+            {
+                pairs.push((what, into));
+            }
+        }
+    }
+    pairs
+}
+
 /// Which parameter slots a function returns.
 ///
 /// Returning a parameter hands the caller back something it is already holding.
@@ -171,6 +210,7 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
     let in_slot = program.slot_targets();
     let arity: Vec<usize> = program.funcs.iter().map(|func| func.params.len()).collect();
     let handed_back: Vec<FxHashSet<u32>> = program.funcs.iter().map(returned_params).collect();
+    let put_into: Vec<Vec<(u32, u32)>> = program.funcs.iter().map(stores_into).collect();
 
     // Every parameter starts held, and is released to `escapes` by evidence.
     let mut escaping_params: Vec<FxHashSet<u32>> =
@@ -181,7 +221,7 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
         results = program
             .funcs
             .iter()
-            .map(|func| analyze(func, &by_name, &in_slot, &arity, &escaping_params, &handed_back))
+            .map(|func| analyze(func, &by_name, &in_slot, &arity, &escaping_params, &handed_back, &put_into))
             .collect();
 
         let mut changed = false;
@@ -234,6 +274,7 @@ fn analyze(
     arity: &[usize],
     escaping_params: &[FxHashSet<u32>],
     handed_back: &[FxHashSet<u32>],
+    put_into: &[Vec<(u32, u32)>],
 ) -> Escapes {
     let mut escapes = Escapes::default();
     // What each store makes reachable, and from where. Deferred rather than
@@ -316,9 +357,16 @@ fn analyze(
                         func.values[container.0 as usize].kind,
                         OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
                     ) && (!repeated.contains(stored) || repeated.contains(container));
+                    // A parameter stored into a parameter's field is published
+                    // rather than escaped: see `stores_into`. The caller knows
+                    // whether the container outlives anything and this does not.
+                    let deferred_to_caller = matches!(
+                        func.values[container.0 as usize].kind,
+                        OpKind::Param(_)
+                    ) && matches!(func.values[stored.0 as usize].kind, OpKind::Param(_));
                     if confinable {
                         reachable_from.push((*container, *stored));
-                    } else {
+                    } else if !deferred_to_caller {
                         escaped(&mut escapes, func, *stored);
                     }
                 }
@@ -329,34 +377,29 @@ fn analyze(
                     escaped(&mut escapes, func, *stored);
                 }
                 OpKind::Call { callee, args, .. } => {
-                    let reached: Option<&[usize]> = match callee {
-                        // A body that is not here could do anything with what
-                        // it is given.
-                        Callee::External(_) => None,
-                        Callee::Direct(name) => {
-                            by_name.get(name.as_str()).map(std::slice::from_ref)
-                        }
-                        // A dispatch reaches one of several bodies, and which
-                        // is decided by a receiver this cannot see -- so an
-                        // argument escapes if *any* of them lets it. A union
-                        // rather than a guess, because the table is complete.
-                        Callee::Virtual { slot, .. } | Callee::Closure { slot } => {
-                            in_slot.get(slot).map(Vec::as_slice)
-                        }
-                    };
-                    let Some(targets) = reached else {
+                    let Some(targets) = bodies_reached(callee, by_name, in_slot) else {
                         for argument in args {
                             escaped(&mut escapes, func, *argument);
                         }
                         continue;
                     };
                     escape_into(&mut escapes, args, targets, arity, escaping_params);
+                    let one = matches!(callee, Callee::Direct(_));
                     for target in targets {
                         for slot in &handed_back[*target] {
                             if let Some(argument) = args.get(*slot as usize) {
                                 aliased_by.push((*value, *argument));
                             }
                         }
+                        put_where_it_went(
+                            &mut escapes,
+                            func,
+                            &repeated,
+                            args,
+                            &put_into[*target],
+                            one,
+                            &mut reachable_from,
+                        );
                     }
                 }
                 // A suspension hands the frame to the runtime, which stores it
@@ -506,6 +549,78 @@ fn hand_on(
 }
 
 /// Mark the arguments that any of a call's possible targets lets escape.
+/// The bodies one call can reach, or `None` for "anything at all".
+///
+/// A dispatch reaches one of several and which is decided by a receiver this
+/// cannot see, so an argument escapes if *any* of them lets it -- a union
+/// rather than a guess, because the table is complete. A body that is not in
+/// this program is the case with no answer.
+fn bodies_reached<'a>(
+    callee: &Callee,
+    by_name: &'a FxHashMap<&str, usize>,
+    in_slot: &'a FxHashMap<u32, Vec<usize>>,
+) -> Option<&'a [usize]> {
+    match callee {
+        Callee::External(_) => None,
+        Callee::Direct(name) => by_name.get(name.as_str()).map(std::slice::from_ref),
+        Callee::Virtual { slot, .. } | Callee::Closure { slot } => {
+            in_slot.get(slot).map(Vec::as_slice)
+        }
+    }
+}
+
+/// The caller's half of a store into a parameter.
+///
+/// `stores_into` says the callee put one parameter inside another and left the
+/// lifetime question open. Here is where it is answered, and the answer is the
+/// *same store*, asked one frame out -- so it faces every test the store in
+/// this function faces, and all three of them are load-bearing:
+///
+/// Is the container something this function made? A parameter is not. It came
+/// from a caller and outlives this frame, so what goes into it does too --
+/// `push(list, new Node())` in a function that was handed the list is a fresh
+/// node in a frame and a list pointing into it after the frame is gone. That is
+/// what `escape` refused to do by escaping the argument outright, and leaving
+/// it out here was a segmentation fault in `examples/cycles` under LLVM and a
+/// program the C backend happened to survive.
+///
+/// Is it one call reaching one body? A dispatch is decided by a receiver this
+/// cannot see, and the containers those bodies store into need not be the same.
+///
+/// Does what goes in live at least as long as what it goes into? A
+/// per-iteration disk pushed onto a pile that outlives the loop does not. The
+/// frame has one slot for that allocation and reuses it, so the pile would hold
+/// seventeen pointers to the same disk.
+fn put_where_it_went(
+    escapes: &mut Escapes,
+    func: &Func,
+    repeated: &FxHashSet<ValueId>,
+    args: &[ValueId],
+    pairs: &[(u32, u32)],
+    one: bool,
+    reachable_from: &mut Vec<(ValueId, ValueId)>,
+) {
+    for (what, into) in pairs {
+        let (Some(stored), Some(container)) = (args.get(*what as usize), args.get(*into as usize))
+        else {
+            continue;
+        };
+        let ours = matches!(
+            func.values[container.0 as usize].kind,
+            OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
+        );
+        let outlived = !repeated.contains(stored) || repeated.contains(container);
+        if one && ours && outlived {
+            reachable_from.push((*container, *stored));
+        } else {
+            // Which body a dispatch reaches is decided by a receiver this
+            // cannot see, and the containers they store into need not be the
+            // same one.
+            escaped(escapes, func, *stored);
+        }
+    }
+}
+
 fn escape_into(
     escapes: &mut Escapes,
     args: &[ValueId],
@@ -604,12 +719,15 @@ mod tests {
         assert!(escapes[0].escapes(ValueId(1)));
     }
 
-    /// `keeper(box, item) { box.f = item }` — one parameter is written through
-    /// and stays; the other is put somewhere that outlives the call and goes.
-    /// A caller of this has to know the difference, which is the whole reason
-    /// the summary is per parameter rather than per function.
+    /// `keeper(box, item) { box.f = item }` — neither parameter escapes *here*.
+    ///
+    /// This function has no opinion on how long either one lives. What `item`
+    /// went into is `box`, and whether that outlives anything is a question
+    /// only a caller can answer -- so the pair is published and the caller adds
+    /// the edge. Deciding it here sent every constructor argument to the heap,
+    /// `this.label = label` being the whole of most constructors.
     #[test]
-    fn a_stored_argument_escapes_and_the_container_does_not() {
+    fn a_stored_argument_is_the_callers_question() {
         let values = vec![
             op(OpKind::Param(0), object()),
             op(OpKind::Param(1), object()),
@@ -634,7 +752,9 @@ mod tests {
         };
         let escapes = analyze_program(&program);
         assert!(!escapes[0].escapes(ValueId(0)));
-        assert!(escapes[0].escapes(ValueId(1)));
+        assert!(!escapes[0].escapes(ValueId(1)));
+        // And the fact that replaces it, for the caller to use.
+        assert_eq!(stores_into(&program.funcs[0]), vec![(1, 0)]);
     }
 
     /// The point of the whole module: an allocation passed only to functions
@@ -736,9 +856,170 @@ mod tests {
         let caller = &escapes[2];
         // `a` is only ever read through, including inside `keeper`.
         assert!(caller.is_frame_local(ValueId(0)));
-        // `b` is put inside `a`, and outlives the call that put it there.
-        assert!(caller.escapes(ValueId(2)));
-        assert!(!caller.is_frame_local(ValueId(2)));
+        // And `b` is inside `a`, which is a frame that outlives both of them.
+        // It outlives the *call* that put it there, which is what this used to
+        // ask and is not the question: nothing here outlives the frame.
+        assert!(caller.is_frame_local(ValueId(2)));
+        assert!(!caller.escapes(ValueId(2)));
+    }
+
+    /// The same store, one iteration at a time.
+    ///
+    /// `while (true) { keeper(a, new P()) }` — a fresh object every time round,
+    /// all of them going into one container. A frame has one slot for the
+    /// allocation, reused, so the container would end up holding the last one
+    /// and pointing at it from every field it ever wrote. `guarded-push` is
+    /// this exactly: `pile.push(new Disk(i))`, and it built a pile of one disk
+    /// seventeen times until the guard read a size that was not there.
+    #[test]
+    fn a_fresh_one_each_time_round_does_not_go_in_a_frame() {
+        let mut program = Program {
+            funcs: Vec::new(),
+            layouts: vec![Layout {
+                types: vec![TypeId(1)],
+                name: "Point".to_owned(),
+                fields: vec![Field {
+                    name: "f".to_owned(),
+                    ty: HirType::NUMBER,
+                    readonly: false,
+                }],
+                methods: Vec::new(),
+            }],
+            globals: Vec::new(),
+        };
+        program.funcs.push(func(
+            "keeper",
+            2,
+            vec![
+                op(OpKind::Param(0), object()),
+                op(OpKind::Param(1), object()),
+                op(
+                    OpKind::FieldSet {
+                        object: ValueId(0),
+                        field: 0,
+                        value: ValueId(1),
+                    },
+                    HirType::Void,
+                ),
+            ],
+            vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                terminator: Terminator::Return(None),
+            }],
+        ));
+        program.funcs.push(func(
+            "caller",
+            0,
+            vec![
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(
+                    OpKind::Call {
+                        callee: Callee::Direct("keeper".to_owned()),
+                        args: vec![ValueId(0), ValueId(1)],
+                        frame: None,
+                    },
+                    HirType::Void,
+                ),
+            ],
+            vec![
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(1),
+                        args: Vec::new(),
+                    },
+                },
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(1), ValueId(2)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(1),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+        ));
+
+        let escapes = analyze_program(&program);
+        let caller = &escapes[1];
+        // The container is made once and holds everything, so it can stay.
+        assert!(caller.is_frame_local(ValueId(0)));
+        // What goes into it is made seventeen times and must not.
+        assert!(caller.escapes(ValueId(1)));
+    }
+
+    /// The container came from somewhere else, so what goes into it does too.
+    ///
+    /// `build(list) { push(list, new P()) }` — `list` is a parameter, which
+    /// means a caller made it and a caller still has it. A node put inside it
+    /// outlives this frame no matter what this frame does, and putting it in
+    /// the frame anyway was a list pointing at dead stack the moment `build`
+    /// returned.
+    #[test]
+    fn what_goes_into_a_parameter_is_gone() {
+        let mut program = Program {
+            funcs: Vec::new(),
+            layouts: vec![Layout {
+                types: vec![TypeId(1)],
+                name: "Point".to_owned(),
+                fields: vec![Field {
+                    name: "f".to_owned(),
+                    ty: HirType::NUMBER,
+                    readonly: false,
+                }],
+                methods: Vec::new(),
+            }],
+            globals: Vec::new(),
+        };
+        program.funcs.push(func(
+            "keeper",
+            2,
+            vec![
+                op(OpKind::Param(0), object()),
+                op(OpKind::Param(1), object()),
+                op(
+                    OpKind::FieldSet {
+                        object: ValueId(0),
+                        field: 0,
+                        value: ValueId(1),
+                    },
+                    HirType::Void,
+                ),
+            ],
+            vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                terminator: Terminator::Return(None),
+            }],
+        ));
+        program.funcs.push(func(
+            "build",
+            1,
+            vec![
+                op(OpKind::Param(0), object()),
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(
+                    OpKind::Call {
+                        callee: Callee::Direct("keeper".to_owned()),
+                        args: vec![ValueId(0), ValueId(1)],
+                        frame: None,
+                    },
+                    HirType::Void,
+                ),
+            ],
+            vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                terminator: Terminator::Return(None),
+            }],
+        ));
+
+        let escapes = analyze_program(&program);
+        assert!(escapes[1].escapes(ValueId(1)));
+        assert!(!escapes[1].is_frame_local(ValueId(1)));
     }
 
     /// A global outlives every function, so what it holds cannot be in a frame.

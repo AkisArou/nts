@@ -1,0 +1,37 @@
+ideal 38
+allocated 2
+because `Field::readonly` had been computed since layouts existed and nothing
+because had ever read it. Its own comment called it load-bearing. Without it
+because this case costs 77 -- which is the naive count exactly, meaning every
+because single read of a field the checker proved constant was being counted.
+because
+because What is owed, per call, with seventeen iterations:
+because
+because   34  `bump` writes a reference over a live one: retain the new, release
+because       the old, twice seventeen. That is real work and no analysis can
+because       remove it -- `spare` genuinely changes owner every iteration.
+because    1  `kept = config`: a module-level slot takes ownership.
+because    1  `kept = null`: and gives it up.
+because    1  the label reaches two owning slots and is created once, so one of
+because       the two stores can take the creator's reference and the other
+because       must copy.
+because    1  the config's own reference, released when `work` returns.
+because
+because The borrow is not on that list. `held = config.label` crosses a call
+because that stores a reference, which is the only kind of store that can
+because disconnect anything -- so `mutating` has `bump`, `initializing_only`
+because does not, and every borrow crossing it died. The slot is `readonly`:
+because no callee can write it, which is what the word means, so the reference
+because the load found is still held by a container this borrow already
+because required to be alive. Thirty-four operations, for a fact the frontend
+because had already computed and handed over.
+because
+because The five above the floor are the same take-versus-copy gap twice: the
+because constructor copies into both slots when it could take into one, and
+because the old value of `kept` is released although it is null on entry to
+because every call -- which is only provable across calls, since `work` is
+because what nulls it.
+because
+because Two allocations, not zero: a store to a module-level slot publishes the
+because object. That `work` nulls it again before returning is true and is not
+because something a per-function analysis can see.

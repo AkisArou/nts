@@ -891,20 +891,51 @@ fn frame_units(func: &Func, value: ValueId) -> Option<u32> {
 /// *bound* rather than a length -- what the compiler knows is that a slice
 /// cannot exceed the string it came from, and how long it actually is only
 /// running finds out.
-fn frame_storage(func: &Func) -> Vec<String> {
+///
+/// An **object** placed in the frame is here for the same reason and was not,
+/// for as long as this backend has placed one. Its `alloca` sat where the
+/// allocation was written, so an object made in a loop took another `sizeof`
+/// bytes of stack every iteration and gave none of them back until the function
+/// returned. `examples/cycles` builds one `Node` per round and asks for as many
+/// rounds as the caller likes: it ran off the end of the stack and died of
+/// signal 11, and it took a change that placed *more* objects in frames to
+/// reach it.
+fn frame_storage(program: &Program, func: &Func) -> Vec<String> {
     func.values
         .iter()
         .enumerate()
-        .filter_map(|(at, op)| match op.kind {
-            OpKind::Call {
-                frame: Some(units), ..
-            } => Some(one_frame(
-                &name(ValueId(u32::try_from(at).unwrap_or(0))),
-                units,
-            )),
-            _ => None,
+        .filter_map(|(at, op)| {
+            let out = name(ValueId(u32::try_from(at).unwrap_or(0)));
+            match op.kind {
+                OpKind::Call {
+                    frame: Some(units), ..
+                } => Some(one_frame(&out, units)),
+                OpKind::ObjectNew { frame: true } => {
+                    let placed = object_placement(program, &op.ty)?;
+                    Some(format!(
+                        "{out}.frame = alloca i8, i64 {}, align {}",
+                        placed.size, placed.align
+                    ))
+                }
+                _ => None,
+            }
         })
         .collect()
+}
+
+/// Where an object type's fields sit, for the two places that need it.
+fn object_placement(
+    program: &Program,
+    ty: &HirType,
+) -> Option<nts_codegen_common::layout::Placement> {
+    let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
+        return None;
+    };
+    let layout = program
+        .layouts
+        .iter()
+        .find(|layout| layout.types.contains(id))?;
+    nts_codegen_common::layout::place(&layout.fields)
 }
 
 fn one_frame(out: &str, units: u32) -> String {
@@ -1149,7 +1180,7 @@ fn function(program: &Program, func: &Func) -> Result<String, Diagnostic> {
             params.push(format!("{ty} {}{value}", extension(&param.ty)));
         }
     }
-    prologue.extend(frame_storage(func));
+    prologue.extend(frame_storage(program, func));
     let linkage = if func.exported { "" } else { "internal " };
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
@@ -1552,22 +1583,7 @@ fn allocation(
                 .ok_or_else(|| refuse(func, "an object whose fields cannot be placed"))?;
             let tag = descriptor_name(layout);
             if *frame {
-                // `NTS_IMMORTAL` in the count word, so the counting pass's
-                // release is a no-op on storage that was never allocated.
-                [
-                    format!(
-                        "{out} = alloca i8, i64 {}, align {}",
-                        placed.size, placed.align
-                    ),
-                    format!("store ptr @nts_desc_{tag}, ptr {out}{}", tbaa("ptr")),
-                    format!("{out}.rc = getelementptr i8, ptr {out}, i64 8"),
-                    format!(
-                        "store i64 {}, ptr {out}.rc{}",
-                        nts_codegen_common::layout::IMMORTAL,
-                        tbaa("i64")
-                    ),
-                ]
-                .join("\n  ")
+                frame_object(func, layout, &placed, &tag, &out)?
             } else {
                 format!("{out} = call ptr @nts_object_new(ptr @nts_desc_{tag})")
             }
@@ -1579,6 +1595,63 @@ fn allocation(
             ));
         }
     })
+}
+
+/// An object that lives in the frame, made out of storage the entry block owns.
+fn frame_object(
+    func: &Func,
+    layout: &nts_core::hir::Layout,
+    placed: &nts_codegen_common::layout::Placement,
+    tag: &str,
+    out: &str,
+) -> Result<String, Diagnostic> {
+    // The storage is in the entry block -- see `frame_storage` --
+    // and this is where it becomes an object: a name for it, the
+    // descriptor, `NTS_IMMORTAL` in the count word so the counting
+    // pass's release is a no-op on storage that was never
+    // allocated, and a zero in every slot that can hold a
+    // reference.
+    //
+    // That last one is not decoration. `nts_object_new` hands back
+    // memory that is already zero and the whole compiler is built
+    // on it: a store over a zero disconnects nothing, so it needs
+    // no release, which is what `own::still_zero` proves and what
+    // lets a list be built without counting. An `alloca` is
+    // whatever the last frame left there. The first store to a
+    // reference field would have released it.
+    let mut lines = vec![
+        format!("{out} = getelementptr i8, ptr {out}.frame, i64 0"),
+        format!("store ptr @nts_desc_{tag}, ptr {out}{}", tbaa("ptr")),
+        format!("{out}.rc = getelementptr i8, ptr {out}, i64 8"),
+        format!(
+            "store i64 {}, ptr {out}.rc{}",
+            nts_codegen_common::layout::IMMORTAL,
+            tbaa("i64")
+        ),
+    ];
+    for (at, field) in layout.fields.iter().enumerate() {
+        if !field.ty.may_hold_a_reference() {
+            continue;
+        }
+        let Some(offset) = placed.offsets.get(at) else {
+            continue;
+        };
+        let slot = format!("{out}.f{at}");
+        let ty = ty_of(&field.ty, func)?;
+        // Zero is `undefined`'s tag as well as the null pointer,
+        // which is what makes an omitted optional property already
+        // correct without anyone storing to it.
+        let zero = if ty == "ptr" {
+            "null"
+        } else {
+            "zeroinitializer"
+        };
+        lines.push(format!(
+            "{slot} = getelementptr i8, ptr {out}, i64 {offset}"
+        ));
+        lines.push(format!("store {ty} {zero}, ptr {slot}{}", tbaa(ty)));
+    }
+    Ok(lines.join("\n  "))
 }
 
 /// Reading and writing an array's elements.

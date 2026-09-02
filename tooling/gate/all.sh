@@ -262,10 +262,10 @@ llvm_examples() {
 }
 
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  llvm_examples 79 "through the LLVM backend, counting" ); }
+  llvm_examples 80 "through the LLVM backend, counting" ); }
 
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  llvm_examples 79 "through the LLVM backend" ); }
+  llvm_examples 80 "through the LLVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \

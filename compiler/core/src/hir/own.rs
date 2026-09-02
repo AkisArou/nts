@@ -471,6 +471,22 @@ pub fn analyze(
 /// Names answer it: a subclass inherits its base's field names, so one slot has
 /// one name however it is viewed. Two unrelated classes that both have an `x`
 /// are called a hazard, which loses precision and keeps the answer sound.
+/// Whether a slot is one the language promises is never written again.
+///
+/// `Field::readonly` is semantic, not syntactic: `Readonly<T>` counts, and so
+/// does a field the checker proved is only assigned in the constructor. It has
+/// been computed since layouts existed and nothing has ever read it.
+fn field_is_settled(func: &Func, layouts: &[Layout], object: ValueId, field: u32) -> bool {
+    let HirType::Managed(ManagedType::Object(id)) = &func.values[object.0 as usize].ty else {
+        return false;
+    };
+    layouts
+        .iter()
+        .find(|layout| layout.types.contains(id))
+        .and_then(|layout| layout.fields.get(field as usize))
+        .is_some_and(|field| field.readonly)
+}
+
 fn field_name<'a>(
     func: &Func,
     layouts: &'a [Layout],
@@ -641,6 +657,13 @@ fn slot_survives(
     from: ValueId,
 ) -> bool {
     let ours = from_field.and_then(|field| field_name(func, layouts, container, field));
+    // A borrow out of a `readonly` slot cannot be ended by a call. No callee can
+    // write the slot -- that is what the word means -- so the reference the load
+    // found is still held by a container this borrow already required to be
+    // alive, and one call cannot take it away. Without this, any call that
+    // stores *anything* ends the borrow, which is how a field the checker
+    // proved constant came to be counted once per read.
+    let settled = from_field.is_some_and(|field| field_is_settled(func, layouts, container, field));
     // Only what can run after the load. A borrow is invalidated by a store or a
     // call that happens *later*, and scanning the whole function charged it for
     // everything that happened earlier too -- which is most of a function that
@@ -678,8 +701,8 @@ fn slot_survives(
         OpKind::Call {
             callee: super::Callee::Direct(name),
             ..
-        } => mutates.contains(name) && !standing.harmless.contains(name),
-        OpKind::Call { .. } => true,
+        } => !settled && mutates.contains(name) && !standing.harmless.contains(name),
+        OpKind::Call { .. } => !settled,
         OpKind::FieldSet { object, field, .. } => match (ours, from_field) {
             // An element borrow is never a field, and a field slot is named.
             (_, None) => false,
