@@ -108,16 +108,16 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | --- | ---: |
 | `console.log`, a global member with no definition here | 7 |
 | a module declaration, which has code in it | 6 |
+| this statement | 5 |
 | `MyEnum`, an enum | 4 |
 | a module-scope variable with no initializer, whose type has no representation for the `undefined` it starts as | 4 |
 | a property `timestamp` of unrepresentable type (`Date`) | 4 |
 | a rest parameter whose element type has no representation | 4 |
 | a tagged template expression | 4 |
+| `x`, a name from an enclosing scope | 3 |
 | a `for...in` statement, which has code in it | 3 |
-| a `for...of` binding by property name, which is object destructuring | 3 |
 | a method on an object literal | 3 |
 | a parameter of unrepresentable type (any) | 3 |
-| this statement | 3 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->
