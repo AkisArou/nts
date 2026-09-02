@@ -43,7 +43,7 @@ fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, Stri
     std::fs::write(src.join("main.ts"), source).expect("write the program");
     std::fs::write(
         dir.join("tsconfig.json"),
-        r#"{ "compilerOptions": { "target": "ES2022", "module": "ESNext",
+        r#"{ "compilerOptions": { "target": "ESNext", "module": "ESNext",
              "moduleResolution": "bundler", "strict": true,
              "noUncheckedIndexedAccess": true, "noEmit": true },
              "include": ["src"] }"#,

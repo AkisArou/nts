@@ -1293,6 +1293,108 @@ NtsString *nts_concat_into(NtsHeader *into, const NtsString *a,
   return out;
 }
 
+/* One code unit, whichever width the string is stored at. */
+static uint16_t nts_unit_at(const NtsString *s, uint32_t at) {
+  return (s->flags & NTS_TWO_BYTE) != 0
+             ? NTS_ELEMENTS(s, uint16_t)[at]
+             : (uint16_t)NTS_ELEMENTS(s, unsigned char)[at];
+}
+
+/* `padStart` and `padEnd`, which differ only by which end the filling goes.
+ *
+ * A fresh string even where nothing is added: `"abc".padStart(2)` is `"abc"`,
+ * and returning the argument would hand the caller a reference it does not own.
+ * Strings are values, so a copy is the same answer. */
+static NtsString *nts_str_pad(const NtsString *s, double target,
+                              const NtsString *pad, int at_start) {
+  /* A NaN target fails both comparisons and asks for nothing, which is what
+   * `ToLength(NaN)` is. */
+  uint32_t want =
+      (target >= 0.0 && target <= 4294967295.0) ? (uint32_t)target : 0u;
+  uint32_t fill =
+      (want > s->length && pad->length > 0u) ? want - s->length : 0u;
+  uint32_t total = s->length + fill;
+  int wide = ((s->flags | (fill != 0u ? pad->flags : 0u)) & NTS_TWO_BYTE) != 0;
+  NtsString *out = nts_str_raw(total, wide);
+  uint32_t head = at_start ? fill : 0u;
+  if (wide) {
+    nts_widen(NTS_ELEMENTS(out, uint16_t) + head, s);
+  } else {
+    memcpy(NTS_ELEMENTS(out, unsigned char) + head,
+           NTS_ELEMENTS(s, unsigned char), s->length);
+  }
+  uint32_t at = at_start ? 0u : s->length;
+  for (uint32_t i = 0; i < fill; i++) {
+    uint16_t unit = nts_unit_at(pad, i % pad->length);
+    if (wide) {
+      NTS_ELEMENTS(out, uint16_t)[at + i] = unit;
+    } else {
+      NTS_ELEMENTS(out, unsigned char)[at + i] = (unsigned char)unit;
+    }
+  }
+  out->length = total;
+  return out;
+}
+
+NtsString *nts_str_pad_start(const NtsString *s, double target,
+                             const NtsString *pad) {
+  return nts_str_pad(s, target, pad, 1);
+}
+
+NtsString *nts_str_pad_end(const NtsString *s, double target,
+                           const NtsString *pad) {
+  return nts_str_pad(s, target, pad, 0);
+}
+
+/* Whether every surrogate in the string is half of a pair.
+ *
+ * A one-byte string cannot hold one at all, which is most strings and is the
+ * whole of the answer for them. */
+bool nts_str_is_well_formed(const NtsString *s) {
+  if ((s->flags & NTS_TWO_BYTE) == 0) {
+    return true;
+  }
+  const uint16_t *units = NTS_ELEMENTS(s, uint16_t);
+  for (uint32_t i = 0; i < s->length; i++) {
+    if (units[i] >= 0xD800u && units[i] <= 0xDBFFu) {
+      if (i + 1u >= s->length || units[i + 1u] < 0xDC00u ||
+          units[i + 1u] > 0xDFFFu) {
+        return false;
+      }
+      i++;
+    } else if (units[i] >= 0xDC00u && units[i] <= 0xDFFFu) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* The same string with every lone surrogate replaced by U+FFFD. */
+NtsString *nts_str_to_well_formed(const NtsString *s) {
+  int wide = (s->flags & NTS_TWO_BYTE) != 0;
+  NtsString *out = nts_str_raw(s->length, wide);
+  if (!wide) {
+    memcpy(NTS_ELEMENTS(out, unsigned char), NTS_ELEMENTS(s, unsigned char),
+           s->length);
+    return out;
+  }
+  const uint16_t *units = NTS_ELEMENTS(s, uint16_t);
+  uint16_t *into = NTS_ELEMENTS(out, uint16_t);
+  for (uint32_t i = 0; i < s->length; i++) {
+    if (units[i] >= 0xD800u && units[i] <= 0xDBFFu && i + 1u < s->length &&
+        units[i + 1u] >= 0xDC00u && units[i + 1u] <= 0xDFFFu) {
+      into[i] = units[i];
+      into[i + 1u] = units[i + 1u];
+      i++;
+    } else if (units[i] >= 0xD800u && units[i] <= 0xDFFFu) {
+      into[i] = 0xFFFDu;
+    } else {
+      into[i] = units[i];
+    }
+  }
+  return out;
+}
+
 NtsString *nts_concat(const NtsString *a, const NtsString *b) {
   return nts_concat_into(NULL, a, b);
 }

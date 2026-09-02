@@ -682,6 +682,20 @@ NTS_READS_ONLY bool nts_str_ends_with(const NtsString *s,
 NtsString *nts_str_char_at(const NtsString *s, double at);
 NtsString *nts_str_repeat(const NtsString *s, double times);
 NtsString *nts_str_trim(const NtsString *s);
+/* `padStart` and `padEnd`. The pad is never empty here: an omitted one is the
+ * single space the specification gives it, supplied by the lowering so that
+ * this has one signature rather than two. */
+NtsString *nts_str_pad_start(const NtsString *s, double target,
+                             const NtsString *pad);
+NtsString *nts_str_pad_end(const NtsString *s, double target,
+                           const NtsString *pad);
+/* ES2024's pair, and the only two string members about surrogates rather than
+ * about characters. Reachable because the fixtures target ESNext: they were
+ * written once against an ES2022 target, could not be named by any program the
+ * compiler accepted, and were taken out again. */
+bool nts_str_is_well_formed(const NtsString *s);
+NtsString *nts_str_to_well_formed(const NtsString *s);
+
 NtsString *nts_str_trim_start(const NtsString *s);
 NtsString *nts_str_trim_end(const NtsString *s);
 /* An array of the pieces, which owns each of them. */

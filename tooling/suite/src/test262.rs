@@ -85,7 +85,7 @@ pub(crate) fn run(root: &Utf8Path, corpus: &Utf8Path) -> Result<Findings> {
     std::fs::create_dir_all(&src)?;
     std::fs::write(
         work.join("tsconfig.json"),
-        r#"{ "compilerOptions": { "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "noEmit": true }, "include": ["src"] }"#,
+        r#"{ "compilerOptions": { "target": "ESNext", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "noEmit": true }, "include": ["src"] }"#,
     )?;
 
     let mut findings = Findings {

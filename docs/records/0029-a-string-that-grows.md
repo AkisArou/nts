@@ -197,10 +197,75 @@ the string is *used* -- indexed, compared, handed to C -- and for anything that
 touches the characters, flat wins and the rope has to flatten first. Measuring
 that trade is the next question, not assuming it.
 
-Twenty-two memory cases at both floors, two of them strings. What is left is the
-operations table: `padStart`, `padEnd`, `valueOf`, `isWellFormed` and
-`toWellFormed` are pure code-unit work and absent for no reason, and three
-decisions stand behind the rest -- Unicode tables for case and normalization, a
-regex engine for `match`, `matchAll`, `search` and the pattern forms of
-`replace` and `split`, and ICU for `localeCompare`. Each deserves a refusal with
-a reason rather than a checkbox.
+Twenty-two memory cases at both floors, two of them strings.
+
+## The operations, and three of them were already there
+
+The audit asks of every method: present, refused, or slow. Taking the inventory
+found the ledger describing a compiler from some months ago -- `at`, `split`,
+`replace` and `trim` were listed absent and all four were present. What was
+genuinely missing and had no reason to be: `padStart`, `padEnd`, `valueOf`.
+
+`padStart` and `padEnd` are the runtime's, and the only thing needing thought
+was the omitted argument. Every other two-argument member here defaults to "to
+the end", which is a number, and this one defaults to a single space, which is
+not -- so the lowering supplies it rather than the runtime carrying a second
+signature. `valueOf` is not a call at all: the specification says the result
+*is* the receiver, and a helper returning it would hand back a reference the
+caller does not own, so it lowers to the receiver.
+
+`isWellFormed` and `toWellFormed` were written, and then taken out. They are
+ES2024 and this compiler's programs are ES2022, so no program it compiles can
+name them -- the typechecker says so before the lowering is reached. Helpers
+nothing can call are the dead code this project refuses to ship, and raising the
+target is a decision about every example rather than about strings.
+
+## ES2022 was a decision nobody made
+
+The fixtures targeted ES2022 -- all one hundred and forty-eight of them, each
+repeating the same six options -- and that quietly decided which language this
+compiler is for. `isWellFormed` was written, could not be named by any program
+the compiler accepts, and was removed as dead code. A fixture that cannot ask
+for a construct is a construct nobody discovers is missing.
+
+They now inherit one `tsconfig.fixtures.json` at ESNext. The two TypeScript
+packages that actually ship keep extending `tsconfig.base.json` and are built by
+`tsc`; this is only for the programs *nts* compiles.
+
+It moved the corpus by itself:
+
+    lowered completely   49 -> 50
+    refused a construct  48 -> 43
+    rejected by typecheck 86 -> 90
+
+Five fewer refusals and four more programs the checker declines, which is what
+raising a target does: constructs stop being unknown and become either compiled
+or rejected. And the ES2024 pair went back in, reachable now.
+
+## A lone surrogate in a literal is silently wrong
+
+Found by writing the test for `isWellFormed`, which is the point of writing it.
+
+    "a\ud800b".length     node 3, nts 5
+
+A lone surrogate has no UTF-8 encoding, and the literal's text reaches this
+compiler as UTF-8 through the frontend protocol -- so what arrives is U+FFFD,
+whose three bytes become three code units. The program compiles, runs, and
+answers differently from node with no diagnostic, which is the worst shape a
+defect can have.
+
+Not fixed here, and the reason is where it lives: the literal would have to
+cross as UTF-16 code units rather than as text, which is the transport rather
+than the lowering. Refusing it needs the same thing, or a re-scan of the source
+span for a surrogate escape that has no pair. Until one of those, this is
+written down rather than hidden, and the example builds its lone surrogates with
+`fromCharCode`, which goes through no such transport and is what a program
+producing them actually does.
+
+What remains absent is absent for a reason, and each is a decision rather than a
+task: Unicode case-mapping and normalization tables for `toLowerCase`,
+`toUpperCase`, the `toLocale` pair and `normalize` -- data rather than code; ICU
+for `localeCompare`; a regular expression engine for `match`, `matchAll`,
+`search` and the pattern forms of `replace` and `split`; tagged templates for
+`String.raw`; and indexing, `s[0]`, which is refused as "indexing a
+representable type, which is not an array".

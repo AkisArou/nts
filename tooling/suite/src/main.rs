@@ -235,7 +235,7 @@ impl Workspace {
         let tsconfig = work.join("tsconfig.json");
         std::fs::write(
             &tsconfig,
-            r#"{ "compilerOptions": { "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "noEmit": true }, "include": ["src"] }"#,
+            r#"{ "compilerOptions": { "target": "ESNext", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "noEmit": true }, "include": ["src"] }"#,
         )?;
         Ok(Self {
             src,

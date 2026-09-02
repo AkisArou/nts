@@ -11303,6 +11303,22 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, &format!("`{name}` on a number")));
         }
 
+        // `valueOf` and `toString` on a string are the string. Not a runtime
+        // call, because there is nothing for one to do: the specification says
+        // the result *is* the receiver, and a helper returning it would hand
+        // back a reference the caller does not own.
+        if matches!(
+            self.values[receiver.0 as usize].ty,
+            HirType::Managed(ManagedType::String)
+        ) && arguments.is_empty()
+            && matches!(
+                self.node(*member).text.as_deref(),
+                Some("valueOf" | "toString")
+            )
+        {
+            return Ok(receiver);
+        }
+
         // A string's methods are the runtime's, not the program's: there is
         // no `String` class here to resolve a call against.
         if matches!(
@@ -12137,6 +12153,17 @@ impl<'a> FuncBuilder<'a> {
             // the byte order mark -- and lives in the runtime, where it can be
             // read as a list.
             "trim" => ("nts_str_trim", 0, string.clone()),
+            // `padStart(n)` pads with a single space, which the filler below
+            // supplies: every other omitted argument here is "to the end" and
+            // is a number, and this one is a string.
+            "padStart" => ("nts_str_pad_start", 2, string.clone()),
+            "padEnd" => ("nts_str_pad_end", 2, string.clone()),
+            // The only two members that are about surrogates rather than
+            // characters. A one-byte string cannot hold a lone one, which is
+            // most strings and the whole of the answer for them.
+            "isWellFormed" => ("nts_str_is_well_formed", 0, HirType::Bool),
+            "toWellFormed" => ("nts_str_to_well_formed", 0, string.clone()),
+
             "trimStart" => ("nts_str_trim_start", 0, string.clone()),
             "trimEnd" => ("nts_str_trim_end", 0, string.clone()),
             // `split`, with a *string* separator. A regular expression is a
@@ -12173,6 +12200,18 @@ impl<'a> FuncBuilder<'a> {
             args.push(self.lower_expression(*argument)?);
         }
         let origin = self.origin(id);
+
+        // `padStart(n)` and `padEnd(n)` pad with a single space. The filler
+        // below gives an omitted trailing argument the "to the end" infinity
+        // every other member here wants, and a string is not that.
+        if matches!(helper, "nts_str_pad_start" | "nts_str_pad_end") && args.len() == 2 {
+            let space = self.push(
+                OpKind::ConstString(" ".to_owned()),
+                HirType::Managed(ManagedType::String),
+                origin.clone(),
+            );
+            args.push(space);
+        }
 
         // An omitted trailing argument becomes the default the specification
         // gives it, which for every two-argument member here is "to the end".

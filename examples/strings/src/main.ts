@@ -159,3 +159,53 @@ export function edges(n: number): number {
   }
   return (out + "z").length + ("" + out).length;
 }
+
+// `padStart` and `padEnd`, and the two ways they decline to do anything: a
+// target no longer than the string, and an empty pad. Both return the string.
+export function padded(n: number): string {
+  const w = rounds(n) + 4;
+  return "ab".padStart(w) + "|" + "ab".padEnd(w, "xy") + "|" +
+    "abc".padStart(2, "z") + "|" + "ab".padStart(w, "") + "|" + "".padEnd(w, "-");
+}
+
+// The pad decides the width as much as the string does: a narrow string padded
+// with a two-byte unit is a two-byte string.
+export function paddedWide(n: number): string {
+  const w = rounds(n) + 4;
+  return "é".padStart(w, "x") + "ab".padEnd(w, "世");
+}
+
+// `valueOf` and `toString` on a string are the string. Not a call: the
+// specification says the result *is* the receiver.
+export function itself(n: number): number {
+  const s = "abc".repeat(rounds(n));
+  return s.valueOf().length * 1000 + s.toString().length;
+}
+
+// `isWellFormed` and `toWellFormed`, which are about surrogates rather than
+// characters and are the reason the fixtures target ESNext rather than ES2022:
+// they were implemented once against the older target, could not be named by
+// any program the compiler accepted, and had to be taken out again.
+//
+// The lone surrogate is *built* rather than written. A source literal cannot
+// carry one: the literal's text reaches the compiler as UTF-8, a lone surrogate
+// has no UTF-8 encoding, and what arrives is U+FFFD -- three bytes that become
+// three code units, so `"a\ud800b"` is five units here and three in node. That
+// is a real disagreement and it is recorded in `0029`; this example uses
+// `fromCharCode`, which goes through no such transport and is what a program
+// producing lone surrogates actually does.
+export function surrogates(n: number): number {
+  const lead = String.fromCharCode(0xd800);
+  const trail = String.fromCharCode(0xdc00);
+  const lone = "a" + lead + "b";
+  const paired = "a" + lead + trail + "b";
+  const narrow = "abc".repeat(rounds(n) + 1);
+  const fixed = lone.toWellFormed();
+  return (lone.isWellFormed() ? 0 : 1) +
+    (paired.isWellFormed() ? 2 : 0) +
+    ((lead + "x").isWellFormed() ? 0 : 4) +
+    (narrow.isWellFormed() ? 8 : 0) +
+    (fixed.isWellFormed() ? 16 : 0) +
+    fixed.charCodeAt(1) * 100 +
+    fixed.length * 100000000;
+}

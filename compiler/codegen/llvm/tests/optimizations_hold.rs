@@ -42,7 +42,7 @@ fn rendered(case: &str, source: &str) -> Option<(String, hir::Program)> {
     std::fs::write(src.join("main.ts"), source).expect("write the program");
     std::fs::write(
         dir.join("tsconfig.json"),
-        r#"{ "compilerOptions": { "target": "ES2022", "module": "ESNext",
+        r#"{ "compilerOptions": { "target": "ESNext", "module": "ESNext",
              "moduleResolution": "bundler", "strict": true, "noEmit": true },
              "include": ["src"] }"#,
     )

@@ -1,23 +1,27 @@
 //! Measures what the compiler is for.
 //!
-//! # Why three references and not one
+//! # What each column answers
 //!
 //! "Compiles TypeScript to native code" is only worth doing if the native code
 //! is fast, and "fast" is a comparison. Each variant answers a different
 //! question, and the interesting answers are the gaps between them:
 //!
-//! - **C (double)** is hand-written C with TypeScript's semantics — every
-//!   `number` an IEEE double. This is the ceiling the compiler is *actually*
-//!   trying to reach, and the gap to it is a codegen defect.
-//! - **C (int64)** is the C a C programmer would write. The gap between it and
-//!   C (double) is not a defect: it is the prize for proving a `number` is
-//!   integral, and it prices the `ScriptC` number-facts analysis that
-//!   [`nts_core::hir::HirType::NUMBER`] defers.
+//! - **C++** is one hand-written reference per case, being what a C++
+//!   programmer would actually write for that program. It is the ceiling, and
+//!   the gap to it is a codegen defect.
+//! - **nts f64** is this compiler's own output with number specialization
+//!   turned off. The gap between it and `nts` is not a defect: it is the prize
+//!   for proving a `number` is integral, and it prices that analysis --
+//!   seventeen times on `accumulate`, nine on `checksum`.
 //! - **Node** is the thing being replaced. The gap to it is the argument for
-//!   the project existing.
+//!   the project existing. **Bun** is the same question asked of the other
+//!   engine.
 //!
-//! Reaching C (double) means the backend is done. Reaching C (int64) means the
-//! *compiler* is done.
+//! This used to describe three references including a `C (int64)`, and said
+//! that reaching it "means the *compiler* is done". There has been no such
+//! column since the two C references became one, eighty lines below -- and a
+//! goal was written against the sentence rather than the code, which is what a
+//! stale comment costs.
 //!
 //! # Checksums
 //!

@@ -1627,10 +1627,22 @@ Measured, not assumed — three of these rows were wrong on the first pass.
 - **`Number`**: `isNaN isFinite isInteger isSafeInteger EPSILON`, and
   `toString` on a number. Absent: `toFixed`, `toPrecision`, `parseFloat`,
   `parseInt`.
-- **`String.prototype`**: `charAt charCodeAt codePointAt concat endsWith
-  includes indexOf lastIndexOf repeat slice startsWith substring length`.
-  Absent: `at`, `split`, `replace`, `trim`, `padStart`/`padEnd`, case
-  conversion, `match`, and indexing (`s[0]`).
+- **`String.prototype`**: `at charAt charCodeAt codePointAt concat endsWith
+  includes indexOf lastIndexOf padEnd padStart repeat replace replaceAll slice
+  split startsWith substring toString trim trimEnd trimStart valueOf length`,
+  and the statics `fromCharCode` and `fromCodePoint`. This list said `at`,
+  `split`, `replace` and `trim` were absent long after they were not.
+
+  Absent, and each for its own reason rather than for want of writing it:
+  `toLowerCase`, `toUpperCase`, the `toLocale` pair and `normalize` want
+  Unicode case-mapping and normalization tables, which are data rather than
+  code; `localeCompare` wants ICU; `match`, `matchAll`, `search` and the
+  *pattern* forms of `replace` and `split` want a regular expression engine,
+  which is refused as its own feature; `String.raw` waits on tagged templates;
+  `isWellFormed` and `toWellFormed` are ES2024 and this compiler's programs are
+  ES2022, so nothing could call them — they were written, could not be reached,
+  and were taken out again. Indexing (`s[0]`) is refused as "indexing a
+  representable type, which is not an array".
 - **`Array.prototype`**: `at fill forEach includes indexOf lastIndexOf map pop
   push reduce reverse slice length` on an array of numbers, and `at includes
   indexOf pop push reverse slice length` — plus `join` — on an array of
@@ -1952,7 +1964,7 @@ blocks on, not to start building.
 | `symbol` | 46 — `string \| symbol` as a property key, 30 as a parameter and 16 as a property | a representation, and a decision about whether well-known symbols are values or names |
 | a method not in the hierarchy | 52 — `emit` 8, then a long tail | structural dispatch, which is the same question as the anonymous-type row above |
 | ~~array methods on a non-numeric array~~ | **done**, 22 → 4. Every site wanted a *reference* element, so there is a `_ref` family and no `_bool` one | what is left is four single-site methods that do not exist for any element type: `shift`, `splice`, `toSorted`, and one unnamed |
-| string methods | 15 — `toLowerCase` 12, `normalize` 2, `toUpperCase` 1. `split`, `trim`, `replace` and `replaceAll` are done | what is left wants a Unicode case table and normalization, which is a different order of work from the rest |
+| string methods | 15 — `toLowerCase` 12, `normalize` 2, `toUpperCase` 1. `split`, `trim`, `replace`, `replaceAll`, `padStart`, `padEnd` and `valueOf` are done | what is left wants a Unicode case table and normalization, which is data rather than code and a different order of work from the rest |
 | generators | 4 refusals, but `readline` and several streams are behind them | the suspension machine exists; what is missing is the `Generator<T>` object and §10's protocol |
 | `try`/`catch` | the largest *language* gap, and invisible in this table because the code that needs it does not reach the lowering | needs an unwinding decision — the runtime has none |
 
