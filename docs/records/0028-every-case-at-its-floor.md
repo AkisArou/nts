@@ -195,6 +195,27 @@ is not a task with a next step that pays, it is the remaining language surface.
 A count of messages ranks symptoms. A count of files where a message is the
 *only* thing left ranks work, and the report prints both now.
 
+The first thing that ranking produced was another anonymous message.
+`this kind of property` was the joint-best row at 2, and naming it the same way
+turned it into `a `method declaration` in an object literal` -- `{ m() { ... } }`
+-- which with the case already reported under its own name makes three, and the
+best oracle-checkable lever there is. The other 2 is a namespace, which has none.
+
+Following it down took one probe. A method in a literal is a field holding a
+function, and a field holding a function does not exist:
+
+    class Ops { twice: (x: number) => number; ... }
+    ops.twice(n)   ->   "`twice`, which `Ops` does not declare"
+
+The function-typed field is dropped from the layout, so the property the program
+wrote is not there to read. That is a representation -- a closure pointer in a
+field, and a call through it -- and it sits under the object-literal method row,
+the "a member a type does not declare" row, and §15's "a class as a value". Not
+a lowering gap, and not small.
+
+Which is the answer to what the corpus's best remaining lever is worth: three
+files, behind one feature that several other rows are also behind.
+
 `typescript.md` §15 already says the better queue is beside it -- the node
 profile's 1,097 sites, "the only list ordered by what real code actually needs
 rather than by what looks incomplete" -- and says to name what a row blocks on

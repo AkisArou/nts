@@ -9224,7 +9224,19 @@ impl<'a> FuncBuilder<'a> {
                 };
                 Ok((text, value))
             }
-            _ => Err(self.unsupported(id, "this kind of property")),
+            // Named, for the reason the statement dispatch is: a spread, an
+            // accessor and a method are three features, and one message over
+            // all of them ranks none.
+            _ => {
+                let what = self
+                    .kind_of(id)
+                    .and_then(nts_semantic_schema::syntax::name_of)
+                    .map_or_else(
+                        || "this kind of property".to_owned(),
+                        |name| format!("a `{name}` in an object literal"),
+                    );
+                Err(self.unsupported(id, &what))
+            }
         }
     }
 
