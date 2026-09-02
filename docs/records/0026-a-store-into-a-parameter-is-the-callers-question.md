@@ -40,6 +40,21 @@ seventeen pointers to the same disk, and `guarded-push` -- which exists because
 store had guarded that since it was written. The caller-side edge now carries
 the same guard, and a unit test holds it.
 
+## And it is worth nothing on the benchmarks
+
+Measured after, under `NTS_BENCH_RC=1`: every row within noise of where it was,
+and nts's own times identical to three digits on the ones that look moved --
+`awfy-permute` 12.08 -> 12.09 us with its C++ reference wandering 9.06 -> 8.44.
+
+That is not a surprise once stated. The benchmark suite's object graphs are
+lists, piles and trees: things built to outlive the loop that built them, which
+is exactly the case where the container escapes and the edge carries the escape
+straight through. The constructor argument that goes in a frame instead of the
+heap is the case where the *whole structure* is local, and no row here has one.
+
+The gain is real and the suite cannot see it. Worth saying rather than leaving
+a reader to assume a table that did not move means a change that did nothing.
+
 ## What placing more objects in frames found in the other backend
 
 The escape change put more objects in frames, and `examples/cycles` began
