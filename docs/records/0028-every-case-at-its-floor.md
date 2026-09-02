@@ -81,6 +81,21 @@ asks what can arrive on it.
 
 Its naive column is zero too. There is nothing counted left in the program.
 
+## And again, nothing on the benchmarks
+
+`0027` said the same about the change before this one, and the reason is the
+same. Measured under `NTS_BENCH_RC=1`: `awfy-bounce` 1.39x -> 1.38x C++,
+`awfy-towers` 1.28x -> 1.30x, `awfy-list` 1.66x -> 1.67x. Every absolute time in
+the run came out about five percent slower than the last one, `loop` included at
+653 -> 698 ns for a body that does nothing but count, so the machine had drifted
+and the ratios are what survived. Nothing moved.
+
+The suite has no factory in a loop. Its object graphs are lists, piles and
+trees, built to outlive the loop that built them, and a callee's allocation that
+reaches the caller's frame is the case where the object dies with the iteration.
+The table it would show up in does not exist yet. The README keeps the earlier
+run, which was measured on a quieter machine and says the same thing.
+
 ## What moved, and what had to move with it
 
 The control in `without_reference_counting_the_same_program_leaks` failed,
