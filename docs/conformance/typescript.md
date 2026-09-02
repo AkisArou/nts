@@ -310,6 +310,29 @@ The checker's id does not survive into this snapshot, so the match is on the
 description, and two symbols sharing one description on one type is **refused**
 rather than guessed — the case that would otherwise pick a field silently.
 
+Measured, because "costs exactly what `_refed` would" is a claim and not an
+observation. The `symbol-keys` row writes both spellings through one object in
+one loop: **1.02x C++ and 0.19x node**, where the C++ reference is a plain
+struct with four fields. A property map would have separated the two halves;
+they do not separate. `tooling/memory/cases/symbol-keys` is the same claim on
+the other axis, at ideal 0 and allocated 0.
+
+What is *not* there is the `symbol` type as a runtime value, and its price is
+the largest single number in the profile:
+
+    a union of `string | symbol` in a parameter        292
+    a property of type `string | symbol`                25
+    a function returning `symbol`                       21
+    `string | symbol | undefined` in a parameter        17
+
+`PropertyKey` is `string | number | symbol`, so it appears wherever node's
+sources touch a key generically. Representing it needs a symbol to *be*
+something at run time — a tag beside `NTS_TAG_OBJECT` and an interned cell
+whose address is its identity — and then `string | symbol` is an ordinary
+erased union. That is a feature rather than a gap, and it is the one the queue
+would reach next if symbols were ranked by refusal count rather than by what the
+language rests on.
+
 
 ### A class has no runtime identity, and it is the layout's fault
 
