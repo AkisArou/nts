@@ -741,6 +741,15 @@ rule exists to prevent, so:
 The `actual` column of `tooling/memory` is the ratchet, down only, the way the
 `rc` gate step already works. Nothing in this plan is allowed to raise it.
 
+## What came after
+
+`docs/records/0025-the-allocator-was-not-the-cost.md` is the sequel, and it
+contradicts the premise it started from: the rows this record could not reach
+turned out to be counting after all, not allocation. `hir::own` is what made
+them reachable -- takes across branches and joins, `consumes` for functions with
+a body, a field every caller has already zeroed -- and each of those is one more
+column of the summary this record asked for.
+
 ## What would say this is wrong
 
 - ~~**The greatest fixpoint does not move `borrowed-call`.**~~ Tested. It moved
