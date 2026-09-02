@@ -397,7 +397,7 @@ of the surface therefore costs nothing.
 | ✅ | `typeof` — including `"function"` for a closure and `"object"` for `null` |
 | ✅ | `Map`, `Set` — one insertion-ordered table, keys and values as tagged values |
 | ✅ | the polymorphic `this` — the receiver's own pointer, which costs nothing |
-| ◐ | `bigint` — exact, and **128 bits** rather than arbitrary precision; `String()` in decimal |
+| ◐ | `bigint` — exact, and **128 bits** rather than arbitrary precision; `String()` in decimal, `BigInt()` from a number or a boolean |
 | ✗ | `symbol` |
 
 ### `null` is not `undefined`, and a pointer holds one of them
@@ -1416,6 +1416,24 @@ is written. Every `bigint` in the node profile is a 64-bit quantity —
 `readBigUInt64BE`, an hrtime timestamp, `0xffffffffffffffffn` — and a true
 bignum would put a heap allocation into each of them. What replaces it, when
 something needs `2n ** 200n`, is a small-integer fast path beside a heap bignum.
+
+`BigInt(x)` is `Number(x)`'s mirror and not quite its twin. The identity on a
+bigint and `0n`/`1n` on a boolean are both what a C cast already is. On a
+*number* it is a conversion with a precondition: the specification throws a
+`RangeError` when the value is not an integer, so `BigInt(1.5)` is not `1n` and
+a cast would be a wrong answer rather than a lossy one. `nts_bigint_from_number`
+checks and refuses, the way an index past the end of an array does, and refuses
+again above 2^127 " + D + " the same boundary the literals have. From a *string* it is a
+parse, which `parseInt` would need too and neither has.
+
+That closed 22 sites reading "a builtin this compiler does not provide", and
+**5,875 to 5,821** across the profile: closing it let lowering reach 32 more
+things that were behind it.
+
+And what the representation is worth, which the table now carries: the `bigint`
+row is **0.99x C++ and 0.09x node**. C++ there is hand-written `__int128`, so
+this matches the floor; node's `BigInt` is arbitrary precision and allocates,
+and pays eleven times over for a width no `readBigUInt64BE` needs.
 
 It is also its own `HirType` rather than a wide integer, and that is not
 bookkeeping: `1n << 40n` is 2^40 where `1 << 40` is 256, because a *number*'s

@@ -2581,7 +2581,12 @@ fn conversion(from: &HirType, to: &HirType, func: &Func) -> Result<&'static str,
         (HirType::Float { .. }, HirType::Int { signed: false, .. }) => "fptoui",
         (HirType::Float { bits: 32 }, HirType::Float { bits: 64 }) => "fpext",
         (HirType::Float { bits: 64 }, HirType::Float { bits: 32 }) => "fptrunc",
-        (HirType::Bool, HirType::Int { .. }) => "zext",
+        // A bool widens into a `bigint` the same way and for the same reason it
+        // widens into any integer: it is one unsigned bit, so `BigInt(true)` is
+        // `1n`. Named separately only because `BigInt` is its own `HirType`
+        // rather than a wide `Int` -- which is what keeps `1n << 40n` from
+        // masking its shift count to five.
+        (HirType::Bool, HirType::Int { .. } | HirType::BigInt) => "zext",
         // Widening reads the *source's* signedness, not the destination's. A
         // `uint8_t` becoming an `int32_t` is `zext`: bytes 128..255 are 128..255
         // and not negatives, however the slot they land in is spelled.

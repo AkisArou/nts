@@ -400,6 +400,11 @@ void nts_cell_unready(const char *name);
 
 /* `String(x)` for the two kinds a double's formatter cannot take. */
 NtsString *nts_bool_to_string(bool value);
+/* `BigInt(x)` on a number. Refuses a non-integer rather than truncating it:
+ * the specification throws a `RangeError` there, so a cast would be a wrong
+ * answer rather than a lossy one. */
+__int128 nts_bigint_from_number(double value);
+
 NtsString *nts_bigint_to_string(__int128 value);
 
 __int128 nts_bigint_shl(__int128 value, __int128 count);

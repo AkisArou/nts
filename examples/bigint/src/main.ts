@@ -172,3 +172,49 @@ export function shiftsByAValue(n: number): number {
     n * 0
   );
 }
+
+// A `bigint` in a field, which is where its width stops being only an
+// arithmetic question. It is the one thing here wider than a word, so it drags
+// the object's alignment to sixteen -- and the C backend checks that placement
+// with a `_Static_assert` per field rather than trusting it.
+//
+// `tooling/memory/cases/bigint-arithmetic` argues this costs no allocation and
+// no counting; this is the half node has an opinion about.
+class Ledger {
+  total: bigint;
+  step: bigint;
+  constructor(step: bigint) {
+    this.total = 0n;
+    this.step = step;
+  }
+}
+
+export function throughAField(n: number): number {
+  const ledger = new Ledger(1000000007n);
+  for (let i = 0; i < 4; i++) {
+    ledger.total = ledger.total * ledger.step + BigInt(i);
+  }
+  return Number(ledger.total & 0xffffffffn) + n * 0;
+}
+
+// `BigInt(x)`, which is `Number(x)`'s mirror and not quite its twin: the
+// identity on a bigint, `0n`/`1n` on a boolean, and on a *number* a conversion
+// with a precondition -- the specification throws a `RangeError` when the value
+// is not an integer, so `BigInt(1.5)` is not `1n`. `nts_bigint_from_number`
+// refuses there rather than truncating, the way an index past the end of an
+// array does.
+export function conversion(n: number): string {
+  return (
+    String(BigInt(n | 0)) +
+    "|" +
+    String(BigInt(7)) +
+    "|" +
+    String(BigInt(0)) +
+    "|" +
+    String(BigInt(n > 0)) +
+    "|" +
+    String(BigInt(-(n | 0))) +
+    "|" +
+    String(BigInt(9007199254740991))
+  );
+}

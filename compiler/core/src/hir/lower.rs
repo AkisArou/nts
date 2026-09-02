@@ -11989,6 +11989,37 @@ impl<'a> FuncBuilder<'a> {
                 _ => Err(self.unsupported(id, "a conversion to number from this type")),
             });
         }
+        // `BigInt(x)`, the mirror of `Number(x)` and not quite its twin.
+        //
+        // The identity on a bigint, and `0n`/`1n` on a boolean, both of which a
+        // C cast already is. On a *number* it is a conversion with a
+        // precondition: the specification throws a `RangeError` when the value
+        // is not an integer, so `BigInt(1.5)` is not `1n` and a cast would be a
+        // wrong answer rather than a lossy one. `nts_bigint_from_number` checks
+        // and refuses, the way an index past the end of an array does.
+        //
+        // On a string it is a parse, which `parseInt` would need too and
+        // neither has; on anything else it is `valueOf` off a prototype chain.
+        // Both are refused by name -- 22 sites in the node profile said only
+        // "a builtin this compiler does not provide" before this existed.
+        if name == "BigInt" {
+            let value = match self.lower_expression(*argument) {
+                Ok(value) => value,
+                Err(problem) => return Some(Err(problem)),
+            };
+            let origin = self.origin(id);
+            return Some(match self.values[value.0 as usize].ty {
+                HirType::BigInt => Ok(value),
+                HirType::Bool => Ok(self.push(OpKind::Convert(value), HirType::BigInt, origin)),
+                HirType::Float { .. } | HirType::Int { .. } => Ok(self.runtime_call(
+                    "nts_bigint_from_number",
+                    vec![value],
+                    HirType::BigInt,
+                    origin,
+                )),
+                _ => Err(self.unsupported(id, "a conversion to bigint from this type")),
+            });
+        }
         None
     }
 

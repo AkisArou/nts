@@ -1010,6 +1010,31 @@ NtsString *nts_value_to_string(NtsValue value) {
   }
 }
 
+/* `BigInt(x)` on a number, which is a conversion with a precondition.
+ *
+ * The specification throws a `RangeError` when the value is not an integer --
+ * `BigInt(1.5)` is not `1n` -- so a plain cast would be a wrong answer rather
+ * than a lossy one. There is no `throw` to raise here, and the same is true of
+ * an index past the end of an array, so this refuses the way that does.
+ *
+ * The second bound is ours rather than the language's: this `bigint` is 128
+ * bits, and a double above 2^127 has no value here to convert to. That is the
+ * boundary `typescript.md` argues for, refused where it is crossed rather than
+ * wrapped silently. */
+__int128 nts_bigint_from_number(double value) {
+  if (!(value == nts_to_integer(value))) {
+    fprintf(stderr, NTS_REFUSED "%g is not an integer, so it has no bigint\n",
+            value);
+    abort();
+  }
+  if (!(value >= -1.7014118346046923e38 && value <= 1.7014118346046923e38)) {
+    fprintf(stderr, NTS_REFUSED "%g is outside the 128 bits a bigint has\n",
+            value);
+    abort();
+  }
+  return (__int128)value;
+}
+
 void nts_bounds(double index, uint32_t length) {
   fprintf(stderr, NTS_REFUSED "index %g is outside [0, %u)\n", index, length);
   abort();

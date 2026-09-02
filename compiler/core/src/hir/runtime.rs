@@ -63,6 +63,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_bigint_as_uintn", &[Some(HirType::Float { bits: 64 }), Some(HirType::BigInt)], Some(HirType::BigInt)),
     ("nts_bigint_shl", &[Some(HirType::BigInt), Some(HirType::BigInt)], Some(HirType::BigInt)),
     ("nts_bigint_shr", &[Some(HirType::BigInt), Some(HirType::BigInt)], Some(HirType::BigInt)),
+    ("nts_bigint_from_number", &[Some(HirType::Float { bits: 64 })], Some(HirType::BigInt)),
     ("nts_bigint_to_string", &[Some(HirType::BigInt)], None),
     ("nts_bool_to_string", &[Some(HirType::Bool)], None),
     ("nts_bounds", &[Some(HirType::Float { bits: 64 }), Some(HirType::Int { bits: 32, signed: false })], None),
