@@ -143,6 +143,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_max_fn", returns: "double", params: &["double", "double"], attributes: &[] },
     Signature { name: "nts_min_fn", returns: "double", params: &["double", "double"], attributes: &[] },
     Signature { name: "nts_number_to_string", returns: "ptr", params: &["double"], attributes: &[] },
+    Signature { name: "nts_number_to_string_into", returns: "ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_object_new", returns: "noalias nonnull ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_post_delayed", returns: "i64", params: &["ptr byval(%struct.NtsTask) align 8", "double", "i1 zeroext"], attributes: &[] },
     Signature { name: "nts_post_from_any_thread", returns: "void", params: &["ptr byval(%struct.NtsTask) align 8"], attributes: &[] },

@@ -1,18 +1,53 @@
 /* The nts side of Unicode case conversion.
  *
- * The tables and `lre_case_conv` come from quickjs-ng and are concatenated
- * ahead of this file into one translation unit -- see `UNICODE_SOURCE` in
- * `compiler/codegen/c/src/emit.rs`. This file is what nts wrote.
+ * The tables and `lre_case_conv` come from quickjs-ng and are included below
+ * rather than compiled beside: several places build a program and each names
+ * its `.c` files explicitly, so a second translation unit would need all of
+ * them to agree. The `quickjs/` path is the repository's own, mirrored into the
+ * emitted directory so this resolves in both.
  *
- * Two passes rather than one. Case conversion is not length-preserving --
- * `ß` uppercases to `SS`, `ﬁ` to `FI`, and one code point can become three --
- * so the output length is not known until it has been computed. Running the
- * table lookup twice is cheaper than allocating three times the input and
- * copying it down, and much cheaper than growing as it goes.
+ * Two passes rather than one, in the general case. Case conversion is not
+ * length-preserving -- `ß` uppercases to `SS`, `ﬁ` to `FI`, and one code point
+ * can become three -- so the output length is not known until it has been
+ * computed. Running the table lookup twice is cheaper than allocating three
+ * times the input and copying it down.
  *
- * The ASCII path skips both. A string whose units are all below 0x80 converts
- * one byte at a time with no code point decoding, no table lookup and no
- * widening, which is nearly every string a program actually converts. */
+ * The one-byte path skips both, and that is nearly every call. */
+
+/* Before any system header, which is what a feature-test macro requires.
+ * quickjs-ng's `cutils.h` reaches for `clock_gettime`, `readlink` and
+ * `pthread_condattr_setclock`, and the differential compiles with `-std=c11`.
+ * `nts_runtime.c` says the same for its own translation unit; this is a second
+ * one and gets no benefit from that. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
+#include "nts_unicode.h"
+
+/* Vendored code is held to upstream's warning standard, not ours, and the
+ * pragmas are pushed and popped around it so that everything below is still
+ * compiled with all of them on. */
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#pragma GCC diagnostic ignored "-Wunused-macros"
+#endif
+/* Including a `.c` is deliberate and not a slip: see `nts_runtime.c` for why
+ * these must not become translation units of their own. */
+/* NOLINTNEXTLINE(bugprone-suspicious-include) */
+#include "quickjs/libunicode.c"
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 /* `lre_case_conv`'s third argument, spelled out. quickjs-ng passes a bare `0`
  * or `1` and calls the parameter `to_lower`, which reads as a boolean until the
@@ -20,16 +55,6 @@
 #define NTS_CASE_UPPER 0
 #define NTS_CASE_LOWER 1
 
-/* ASCII case conversion as two lookups rather than two comparisons and a
- * branch.
- *
- * The branching form measured 8.64us against node's 2.96us on `case-convert`.
- * A table is one load and one store per byte with nothing to predict, which is
- * also the shape clang can vectorise -- the branching form is not.
- *
- * 256 entries and not 128 so that a byte above 0x7F indexes safely; those
- * entries are the identity, which is wrong for Latin-1 and never reached,
- * because `nts_all_ascii` decides before this is used. */
 /* Lowercasing a one-byte string never leaves one byte.
  *
  * Latin-1's uppercase letters are 0xC0..0xDE without 0xD7, and each maps 32

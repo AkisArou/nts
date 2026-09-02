@@ -44,74 +44,44 @@ pub const UV_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_uv_host
 pub const UV_HOST_SOURCE_NAME: &str = "nts_uv_host.c";
 pub const UV_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_uv_host.c");
 
+/// The vendored half of the runtime, shipped as a `quickjs/` subdirectory.
+///
+/// Mirroring the repository layout rather than flattening it, so that
+/// `#include "quickjs/dtoa.c"` in `nts_runtime.c` resolves the same whether the
+/// runtime is compiled from `runtime/c` or from a directory this emitted. A
+/// flat layout would need two different spellings of the same include.
+///
+/// None of these is a translation unit. They are `#include`d, which is what
+/// keeps the several places that build a program from having to agree about a
+/// new `.c` file -- one of them is `tooling/conformance/build.sh`, and adding a
+/// source to its explicit list is not always this session's to do.
+pub const CUTILS_HEADER_NAME: &str = "quickjs/cutils.h";
+pub const CUTILS_HEADER: &str = include_str!("../../../../runtime/c/quickjs/cutils.h");
+pub const DTOA_HEADER_NAME: &str = "quickjs/dtoa.h";
+pub const DTOA_HEADER: &str = include_str!("../../../../runtime/c/quickjs/dtoa.h");
+pub const DTOA_SOURCE_NAME: &str = "quickjs/dtoa.c";
+pub const DTOA_SOURCE: &str = include_str!("../../../../runtime/c/quickjs/dtoa.c");
+
 /// Unicode case conversion, which is a table rather than an algorithm.
-///
-/// Four headers and one source, and the source is two files fused:
-/// `libunicode.c` from quickjs-ng, then the nts wrapper that turns
-/// `lre_case_conv` into `toLowerCase`. One translation unit rather than two
-/// because every consumer that compiles a program names its C files
-/// explicitly, and there are eight of them -- fusing costs a `concat!` and
-/// saves adding a path in eight places.
-///
-/// quickjs-ng rather than bellard/quickjs: its `libunicode.c` needs nothing
-/// outside libc, where bellard's pulls `dbuf_*` and `rqsort` out of `cutils.c`
-/// and would have made this three files.
 ///
 /// # Why it is not part of the runtime
 ///
-/// Measured: linking these into `examples/hello` takes it from 81 KB to
-/// 162 KB. Doubling every binary to carry tables most programs never read is
-/// not a tradeoff worth making, so this is emitted only for a program that
-/// calls one of the methods -- `needs_unicode` on the emitted output says
-/// which, the same way the libuv host is written only when a loop is asked
-/// for.
-///
-/// The headers keep their upstream names because `libunicode.c` includes them
-/// by those names, and the emitted directory is flat.
+/// `dtoa` is: `String(x)` is in nearly every program and it is 12 KB with no
+/// tables. These are 63 KB of tables that most programs never read, and linking
+/// them takes `examples/hello` from 81 KB to 162 KB -- so they are emitted only
+/// for a program that calls one of the methods, the same way the libuv host is
+/// written only when a loop is asked for. `needs_unicode` says which.
 pub const UNICODE_HEADER_NAME: &str = "nts_unicode.h";
 pub const UNICODE_HEADER: &str = include_str!("../../../../runtime/c/nts_unicode.h");
-pub const CUTILS_HEADER_NAME: &str = "cutils.h";
-pub const CUTILS_HEADER: &str = include_str!("../../../../runtime/c/quickjs/cutils.h");
-pub const LIBUNICODE_HEADER_NAME: &str = "libunicode.h";
+pub const LIBUNICODE_HEADER_NAME: &str = "quickjs/libunicode.h";
 pub const LIBUNICODE_HEADER: &str = include_str!("../../../../runtime/c/quickjs/libunicode.h");
-pub const LIBUNICODE_TABLE_NAME: &str = "libunicode-table.h";
+pub const LIBUNICODE_TABLE_NAME: &str = "quickjs/libunicode-table.h";
 pub const LIBUNICODE_TABLE: &str =
     include_str!("../../../../runtime/c/quickjs/libunicode-table.h");
+pub const LIBUNICODE_SOURCE_NAME: &str = "quickjs/libunicode.c";
+pub const LIBUNICODE_SOURCE: &str = include_str!("../../../../runtime/c/quickjs/libunicode.c");
 pub const UNICODE_SOURCE_NAME: &str = "nts_unicode.c";
-pub const UNICODE_SOURCE: &str = concat!(
-    // Before any system header, which is what a feature-test macro requires.
-    //
-    // quickjs-ng's `cutils.h` is a general-purpose header rather than the small
-    // one bellard's was: it reaches for `clock_gettime`, `readlink` and
-    // `pthread_condattr_setclock`, none of which strict ISO C declares. The
-    // differential compiles with `-std=c11` and got five errors from a header
-    // it only includes for `countof`. Asking for POSIX here fixes it where the
-    // need is, rather than loosening the standard in the several places that
-    // compile a program.
-    "#ifndef _POSIX_C_SOURCE\n#define _POSIX_C_SOURCE 200809L\n#endif\n",
-    "#include \"nts_unicode.h\"\n",
-    // Vendored code is held to upstream's warning standard, not ours. The
-    // pragmas travel *in the file* rather than as flags because eight places
-    // compile a program and every one of them would otherwise need to know;
-    // and they are pushed and popped around the vendored half so that the nts
-    // wrapper after it is still compiled with everything on.
-    "#if defined(__clang__) || defined(__GNUC__)\n",
-    "#pragma GCC diagnostic push\n",
-    "#pragma GCC diagnostic ignored \"-Wunused-parameter\"\n",
-    "#pragma GCC diagnostic ignored \"-Wsign-compare\"\n",
-    "#pragma GCC diagnostic ignored \"-Wunused-function\"\n",
-    "#pragma GCC diagnostic ignored \"-Wunused-but-set-variable\"\n",
-    "#pragma GCC diagnostic ignored \"-Wmissing-field-initializers\"\n",
-    "#pragma GCC diagnostic ignored \"-Wimplicit-fallthrough\"\n",
-    "#pragma GCC diagnostic ignored \"-Wconversion\"\n",
-    "#pragma GCC diagnostic ignored \"-Wshadow\"\n",
-    "#pragma GCC diagnostic ignored \"-Wcast-qual\"\n",
-    "#pragma GCC diagnostic ignored \"-Wunused-macros\"\n",
-    "#endif\n",
-    include_str!("../../../../runtime/c/quickjs/libunicode.c"),
-    "\n#if defined(__clang__) || defined(__GNUC__)\n#pragma GCC diagnostic pop\n#endif\n",
-    include_str!("../../../../runtime/c/nts_unicode.c"),
-);
+pub const UNICODE_SOURCE: &str = include_str!("../../../../runtime/c/nts_unicode.c");
 
 /// One file a program needs beside `program.c`.
 ///
@@ -127,6 +97,27 @@ pub struct Support {
     pub compiled: bool,
 }
 
+impl Support {
+    /// Write this file under `out`, making the `quickjs/` subdirectory if the
+    /// name asks for one.
+    ///
+    /// A shared helper because a name with a directory in it is easy to write
+    /// with `fs::write` and have fail at run time, in each of the several
+    /// places that write these.
+    ///
+    /// # Errors
+    ///
+    /// If the directory cannot be made or the file cannot be written.
+    pub fn write(&self, out: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+        let path = out.join(self.name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, self.contents)?;
+        Ok(path)
+    }
+}
+
 /// Every file a program needs beside `program.c`, given whether it converts case.
 #[must_use]
 pub fn support_files(needs_unicode: bool) -> Vec<Support> {
@@ -137,14 +128,19 @@ pub fn support_files(needs_unicode: bool) -> Vec<Support> {
     };
     let mut files = vec![
         one(RUNTIME_HEADER_NAME, RUNTIME_HEADER, false),
+        // `nts_runtime.c` includes `quickjs/dtoa.c`, so these travel with it
+        // always -- `String(x)` is in nearly every program.
+        one(CUTILS_HEADER_NAME, CUTILS_HEADER, false),
+        one(DTOA_HEADER_NAME, DTOA_HEADER, false),
+        one(DTOA_SOURCE_NAME, DTOA_SOURCE, false),
         one(RUNTIME_SOURCE_NAME, RUNTIME_SOURCE, true),
     ];
     if needs_unicode {
         files.extend([
             one(UNICODE_HEADER_NAME, UNICODE_HEADER, false),
-            one(CUTILS_HEADER_NAME, CUTILS_HEADER, false),
             one(LIBUNICODE_HEADER_NAME, LIBUNICODE_HEADER, false),
             one(LIBUNICODE_TABLE_NAME, LIBUNICODE_TABLE, false),
+            one(LIBUNICODE_SOURCE_NAME, LIBUNICODE_SOURCE, false),
             one(UNICODE_SOURCE_NAME, UNICODE_SOURCE, true),
         ]);
     }

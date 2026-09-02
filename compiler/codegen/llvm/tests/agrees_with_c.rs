@@ -76,13 +76,18 @@ fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, Stri
     let c = nts_codegen_c::emit(&prepared.program);
     assert!(c.diagnostics.is_empty(), "the C backend declined");
     std::fs::write(dir.join("program.c"), c.writer.text()).expect("write the C");
-    std::fs::write(
-        dir.join(nts_codegen_c::RUNTIME_HEADER_NAME),
-        nts_codegen_c::RUNTIME_HEADER,
-    )
-    .expect("write the runtime header");
-    std::fs::write(dir.join("nts_runtime.c"), nts_codegen_c::RUNTIME_SOURCE)
-        .expect("write the runtime");
+    // Through `support_files` rather than by naming the header and the source:
+    // `nts_runtime.c` includes `quickjs/dtoa.c`, which has to land in a
+    // subdirectory beside it, and a program that converts case needs a second
+    // translation unit as well. Every place that builds a program shares this
+    // list precisely so none of them falls behind one that changes.
+    let mut runtime_sources: Vec<std::path::PathBuf> = Vec::new();
+    for file in nts_codegen_c::support_files(c.needs_unicode()) {
+        let written = file.write(&dir).expect("write a support file");
+        if file.compiled {
+            runtime_sources.push(written);
+        }
+    }
     std::fs::write(dir.join("drive.c"), driver).expect("write the driver");
 
     // Reporting rather than a bool: a check that fails without saying why is
@@ -119,11 +124,16 @@ fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, Stri
     // hand-written C library, two code generators calling it. It is also the
     // only place the C-to-LLVM ABI is exercised.
     let program_c = dir.join("program.c");
-    let runtime_c = dir.join("nts_runtime.c");
-    if let Err(problem) = build(&[object.to_str()?, runtime_c.to_str()?], "run_llvm") {
+    let runtime: Vec<&str> = runtime_sources.iter().filter_map(|p| p.to_str()).collect();
+
+    let mut llvm_args = vec![object.to_str()?];
+    llvm_args.extend(runtime.iter().copied());
+    if let Err(problem) = build(&llvm_args, "run_llvm") {
         panic!("linking the IR against the runtime failed:\n{problem}");
     }
-    if let Err(problem) = build(&[program_c.to_str()?, runtime_c.to_str()?], "run_c") {
+    let mut c_args = vec![program_c.to_str()?];
+    c_args.extend(runtime.iter().copied());
+    if let Err(problem) = build(&c_args, "run_c") {
         panic!("building the C failed:\n{problem}");
     }
 

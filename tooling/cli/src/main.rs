@@ -1339,7 +1339,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     // program agree about it rather than each remembering.
     let support = emitted.support_files();
     for file in &support {
-        std::fs::write(out.join(file.name), file.contents)?;
+        file.write(out.as_std_path())?;
     }
     let extra: Vec<&str> = support
         .iter()

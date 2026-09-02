@@ -1123,10 +1123,9 @@ fn run_native(
     // arrives with a new translation unit needs no change here.
     let mut sources = Vec::new();
     for file in emitted.support_files() {
-        let path = dir.join(file.name);
-        std::fs::write(&path, file.contents)?;
+        let path = file.write(dir.as_std_path())?;
         if file.compiled {
-            sources.push(path);
+            sources.push(Utf8PathBuf::from_path_buf(path).unwrap_or_default());
         }
     }
     // The deterministic host, so a compiled `async` function has a loop to be

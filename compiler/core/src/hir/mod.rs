@@ -1898,6 +1898,19 @@ fn frame_capacity(func: &Func, value: ValueId) -> Option<u32> {
     if name == "nts_string_from_char_code" {
         return Some(1);
     }
+    // `String(x)`, whose length is bounded by what a double *is* rather than by
+    // any argument: the shortest round-tripping decimal needs at most 17
+    // significant digits, and the widest shape around them is
+    // `-1.2345678901234567e-308` at twenty-four characters.
+    //
+    // This is the difference between `String(x)` and `toLowerCase`, which
+    // cannot be placed at all: one has a bound the compiler can know before the
+    // call and the other's output length is its input's. `NTS_NUMBER_STRING_MAX`
+    // in the runtime header is the same number, and `nts_number_to_string_into`
+    // takes the heap rather than trusting it if a value ever exceeds it.
+    if name == "nts_number_to_string" {
+        return Some(40);
+    }
     // The helpers with an `_into` form: each returns a *fresh* string, so
     // nothing else can hold the one this builds.
     if !matches!(

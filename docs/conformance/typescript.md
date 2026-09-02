@@ -1653,8 +1653,17 @@ Measured, not assumed — three of these rows were wrong on the first pass.
   tanh trunc`, and the constants. Absent: `random`, which needs a decision
   about its source rather than an implementation.
 - **`Number`**: `isNaN isFinite isInteger isSafeInteger EPSILON`, and
-  `toString` on a number. Absent: `toFixed`, `toPrecision`, `parseFloat`,
-  `parseInt`.
+  `toString` on a number — which is `String(x)`, and is ECMAScript's
+  Number::toString rather than a `printf`: the shortest decimal that reads back
+  as the same double. quickjs-ng's `js_dtoa` computes it, an integer takes a
+  digit-pair loop written here instead, and the result lands in the frame
+  because its length is bounded before the call. Record 0034.
+
+  Absent, and now for want of wiring rather than for want of an algorithm:
+  `toFixed`, `toPrecision` and `toExponential` are `js_dtoa`'s `FORMAT_FIXED`
+  and `FORMAT_FRAC` with the `EXP_*` flags, and `parseFloat`/`parseInt` are
+  `js_atod` — all four already vendored and compiled in, none of them
+  reachable from a program yet.
 - **`String.prototype`**: `at charAt charCodeAt codePointAt concat endsWith
   includes indexOf isWellFormed lastIndexOf padEnd padStart repeat replace
   replaceAll slice split startsWith substring toString toWellFormed trim

@@ -156,13 +156,25 @@ fn build_and_run_hosted(
     std::fs::write(&main, harness).expect("write harness");
     // The runtime is a real translation unit, so it is written beside the
     // generated file and compiled with it rather than pasted into it.
-    let runtime = dir.join(nts_codegen_c::RUNTIME_SOURCE_NAME);
-    std::fs::write(
-        dir.join(nts_codegen_c::RUNTIME_HEADER_NAME),
-        nts_codegen_c::RUNTIME_HEADER,
-    )
-    .expect("write runtime header");
-    std::fs::write(&runtime, nts_codegen_c::RUNTIME_SOURCE).expect("write runtime");
+    //
+    // Through `support_files` rather than by naming the two: `nts_runtime.c`
+    // includes `quickjs/dtoa.c`, which has to be written into a subdirectory
+    // beside it, and this wrote the pair by hand until that stopped being the
+    // whole list. Every place that builds a program shares this list precisely
+    // so it cannot fall behind one that changes.
+    // *Every* compiled file, not the last one. Written as a single `runtime`
+    // path first, which silently dropped `nts_runtime.c` from the link for any
+    // program that also needed `nts_unicode.c` -- the loop overwrote the
+    // variable rather than adding to it, so the link lost everything the
+    // runtime defines and reported it as an undefined reference inside the
+    // *generated* function that called it.
+    let mut runtime: Vec<std::path::PathBuf> = Vec::new();
+    for file in nts_codegen_c::support_files(emitted.needs_unicode()) {
+        let written = file.write(&dir).expect("write support file");
+        if file.compiled {
+            runtime.push(written);
+        }
+    }
     let host = write_host(&dir, host_kind);
 
     // The provider is a property of the runtime as much as of the HIR: RC needs
@@ -207,7 +219,7 @@ fn build_and_run_hosted(
         .arg(&binary)
         .arg(&generated)
         .arg(&main)
-        .arg(&runtime)
+        .args(&runtime)
         .args(if host_kind == Host::None {
             Vec::new()
         } else {

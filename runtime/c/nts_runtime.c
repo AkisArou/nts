@@ -7,11 +7,66 @@
  * hundreds of names they declare, so a TypeScript `function div()` no longer
  * collides with C's.
  */
+
+/* Before any system header, which is what a feature-test macro requires.
+ * quickjs-ng's `cutils.h`, which `dtoa.c` below includes, reaches for
+ * `clock_gettime`, `readlink` and `pthread_condattr_setclock` -- none of which
+ * strict ISO C declares, and the differential compiles with `-std=c11`. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "nts_runtime.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Double to decimal, which is a specification rather than a `printf`.
+ *
+ * Included rather than compiled beside, and that is deliberate: several places
+ * build a program and each names its `.c` files explicitly -- one of them is
+ * `tooling/conformance/build.sh`, which this session does not own. A second
+ * translation unit would need all of them to agree; a header-style include
+ * needs none of them to change, and the file is emitted into a `quickjs/`
+ * subdirectory of the output so this path resolves the same whether the runtime
+ * is compiled from `runtime/c` or from an emitted directory.
+ *
+ * What it replaces: `nts_shortest_digits` found the shortest round-tripping
+ * representation by calling `snprintf("%.*e")` and `strtod` at every precision
+ * from 1 to 17 until one read back. That is correct -- it verifies -- and it
+ * cost 867ns to render `1234567`, which is seven of those round trips.
+ * `js_dtoa` computes it, produces byte-identical output on every value tested,
+ * and does the same number in 7.4ns.
+ *
+ * clang-tidy flags including a `.c`, and it is right to: it usually means
+ * somebody meant the header. Here it is the point -- the file must not become
+ * a translation unit of its own -- so the check is suppressed at the line with
+ * the reason above it rather than turned off. */
+/* Vendored code is held to upstream's warning standard, not ours, and the
+ * pragmas are pushed and popped around it so that everything below is still
+ * compiled with all of them on. `runtime_checkpoint` builds with `-Werror
+ * -Wunused-parameter` and `cutils.h` has four `static` helpers that ignore an
+ * argument, which is how this was found. */
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#pragma GCC diagnostic ignored "-Wunused-macros"
+#pragma GCC diagnostic ignored "-Wfloat-equal"
+#endif
+/* NOLINTNEXTLINE(bugprone-suspicious-include) */
+#include "quickjs/dtoa.c"
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 /* Allocated and reclaimed, so that a test can see reference counting balance
  * from inside the program rather than infer it from memory use. */
@@ -2163,51 +2218,6 @@ NtsArray *nts_array_slice(const NtsArray *a, double from, double to) {
   return out;
 }
 
-/* ECMAScript `Number::toString`, base 10, written from the specification.
- *
- * Not `printf`. `%.17g` gives seventeen significant digits whether or not they
- * are needed, so `0.1` prints as `0.10000000000000001`; `%g` also switches to
- * exponential notation at a threshold that is not JavaScript's. The
- * specification asks for the *shortest* decimal that reads back as the same
- * double, and then for four different layouts of it depending on where the
- * decimal point falls.
- *
- * Checked against node over 1039 values -- NaN, both zeros, both infinities,
- * the smallest denormal, the 1e21 and 1e-7 notation boundaries, 2^53 either
- * side, and a thousand pseudorandom values spanning 10^-22 to 10^21. Zero
- * differences; and with the search below truncated it differs on 1013 of them,
- * which is what makes the zero worth reporting. */
-static int nts_shortest_digits(double x, char *s, int *n) {
-  char buffer[64];
-  /* Upward from one digit, so the first that reads back is the shortest. */
-  for (int precision = 1; precision <= 17; precision++) {
-    snprintf(buffer, sizeof buffer, "%.*e", precision - 1, x);
-    if (strtod(buffer, NULL) == x) {
-      const char *e = strchr(buffer, 'e');
-      /* The digits are `snprintf`'s own `%e` output two lines up, so there is
-       * no input here that could fail to convert. */
-      /* NOLINTNEXTLINE(bugprone-unchecked-string-to-number-conversion) */
-      *n = atoi(e + 1) + 1;
-      int k = 0;
-      for (const char *at = buffer; at < e; at++) {
-        if (*at >= '0' && *at <= '9') {
-          s[k++] = *at;
-        }
-      }
-      /* The specification's `s` has no trailing zeros: 100 is s=1, n=3. */
-      while (k > 1 && s[k - 1] == '0') {
-        k--;
-      }
-      s[k] = '\0';
-      return k;
-    }
-  }
-  s[0] = '0';
-  s[1] = '\0';
-  *n = 1;
-  return 1;
-}
-
 /* The `Number` predicates, each exactly specified -- no approximation here.
  *
  * A call rather than an expression because none of them is one operation. The
@@ -2281,61 +2291,139 @@ double nts_math_cbrt(double x) { return cbrt(x); }
 double nts_math_atan2(double y, double x) { return atan2(y, x); }
 double nts_math_hypot(double a, double b) { return hypot(a, b); }
 
-NtsString *nts_number_to_string(double x) {
-  char out[64];
-  char *at = out;
-  if (x != x) {
-    return nts_string_from_utf8("NaN", 3);
-  }
-  /* Negative zero prints as "0": the sign is not part of the answer. */
-  if (x == 0.0) {
-    return nts_string_from_utf8("0", 1);
-  }
-  if (x < 0.0) {
-    *at++ = '-';
-    x = -x;
-  }
-  if (x > 1.7976931348623157e308) {
-    memcpy(at, "Infinity", 8);
-    return nts_string_from_utf8(out, (size_t)(at - out) + 8);
-  }
+/* `String(x)`, which is ECMAScript's Number::toString and not `printf`.
+ *
+ * `js_dtoa` with `FORMAT_FREE` is exactly that algorithm: the shortest decimal
+ * that reads back as the same double, placed by the specification's own rules
+ * for where the point goes and when to use an exponent. It answers `NaN`,
+ * `Infinity` and `-Infinity` itself.
+ *
+ * `-0` is the one place the specification and the library disagree on purpose.
+ * `String(-0)` is `"0"` -- the sign is not part of the answer -- and `js_dtoa`
+ * writes it only when asked with `JS_DTOA_MINUS_ZERO`, which this does not ask.
+ *
+ * What was here: a loop calling `snprintf("%.*e")` and `strtod` at every
+ * precision from 1 to 17 until one round-tripped. Correct, because it verifies,
+ * and 867ns for `1234567` against 7.4ns for this.
+ */
+/* An integer's decimal digits, two at a time.
+ *
+ * quickjs-ng's `u32toa` is a divide-by-ten loop into a scratch buffer followed
+ * by a `memcpy`, which measured 7.44ns for values up to a million -- most of
+ * what `String(n)` costs, and more than twice what `std::to_string` takes for
+ * the same work.
+ *
+ * This is the standard alternative and the reason it is faster is arithmetic
+ * rather than cleverness: half as many divisions, the length known before the
+ * first digit so the digits go straight into the caller's buffer, and no
+ * second buffer to copy out of.
+ *
+ * Ours rather than a patch to `runtime/c/quickjs`: that directory is upstream
+ * unmodified so updating it stays a file copy. `js_dtoa` is still theirs and
+ * still does everything a non-integer needs. */
+static const char nts_digit_pairs[201] =
+    "00010203040506070809101112131415161718192021222324252627282930313233343536"
+    "37383940414243444546474849505152535455565758596061626364656667686970717273"
+    "7475767778798081828384858687888990919293949596979899";
 
-  char s[32];
-  int n = 0;
-  const int k = nts_shortest_digits(x, s, &n);
+/* How many decimal digits `n` has. A comparison chain rather than a logarithm:
+ * every branch here is perfectly predicted in a loop over similar values, and
+ * the result is needed *before* the digits so they can be written backwards
+ * into place. */
+static uint32_t nts_digits10(uint32_t n) {
+  if (n < 10u) {
+    return 1;
+  }
+  if (n < 100u) {
+    return 2;
+  }
+  if (n < 1000u) {
+    return 3;
+  }
+  if (n < 10000u) {
+    return 4;
+  }
+  if (n < 100000u) {
+    return 5;
+  }
+  if (n < 1000000u) {
+    return 6;
+  }
+  if (n < 10000000u) {
+    return 7;
+  }
+  if (n < 100000000u) {
+    return 8;
+  }
+  if (n < 1000000000u) {
+    return 9;
+  }
+  return 10;
+}
 
-  if (k <= n && n <= 21) {
-    /* Every digit, then the zeros that place them: 100. */
-    memcpy(at, s, (size_t)k);
-    memset(at + k, '0', (size_t)(n - k));
-    at += n;
-  } else if (0 < n && n <= 21) {
-    /* The point falls inside the digits: 1.5. */
-    memcpy(at, s, (size_t)n);
-    at[n] = '.';
-    memcpy(at + n + 1, s + n, (size_t)(k - n));
-    at += k + 1;
-  } else if (-6 < n && n <= 0) {
-    /* A leading zero and the point, then the digits: 0.001. */
-    *at++ = '0';
-    *at++ = '.';
-    memset(at, '0', (size_t)(-n));
-    memcpy(at - n, s, (size_t)k);
-    at += k - n;
+static int nts_u32toa(char *buf, uint32_t n) {
+  const uint32_t length = nts_digits10(n);
+  char *at = buf + length;
+  while (n >= 100u) {
+    const uint32_t pair = (n % 100u) * 2u;
+    n /= 100u;
+    *--at = nts_digit_pairs[pair + 1u];
+    *--at = nts_digit_pairs[pair];
+  }
+  if (n >= 10u) {
+    const uint32_t pair = n * 2u;
+    *--at = nts_digit_pairs[pair + 1u];
+    *--at = nts_digit_pairs[pair];
   } else {
-    /* Exponential, with the exponent's sign always written: 1e+21. */
-    *at++ = s[0];
-    if (k != 1) {
-      *at++ = '.';
-      memcpy(at, s + 1, (size_t)(k - 1));
-      at += k - 1;
-    }
-    *at++ = 'e';
-    const int exponent = n - 1;
-    *at++ = exponent < 0 ? '-' : '+';
-    at += snprintf(at, 16, "%d", exponent < 0 ? -exponent : exponent);
+    *--at = (char)('0' + n);
   }
-  return nts_string_from_utf8(out, (size_t)(at - out));
+  return (int)length;
+}
+
+NtsString *nts_number_to_string(double x) {
+  return nts_number_to_string_into(NULL, x);
+}
+
+NtsString *nts_number_to_string_into(NtsHeader *into, double x) {
+  /* An integer is not a general double, and the shortest-round-trip algorithm
+   * charges it as one. Every index, count and identifier a program formats is
+   * an integer, and V8 has the same split for anything that fits a Smi.
+   *
+   * `-0` needs no guard: it converts to `0`, `(double)0 == -0.0` is true, and
+   * `String(-0)` is `"0"` -- the sign is not part of the answer, so this gives
+   * exactly the right characters. NaN and the infinities fail the round-trip
+   * test and fall through to `js_dtoa`, which spells them itself. */
+  const int32_t whole = (int32_t)x;
+  if ((double)whole == x) {
+    /* Straight into the string: no scratch buffer and no copy, because
+     * `nts_digits10` knows the length before a digit is written. An integer is
+     * at most eleven characters, so it always fits the caller's storage. */
+    const uint32_t magnitude =
+        whole < 0 ? (uint32_t)(-(int64_t)whole) : (uint32_t)whole;
+    const uint32_t sign = whole < 0 ? 1u : 0u;
+    NtsString *out = nts_str_build(into, nts_digits10(magnitude) + sign, 0);
+    char *data = (char *)NTS_ELEMENTS(out, unsigned char);
+    if (sign != 0u) {
+      data[0] = '-';
+    }
+    nts_u32toa(data + sign, magnitude);
+    return out;
+  }
+
+  char buf[JS_DTOA_MAX_DIGITS + 32];
+  JSDTOATempMem tmp;
+  const int length =
+      js_dtoa(buf, x, 10, 0, JS_DTOA_FORMAT_FREE | JS_DTOA_EXP_AUTO, &tmp);
+  /* The caller's storage is sized by `NTS_NUMBER_STRING_MAX`, which is an
+   * argument about the longest thing `js_dtoa` can write and not a measurement
+   * of it. If that argument is ever wrong, this takes the heap rather than
+   * writing past a frame slot: a lost optimisation instead of a smashed
+   * stack. */
+  NtsHeader *where = (length <= NTS_NUMBER_STRING_MAX) ? into : NULL;
+  /* Always one byte: every character `js_dtoa` writes in radix 10 is ASCII. */
+  NtsString *out = nts_str_build(where, (uint32_t)length, 0);
+  memcpy(NTS_ELEMENTS(out, unsigned char), buf, (size_t)length);
+  return out;
 }
 
 /* `typeof` for a tag.

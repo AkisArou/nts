@@ -149,6 +149,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_str_substring_into_fn", &[None, None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
     ("nts_string_eq", &[None, None], Some(HirType::Bool)),
     ("nts_string_from_char_code", &[Some(HirType::Float { bits: 64 })], None),
+    ("nts_number_to_string_into", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_string_from_char_code_into", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_string_from_code_point", &[Some(HirType::Float { bits: 64 })], None),
     ("nts_str_to_lower_case", &[None], None),

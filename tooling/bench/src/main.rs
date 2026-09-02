@@ -137,7 +137,7 @@ fn main() -> Result<()> {
     // reaches a binary is still per-case -- `nts_unicode.c` goes on a command
     // line only when that case's program calls into it.
     for file in nts_codegen_c::support_files(true) {
-        std::fs::write(out.join(file.name), file.contents)
+        file.write(out.as_std_path())
             .with_context(|| format!("writing {}", file.name))?;
     }
 

@@ -841,6 +841,20 @@ NtsString *nts_number_to_string(double x);
  * the first takes a UTF-16 code *unit* through `ToUint16` and always returns
  * one of them, the second takes a code *point* and returns a surrogate pair
  * above 0xFFFF. */
+/* The longest string `String(x)` can produce, in code units.
+ *
+ * A double's shortest round-tripping decimal needs at most 17 significant
+ * digits, and the widest shape around them is
+ * `-1.2345678901234567e-308`: a sign, a digit, a point, sixteen more digits,
+ * `e`, a sign and three exponent digits. Twenty-four. Forty is that with room
+ * to be wrong in, and `nts_number_to_string_into` checks rather than trusts it.
+ *
+ * This is the frame capacity `hir::frame_capacity` gives the call, so the two
+ * have to agree; `runtime_signatures` is what notices if they stop. */
+#define NTS_NUMBER_STRING_MAX 40
+
+NtsString *nts_number_to_string_into(NtsHeader *into, double x);
+
 NtsString *nts_string_from_char_code(double code);
 /* The same, into storage the caller supplies. One code unit, always -- which is
  * the easiest bound in the language and the reason this has an `_into` form at
