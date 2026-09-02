@@ -105,3 +105,57 @@ export function single(s: string, i: number): string {
 export function repeated(s: string, times: number): string {
   return s.repeat(times);
 }
+
+// Building a string a piece at a time, which is the shape a decoder writes and
+// the one `+` was worst at.
+//
+// A string is a header and its units inline, sized to fit, so `a + b` allocated
+// a whole new one and copied both sides -- n appends cost n allocations and
+// O(n^2) copying. Where the left side is owned and dies at the `+`, the
+// reference moves into `nts_str_append` instead and the runtime writes into the
+// string it was given, growing to a power of two when it has to. What makes
+// that safe is the count, checked there: a static proof of ownership is not a
+// proof that nobody else is holding it.
+//
+// Every loop below is bounded the same way. The pool feeds a parameter values
+// no program would, and a `for` of two billion appends is not a disagreement
+// with node, it is a timeout. Each comparison is false for a NaN, so that lands
+// on the fallback and terminates.
+function rounds(n: number): number {
+  return n >= 0 && n <= 12 ? n : 3;
+}
+
+export function built(n: number): string {
+  let out = "";
+  for (let i = 0; i < rounds(n); i++) {
+    out = out + "ab";
+  }
+  return out;
+}
+
+// The left side still live afterwards, so the reference cannot move and the old
+// string has to survive the call intact.
+export function notConsumed(n: number): number {
+  const base = "x".repeat(rounds(n));
+  const longer = base + "y";
+  return base.length * 1000 + longer.length;
+}
+
+// Widening mid-build: narrow storage cannot take a two-byte unit in place, so
+// this is the path that reallocates and converts rather than appending.
+export function widened(n: number): string {
+  let out = "";
+  for (let i = 0; i < rounds(n); i++) {
+    out = out + "a";
+  }
+  return out + "\u00e9\u4e16";
+}
+
+// An empty right-hand side, and an empty left one: neither may lose units.
+export function edges(n: number): number {
+  let out = "";
+  for (let i = 0; i < rounds(n); i++) {
+    out = out + "";
+  }
+  return (out + "z").length + ("" + out).length;
+}

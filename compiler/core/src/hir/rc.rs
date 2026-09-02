@@ -353,6 +353,51 @@ fn count_ops(
     for (index, value) in original.iter().enumerate() {
         let kind = func.values[value.0 as usize].kind.clone();
 
+        // `a + b` where `a` is owned and dies here.
+        //
+        // A string is a header and its units inline, sized to fit, so `+`
+        // allocates a whole new one and copies both sides -- and a loop that
+        // builds a string one piece at a time therefore allocates once per
+        // piece and copies O(n^2) units. That is `out += c` per code point,
+        // which is what a decoder writes, and it is the whole of `node-utf8`.
+        //
+        // Nothing about the language requires it. If this function owns the
+        // left side and nobody reads it after this, the reference can move into
+        // the call and the runtime can write into the string it was given.
+        // `nts_str_append` decides that at run time by the count, because a
+        // static proof of ownership is not a proof of *uniqueness* -- the
+        // string may have been stored somewhere earlier -- and the check is one
+        // load against a word already in cache.
+        //
+        // The guards are the ones the hand-over arm below uses, for the same
+        // reasons: `dies_in` says the last read is in this block rather than
+        // here, so the reads after this operation are checked too.
+        if let OpKind::Binary {
+            op: super::BinOp::Concat,
+            lhs,
+            rhs,
+        } = &kind
+            && own::counted(func, layouts, *lhs)
+            && (own::owned(func, layouts, *lhs) || map.owns(*lhs))
+            && !map.borrowed(*lhs)
+            && live.dies_in(at, *lhs)
+            && !original[index + 1..].iter().any(|later| {
+                super::verify::operands(&func.values[later.0 as usize].kind).contains(lhs)
+            })
+            && !super::operands_of_terminator(terminator).contains(lhs)
+            && moved.insert(*lhs)
+        {
+            let (lhs, rhs) = (*lhs, *rhs);
+            func.values[value.0 as usize].kind = OpKind::Call {
+                callee: super::Callee::External("nts_str_append".to_owned()),
+                args: vec![lhs, rhs],
+                frame: None,
+            };
+            report.moves += 1;
+            ops.push(*value);
+            continue;
+        }
+
         // A helper that takes ownership of an argument is a store with a
         // different spelling, and owes exactly what a store owes: move the
         // reference in if the value dies here, take one of its own if it does

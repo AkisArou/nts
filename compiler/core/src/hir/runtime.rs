@@ -124,6 +124,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_set_timeout", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 }), Some(HirType::Bool)], Some(HirType::Float { bits: 64 })),
     ("nts_shl", &[Some(HirType::Int { bits: 32, signed: true }), Some(HirType::Int { bits: 32, signed: true })], Some(HirType::Int { bits: 32, signed: true })),
     ("nts_shr", &[Some(HirType::Int { bits: 32, signed: true }), Some(HirType::Int { bits: 32, signed: true })], Some(HirType::Int { bits: 32, signed: true })),
+    ("nts_str_append", &[None, None], None),
     ("nts_str_char_at", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_str_char_at_into", &[None, None, Some(HirType::Float { bits: 64 })], None),
     ("nts_str_char_code_at", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),

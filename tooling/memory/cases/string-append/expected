@@ -1,0 +1,28 @@
+ideal 1
+allocated 6
+because seventeen appends, and the floor is argued before it is measured.
+because
+because Six allocations, not seventeen and not one. `out` is unique -- one
+because local holds it and nothing else can -- so appending may grow it in
+because place, and growth that doubles reaches seventeen units in six steps:
+because capacities 1, 2, 4, 8, 16, 32, taken as the length passes 1, 2, 3, 5,
+because 9 and 17. That is amortized constant time per append, which is what
+because every growable buffer in every language gives, and it is what the
+because array beside it already gives -- `NtsArray` carries a capacity and
+because grows out of line for exactly this reason.
+because
+because Not one allocation, because nobody knows the final length. The trip
+because count is `16 + n` and `n` is a parameter. `flow::string_span` bounds a
+because slice by the string it came from, which is a different question from
+because bounding an accumulator by a loop it has not run yet.
+because
+because One operation. The accumulator is a single owned value moved from one
+because SSA name to the next -- a move needs no count -- released once where it
+because dies. Growing it frees the old storage directly rather than through a
+because release, the way `nts_array_push_ref` already consumes what it is given.
+because
+because What stands in the way is the representation. `NtsString` is a header
+because and its code units inline, sized exactly to `length`, with no capacity:
+because the comment beside `NtsArray` says a string keeps the inline shape
+because "because a string never grows". That is the premise this case exists to
+because reopen.

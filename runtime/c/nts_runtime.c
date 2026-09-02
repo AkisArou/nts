@@ -1297,6 +1297,92 @@ NtsString *nts_concat(const NtsString *a, const NtsString *b) {
   return nts_concat_into(NULL, a, b);
 }
 
+/* The smallest power of two at or above `n`, and at least one. */
+static uint32_t nts_round_up_pow2(uint32_t n) {
+  uint32_t at = 1u;
+  while (at < n) {
+    at <<= 1;
+  }
+  return at;
+}
+
+/* How many code units this string can hold without moving. See `NTS_GROWN`. */
+static uint32_t nts_str_capacity(const NtsString *s) {
+  return (s->flags & NTS_GROWN) != 0 ? nts_round_up_pow2(s->length) : s->length;
+}
+
+NtsString *nts_str_append(NtsString *a, const NtsString *b) {
+  uint32_t total = a->length + b->length;
+  int wide = ((a->flags | b->flags) & NTS_TWO_BYTE) != 0;
+  int already_wide = (a->flags & NTS_TWO_BYTE) != 0;
+
+  /* In place, when every one of these holds. `reserved == 1` is the whole
+   * safety argument: one reference exists and this call is consuming it, so
+   * nobody can be looking at the units being overwritten. An immortal string --
+   * a literal, or frame storage -- fails it, which is right: neither is ours to
+   * write. */
+  if (a->reserved == 1u && wide == already_wide &&
+      total <= nts_str_capacity(a)) {
+    if (wide) {
+      uint16_t *units = NTS_ELEMENTS(a, uint16_t);
+      nts_widen(units + a->length, b);
+      units[total] = 0;
+    } else {
+      unsigned char *bytes = NTS_ELEMENTS(a, unsigned char);
+      memcpy(bytes + a->length, NTS_ELEMENTS(b, unsigned char), b->length);
+      bytes[total] = 0;
+    }
+    a->length = total;
+    return a;
+  }
+
+  /* Otherwise a new one, sized to the next power of two so that the *next*
+   * append has somewhere to go. That is what makes a loop of n appends cost
+   * log n allocations instead of n, and it is why the capacity can be derived
+   * from the length rather than stored beside it. */
+  NtsString *out = nts_str_raw(nts_round_up_pow2(total), wide);
+  if (wide) {
+    uint16_t *units = NTS_ELEMENTS(out, uint16_t);
+    nts_widen(units, a);
+    nts_widen(units + a->length, b);
+    units[total] = 0;
+  } else {
+    unsigned char *bytes = NTS_ELEMENTS(out, unsigned char);
+    memcpy(bytes, NTS_ELEMENTS(a, unsigned char), a->length);
+    memcpy(bytes + a->length, NTS_ELEMENTS(b, unsigned char), b->length);
+    bytes[total] = 0;
+  }
+  out->length = total;
+  out->flags |= NTS_GROWN;
+  /* The old storage, returned rather than released. A release is the right
+   * thing when somebody else may still hold this -- `reserved != 1` -- and a
+   * counted operation the caller is charged for either way. Where the count
+   * says the string is ours alone, there is nothing to decide: no other
+   * reference exists, a string has no fields to give back, and one with no
+   * reference fields is never a collection candidate, so nothing is buffered
+   * that could be left pointing at it.
+   *
+   * `nts_destroy` and not `nts_free`: the first is the death path every other
+   * object takes and does the reclaiming bookkeeping, and `nts_live_count` is
+   * how reference counting is tested. Freeing the block alone gave the memory
+   * back and left the object counted as live, which the suite reported as five
+   * leaks -- correctly.
+   *
+   * This is what keeps growth off the bill. Six reallocations building a string
+   * were six releases, and the operation they were counted against is one the
+   * program never asked for. */
+  if (a->reserved == 1u) {
+    nts_destroy((NtsHeader *)a);
+  } else if (a->reserved != NTS_IMMORTAL) {
+    nts_release((NtsHeader *)a);
+  }
+  /* An immortal left alone. A literal or frame storage has no count to give
+   * back -- retain and release both return on their first line -- so releasing
+   * one is a call that decides nothing, and `let out = ""` in front of a loop
+   * put exactly one of those on every string built in this program. */
+  return out;
+}
+
 /* Allocate a string of `length` code units, narrow if every unit fits a byte.
  *
  * The two representations are not a detail a caller should reproduce: a slice

@@ -459,6 +459,22 @@ void nts_value_release(NtsValue value);
  * because talking to C is the point. */
 #define NTS_TWO_BYTE 1u
 
+/* Allocated with room to grow: `next_pow2(length)` code units rather than
+ * exactly `length`.
+ *
+ * A string is a header and its units inline, sized to fit, and the comment
+ * beside `NtsArray` gives the reason: "a string never grows, so it keeps the
+ * inline shape and pays nothing for a field it would never use". Building one
+ * in a loop is where that stops being true -- `out += c` per code point is what
+ * a decoder writes, and rebuilding the whole string each time is quadratic.
+ *
+ * So capacity is *derived* rather than stored. Grow only to a power of two and
+ * `capacity == next_pow2(length)` is an invariant, which costs one bit here and
+ * not one byte anywhere: a literal, a slice, a substring sets nothing and is
+ * exact-sized as before. Only a string something appended to pays, and what it
+ * pays is the slack every growable buffer pays. */
+#define NTS_GROWN 2u
+
 /* Elements of an array of references. Every reference is a pointer, so one
  * descriptor serves them all -- it describes the element's shape, not what the
  * element points at. `traced` is set, which is what a collector will read. */
@@ -682,6 +698,20 @@ NtsString *nts_str_substring_general(NtsHeader *into, const NtsString *s,
                                      double from, double to);
 NtsString *nts_concat_into(NtsHeader *into, const NtsString *a,
                            const NtsString *b);
+
+/* `a + b` where the caller is handing over its reference to `a`.
+ *
+ * **Consuming**, like `nts_array_push_ref`: the caller owes a reference and the
+ * one it was holding moves in, so it emits no release. `own::consumes` records
+ * that, and `rc` only rewrites a `nts_concat` into this where the ownership
+ * answer says the left side is owned and dies at the call.
+ *
+ * Whether it writes in place is decided *here*, at run time, by the count. A
+ * static proof of uniqueness is not enough on its own -- the string may have
+ * been stored somewhere earlier -- and the check is one load and one compare
+ * against a word already in cache. Not unique, immortal, too narrow for what is
+ * arriving, or out of room: allocate, copy both, release the old one. */
+NtsString *nts_str_append(NtsString *a, const NtsString *b);
 
 /* Frame storage for a string of at most `units` code units.
  *
