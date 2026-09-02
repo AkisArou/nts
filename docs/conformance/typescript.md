@@ -1662,14 +1662,23 @@ Measured, not assumed — three of these rows were wrong on the first pass.
   `fromCodePoint`. This list said `at`, `split`, `replace` and `trim` were
   absent long after they were not.
 
+  `toLowerCase` and `toUpperCase` are there because the tables are:
+  quickjs-ng's `libunicode` is vendored under `runtime/c/quickjs`, MIT, and
+  emitted only
+  for a program that calls one of them — linking it always would take
+  `examples/hello` from 81 KB to 162 KB. That closed 39 refusal sites in the
+  node profile. Record 0033.
+
   Absent, and each for its own reason rather than for want of writing it:
-  `toLowerCase`, `toUpperCase`, the `toLocale` pair and `normalize` want
-  Unicode case-mapping and normalization tables, which are data rather than
-  code; `localeCompare` wants ICU; `match`, `matchAll`, `search` and the
-  *pattern* forms of `replace` and `split` want a regular expression engine,
-  which is refused as its own feature; `String.raw` waits on tagged templates.
-  Indexing (`s[0]`) is refused as "indexing a representable type, which is not
-  an array".
+  `normalize` has its tables now and is not yet wired (3 sites); the `toLocale`
+  pair is deliberately **not** aliased onto the plain forms, because
+  `toLocaleUpperCase` of `i` in Turkish is `\u0130` and answering it with the
+  locale-independent mapping would be wrong rather than approximate;
+  `localeCompare` wants ICU; `match`, `matchAll`, `search` and the *pattern*
+  forms of `replace` and `split` want a regular expression engine, which is
+  refused as its own feature; `String.raw` waits on tagged templates. Indexing
+  (`s[0]`) is refused as "indexing a representable type, which is not an
+  array".
 
   `isWellFormed` and `toWellFormed` are ES2024, and this paragraph said for one
   commit that they were written, could not be reached, and were taken out again
@@ -1998,7 +2007,7 @@ blocks on, not to start building.
 | `symbol` | 46 — `string \| symbol` as a property key, 30 as a parameter and 16 as a property | a representation, and a decision about whether well-known symbols are values or names |
 | a method not in the hierarchy | 52 — `emit` 8, then a long tail | structural dispatch, which is the same question as the anonymous-type row above |
 | ~~array methods on a non-numeric array~~ | **done**, 22 → 4. Every site wanted a *reference* element, so there is a `_ref` family and no `_bool` one | what is left is four single-site methods that do not exist for any element type: `shift`, `splice`, `toSorted`, and one unnamed |
-| string methods | 15 — `toLowerCase` 12, `normalize` 2, `toUpperCase` 1. `split`, `trim`, `replace`, `replaceAll`, `padStart`, `padEnd` and `valueOf` are done | what is left wants a Unicode case table and normalization, which is data rather than code and a different order of work from the rest |
+| string methods | 3 — `normalize`. `toLowerCase` and `toUpperCase` are done, which was 39 sites; `split`, `trim`, `replace`, `replaceAll`, `padStart`, `padEnd` and `valueOf` before them | the case tables are vendored and `normalize`'s came with them; it wants `dbuf` and an allocator argument |
 | generators | 4 refusals, but `readline` and several streams are behind them | the suspension machine exists; what is missing is the `Generator<T>` object and §10's protocol |
 | `try`/`catch` | the largest *language* gap, and invisible in this table because the code that needs it does not reach the lowering | needs an unwinding decision — the runtime has none |
 

@@ -12255,6 +12255,15 @@ impl<'a> FuncBuilder<'a> {
             "isWellFormed" => ("nts_str_is_well_formed", 0, HirType::Bool),
             "toWellFormed" => ("nts_str_to_well_formed", 0, string.clone()),
 
+            // Case conversion, which is a table rather than an algorithm -- see
+            // `runtime/c/quickjs`. The locale forms are deliberately *not*
+            // aliased onto these: `toLocaleUpperCase` of `i` in Turkish is
+            // `\u0130` and not `I`, so answering it with the
+            // locale-independent mapping would be wrong rather than
+            // approximate, and a wrong answer is worse than a named refusal.
+            "toLowerCase" => ("nts_str_to_lower_case", 0, string.clone()),
+            "toUpperCase" => ("nts_str_to_upper_case", 0, string.clone()),
+
             "trimStart" => ("nts_str_trim_start", 0, string.clone()),
             "trimEnd" => ("nts_str_trim_end", 0, string.clone()),
             // `split`, with a *string* separator. A regular expression is a

@@ -209,3 +209,45 @@ export function surrogates(n: number): number {
     fixed.charCodeAt(1) * 100 +
     fixed.length * 100000000;
 }
+
+// Case conversion, which is a table rather than an algorithm. The tables are
+// quickjs-ng's -- see `runtime/c/quickjs` -- and node is the oracle for all of
+// it, which matters more here than usual: case mapping is a specification with
+// thousands of entries and no amount of reading the code checks it.
+//
+// The interesting cases are the ones where it is not a per-character mapping.
+export function caseAscii(n: number): string {
+  const s = "Hello, World! " + String(n);
+  return s.toLowerCase() + "|" + s.toUpperCase();
+}
+
+export function caseLatin1(n: number): string {
+  const s = "Héllo Ünïcôde ÿ µ ß" + String(n * 0);
+  return s.toLowerCase() + "|" + s.toUpperCase();
+}
+
+// One code point becoming two, so the output length is not the input length
+// and cannot be known before the conversion runs.
+export function caseGrows(n: number): string {
+  const s = "straße ﬁnd ǳ" + String(n * 0);
+  return s.toUpperCase() + "|" + String(s.toUpperCase().length);
+}
+
+// Above the BMP, where a code point is two units and the mapping is still per
+// code point rather than per unit. Deseret has case.
+export function caseAstral(n: number): string {
+  const s = "𐐀𐐨 𐐁" + String(n * 0);
+  return (
+    s.toLowerCase() + "|" + s.toUpperCase() + "|" + String(s.toLowerCase().length)
+  );
+}
+
+export function caseGreekAndCyrillic(n: number): string {
+  const s = "Σίσυφος ΑΘΗΝΑ Привет" + String(n * 0);
+  return s.toLowerCase() + "|" + s.toUpperCase();
+}
+
+export function caseEmpty(n: number): string {
+  const s = "";
+  return "[" + s.toLowerCase() + s.toUpperCase() + "]" + String(n * 0);
+}

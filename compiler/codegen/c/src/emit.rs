@@ -44,6 +44,113 @@ pub const UV_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_uv_host
 pub const UV_HOST_SOURCE_NAME: &str = "nts_uv_host.c";
 pub const UV_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_uv_host.c");
 
+/// Unicode case conversion, which is a table rather than an algorithm.
+///
+/// Four headers and one source, and the source is two files fused:
+/// `libunicode.c` from quickjs-ng, then the nts wrapper that turns
+/// `lre_case_conv` into `toLowerCase`. One translation unit rather than two
+/// because every consumer that compiles a program names its C files
+/// explicitly, and there are eight of them -- fusing costs a `concat!` and
+/// saves adding a path in eight places.
+///
+/// quickjs-ng rather than bellard/quickjs: its `libunicode.c` needs nothing
+/// outside libc, where bellard's pulls `dbuf_*` and `rqsort` out of `cutils.c`
+/// and would have made this three files.
+///
+/// # Why it is not part of the runtime
+///
+/// Measured: linking these into `examples/hello` takes it from 81 KB to
+/// 162 KB. Doubling every binary to carry tables most programs never read is
+/// not a tradeoff worth making, so this is emitted only for a program that
+/// calls one of the methods -- `needs_unicode` on the emitted output says
+/// which, the same way the libuv host is written only when a loop is asked
+/// for.
+///
+/// The headers keep their upstream names because `libunicode.c` includes them
+/// by those names, and the emitted directory is flat.
+pub const UNICODE_HEADER_NAME: &str = "nts_unicode.h";
+pub const UNICODE_HEADER: &str = include_str!("../../../../runtime/c/nts_unicode.h");
+pub const CUTILS_HEADER_NAME: &str = "cutils.h";
+pub const CUTILS_HEADER: &str = include_str!("../../../../runtime/c/quickjs/cutils.h");
+pub const LIBUNICODE_HEADER_NAME: &str = "libunicode.h";
+pub const LIBUNICODE_HEADER: &str = include_str!("../../../../runtime/c/quickjs/libunicode.h");
+pub const LIBUNICODE_TABLE_NAME: &str = "libunicode-table.h";
+pub const LIBUNICODE_TABLE: &str =
+    include_str!("../../../../runtime/c/quickjs/libunicode-table.h");
+pub const UNICODE_SOURCE_NAME: &str = "nts_unicode.c";
+pub const UNICODE_SOURCE: &str = concat!(
+    // Before any system header, which is what a feature-test macro requires.
+    //
+    // quickjs-ng's `cutils.h` is a general-purpose header rather than the small
+    // one bellard's was: it reaches for `clock_gettime`, `readlink` and
+    // `pthread_condattr_setclock`, none of which strict ISO C declares. The
+    // differential compiles with `-std=c11` and got five errors from a header
+    // it only includes for `countof`. Asking for POSIX here fixes it where the
+    // need is, rather than loosening the standard in the several places that
+    // compile a program.
+    "#ifndef _POSIX_C_SOURCE\n#define _POSIX_C_SOURCE 200809L\n#endif\n",
+    "#include \"nts_unicode.h\"\n",
+    // Vendored code is held to upstream's warning standard, not ours. The
+    // pragmas travel *in the file* rather than as flags because eight places
+    // compile a program and every one of them would otherwise need to know;
+    // and they are pushed and popped around the vendored half so that the nts
+    // wrapper after it is still compiled with everything on.
+    "#if defined(__clang__) || defined(__GNUC__)\n",
+    "#pragma GCC diagnostic push\n",
+    "#pragma GCC diagnostic ignored \"-Wunused-parameter\"\n",
+    "#pragma GCC diagnostic ignored \"-Wsign-compare\"\n",
+    "#pragma GCC diagnostic ignored \"-Wunused-function\"\n",
+    "#pragma GCC diagnostic ignored \"-Wunused-but-set-variable\"\n",
+    "#pragma GCC diagnostic ignored \"-Wmissing-field-initializers\"\n",
+    "#pragma GCC diagnostic ignored \"-Wimplicit-fallthrough\"\n",
+    "#pragma GCC diagnostic ignored \"-Wconversion\"\n",
+    "#pragma GCC diagnostic ignored \"-Wshadow\"\n",
+    "#pragma GCC diagnostic ignored \"-Wcast-qual\"\n",
+    "#pragma GCC diagnostic ignored \"-Wunused-macros\"\n",
+    "#endif\n",
+    include_str!("../../../../runtime/c/quickjs/libunicode.c"),
+    "\n#if defined(__clang__) || defined(__GNUC__)\n#pragma GCC diagnostic pop\n#endif\n",
+    include_str!("../../../../runtime/c/nts_unicode.c"),
+);
+
+/// One file a program needs beside `program.c`.
+///
+/// `compiled` is what separates a translation unit from a header: the caller
+/// puts those on the command line and merely writes the rest. Saying it here
+/// rather than letting each caller match on `.c` means the several places that
+/// build a program cannot disagree about it -- and there is nothing to get
+/// wrong when a helper arrives with a new file.
+#[derive(Debug)]
+pub struct Support {
+    pub name: &'static str,
+    pub contents: &'static str,
+    pub compiled: bool,
+}
+
+/// Every file a program needs beside `program.c`, given whether it converts case.
+#[must_use]
+pub fn support_files(needs_unicode: bool) -> Vec<Support> {
+    let one = |name, contents, compiled| Support {
+        name,
+        contents,
+        compiled,
+    };
+    let mut files = vec![
+        one(RUNTIME_HEADER_NAME, RUNTIME_HEADER, false),
+        one(RUNTIME_SOURCE_NAME, RUNTIME_SOURCE, true),
+    ];
+    if needs_unicode {
+        files.extend([
+            one(UNICODE_HEADER_NAME, UNICODE_HEADER, false),
+            one(CUTILS_HEADER_NAME, CUTILS_HEADER, false),
+            one(LIBUNICODE_HEADER_NAME, LIBUNICODE_HEADER, false),
+            one(LIBUNICODE_TABLE_NAME, LIBUNICODE_TABLE, false),
+            one(UNICODE_SOURCE_NAME, UNICODE_SOURCE, true),
+        ]);
+    }
+    files
+}
+
 /// The `main` of a standalone program.
 ///
 /// What an executable *is*, in one function: evaluate the module, then run the
@@ -137,6 +244,24 @@ impl Emitted {
     #[must_use]
     pub fn is_complete(&self) -> bool {
         self.diagnostics.is_empty()
+    }
+
+    /// Whether this program needs the Unicode tables beside it.
+    ///
+    /// Asked of the emitted text rather than of the HIR, because the text is
+    /// what gets compiled: a helper the lowering emits by some route this
+    /// forgot to enumerate still appears here, and the failure mode of getting
+    /// it wrong is a link error rather than a wrong answer.
+    #[must_use]
+    pub fn needs_unicode(&self) -> bool {
+        let source = self.writer.text();
+        source.contains("nts_str_to_lower_case") || source.contains("nts_str_to_upper_case")
+    }
+
+    /// The files to write beside `program.c`, this program's set.
+    #[must_use]
+    pub fn support_files(&self) -> Vec<Support> {
+        support_files(self.needs_unicode())
     }
 }
 

@@ -761,6 +761,26 @@ NtsString *nts_str_append(NtsString *a, const NtsString *b);
  * string is and what every operation above counts. A byte sequence that is not
  * valid UTF-8 yields U+FFFD for each bad byte, which is what every decoder that
  * has to keep going does. */
+/* An uninitialised string of `length` units, one-byte or two-byte as asked,
+ * already NUL-terminated. The caller fills it.
+ *
+ * This is the allocation an in-place conversion wants: `toLowerCase` of an
+ * ASCII string knows the output length and the storage width before it starts,
+ * so going through `nts_str_alloc` would scan a temporary buffer to rediscover
+ * both. One pass, one allocation.
+ *
+ * Public for the same reason `nts_str_alloc` is -- see below. */
+NtsString *nts_str_raw(uint32_t length, int wide);
+
+/* Build a string from UTF-16 code units, choosing one-byte or two-byte storage
+ * by what the units actually need.
+ *
+ * Public because `nts_unicode.c` is a separate translation unit -- it is
+ * emitted only for a program that asks for case conversion, since linking the
+ * Unicode tables into every binary takes `examples/hello` from 81 KB to 162 KB.
+ * Everything else it needs to read a string is already in this header. */
+NtsString *nts_str_alloc(const uint16_t *units, uint32_t length);
+
 NtsString *nts_string_from_utf8(const char *bytes, size_t length);
 /* ECMAScript `Number::toString`, base 10. The shortest decimal that reads back
  * as the same double, laid out the way the specification lays it out -- which

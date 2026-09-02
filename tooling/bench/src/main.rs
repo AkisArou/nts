@@ -129,17 +129,17 @@ fn main() -> Result<()> {
 
     let out = root.join("target/bench");
     std::fs::create_dir_all(&out).context("creating the build directory")?;
-    // Written once; every case compiles against it.
-    std::fs::write(
-        out.join(nts_codegen_c::RUNTIME_HEADER_NAME),
-        nts_codegen_c::RUNTIME_HEADER,
-    )
-    .context("writing the runtime header")?;
-    std::fs::write(
-        out.join(nts_codegen_c::RUNTIME_SOURCE_NAME),
-        nts_codegen_c::RUNTIME_SOURCE,
-    )
-    .context("writing the runtime")?;
+    // Written once; every case compiles against them.
+    //
+    // Every support file rather than the runtime alone, and unconditionally:
+    // one build directory is shared by every case, so writing only what the
+    // *current* case needs would leave the next one without it. Which of them
+    // reaches a binary is still per-case -- `nts_unicode.c` goes on a command
+    // line only when that case's program calls into it.
+    for file in nts_codegen_c::support_files(true) {
+        std::fs::write(out.join(file.name), file.contents)
+            .with_context(|| format!("writing {}", file.name))?;
+    }
 
     println!(
         "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
@@ -338,6 +338,27 @@ fn provider_for(case: &Utf8Path) -> hir::Provider {
     }
 }
 
+/// The runtime translation units every variant of a case links.
+///
+/// The Unicode tables join them only for a case that converts case: linking
+/// them always takes `examples/hello` from 81 KB to 162 KB, and a benchmark
+/// binary has no more reason to carry them than any other program.
+fn runtime_sources(out: &Utf8Path, needs_unicode: bool) -> Vec<Utf8PathBuf> {
+    let mut sources = vec![out.join(nts_codegen_c::RUNTIME_SOURCE_NAME)];
+    if needs_unicode {
+        sources.push(out.join(nts_codegen_c::UNICODE_SOURCE_NAME));
+    }
+    sources
+}
+
+/// Whether a case's program reaches the Unicode tables.
+///
+/// Asked of the emitted text rather than of the HIR, because the text is what
+/// gets compiled -- the same reason `Emitted::needs_unicode` asks it there.
+fn reaches_unicode(source: &str) -> bool {
+    source.contains("nts_str_to_lower_case") || source.contains("nts_str_to_upper_case")
+}
+
 fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     let name = case.file_name().context("a case needs a name")?;
     let tsconfig = case.join("tsconfig.json");
@@ -360,11 +381,10 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     let plain = out.join(format!("{name}.plain.c"));
     let rendered = out.join(format!("{name}.specialized.ll"));
     let entry = entry_points(case)?;
-    std::fs::write(
-        &specialized,
-        emit(&tsconfig, &entry, true, provider, false)?,
-    )
-    .with_context(|| format!("writing {specialized}"))?;
+    let specialized_text = emit(&tsconfig, &entry, true, provider, false)?;
+    let needs_unicode = reaches_unicode(&specialized_text);
+    std::fs::write(&specialized, &specialized_text)
+        .with_context(|| format!("writing {specialized}"))?;
     std::fs::write(&plain, emit(&tsconfig, &entry, false, provider, false)?)
         .with_context(|| format!("writing {plain}"))?;
     // The second backend is allowed to fail here and further down. Anything it
@@ -391,7 +411,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
             continue;
         }
         let cpp = vec![source, root.join("benches/common/main.cpp")];
-        let mut c = vec![out.join(nts_codegen_c::RUNTIME_SOURCE_NAME)];
+        let mut c = runtime_sources(out, needs_unicode);
         match variant.generated {
             Generated::Specialized => c.push(specialized.clone()),
             Generated::Unspecialized => c.push(plain.clone()),

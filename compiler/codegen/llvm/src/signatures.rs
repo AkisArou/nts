@@ -191,6 +191,8 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_str_substring", returns: "ptr", params: &["ptr", "double", "double"], attributes: &[] },
     Signature { name: "nts_str_substring_general", returns: "ptr", params: &["ptr", "ptr", "double", "double"], attributes: &[] },
     Signature { name: "nts_str_substring_into_fn", returns: "ptr", params: &["ptr", "ptr", "double", "double"], attributes: &[] },
+    Signature { name: "nts_str_to_lower_case", returns: "ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_str_to_upper_case", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_str_to_well_formed", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_str_trim", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_str_trim_end", returns: "ptr", params: &["ptr"], attributes: &[] },
@@ -227,4 +229,33 @@ pub fn signature(name: &str) -> Option<&'static Signature> {
         .binary_search_by(|known| known.name.cmp(name))
         .ok()
         .map(|at| &SIGNATURES[at])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SIGNATURES;
+
+    /// The table is searched with `binary_search_by`, so its order is not a
+    /// matter of taste.
+    ///
+    /// An entry in the wrong place is not found, `signature` answers `None`,
+    /// and the backend refuses the call as one "the runtime declares only as a
+    /// `static inline` and so exposes no symbol for" -- which is a sentence
+    /// about the runtime that is simply false. `nts_str_to_lower_case` was
+    /// added three rows too late and cost the LLVM column of a whole benchmark
+    /// row, with a refusal message pointing at the wrong file.
+    ///
+    /// Nothing checked this before, and a lookup that silently answers `None`
+    /// for a name that is right there is the worst shape a table can have.
+    #[test]
+    fn the_table_is_sorted_because_it_is_binary_searched() {
+        for pair in SIGNATURES.windows(2) {
+            assert!(
+                pair[0].name < pair[1].name,
+                "signatures out of order: `{}` must come after `{}`",
+                pair[0].name,
+                pair[1].name
+            );
+        }
+    }
 }

@@ -1179,7 +1179,7 @@ fn where_it_is(snapshot: &nts_semantic_schema::SemanticSnapshot, at: &Location) 
 /// Both are a *choice* rather than part of the runtime: an embedder with its
 /// own loop supplies its own host and links none of this, and a library product
 /// has no loop at all (RFC §26.1).
-fn write_standalone(program: &hir::Program, out: &Utf8Path) -> Result<()> {
+fn write_standalone(program: &hir::Program, out: &Utf8Path, sources: &[&str]) -> Result<()> {
     // A program that is only declarations has nothing to evaluate, and calling
     // a function that was never emitted is a link error.
     let initializes = program
@@ -1198,15 +1198,25 @@ fn write_standalone(program: &hir::Program, out: &Utf8Path) -> Result<()> {
     std::fs::write(&main_path, nts_codegen_c::standalone_main(initializes))
         .with_context(|| format!("writing {main_path}"))?;
     println!(
-        "wrote program.c, main.c, {}, {}, {}, {} to {out}",
-        nts_codegen_c::RUNTIME_HEADER_NAME,
-        nts_codegen_c::RUNTIME_SOURCE_NAME,
+        "wrote program.c, main.c, {}, {}, {} to {out}",
+        sources.join(", "),
         nts_codegen_c::UV_HOST_HEADER_NAME,
         nts_codegen_c::UV_HOST_SOURCE_NAME,
     );
+    // Every translation unit the program needs, which is not a fixed list: a
+    // program that converts case gets `nts_unicode.c` too, and printing a
+    // command that omits it is printing a link error.
+    //
+    // `--gc-sections` is not a micro-optimisation here. The Unicode tables are
+    // one library's worth of data of which a program uses the part it calls,
+    // and the linker is what knows which part: measured on a program that
+    // converts case, the tables cost 81 KB linked whole and 10 KB after
+    // stripping. The same flags take a `hello` with no Unicode at all from
+    // 81 KB to 16 KB, because most of the runtime is unreachable from any one
+    // program too.
     println!(
-        "  cc -std=c11 -I. main.c program.c {} {} -luv -lm -o program",
-        nts_codegen_c::RUNTIME_SOURCE_NAME,
+        "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c program.c {} {} -luv -lm -o program",
+        sources.join(" "),
         nts_codegen_c::UV_HOST_SOURCE_NAME
     );
     Ok(())
@@ -1324,20 +1334,24 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     let program_path = out.join("program.c");
     std::fs::write(&program_path, emitted.writer.text())
         .with_context(|| format!("writing {program_path}"))?;
-    std::fs::write(
-        out.join(nts_codegen_c::RUNTIME_HEADER_NAME),
-        nts_codegen_c::RUNTIME_HEADER,
-    )?;
-    std::fs::write(
-        out.join(nts_codegen_c::RUNTIME_SOURCE_NAME),
-        nts_codegen_c::RUNTIME_SOURCE,
-    )?;
+    // The runtime, plus the Unicode tables when this program converts case.
+    // `support_files` is the one list, so that the several places which build a
+    // program agree about it rather than each remembering.
+    let support = emitted.support_files();
+    for file in &support {
+        std::fs::write(out.join(file.name), file.contents)?;
+    }
+    let extra: Vec<&str> = support
+        .iter()
+        .filter(|file| file.compiled)
+        .map(|file| file.name)
+        .collect();
     // `--main` adds the entry point of a standalone program: evaluate the
     // module, run the loop until nothing is left, shut down. The libuv host
     // comes with it, because a program needs a loop and an embedder with its
     // own supplies a different one.
     if standalone {
-        return write_standalone(&program, out);
+        return write_standalone(&program, out, &extra);
     }
 
     // `--napi` adds the Node-API wrapper, which is what makes the compiled
@@ -1353,19 +1367,14 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
             eprintln!("no wrapper for {}: {}", skipped.function, skipped.reason);
         }
         println!(
-            "wrote program.c, {}, {}, {} to {out}",
-            nts_codegen_c::RUNTIME_HEADER_NAME,
-            nts_codegen_c::RUNTIME_SOURCE_NAME,
+            "wrote program.c, {}, {} to {out}",
+            extra.join(", "),
             nts_codegen_napi::ADDON_SOURCE_NAME
         );
         return Ok(());
     }
 
-    println!(
-        "wrote program.c, {}, {} to {out}",
-        nts_codegen_c::RUNTIME_HEADER_NAME,
-        nts_codegen_c::RUNTIME_SOURCE_NAME
-    );
+    println!("wrote program.c, {} to {out}", extra.join(", "));
     // The provider is half a runtime decision. Reference counting needs each
     // object to be its own allocation so that the last release can hand it back;
     // the bump allocator the default uses cannot free anything. Compiling the

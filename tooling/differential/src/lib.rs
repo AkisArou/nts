@@ -1118,12 +1118,17 @@ fn run_native(
         );
     }
     let generated = render(dir, program, through_llvm, &emitted)?;
-    std::fs::write(
-        dir.join(nts_codegen_c::RUNTIME_HEADER_NAME),
-        nts_codegen_c::RUNTIME_HEADER,
-    )?;
-    let runtime = dir.join(nts_codegen_c::RUNTIME_SOURCE_NAME);
-    std::fs::write(&runtime, nts_codegen_c::RUNTIME_SOURCE)?;
+    // The runtime, plus the Unicode tables when this program converts case.
+    // Every `.c` among them goes on the command line below, so a helper that
+    // arrives with a new translation unit needs no change here.
+    let mut sources = Vec::new();
+    for file in emitted.support_files() {
+        let path = dir.join(file.name);
+        std::fs::write(&path, file.contents)?;
+        if file.compiled {
+            sources.push(path);
+        }
+    }
     // The deterministic host, so a compiled `async` function has a loop to be
     // driven to quiescence on. Virtual time and one thread: the differential
     // must not depend on a wall clock.
@@ -1176,7 +1181,7 @@ fn run_native(
         .arg(&binary)
         .arg(&main_path)
         .arg(&generated)
-        .arg(&runtime)
+        .args(&sources)
         .arg(&host)
         .arg("-lm")
         .output()

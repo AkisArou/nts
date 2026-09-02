@@ -79,7 +79,12 @@ for dir in tooling/memory/cases/*/; do
       echo "  $name: emit failed" >&2
       return 1
     fi
-    clang -O2 -I"$where" -o "$where/run" "$where/program.c" "$where/nts_runtime.c" \
+    # Every `.c` the emitter wrote, not a fixed pair: a case that converts case
+    # gets `nts_unicode.c` beside the runtime, and one that does not still gets
+    # exactly the two. Naming them here meant the first case to need a third
+    # file reported "did not compile" with nothing saying which file was
+    # missing.
+    clang -O2 -I"$where" -o "$where/run" "$where"/*.c \
           tooling/memory/harness.c -DNTS_PROVIDER_RC -lm 2>/dev/null || {
       echo "  $name: did not compile" >&2
       return 1

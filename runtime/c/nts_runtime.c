@@ -1234,7 +1234,7 @@ static void nts_widen(uint16_t *into, const NtsString *from) {
   }
 }
 
-static NtsString *nts_str_raw(uint32_t length, int wide);
+/* Declared in the header: `nts_unicode.c` allocates its result directly. */
 
 /* Give storage the caller already has a string's header, instead of allocating
  * one.
@@ -1528,7 +1528,7 @@ NtsString *nts_str_append(NtsString *a, const NtsString *b) {
  * existing one, and a copy that knows its own width has nothing to inspect and
  * nowhere to stage. `nts_str_alloc` is what remains: the case where the units
  * arrive as `uint16_t` and the width is still a question. */
-static NtsString *nts_str_raw(uint32_t length, int wide) {
+NtsString *nts_str_raw(uint32_t length, int wide) {
   size_t width = wide ? 2u : 1u;
   NtsString *out =
       (NtsString *)nts_alloc(sizeof(NtsHeader) + ((size_t)length + 1) * width);
@@ -1545,7 +1545,7 @@ static NtsString *nts_str_raw(uint32_t length, int wide) {
   return out;
 }
 
-static NtsString *nts_str_alloc(const uint16_t *units, uint32_t length) {
+NtsString *nts_str_alloc(const uint16_t *units, uint32_t length) {
   int wide = 0;
   for (uint32_t at = 0; at < length; at++) {
     if (units[at] > 0xFFu) {

@@ -1,0 +1,224 @@
+/* The nts side of Unicode case conversion.
+ *
+ * The tables and `lre_case_conv` come from quickjs-ng and are concatenated
+ * ahead of this file into one translation unit -- see `UNICODE_SOURCE` in
+ * `compiler/codegen/c/src/emit.rs`. This file is what nts wrote.
+ *
+ * Two passes rather than one. Case conversion is not length-preserving --
+ * `ß` uppercases to `SS`, `ﬁ` to `FI`, and one code point can become three --
+ * so the output length is not known until it has been computed. Running the
+ * table lookup twice is cheaper than allocating three times the input and
+ * copying it down, and much cheaper than growing as it goes.
+ *
+ * The ASCII path skips both. A string whose units are all below 0x80 converts
+ * one byte at a time with no code point decoding, no table lookup and no
+ * widening, which is nearly every string a program actually converts. */
+
+/* `lre_case_conv`'s third argument, spelled out. quickjs-ng passes a bare `0`
+ * or `1` and calls the parameter `to_lower`, which reads as a boolean until the
+ * folding case appears. */
+#define NTS_CASE_UPPER 0
+#define NTS_CASE_LOWER 1
+
+/* ASCII case conversion as two lookups rather than two comparisons and a
+ * branch.
+ *
+ * The branching form measured 8.64us against node's 2.96us on `case-convert`.
+ * A table is one load and one store per byte with nothing to predict, which is
+ * also the shape clang can vectorise -- the branching form is not.
+ *
+ * 256 entries and not 128 so that a byte above 0x7F indexes safely; those
+ * entries are the identity, which is wrong for Latin-1 and never reached,
+ * because `nts_all_ascii` decides before this is used. */
+/* Lowercasing a one-byte string never leaves one byte.
+ *
+ * Latin-1's uppercase letters are 0xC0..0xDE without 0xD7, and each maps 32
+ * higher into 0xE0..0xFE -- so the whole of `toLowerCase` on a one-byte string
+ * is this table and no test at all. Uppercasing is *not* closed, which is why
+ * it does not get the same treatment: `\u00b5` becomes `\u039c`, `\u00ff`
+ * becomes `\u0178`, and `\u00df` becomes two characters. Those three are found
+ * with `memchr` rather than with a test per byte.
+ *
+ * # A table, and the arithmetic that lost to it
+ *
+ * Three forms were measured on `case-convert`, which is 128 conversions of a
+ * 44-byte ASCII string:
+ *
+ *     two comparisons and a branch per byte      8.64 us
+ *     this table                                 4.79 us
+ *     branchless arithmetic, no table            7.26 us
+ *
+ * The arithmetic form was written on the theory that `table[bytes[at]]` is a
+ * gather clang cannot vectorise, while comparisons and adds are sixteen bytes
+ * per instruction. The theory was wrong and the number said so twice -- once
+ * with `&&`, and again with `&` after the short-circuit was blamed for it.
+ *
+ * What it missed: 256 bytes stays in L1, so the table is *one load* per byte
+ * with no dependency chain, where the arithmetic is two range tests, an or, a
+ * shift and an add. For strings this size the instruction count decides and
+ * the vector width never gets a chance. */
+static unsigned char nts_latin1_lower[256];
+static unsigned char nts_latin1_upper[256];
+static int nts_tables_built = 0;
+
+static void nts_build_tables(void) {
+  if (nts_tables_built) {
+    return;
+  }
+  for (int c = 0; c < 256; c++) {
+    nts_latin1_lower[c] = (unsigned char)c;
+    nts_latin1_upper[c] = (unsigned char)c;
+  }
+  for (int c = 'A'; c <= 'Z'; c++) {
+    nts_latin1_lower[c] = (unsigned char)(c + 32);
+  }
+  for (int c = 'a'; c <= 'z'; c++) {
+    nts_latin1_upper[c] = (unsigned char)(c - 32);
+  }
+  for (int c = 0xC0; c <= 0xDE; c++) {
+    if (c != 0xD7) {
+      nts_latin1_lower[c] = (unsigned char)(c + 32);
+    }
+  }
+  for (int c = 0xE0; c <= 0xFE; c++) {
+    if (c != 0xF7) {
+      nts_latin1_upper[c] = (unsigned char)(c - 32);
+    }
+  }
+  nts_tables_built = 1;
+}
+
+/* The three one-byte characters whose uppercase form is not one byte. */
+static int nts_upper_escapes(const unsigned char *bytes, uint32_t length) {
+  return memchr(bytes, 0xB5, length) != NULL ||
+         memchr(bytes, 0xDF, length) != NULL ||
+         memchr(bytes, 0xFF, length) != NULL;
+}
+
+/* Whether every unit is ASCII, which decides whether the general path runs. */
+static int nts_all_ascii(const NtsString *s) {
+  if ((s->flags & NTS_TWO_BYTE) != 0) {
+    const uint16_t *units = NTS_ELEMENTS(s, uint16_t);
+    for (uint32_t at = 0; at < s->length; at++) {
+      if (units[at] >= 0x80u) {
+        return 0;
+      }
+    }
+    return 1;
+  }
+  const unsigned char *bytes = NTS_ELEMENTS(s, unsigned char);
+  for (uint32_t at = 0; at < s->length; at++) {
+    if (bytes[at] >= 0x80u) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+/* The code point at `at`, and how many units it took.
+ *
+ * A high surrogate followed by a low one is one code point of two units. A
+ * lone surrogate is left exactly as it is: it is not a character, it has no
+ * case, and replacing it here would be this function deciding something
+ * `toWellFormed` exists to decide. */
+static uint32_t nts_code_point_at(const NtsString *s, uint32_t at,
+                                  uint32_t *width) {
+  *width = 1;
+  if ((s->flags & NTS_TWO_BYTE) == 0) {
+    return NTS_ELEMENTS(s, unsigned char)[at];
+  }
+  const uint16_t *units = NTS_ELEMENTS(s, uint16_t);
+  uint32_t unit = units[at];
+  if (unit >= 0xD800u && unit <= 0xDBFFu && at + 1u < s->length) {
+    uint32_t low = units[at + 1u];
+    if (low >= 0xDC00u && low <= 0xDFFFu) {
+      *width = 2;
+      return 0x10000u + ((unit - 0xD800u) << 10) + (low - 0xDC00u);
+    }
+  }
+  return unit;
+}
+
+/* Write one code point as UTF-16, or count what it would take. */
+static uint32_t nts_put_code_point(uint16_t *into, uint32_t at, uint32_t c) {
+  if (c >= 0x10000u) {
+    if (into) {
+      into[at] = (uint16_t)(0xD800u + ((c - 0x10000u) >> 10));
+      into[at + 1u] = (uint16_t)(0xDC00u + ((c - 0x10000u) & 0x3FFu));
+    }
+    return 2;
+  }
+  if (into) {
+    into[at] = (uint16_t)c;
+  }
+  return 1;
+}
+
+/* One pass: fill `into` when it is given, and return the length either way. */
+static uint32_t nts_case_pass(const NtsString *s, int conv_type,
+                              uint16_t *into) {
+  uint32_t out = 0;
+  for (uint32_t at = 0; at < s->length;) {
+    uint32_t width = 1;
+    uint32_t c = nts_code_point_at(s, at, &width);
+    at += width;
+    uint32_t converted[LRE_CC_RES_LEN_MAX];
+    int count = lre_case_conv(converted, c, conv_type);
+    for (int each = 0; each < count; each++) {
+      out += nts_put_code_point(into, out, converted[each]);
+    }
+  }
+  return out;
+}
+
+static NtsString *nts_str_case_convert(const NtsString *s, int conv_type) {
+  nts_build_tables();
+
+  /* One byte in, one byte out, one allocation, one pass.
+   *
+   * No pre-scan: for lowercasing there is nothing to find out, and for
+   * uppercasing the only three characters that would escape one byte are found
+   * with `memchr`, which the C library vectorises. */
+  if ((s->flags & NTS_TWO_BYTE) == 0) {
+    const unsigned char *bytes = NTS_ELEMENTS(s, unsigned char);
+    if (conv_type == NTS_CASE_LOWER || !nts_upper_escapes(bytes, s->length)) {
+      const unsigned char *table =
+          conv_type == NTS_CASE_LOWER ? nts_latin1_lower : nts_latin1_upper;
+      NtsString *out = nts_str_raw(s->length, 0);
+      unsigned char *into = NTS_ELEMENTS(out, unsigned char);
+      for (uint32_t at = 0; at < s->length; at++) {
+        into[at] = table[bytes[at]];
+      }
+      return out;
+    }
+  } else if (nts_all_ascii(s)) {
+    /* A two-byte string holding only ASCII, whose result is one byte. */
+    const uint16_t *units = NTS_ELEMENTS(s, uint16_t);
+    const unsigned char *table =
+        conv_type == NTS_CASE_LOWER ? nts_latin1_lower : nts_latin1_upper;
+    NtsString *out = nts_str_raw(s->length, 0);
+    unsigned char *into = NTS_ELEMENTS(out, unsigned char);
+    for (uint32_t at = 0; at < s->length; at++) {
+      into[at] = table[(unsigned char)units[at]];
+    }
+    return out;
+  }
+
+  uint32_t length = nts_case_pass(s, conv_type, NULL);
+  uint16_t *units = (uint16_t *)malloc((size_t)length * sizeof(uint16_t) + 2u);
+  if (!units) {
+    return nts_str_alloc(NULL, 0);
+  }
+  nts_case_pass(s, conv_type, units);
+  NtsString *out = nts_str_alloc(units, length);
+  free(units);
+  return out;
+}
+
+NtsString *nts_str_to_lower_case(const NtsString *s) {
+  return nts_str_case_convert(s, NTS_CASE_LOWER);
+}
+
+NtsString *nts_str_to_upper_case(const NtsString *s) {
+  return nts_str_case_convert(s, NTS_CASE_UPPER);
+}
