@@ -33,33 +33,33 @@ see [`benches/README.md`](benches/README.md) for what each row is made of.
 <!-- benchmarks:start -->
 | case | C++ | nts (C) | nts (LLVM) | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| accumulate (rc) | 1.09 us | 1.47 us | **1.08 us** | 2.78 us | 20.86 us | 0.99x | 0.39x | 0.05x |
-| array-methods (rc) | 2.34 us | 3.03 us | **3.06 us** | 5.69 us | 7.77 us | 1.31x | 0.54x | 0.39x |
-| arrays (rc) | 1.31 us | 1.46 us | **1.46 us** | 2.43 us | 2.08 us | 1.11x | 0.60x | 0.70x |
-| awfy-bounce (rc) | 4.09 us | 5.53 us | **5.63 us** | 12.08 us | 11.04 us | 1.38x | 0.47x | 0.51x |
-| awfy-list (rc) | 7.37 us | 12.04 us | **12.06 us** | 16.01 us | 13.03 us | 1.64x | 0.75x | 0.93x |
-| awfy-mandelbrot (rc) | 22.56 ms | 22.53 ms | **22.45 ms** | 21.95 ms | 21.90 ms | 0.99x | 1.02x | 1.02x |
-| awfy-nbody (rc) | 6.94 ms | 6.55 ms | **7.93 ms** | 77.70 ms | 14.11 ms | 1.14x | 0.10x | 0.56x |
-| awfy-permute (rc) | 9.11 us | 12.13 us | **12.05 us** | 21.19 us | 16.62 us | 1.32x | 0.57x | 0.73x |
-| awfy-queens (rc) | 4.68 us | 6.57 us | **6.13 us** | 16.71 us | 14.15 us | 1.31x | 0.37x | 0.43x |
-| awfy-sieve (rc) | 3.71 us | 3.58 us | **3.55 us** | 9.92 us | 9.28 us | 0.96x | 0.36x | 0.38x |
-| awfy-towers (rc) | 12.47 us | 37.38 us | **38.06 us** | 31.90 us | 20.50 us | 3.05x | 1.19x | 1.86x |
-| bytes (rc) | 422.82 us | 424.63 us | **429.00 us** | 508.89 us | 720.57 us | 1.01x | 0.84x | 0.60x |
+| accumulate (rc) | 1.09 us | 1.47 us | **1.08 us** | 2.78 us | 20.97 us | 1.00x | 0.39x | 0.05x |
+| array-methods (rc) | 2.34 us | 3.04 us | **3.06 us** | 5.71 us | 7.74 us | 1.31x | 0.54x | 0.40x |
+| arrays (rc) | 1.32 us | 1.46 us | **1.46 us** | 2.58 us | 2.09 us | 1.11x | 0.57x | 0.70x |
+| awfy-bounce (rc) | 4.14 us | 5.64 us | **5.75 us** | 12.23 us | 10.74 us | 1.39x | 0.47x | 0.54x |
+| awfy-list (rc) | 7.28 us | 12.09 us | **12.05 us** | 15.94 us | 12.96 us | 1.66x | 0.76x | 0.93x |
+| awfy-mandelbrot (rc) | 22.58 ms | 22.52 ms | **22.45 ms** | 21.98 ms | 21.91 ms | 0.99x | 1.02x | 1.02x |
+| awfy-nbody (rc) | 7.02 ms | 6.54 ms | **7.93 ms** | 78.78 ms | 14.13 ms | 1.13x | 0.10x | 0.56x |
+| awfy-permute (rc) | 9.06 us | 12.10 us | **12.08 us** | 21.24 us | 16.73 us | 1.33x | 0.57x | 0.72x |
+| awfy-queens (rc) | 4.63 us | 6.62 us | **6.14 us** | 16.76 us | 14.14 us | 1.33x | 0.37x | 0.43x |
+| awfy-sieve (rc) | 3.71 us | 3.57 us | **3.57 us** | 9.99 us | 9.03 us | 0.96x | 0.36x | 0.40x |
+| awfy-towers (rc) | 12.64 us | 17.89 us | **16.20 us** | 32.07 us | 20.72 us | 1.28x | 0.51x | 0.78x |
+| bytes (rc) | 422.46 us | 426.15 us | **429.18 us** | 509.03 us | 724.42 us | 1.02x | 0.84x | 0.59x |
 | checksum (rc) | 4.78 us | 4.78 us | **4.78 us** | 5.47 us | 22.80 us | 1.00x | 0.87x | 0.21x |
-| closures (rc) | 1.11 us | 1.13 us | **1.13 us** | 2.94 us | 17.78 us | 1.02x | 0.38x | 0.06x |
-| dispatch (rc) | 27.85 us | 23.76 us | **21.08 us** | 40.65 us | 13.69 us | 0.76x | 0.52x | 1.54x |
-| elementwise (rc) | 154.07 us | 192.13 us | **193.25 us** | 928.37 us | 588.82 us | 1.25x | 0.21x | 0.33x |
-| erasure-stored-typed (rc) | 67.19 us | 67.46 us | **67.46 us** | 111.70 us | 68.71 us | 1.00x | 0.60x | 0.98x |
-| erasure-stored-unknown (rc) | 67.18 us | 67.10 us | **67.11 us** | 87.54 us | 68.71 us | 1.00x | 0.77x | 0.98x |
-| erasure-typed (rc) | 133.76 us | 133.75 us | **133.78 us** | 136.06 us | 87.41 us | 1.00x | 0.98x | 1.53x |
-| erasure-unknown (rc) | 133.77 us | 133.77 us | **133.76 us** | 136.06 us | 87.51 us | 1.00x | 0.98x | 1.53x |
-| fib (rc) | 302.96 us | 516.25 us | **516.85 us** | 998.24 us | 639.25 us | 1.71x | 0.52x | 0.81x |
-| loop (rc) | 653.6 ns | 649.5 ns | **649.5 ns** | 666.3 ns | 666.9 ns | 0.99x | 0.97x | 0.97x |
-| node-utf8 (rc) | -- | 111.51 us | **114.78 us** | 36.84 us | 30.63 us | -- | 3.12x | 3.75x |
-| objects (rc) | 1.52 us | 1.51 us | **1.51 us** | 1.80 us | 1.41 us | 1.00x | 0.84x | 1.07x |
-| pipeline (rc) | 28.65 us | 27.91 us | **27.93 us** | 117.33 us | 118.74 us | 0.97x | 0.24x | 0.24x |
-| strings (rc) | 337.6 ns | 210.7 ns | **213.0 ns** | 2.40 us | 2.68 us | 0.63x | 0.09x | 0.08x |
-| substrings (rc) | 1.71 us | 3.61 us | **3.68 us** | 6.69 us | 23.70 us | 2.15x | 0.55x | 0.16x |
+| closures (rc) | 1.11 us | 1.13 us | **1.13 us** | 2.93 us | 18.28 us | 1.01x | 0.39x | 0.06x |
+| dispatch (rc) | 27.84 us | 23.76 us | **21.22 us** | 41.00 us | 13.68 us | 0.76x | 0.52x | 1.55x |
+| elementwise (rc) | 150.51 us | 194.15 us | **194.00 us** | 909.23 us | 588.89 us | 1.29x | 0.21x | 0.33x |
+| erasure-stored-typed (rc) | 67.20 us | 67.47 us | **67.49 us** | 113.18 us | 68.79 us | 1.00x | 0.60x | 0.98x |
+| erasure-stored-unknown (rc) | 67.19 us | 67.11 us | **67.12 us** | 87.50 us | 68.84 us | 1.00x | 0.77x | 0.97x |
+| erasure-typed (rc) | 133.76 us | 133.73 us | **133.72 us** | 136.04 us | 87.39 us | 1.00x | 0.98x | 1.53x |
+| erasure-unknown (rc) | 133.72 us | 133.74 us | **133.73 us** | 136.03 us | 87.25 us | 1.00x | 0.98x | 1.53x |
+| fib (rc) | 304.58 us | 516.56 us | **517.82 us** | 1.00 ms | 652.22 us | 1.70x | 0.52x | 0.79x |
+| loop (rc) | 653.7 ns | 649.4 ns | **649.2 ns** | 666.0 ns | 670.4 ns | 0.99x | 0.97x | 0.97x |
+| node-utf8 (rc) | -- | 111.07 us | **117.03 us** | 37.07 us | 31.66 us | -- | 3.16x | 3.70x |
+| objects (rc) | 1.52 us | 1.51 us | **1.51 us** | 1.81 us | 1.41 us | 0.99x | 0.83x | 1.07x |
+| pipeline (rc) | 28.67 us | 27.90 us | **27.91 us** | 117.09 us | 118.32 us | 0.97x | 0.24x | 0.24x |
+| strings (rc) | 337.6 ns | 210.7 ns | **213.3 ns** | 3.99 us | 2.71 us | 0.63x | 0.05x | 0.08x |
+| substrings (rc) | 1.71 us | 3.60 us | **3.68 us** | 6.76 us | 23.85 us | 2.16x | 0.54x | 0.15x |
 
 Every ratio is nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and `nts/Bun` under 1.00 beat those engines.
 
