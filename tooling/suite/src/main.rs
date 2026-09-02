@@ -75,6 +75,17 @@ struct Totals {
     /// clean run because it never asked clang.
     uncompilable: usize,
     reasons: FxHashMap<String, usize>,
+    /// Each refusing case, with the distinct refusals in it.
+    ///
+    /// The aggregate above ranks *messages*, and a message is not a case: the
+    /// row a reader closes goes to zero while the count of refusing files does
+    /// not move, because the files behind it had other blockers. Three rows
+    /// closed that way before anyone could see why.
+    ///
+    /// So the cases are kept too, and the report prints the ones nearest to
+    /// lowering. A file with one refusal left is a file one change away, and
+    /// that is the only thing here that ranks *work* rather than symptoms.
+    blocked: Vec<(String, Vec<String>)>,
 }
 
 fn main() -> Result<()> {
@@ -427,6 +438,7 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         invalid: 0,
         uncompilable: 0,
         reasons: FxHashMap::default(),
+        blocked: Vec::new(),
     };
     for (at, slot) in results.into_iter().enumerate() {
         let Some(examined) = slot.into_inner().unwrap_or_else(std::sync::PoisonError::into_inner) else {
@@ -451,9 +463,14 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
             }
             Outcome::Refused(reasons) => {
                 totals.refused += 1;
-                for reason in reasons {
-                    *totals.reasons.entry(reason).or_default() += 1;
+                for reason in &reasons {
+                    *totals.reasons.entry(reason.clone()).or_default() += 1;
                 }
+                let name = files[at]
+                    .file_name()
+                    .unwrap_or(files[at].as_str())
+                    .to_owned();
+                totals.blocked.push((name, reasons));
             }
         }
     }
@@ -485,6 +502,41 @@ fn report(totals: &Totals) {
     reasons.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
     println!("\ntop refusals:");
     for (reason, count) in reasons.iter().take(60) {
+        println!("  {count:4}  {reason}");
+    }
+
+    // What is actually near. A row going to zero moves no case unless the files
+    // behind it had nothing else wrong, and the aggregate above cannot say
+    // which do.
+    let mut nearest: Vec<&(String, Vec<String>)> = totals.blocked.iter().collect();
+    nearest.sort_by(|a, b| a.1.len().cmp(&b.1.len()).then(a.0.cmp(&b.0)));
+    let alone = nearest.iter().filter(|(_, why)| why.len() == 1).count();
+    println!(
+        "\nnearest to lowering ({alone} of {} cases are one refusal away):",
+        totals.blocked.len()
+    );
+    for (name, why) in nearest.iter().take(8) {
+        println!("  {:2}  {name}", why.len());
+        for reason in why.iter().take(3) {
+            println!("        {reason}");
+        }
+        if why.len() > 3 {
+            println!("        ... and {} more", why.len() - 3);
+        }
+    }
+
+    // And the ranking that follows: what one refusal, closed, would finish a
+    // file. The list above ranks messages by how often they appear, which
+    // counts a message five times in one file that has four other blockers.
+    // This counts only the files where it is the last thing standing.
+    let mut alone_by_reason: FxHashMap<&str, usize> = FxHashMap::default();
+    for (_, why) in totals.blocked.iter().filter(|(_, why)| why.len() == 1) {
+        *alone_by_reason.entry(why[0].as_str()).or_default() += 1;
+    }
+    let mut ranked: Vec<(&&str, &usize)> = alone_by_reason.iter().collect();
+    ranked.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+    println!("\ncases one refusal would finish:");
+    for (reason, count) in ranked.iter().take(20) {
         println!("  {count:4}  {reason}");
     }
 }

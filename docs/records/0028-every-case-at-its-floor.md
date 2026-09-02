@@ -179,6 +179,22 @@ a generic mixin whose point is declaration emit, and the `console.log` row
 includes a regression test for `asserts condition` predicates. In each the named
 refusal is the first one hit, not what the case needs.
 
+Three rows were closed that way before the instrument could say why, so the
+suite now keeps the cases and not only the messages. Two numbers came out of it
+immediately:
+
+    26 of 48 refusing cases are one refusal away
+    the best single refusal would finish 2 of them; every other finishes 1
+
+The first is better news than the aggregate suggested and the second is worse.
+There is no lever. `console.log`, the tallest row in the table at 7 sites, is
+the last thing standing in exactly **one** file. Closing all 48 means closing
+about 26 distinct single blockers and then 22 files with several each -- which
+is not a task with a next step that pays, it is the remaining language surface.
+
+A count of messages ranks symptoms. A count of files where a message is the
+*only* thing left ranks work, and the report prints both now.
+
 `typescript.md` §15 already says the better queue is beside it -- the node
 profile's 1,097 sites, "the only list ordered by what real code actually needs
 rather than by what looks incomplete" -- and says to name what a row blocks on
