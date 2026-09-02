@@ -298,6 +298,16 @@ static void nts_free_storage(NtsHeader *object) {
     if (map->values) {
       nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
     }
+    /* Paired with the three `nts_note_allocation` calls in `nts_map_rehash`,
+     * the same way the rehash pairs the ones it replaces. A table that was
+     * never grown has no blocks and none to give back. */
+    if (map->keys) {
+      nts_reclaimed++;
+      nts_reclaimed++;
+      if (map->values) {
+        nts_reclaimed++;
+      }
+    }
     free(map->keys);
     free(map->values);
     free(map->index);
@@ -3268,6 +3278,21 @@ static void nts_map_rehash(NtsMap *map) {
     fprintf(stderr, "nts: out of memory growing a map\n");
     abort();
   }
+  /* Counted, which they were not.
+   *
+   * `nts_note_allocation` says "objects, arrays, strings and maps all come
+   * through it", and a map's *header* did while the three blocks holding its
+   * actual contents did not -- so `tooling/memory`'s allocation column showed
+   * `1` for a table of any size, and could not have shown otherwise. The bytes
+   * were already tracked a few lines below; only the count was missing.
+   *
+   * These stay `malloc` rather than `nts_alloc` on purpose: a table reallocates
+   * as it grows, and the bump provider cannot give a block back. */
+  nts_note_allocation();
+  nts_note_allocation();
+  if (map->holds_values) {
+    nts_note_allocation();
+  }
   for (uint32_t slot = 0; slot < slots; slot++) {
     index[slot] = NTS_MAP_EMPTY;
   }
@@ -3291,6 +3316,13 @@ static void nts_map_rehash(NtsMap *map) {
     nts_bytes_held -= (size_t)map->slots * sizeof(int32_t);
     if (map->values) {
       nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
+    }
+    /* Paired with the three above, or `nts_live_count` -- which is
+     * `allocated - reclaimed` -- would read every grown table as a leak. */
+    nts_reclaimed++;
+    nts_reclaimed++;
+    if (map->values) {
+      nts_reclaimed++;
     }
     free(map->keys);
     free(map->values);

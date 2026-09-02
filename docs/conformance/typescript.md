@@ -1843,7 +1843,7 @@ nothing fails loudly when they are.
 | ✅ | promises, microtasks, the tick queue |
 | ✅ | timers: `setTimeout`, `setInterval`, `clearInterval` |
 | ✅ | host loop, task posting, thread-ownership assertions |
-| ✗ | a hash table — what `Map`, `Set` and `Object`'s enumeration statics all need |
+| ✅ | a hash table — open addressing, linear probing, tombstones, power-of-two slots; `Map` and `Set` are built on it, and `Object`'s enumeration statics turned out not to need one |
 | ✗ | a regular-expression engine |
 | ✗ | date and time |
 | ✗ | shared memory and an agent model — the threading primitives above are the runtime's own task posting, and `Atomics` needs more than they provide |

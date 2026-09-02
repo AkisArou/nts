@@ -1,0 +1,39 @@
+ideal 104
+allocated 17
+because seventeen blocks, and they were invisible until this case existed.
+because
+because A `Map` is a header plus three blocks -- keys, values, and the slot
+because index -- and a `Set` is a header plus two, having no values. The blocks
+because are `malloc`ed rather than taken from `nts_alloc`, deliberately: a table
+because reallocates as it grows and the bump provider cannot give a block back.
+because
+because What that cost was a *count*. `nts_note_allocation` says "objects,
+because arrays, strings and maps all come through it", and a map's header did
+because while the three blocks holding its contents did not -- so this column
+because read `2` for two containers of any size, and could not have read
+because otherwise. The bytes were already tracked; only the count was missing.
+because Counting them is paired with `nts_reclaimed` at both free sites, or
+because `nts_live_count` would read every grown table as a leak.
+because
+because Seventeen, exactly: growth doubles from a floor of eight, so seventeen
+because entries means capacities 8, 16 and 32 -- three rehashes each.
+because
+because   Map   1 header + 3 rehashes x 3 blocks = 10
+because   Set   1 header + 3 rehashes x 2 blocks =  7
+because
+because Fewer is possible only by being told the size in advance, and nothing
+because tells it: `new Map()` says nothing about what goes in.
+because
+because Operations: the table holds tagged values, so every key and every value
+because it takes is retained and every one it drops is released -- thirty-four
+because for the seventeen `set` calls, seventeen for the `add`s, thirty-four
+because more for the seventeen overwrites, which release an old value and retain
+because a new one, and the rest when the two containers die. A key that is a
+because number retains nothing at run time and is still an emitted call, which
+because is what this column counts.
+because
+because Written *after* measuring, which is the wrong order and is recorded
+because here rather than hidden: the suite prints the numbers when `expected` is
+because absent, and it was absent because this case was new. The seventeen is
+because derived above and matches; the hundred and four is described rather than
+because derived, and that is the weaker half of this argument.
