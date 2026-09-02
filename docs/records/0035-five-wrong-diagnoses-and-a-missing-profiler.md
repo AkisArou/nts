@@ -65,19 +65,51 @@ Two more hypotheses died on the way to that:
 `guards::redirect` was built on the first of those, and is reverted: sound,
 fires nowhere in this program, and aimed at something that costs nothing anyway.
 
+## The profiler was here all along
+
+I wrote that this machine has neither `perf` nor `valgrind` and that the row
+could not be attributed. It has **`gprof`**, which I never checked -- the sixth
+thing I got wrong about this row, and the one that made the other five
+avoidable. Compile with `-pg`, run, and it answers in a minute what a day of
+probes did not:
+
+    23.89%  utf8Decode                       1,280,000 calls
+    23.89%  utf8Write                        1,280,000 calls
+    17.70%  nts_str_append                 105,000,000 calls
+    17.70%  nts_str_raw                     10,280,000 calls
+     8.85%  nts_string_from_char_code_into 108,800,000 calls
+     1.77%  nts_release / nts_free          10,300,000 frees
+
+**Eight allocations per decoded string**, and the frees to match. The 105 million
+appends are nearly free -- they are in place, which is what `0029` built -- but
+the string reallocates as it grows: four doublings from the floor of 16 up to
+128 units, the one-byte to two-byte widening when the CJK text arrives, and
+three `nts_concat` calls for the emoji, because a two-argument
+`String.fromCharCode` builds a pair and then appends it.
+
+Nothing that was guessed at appears in this list.
+
+## Raising the growth floor, and why not
+
+The obvious lever, measured across four values:
+
+    floor  16   47.89 us   1.31x node
+    floor  32   47.74 us   1.30x
+    floor  64   47.21 us   1.29x
+    floor 128   46.43 us   1.27x
+
+Three percent, for an eight-fold larger minimum allocation -- every string would
+reserve 128 code units, 256 bytes once it is two-byte. Most strings are short,
+so that is a bad trade made globally to move one row, and it is **refused**.
+
+The profile also bounds what any allocation work could buy: `nts_str_raw` and
+its frees are 19.5% of the run, so removing *every* allocation leaves the row at
+roughly 1.07x node. The rest is spread across the compiled decoder and encoder
+(47.8% between them) and the append and char-code helpers (26.6%). There is no
+single fix here, which is itself the answer to the question this record opened
+with.
+
 ## What this record is actually worth
-
-An honest account of five wrong diagnoses and the eliminations they bought,
-which is less than it set out to be and more than another guess would have been.
-
-The measurement that would settle it is a profile, and this machine has neither
-`perf` nor `valgrind`. Every probe built to stand in for one has either folded
-to a constant, hoisted out of its loop, changed the byte distribution, or
-changed the program's inlining -- each caught, each after it had already
-produced a confident-looking number. That is the honest difficulty here, and it
-is worth writing down: **this row cannot be attributed with the instruments
-available**, and the next person should get a profiler before spending a day on
-it as I did.
 
 ## Two changes made along the way, and what they were worth
 
