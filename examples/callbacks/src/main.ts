@@ -201,3 +201,181 @@ export function nestedIteration(seed: number): number {
     return acc + inner.reduce((a, w) => a + w, 0);
   }, 0);
 }
+
+// `some` and `every`, which are the same loop with different stopping
+// conditions -- and the first two of these that can end before the last
+// element. The answer is loop-carried like `reduce`'s accumulator, so nothing
+// is allocated for it, and the early exit leaves through the block `break`
+// leaves through.
+export function anyNegative(seed: number): boolean {
+  return digits(seed).some((v) => v < 0);
+}
+
+export function allSmall(seed: number): boolean {
+  return digits(seed).every((v) => v < 100);
+}
+
+// Neither ever decides, so both run to the end and answer with their seed.
+export function noneHuge(seed: number): boolean {
+  return digits(seed).some((v) => v > 1000);
+}
+
+export function notAllPositive(seed: number): boolean {
+  return digits(seed).every((v) => v > 0);
+}
+
+// An empty array, where the seed *is* the answer: `[].some(f)` is `false` and
+// `[].every(f)` is `true`, and the callback never runs.
+export function emptySome(seed: number): boolean {
+  const none: number[] = [];
+  return none.some((v) => v === seed);
+}
+
+export function emptyEvery(seed: number): boolean {
+  const none: number[] = [];
+  return none.every((v) => v === seed);
+}
+
+// The stop is observable. A counter incremented in the callback says how many
+// elements were looked at, and `some` that stops at the first `true` looks at
+// fewer than the whole array -- which is the difference between this and a
+// `filter(...).length > 0`.
+export function stopsEarly(seed: number): number {
+  let seen = 0;
+  const found = digits(seed).some((v) => {
+    seen = seen + 1;
+    return v === 3;
+  });
+  return seen * 10 + (found ? 1 : 0);
+}
+
+export function everyStopsEarly(seed: number): number {
+  let seen = 0;
+  const all = digits(seed).every((v) => {
+    seen = seen + 1;
+    return v >= 0;
+  });
+  return seen * 10 + (all ? 1 : 0);
+}
+
+// A block body with a `return`, which delivers through the same path a concise
+// body does.
+export function blockBodied(seed: number): boolean {
+  return digits(seed).some((v) => {
+    const doubled = v * 2;
+    return doubled === 6;
+  });
+}
+
+// In a condition, which is where a predicate usually appears.
+export function usedInAnIf(seed: number): number {
+  if (digits(seed).some((v) => v === 5)) {
+    return 100;
+  }
+  return 200;
+}
+
+// Both over the same array, and a `some` inside an `every`'s callback: the
+// inner loop has a carried answer of its own and must not disturb the outer.
+export function nestedPredicates(seed: number): boolean {
+  const outer = [1, 2, 3];
+  return outer.every((a) => digits(seed).some((b) => b === a));
+}
+
+// `findIndex`, which is `some` carrying the index it stopped at instead of the
+// answer that stopped it. `-1` is the seed and the answer for an array that
+// never decides, so nothing beside it records whether anything was found.
+export function whereIsThree(seed: number): number {
+  return digits(seed).findIndex((v) => v === 3);
+}
+
+export function whereIsNothing(seed: number): number {
+  return digits(seed).findIndex((v) => v === 100000);
+}
+
+// The first match wins, and the array has two elements that satisfy this.
+export function firstNonNegative(seed: number): number {
+  return [-1, -2, seed * 0 + 4, 5].findIndex((v) => v >= 0);
+}
+
+export function findIndexEmpty(seed: number): number {
+  const none: number[] = [];
+  return none.findIndex((v) => v === seed);
+}
+
+// Stops where it finds, which is observable through a counter.
+export function findIndexStops(seed: number): number {
+  let seen = 0;
+  const at = digits(seed).findIndex((v) => {
+    seen = seen + 1;
+    return v === -4;
+  });
+  return seen * 100 + at;
+}
+
+// `filter`, which is the first of these whose result is shorter than its input
+// and so the first that has to decide how much to allocate.
+//
+// One allocation: as long as the input, filled from the front, and shortened
+// to what was kept. Growing with `push` is the other way to write it and pays a
+// block every time it doubles.
+export function positives(seed: number): number {
+  const kept = digits(seed).filter((v) => v > 0);
+  let sum = 0;
+  for (const v of kept) {
+    sum = sum + v;
+  }
+  return sum * 10 + kept.length;
+}
+
+// Keeps everything, so the result is exactly as long as the allocation.
+export function keepsAll(seed: number): number {
+  return digits(seed).filter((v) => v === v).length;
+}
+
+// Keeps nothing, which is the shortening at its largest.
+export function keepsNone(seed: number): number {
+  return digits(seed).filter((v) => v === 999999).length;
+}
+
+export function filterEmpty(seed: number): number {
+  const none: number[] = [];
+  return none.filter((v) => v === seed).length;
+}
+
+// A block body, and a predicate that is not already a boolean.
+export function filterBlock(seed: number): number {
+  const kept = digits(seed).filter((v) => {
+    const doubled = v * 2;
+    return doubled > 0;
+  });
+  return kept.length;
+}
+
+// Elements that are references, which is the case the zeroed allocation is for:
+// the array is live while the callback runs, and its tail must not be read as
+// pointers the loop never wrote.
+export function filterStrings(seed: number): string {
+  const names = ["alpha", "b", "gamma", "d", "epsilon"];
+  const long = names.filter((s) => s.length > 1 + (seed - seed));
+  return long.join(",") + ":" + String(long.length);
+}
+
+// Chained, which is where the shortened length has to be right for the next
+// method to see it.
+export function filterThenMap(seed: number): number {
+  const out = digits(seed)
+    .filter((v) => v >= 0)
+    .map((v) => v * 3);
+  let sum = 0;
+  for (const v of out) {
+    sum = sum + v;
+  }
+  return sum;
+}
+
+// And the predicates over the shortened result, which must not see the tail.
+export function filterThenSome(seed: number): number {
+  const kept = digits(seed).filter((v) => v > 0);
+  return (kept.some((v) => v === 0) ? 1 : 0) + (kept.every((v) => v > 0) ? 2 : 0);
+}

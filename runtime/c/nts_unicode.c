@@ -113,8 +113,24 @@ static void nts_build_tables(void) {
   nts_tables_built = 1;
 }
 
-/* The three one-byte characters whose uppercase form is not one byte. */
+/* The three one-byte characters whose uppercase form is not one byte.
+ *
+ * Every one of them is above ASCII, so a string with no high byte has none of
+ * them -- and that is what ordinary text is. Ruling the whole question out with
+ * one OR-reduce, which vectorises, beats three `memchr` calls looking for
+ * characters that are not there: on `benches/cases/case-convert` those three
+ * passes over a forty-five byte string were 7.3% of the program.
+ *
+ * The `memchr`s stay for the case that reaches them, where the C library's
+ * vectorised search is still the right way to ask. */
 static int nts_upper_escapes(const unsigned char *bytes, uint32_t length) {
+  unsigned char high = 0;
+  for (uint32_t at = 0; at < length; at++) {
+    high |= bytes[at];
+  }
+  if ((high & 0x80u) == 0) {
+    return 0;
+  }
   return memchr(bytes, 0xB5, length) != NULL ||
          memchr(bytes, 0xDF, length) != NULL ||
          memchr(bytes, 0xFF, length) != NULL;

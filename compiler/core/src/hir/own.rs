@@ -2255,6 +2255,7 @@ const RUNTIME_HANDS_BACK: &[&str] = &[
     "nts_array_fill",
     "nts_array_fill_bool",
     "nts_array_fill_ref",
+    "nts_array_keep_first",
     "nts_array_reverse",
     "nts_array_reverse_ref",
     "nts_map_set",

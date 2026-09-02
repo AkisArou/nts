@@ -590,7 +590,7 @@ pub(super) fn string_span(func: &Func, value: ValueId, depth: u32) -> Option<Fac
             // them be bounded -- and `String.fromCharCode(hi, lo)`, the
             // surrogate pair every astral character goes through, was three of
             // the eight allocations `node-utf8` made per decoded string.
-            ("nts_str_char_at" | "nts_string_from_char_code", _) => upto(1.0),
+            ("nts_str_at" | "nts_str_char_at" | "nts_string_from_char_code", _) => upto(1.0),
             // One or two: a code point above the basic plane is a surrogate
             // pair, which is what makes this a different function.
             ("nts_string_from_code_point", _) => upto(2.0),

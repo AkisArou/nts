@@ -251,3 +251,51 @@ export function caseEmpty(n: number): string {
   const s = "";
   return "[" + s.toLowerCase() + s.toUpperCase() + "]" + String(n * 0);
 }
+
+// `s[i]`, which is not `s.charAt(i)`.
+//
+// The difference is out of range: `charAt` answers `""` and `s[i]` answers
+// `undefined`, while TypeScript types both `string`. That is the same claim it
+// makes about `xs[i]`, so this keeps the same bargain -- the index is checked,
+// and one outside the string stops the program rather than reading a value the
+// type says cannot be there.
+export function indexed(n: number): string {
+  const s = "abcdef" + String(n % 10);
+  return s[0]! + s[3]! + s[s.length - 1]!;
+}
+
+// In a loop bounded by the length, which is how real code reaches it: this is
+// the shape `runtime/node/path`'s `toPosix` is written in.
+export function rewritten(n: number): string {
+  const path = "a/b" + String(n % 10) + "/c";
+  let out = "";
+  for (let i = 0; i < path.length; i++) {
+    out += path.charCodeAt(i) === 47 ? "\\" : path[i]!;
+  }
+  return out;
+}
+
+// The first unit, guarded by the string being non-empty, which is the other
+// shape it appears in.
+export function firstUnit(n: number): string {
+  const ext = n > 0 ? ".ts" : "";
+  return ext ? (ext[0] === "." ? "dot" : "bare") : "none";
+}
+
+// Two-byte units index the same way: `length` counts code units and so does
+// this, so an astral character is two indexes.
+export function indexedWide(n: number): string {
+  const s = "a\u{1F600}b" + String(n % 10);
+  return String(s.length) + ":" + s[0]! + ":" + String(s[1]!.charCodeAt(0));
+}
+
+// And it agrees with `charAt` wherever the index is in range, which is the only
+// place they are allowed to differ.
+export function agreesWithCharAt(n: number): string {
+  const s = "wxyz" + String(n % 10);
+  let same = "";
+  for (let i = 0; i < s.length; i++) {
+    same += s[i]! === s.charAt(i) ? "=" : "!";
+  }
+  return same;
+}

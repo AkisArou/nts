@@ -90,3 +90,108 @@ export function throughSwitch(n: number): number {
   }
   return total;
 }
+
+// A declaration with no initializer, which is how a value decided by branches
+// rather than by an expression gets written.
+//
+// The name has to be *something* from the declaration onward -- every block
+// below reads it as a carried name and a merge takes it as a parameter -- so
+// the whole of this is having a value to bind. Where the type admits no
+// absence the checker has already proved the assignment comes first, so what
+// that value is cannot be observed; where it admits one, it can be, and the
+// placeholder is the `undefined` node reports.
+export function assignedInBothArms(n: number): number {
+  let picked: number;
+  if (n > 10) {
+    picked = n * 2;
+  } else {
+    picked = n - 1;
+  }
+  return picked;
+}
+
+// Read before it is written, which is the case the placeholder is observable
+// in: `string | undefined` is one absence on a reference, so the null pointer
+// *is* the `undefined`.
+export function readBeforeWritten(n: number): string {
+  let joined: string | undefined;
+  const before = joined === undefined ? "u" : "s";
+  if (n > 10) {
+    joined = "big";
+  }
+  return before + ":" + (joined === undefined ? "still" : joined);
+}
+
+// A scalar union, which is erased rather than a pointer, so its `undefined` is
+// a tag instead of a null.
+export function scalarUnwritten(n: number): number {
+  let held: number | undefined;
+  const first = held === undefined ? 1 : 0;
+  if (n > 10) {
+    held = n;
+  }
+  return first * 100 + (held ?? -1);
+}
+
+// Written in a loop, which is where the merge the declaration feeds is a
+// loop-carried name rather than a branch.
+export function assignedInALoop(n: number): number {
+  let last: number;
+  last = 0;
+  for (let i = 0; i < 4 + (n - n); i++) {
+    let step: number;
+    if (i % 2 === 0) {
+      step = i * 3;
+    } else {
+      step = i;
+    }
+    last = last + step;
+  }
+  return last;
+}
+
+// A boolean, and a string, each declared and then written on every path.
+export function twoKinds(n: number): string {
+  let flag: boolean;
+  let name: string;
+  if (n > 10) {
+    flag = true;
+    name = "over";
+  } else {
+    flag = false;
+    name = "under";
+  }
+  return name + (flag ? "!" : "-");
+}
+
+// Declared, then written in a `switch`, which is a merge with more than two
+// ways in.
+export function assignedInASwitch(n: number): number {
+  let weight: number;
+  switch (n % 3) {
+    case 0:
+      weight = 100;
+      break;
+    case 1:
+      weight = 200;
+      break;
+    default:
+      weight = 300;
+      break;
+  }
+  return weight + n * 0;
+}
+
+// The shape `path.resolve` is written in: a declaration outside a loop, written
+// inside it, and read after.
+export function resolvedLikePath(n: number): string {
+  const parts = ["a", "bb", "ccc"];
+  let out: string | undefined;
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]!;
+    if (part.length > 1) {
+      out = out === undefined ? part : out + "/" + part;
+    }
+  }
+  return (out ?? "none") + String(n * 0);
+}

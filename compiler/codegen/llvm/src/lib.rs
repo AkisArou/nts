@@ -854,6 +854,7 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_retain",
     "nts_round_fn",
     "nts_str_char_code_at_fn",
+    "nts_string_eq",
     "nts_string_truthy",
     "nts_to_int32_fn",
     "nts_to_uint32_fn",
@@ -862,6 +863,43 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_value_retain",
     "nts_value_strict_eq",
 ];
+
+/// `a === b` on two strings, which compares by contents.
+///
+/// See the arm that reaches this for why it exists and why it must come after
+/// the absent-reference test.
+fn string_equality(out: &str, bin: BinOp, lhs: ValueId, rhs: ValueId) -> String {
+    let same = format!("{out}.eq");
+    let call = format!(
+        "{same} = call zeroext i1 @nts_string_eq(ptr {}, ptr {})",
+        name(lhs),
+        name(rhs)
+    );
+    let answer = if matches!(bin, BinOp::Ne) {
+        format!("{out} = xor i1 {same}, true")
+    } else {
+        format!("{out} = add i1 {same}, 0")
+    };
+    format!("{call}\n  {answer}")
+}
+
+/// Whether a value is the absent reference, written as a constant.
+///
+/// `s === null` is a question about the pointer and not about the text, so it
+/// has to be answered *before* the string rule: reading through the pointer to
+/// compare contents is reading through the null one. The C backend orders its
+/// two rules this way and says so; this is the same order spelled as a guard,
+/// because here the string rule is a match arm rather than a function that can
+/// decline.
+///
+/// Fifteen crashes in `examples/optional-access` were this, and the arm shipped
+/// without it for one build.
+fn absent(func: &Func, value: ValueId) -> bool {
+    matches!(
+        func.values[value.0 as usize].kind,
+        OpKind::ConstNull | OpKind::ConstUndefined
+    )
+}
 
 /// The frame bound on a call whose result the escape analysis kept off the heap.
 ///
@@ -1412,6 +1450,31 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
             ..
         } if func.values[lhs.0 as usize].ty == HirType::Erased => {
             return tagging(func, value, &out);
+        }
+        // And before it again, for the same reason one step over: two strings
+        // are equal when their *contents* are, and `icmp eq` compares the
+        // pointers they arrive in.
+        //
+        // This was a wrong answer rather than a missing one, and it had been
+        // there as long as the backend. `ext.charAt(0) === "."` is `false`
+        // however the string reads, because `charAt` allocates and the literal
+        // did not -- so every `s[i] === c` and every `s.charAt(i) === c` was
+        // false. Nothing caught it because the examples compared literals
+        // against literals, where two equal strings genuinely are one pointer
+        // and the test accidentally agrees.
+        //
+        // The C backend has had `nts_string_eq` here since it had strings; this
+        // is the second half of that rule, arriving late.
+        OpKind::Binary {
+            op: bin @ (BinOp::Eq | BinOp::Ne),
+            lhs,
+            rhs,
+        } if func.values[lhs.0 as usize].ty
+            == HirType::Managed(nts_core::hir::ManagedType::String)
+            && !absent(func, *lhs)
+            && !absent(func, *rhs) =>
+        {
+            string_equality(&out, *bin, *lhs, *rhs)
         }
         OpKind::Binary { op: bin, lhs, rhs } => arithmetic(func, &out, *bin, *lhs, *rhs)?,
         OpKind::Unary { op: un, operand } => unary(func, &out, value, *un, *operand)?,

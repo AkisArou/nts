@@ -322,6 +322,9 @@ static void nts_free_storage(NtsHeader *object) {
   NtsArray *array = (NtsArray *)object;
   if (!nts_array_is_inline(array)) {
     nts_bytes_held -= (size_t)array->capacity * object->descriptor->size;
+    /* The element block this array grew into, given back. Counted where it was
+     * taken -- see `nts_array_reserve`. */
+    nts_reclaimed++;
     free(array->elements);
     array->elements = 0;
   }
@@ -1152,9 +1155,26 @@ static void nts_array_reserve(NtsArray *a) {
      * program that leaked every element block it ever grew measured as holding
      * exactly what it should. */
     nts_bytes_held += bytes;
+    /* And counted, which it was not.
+     *
+     * `nts_note_allocation` says "objects, arrays, strings and maps all come
+     * through it". An array's *header* did; the block holding its elements
+     * did not, so `tooling/memory`'s allocation column read the same number
+     * for an array of four and an array of four thousand, and could not have
+     * read otherwise. The bytes above were already right -- the paragraph
+     * beside them explains that they were added because a leak was invisible
+     * without them -- and the count is the same argument one column over.
+     *
+     * `nts_map_rehash` had this exact hole and was fixed first; a table
+     * reallocates as it grows and so does an array, for the same reason and
+     * with the same three lines missing. */
+    nts_note_allocation();
     if (!nts_array_is_inline(a)) {
       /* Not the inline block, so it was one of ours to free. */
       nts_bytes_held -= (size_t)a->capacity * a->header.descriptor->size;
+      /* Paired with the note above, or `nts_live_count` -- which is
+       * `allocated - reclaimed` -- reads every grown array as a leak. */
+      nts_reclaimed++;
       free(a->elements);
     }
     a->elements = moved;
@@ -1892,6 +1912,27 @@ NtsString *nts_str_char_at(const NtsString *s, double at) {
   return nts_str_char_at_into(NULL, s, at);
 }
 
+/* `s[i]`, which is not `s.charAt(i)`.
+ *
+ * The difference is the whole reason this exists beside it. `charAt` answers
+ * `""` for an index that is not there; `s[i]` answers `undefined`, and
+ * TypeScript types it `string` regardless -- exactly what it says about
+ * `xs[i]`, where the bounds test is what checks the claim. So this keeps that
+ * bargain rather than inventing a third answer: an index outside the string
+ * stops the program where an index outside an array would. */
+NtsString *nts_str_at_into(NtsHeader *into, const NtsString *s, double at) {
+  at = nts_to_integer(at);
+  if (!(at >= 0.0 && at < (double)s->length)) {
+    nts_bounds(at, s->length);
+  }
+  uint32_t index = (uint32_t)at;
+  return nts_str_range(into, s, index, index + 1u);
+}
+
+NtsString *nts_str_at(const NtsString *s, double at) {
+  return nts_str_at_into(NULL, s, at);
+}
+
 NtsString *nts_str_repeat(const NtsString *s, double times) {
   if (times != times || times < 0) {
     times = 0;
@@ -2246,6 +2287,30 @@ NtsArray *nts_array_slice_ref(const NtsArray *a, double from, double to) {
     nts_retain((NtsHeader *)into[at]);
   }
   return out;
+}
+
+/* Shorten an array to its first `count` elements, and hand it back.
+ *
+ * What `filter` does when it has finished writing them. It allocates the
+ * longest result it could need -- one element per element of the input -- and
+ * fills it from the front, so the elements it kept are already contiguous and
+ * all that is left is to say how many there are.
+ *
+ * **Not a general `truncate`.** One of those would have to release what it
+ * drops, and this releases nothing. It does not have to: the slots past `count`
+ * hold what the allocation started with, and `filter` asks for a zeroed one
+ * precisely so that this is true. The name says which of the two it is, because
+ * the other one is what a caller reaching for a `truncate` would expect.
+ *
+ * One allocation for the whole method, and no reallocation. Growing a result
+ * with `push` would be the other way to write it, and it is what a hand-written
+ * loop does, but it pays a fresh block every time it doubles. */
+NtsArray *nts_array_keep_first(NtsArray *a, double count) {
+  uint32_t keep = count > 0.0 ? (uint32_t)count : 0u;
+  if (keep < a->header.length) {
+    a->header.length = keep;
+  }
+  return a;
 }
 
 NtsArray *nts_array_reverse_ref(NtsArray *a) {

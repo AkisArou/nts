@@ -2962,6 +2962,10 @@ fn iteration_method(name: &str) -> Option<Iteration> {
         "forEach" => Iteration::ForEach,
         "map" => Iteration::Map,
         "reduce" => Iteration::Reduce,
+        "some" => Iteration::Any,
+        "every" => Iteration::All,
+        "findIndex" => Iteration::FindIndex,
+        "filter" => Iteration::Filter,
         _ => return None,
     })
 }
@@ -3013,6 +3017,14 @@ enum Iteration {
     ForEach,
     Map,
     Reduce,
+    /// `some`. Spelled `Any` because `Some` is taken by the language.
+    Any,
+    /// `every`.
+    All,
+    /// `findIndex`.
+    FindIndex,
+    /// `filter`.
+    Filter,
 }
 
 impl Iteration {
@@ -3023,6 +3035,10 @@ impl Iteration {
             Self::ForEach => "forEach",
             Self::Map => "map",
             Self::Reduce => "reduce",
+            Self::Any => "some",
+            Self::All => "every",
+            Self::FindIndex => "findIndex",
+            Self::Filter => "filter",
         }
     }
 
@@ -3033,7 +3049,12 @@ impl Iteration {
     /// identity to survive into the body, and this has no test for that yet.
     const fn parameters(self) -> usize {
         match self {
-            Self::ForEach | Self::Map => 1,
+            Self::ForEach
+            | Self::Map
+            | Self::Any
+            | Self::All
+            | Self::FindIndex
+            | Self::Filter => 1,
             Self::Reduce => 2,
         }
     }
@@ -3055,6 +3076,30 @@ enum CallbackResult {
     /// `map`: it is stored at the current index of the array allocated before
     /// the loop.
     Store { array: ValueId, index: u32 },
+    /// `some` and `every`: it decides whether to stop.
+    ///
+    /// Both are the same loop asking the same question and differ only in
+    /// which answer ends it -- `some` stops at the first `true` and is `false`
+    /// if it never does, `every` stops at the first `false` and is `true`. So
+    /// `exits_on` is both the value that breaks and the value the result takes
+    /// when it breaks, and the seed is its negation.
+    Decide { symbol: u32, exits_on: bool },
+    /// `findIndex`: the index the first `true` was reached at.
+    ///
+    /// The seed is `-1`, which is the answer for an array that never decides
+    /// and is what the method returns for one -- so the loop-carried name needs
+    /// no separate "was it found" beside it.
+    Locate { symbol: u32, index: u32 },
+    /// `filter`: the element is kept when the value is true.
+    ///
+    /// `element` is the value itself rather than the name bound to it. A
+    /// callback may assign to its own parameter, and `filter` keeps what the
+    /// array held either way.
+    Keep {
+        array: ValueId,
+        out: u32,
+        element: ValueId,
+    },
 }
 
 /// Where a `return` inside an inlined callback body goes.
@@ -7099,7 +7144,7 @@ impl<'a> FuncBuilder<'a> {
         target: CallbackReturn,
         value: Option<ValueId>,
     ) -> Result<(), Diagnostic> {
-        self.deliver(id, &target.result, value)?;
+        self.deliver(id, &target.result, target.depth, value)?;
         let it = self.breakables[target.depth].clone();
         let args = self.carried_now(&it.carried);
         let latch = it
@@ -10235,6 +10280,9 @@ impl<'a> FuncBuilder<'a> {
         if self.names_a_property(id) {
             return self.lower_property_access(id);
         }
+        if let Some(read) = self.lower_string_index(id)? {
+            return Ok(read);
+        }
         let (array, index) = self.element_access_parts(id)?;
         // The element's representation comes from the *array*, not from the
         // access node's type. Under `noUncheckedIndexedAccess` — which is what
@@ -10272,6 +10320,39 @@ impl<'a> FuncBuilder<'a> {
             return Ok(self.push(OpKind::Convert(read), HirType::NUMBER, origin));
         }
         Ok(read)
+    }
+
+    /// `s[i]` where `s` is a string, which is a one-unit string rather than an
+    /// element of anything.
+    ///
+    /// `None` where the receiver is not a string, so the array path runs
+    /// unchanged. Decided from the *checker's* type rather than by lowering the
+    /// receiver and looking, because the array path lowers it again and a
+    /// receiver with a side effect would then have it twice.
+    ///
+    /// Two of the seven things `runtime/node/path` could not compile were this,
+    /// both in the same shape: `path[i]` inside a loop bounded by
+    /// `path.length`, and `ext[0]` guarded by `ext` being non-empty.
+    fn lower_string_index(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
+        let children = self.children(id);
+        let [object, index] = children.as_slice() else {
+            return Ok(None);
+        };
+        if !matches!(
+            self.type_of(*object),
+            Some(HirType::Managed(ManagedType::String))
+        ) {
+            return Ok(None);
+        }
+        let receiver = self.lower_expression(*object)?;
+        let at = self.lower_expression(*index)?;
+        let origin = self.origin(id);
+        Ok(Some(self.runtime_call(
+            "nts_str_at",
+            vec![receiver, at],
+            HirType::Managed(ManagedType::String),
+            origin,
+        )))
     }
 
     /// The array and index of an `xs[i]`, lowered in source order.
@@ -11089,22 +11170,22 @@ impl<'a> FuncBuilder<'a> {
             let Some([Some(name), _, _, initializer]) = self.child_slots::<4>(declaration) else {
                 return Err(self.unsupported(declaration, "a declaration of unexpected shape"));
             };
-            let Some(initializer) = initializer else {
-                return Err(self.unsupported(declaration, "a declaration without an initializer"));
-            };
             // An empty array literal has type `never[]`: with no elements the
             // checker has nothing to infer from. The declaration does know —
             // `const out: number[] = []` says so — so the annotation supplies
             // what the literal cannot.
-            let value = if self.kind_of(initializer) == Some(syntax::ARRAY_LITERAL_EXPRESSION)
-                && self.children(initializer).is_empty()
-            {
-                let declared = self
-                    .type_of(name)
-                    .ok_or_else(|| self.unrepresentable(declaration, "an empty array"))?;
-                self.lower_empty_array(initializer, declared)?
-            } else {
-                self.lower_expression(initializer)?
+            let value = match initializer {
+                Some(initializer)
+                    if self.kind_of(initializer) == Some(syntax::ARRAY_LITERAL_EXPRESSION)
+                        && self.children(initializer).is_empty() =>
+                {
+                    let declared = self
+                        .type_of(name)
+                        .ok_or_else(|| self.unrepresentable(declaration, "an empty array"))?;
+                    self.lower_empty_array(initializer, declared)?
+                }
+                Some(initializer) => self.lower_expression(initializer)?,
+                None => self.unwritten(name, declaration)?,
             };
             // `const { a, b } = o` and `const [a, b] = xs`: one initializer,
             // several names. Lowered as the reads it stands for -- a field per
@@ -11136,6 +11217,52 @@ impl<'a> FuncBuilder<'a> {
             self.bindings.insert(symbol.0, value);
         }
         Ok(())
+    }
+
+    /// What a name holds between its declaration and its first assignment.
+    ///
+    /// `let path: string;` and then a branch that writes it. It is how a value
+    /// decided by statements rather than by an expression gets written, and
+    /// four of the seven things `runtime/node/path` still could not compile
+    /// were this.
+    ///
+    /// The name has to *be* something from here on. Every block below reads it
+    /// as a carried name, a merge takes it as a parameter, and a name with no
+    /// binding is not one -- so the whole of this feature is having a value to
+    /// bind, and the rest of the lowering was already able to cope.
+    ///
+    /// # Why a placeholder is not a guess
+    ///
+    /// Where the type admits no absence the checker has already proved the
+    /// assignment comes first: `let path: string;` read before it is written is
+    /// "used before being assigned", and the program does not reach here. So
+    /// what the placeholder is cannot be observed.
+    ///
+    /// Where the type *does* admit one it can be observed, and then the
+    /// placeholder is the answer node gives. `let joined: string | undefined;`
+    /// is read before it is written -- that is the point of writing it -- and
+    /// `undefined` is what it holds. One absence on a reference is the null
+    /// pointer, so `ConstNull` is that `undefined` rather than a stand-in for
+    /// it; a scalar union is erased, where it is spelled out.
+    fn unwritten(&mut self, name: NodeId, declaration: NodeId) -> Result<ValueId, Diagnostic> {
+        let ty = self
+            .type_of(name)
+            .ok_or_else(|| self.unsupported(declaration, "a declaration without an initializer"))?;
+        let origin = self.origin(declaration);
+        let kind = match &ty {
+            HirType::Bool => OpKind::ConstBool(false),
+            HirType::Erased => OpKind::ConstUndefined,
+            HirType::Managed(_) => OpKind::ConstNull,
+            HirType::Float { .. } => OpKind::ConstFloat(0.0),
+            // An integer here would be `specialize`'s doing, and it has not run
+            // yet; anything else is a type with no zero to name.
+            _ => {
+                return Err(
+                    self.unsupported(declaration, "a declaration without an initializer")
+                );
+            }
+        };
+        Ok(self.push(kind, ty, origin))
     }
 
     /// Bind every name a destructuring pattern introduces.
@@ -12440,7 +12567,15 @@ impl<'a> FuncBuilder<'a> {
         if let Some(kind) = iteration_method(&name) {
             let (callback, seed) = match (kind, arguments) {
                 (Iteration::Reduce, [callback, seed]) => (*callback, Some(*seed)),
-                (Iteration::ForEach | Iteration::Map, [callback]) => (*callback, None),
+                (
+                    Iteration::ForEach
+                    | Iteration::Map
+                    | Iteration::Any
+                    | Iteration::All
+                    | Iteration::FindIndex
+                    | Iteration::Filter,
+                    [callback],
+                ) => (*callback, None),
                 // `reduce` with no initial value starts from the first element
                 // and throws on an empty array, which is a different lowering
                 // and a different failure. Refused rather than assumed.
@@ -12936,16 +13071,7 @@ impl<'a> FuncBuilder<'a> {
         //
         // The accumulator is a loop-carried name like any other, which is what
         // keeps `reduce` free of an allocation: nothing about it escapes.
-        let accumulator = match kind {
-            Iteration::Reduce => {
-                let symbol = self.synthetic_symbol();
-                let seed =
-                    seed.ok_or_else(|| self.unsupported(id, "a `reduce` with no initial value"))?;
-                self.bindings.insert(symbol, seed);
-                Some(symbol)
-            }
-            Iteration::ForEach | Iteration::Map => None,
-        };
+        let accumulator = self.iteration_answer(id, kind, seed, &origin)?;
         let mut synthetic = vec![index];
         synthetic.extend(accumulator);
         let carried = self.carried_across(body, &synthetic, names);
@@ -12988,12 +13114,7 @@ impl<'a> FuncBuilder<'a> {
             self.bindings.insert(*name, self.bindings[&accumulator]);
         }
 
-        let result = match (kind, produced, accumulator) {
-            (Iteration::ForEach, _, _) => CallbackResult::Discard,
-            (Iteration::Map, Some(array), _) => CallbackResult::Store { array, index },
-            (Iteration::Reduce, _, Some(symbol)) => CallbackResult::Accumulate(symbol),
-            _ => unreachable!("the result of a kind is decided with the kind"),
-        };
+        let result = Self::iteration_delivery(kind, produced, accumulator, index, value);
         self.callback_returns.push(CallbackReturn {
             depth: record.depth,
             result,
@@ -13010,7 +13131,7 @@ impl<'a> FuncBuilder<'a> {
         // A concise body *is* its value, so it is delivered here rather than by
         // a `return` that cannot appear in one.
         if let Some(value) = produced_value {
-            self.deliver(id, &result, Some(value))?;
+            self.deliver(id, &result, record.depth, Some(value))?;
         } else if !self.is_terminated() && !matches!(kind, Iteration::ForEach) {
             // A block body that can reach its end without returning has no
             // value for this iteration. TypeScript rejects it before this,
@@ -13035,7 +13156,19 @@ impl<'a> FuncBuilder<'a> {
             (Iteration::Map, Some(array), _) => Ok(array),
             // The accumulator's binding after the loop is the exit block's
             // parameter for it, which `end_loop` has just installed.
-            (Iteration::Reduce, _, Some(symbol)) => Ok(self.bindings[&symbol]),
+            (
+                Iteration::Reduce | Iteration::Any | Iteration::All | Iteration::FindIndex,
+                _,
+                Some(symbol),
+            ) => Ok(self.bindings[&symbol]),
+            // The array is as long as the input and holds its kept elements in
+            // the front, so the last step is to say how many there are. The
+            // helper hands the array back rather than making one.
+            (Iteration::Filter, Some(array), Some(symbol)) => {
+                let kept = self.bindings[&symbol];
+                let ty = self.values[array.0 as usize].ty.clone();
+                Ok(self.runtime_call("nts_array_keep_first", vec![array, kept], ty, origin))
+            }
             _ => unreachable!("the result of a kind is decided with the kind"),
         }
     }
@@ -13058,17 +13191,22 @@ impl<'a> FuncBuilder<'a> {
         length: ValueId,
         origin: &Origin,
     ) -> Result<Option<ValueId>, Diagnostic> {
-        if !matches!(kind, Iteration::Map) {
+        if !matches!(kind, Iteration::Map | Iteration::Filter) {
             return Ok(None);
         }
         let ty = self
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "a `map` result"))?;
+        // Zeroed for `filter` and not for `map`, and the difference is which
+        // slots get written. `map` fills every one of them; `filter` fills a
+        // prefix and shortens the array to it, so the tail is read by nothing
+        // *after* the loop -- but during it the array is a live object with a
+        // length, and a collection triggered inside the callback would walk
+        // slots the loop has not reached. Zeroing is what makes that walk find
+        // nulls instead of whatever the allocator last left there.
+        let zeroed = matches!(kind, Iteration::Filter);
         Ok(Some(self.push(
-            OpKind::ArrayNew {
-                length,
-                zeroed: false,
-            },
+            OpKind::ArrayNew { length, zeroed },
             ty,
             origin.clone(),
         )))
@@ -13097,6 +13235,7 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         id: NodeId,
         result: &CallbackResult,
+        depth: usize,
         value: Option<ValueId>,
     ) -> Result<(), Diagnostic> {
         match result {
@@ -13109,6 +13248,58 @@ impl<'a> FuncBuilder<'a> {
                     )
                 })?;
                 self.bindings.insert(*symbol, value);
+                Ok(())
+            }
+            // `some` and `every`: the callback's value is a question, and an
+            // answer that ends the loop leaves through the same exit `break`
+            // uses -- carrying what the loop carries, so the answer merges with
+            // the one the header would have reached on its own.
+            CallbackResult::Decide { symbol, exits_on } => {
+                let value = value.ok_or_else(|| {
+                    self.unsupported(
+                        id,
+                        "a bare `return` in a callback that must produce a value",
+                    )
+                })?;
+                let origin = self.origin(id);
+                let cond = self.truthy(id, value);
+                let answer = self.push(OpKind::ConstBool(*exits_on), HirType::Bool, origin);
+                self.stop_early(*symbol, answer, depth, cond, *exits_on);
+                Ok(())
+            }
+            // `findIndex`: the same early exit `some` takes, carrying the
+            // index it stopped at instead of the answer that stopped it.
+            CallbackResult::Locate { symbol, index } => {
+                let value = value.ok_or_else(|| {
+                    self.unsupported(
+                        id,
+                        "a bare `return` in a callback that must produce a value",
+                    )
+                })?;
+                let cond = self.truthy(id, value);
+                let at = self.bindings[index];
+                self.stop_early(*symbol, at, depth, cond, true);
+                Ok(())
+            }
+            // `filter`: a store and a step, or neither.
+            //
+            // The two paths disagree about how many have been kept, so the
+            // block they meet in takes it as a parameter -- which is what an
+            // `if` does for any name its arms write, and the reason the cursor
+            // cannot just be rebound the way `some`'s answer is.
+            CallbackResult::Keep {
+                array,
+                out,
+                element,
+            } => {
+                let value = value.ok_or_else(|| {
+                    self.unsupported(
+                        id,
+                        "a bare `return` in a callback that must produce a value",
+                    )
+                })?;
+                let cond = self.truthy(id, value);
+                self.keep_element(id, *array, *out, *element, cond);
                 Ok(())
             }
             CallbackResult::Store { array, index } => {
@@ -13133,6 +13324,207 @@ impl<'a> FuncBuilder<'a> {
                 Ok(())
             }
         }
+    }
+
+    /// What the body's value does, which is the whole difference between the
+    /// seven methods this lowering serves.
+    fn iteration_delivery(
+        kind: Iteration,
+        produced: Option<ValueId>,
+        accumulator: Option<u32>,
+        index: u32,
+        value: ValueId,
+    ) -> CallbackResult {
+        match (kind, produced, accumulator) {
+            (Iteration::ForEach, _, _) => CallbackResult::Discard,
+            (Iteration::Map, Some(array), _) => CallbackResult::Store { array, index },
+            (Iteration::Reduce, _, Some(symbol)) => CallbackResult::Accumulate(symbol),
+            (Iteration::Any, _, Some(symbol)) => CallbackResult::Decide {
+                symbol,
+                exits_on: true,
+            },
+            (Iteration::All, _, Some(symbol)) => CallbackResult::Decide {
+                symbol,
+                exits_on: false,
+            },
+            (Iteration::FindIndex, _, Some(symbol)) => CallbackResult::Locate { symbol, index },
+            (Iteration::Filter, Some(array), Some(symbol)) => CallbackResult::Keep {
+                array,
+                out: symbol,
+                element: value,
+            },
+            _ => unreachable!("the result of a kind is decided with the kind"),
+        }
+    }
+
+    /// The name a method's answer is carried in, and what it starts as.
+    ///
+    /// One loop-carried name serves five of the seven. `reduce` carries its
+    /// accumulator, `some` and `every` carry the answer, `findIndex` carries the
+    /// index it stopped at, and `filter` carries how many it has kept -- and in
+    /// every case it is a scalar in a block parameter, which is why none of them
+    /// allocates anything to hold it.
+    ///
+    /// The seed is the answer for an array the loop never decides anything
+    /// about: `[].some(f)` is `false`, `[].every(f)` is `true`, `[].findIndex(f)`
+    /// is `-1`, and a `filter` that keeps nothing has kept none.
+    fn iteration_answer(
+        &mut self,
+        id: NodeId,
+        kind: Iteration,
+        seed: Option<ValueId>,
+        origin: &Origin,
+    ) -> Result<Option<u32>, Diagnostic> {
+        Ok(match kind {
+            Iteration::Reduce => {
+                let symbol = self.synthetic_symbol();
+                let seed =
+                    seed.ok_or_else(|| self.unsupported(id, "a `reduce` with no initial value"))?;
+                self.bindings.insert(symbol, seed);
+                Some(symbol)
+            }
+            // `some` and `every` carry their answer the way `reduce` carries
+            // its accumulator, and for the same reason: it is a loop-carried
+            // name, so nothing about it escapes and nothing is allocated for
+            // it. The seed is the answer for an array that never decides --
+            // `[].some(f)` is `false` and `[].every(f)` is `true`.
+            Iteration::Any | Iteration::All => {
+                let symbol = self.synthetic_symbol();
+                let start = self.push(
+                    OpKind::ConstBool(matches!(kind, Iteration::All)),
+                    HirType::Bool,
+                    origin.clone(),
+                );
+                self.bindings.insert(symbol, start);
+                Some(symbol)
+            }
+            // `findIndex` carries an index rather than an answer, seeded with
+            // the one it returns for an array that never decides.
+            Iteration::FindIndex => {
+                let symbol = self.synthetic_symbol();
+                let start =
+                    self.push(OpKind::ConstFloat(-1.0), HirType::NUMBER, origin.clone());
+                self.bindings.insert(symbol, start);
+                Some(symbol)
+            }
+            // `filter` carries how many it has kept, which is both the index
+            // it writes the next one at and the length of the result.
+            Iteration::Filter => {
+                let symbol = self.synthetic_symbol();
+                let start = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                self.bindings.insert(symbol, start);
+                Some(symbol)
+            }
+            Iteration::ForEach | Iteration::Map => None,
+        })
+    }
+
+    /// Store an element and step the cursor, or do neither.
+    ///
+    /// `filter`'s body, and the one of these whose two paths *disagree* about a
+    /// carried name: one has kept an element and the other has not, so the
+    /// count differs where they meet. That makes the meeting block a merge and
+    /// the count its parameter, which is what an `if` does for any name its
+    /// arms write -- and the reason this cannot rebind the way `stop_early`
+    /// does, where the path that writes never comes back.
+    fn keep_element(
+        &mut self,
+        id: NodeId,
+        array: ValueId,
+        out: u32,
+        element: ValueId,
+        cond: ValueId,
+    ) {
+        let origin = self.origin(id);
+        let at = self.bindings[&out];
+        let keeping = self.new_block();
+        let rest = self.new_block();
+        let merged = self.push_block_param(rest, HirType::NUMBER, origin.clone());
+        self.terminate(Terminator::Branch {
+            cond,
+            then_target: keeping,
+            then_args: Vec::new(),
+            else_target: rest,
+            else_args: vec![at],
+        });
+        self.switch_to(keeping);
+        self.push(
+            OpKind::ArraySet {
+                array,
+                index: at,
+                value: element,
+                checked: true,
+            },
+            HirType::Void,
+            origin.clone(),
+        );
+        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+        let next = self.push(
+            OpKind::Binary {
+                op: BinOp::Add,
+                lhs: at,
+                rhs: one,
+            },
+            HirType::NUMBER,
+            origin,
+        );
+        self.terminate(Terminator::Jump {
+            target: rest,
+            args: vec![next],
+        });
+        self.switch_to(rest);
+        self.bindings.insert(out, merged);
+    }
+
+    /// Leave the loop with an answer, on the side of a test that decides.
+    ///
+    /// `some`, `every` and `findIndex` all stop before the end and all three
+    /// stop the same way: branch on what the callback said, write the answer on
+    /// the side that leaves, and go out through the block `break` goes out
+    /// through -- carrying what the loop carries, so the answer merges with the
+    /// one the header would have reached had it run out of elements instead.
+    ///
+    /// `exits_on` says which side of the test leaves. It is `true` for `some`
+    /// and `findIndex`, which stop when the predicate holds, and `false` for
+    /// `every`, which stops when it does not.
+    ///
+    /// # The binding, written twice
+    ///
+    /// `bindings` is one map and not one per block, so a name written on a path
+    /// that ends in a jump is still written after it. Left that way the loop
+    /// goes on reading a value defined in a block that no longer dominates it,
+    /// which is what `NotDominated` says and what this got wrong first.
+    fn stop_early(
+        &mut self,
+        symbol: u32,
+        answer: ValueId,
+        depth: usize,
+        cond: ValueId,
+        exits_on: bool,
+    ) {
+        let before = self.bindings[&symbol];
+        let leaving = self.new_block();
+        let staying = self.new_block();
+        let (then_target, else_target) = if exits_on {
+            (leaving, staying)
+        } else {
+            (staying, leaving)
+        };
+        self.terminate(Terminator::Branch {
+            cond,
+            then_target,
+            then_args: Vec::new(),
+            else_target,
+            else_args: Vec::new(),
+        });
+        self.switch_to(leaving);
+        self.bindings.insert(symbol, answer);
+        let carried = self.breakables[depth].carried.clone();
+        let args = self.carried_now(&carried);
+        let (exit, _) = self.exit_of(depth);
+        self.terminate(Terminator::Jump { target: exit, args });
+        self.switch_to(staying);
+        self.bindings.insert(symbol, before);
     }
 
     /// The names a callback binds and the body it runs, checked against what

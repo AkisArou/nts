@@ -723,6 +723,10 @@ NtsString *nts_str_substring(const NtsString *s, double from, double to);
  * `text.substring(start, i)` has no length until it runs, and what the compiler
  * knows is that it cannot exceed the string it came from. */
 NtsString *nts_str_char_at_into(NtsHeader *into, const NtsString *s, double at);
+/* `s[i]`: one unit, and a checked index. See the note beside the definition for
+ * why this is not `charAt`. */
+NtsString *nts_str_at(const NtsString *s, double at);
+NtsString *nts_str_at_into(NtsHeader *into, const NtsString *s, double at);
 NtsString *nts_str_slice_into(NtsHeader *into, const NtsString *s, double from,
                               double to);
 NtsString *nts_str_substring_general(NtsHeader *into, const NtsString *s,
@@ -976,6 +980,9 @@ NtsArray *nts_array_fill_bool(NtsArray *a, bool value);
  * reference is untouched, so this is a store rather than a hand-over. */
 NtsArray *nts_array_fill_ref(NtsArray *a, void *value);
 NtsArray *nts_array_reverse(NtsArray *a);
+/* `filter`'s last step: keep the first `count` and say so. Hands back the array
+ * it was given, borrowed -- see `own::RUNTIME_HANDS_BACK`. */
+NtsArray *nts_array_keep_first(NtsArray *a, double count);
 NtsArray *nts_array_slice(const NtsArray *a, double from, double to);
 
 /* One code unit of a string, whichever width it is stored in.
