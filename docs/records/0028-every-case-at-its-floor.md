@@ -96,6 +96,45 @@ reaches the caller's frame is the case where the object dies with the iteration.
 The table it would show up in does not exist yet. The README keeps the earlier
 run, which was measured on a quieter machine and says the same thing.
 
+## `escape.rs` reads `own`: the whole refusal, and how a false premise got in
+
+`0025` refused this in a paragraph, on one argument. It is a standing item in
+the goal that produced these records, so here is all of it.
+
+**The dependency inverts.** `own::counted` answers "no" for
+`ObjectNew { frame: true }` with no reference fields, and that flag is set by
+`place_allocations` out of `escape`'s own answer. Everything in `own` that
+decides ownership reaches `counted`. So `own` is downstream of `escape` by
+construction, and the edge asked for would close a cycle rather than add
+information.
+
+**Anchoring answers a different question.** The reason given was "nothing should
+escape that `own` can anchor". Anchored means the *place* a borrow was read from
+stays alive for the rest of this frame -- a parameter, an entry-block local held
+to every exit, a slot of something anchored. Escape asks whether an object
+outlives the frame. A parameter is the clearest anchor there is, and the object
+behind it certainly outlives this frame, because the caller made it. The two
+predicates do not constrain each other in either direction, so reading one to
+decide the other would be wrong even if the dependency allowed it.
+
+**And the blind spot it was named for was already closed.** The goal said
+`escape` "has the block-parameter blind spot `crossing_borrows` had -- its own
+comment says so". `hand_on` had stopped marking every edge argument as escaped
+some time before, and its doc says exactly that. What was left was the other
+half, and it is now closed too: an allocation made in a loop and handed on
+escapes only where the parameter receiving it is still live where the allocation
+happens, following that parameter onward through the latch.
+
+The evidence that nothing is left on the table is the column this goal added:
+twenty of twenty cases at their **allocation** floor, each floor argued in
+`expected` before it was measured.
+
+The premise survived into a goal because the module's own header still said
+`- passed along an edge, because a block parameter is a value this analysis does
+not follow`, three hundred lines above a function whose doc says it stopped
+doing that and what it cost. A stale comment is not a small thing when a comment
+is what the next reader plans from. It now says what the code does.
+
 ## What moved, and what had to move with it
 
 The control in `without_reference_counting_the_same_program_leaks` failed,

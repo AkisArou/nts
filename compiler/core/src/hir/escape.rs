@@ -21,8 +21,11 @@
 //!
 //! - stored into a field or an element — the container outlives the store;
 //! - returned;
-//! - passed along an edge, because a block parameter is a value this analysis
-//!   does not follow;
+//! - passed along an edge *only* where the parameter it lands in escapes, or
+//!   where the value was made inside a loop and that parameter is still live
+//!   where it is made -- one frame slot cannot hold two results anyone can
+//!   still read. This used to say "because a block parameter is a value this
+//!   analysis does not follow", and it followed nothing: see [`hand_on`];
 //! - passed to a call in a position that callee lets escape.
 //!
 //! Reading *through* a reference is not escaping. `o.x`, `xs[i]` and `xs.length`
