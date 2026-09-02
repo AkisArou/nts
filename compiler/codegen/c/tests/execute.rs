@@ -1040,18 +1040,32 @@ fn without_reference_counting_the_same_program_leaks() {
     // never frees, and this is what that means when a program runs for a while.
     // It is here so the test above is measuring something.
     //
-    // It has to be `borrowChain`, whose object comes back from `makeCounter`
-    // and therefore reaches the heap. `run` used to work here and does not any
-    // more: its counter never escapes, so escape analysis puts it in the frame
-    // and there is nothing left to leak. A control that measures zero either
-    // way would be worse than no control.
+    // It has to be a call whose object cannot be anywhere but the heap, and
+    // twice now that has meant changing which one. `run` was first: its counter
+    // never escapes, so escape analysis put it in the frame and there was
+    // nothing left to leak. `borrowChain` was second: it gets its counter from
+    // `makeCounter`, which `hir::inline` now merges into it, so the object it
+    // was leaking is in a frame too.
+    //
+    // So the control is `makeCounter` itself, called from here. It is exported,
+    // and its result goes to a caller outside the program -- this one. No
+    // analysis can put that object in a frame without being wrong, which is
+    // what a control has to be made of. A control that measures zero either way
+    // would be worse than no control.
     let harness = format!(
         r#"{CHECK}
 #include "nts_runtime.h"
+void *makeCounter(double step);
 double borrowChain(double step, double times);
 int main(void) {{
     check("borrowChain(3,4)", borrowChain(3, 4), 12);
-    for (int i = 0; i < 99; i++) {{ borrowChain(3, 4); }}
+    for (int i = 0; i < 100; i++) {{
+        if (!makeCounter(3)) {{
+            printf("FAIL makeCounter returned nothing\n");
+            failures++;
+            break;
+        }}
+    }}
     printf("live objects after 100 calls: %zu\n", nts_live_count());
     return failures ? 1 : 0;
 }}

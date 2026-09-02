@@ -50,6 +50,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use super::liveness;
 use super::{BlockId, Callee, Func, OpKind, Program, Terminator, ValueId};
 
 /// A bound on the call-graph iteration. Convergence takes a handful of rounds --
@@ -291,6 +292,7 @@ fn analyze(
     // Which allocations can run more than once with an earlier result still
     // reachable. See `repeats`.
     let repeated = repeats(func);
+    let live = liveness::analyze(func);
 
     for block in &func.blocks {
         for value in &block.ops {
@@ -422,7 +424,7 @@ fn analyze(
             }
         }
 
-        escape_through(&mut escapes, func, &repeated, &mut carried, &block.terminator);
+        escape_through(&mut escapes, func, &repeated, &live, &mut carried, &block.terminator);
     }
 
     // Now the stores, once every other reason to escape is known.
@@ -486,6 +488,7 @@ fn escape_through(
     escapes: &mut Escapes,
     func: &Func,
     repeated: &FxHashSet<ValueId>,
+    live: &liveness::Liveness,
     carried: &mut Vec<(ValueId, ValueId)>,
     terminator: &Terminator,
 ) {
@@ -496,7 +499,7 @@ fn escape_through(
             }
         }
         Terminator::Jump { target, args } => {
-            hand_on(escapes, func, repeated, carried, *target, args);
+            hand_on(escapes, func, repeated, live, carried, *target, args);
         }
         Terminator::Branch {
             then_target,
@@ -505,18 +508,81 @@ fn escape_through(
             else_args,
             ..
         } => {
-            hand_on(escapes, func, repeated, carried, *then_target, then_args);
-            hand_on(escapes, func, repeated, carried, *else_target, else_args);
+            hand_on(escapes, func, repeated, live, carried, *then_target, then_args);
+            hand_on(escapes, func, repeated, live, carried, *else_target, else_args);
         }
         Terminator::Return(None) | Terminator::Unreachable | Terminator::FellThrough => {}
     }
 }
 
 /// One edge: pair each argument with the parameter that receives it.
+/// Whether a parameter is still being read where the value it receives is made.
+///
+/// The allocation is one slot in the frame, written every time its operation
+/// runs. That is correct exactly while no earlier result is still wanted -- so
+/// the question is whether the parameter receiving it is live at the block that
+/// makes it.
+///
+/// Following where the parameter goes next is not optional. A loop carries a
+/// value through the latch's parameter into the header's, and the latch's is
+/// dead the instant it is handed on: asking only about the one the edge names
+/// said "not live" for `sumChain`, put a list node in one frame slot, and every
+/// link pointed at itself. The walk that followed never ended.
+fn still_live_where_it_is_made(
+    func: &Func,
+    live: &liveness::Liveness,
+    made: ValueId,
+    param: ValueId,
+) -> bool {
+    let Some(at) = func.blocks.iter().position(|block| block.ops.contains(&made)) else {
+        return true;
+    };
+    let block = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
+    let mut seen = FxHashSet::default();
+    let mut front = vec![param];
+    while let Some(one) = front.pop() {
+        if !seen.insert(one) {
+            continue;
+        }
+        if live.live_in(block).contains(&one) || live.live_out(block).contains(&one) {
+            return true;
+        }
+        for source in &func.blocks {
+            let edges: Vec<(BlockId, &Vec<ValueId>)> = match &source.terminator {
+                Terminator::Jump { target, args } => vec![(*target, args)],
+                Terminator::Branch {
+                    then_target,
+                    then_args,
+                    else_target,
+                    else_args,
+                    ..
+                } => vec![(*then_target, then_args), (*else_target, else_args)],
+                _ => Vec::new(),
+            };
+            for (target, args) in edges {
+                for (slot, argument) in args.iter().enumerate() {
+                    if *argument != one {
+                        continue;
+                    }
+                    if let Some(onward) = func
+                        .blocks
+                        .get(target.0 as usize)
+                        .and_then(|block| block.params.get(slot))
+                    {
+                        front.push(*onward);
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
 fn hand_on(
     escapes: &mut Escapes,
     func: &Func,
     repeated: &FxHashSet<ValueId>,
+    live: &liveness::Liveness,
     carried: &mut Vec<(ValueId, ValueId)>,
     target: BlockId,
     args: &[ValueId],
@@ -527,14 +593,31 @@ fn hand_on(
         .map(|block| block.params.as_slice())
         .unwrap_or_default();
     for (slot, argument) in args.iter().enumerate() {
-        let reused = repeated.contains(argument)
-            && matches!(
-                func.values[argument.0 as usize].kind,
-                OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
-            );
+        let made_here = matches!(
+            func.values[argument.0 as usize].kind,
+            OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
+        );
+        // "One slot, two live results" is a statement about *liveness*, and it
+        // used to be tested by repetition alone: any allocation from inside a
+        // loop, handed to any block parameter, escaped.
+        //
+        // Most of them are handed forward within the iteration that made them.
+        // A factory merged into its caller returns through a continuation --
+        // `const got = maybe(i)` is a parameter receiving either the object or
+        // a null -- and that parameter is dead before the loop comes round and
+        // the next one is made. One slot is exactly right for it.
+        //
+        // It is two live results only when the parameter is still live where
+        // the allocation happens, which is what a value carried on a *back*
+        // edge is: `aCellPerIteration` holds last round's cell across the whole
+        // body, so the slot would be written while the previous result is still
+        // being read.
+        let reused = made_here
+            && repeated.contains(argument)
+            && params
+                .get(slot)
+                .is_some_and(|param| still_live_where_it_is_made(func, live, *argument, *param));
         match params.get(slot) {
-            // An allocation from inside a loop, carried on: one slot, two live
-            // results. See the note above.
             Some(_) if reused => {
                 escapes.values.insert(*argument);
             }

@@ -43,6 +43,7 @@ pub mod tags;
 pub mod unerase;
 
 pub mod lower;
+pub mod inline;
 pub mod monomorphize;
 /// Who owns what, and for how long: one answer per value, which the counting
 /// pass reads and does no reasoning of its own about.
@@ -1250,6 +1251,8 @@ pub struct Prepared {
     pub narrowed: usize,
     /// Functions cloned for the closure they are called with.
     pub cloned: usize,
+    /// Calls merged with the body they called, to place an allocation.
+    pub copied: usize,
 }
 
 /// Lower a snapshot and make it ready to emit.
@@ -1597,15 +1600,8 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // function nothing can call should pay for none of that.
     let pruned = reachable::prune(&mut program, options.roots);
 
-    // Before any analysis, because a clone's parameter is a different type and
-    // everything downstream should see it that way -- and because the dispatch
-    // it turns into a direct call is a call the interprocedural analysis can
-    // then follow.
-    let cloned = monomorphize::monomorphize(&mut program);
-    // Again, because a function every caller now reaches through a clone is a
-    // function nothing calls -- and one that still contains the dispatch the
-    // clone exists to avoid.
-    let pruned = pruned + reachable::prune(&mut program, options.roots);
+    let (cloned, copied, dropped) = reshape_calls(&mut program, options.roots);
+    let pruned = pruned + dropped;
 
     let mut specialized = 0;
     let mut conversions = 0;
@@ -1756,6 +1752,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
 
     Prepared {
         cloned,
+        copied,
         program,
         diagnostics: lowered.diagnostics,
         specialized,
@@ -1824,6 +1821,26 @@ fn narrow_erasure(program: &mut Program) -> usize {
 /// Returns how many moved, which is worth reporting: it is the difference
 /// between a loop that calls the allocator and one that does not, and on the
 /// `objects` benchmark it is the entire gap to hand-written C.
+/// Settle what calls what, before anything reads a call.
+///
+/// **Monomorphize** first, because a clone's parameter is a different type and
+/// everything downstream should see it that way -- and because the dispatch it
+/// turns into a direct call is a call the interprocedural analysis can follow.
+///
+/// **Merge** two frames where a callee hands back what it allocated, which is
+/// the one shape no summary can answer: placement is per function and the
+/// allocation is in the wrong one. Not an inliner -- see [`inline`], and
+/// `docs/records/0027` for the general one that was measured and deleted.
+///
+/// **Prune** after both, because a function reached only through a clone, or
+/// copied into every caller it had, is a function nothing calls -- and one that
+/// still contains the dispatch the clone exists to avoid.
+fn reshape_calls(program: &mut Program, roots: reachable::Roots<'_>) -> (usize, usize, usize) {
+    let cloned = monomorphize::monomorphize(program);
+    let copied = inline::inline(program);
+    (cloned, copied, reachable::prune(program, roots))
+}
+
 fn place_allocations(program: &mut Program) -> usize {
     let escapes = escape::analyze_program(program);
     let mut framed = 0;

@@ -91,6 +91,14 @@ pub struct Summaries {
     /// Parameter fields every caller has already zeroed, by function name. See
     /// [`zeroed_parameters`].
     zeroed: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<(u32, u32)>>,
+    /// Globals holding a zero before anything runs, by index.
+    ///
+    /// Which is every reference-typed global: `Global::initial` is what it
+    /// holds before the program starts, and a pointer's zero is a null. The
+    /// module initializer is the one function that can use it -- see
+    /// [`initializing_stores`] -- because it is the one function that runs
+    /// before anything has had a chance to write one.
+    starts_zero: rustc_hash::FxHashSet<u32>,
 }
 
 impl Summaries {
@@ -113,6 +121,13 @@ impl Summaries {
 pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
     let harmless = initializing_only(program, layouts);
     Summaries {
+        starts_zero: program
+            .globals
+            .iter()
+            .enumerate()
+            .filter(|(_, global)| global.initial == 0.0 && global.ty.may_hold_a_reference())
+            .filter_map(|(at, _)| u32::try_from(at).ok())
+            .collect(),
         zeroed: zeroed_parameters(program, layouts, &harmless),
         mutates: mutating(program),
         harmless,
@@ -380,8 +395,13 @@ pub fn analyze(
         .cloned()
         .unwrap_or_default();
     let entering = freshness(func, layouts, &summaries.harmless, &vouched);
-    let (initializing, still_zero) =
-        initializing_stores(func, layouts, &entering, &summaries.harmless);
+    let (initializing, still_zero) = initializing_stores(
+        func,
+        layouts,
+        &entering,
+        &summaries.harmless,
+        &summaries.starts_zero,
+    );
     let crossing = crossing_borrows(
         func,
         layouts,
@@ -977,6 +997,7 @@ fn initializing_stores(
     layouts: &[Layout],
     entering: &[Fresh],
     harmless: &rustc_hash::FxHashSet<String>,
+    starts_zero: &rustc_hash::FxHashSet<u32>,
 ) -> (
     rustc_hash::FxHashSet<ValueId>,
     Vec<rustc_hash::FxHashSet<(ValueId, u32)>>,
@@ -989,6 +1010,17 @@ fn initializing_stores(
     // needs every write in the function to be attributable. See
     // `stores_are_aimed`.
     let attributable = stores_are_aimed(func, harmless);
+    // A module's top-level statements, which run once and before anything else.
+    // `let kept: Config | null = null` is a store over a global that is already
+    // null -- the static initializer put it there -- and the release of what it
+    // found was a counted operation in every program with a module-level
+    // reference. Only the entry block, because that is the block this function
+    // is known to reach first.
+    let mut untouched: rustc_hash::FxHashSet<u32> = if func.name == super::lower::MODULE_INIT {
+        starts_zero.clone()
+    } else {
+        rustc_hash::FxHashSet::default()
+    };
     for (at, block) in func.blocks.iter().enumerate() {
         let mut fresh = entering.get(at).cloned().unwrap_or_default();
         for value in &block.ops {
@@ -997,6 +1029,24 @@ fn initializing_stores(
                 && fresh.initializing(func, &kind)
             {
                 settled.insert(*value);
+            }
+            if at == 0 {
+                match &kind {
+                    OpKind::GlobalSet { global, .. } => {
+                        if untouched.remove(global) {
+                            settled.insert(*value);
+                        }
+                    }
+                    // Anything a callee is handed can reach a global, and a
+                    // body that is not here can reach one without being handed
+                    // anything at all.
+                    OpKind::Call {
+                        callee: super::Callee::Direct(name),
+                        ..
+                    } if harmless.contains(name) => {}
+                    OpKind::Call { .. } => untouched.clear(),
+                    _ => {}
+                }
             }
             fresh.observe(func, *value, &kind, harmless);
         }
@@ -1357,10 +1407,82 @@ fn mutating(program: &Program) -> rustc_hash::FxHashSet<String> {
 /// Whether a value needs counting at all.
 ///
 pub(super) fn counted(func: &Func, layouts: &[Layout], value: ValueId) -> bool {
+    counted_from(func, layouts, value, &mut rustc_hash::FxHashSet::default())
+}
+
+/// The arguments every edge into a block carries, for one parameter slot.
+fn arriving_on(func: &Func, block: usize, slot: usize) -> Option<Vec<ValueId>> {
+    let mut arriving = Vec::new();
+    for source in &func.blocks {
+        let edges: Vec<(BlockId, &Vec<ValueId>)> = match &source.terminator {
+            super::Terminator::Jump { target, args } => vec![(*target, args)],
+            super::Terminator::Branch {
+                then_target,
+                then_args,
+                else_target,
+                else_args,
+                ..
+            } => vec![(*then_target, then_args), (*else_target, else_args)],
+            _ => Vec::new(),
+        };
+        for (target, args) in edges {
+            if target.0 as usize == block {
+                // An edge that carries too few arguments is one this cannot
+                // read, and a fact it cannot read is one it does not claim.
+                arriving.push(*args.get(slot)?);
+            }
+        }
+    }
+    Some(arriving)
+}
+
+fn counted_from(
+    func: &Func,
+    layouts: &[Layout],
+    value: ValueId,
+    seen: &mut rustc_hash::FxHashSet<ValueId>,
+) -> bool {
     let op = &func.values[value.0 as usize];
     if !op.ty.may_hold_a_reference() {
         return false;
     }
+    match op.kind {
+        // A parameter of a block is whatever the edges into it carry, so it
+        // costs what they cost. A `T | null` that is either a null or an object
+        // in this frame is neither of them counted, and the release emitted for
+        // it was a call per iteration to look at an immortal word and return.
+        //
+        // `early-return` is the case: a factory merged into its caller hands
+        // back the object on one path and a null on the other, and the two meet
+        // in the parameter the call became.
+        //
+        // A parameter reached only by itself contributes nothing and says so by
+        // being already seen -- the answer is "not counted *because of this
+        // edge*", and any other edge is still free to say otherwise.
+        OpKind::BlockParam(slot) => {
+            if !seen.insert(value) {
+                return false;
+            }
+            let Some(block) = func
+                .blocks
+                .iter()
+                .position(|block| block.params.get(slot as usize) == Some(&value))
+            else {
+                return true;
+            };
+            let Some(arriving) = arriving_on(func, block, slot as usize) else {
+                return true;
+            };
+            arriving
+                .into_iter()
+                .any(|argument| counted_from(func, layouts, argument, seen))
+        }
+        _ => counted_here(func, layouts, value),
+    }
+}
+
+fn counted_here(func: &Func, layouts: &[Layout], value: ValueId) -> bool {
+    let op = &func.values[value.0 as usize];
     match op.kind {
         // A constant with no count to change.
         //
@@ -1991,6 +2113,27 @@ fn zeroed_parameters(
 /// each `Return` means, and to run *once*, which is why a second store anywhere
 /// disqualifies the parameter: two stores need two references and the caller is
 /// handing over one.
+/// Whether control can come back round to a block.
+///
+/// A store that takes the caller's reference may run once. Run it twice on one
+/// handed-over reference and the second take is a reference nobody had.
+fn reaches_itself(func: &Func, block: BlockId) -> bool {
+    let mut seen = rustc_hash::FxHashSet::default();
+    let mut front: Vec<BlockId> = func.blocks[block.0 as usize].terminator.successors();
+    while let Some(at) = front.pop() {
+        if at == block {
+            return true;
+        }
+        if !seen.insert(at) {
+            continue;
+        }
+        if let Some(next) = func.blocks.get(at.0 as usize) {
+            front.extend(next.terminator.successors());
+        }
+    }
+    false
+}
+
 fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
     let mut consumed = rustc_hash::FxHashSet::default();
     let reachable = super::verify::reachable_blocks(func);
@@ -2026,7 +2169,26 @@ fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
                 }
             }
         }
-        let [only] = stores.as_slice() else { continue };
+        // One block, however many stores are in it.
+        //
+        // A constructor puts the same argument in two slots -- `this.label` and
+        // `this.spare` -- and needed two references where the caller was
+        // holding one, so it retained twice and the caller released after. The
+        // arithmetic never needed that: the callee needs one reference per
+        // slot, is handed one, and owes itself the rest. `rc` already emits
+        // exactly that, because at most one store per value may claim the
+        // value's death and every other store copies.
+        //
+        // What the stores may not do is disagree about *whether* they ran. Two
+        // stores on two arms of a branch would each want the handed-over
+        // reference, and the arm that did not take it would leak. One block
+        // that dominates every return means all of them ran, once.
+        let Some(only) = stores.first().copied() else {
+            continue;
+        };
+        if stores.iter().any(|at| *at != only) || reaches_itself(func, only) {
+            continue;
+        }
         let returns_covered = func
             .blocks
             .iter()
@@ -2035,7 +2197,7 @@ fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
                 matches!(block.terminator, super::Terminator::Return(_))
                     && reachable.contains(&BlockId(u32::try_from(*at).unwrap_or(u32::MAX)))
             })
-            .all(|(at, _)| dominates(*only, BlockId(u32::try_from(at).unwrap_or(u32::MAX))));
+            .all(|(at, _)| dominates(only, BlockId(u32::try_from(at).unwrap_or(u32::MAX))));
         if returns_covered {
             consumed.insert(slot);
         }

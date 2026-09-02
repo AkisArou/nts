@@ -44,6 +44,5 @@ export function work(n: number): number {
     bump(config);
     total = total + held.text;
   }
-  kept = null;
   return total;
 }
