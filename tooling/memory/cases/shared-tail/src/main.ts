@@ -5,19 +5,33 @@
 // both back must. A pass that elides its way to zero here is wrong, and the
 // leak check and the answer are what say so.
 
-class Link { value: number; next: Link | null; constructor(v: number) { this.value = v; this.next = null; } }
+class Link {
+  value: number;
+  next: Link | null;
+  constructor(v: number) {
+    this.value = v;
+    this.next = null;
+  }
+}
 
 function chain(length: number): Link {
   const head = new Link(0);
   let tail = head;
-  for (let i = 1; i < length; i++) { const made = new Link(i); tail.next = made; tail = made; }
+  for (let i = 1; i < length; i++) {
+    const made = new Link(i);
+    tail.next = made;
+    tail = made;
+  }
   return head;
 }
 
 function total(head: Link | null): number {
   let sum = 0;
   let at = head;
-  while (at !== null) { sum = sum + at.value; at = at.next; }
+  while (at !== null) {
+    sum = sum + at.value;
+    at = at.next;
+  }
   return sum;
 }
 
