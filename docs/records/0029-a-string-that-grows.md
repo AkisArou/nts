@@ -121,10 +121,81 @@ string holds no references.
 `substrings` moved because its slices are frame-placed too, and every one of
 them was being counted on the way out.
 
+## Two measurements that were wrong, and the loop I had written
+
+The row was still 1.48x node, so the next question was where the time went. The
+guess on offer was the representation again -- V8 answers `a + b` with a *cons
+string*, a tree node over both halves, and never copies until something reads
+the result. That guess was wrong, and two measurements had to be thrown away
+before it was.
+
+**The first was invalid.** A microbenchmark timing `build(20000)` in a loop
+reported 54us against node's 106, which would have meant we were already twice
+as fast. `build` is pure and its argument was a compile-time constant, so clang
+hoisted the call out of the timing loop: it measured one build amortized over
+two hundred. Taking the length as a parameter put it back to 150us, and the
+honest number was 1.36x behind, not 0.51x ahead.
+
+**The second found something real, in my own code.** `nts_round_up_pow2` was
+written as `while (at < n) at <<= 1`, which runs on *every append*, to ask
+whether the string still has room. O(log n) per append is O(n log n) to build a
+string -- most of it shifting a one upwards to rediscover a capacity that had
+not changed. Branchless, it is five instructions:
+
+    20000 appends   150us -> 120us     (node 112)
+
+**And the third was a floor I had argued too weakly.** Doubling from one spends
+an allocation on each of the first few units, and those are the units every
+short string has: a ninety-unit line of decoded text cost eight allocations to
+hold what one could. A grown string now starts at sixteen units -- sixteen bytes
+of slack on a narrow string, less than the header it hangs off:
+
+    20000 appends   120us -> 75us      (node 96) -- 0.79x, ahead
+    string-append   6 -> 2 allocations, below the floor `expected` argued
+
+That last line is the column doing its job. The floor said six with an argument
+from doubling out of one, the implementation reached two, and the suite refused
+it until the argument was rewritten. An argument weaker than the code is exactly
+what "below the floor" is for.
+
+## What `sds` has that we do not
+
+Asked whether to use antirez's `sds`, and the answer is no as a dependency and
+yes to two of its ideas.
+
+Not as a dependency: an `sds` is a `char *` with its header immediately before
+the data, and ours has to carry a descriptor pointer and a reference count that
+`sds` has no place for. A JavaScript string is UTF-16 code units with an O(1)
+length, and the narrow/wide pair we already have is V8's answer, not `sds`'s. On
+its headline feature -- an explicit `alloc` field -- we are ahead: capacity here
+is derived from an invariant and costs no bytes at all where `sds` spends four
+or eight.
+
+Its growth policy is better than what I wrote, though. Doubling without limit
+asks for two megabytes to hold a million and one units, and `sds` stops doubling
+at a threshold and grows in fixed chunks after it. Same threshold here, and the
+capacity stays a function of the length -- `cap(cap(n)) == cap(n)` at every
+probe -- so nothing else changes:
+
+    100M units   128M allocated -> 100.7M
+
+The other idea is worth keeping in view rather than taking: `sds` picks a header
+size from the length, three bytes where ours is twenty-four. Twenty-four bytes
+on a one-unit string is most of what a short string costs, and the short-string
+shape is where we are still behind.
+
 ## Where strings stand
 
-    node-utf8   3.14x -> 1.48x node      over the whole audit
-    substrings  2.22x -> 1.88x C++
+    node-utf8   3.14x -> 1.28x node      over the whole audit
+    substrings  2.22x -> 1.87x C++
+
+Still behind node on `node-utf8`, and the remaining gap is most likely the one
+thing this representation cannot answer: that benchmark builds a string and
+reads only its `length`, which a cons string gives in O(1) having copied
+nothing. A flat string copies each unit once. Which is right depends on whether
+the string is *used* -- indexed, compared, handed to C -- and for anything that
+touches the characters, flat wins and the rope has to flatten first. Measuring
+that trade is the next question, not assuming it.
 
 Twenty-two memory cases at both floors, two of them strings. What is left is the
 operations table: `padStart`, `padEnd`, `valueOf`, `isWellFormed` and

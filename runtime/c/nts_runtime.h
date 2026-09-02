@@ -475,6 +475,18 @@ void nts_value_release(NtsValue value);
  * pays is the slack every growable buffer pays. */
 #define NTS_GROWN 2u
 
+/* The smallest capacity a grown string takes, in code units. See
+ * `nts_round_up_pow2`: doubling from one costs a fresh allocation for each of
+ * the first few units, and those are the units every short string has. */
+#define NTS_STRING_FLOOR 16u
+
+/* Where doubling stops being the right shape and fixed chunks take over, in
+ * code units. Below this the slack is a few bytes and buys back an allocation;
+ * above it, doubling a string of a million units asks for two million. `sds`
+ * draws the line in the same place. */
+#define NTS_STRING_DOUBLE_TO (1u << 20)
+#define NTS_STRING_CHUNK (1u << 20)
+
 /* Elements of an array of references. Every reference is a pointer, so one
  * descriptor serves them all -- it describes the element's shape, not what the
  * element points at. `traced` is set, which is what a collector will read. */

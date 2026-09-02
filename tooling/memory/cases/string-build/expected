@@ -1,7 +1,8 @@
 ideal 1
-allocated 6
-because the same six the accumulator costs in `string-append`, and nothing for
-because the seventeen one-unit strings on the right.
+allocated 2
+because the same two the accumulator costs in `string-append` -- capacity 16,
+because then capacity 32 -- and nothing at all for the seventeen one-unit
+because strings on the right.
 because
 because `String.fromCharCode` yields exactly one code unit, whatever it is given:
 because the argument is truncated to sixteen bits. That is the easiest bound in

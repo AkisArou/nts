@@ -1,15 +1,22 @@
 ideal 1
-allocated 6
+allocated 2
 because seventeen appends, and the floor is argued before it is measured.
 because
-because Six allocations, not seventeen and not one. `out` is unique -- one
+because Two allocations, not seventeen and not one. `out` is unique -- one
 because local holds it and nothing else can -- so appending may grow it in
-because place, and growth that doubles reaches seventeen units in six steps:
-because capacities 1, 2, 4, 8, 16, 32, taken as the length passes 1, 2, 3, 5,
-because 9 and 17. That is amortized constant time per append, which is what
-because every growable buffer in every language gives, and it is what the
-because array beside it already gives -- `NtsArray` carries a capacity and
-because grows out of line for exactly this reason.
+because place, and growth that doubles is amortized constant time per append.
+because
+because Six was argued here first, from doubling out of one: capacities 1, 2,
+because 4, 8, 16, 32 as the length passes 1, 2, 3, 5, 9, 17. That argument was
+because measured and found weaker than the implementation, which is what this
+because column is for. Doubling from one spends an allocation on each of the
+because first few units, and those are the units every short string has, so a
+because grown string starts at sixteen. Seventeen appends then take capacity
+because 16 and capacity 32: two.
+because
+because Sixteen units is sixteen bytes of slack on a narrow string, less than
+because the header it hangs off, and it took the eight allocations a ninety-unit
+because line of decoded text used to cost down to four.
 because
 because Not one allocation, because nobody knows the final length. The trip
 because count is `16 + n` and `n` is a parameter. `flow::string_span` bounds a

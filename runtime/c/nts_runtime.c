@@ -1297,13 +1297,44 @@ NtsString *nts_concat(const NtsString *a, const NtsString *b) {
   return nts_concat_into(NULL, a, b);
 }
 
-/* The smallest power of two at or above `n`, and at least one. */
+/* The smallest capacity a grown string of `n` units gets: a power of two, and
+ * never below `NTS_STRING_FLOOR`.
+ *
+ * Branchless, and that is not a flourish: this runs on *every* append, to ask
+ * whether the string still has room. Written as a loop it was O(log n) per
+ * append and so O(n log n) to build a string of n units -- 150us where node
+ * took 110 for twenty thousand appends, most of it shifting a one upwards to
+ * rediscover a capacity that had not changed. */
 static uint32_t nts_round_up_pow2(uint32_t n) {
-  uint32_t at = 1u;
-  while (at < n) {
-    at <<= 1;
+  /* A floor, so that a short string is not built by doubling from one. Ninety
+   * code units -- a line of decoded text -- reached capacity through 1, 2, 4,
+   * 8, 16, 32, 64, 128: eight allocations to hold what one could. Starting at
+   * sixteen makes it two, and sixteen units is sixteen bytes of slack on a
+   * narrow string, which is less than the header it hangs off.
+   *
+   * The invariant survives it: this is still the capacity a length implies, so
+   * `capacity == nts_round_up_pow2(length)` still holds for every grown
+   * string. */
+  if (n <= NTS_STRING_FLOOR) {
+    return NTS_STRING_FLOOR;
   }
-  return at;
+  /* Doubling, but not for ever. Past a point it is the wrong shape: a string
+   * of 1M+1 units would take 2M, and the slack is no longer the few bytes that
+   * bought the allocations back. So growth becomes linear in fixed chunks,
+   * which is what `sds` does at the same threshold and for the same reason.
+   *
+   * The invariant holds either way -- this is still the capacity a length
+   * implies -- because both halves are functions of `n` alone. */
+  if (n > NTS_STRING_DOUBLE_TO) {
+    return (n + (NTS_STRING_CHUNK - 1u)) & ~(NTS_STRING_CHUNK - 1u);
+  }
+  n--;
+  n |= n >> 1;
+  n |= n >> 2;
+  n |= n >> 4;
+  n |= n >> 8;
+  n |= n >> 16;
+  return n + 1u;
 }
 
 /* How many code units this string can hold without moving. See `NTS_GROWN`. */
