@@ -2236,6 +2236,29 @@ enum Absence {
     Undefined,
 }
 
+/// Whether an erased value can be read back as this.
+///
+/// `Unerase` is a load out of the payload, so it needs a representation to load
+/// *as*. A `Void` has none -- there is nothing in the payload for `undefined`,
+/// the tag is the whole value -- and neither has a `Never`, an erased value, or
+/// a table.
+///
+/// Asked in two places, which is why it is a function rather than a `matches!`:
+/// [`FuncBuilder::narrowed`] reads back what the checker narrowed, and
+/// [`FuncBuilder::present_of`] reads back what a `?.` test established. The two
+/// have different licences and the same question about the destination.
+fn readable_back(ty: &HirType) -> bool {
+    matches!(
+        ty,
+        HirType::Float { .. }
+            | HirType::Int { .. }
+            | HirType::Bool
+            | HirType::Managed(
+                ManagedType::String | ManagedType::Object(_) | ManagedType::Array(_)
+            )
+    )
+}
+
 fn absence_of_member(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Absence> {
     match snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Null => Some(Absence::Null),
@@ -4287,7 +4310,11 @@ impl<'a> FuncBuilder<'a> {
     /// where the test succeeded. Emitting it anywhere the checker did not
     /// narrow would read a payload the tag does not describe -- a double out of
     /// a pointer -- which is silent. So the licence comes from `node_types` and
-    /// from nothing else, and there is exactly one call site.
+    /// from nothing else, at every one of the call sites: each passes the node
+    /// whose narrowed type it wants, and none of them names a type itself.
+    ///
+    /// [`FuncBuilder::present_of`] is the one read-back that does *not* come
+    /// from here, because its licence is different -- see it for why.
     fn narrowed(&mut self, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
         if self.values[value.0 as usize].ty != HirType::Erased {
             return Ok(value);
@@ -4316,15 +4343,7 @@ impl<'a> FuncBuilder<'a> {
         if want == HirType::Void {
             return Ok(value);
         }
-        if !matches!(
-            want,
-            HirType::Float { .. }
-                | HirType::Int { .. }
-                | HirType::Bool
-                | HirType::Managed(
-                    ManagedType::String | ManagedType::Object(_) | ManagedType::Array(_)
-                )
-        ) {
+        if !readable_back(&want) {
             return Err(self.unsupported(
                 id,
                 &format!("an `unknown` narrowed to {want:?}, which it cannot be read back as"),
@@ -10369,7 +10388,69 @@ impl<'a> FuncBuilder<'a> {
                 .ok_or_else(|| self.unsupported(member, "a computed property name"))?;
             return self.member_of(id, receiver, &name);
         };
-        self.lower_branching_value(id, absent, Branch::Absent, Branch::Member(receiver, member))
+        let present = self.present_of(object, receiver);
+        self.lower_branching_value(
+            id,
+            absent,
+            Branch::Absent,
+            Branch::Member(receiver, member, present),
+        )
+    }
+
+    /// What an erased receiver is, in the arm a `?.` has established it is
+    /// present.
+    ///
+    /// # Why this is not [`Self::narrowed`]
+    ///
+    /// That one reads back what the *checker* narrowed, and its licence is
+    /// `node_types`: it asks for the type of the very node being read. Here
+    /// there is no such node. The checker narrows `v` inside
+    /// `if (v !== null && v !== undefined)`, and it does not narrow anything
+    /// inside `v?.length` -- the only type it records for that expression is
+    /// the type of the whole thing, `number | undefined`, which says nothing
+    /// about the receiver.
+    ///
+    /// So the licence is this lowering's own: [`Self::absence_of`] emitted a
+    /// test of the tag against exactly the tags the receiver's type admits as
+    /// absences, and this runs in the arm where that test was false. What is
+    /// left is the union's non-absent members, and where those share one
+    /// representation, that is what the payload holds.
+    ///
+    /// # What it was worth
+    ///
+    /// Two refusals with different sentences and one cause. `v?.length` on a
+    /// `string | null | undefined` was refused as "`length` of something
+    /// without one", and `h?.value` on a `Held | null | undefined` as "a union
+    /// whose members lay their fields out differently" -- said of a union with
+    /// exactly one object in it. Both were the erased receiver reaching
+    /// [`Self::member_of`] still erased, while `Branch::Present` two arms away
+    /// had been reading the payload back all along.
+    ///
+    /// `None` where there is nothing to read back to: a receiver that was never
+    /// erased was never tagged, and a payload that is still several things
+    /// (`string | number | null`) stays erased in the present arm too. Both are
+    /// ordinary answers rather than refusals -- the first needs no unerase and
+    /// the second is refused, if at all, by the member read.
+    fn present_of(&self, object: NodeId, receiver: ValueId) -> Option<HirType> {
+        if self.values[receiver.0 as usize].ty != HirType::Erased {
+            return None;
+        }
+        let ty = *self.snapshot.node_types.get(&object)?;
+        let TypeKind::Union(members) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
+            return None;
+        };
+        let mut shared: Option<HirType> = None;
+        for member in members {
+            if absence_of_member(self.snapshot, *member).is_some() {
+                continue;
+            }
+            let member = self.represent(*member)?;
+            match &shared {
+                Some(existing) if *existing != member => return None,
+                _ => shared = Some(member),
+            }
+        }
+        shared.filter(readable_back)
     }
 
     /// A member of a receiver that is already lowered.
@@ -10614,10 +10695,20 @@ impl<'a> FuncBuilder<'a> {
                 let origin = self.origin(id);
                 Ok(self.push(OpKind::ConstUndefined, ty, origin))
             }
-            Branch::Member(receiver, member) => {
+            Branch::Member(receiver, member, present) => {
                 let name = self
                     .literal_name(member)
                     .ok_or_else(|| self.unsupported(member, "a computed property name"))?;
+                // Here and not before the branch. Reading the payload of a
+                // value that may be absent is the thing the test exists to
+                // prevent, and `evaluate` runs with the arm's block current.
+                let receiver = match present {
+                    Some(ty) => {
+                        let origin = self.origin(member);
+                        self.push(OpKind::Unerase { value: receiver }, ty, origin)
+                    }
+                    None => receiver,
+                };
                 self.member_of(id, receiver, &name)
             }
             // At the type the whole expression has, which is what `id` is.
@@ -14376,7 +14467,11 @@ struct CaseChain<'a> {
 /// A ternary's arms are expressions to lower inside their own blocks; a
 /// short-circuit's "untaken" arm is the left operand, already evaluated before
 /// the branch.
-#[derive(Clone, Copy)]
+///
+/// `Clone` and not `Copy`: `Member` carries a representation, which is a type
+/// and owns a `Box` for an array's element. Every branch is built where it is
+/// used and moved once, so nothing here wanted the copy.
+#[derive(Clone)]
 enum Branch {
     Expression(NodeId),
     Value(ValueId),
@@ -14389,7 +14484,15 @@ enum Branch {
     ///
     /// The receiver is evaluated before the branch and read inside it, which is
     /// what keeps `a?.b` from evaluating `a` twice.
-    Member(ValueId, NodeId),
+    ///
+    /// The third field is what the receiver *is* once the branch has
+    /// established it is present, and `None` where it was already that. A
+    /// pointer carries its own absence, so a `string | null` receiver is a
+    /// string in the arm that tested it and there is nothing to do; two
+    /// absences needed a tag, and the payload has to be read back out of it
+    /// before anything can ask for a member. See
+    /// [`FuncBuilder::present_of`].
+    Member(ValueId, NodeId, Option<HirType>),
     /// A value the branch has established is neither `null` nor `undefined`.
     ///
     /// Distinct from [`Self::Value`] because the distinction is a soundness

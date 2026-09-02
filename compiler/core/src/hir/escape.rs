@@ -256,6 +256,29 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
 /// The chain rather than one step, because guessing that the lowering never
 /// emits an erasure of an erasure costs correctness and following it costs
 /// nothing.
+///
+/// # Every site, and why
+///
+/// This function existed and four places did not call it, marking the value
+/// with a bare `insert` instead. One of them was `Return`, and it produced this
+/// for a `Held | null | undefined`:
+///
+/// ```c
+/// v7 = &v7_frame;                                  // placed in the frame
+/// v9 = nts_value_of_reference((NtsHeader *)v7, NTS_TAG_OBJECT);
+/// v11 = v7->label;
+/// nts_release((NtsHeader *)v11);                   // ...so its fields are walked
+/// return v9;                                       // ...and the caller gets both
+/// ```
+///
+/// A pointer into a dead frame *and* its one reference field freed before the
+/// caller reads it, because the erasure looked like an ordinary value and the
+/// object under it looked frame-local. The same function returning a plain
+/// `Held | null` was correct: one absence is a pointer, so there is no erasure
+/// and nothing to follow.
+///
+/// So the rule is that no site marks a value escaped by hand. There is one door
+/// and this is it.
 fn escaped(escapes: &mut Escapes, func: &Func, value: ValueId) {
     let mut at = value;
     loop {
@@ -386,7 +409,14 @@ fn analyze(
                         gone_into_the_unknown(&mut escapes, func, callee, args);
                         continue;
                     };
-                    escape_into(&mut escapes, args, targets, arity, escaping_params);
+                    escape_into(
+                        &mut escapes,
+                        func,
+                        args,
+                        targets,
+                        arity,
+                        escaping_params,
+                    );
                     let one = matches!(callee, Callee::Direct(_));
                     for target in targets {
                         for slot in &handed_back[*target] {
@@ -418,8 +448,8 @@ fn analyze(
                 // because the resumption was writing through a dangling
                 // pointer.
                 OpKind::Suspend { promise, frame, .. } => {
-                    escapes.values.insert(*promise);
-                    escapes.values.insert(*frame);
+                    escaped(&mut escapes, func, *promise);
+                    escaped(&mut escapes, func, *frame);
                 }
                 _ => {}
             }
@@ -496,7 +526,7 @@ fn escape_through(
     match terminator {
         Terminator::Return(Some(value)) => {
             if !matches!(func.values[value.0 as usize].kind, OpKind::Param(_)) {
-                escapes.values.insert(*value);
+                escaped(escapes, func, *value);
             }
         }
         Terminator::Jump { target, args } => {
@@ -620,13 +650,13 @@ fn hand_on(
                 .is_some_and(|param| still_live_where_it_is_made(func, live, *argument, *param));
         match params.get(slot) {
             Some(_) if reused => {
-                escapes.values.insert(*argument);
+                escaped(escapes, func, *argument);
             }
             Some(param) => carried.push((*param, *argument)),
             // An argument with no parameter to land in is one this does not
             // model, and what is not modelled is assumed to escape.
             None => {
-                escapes.values.insert(*argument);
+                escaped(escapes, func, *argument);
             }
         }
     }
@@ -743,6 +773,7 @@ fn put_where_it_went(
 
 fn escape_into(
     escapes: &mut Escapes,
+    func: &Func,
     args: &[ValueId],
     targets: &[usize],
     arity: &[usize],
@@ -756,7 +787,7 @@ fn escape_into(
             slot >= arity[*target] || escaping_params[*target].contains(&at)
         });
         if escaping {
-            escapes.values.insert(*argument);
+            escaped(escapes, func, *argument);
         }
     }
 }

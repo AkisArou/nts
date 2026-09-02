@@ -119,6 +119,62 @@ export function narrowedByTruth(n: number): number {
   return v ? v.length : -3;
 }
 
+// `?.` directly on a two-absence union, which was refused until now.
+//
+// The receiver is a tag and a payload, and the arm the test establishes is the
+// arm that may read the payload back out. Lowering did not: the erased receiver
+// reached the member read still erased, and came back refused with two
+// different sentences for one cause -- "`length` of something without one" for
+// a string, and "a union whose members lay their fields out differently" for an
+// object, said of a union with exactly one object in it. Narrowing by hand
+// worked all along, which is what made this look like a representation problem
+// rather than a missing unerase on one path.
+
+class Held {
+  value: number;
+  label: string;
+  constructor(v: number) {
+    this.value = v;
+    this.label = "h" + String(v);
+  }
+}
+
+function heldOrEither(n: number): Held | null | undefined {
+  if (n < 10) return null;
+  if (n < 20) return undefined;
+  return new Held(n);
+}
+
+function listOrEither(n: number): number[] | null | undefined {
+  if (n < 10) return null;
+  if (n < 20) return undefined;
+  return [n, n + 1, n + 2];
+}
+
+export function optionalThroughTwoAbsences(n: number): number {
+  const text = either(n);
+  const held = heldOrEither(n);
+  const list = listOrEither(n);
+  return (
+    (text?.length ?? -1) * 1000 +
+    (held?.value ?? -1) * 100 +
+    (list?.length ?? -1) * 10 +
+    // The result is itself a two-absence question: `?.` produces `undefined`
+    // for both, which is what makes `null?.x === undefined` true in node.
+    (text?.length === undefined ? 2 : 0) +
+    (text?.length === null ? 4 : 0) +
+    n * 0
+  );
+}
+
+// A member whose own type is a reference, so the unerase feeds something that
+// is counted rather than something that is a double.
+export function optionalStringMember(n: number): string {
+  const held = heldOrEither(n);
+  const text = either(n);
+  return (held?.label ?? "-") + ":" + String(text?.length ?? -1);
+}
+
 // A Map keeps them as separate keys. That is `SameValueZero`, which compares
 // like `===` and not like `==` -- so a table given both has two entries, and
 // before this it had one.

@@ -26,6 +26,21 @@
 # of reference operations. `actual - ideal` is the work queue. Without the third
 # number this is a measurement; with it, it is a claim that can be wrong.
 #
+# Both columns are now at their floor on every case, which is what the sentence
+# above warned about, twice over. So the work queue is empty and neither column
+# ratchets *upward* any more -- and being above a floor used to be a note, which
+# meant neither ratcheted downward either: a case could double its allocations
+# and this exited green with a number nobody read. Above a floor is now a
+# failure. That gives the suite back the half of a ratchet it can still do,
+# which is refusing a regression; the other half -- marking progress -- needs a
+# question these two columns no longer ask, and there is not one here yet.
+#
+# What it costs: a case whose floor is an argument the compiler has not yet
+# reached cannot be committed. That is the ratchet working rather than a defect
+# in it -- `string-append` and `readonly-anchor` were both written above their
+# floor and closed in the same sitting -- but it is a real constraint on the
+# order the work has to happen in, so it is written down rather than discovered.
+#
 # And every count is paired with a leak check, because zero operations is
 # trivially reachable and catastrophically wrong. A case that counts less and
 # leaks fails. That check earned itself on its second day: `store-elsewhere`
@@ -120,7 +135,7 @@ for dir in tooling/memory/cases/*/; do
     over=""
     [ "$a" -gt "$ideal" ] && over="$((a - ideal)) ops"
     [ -n "$floor" ] && [ "$alloc" -gt "$floor" ] && over="${over:+$over, }$((alloc - floor)) allocations"
-    [ -n "$over" ] && note="$over above"
+    [ -n "$over" ] && { note="$over above"; fail=1; }
   fi
 
   ratio="--"
@@ -133,4 +148,4 @@ if [ "$fail" -ne 0 ]; then
   printf '\n\033[31mFAILED\033[0m: memory\n'
   exit 1
 fi
-printf '\n\033[32mgreen\033[0m: nothing leaked, no answer changed, nothing below a floor\n'
+printf '\n\033[32mgreen\033[0m: nothing leaked, no answer changed, every case at both floors\n'

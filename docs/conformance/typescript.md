@@ -101,7 +101,7 @@ counter, not by reading the emitted C.
 | ✅ | `new` | user classes, `Array`, typed arrays |
 | ✅ | `??` | the absence test, not the truthiness one — `0 ?? 1` is `0` |
 | ✗ | `??=`, `\|\|=`, `&&=` | |
-| ✅ | `?.` | one link; a chain after an optional access is refused and named |
+| ✅ | `?.` | one link, through either absence or both; a chain after an optional access is refused and named |
 | ✗ | `?.()`, `?.[]` | optional call and optional index |
 | ✗ | spread | `[...a]`, `{...o}` |
 | ✗ | `delete`, `void`, comma | `in` is named above |
@@ -454,12 +454,40 @@ parameter is the function type. Same TypeScript type, two representations, and
 only one of them was ever asked. The sweep now runs every cell twice, once on a
 local and once on a value that arrived as a parameter.
 
-A gap this opened, still real:
+A gap this opened, and what closing it cost:
 
-- `v?.length` directly on a two-absence union is refused — the receiver is
-  erased and the present branch does not unerase it. Narrowing first works, in
-  all three forms: `v !== null && v !== undefined`, `typeof v === "string"`, and
-  plain truthiness.
+`v?.length` directly on a two-absence union was refused. The receiver is erased,
+and the arm the test establishes is the arm that may read the payload back out —
+which lowering did not do, so the member read got a tag where it wanted a
+string. Narrowing by hand worked all along (`v !== null && v !== undefined`,
+`typeof v === "string"`, plain truthiness), which is what made it look like a
+representation problem rather than a missing unerase on one path.
+
+It was two refusals with different sentences and one cause: "`length` of
+something without one" for a string receiver, and "a union whose members lay
+their fields out differently" for an object one — said of a union containing
+exactly one object.
+
+The licence for the read-back is *not* the checker's. It narrows `v` inside an
+`if`; it narrows nothing inside `v?.length`, where the only type it records is
+`number | undefined` for the whole expression. It is this lowering's own: the
+branch tests the tag against exactly the tags the receiver's type admits as
+absences, so in the other arm what is left is the union's non-absent members,
+and where those share a representation that is what the payload holds.
+
+Measured across the node profile: **5,884 → 5,875 refusal sites**. 28 closed —
+`err.stack` (15), `res.setHeader` (5), `stream.isTTY` (4),
+`immediate._onImmediate` (4) — and 19 uncovered one step behind them, where the
+value that now arrives meets a second wall: `String()` of an erased type (15)
+and a method with no declaration in the hierarchy (4). Most of a closed refusal
+is a moved one, and the count says so.
+
+Closing it also surfaced a lifetime bug that had nothing to do with `?.` and
+everything to do with two absences. Returning a *class* through
+`T | null | undefined` handed the caller a pointer into a dead stack frame with
+the object's fields already freed, because an erasure did not count as an escape
+on a return. No example returned an object through two absences until the case
+written for the refusal above did. Record 0032.
 
 ### An absent literal in an argument
 
@@ -1628,21 +1656,27 @@ Measured, not assumed — three of these rows were wrong on the first pass.
   `toString` on a number. Absent: `toFixed`, `toPrecision`, `parseFloat`,
   `parseInt`.
 - **`String.prototype`**: `at charAt charCodeAt codePointAt concat endsWith
-  includes indexOf lastIndexOf padEnd padStart repeat replace replaceAll slice
-  split startsWith substring toString trim trimEnd trimStart valueOf length`,
-  and the statics `fromCharCode` and `fromCodePoint`. This list said `at`,
-  `split`, `replace` and `trim` were absent long after they were not.
+  includes indexOf isWellFormed lastIndexOf padEnd padStart repeat replace
+  replaceAll slice split startsWith substring toString toWellFormed trim
+  trimEnd trimStart valueOf length`, and the statics `fromCharCode` and
+  `fromCodePoint`. This list said `at`, `split`, `replace` and `trim` were
+  absent long after they were not.
 
   Absent, and each for its own reason rather than for want of writing it:
   `toLowerCase`, `toUpperCase`, the `toLocale` pair and `normalize` want
   Unicode case-mapping and normalization tables, which are data rather than
   code; `localeCompare` wants ICU; `match`, `matchAll`, `search` and the
   *pattern* forms of `replace` and `split` want a regular expression engine,
-  which is refused as its own feature; `String.raw` waits on tagged templates;
-  `isWellFormed` and `toWellFormed` are ES2024 and this compiler's programs are
-  ES2022, so nothing could call them — they were written, could not be reached,
-  and were taken out again. Indexing (`s[0]`) is refused as "indexing a
-  representable type, which is not an array".
+  which is refused as its own feature; `String.raw` waits on tagged templates.
+  Indexing (`s[0]`) is refused as "indexing a representable type, which is not
+  an array".
+
+  `isWellFormed` and `toWellFormed` are ES2024, and this paragraph said for one
+  commit that they were written, could not be reached, and were taken out again
+  because the fixtures were pinned to ES2022. That was true of the fixtures and
+  is what got the target changed: the programs are ESNext now and both are back,
+  in the differential. A target is not a detail of the build — it decides which
+  language the compiler is a compiler for.
 - **`Array.prototype`**: `at fill forEach includes indexOf lastIndexOf map pop
   push reduce reverse slice length` on an array of numbers, and `at includes
   indexOf pop push reverse slice length` — plus `join` — on an array of
