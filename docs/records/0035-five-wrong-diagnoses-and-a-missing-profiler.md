@@ -105,9 +105,35 @@ so that is a bad trade made globally to move one row, and it is **refused**.
 The profile also bounds what any allocation work could buy: `nts_str_raw` and
 its frees are 19.5% of the run, so removing *every* allocation leaves the row at
 roughly 1.07x node. The rest is spread across the compiled decoder and encoder
-(47.8% between them) and the append and char-code helpers (26.6%). There is no
-single fix here, which is itself the answer to the question this record opened
-with.
+(47.8% between them) and the append and char-code helpers (26.6%).
+
+## Three of the eight, and they were free
+
+Written here first as "there is no single fix", which was wrong within the hour.
+The profile said eight allocations per decoded string; **three of them are the
+emoji**, and they cost nothing to remove.
+
+`String.fromCharCode(hi, lo)` -- the surrogate pair every astral character goes
+through -- folds an n-ary call into a chain of concatenations. Two things had to
+meet for that pair to live in a frame, and neither knew about the other:
+
+- `flow::string_span` had no arm for `nts_string_from_char_code`, so a
+  concatenation *of* two of them could not be bounded. `hir::frame_capacity` has
+  said "exactly one code unit" about that helper since it was written; the fact
+  simply was not where the other pass could read it.
+- the fold emitted `BinOp::Concat`, and `frame_capacity` reads a **call's**
+  callee. A binary operator has nowhere to put storage. The emitter renders both
+  spellings as `nts_concat`, so the call form costs nothing and can carry a
+  frame.
+
+    node-utf8    47.89 us -> 43.88 us     1.31x node -> 1.20x
+
+An 8.4% row, from two facts that existed in different modules. Invisible to
+every probe built for this record, and obvious in the profile in a minute.
+
+There is still no *second* fix of that size: what remains is the 47.8% in the
+compiled decoder and encoder, and that is a codegen question rather than a
+string one.
 
 ## What this record is actually worth
 

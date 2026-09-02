@@ -12160,12 +12160,19 @@ impl<'a> FuncBuilder<'a> {
                 for argument in rest {
                     let operand = self.lower_expression(*argument)?;
                     let unit = self.runtime_call(name, vec![operand], ty.clone(), origin.clone());
-                    folded = self.push(
-                        OpKind::Binary {
-                            op: BinOp::Concat,
-                            lhs: folded,
-                            rhs: unit,
-                        },
+                    // The *call* spelling of concatenation, not `BinOp::Concat`.
+                    // The emitter renders both as `nts_concat`, but only a call
+                    // carries `frame`: `hir::frame_capacity` reads a call's
+                    // callee and a binary operator has nowhere to put storage.
+                    //
+                    // Each side here is exactly one code unit, so the pair is
+                    // two and fits a frame slot -- which `flow::string_span`
+                    // can now say, because it knows what `fromCharCode` returns.
+                    // As a binop this was a heap allocation: three of the eight
+                    // `node-utf8` makes per decoded string, for its three emoji.
+                    folded = self.runtime_call(
+                        "nts_concat",
+                        vec![folded, unit],
                         ty.clone(),
                         origin.clone(),
                     );

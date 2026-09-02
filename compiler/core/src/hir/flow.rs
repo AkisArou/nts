@@ -580,8 +580,20 @@ pub(super) fn string_span(func: &Func, value: ValueId, depth: u32) -> Option<Fac
         } => match (name.as_str(), args.first()) {
             // Both clamp into the receiver, so neither can be longer than it.
             ("nts_str_substring" | "nts_str_slice", Some(&source)) => upto(span(source)?),
-            // One code unit, or none where the index is out of range.
-            ("nts_str_char_at", _) => upto(1.0),
+            // At most one code unit, for two different reasons: `charAt` clamps
+            // into the receiver and yields none where the index is out of
+            // range, while `fromCharCode` truncates its argument to sixteen
+            // bits and always yields exactly one.
+            //
+            // `hir::frame_capacity` has known the second since it was written.
+            // Saying it *here* too is what lets a **concatenation** of two of
+            // them be bounded -- and `String.fromCharCode(hi, lo)`, the
+            // surrogate pair every astral character goes through, was three of
+            // the eight allocations `node-utf8` made per decoded string.
+            ("nts_str_char_at" | "nts_string_from_char_code", _) => upto(1.0),
+            // One or two: a code point above the basic plane is a surrogate
+            // pair, which is what makes this a different function.
+            ("nts_string_from_code_point", _) => upto(2.0),
             // `a.concat(b)`. The `a + b` spelling is a `BinOp::Concat` and is
             // handled above.
             ("nts_concat", _) => match (args.first(), args.get(1)) {
