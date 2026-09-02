@@ -135,6 +135,7 @@ counter, not by reading the emitted C.
 | ✅ | generics, including constrained; monomorphized per instantiation |
 | ✅ | higher-order functions and closures that only *read* what they capture |
 | ✅ | a **named function used as a value** — one static instance, so identity holds |
+| ✅ | a function held in a **field**, on a class or an object literal, called through it. `f(x): number` is a method the dispatch table holds and `f: (x) => number` is storage; the checker says which, and asking the *type* instead cannot tell them apart |
 | ✅ | recursion |
 | ✅ | `async`/`await` — under both providers |
 | ✅ | type predicates (`x is T`) and `asserts x is T` |

@@ -104,3 +104,45 @@ export function bothKinds(n: number): number {
   const base = n;
   return twice(inc, n) + twice((x) => x + base, n) * 1000;
 }
+
+// A function held in a *field*, which is storage rather than dispatch.
+//
+// `f(x: number): number` and `f: (x: number) => number` declare members of the
+// same type and are not the same thing: the first is a method the dispatch
+// table holds, the second is a field holding a closure. The checker says which
+// -- `MemberKind` -- and the layout used to ask the *type* instead, which
+// cannot tell them apart. Both were dropped, so reading one answered "`apply`,
+// which `Ops` does not declare": a message about the type, for a field the
+// compiler had removed.
+class Ops {
+  apply: (x: number) => number;
+  scale: number;
+  constructor(apply: (x: number) => number, scale: number) {
+    this.apply = apply;
+    this.scale = scale;
+  }
+}
+
+export function throughAField(n: number): number {
+  const ops = new Ops((x) => x * 2, 10);
+  return ops.apply(n) * ops.scale;
+}
+
+// The field holds a closure that captured something, so what is stored is a
+// pointer to an object with a field of its own rather than a bare code pointer.
+export function throughAFieldCapturing(n: number): number {
+  const base = n * 3;
+  const ops = new Ops((x) => x + base, 1);
+  return ops.apply(4);
+}
+
+// The same member on an object literal, which is the shape that reaches for it
+// most often.
+interface Handler {
+  handle: (x: number) => number;
+}
+
+export function throughALiteral(n: number): number {
+  const h: Handler = { handle: (x) => x * 7 };
+  return h.handle(n);
+}

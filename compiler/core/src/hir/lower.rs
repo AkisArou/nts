@@ -2585,21 +2585,15 @@ fn inherited_typed_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirT
 
 /// Whether a type declares storage of its own.
 ///
-/// A method is a property whose type is a function, and an accessor is a call:
-/// neither is a field. `own` is what separates what the class wrote from what
-/// the flattened list inherited.
-fn declares_storage(
-    snapshot: &SemanticSnapshot,
-    properties: &[nts_semantic_schema::PropertyRecord],
-) -> bool {
-    properties.iter().any(|property| {
-        property.own
-            && property.accessor.is_none()
-            && !matches!(
-                snapshot.types.get(property.ty.0 as usize).map(|r| &r.kind),
-                Some(TypeKind::Function(_))
-            )
-    })
+/// Neither a method nor an accessor is a field, and `MemberKind` says which is
+/// which. It used to be asked of the *type* -- "a property whose type is a
+/// function" -- which cannot tell a method from a field holding a closure.
+/// `own` is what separates what the class wrote from what the flattened list
+/// inherited.
+fn declares_storage(properties: &[nts_semantic_schema::PropertyRecord]) -> bool {
+    properties
+        .iter()
+        .any(|property| property.own && property.kind.is_stored())
 }
 
 fn representation_within(
@@ -2763,7 +2757,7 @@ fn representation_of(
         // nowhere to put one -- that is a real layout question and not this
         // one.
         TypeKind::Object { properties } => match inherited_typed_array(snapshot, ty) {
-            Some(element) if !declares_storage(snapshot, properties) => {
+            Some(element) if !declares_storage(properties) => {
                 HirType::Managed(ManagedType::Array(Box::new(element)))
             }
             _ => HirType::Managed(ManagedType::Object(ty)),
@@ -9499,19 +9493,19 @@ impl<'a> FuncBuilder<'a> {
             if provided.is_some() && !property.own {
                 continue;
             }
-            // An accessor looks like a property and *is* a call: `o.x` where
-            // `x` is a getter runs code. It has no storage, so it is not a
-            // field -- the same reason a method is not one.
-            if property.accessor.is_some() {
-                continue;
-            }
-            if matches!(
-                self.snapshot
-                    .types
-                    .get(property.ty.0 as usize)
-                    .map(|record| &record.kind),
-                Some(TypeKind::Function(_))
-            ) {
+
+            // Only a field is laid out. An accessor looks like a property and
+            // *is* a call -- `o.x` where `x` is a getter runs code -- and a
+            // method is a call the dispatch table holds.
+            //
+            // What used to stand here skipped every property whose *type* was a
+            // function type, which is a method and a function-valued field
+            // together, because the type cannot tell them apart. Dropping the
+            // field silently was worse than refusing it: the member the program
+            // wrote was not in the layout, so reading it answered "`twice`,
+            // which `Ops` does not declare" -- a message about the type, for a
+            // field this compiler had removed.
+            if !property.kind.is_stored() {
                 continue;
             }
             // A reference field is a pointer. Under NoGC nothing is ever freed,
@@ -9538,9 +9532,15 @@ impl<'a> FuncBuilder<'a> {
             // has no layout but which nothing ever reads still emits and still
             // runs -- so the wider fix is its own decision, with the silent
             // drop in the emitter as its other half.
+            //
+            // A *function* type is asked for too, and safely: `layout_of`
+            // constructs one for it rather than deriving it -- a signature has
+            // no fields, because two closures of one type differ by what they
+            // captured -- so the call cannot refuse anything. It is the general
+            // rule for exactly the case where the general rule is free.
             if let HirType::Managed(ManagedType::Object(inner)) = &field_ty
                 && *inner != ty
-                && self.is_tuple(*inner)
+                && (self.is_tuple(*inner) || self.is_a_signature(*inner))
             {
                 self.layout_of(id, *inner)?;
             }
@@ -9711,6 +9711,14 @@ impl<'a> FuncBuilder<'a> {
         };
         self.layouts.push(layout.clone());
         Ok(layout)
+    }
+
+    /// Whether a type is a call signature rather than something with fields.
+    fn is_a_signature(&self, ty: TypeId) -> bool {
+        self.snapshot
+            .types
+            .get(ty.0 as usize)
+            .is_some_and(|record| matches!(record.kind, TypeKind::Function(_)))
     }
 
     fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {
@@ -11603,6 +11611,22 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         let receiver = self.lower_expression(callee_node)?;
+        self.call_through_closure(id, callee_node, receiver, arguments)
+    }
+
+    /// The call itself, given the closure value already in hand.
+    ///
+    /// Separate because there are two ways to come by one. `f(x)` lowers the
+    /// name; `o.f(x)` where `f` is a *field* has already lowered `o` and loaded
+    /// the field out of it, and lowering the property access again would
+    /// evaluate the receiver twice.
+    fn call_through_closure(
+        &mut self,
+        id: NodeId,
+        callee_node: NodeId,
+        receiver: ValueId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
         let HirType::Managed(ManagedType::Object(receiver_ty)) =
             self.values[receiver.0 as usize].ty
         else {
@@ -13013,6 +13037,30 @@ impl<'a> FuncBuilder<'a> {
         // than a diagnostic here. `toString` is a real member of the declared
         // `Error` and is not one this compiler provides, which is the same
         // shape as reading `.stack`.
+        // A *field* holding a closure, called. `o.f(x)` where `f: (x) => y` is
+        // storage, not a method: nothing declares it in the hierarchy because
+        // there is nothing to declare, and the value to call is in the object.
+        //
+        // Asked before the hierarchy, because a name cannot be both: a method
+        // is not in the layout and a field is not in the dispatch table.
+        if let Some(layout) = self.layout_of(id, type_id).ok()
+            && let Some(field) = layout.index_of(&member_name)
+            && let Some(declared) = layout.fields.get(field as usize)
+            && matches!(declared.ty, HirType::Managed(ManagedType::Object(_)))
+        {
+            let field_ty = declared.ty.clone();
+            let origin = self.origin(member);
+            let held = self.push(
+                OpKind::FieldGet {
+                    object: receiver,
+                    field,
+                },
+                field_ty,
+                origin,
+            );
+            return self.call_through_closure(id, member, held, arguments);
+        }
+
         let Some(declaring) = self.hierarchy.declaring(type_id, &member_name) else {
             return Err(self.unsupported(
                 id,

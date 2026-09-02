@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 11;
+pub const SCHEMA_VERSION: u32 = 12;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -461,14 +461,46 @@ pub struct PropertyRecord {
     /// Changes layout: an optional property needs a presence bit or an undefined
     /// slot, so it cannot share a representation with a required one.
     pub optional: bool,
-    /// Set when the member is an accessor rather than a field.
-    pub accessor: Option<Accessor>,
+    /// What the member is, which is what decides whether it has storage.
+    pub kind: MemberKind,
     /// Declared on this type rather than inherited.
     ///
     /// The checker returns a flattened member list, so without this a backend
     /// cannot tell `Circle.radius` from `Circle.id` — and emitting an inherited
     /// field as an own one duplicates the superclass's storage.
     pub own: bool,
+}
+
+/// What a member of a type is.
+///
+/// One question with one answer, rather than a flag per kind. The three are
+/// mutually exclusive and only one of them has storage, which is the thing every
+/// reader actually wants to know.
+///
+/// Telling a method from a field needs this, and the *type* cannot do it:
+/// `f(x: number): number` and `f: (x: number) => number` declare members of the
+/// same type and are not the same thing. The first is dispatched and has no
+/// storage; the second is a field holding a closure. Reading only the type sees
+/// a function either way, which is why every function-typed property was once
+/// dropped from the layout, methods and fields together -- and reading one
+/// answered "`twice`, which `Ops` does not declare", a message about the type
+/// for a field the compiler had removed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MemberKind {
+    /// Storage. The only one of the three that is laid out.
+    Field,
+    /// A call that looks like a load.
+    Accessor(Accessor),
+    /// A call the dispatch table holds.
+    Method,
+}
+
+impl MemberKind {
+    /// Whether this member is laid out in the object.
+    #[must_use]
+    pub fn is_stored(self) -> bool {
+        matches!(self, Self::Field)
+    }
 }
 
 /// The value of a literal type.

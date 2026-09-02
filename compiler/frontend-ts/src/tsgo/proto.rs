@@ -522,6 +522,14 @@ pub mod check_flags {
 
 /// `ast.SymbolFlags`, for the bits decomposition reads.
 pub mod symbol_flags {
+    /// `f(x: number): number` on a type, as against `f: (x: number) => number`.
+    ///
+    /// TypeScript itself draws this line and a backend has to: a method has no
+    /// storage and lives in the dispatch table, and a property whose type
+    /// happens to be a function is an ordinary field holding a closure. Both
+    /// arrive as a property whose type is a function type, so the type cannot
+    /// tell them apart and this flag is the only thing that can.
+    pub const METHOD: u32 = 1 << 13;
     pub const GET_ACCESSOR: u32 = 1 << 15;
     pub const SET_ACCESSOR: u32 = 1 << 16;
     /// Declared `x?: T`.

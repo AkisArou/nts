@@ -576,8 +576,10 @@ impl<'a> Decomposer<'a> {
                     readonly: symbol.check_flags & check_flags::READONLY != 0
                         || Self::declared_readonly(snapshot, written_name(&symbol.name)),
                     optional: symbol.flags & symbol_flags::OPTIONAL != 0,
-                    // A getter is a call, not a load.
-                    accessor: accessor_of(symbol.flags),
+                    // A getter is a call that looks like a load, a method is
+                    // a call the dispatch table holds, and only a field has
+                    // storage.
+                    kind: member_kind(symbol.flags),
                     own: own.contains(written_name(&symbol.name)),
                     name: written_name(&symbol.name).to_owned(),
                     ty,
@@ -1192,14 +1194,16 @@ fn written_name(interned: &str) -> &str {
     }
 }
 
-fn accessor_of(flags: u32) -> Option<nts_semantic_schema::Accessor> {
+fn member_kind(flags: u32) -> nts_semantic_schema::MemberKind {
+    use nts_semantic_schema::{Accessor, MemberKind};
     let get = flags & symbol_flags::GET_ACCESSOR != 0;
     let set = flags & symbol_flags::SET_ACCESSOR != 0;
     match (get, set) {
-        (true, true) => Some(nts_semantic_schema::Accessor::GetSet),
-        (true, false) => Some(nts_semantic_schema::Accessor::Get),
-        (false, true) => Some(nts_semantic_schema::Accessor::Set),
-        (false, false) => None,
+        (true, true) => MemberKind::Accessor(Accessor::GetSet),
+        (true, false) => MemberKind::Accessor(Accessor::Get),
+        (false, true) => MemberKind::Accessor(Accessor::Set),
+        (false, false) if flags & symbol_flags::METHOD != 0 => MemberKind::Method,
+        (false, false) => MemberKind::Field,
     }
 }
 

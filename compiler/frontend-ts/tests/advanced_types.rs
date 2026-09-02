@@ -7,7 +7,7 @@
 
 use camino::Utf8Path;
 use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
-use nts_semantic_schema::{Accessor, SemanticSnapshot, TypeKind};
+use nts_semantic_schema::{Accessor, MemberKind, SemanticSnapshot, TypeKind};
 
 fn snapshot() -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
@@ -80,10 +80,10 @@ fn accessors_are_distinguished_from_fields() {
         .expect("the Box instance type");
 
     let get = |name: &str| box_type.iter().find(|p| p.name == name).unwrap();
-    assert_eq!(get("value").accessor, Some(Accessor::GetSet));
+    assert_eq!(get("value").kind, MemberKind::Accessor(Accessor::GetSet));
     assert_eq!(
-        get("plain").accessor,
-        None,
+        get("plain").kind,
+        MemberKind::Field,
         "a plain field is not an accessor"
     );
 }
