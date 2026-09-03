@@ -674,6 +674,9 @@ NTS_READS_ONLY NtsValue nts_map_value_at(const NtsMap *map, double at);
 NTS_READS_ONLY double nts_str_point_width(const NtsString *s, double at);
 
 NTS_READS_ONLY double nts_str_code_point_at(const NtsString *s, double at);
+/* The same search, from somewhere other than the start. */
+NTS_READS_ONLY double
+nts_str_index_of_from(const NtsString *s, const NtsString *needle, double from);
 NTS_READS_ONLY double nts_str_index_of(const NtsString *s,
                                        const NtsString *needle);
 NTS_READS_ONLY double nts_str_last_index_of(const NtsString *s,
@@ -843,6 +846,12 @@ NTS_READS_ONLY double nts_str_char_code_at_fn(const NtsString *s, double at);
  * test with a short circuit between them, which is why this is a function
  * rather than something a backend inlines. */
 NTS_READS_ONLY bool nts_string_truthy(const NtsString *s);
+/* `nts_value_truthy` with a name to call. See the definition.
+ *
+ * `NTS_READS_ONLY` like `nts_string_truthy`, and for the same reason: an empty
+ * string is falsy however present it is, so this reads the length -- and reads
+ * nothing else, and writes nothing. */
+NTS_READS_ONLY bool nts_value_truthy_fn(NtsValue value);
 uint32_t nts_to_uint32_fn(double x);
 
 NtsString *nts_number_to_string(double x);

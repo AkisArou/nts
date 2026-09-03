@@ -297,3 +297,41 @@ export function fromNames(n: number): string {
   copy.push("r");
   return copy.join(",") + ":" + names.join(",");
 }
+
+// `const xs = []` with no annotation, which TypeScript calls an *evolving*
+// array: it is `never[]` where it is written, because with no elements and no
+// annotation the checker has nothing to infer from yet, and it fills that in
+// from the pushes as it walks.
+//
+// So the type at the declaration is the one that says nothing, and every later
+// mention carries what it evolved to. Reading one of those back is the whole
+// feature; repeating the inference here would be a second answer to a question
+// that already has one.
+export function evolvedStrings(n: number): string {
+  const parts = [];
+  for (let i = 0; i < 3 + (n - n); i++) {
+    parts.push("p" + String(i));
+  }
+  return parts.join("/") + ":" + String(parts.length);
+}
+
+export function evolvedNumbers(n: number): number {
+  const nums = [];
+  for (let i = 0; i < 4 + (n - n); i++) {
+    nums.push(i * 2 + n);
+  }
+  let total = 0;
+  for (let i = 0; i < nums.length; i++) {
+    total = total + nums[i]!;
+  }
+  return total;
+}
+
+// Pushed in a branch, so the array is empty on one path and not on the other.
+export function evolvedConditionally(n: number): number {
+  const kept = [];
+  if (n > 5) {
+    kept.push(n);
+  }
+  return kept.length * 100 + (kept[0] ?? -1);
+}

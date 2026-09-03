@@ -72,9 +72,9 @@ static SIGNATURES: &[Declared] = &[
     ("nts_array_unshift_ref", &[None, None], Some(HirType::Float { bits: 64 })),
     ("nts_bigint_as_intn", &[Some(HirType::Float { bits: 64 }), Some(HirType::BigInt)], Some(HirType::BigInt)),
     ("nts_bigint_as_uintn", &[Some(HirType::Float { bits: 64 }), Some(HirType::BigInt)], Some(HirType::BigInt)),
+    ("nts_bigint_from_number", &[Some(HirType::Float { bits: 64 })], Some(HirType::BigInt)),
     ("nts_bigint_shl", &[Some(HirType::BigInt), Some(HirType::BigInt)], Some(HirType::BigInt)),
     ("nts_bigint_shr", &[Some(HirType::BigInt), Some(HirType::BigInt)], Some(HirType::BigInt)),
-    ("nts_bigint_from_number", &[Some(HirType::Float { bits: 64 })], Some(HirType::BigInt)),
     ("nts_bigint_to_string", &[Some(HirType::BigInt)], None),
     ("nts_bool_to_string", &[Some(HirType::Bool)], None),
     ("nts_bounds", &[Some(HirType::Float { bits: 64 }), Some(HirType::Int { bits: 32, signed: false })], None),
@@ -121,15 +121,16 @@ static SIGNATURES: &[Declared] = &[
     ("nts_math_tan", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_math_tanh", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_max", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
+    ("nts_max_fn", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_min", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
+    ("nts_min_fn", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_number_to_string", &[Some(HirType::Float { bits: 64 })], None),
+    ("nts_number_to_string_into", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_post_delayed", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Bool)], None),
     ("nts_promise_fulfill_number", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_promise_fulfill_tagged", &[None, None, Some(HirType::Int { bits: 32, signed: false })], None),
     ("nts_promise_is_rejected", &[None], Some(HirType::Bool)),
     ("nts_promise_number", &[None], Some(HirType::Float { bits: 64 })),
-    ("nts_max_fn", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_min_fn", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_round", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_round_fn", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_set_new", &[Some(HirType::Float { bits: 64 })], None),
@@ -147,12 +148,12 @@ static SIGNATURES: &[Declared] = &[
     ("nts_str_ends_with", &[None, None], Some(HirType::Bool)),
     ("nts_str_includes", &[None, None], Some(HirType::Bool)),
     ("nts_str_index_of", &[None, None], Some(HirType::Float { bits: 64 })),
-    ("nts_str_last_index_of", &[None, None], Some(HirType::Float { bits: 64 })),
+    ("nts_str_index_of_from", &[None, None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_str_is_well_formed", &[None], Some(HirType::Bool)),
+    ("nts_str_last_index_of", &[None, None], Some(HirType::Float { bits: 64 })),
     ("nts_str_pad_end", &[None, Some(HirType::Float { bits: 64 }), None], None),
     ("nts_str_pad_start", &[None, Some(HirType::Float { bits: 64 }), None], None),
     ("nts_str_point_width", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_str_to_well_formed", &[None], None),
     ("nts_str_repeat", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_str_slice", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
     ("nts_str_slice_into", &[None, None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
@@ -161,13 +162,13 @@ static SIGNATURES: &[Declared] = &[
     ("nts_str_substring_general", &[None, None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
     ("nts_str_substring_into", &[None, None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
     ("nts_str_substring_into_fn", &[None, None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_string_eq", &[None, None], Some(HirType::Bool)),
-    ("nts_string_from_char_code", &[Some(HirType::Float { bits: 64 })], None),
-    ("nts_number_to_string_into", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_string_from_char_code_into", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_string_from_code_point", &[Some(HirType::Float { bits: 64 })], None),
     ("nts_str_to_lower_case", &[None], None),
     ("nts_str_to_upper_case", &[None], None),
+    ("nts_str_to_well_formed", &[None], None),
+    ("nts_string_eq", &[None, None], Some(HirType::Bool)),
+    ("nts_string_from_char_code", &[Some(HirType::Float { bits: 64 })], None),
+    ("nts_string_from_char_code_into", &[None, Some(HirType::Float { bits: 64 })], None),
+    ("nts_string_from_code_point", &[Some(HirType::Float { bits: 64 })], None),
     ("nts_string_from_utf8", &[None, Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_string_truthy", &[None], Some(HirType::Bool)),
     ("nts_tag_name", &[Some(HirType::Int { bits: 32, signed: false })], None),
@@ -196,6 +197,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_value_strict_eq", &[None, None], Some(HirType::Bool)),
     ("nts_value_tag", &[None], Some(HirType::Int { bits: 32, signed: false })),
     ("nts_value_truthy", &[None], Some(HirType::Bool)),
+    ("nts_value_truthy_fn", &[None], Some(HirType::Bool)),
 ];
 
 #[must_use]
@@ -262,5 +264,36 @@ pub fn into_form(target: &str) -> String {
         into
     } else {
         format!("{into}_fn")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SIGNATURES;
+
+    /// The same guard the LLVM backend's table has, and for the same reason it
+    /// was written there: [`declared`] is a binary search, an unsorted entry
+    /// answers `None`, and `None` here does not fail -- it means "the runtime
+    /// does not declare this", which is a sentence about the runtime that is
+    /// simply false.
+    ///
+    /// What it costs is quiet. `parameters` answering `None` makes
+    /// [`into_form`] fall back to the `_into_fn` spelling; `result` answering
+    /// `None` skips a conversion the operation needed. Neither says anything.
+    ///
+    /// It had drifted in six places when this was added -- among them
+    /// `nts_bigint_from_number`, three rows after `nts_bigint_shr` -- and the
+    /// LLVM table's copy of this test had been catching its own version of the
+    /// same mistake for some time. One table had a guard and the other did not.
+    #[test]
+    fn the_table_is_sorted_because_it_is_binary_searched() {
+        for pair in SIGNATURES.windows(2) {
+            assert!(
+                pair[0].0 < pair[1].0,
+                "signatures out of order: `{}` must come after `{}`",
+                pair[0].0,
+                pair[1].0
+            );
+        }
     }
 }

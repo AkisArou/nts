@@ -11436,6 +11436,7 @@ impl<'a> FuncBuilder<'a> {
                 {
                     let declared = self
                         .type_of(name)
+                        .or_else(|| self.evolved_type(name))
                         .ok_or_else(|| self.unrepresentable(declaration, "an empty array"))?;
                     self.lower_empty_array(initializer, declared)?
                 }
@@ -11502,6 +11503,7 @@ impl<'a> FuncBuilder<'a> {
     fn unwritten(&mut self, name: NodeId, declaration: NodeId) -> Result<ValueId, Diagnostic> {
         let ty = self
             .type_of(name)
+            .or_else(|| self.evolved_type(name))
             .ok_or_else(|| self.unsupported(declaration, "a declaration without an initializer"))?;
         let origin = self.origin(declaration);
         let kind = match &ty {
@@ -11518,6 +11520,43 @@ impl<'a> FuncBuilder<'a> {
             }
         };
         Ok(self.push(kind, ty, origin))
+    }
+
+    /// The type an *evolving* declaration settles on, read back from a use.
+    ///
+    /// `const parts = []` is `never[]` where it is written: with no elements and
+    /// no annotation the checker has nothing to infer from *yet*, and it fills
+    /// that in from the pushes as it walks. `let device;` is the same thing
+    /// spelled without a literal. Both are ordinary TypeScript and both were
+    /// refused here, because the type at the declaration is the one that says
+    /// nothing.
+    ///
+    /// Every later mention of the name carries what it evolved to, and the
+    /// checker has already done the work. So this reads one back rather than
+    /// repeating the inference -- which would be a second answer to a question
+    /// that already has one, and the two would agree until they did not.
+    ///
+    /// **Every** use has to agree, and `None` where they do not. A use before
+    /// the first assignment sees a narrower type than one after it, and picking
+    /// whichever came first in the node list would be picking arbitrarily.
+    fn evolved_type(&self, name: NodeId) -> Option<HirType> {
+        let symbol = self.node(name).symbol?;
+        let mut settled: Option<HirType> = None;
+        for at in 0..self.snapshot.nodes.len() {
+            let id = NodeId(u32::try_from(at).ok()?);
+            if id == name || self.node(id).symbol != Some(symbol) {
+                continue;
+            }
+            let Some(ty) = self.type_of(id) else {
+                continue;
+            };
+            match &settled {
+                Some(known) if *known != ty => return None,
+                Some(_) => {}
+                None => settled = Some(ty),
+            }
+        }
+        settled
     }
 
     /// Bind every name a destructuring pattern introduces.
@@ -12649,6 +12688,9 @@ impl<'a> FuncBuilder<'a> {
 
         let (helper, arity, ty) = match name.as_str() {
             "codePointAt" => ("nts_str_code_point_at", 1, HirType::NUMBER),
+            "indexOf" if arguments.len() == 2 => {
+                ("nts_str_index_of_from", 2, HirType::NUMBER)
+            }
             "indexOf" => ("nts_str_index_of", 1, HirType::NUMBER),
             "lastIndexOf" => ("nts_str_last_index_of", 1, HirType::NUMBER),
             "includes" => ("nts_str_includes", 1, HirType::Bool),

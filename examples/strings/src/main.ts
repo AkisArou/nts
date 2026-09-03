@@ -299,3 +299,29 @@ export function agreesWithCharAt(n: number): string {
   }
   return same;
 }
+
+// `indexOf(needle, from)`: the same search from somewhere other than the start.
+// `nts_str_find` has taken a start position all along and the one-argument form
+// passes zero; a scan that *resumes* is what wanted the other, and
+// `path.indexOf(':', index + 1)` is where it came up.
+export function scanned(n: number): number {
+  const text = "a:b:c:d" + String(n % 10);
+  let at = text.indexOf(":");
+  let total = 0;
+  while (at !== -1) {
+    total = total * 10 + at;
+    at = text.indexOf(":", at + 1);
+  }
+  return total;
+}
+
+// Past the end, before the start, and a needle that is not there.
+export function scannedEdges(n: number): number {
+  const text = "abcabc" + String(n % 10);
+  return (
+    text.indexOf("a", 1) * 1000 +
+    text.indexOf("a", 99) * 100 +
+    text.indexOf("z", 0) * 10 +
+    text.indexOf("b", -5)
+  );
+}

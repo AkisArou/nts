@@ -192,6 +192,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_str_ends_with", returns: "zeroext i1", params: &["ptr", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_str_includes", returns: "zeroext i1", params: &["ptr", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_str_index_of", returns: "double", params: &["ptr", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_str_index_of_from", returns: "double", params: &["ptr", "ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_str_is_well_formed", returns: "zeroext i1", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_str_last_index_of", returns: "double", params: &["ptr", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_str_pad_end", returns: "ptr", params: &["ptr", "double", "ptr"], attributes: &[] },
@@ -236,6 +237,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_value_retain", returns: "void", params: &["i32", "i64"], attributes: &[] },
     Signature { name: "nts_value_strict_eq", returns: "zeroext i1", params: &["i32", "i64", "i32", "i64"], attributes: &[] },
     Signature { name: "nts_value_to_string", returns: "ptr", params: &["i32", "i64"], attributes: &[] },
+    Signature { name: "nts_value_truthy_fn", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
 ];
 
 /// The signature of a runtime function, if the runtime declares one.

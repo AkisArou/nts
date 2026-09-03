@@ -1939,6 +1939,15 @@ double nts_str_index_of(const NtsString *s, const NtsString *needle) {
   return nts_str_find(s, needle, 0u, 0);
 }
 
+/* `indexOf(needle, from)`, which is the same search from somewhere other than
+ * the start. `nts_str_find` has taken a start position all along; the one
+ * argument form is this one with a zero, and `path.indexOf(':', index + 1)` --
+ * a scan that resumes -- is what wanted the other. */
+double nts_str_index_of_from(const NtsString *s, const NtsString *needle,
+                             double from) {
+  return nts_str_find(s, needle, nts_str_clamp(from, s->length, 0), 0);
+}
+
 double nts_str_last_index_of(const NtsString *s, const NtsString *needle) {
   return nts_str_find(s, needle, 0u, 1);
 }
@@ -2245,6 +2254,14 @@ double nts_str_char_code_at_fn(const NtsString *s, double at) {
 }
 
 bool nts_string_truthy(const NtsString *s) { return s != 0 && s->length != 0; }
+
+/* The linkable companion to `nts_value_truthy`, which is a `static inline`.
+ *
+ * The C backend writes the inline one at the call site and the second backend
+ * cannot: it emits calls by name, and a `static inline` has no name to call.
+ * The same reason `nts_to_int32_fn` and `nts_round_fn` exist, and the same
+ * suffix. */
+bool nts_value_truthy_fn(NtsValue value) { return nts_value_truthy(value); }
 
 uint32_t nts_to_uint32_fn(double x) { return nts_to_uint32(x); }
 

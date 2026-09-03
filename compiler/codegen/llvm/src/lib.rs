@@ -113,6 +113,17 @@ pub fn emit(program: &Program) -> Emitted {
         let linkage = if global.exported { "" } else { "internal " };
         let zero = if matches!(global.ty, HirType::Managed(_)) {
             "null".to_owned()
+        } else if matches!(global.ty, HirType::Erased) {
+            // An erased global is a tag beside a payload -- an aggregate, and
+            // `0` is not a value one can have. `undefined` is the tag zero and
+            // the payload zero together, which is what `zeroinitializer` is.
+            //
+            // Nothing reached this until `let held;` could be a global: an
+            // evolving `any` has no annotation to refuse it by, so the slot is
+            // erased and the module has one. clang's answer was "integer
+            // constant must have integer type", which is the right complaint
+            // about the wrong thing.
+            "zeroinitializer".to_owned()
         } else if matches!(global.ty, HirType::Float { .. }) {
             float_literal(global.initial)
         } else {
@@ -357,6 +368,16 @@ fn tag_of(ty: &HirType) -> Option<u32> {
         HirType::Bool => tags::BOOLEAN,
         HirType::Float { .. } | HirType::Int { .. } => tags::NUMBER,
         HirType::Managed(nts_core::hir::ManagedType::String) => tags::STRING,
+        // A closure answers `"function"` to `typeof`, so it carries its own
+        // tag -- told apart by the id rather than by the layout, because that
+        // is all this sees. The C backend has had this case since closures
+        // became values; here they fell into `OBJECT` below, and
+        // `examples/absent` read 42 where node reads 45.
+        HirType::Managed(nts_core::hir::ManagedType::Object(ty))
+            if nts_core::hir::is_closure_type(*ty) =>
+        {
+            tags::FUNCTION
+        }
         HirType::Managed(_) => tags::OBJECT,
         HirType::Void => tags::UNDEFINED,
         _ => return None,
@@ -862,6 +883,7 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_value_release",
     "nts_value_retain",
     "nts_value_strict_eq",
+    "nts_value_truthy_fn",
 ];
 
 /// `a === b` on two strings, which compares by contents.
@@ -2815,6 +2837,27 @@ fn unary(
                 format!("{out} = icmp ne {ty} {}, 0", name(operand))
             }
             HirType::Bool => format!("{out} = add i1 {}, 0", name(operand)),
+            // An erased value carries which of those it is, so the rule is a
+            // switch on the tag rather than a comparison -- and it lives in the
+            // runtime, because spelling the whole of JavaScript truthiness at
+            // every site that tests one is what the C backend also declines to
+            // do.
+            //
+            // Without this arm the fall-through emitted `fcmp one { i32, i64 }
+            // %v, 0.0`, which is a floating-point comparison of a struct
+            // against a float. clang said "floating point constant invalid for
+            // type", and three examples could not be built through this
+            // backend.
+            HirType::Erased => {
+                let tag = format!("{out}.t");
+                let bits = format!("{out}.p");
+                format!(
+                    "{tag} = extractvalue {ERASED_TYPE} {0}, 0\n  \
+                     {bits} = extractvalue {ERASED_TYPE} {0}, 1\n  \
+                     {out} = call zeroext i1 @nts_value_truthy_fn(i32 {tag}, i64 {bits})",
+                    name(operand)
+                )
+            }
             _ => format!("{out} = fcmp one {ty} {}, 0.0", name(operand)),
         },
         UnOp::Abs if float => format!(

@@ -195,3 +195,27 @@ export function resolvedLikePath(n: number): string {
   }
   return (out ?? "none") + String(n * 0);
 }
+
+// `let device;` — no annotation and no initializer, which is TypeScript's
+// evolving `any`. Same question as an evolving array and the same answer: the
+// type where it is written says nothing, and a later mention says what it
+// became.
+export function evolvedAny(n: number): string {
+  let device;
+  if (n > 10) {
+    device = "big";
+  } else {
+    device = "small";
+  }
+  return device + ":" + String(device.length);
+}
+
+export function evolvedNumber(n: number): number {
+  let held;
+  if (n > 10) {
+    held = n * 2;
+  } else {
+    held = n - 1;
+  }
+  return held + 1;
+}
