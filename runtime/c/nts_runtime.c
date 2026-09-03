@@ -298,19 +298,14 @@ static void nts_free_storage(NtsHeader *object) {
     if (map->values) {
       nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
     }
-    /* Paired with the three `nts_note_allocation` calls in `nts_map_rehash`,
-     * the same way the rehash pairs the ones it replaces. A table that was
-     * never grown has no blocks and none to give back. */
+    /* Paired with the `nts_note_allocation` in `nts_map_rehash`, the same way
+     * the rehash pairs the one it replaces. A table that was never grown has no
+     * block and none to give back. */
     if (map->keys) {
       nts_reclaimed++;
-      nts_reclaimed++;
-      if (map->values) {
-        nts_reclaimed++;
-      }
     }
+    /* `keys` is the block: `values` and `index` point into it. */
     free(map->keys);
-    free(map->values);
-    free(map->index);
     map->keys = 0;
     map->values = 0;
     map->index = 0;
@@ -3607,19 +3602,37 @@ static void nts_map_rehash(NtsMap *map) {
     wanted = 8u;
   }
 
-  NtsValue *keys = (NtsValue *)malloc((size_t)wanted * sizeof(NtsValue));
-  NtsValue *values = map->holds_values
-                         ? (NtsValue *)malloc((size_t)wanted * sizeof(NtsValue))
-                         : 0;
   uint32_t slots = 8u;
   while (slots < NTS_MAP_SLOTS_FOR(wanted)) {
     slots *= 2u;
   }
-  int32_t *index = (int32_t *)malloc((size_t)slots * sizeof(int32_t));
-  if (!keys || (map->holds_values && !values) || !index) {
+
+  /* One block, sliced, rather than three.
+   *
+   * The three arrays are allocated and freed together and always have been --
+   * they are the same table -- so nothing was buying the separate `malloc`s
+   * except the code being written that way. A table of seventeen entries grows
+   * three times, and `tooling/memory/cases/map-and-set` counted 3 blocks a
+   * rehash for a `Map` and 2 for a `Set`: seventeen allocations for two
+   * containers.
+   *
+   * `keys` first, so the block's base is what `free` is given. `NtsValue` is
+   * sixteen bytes and `wanted` is a whole number of them, so `values` and then
+   * `index` are aligned by construction rather than by padding -- and the
+   * index, which every lookup touches, now sits next to the keys it indexes. */
+  size_t key_bytes = (size_t)wanted * sizeof(NtsValue);
+  size_t value_bytes = map->holds_values ? key_bytes : 0u;
+  size_t index_bytes = (size_t)slots * sizeof(int32_t);
+  unsigned char *block =
+      (unsigned char *)malloc(key_bytes + value_bytes + index_bytes);
+  if (!block) {
     fprintf(stderr, "nts: out of memory growing a map\n");
     abort();
   }
+  NtsValue *keys = (NtsValue *)(void *)block;
+  NtsValue *values =
+      map->holds_values ? (NtsValue *)(void *)(block + key_bytes) : 0;
+  int32_t *index = (int32_t *)(void *)(block + key_bytes + value_bytes);
   /* Counted, which they were not.
    *
    * `nts_note_allocation` says "objects, arrays, strings and maps all come
@@ -3631,10 +3644,6 @@ static void nts_map_rehash(NtsMap *map) {
    * These stay `malloc` rather than `nts_alloc` on purpose: a table reallocates
    * as it grows, and the bump provider cannot give a block back. */
   nts_note_allocation();
-  nts_note_allocation();
-  if (map->holds_values) {
-    nts_note_allocation();
-  }
   for (uint32_t slot = 0; slot < slots; slot++) {
     index[slot] = NTS_MAP_EMPTY;
   }
@@ -3659,16 +3668,11 @@ static void nts_map_rehash(NtsMap *map) {
     if (map->values) {
       nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
     }
-    /* Paired with the three above, or `nts_live_count` -- which is
+    /* Paired with the one above, or `nts_live_count` -- which is
      * `allocated - reclaimed` -- would read every grown table as a leak. */
     nts_reclaimed++;
-    nts_reclaimed++;
-    if (map->values) {
-      nts_reclaimed++;
-    }
+    /* `keys` is the block: `values` and `index` point into it. */
     free(map->keys);
-    free(map->values);
-    free(map->index);
   }
   map->keys = keys;
   map->values = values;

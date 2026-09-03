@@ -1,5 +1,5 @@
 ideal 2
-allocated 17
+allocated 8
 because seventeen blocks, and they were invisible until this case existed.
 because
 because A `Map` is a header plus three blocks -- keys, values, and the slot
@@ -15,14 +15,24 @@ because otherwise. The bytes were already tracked; only the count was missing.
 because Counting them is paired with `nts_reclaimed` at both free sites, or
 because `nts_live_count` would read every grown table as a leak.
 because
-because Seventeen, exactly: growth doubles from a floor of eight, so seventeen
+because Eight, exactly: growth doubles from a floor of eight, so seventeen
 because entries means capacities 8, 16 and 32 -- three rehashes each.
 because
-because   Map   1 header + 3 rehashes x 3 blocks = 10
-because   Set   1 header + 3 rehashes x 2 blocks =  7
+because   Map   1 header + 3 rehashes x 1 block = 4
+because   Set   1 header + 3 rehashes x 1 block = 4
 because
-because Fewer is possible only by being told the size in advance, and nothing
-because tells it: `new Map()` says nothing about what goes in.
+because It read seventeen until 0065, because a rehash allocated its three
+because arrays separately -- keys, values and the slot index. They are the same
+because table: allocated together, freed together, and never one without the
+because others. Nothing was buying the three `malloc`s except the code being
+because written that way. One block sliced three ways is one allocation, and it
+because puts the index next to the keys it indexes.
+because
+because Fewer than four is possible only by being told the size in advance, and
+because nothing tells it: `new Map()` says nothing about what goes in. A `Set`
+because costs the same as a `Map` now, having one block either way; what it
+because saves is the block's *size*, which `nts_bytes_held` sees and this
+because column does not.
 because
 because Operations: two. The `Map` and the `Set` are each released once, where
 because `work` returns and the last thing holding them lets go. Nothing else in
