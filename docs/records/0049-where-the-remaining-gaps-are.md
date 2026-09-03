@@ -100,6 +100,22 @@ reference says so in its own comment:
   and then loop in TypeScript, so if that filter is the one declining, the claim
   is false and these are what pays.
 
+  There is a second thing in that row, unmeasured. Object fields start at
+  `sizeof(NtsHeader)`, which is 24, and 24 mod 16 is 8 — so a pair of adjacent
+  `double` fields read together straddles a boundary exactly as an array's
+  elements did before 0064. `awfy-bounce`'s profile puts 8.76% on
+  `movupd 0x18(%rdi),%xmm6` and 2.05% on the matching store, which is ~11% of
+  the row sitting on unaligned pair access.
+
+  Starting fields at 32 was tried and the `_Static_assert`s caught it at once:
+  the struct *declaration* is emitted from a different path than the offsets, so
+  the two disagreed. Making them agree needs explicit padding in the declaration
+  *and* `_Alignas(16)`, since C aligns a struct only to its widest member. Not
+  built, because the expected win is much smaller than 0064's: `elementwise`
+  streams 4096 doubles and is memory-bound, where `awfy-bounce` works on a
+  hundred balls that fit in L1 and straddling inside L1 is cheap. A few percent
+  on 1.60x, against eight bytes on every object in every program.
+
 - **`fib` 1.70x.** The reference is `std::int64_t`. Ours is a `double`, and it
   has to be: `fib`'s return cannot be narrowed because the fixpoint over a
   recursive exponential does not converge to a bound, and `n` is only known to
