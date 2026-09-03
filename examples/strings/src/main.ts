@@ -98,6 +98,35 @@ export function between(s: string, from: number, to: number): string {
   return s.substring(from, to);
 }
 
+// A substring nothing reads *as a string*, which is the shape `hir::substring`
+// answers from the endpoints instead of building. These exist so that the
+// rewrite has an oracle: the endpoints arrive negative, fractional, swapped and
+// past the end from the differential's pool, and every one of those is a rule
+// `substring` has and a subtraction does not.
+//
+// `between` above returns the string and so is *not* this shape. It was the
+// only substring here, which meant nothing could have caught the rewrite
+// getting the clamping wrong.
+// The `| 0` is not decoration. The rewrite declines a fractional endpoint,
+// because `substring` also has to apply `ToIntegerOrInfinity` and clamping does
+// not do that -- so without the coercion these would exercise the path that was
+// already there and prove nothing about the new one. node runs the same source,
+// so the oracle is unaffected.
+export function spanLength(s: string, from: number, to: number): number {
+  return s.substring(from | 0, to | 0).length;
+}
+
+export function spanFirst(s: string, from: number, to: number): number {
+  const part = s.substring(from | 0, to | 0);
+  return part.length === 0 ? -1 : part.charCodeAt(0);
+}
+
+export function spanAt(s: string, from: number, to: number, at: number): number {
+  const part = s.substring(from | 0, to | 0);
+  const k = at | 0;
+  return k >= 0 && k < part.length ? part.charCodeAt(k) : -1;
+}
+
 export function single(s: string, i: number): string {
   return s.charAt(i);
 }

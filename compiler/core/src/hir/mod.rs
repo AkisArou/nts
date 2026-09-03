@@ -54,6 +54,7 @@ pub mod reachable;
 pub mod signatures;
 pub mod simplify;
 pub mod split;
+pub mod substring;
 pub mod specialize;
 pub mod verify;
 pub mod zero_sign;
@@ -1702,6 +1703,14 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // may be of another type than the one the reader was reconciled against.
     // The unit tests caught it where two corpora did not, on a `+` whose right
     // operand went back to being an `i64` under a `double`.
+    // Before `reconcile`, which is what fixes up the operand types the new
+    // arithmetic arrives with, and before `dce`, which collects the call it
+    // leaves behind. See [`substring`].
+    // Counted with the simplifications: a substring answered from its
+    // endpoints is an operation that turned out to be its own operands, which
+    // is what that number means.
+    simplified += program.funcs.iter_mut().map(substring::elide).sum::<usize>();
+
     conversions += reconcile(&mut program);
 
     // Specialization orphans values by design — a folded constant leaves its

@@ -17,7 +17,7 @@ column is a row with no hand-written reference; the case says why.
 | primitive | correctness | memory: ops / allocs | speed: vs C++ / node | record |
 |---|---|---|---|---|
 | **number** | `arith`, `mathops`, `bitwise` | `number-to-string` 0 / 0 | `number-format` 0.82 / 0.49<br>`loop` 0.99 / 0.98<br>`fib` 1.71 / 0.52 | 0030, 0034 |
-| **string** | `strings`, `string-methods` | `string-append` 1 / 2<br>`string-build` 1 / 2<br>`case-convert` 18 / 17 | `strings` 0.63 / 0.05<br>`node-utf8` — / 0.93<br>`substrings` 1.88 / 0.48<br>`case-convert` 0.40 / 0.83 | 0029, 0033, 0035, 0059, 0060 |
+| **string** | `strings`, `string-methods` | `string-append` 1 / 2<br>`string-build` 1 / 2<br>`case-convert` 18 / 17 | `strings` 0.63 / 0.05<br>`node-utf8` — / 0.93<br>`substrings` 0.93 / 0.23<br>`case-convert` 0.40 / 0.83 | 0029, 0033, 0035, 0059, 0060, 0062 |
 | **boolean, null, undefined** | `absent`, `nullish`, `unknown-truthiness` | `boolean-flags` 0 / 0 | `absences` 2.14 / 0.50 | 0031, 0039, 0053, 0057 |
 | **bigint** | `bigint` | `bigint-arithmetic` 0 / 0 | `bigint` 0.99 / 0.09 | 0036 |
 | **symbol** | `symbol-keys` | `symbol-keys` 0 / 0 | `symbol-keys` 1.02 / 0.19 | 0037 |
@@ -42,9 +42,11 @@ the answer for a third of the queue.
 
 **Two rows above 1.20x C++ are statements rather than targets**, and 0049 has
 the evidence for each: `fib` 1.71x against an `int64_t` that wraps where we
-cannot, and `substrings` 1.88x — where the evidence turned out to be wrong.
-0059 re-measured it: we do not allocate, the copy is 13%, and the rest is a
-scan loop that will not unroll while the copy sits inside it.
+cannot, and `awfy-bounce` 1.56x against an array that holds its elements inline.
+`substrings` was the third at 1.88x and is no longer above 1.20x at all: the
+evidence for it was wrong twice — we never allocated, and the copy was 58%
+rather than the 13% a profile suggested — and 0062 stopped building a substring
+that nothing reads as a string, which took the row to 0.93x.
 `absences` was the third at 4.46x, and it was not a statement — it was a tagged
 value round-tripping an integer through a double, which 0057 removed.
 

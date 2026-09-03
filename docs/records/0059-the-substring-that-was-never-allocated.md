@@ -40,6 +40,17 @@ So the substring is not what the row is paying for. Something about
 whole string and reading its first character, which is its own finding and is
 not chased here.
 
+## What it actually is — and this section is wrong, see 0062
+
+The section below concludes the copy costs about 13% and blames the rest on the
+scan not unrolling. The 13% came from reading one symbol in a `perf` profile,
+and it is out by a factor of four: the cost spreads across `memcpy`'s libc
+callees and the call itself. Cutting the copy to one byte — which this benchmark
+cannot tell apart — takes the row from 3.02us to 1.91us.
+
+0062 has the measurement and the pass that acts on it. The unrolling observation
+below is real and was not the lever.
+
 ## What it actually is: the loop does not unroll
 
     nts   bench_run   354 instructions   11 cvtsi2sd   6 memcpy
