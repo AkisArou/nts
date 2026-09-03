@@ -66,7 +66,43 @@ tables, no `setjmp`, no `-fexceptions`, and no divergence between the backends.
 and then resume, which is a second question, and the honest thing is to refuse
 it until this half is measured rather than to design both at once.
 
-## What building it immediately found, and why that stops it
+## The premise below is false, and a stale comment is how it got here
+
+What follows says `Error` is a prerequisite because the compiler cannot
+construct one. It can. `hir::builtin` provides `Error`, `TypeError`,
+`RangeError` and `URIError` as real classes with `message` and `name`, exactly
+because `lib.d.ts`'s `stack?`/`cause?` are optional properties this compiler
+refuses — and `class MyError extends Error {}` works through
+`PropertyRecord::own`. `new Error("boom")` emits:
+
+```c
+struct NtsObj_Error { NtsHeader header; NtsString *message; NtsString *name; };
+_Static_assert(sizeof(NtsObj_Error) == 40u, ...);
+```
+
+The comment in `lower_throw` that says otherwise — "the class is not one this
+compiler can construct, it is `lib.d.ts`'s" — predates `builtin.rs` and was
+never updated. It is the reason the section below reordered the whole feature
+around a representation that already exists. *The record matches the code: a
+stale comment is how a false premise reaches a goal*, and this is that, in a
+record about the goal.
+
+## What a thrown value should be
+
+Not a message, and not an `Error *` either. `catch (e)` is `unknown` in
+TypeScript, so the pending slot holds an **erased `NtsValue`**: `throw` erases
+whatever it is given, `catch` binds `unknown`, and the erasure machinery that
+already exists carries it. That admits `throw "text"` and `throw new Error(m)`
+and anything else, at one representation, which is what the language actually
+says.
+
+What it costs is that a `catch` block wanting to discriminate needs
+`instanceof`, which is its own gap. That is a real dependency and not a blocker:
+`catch (e) { return String(e) }` and a typed rethrow both work without it.
+
+## What building it found, kept because the reasoning below is still right
+
+
 
 `throw` does not throw a value today. It throws a *message*:
 
