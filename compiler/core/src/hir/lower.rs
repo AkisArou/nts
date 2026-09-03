@@ -2119,6 +2119,17 @@ fn message_field(layouts: &[Layout], ty: &HirType) -> Option<u32> {
 ///
 /// A layout is a property of the type, not of the function that happened to
 /// mention it first.
+/// Whether a layout's name was invented here rather than declared.
+///
+/// An anonymous object type is named `Type` followed by its type id. Matching
+/// on the prefix alone is not enough and was wrong about exactly the class this
+/// mattered for: `TypeError` starts with `Type`, so it read as generated, so it
+/// merged with `RangeError` by shape and the two shared one descriptor.
+fn generated_name(name: &str) -> bool {
+    name.strip_prefix("Type")
+        .is_some_and(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()))
+}
+
 fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
     for layout in layouts {
         if let Some(existing) = program.layouts.iter_mut().find(|known| {
@@ -2129,8 +2140,26 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
             // was `redefinition of NtsObj_A` rather than anything the merge
             // below would have noticed: it compares *shape*, and the two
             // disagreed about their method tables while describing one type.
+            // Shape is the right test almost everywhere, and it is what makes
+            // TypeScript's structural typing work: `Point` and the `{ x, y }` of
+            // a literal are one type, and two interfaces of one shape are
+            // interchangeable, so they must share a struct or a call cannot pass
+            // one where the other is declared. Widening this guard beyond the
+            // case below broke `function-values` and `readonly` for exactly that
+            // reason.
+            //
+            // The provided error classes are the exception, because they are the
+            // one family this compiler asks a *nominal* question about. All four
+            // hold a `message` and a `name` and nothing else, so shape merged
+            // them into one layout with one descriptor -- and `e instanceof
+            // TypeError` was then true of a `RangeError`, and an uncaught
+            // `TypeError` printed whichever of the four had been laid out first.
+            // Nothing could see either until `instanceof` existed.
+            let two_errors = super::builtin::is_error(&known.name)
+                && super::builtin::is_error(&layout.name)
+                && known.name != layout.name;
             known.types.iter().any(|ty| layout.types.contains(ty))
-                || known.same_shape(&layout.fields, &layout.methods)
+                || (!two_errors && known.same_shape(&layout.fields, &layout.methods))
         }) {
             for ty in layout.types {
                 if !existing.types.contains(&ty) {
@@ -2139,7 +2168,7 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
             }
             // A declared name beats a generated one, and the two functions that
             // mention a type may be discovered in either order.
-            if existing.name.starts_with("Type") && !layout.name.starts_with("Type") {
+            if generated_name(&existing.name) && !generated_name(&layout.name) {
                 existing.name = layout.name;
             }
         } else {
@@ -8181,6 +8210,158 @@ impl<'a> FuncBuilder<'a> {
         // treat the code after a throw as unreachable, which it is.
         self.terminate(Terminator::Unreachable);
         Ok(())
+    }
+
+    /// `x instanceof C`.
+    ///
+    /// # The answer is a comparison, not a walk
+    ///
+    /// JavaScript's `instanceof` walks a prototype chain, because a program can
+    /// change one while it runs. A compiled program cannot: the classes that
+    /// extend `C` are all of them, they are known here, and nothing can be
+    /// added after the binary is built. So the question "is this object a `C`"
+    /// is "is its class one of these", and *these* is usually one.
+    ///
+    /// The right side is resolved through the **symbol** the class declares
+    /// rather than through its name. Two modules may each declare a `Point`,
+    /// and a name would pick whichever the map happened to hold.
+    fn lower_instanceof(
+        &mut self,
+        id: NodeId,
+        lhs: NodeId,
+        rhs: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let Some(symbol) = self.node(rhs).symbol else {
+            return Err(self.unsupported(rhs, "an `instanceof` whose right side is not a class"));
+        };
+        // The class's *instance* type. The right operand names the constructor,
+        // whose type is not the type of what `new` produces, so it is found by
+        // the symbol both share -- and by the symbol rather than by the name,
+        // because two modules may each declare a `Point`.
+        let mut named: Vec<TypeId> = self
+            .snapshot
+            .types
+            .iter()
+            .enumerate()
+            .filter(|(_, record)| {
+                record.symbol == Some(symbol)
+                    && matches!(record.kind, nts_semantic_schema::TypeKind::Object { .. })
+            })
+            .filter_map(|(at, _)| u32::try_from(at).ok().map(TypeId))
+            .collect();
+        named.sort_unstable_by_key(|ty| ty.0);
+        // A provided error class is found by *name*. `lib.d.ts` declares
+        // `TypeError` as a variable of type `TypeErrorConstructor`, so the
+        // symbol the right operand resolves to is the constructor's and never
+        // the instance's -- there is no symbol the two share. Name is what
+        // [`super::builtin`] identifies these four by everywhere else, and they
+        // are global, so there is nothing else they could be.
+        let class = named.first().copied().or_else(|| {
+            let text = self.node(rhs).text.clone()?;
+            if !super::builtin::is_error(&text) {
+                return None;
+            }
+            self.type_named(&text)
+        });
+        let Some(class) = class else {
+            return Err(self.unsupported(
+                rhs,
+                "an `instanceof` against something this compiler has no class for",
+            ));
+        };
+
+        // `C` and everything that extends it, directly or not. Sorted, because
+        // the sources are hash maps and a list that varied between runs would
+        // emit a different program from the same input.
+        let mut classes: Vec<TypeId> = vec![class];
+        classes.extend(
+            self.hierarchy
+                .name
+                .keys()
+                .copied()
+                .filter(|ty| *ty != class && self.descends_from(*ty, class)),
+        );
+        // The provided error classes are not declarations in this program, so
+        // the hierarchy has never heard of them -- and `TypeError extends Error`
+        // all the same. `e instanceof Error` inside a `catch` is the reason
+        // `instanceof` is worth having, so the relation is spelled here rather
+        // than left to a hierarchy that cannot see it.
+        if super::builtin::is_error(self.name_of_type(class).unwrap_or_default()) {
+            classes.extend(self.provided_errors_under(class));
+        }
+        classes.sort_unstable_by_key(|ty| ty.0);
+        classes.dedup();
+
+        let value = self.lower_expression(lhs)?;
+        let origin = self.origin(id);
+        // Erased first, whatever it arrived as. The operation asks an object
+        // for its class, and a value that might not be an object has to say so
+        // -- which is what a tag is. An erase of something already known to be
+        // an object is one inline word.
+        let value = match self.values[value.0 as usize].ty {
+            HirType::Erased => value,
+            _ => self.push(OpKind::Erase { value }, HirType::Erased, origin.clone()),
+        };
+        Ok(self.push(OpKind::InstanceOf { value, classes }, HirType::Bool, origin))
+    }
+
+    /// The first object type declared with this name.
+    fn type_named(&self, wanted: &str) -> Option<TypeId> {
+        // No filter on the type's *kind*. `Error` reaches the compiler as
+        // whatever `lib.d.ts` declares it as, which is not the object kind a
+        // class declaration produces -- and the name is what identifies these
+        // four everywhere else here.
+        (0..self.snapshot.types.len())
+            .filter_map(|at| u32::try_from(at).ok().map(TypeId))
+            .find(|ty| self.name_of_type(*ty) == Some(wanted))
+    }
+
+    /// A type's declared name, where it has one.
+    fn name_of_type(&self, ty: TypeId) -> Option<&str> {
+        let symbol = self.snapshot.types.get(ty.0 as usize)?.symbol?;
+        self.snapshot
+            .symbols
+            .get(symbol.0 as usize)
+            .map(|record| record.name.as_str())
+    }
+
+    /// The provided error classes that satisfy `instanceof class`.
+    ///
+    /// `Error` is the base of the other three, so it admits all of them; each
+    /// of the others admits only itself. That is the whole hierarchy, and it is
+    /// four names rather than a structure because [`super::builtin`] provides
+    /// exactly four.
+    fn provided_errors_under(&self, class: TypeId) -> Vec<TypeId> {
+        if self.name_of_type(class) != Some("Error") {
+            return Vec::new();
+        }
+        self.snapshot
+            .types
+            .iter()
+            .enumerate()
+            .filter_map(|(at, _)| u32::try_from(at).ok().map(TypeId))
+            .filter(|ty| {
+                self.name_of_type(*ty)
+                    .is_some_and(super::builtin::is_error)
+            })
+            .collect()
+    }
+
+    /// Whether `ty` is `class` or extends it, at any depth.
+    fn descends_from(&self, ty: TypeId, class: TypeId) -> bool {
+        let mut at = ty;
+        // Bounded rather than trusted: a cycle in the base map would hang the
+        // compiler, and no hierarchy is this deep.
+        for _ in 0..64 {
+            if at == class {
+                return true;
+            }
+            match self.hierarchy.base.get(&at) {
+                Some(base) => at = *base,
+                None => return false,
+            }
+        }
+        false
     }
 
     /// `outer: for (…) { … }`.
@@ -15400,6 +15581,10 @@ impl<'a> FuncBuilder<'a> {
         // own, only a tag.
         if let Some(result) = self.erased_absence_test(id, token, *lhs_node, *rhs_node) {
             return result;
+        }
+
+        if token == syntax::INSTANCEOF_KEYWORD {
+            return self.lower_instanceof(id, *lhs_node, *rhs_node);
         }
 
         // `&&` and `||` must not evaluate their right operand unless the left

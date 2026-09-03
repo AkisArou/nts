@@ -182,7 +182,10 @@ fn constant(func: &Func, value: ValueId) -> Option<i128> {
 /// instruction set grows.
 pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
     match kind {
-        OpKind::Erase { value } | OpKind::TagOf { value } | OpKind::Unerase { value } => {
+        OpKind::Erase { value }
+        | OpKind::TagOf { value }
+        | OpKind::Unerase { value }
+        | OpKind::InstanceOf { value, .. } => {
             *value = of(*value);
         }
         OpKind::Await { promise } => *promise = of(*promise),

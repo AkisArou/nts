@@ -791,3 +791,60 @@ fn a_labelled_break_names_the_loop_it_leaves() {
         "three nested loops, each with a header, a body and an exit"
     );
 }
+
+#[test]
+fn the_provided_error_classes_are_told_apart() {
+    let Some(lowered) = lowered("exceptions") else {
+        return;
+    };
+    // All four hold a `message` and a `name` and nothing else, so the layout
+    // merge -- which is *shape* everywhere else, and has to be, because that is
+    // what makes two interfaces of one shape interchangeable -- put them in one
+    // layout with one descriptor. `e instanceof TypeError` was then true of a
+    // `RangeError`, and an uncaught `TypeError` printed `RangeError`.
+    //
+    // Nothing could see either until `instanceof` existed: a descriptor's name
+    // is otherwise read only by a crash message.
+    let names: Vec<&str> = lowered
+        .program
+        .layouts
+        .iter()
+        .map(|layout| layout.name.as_str())
+        .filter(|name| ["Error", "TypeError", "RangeError", "URIError"].contains(name))
+        .collect();
+    let mut sorted = names.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(
+        names.len(),
+        sorted.len(),
+        "each provided error class the program builds has a layout of its own: {names:?}"
+    );
+    assert!(
+        names.len() >= 3,
+        "the example builds an `Error`, a `TypeError` and a `RangeError`: {names:?}"
+    );
+}
+
+#[test]
+fn instanceof_is_a_comparison_against_a_closed_set() {
+    let Some(lowered) = lowered("exceptions") else {
+        return;
+    };
+    // `e instanceof Error` names `Error` and everything extending it, which is
+    // decided here and cannot grow: a compiled program gains no subclasses. So
+    // there is no chain to walk, and the operation carries the whole answer.
+    let is_error = func(&lowered, "aTypeErrorIsAnError");
+    let classes = is_error
+        .values
+        .iter()
+        .find_map(|op| match &op.kind {
+            OpKind::InstanceOf { classes, .. } => Some(classes.len()),
+            _ => None,
+        })
+        .expect("`e instanceof Error` lowers to the operation");
+    assert!(
+        classes >= 2,
+        "`Error` admits the three classes that extend it as well as itself"
+    );
+}

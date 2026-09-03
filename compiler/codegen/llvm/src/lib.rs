@@ -848,6 +848,57 @@ fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
     format!("nts_fnval_{}", descriptor_name(layout))
 }
 
+/// `x instanceof C`, as one call per class that satisfies it, or'd together.
+///
+/// The set is closed when the program is built, so there is no chain to walk.
+/// A class with no layout was never laid out here, so nothing can be an
+/// instance of it and it contributes nothing.
+///
+/// Through `nts_is_class` rather than an inline comparison because this backend
+/// cannot short-circuit the load without branching: the tag has to rule out the
+/// values with no class before the descriptor is read, and a `select` would
+/// read it either way.
+fn instance_of(
+    program: &Program,
+    out: &str,
+    operand: nts_core::hir::ValueId,
+    classes: &[nts_core::hir::ClassId],
+) -> String {
+    let subject = name(operand);
+    let mut lines = vec![
+        format!("{out}.t = extractvalue {ERASED_TYPE} {subject}, 0"),
+        format!("{out}.p = extractvalue {ERASED_TYPE} {subject}, 1"),
+    ];
+    let mut answers: Vec<String> = Vec::new();
+    for class in classes {
+        let Some(layout) = program
+            .layouts
+            .iter()
+            .find(|layout| layout.types.contains(class))
+        else {
+            continue;
+        };
+        let at = format!("{out}.c{}", answers.len());
+        lines.push(format!(
+            "{at} = call zeroext i1 @nts_is_class(i32 {out}.t, i64 {out}.p, ptr @nts_desc_{})",
+            descriptor_name(layout)
+        ));
+        answers.push(at);
+    }
+    let Some((first, rest)) = answers.split_first() else {
+        // Nothing to compare against, so nothing is one.
+        return format!("{out} = add i1 false, 0");
+    };
+    let mut running = first.clone();
+    for (step, next) in rest.iter().enumerate() {
+        let joined = format!("{out}.or{step}");
+        lines.push(format!("{joined} = or i1 {running}, {next}"));
+        running = joined;
+    }
+    lines.push(format!("{out} = add i1 {running}, 0"));
+    lines.join("\n  ")
+}
+
 fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
     layout
         .name
@@ -871,6 +922,7 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_concat",
     "nts_promise_subscribe",
     "nts_index_fn",
+    "nts_is_class",
     "nts_object_new",
     "nts_max_fn",
     "nts_min_fn",
@@ -1471,6 +1523,11 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
         OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::TagOf { .. } => {
             return tagging(func, value, &out);
         }
+        // See `instance_of`, which is where the reasoning is.
+        OpKind::InstanceOf {
+            value: operand,
+            classes,
+        } => return Ok(instance_of(program, &out, *operand, classes)),
         // Before the general binary arm, because it *is* a binary and the
         // general one would match it first -- and an `icmp` on a sixteen-byte
         // aggregate is not an instruction.

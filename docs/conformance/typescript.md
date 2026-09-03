@@ -105,7 +105,8 @@ counter, not by reading the emitted C.
 | ✗ | `?.()`, `?.[]` | optional call and optional index |
 | ◐ | spread | every shape of it in an **array literal** works — `[...a]` is a copy, and `[...a, x, ...b]` sums the lengths before allocating; `f(...a)` and `{...o}` do not |
 | ✗ | `delete`, `void`, comma | `in` is named above |
-| ✗ | `instanceof` | needs a class as a value |
+| ✅ | `instanceof` | against a class this program declares, or one of the four provided error classes. The set of classes that satisfy it is closed when the program is built, so it is a comparison and not a walk |
+| ✗ | `instanceof` between two classes of *identical shape* | they share a layout, and the descriptor with it — see below |
 | ✗ | tagged templates | |
 
 ## 2. Statements and control flow
@@ -288,7 +289,7 @@ ordinary calls emits no closure struct, no dispatch slot and no table at all.
 | ✗ | parameter properties (`constructor(public x: number)`) |
 | ✗ | `abstract` **methods** — the class works, the declaration is refused |
 | ✗ | generic classes |
-| ✗ | a class used as a *value* (`C` itself, `instanceof C`) |
+| ✗ | a class used as a *value* (`C` itself, passed or returned) |
 | ✗ | methods and getters on **object literals** |
 | ✅ | a member keyed by a **symbol** (`[kRefed]`) — an ordinary field, not a map |
 | ✗ | a member name the program computes from a value the compiler cannot see |
@@ -339,14 +340,17 @@ would reach next if symbols were ranked by refusal count rather than by what the
 language rests on.
 
 
-### A class has no runtime identity, and it is the layout's fault
+### A class's identity is the layout's, and that is right until it is not
 
 `instanceof` and `.constructor` are the two places JavaScript stays *nominal* at
-runtime, and neither can be built on what is emitted today. Two classes of the
-same shape share one layout — deliberately, because TypeScript is structurally
-typed and the two are mutually assignable, so sharing the struct is what makes
-passing one where the other is expected cost nothing. But they share the
-*descriptor* with it:
+runtime. `instanceof` works now; `.constructor` does not, and the reason is the
+same one that made `instanceof` interesting to build.
+
+Two classes of the same shape share one layout — deliberately, because
+TypeScript is structurally typed and the two are mutually assignable, so sharing
+the struct is what makes passing one where the other is expected cost nothing.
+But they share the *descriptor* with it, and a descriptor is what an object
+carries to say what it is:
 
 ```c
 struct NtsObj_Alpha { ... };
@@ -355,26 +359,34 @@ static const NtsDescriptor nts_desc_NtsObj_Alpha = { ..., "Alpha", ... };
 v3_frame.header.descriptor = &nts_desc_NtsObj_Alpha;   /* this is a Beta */
 ```
 
-A `Beta` carries Alpha's descriptor and answers `"Alpha"` when asked its name.
-Nothing observable depends on that yet, because neither `instanceof` nor
-`.constructor` is implemented — but it is why neither *can* be, and it is the
-first thing to fix if they are wanted. The shape is structural and belongs to
-the layout; the identity is nominal and needs a table of its own, one entry per
-class, carrying the name and the base. The descriptor would then follow the
-class rather than the layout.
+This was written when nothing could observe it. `instanceof` observes it: `v
+instanceof Alpha` was true of a `Beta`, and an uncaught `TypeError` printed
+`RangeError` — because all four provided error classes hold a `message` and a
+`name` and nothing else, so all four were one layout.
+
+The error family is fixed, by refusing to merge two *differently named provided
+error classes* and nothing else. Widening that to every declared class breaks
+`function-values` and `readonly`, which is structural typing doing its job: two
+interfaces of one shape have to share a struct.
+
+So the limitation stands for user classes of identical shape, and it is stated
+rather than hidden: `class Alpha { x: number }` and `class Beta { x: number }`
+are one descriptor, and `instanceof` cannot tell them apart. The fix is the one
+this section always described — identity is nominal and wants a table of its
+own, one entry per class carrying the name and the base, with the descriptor
+following the class rather than the layout. What is new is that there is now a
+feature that would use it.
 
 Worth knowing before starting: of the 67 refusal sites that named a class used
-as a value, **none** would be closed by this. Fifty-nine are one idiom in the
-node profile —
+as a value, fifty-nine are one idiom in the node profile —
 
 ```ts
 override get ["constructor"](): unknown { return TypeError; }
 ```
 
 — and the remaining eight are `instanceof` against `Error`, `RangeError` or
-`Uint8Array`. Every right-hand side in all 67 is an ambient `lib` class this
-compiler does not declare, so the nominal machinery is necessary for them and
-nowhere near sufficient.
+`Uint8Array`. The first two of those three now work; a class used as a *value*
+is what the rest still want, and it is a different feature from this one.
 
 ## 5. Modules
 
@@ -1834,7 +1846,7 @@ starts, whether it is still going, what it reads. That is what let `break`,
 | ✗ | `for...of` over a generator, or over a user type with `[Symbol.iterator]` |
 | ◐ | spread over an iterable; `new Map([[k, v]])`. `Array.from(xs)` where `xs` is already an array is a copy and works; a mapper, or anything iterable that is not an array, does not |
 | ✗ | `Map`/`Set` `forEach` |
-| ✗ | a default in a destructuring pattern (`{ a = 1 }`) |
+| ✅ | a default in a destructuring pattern (`{ a = 1 }`) |
 | ✗ | `yield`, `yield*`, generator objects |
 | ✗ | the async iterator protocol, `for await...of` |
 | ✗ | iterator helpers (`map`, `filter`, `take`, …) |

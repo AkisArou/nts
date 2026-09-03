@@ -301,3 +301,55 @@ export function finallyThrowReplacesTheThrow(n: number): number {
     return 4;
   }
 }
+
+// `instanceof` is what makes a `catch` binding useful: `e` is `unknown`, and
+// this is how a handler asks which error it caught.
+//
+// It is a comparison, not a walk. The classes that satisfy `e instanceof Error`
+// are fixed when the program is built -- `Error` and everything extending it --
+// so there is no prototype chain to follow, and a compiled program cannot gain
+// a subclass after the fact.
+export function whichError(n: number): number {
+  try {
+    if (n < 0) {
+      throw new TypeError("negative");
+    }
+    if (n === 0) {
+      throw new RangeError("zero");
+    }
+    throw "not an error at all";
+  } catch (e) {
+    if (e instanceof TypeError) {
+      return 1;
+    }
+    if (e instanceof RangeError) {
+      return 2;
+    }
+    if (e instanceof Error) {
+      return 3;
+    }
+    return 4;
+  }
+}
+
+// `TypeError` is an `Error`, and the test says so: the provided error classes
+// are not declarations in this program, so the relation is one the compiler
+// carries rather than one the hierarchy can see.
+export function aTypeErrorIsAnError(n: number): number {
+  try {
+    throw n < 0 ? new TypeError("t") : new Error("e");
+  } catch (e) {
+    return e instanceof Error ? 1 : 0;
+  }
+}
+
+// A thrown string is a reference too, and it reaches the same comparison. Its
+// descriptor is a string's, which is never a class's, so it answers false by
+// the ordinary route rather than by a case of its own.
+export function aStringIsNotAnError(n: number): number {
+  try {
+    throw "text";
+  } catch (e) {
+    return e instanceof Error ? 1 : 0;
+  }
+}

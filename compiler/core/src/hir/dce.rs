@@ -106,6 +106,9 @@ fn has_effects(kind: &OpKind) -> bool {
         // Erasing, reading a tag and unerasing are all pure: they read one
         // value and produce another. Dead ones go, like any other computation.
         OpKind::Erase { .. } | OpKind::TagOf { .. } | OpKind::Unerase { .. } => false,
+        // Asking what class a value is reads one word and compares it. A dead
+        // `instanceof` is a dead comparison.
+        OpKind::InstanceOf { .. } => false,
         // Named runtime functions that compute and do nothing else. A call is
         // assumed to have effects because it may, and these provably do not:
         // `nts_tag_name` allocates a string and returns it, so a dead one is a

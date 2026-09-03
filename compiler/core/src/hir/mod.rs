@@ -62,6 +62,11 @@ pub mod zero_sign;
 
 use nts_semantic_schema::{Origin, SemanticSnapshot, TypeId};
 
+/// Re-exported because it is already part of this module's surface -- a
+/// [`Layout`]'s `types` and an [`OpKind::InstanceOf`]'s `classes` are both made
+/// of these -- and a backend that has to read one needs to be able to name it.
+pub use nts_semantic_schema::TypeId as ClassId;
+
 /// How a value is represented in a machine.
 ///
 /// Deliberately not a mirror of [`nts_semantic_schema::TypeKind`]. That type
@@ -672,6 +677,23 @@ pub enum OpKind {
     ///
     /// The type says which closure class, the way [`OpKind::ObjectNew`]'s does.
     ClosureStatic,
+    /// `x instanceof C`, answered by the object's own class.
+    ///
+    /// The set of classes that satisfy it is **closed at compile time**: `C`
+    /// and everything that extends it, which the hierarchy already knows. A
+    /// compiled program cannot gain a subclass after it is built, so there is
+    /// no chain to walk and no prototype to consult -- the test is a comparison
+    /// against a handful of descriptor pointers, and usually against one.
+    ///
+    /// The operand may be erased, in which case its tag has to say it is a
+    /// reference before its class can be asked for. The lowering emits that
+    /// test; this operation assumes it.
+    InstanceOf {
+        value: ValueId,
+        /// `C` and its subclasses, in a stable order so two runs of one
+        /// compiler on one input emit the same program.
+        classes: Vec<TypeId>,
+    },
     /// `object.field`, by index into the type's [`Layout`].
     ///
     /// An index rather than a name: the layout already decided the order, and

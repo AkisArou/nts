@@ -1042,6 +1042,20 @@ NTS_READS_ONLY double nts_array_at(const NtsArray *a, double at);
  * else, a thrown string included: `value` already carries its text. */
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail);
 
+/* `x instanceof C`, for one candidate class.
+ *
+ * The compiler asks this once per class that satisfies the test, because that
+ * set is closed when the program is built: `C` and everything extending it, and
+ * usually just `C`. There is no chain to walk -- a compiled program gains no
+ * subclasses -- so the whole question is whether this object's descriptor is
+ * that one.
+ *
+ * Takes a value rather than a pointer so the tag can rule out the things that
+ * have no class at all. A string passes the tag test and then compares its own
+ * descriptor, which is never a class's, so `"x" instanceof C` is false by the
+ * same comparison rather than by a case of its own. */
+NTS_READS_ONLY bool nts_is_class(NtsValue value, const NtsDescriptor *klass);
+
 NtsArray *nts_array_fill(NtsArray *a, double value);
 /* The same for an array of booleans, which is a byte per element rather than
  * eight. A separate entry point rather than a generic one taking a width: the

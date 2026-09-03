@@ -1009,6 +1009,14 @@ _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail) {
   exit(1);
 }
 
+bool nts_is_class(NtsValue value, const NtsDescriptor *klass) {
+  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+    return false;
+  }
+  const NtsHeader *object = nts_value_reference(value);
+  return object && object->descriptor == klass;
+}
+
 /* A `const` read through a closure before its declaration ran.
  *
  *     const read = () => later;   // the cell exists, holding nothing

@@ -1426,6 +1426,51 @@ fn layout_of<'a>(
 ///
 /// Prefixed so it cannot collide with anything the program declares, and named
 /// after the source type so the emitted C is readable.
+/// `x instanceof C`, as one call per class that satisfies it.
+///
+/// The set is closed when the program is built -- `C` and everything extending
+/// it, which is usually just `C` -- so there is no chain to walk.
+///
+/// A class with no layout was never laid out here, which means this program
+/// never builds one, so nothing can be an instance of it and it contributes
+/// nothing: `instanceof Error` names all four provided error classes, and a
+/// program that throws only `TypeError` has a layout for one of them.
+///
+/// Through `nts_is_class` rather than an inline comparison, because the LLVM
+/// backend cannot short-circuit the load without branching and one question
+/// should not have two spellings. The helper also rules out the values with no
+/// class at all -- a number, and `null`. A *string* passes that test and then
+/// compares its own descriptor, which is never a class's, so `"x" instanceof C`
+/// is false by the same comparison rather than by a case of its own.
+fn instance_of(
+    name: &str,
+    operand: ValueId,
+    classes: &[nts_core::hir::ClassId],
+    context: &Context<'_>,
+) -> String {
+    let subject = value_name(operand);
+    let tests: Vec<String> = classes
+        .iter()
+        .filter_map(|class| {
+            context
+                .program
+                .layouts
+                .iter()
+                .find(|layout| layout.types.contains(class))
+        })
+        .map(|layout| {
+            format!(
+                "nts_is_class({subject}, &nts_desc_{})",
+                object_type_name(layout)
+            )
+        })
+        .collect();
+    if tests.is_empty() {
+        return format!("{name} = false;");
+    }
+    format!("{name} = ({});", tests.join(" || "))
+}
+
 fn object_type_name(layout: &nts_core::hir::Layout) -> String {
     format!(
         "NtsObj_{}",
@@ -2491,9 +2536,8 @@ fn emit_op(
         OpKind::Erase { .. } | OpKind::Unerase { .. } => {
             erased_conversion(func, op, &name, &op.kind, context)?
         }
-        OpKind::TagOf { value: operand } => {
-            format!("{name} = nts_value_tag({});", value_name(*operand))
-        }
+        OpKind::TagOf { value: at } => format!("{name} = nts_value_tag({});", value_name(*at)),
+        OpKind::InstanceOf { value: at, classes } => instance_of(&name, *at, classes, context),
         // The absent reference. Typed, because C distinguishes a null
         // `NtsString *` from a null `NtsObj_Point *` even though the address is
         // the same one.
