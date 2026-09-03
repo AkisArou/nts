@@ -56,6 +56,14 @@ reference says so in its own comment:
   representation that can alias its input costs — which is nothing — against
   one that must copy". We are 0.48x node and 0.14x bun on the same row.
 
+  **This reason is retired: see 0059.** We do not allocate either — a substring
+  that does not escape is written into frame storage, and that was already true
+  when this was written. The copy is real and costs about 13%; the rest of the
+  row is that the `memcpy` sits inside the scan loop and stops clang unrolling
+  it, which it does four ways for the C++. Two other plausible causes, the
+  allocation and `nts_unit`'s per-character width test, were measured and are
+  worth nothing.
+
 - **`fib` 1.70x.** The reference is `std::int64_t`. Ours is a `double`, and it
   has to be: `fib`'s return cannot be narrowed because the fixpoint over a
   recursive exponential does not converge to a bound, and `n` is only known to
