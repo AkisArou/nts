@@ -57,6 +57,21 @@ also passed to `substring`, whose signature pins it to a double anyway.
 So the arithmetic was never what the scan was paying for. The loop's cost is the
 character load and the branch, and a `double` multiply beside them is free.
 
+## The combination that looked like it would pay, and did not
+
+There was one more thing to try before reverting. The two changes might only
+work together: the reset cap does nothing to `substrings` because `start` is
+passed to `substring`, whose signature pins it to a double — and *removing* the
+substring makes that row slower, because `i - start` then goes unbounded and
+sinks the accumulator. Neither cause applies if you do both.
+
+Both, measured: **5.16us**, exactly what removing the substring alone gave. The
+cap does not fire on that shape at all — the emitted C still has 23 doubles and
+no `int64`. `substrings` nests its loops and resets `start` per round, and its
+guard is `i <= text.length` rather than `i <`, so `shape()` does not match what
+the minimal case matched. A third reason, found by trying rather than reasoned
+about.
+
 ## Reverted, and why that is the finding
 
 A change that makes the compiler prove more and the program no faster is a
