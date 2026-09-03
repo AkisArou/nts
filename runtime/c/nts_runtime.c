@@ -2271,6 +2271,10 @@ double nts_str_char_code_at_fn(const NtsString *s, double at) {
   return nts_str_char_code_at(s, at);
 }
 
+double nts_str_char_code_at_int_fn(const NtsString *s, int64_t at) {
+  return nts_str_char_code_at_int(s, at);
+}
+
 bool nts_string_truthy(const NtsString *s) { return s != 0 && s->length != 0; }
 
 /* The linkable companion to `nts_value_truthy`, which is a `static inline`.

@@ -851,6 +851,8 @@ int16_t nts_to_int16_fn(double x);
 uint16_t nts_to_uint16_fn(double x);
 NTS_READS_ONLY uint16_t nts_unit_fn(const NtsString *s, uint32_t at);
 NTS_READS_ONLY double nts_str_char_code_at_fn(const NtsString *s, double at);
+NTS_READS_ONLY double nts_str_char_code_at_int_fn(const NtsString *s,
+                                                  int64_t at);
 /* A string is falsy when it is absent *or* empty -- a null test and a length
  * test with a short circuit between them, which is why this is a function
  * rather than something a backend inlines. */
@@ -1068,6 +1070,26 @@ static inline double nts_to_integer(double value) {
     return 0.0;
   }
   return value < 0 ? -floor(-value) : floor(value);
+}
+
+/* The same read with an index that is already an integer.
+ *
+ * `charCodeAt` takes a `double` because `s.charCodeAt(0.5)` is legal and means
+ * index 0, so the general form has to truncate and compare in floating point.
+ * A scan does not produce halves -- its index is the loop counter -- and
+ * running that through the general form costs a conversion out and a
+ * conversion back per character, which is the thing the lowering keeps
+ * `charCodeAt` an operation rather than a call to avoid. The checked path
+ * reintroduced it.
+ *
+ * One unsigned comparison catches a negative index too: it wraps to something
+ * enormous, which is not less than the length. Out of range is NaN, not an
+ * error and not zero, exactly as above. */
+static inline double nts_str_char_code_at_int(const NtsString *s, int64_t at) {
+  if ((uint64_t)at >= (uint64_t)s->length) {
+    return (double)NAN;
+  }
+  return (double)nts_unit(s, (uint32_t)at);
 }
 
 static inline double nts_str_char_code_at(const NtsString *s, double at) {

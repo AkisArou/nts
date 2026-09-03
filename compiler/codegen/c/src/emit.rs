@@ -2522,8 +2522,20 @@ fn emit_op(
             // Proven inside the string, so there is no NaN to produce and no
             // range to test: a load, and the index is already an integer.
             if *checked {
+                // An index specialization already made an integer does not go
+                // back through a double to be range-tested. The general form
+                // has to -- `s.charCodeAt(0.5)` is index 0 -- and paying that
+                // per character is what the unchecked path exists to avoid,
+                // which the checked path was quietly undoing.
+                let helper = if func.value(*index).ty.is_scalar()
+                    && !matches!(func.value(*index).ty, HirType::Float { .. })
+                {
+                    "nts_str_char_code_at_int"
+                } else {
+                    "nts_str_char_code_at"
+                };
                 format!(
-                    "{name} = nts_str_char_code_at({}, {});",
+                    "{name} = {helper}({}, {});",
                     value_name(*string),
                     value_name(*index)
                 )

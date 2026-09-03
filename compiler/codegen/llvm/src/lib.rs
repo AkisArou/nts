@@ -875,6 +875,7 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_retain",
     "nts_round_fn",
     "nts_str_char_code_at_fn",
+    "nts_str_char_code_at_int_fn",
     "nts_string_eq",
     "nts_string_truthy",
     "nts_to_int32_fn",
@@ -1912,7 +1913,16 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             // next door had it right all along.
             let returns = ty_of(&op.ty, func)?;
             let helper = if *checked {
-                "nts_str_char_code_at_fn"
+                // See the C backend: an index that is already an integer is
+                // range-tested as one, rather than converted to a double and
+                // back once per character.
+                if func.value(*index).ty.is_scalar()
+                    && !matches!(func.value(*index).ty, HirType::Float { .. })
+                {
+                    "nts_str_char_code_at_int_fn"
+                } else {
+                    "nts_str_char_code_at_fn"
+                }
             } else {
                 "nts_unit_fn"
             };

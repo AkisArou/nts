@@ -188,6 +188,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_str_char_at", returns: "ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_str_char_at_into", returns: "ptr", params: &["ptr", "ptr", "double"], attributes: &[] },
     Signature { name: "nts_str_char_code_at_fn", returns: "double", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_str_char_code_at_int_fn", returns: "double", params: &["ptr", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_str_code_point_at", returns: "double", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_str_ends_with", returns: "zeroext i1", params: &["ptr", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_str_includes", returns: "zeroext i1", params: &["ptr", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },

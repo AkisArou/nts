@@ -144,6 +144,8 @@ static SIGNATURES: &[Declared] = &[
     ("nts_str_char_at_into", &[None, None, Some(HirType::Float { bits: 64 })], None),
     ("nts_str_char_code_at", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_str_char_code_at_fn", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
+    ("nts_str_char_code_at_int", &[None, Some(HirType::Int { bits: 64, signed: true })], Some(HirType::Float { bits: 64 })),
+    ("nts_str_char_code_at_int_fn", &[None, Some(HirType::Int { bits: 64, signed: true })], Some(HirType::Float { bits: 64 })),
     ("nts_str_code_point_at", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_str_ends_with", &[None, None], Some(HirType::Bool)),
     ("nts_str_includes", &[None, None], Some(HirType::Bool)),
