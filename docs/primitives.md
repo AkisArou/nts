@@ -21,7 +21,7 @@ column is a row with no hand-written reference; the case says why.
 | **boolean, null, undefined** | `absent`, `nullish`, `unknown-truthiness` | `boolean-flags` 0 / 0 | `absences` 2.14 / 0.50 | 0031, 0039, 0053, 0057 |
 | **bigint** | `bigint` | `bigint-arithmetic` 0 / 0 | `bigint` 0.99 / 0.09 | 0036 |
 | **symbol** | `symbol-keys` | `symbol-keys` 0 / 0 | `symbol-keys` 1.02 / 0.19 | 0037 |
-| **array** | `arrays`, `growable`, `callbacks` | `array-methods` 2 / 6<br>`array-mutations` 5 / 9<br>`array-of-objects` 18 / 22 | `arrays` 1.06 / 0.56<br>`array-methods` 0.54 / 0.22<br>`array-predicates` 1.09 / 0.58<br>`array-mutations` 1.04 / 0.37 | 0038, 0043, 0047, 0048, 0052 |
+| **array** | `arrays`, `growable`, `callbacks` | `array-methods` 2 / 6<br>`array-mutations` 5 / 9<br>`array-of-objects` 18 / 22 | `arrays` 1.06 / 0.56<br>`array-methods` 0.54 / 0.22<br>`array-predicates` 1.09 / 0.58<br>`array-mutations` 1.07 / 0.37 | 0038, 0043, 0047, 0048, 0052 |
 | **object and class** | `instances`, `classes`, `inheritance` | `subclass-field` 0 / 0<br>`nulled-field` 17 / 17<br>`readonly-anchor` 40 / 2<br>`cyclic-array` 8 / 4 | `objects` 1.00 / 0.84<br>`dispatch` 0.99 / 0.67 | 0054, 0055, 0056 |
 | **function and closure** | `closures`, `function-values` | `closure-capture` 0 / 0 | `closures` 1.01 / 0.38<br>`dispatch` 0.99 / 0.67 | 0040 |
 | **Map and Set** | `map-and-set`, `iteration` | `map-and-set` 2 / 17 | `map-and-set` 0.56 / 0.76 | 0041 |
