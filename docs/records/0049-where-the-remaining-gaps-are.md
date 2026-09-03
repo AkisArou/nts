@@ -81,6 +81,25 @@ reference says so in its own comment:
   provably unaliased and their identity never observed — and it is the same
   class of thing as 0059's view, on the same axis as 0038.
 
+- **`awfy-permute` 1.29x and `awfy-queens` 1.36x.** Both store `double[]` where
+  the reference stores `int32_t*` — `permute` has four such arrays and `queens`
+  two, beside six `bool[]` that already match. Twice the bytes moved per
+  element, for values that are all small integers.
+
+  `hir::elements` exists to narrow exactly this and does not fire. Its two
+  documented refusals — an element type read into floating point, and one whose
+  array reaches any runtime helper — are both plausible here, since
+  `new Array(n).fill(0)` is a helper call and a `number` read is a double. But
+  narrowing also declines on a local array with no `fill` and with every read
+  coerced by `| 0`, so **which filter declines is not established** and the two
+  obvious answers are not sufficient.
+
+  Worth noting that `reaches_a_runtime_helper` carries the claim "nothing in the
+  benchmark suite pays for the crudeness: an array used through helpers is one
+  whose loop is inside the runtime". These two rows use `fill` at construction
+  and then loop in TypeScript, so if that filter is the one declining, the claim
+  is false and these are what pays.
+
 - **`fib` 1.70x.** The reference is `std::int64_t`. Ours is a `double`, and it
   has to be: `fib`'s return cannot be narrowed because the fixpoint over a
   recursive exponential does not converge to a bound, and `n` is only known to
