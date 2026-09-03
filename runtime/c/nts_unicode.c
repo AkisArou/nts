@@ -212,7 +212,28 @@ static uint32_t nts_case_pass(const NtsString *s, int conv_type,
   return out;
 }
 
-static NtsString *nts_str_case_convert(const NtsString *s, int conv_type) {
+/* Aligned, which is not a style choice and is the largest single number in
+ * `benches/cases/case-convert`.
+ *
+ * The two backends emitted *byte-identical* code for this function -- 492
+ * instructions, 96 of them vector, the same in both -- and one ran 28% slower
+ * than the other. The only difference was where it landed: 0x4eb0 against
+ * 0x4ed0, forty-eight bytes into a cache line against sixteen. Same
+ * instructions, three times the branch mispredictions, from thirty-two bytes of
+ * address.
+ *
+ * That is branch-predictor aliasing, and it is luck. It is also *unstable*
+ * luck: an unrelated change to the runtime moved this function and flipped
+ * which backend was faster, which is how a published row swung 35% between two
+ * runs with no relevant change between them. Pinning the alignment takes the
+ * luck out, and both backends land on the good side of it -- 3.36us and 2.63us
+ * became 2.54 and 2.49.
+ *
+ * Only this one. The same attribute on `nts_release` measured nothing and is
+ * not here; a hot function whose misprediction rate is already low has no
+ * aliasing to lose. */
+__attribute__((aligned(64))) static NtsString *
+nts_str_case_convert(const NtsString *s, int conv_type) {
   nts_build_tables();
 
   /* One byte in, one byte out, one allocation, one pass.
