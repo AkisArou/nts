@@ -3622,7 +3622,21 @@ static void nts_map_rehash(NtsMap *map) {
  *
  * The same for the two cursor reads below: a `for...of` over a table reads a
  * key and a value per step and gives each back at the end of the step. */
-NtsValue nts_map_get(const NtsMap *map, NtsValue key) {
+/* `get`, `has`, `set` and `add` are inlined, and `nts_map_rehash` is not.
+ *
+ * That split is the whole of it. A lookup is a hash, a masked index and a probe
+ * that almost always hits on the first slot -- twenty or so instructions, with
+ * `nts_map_find` and `nts_hash_key` already folded into them -- so out of line
+ * the call was a third of the cost of the thing it called. Growing is a
+ * `malloc`, a copy and a reinsert of every entry, it happens log n times, and
+ * it stays where it is: `nts_map_rehash` is 15.6% of the benchmark as a call
+ * and would be far more as a copy at every `set`.
+ *
+ * `benches/cases/map-and-set` walked down as each went in: 6.82us with none of
+ * them, 6.12 with `get` and `has`, 5.53 with `set`, 5.35 with `add`. That is
+ * 1.35x bun to 1.01x, and 0.72x `std::unordered_map` to 0.56x. */
+__attribute__((always_inline)) NtsValue nts_map_get(const NtsMap *map,
+                                                    NtsValue key) {
   int32_t at = nts_map_find(map, key, nts_hash_key(key, map->kind), 0);
   if (at < 0 || !map->values) {
     return nts_value_of_undefined();
@@ -3631,7 +3645,8 @@ NtsValue nts_map_get(const NtsMap *map, NtsValue key) {
   return map->values[at];
 }
 
-bool nts_map_has(const NtsMap *map, NtsValue key) {
+__attribute__((always_inline)) bool nts_map_has(const NtsMap *map,
+                                                NtsValue key) {
   return nts_map_find(map, key, nts_hash_key(key, map->kind), 0) >= 0;
 }
 
@@ -3665,7 +3680,8 @@ static NtsValue nts_map_normalize(NtsValue key) {
  * the end of it a `set` in a loop can be free at. */
 static NtsMap *nts_map_same(NtsMap *map) { return map; }
 
-NtsMap *nts_map_set(NtsMap *map, NtsValue key, NtsValue value) {
+__attribute__((always_inline)) NtsMap *nts_map_set(NtsMap *map, NtsValue key,
+                                                   NtsValue value) {
   key = nts_map_normalize(key);
   uint32_t hash = nts_hash_key(key, map->kind);
   uint32_t slot = 0;
@@ -3734,7 +3750,7 @@ void nts_map_clear(NtsMap *map) {
   map->header.length = 0;
 }
 
-NtsMap *nts_set_add(NtsMap *map, NtsValue key) {
+__attribute__((always_inline)) NtsMap *nts_set_add(NtsMap *map, NtsValue key) {
   return nts_map_set(map, key, nts_value_of_undefined());
 }
 
