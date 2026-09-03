@@ -116,6 +116,27 @@ reference says so in its own comment:
   hundred balls that fit in L1 and straddling inside L1 is cheap. A few percent
   on 1.60x, against eight bytes on every object in every program.
 
+- **`awfy-towers` 1.31x.** Not inlined, where the C++ is. `Towers__moveTopDisk`
+  is 35.7% of the row and `Towers__moveDisks` 20.8%, and inside the first one
+  `pop %rax` and `ret` are about **40%** — a tiny function called constantly,
+  paying its prologue and return every time. C++ runs 980 instructions to our
+  1686.
+
+  `hir::inline` is deliberately not an inliner: 0027 measured a general one and
+  deleted it, because the facts here are whole-function and all-or-nothing, so
+  copying small bodies made the analysis strictly worse. The C compiler is meant
+  to do this instead, and it declines — because the method carries **external
+  linkage**. The emitter already writes `static` for anything not exported; the
+  method is exported because its *class* is, even though the whole program is
+  compiled together and only `work` is an entry point.
+
+  Narrowing linkage to the actual roots was tried and is a bigger change than it
+  looks: it turns `Benchmark__benchmark` into an unused `static`, which is
+  `-Wunused-function` and an error here. External linkage had been hiding dead
+  code that `reachable::prune` keeps — it is reachable through a vtable slot
+  nothing calls. So this is a pruning change with a linkage change on top, and
+  `dispatch` and `objects` did not move under it.
+
 - **`fib` 1.70x.** The reference is `std::int64_t`. Ours is a `double`, and it
   has to be: `fib`'s return cannot be narrowed because the fixpoint over a
   recursive exponential does not converge to a bound, and `n` is only known to
