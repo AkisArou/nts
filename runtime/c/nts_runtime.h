@@ -137,7 +137,25 @@ typedef struct NtsArray {
   /* Elements the block can hold. `header.length` is how many it does hold. */
   uint32_t capacity;
   void *elements;
+  /* Padding, and it is not slack.
+   *
+   * `elements` points just past this struct for an array nothing has grown, so
+   * `sizeof(NtsArray) % 16` *is* the alignment of every inline element block.
+   * At 40 it was 8: a `double[]` read two at a time crossed a 16-byte boundary
+   * on every single access, and `elementwise` -- a multiply over 4096 doubles,
+   * 512 times -- paid 33% for it. The loop was already vectorized and its body
+   * was instruction-for-instruction what clang emits for `std::vector`; the
+   * only difference left was where the data began.
+   *
+   * Eight bytes per array, once, against every SSE load and store its elements
+   * will ever take. */
+  uint32_t alignment_[2];
 } NtsArray;
+/* Both providers hand back 16-byte aligned blocks -- `malloc` does, and the
+ * bump allocator advances by sizes already rounded to 16 -- so this assertion
+ * is the whole of what the alignment above depends on. */
+_Static_assert(sizeof(NtsArray) % 16u == 0u,
+               "inline array elements start at sizeof(NtsArray)");
 
 /* A value carrying its own type: what a slot the checker typed `unknown` holds.
  *
