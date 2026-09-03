@@ -98,4 +98,39 @@ a *representation* question, which is the axis this goal declared closed.
 
 Not built here, and now for a better reason than "it is large": the control flow
 was the easy half, and the half nobody had looked at is what a thrown value is.
-The next sitting starts there, not with `can_throw`.
+
+## Two more things building it found
+
+**The lowering is single-pass, so the tests cannot go in it.** At the point it
+lowers a call it does not know whether the callee throws — `can_throw` is a
+call-graph property and the callee may not be lowered yet. So the checks have to
+be a later HIR pass, which means the IR has to carry *which `try` region a call
+is inside*. That is a new thing in the IR, not a new arrangement of what is
+there.
+
+**The handler needs N-edge merging.** `lower_if` snapshots the bindings, lowers
+both arms, and builds block parameters for the names that differ. A handler is
+entered from every throwing call in the body, each with different bindings —
+
+```ts
+let x = 1;
+try { x = 2; f(); } catch { return x }   // 2, not 1
+```
+
+— so it needs that same algorithm over N edges rather than two, with every
+edge's terminator patched after the body is lowered, the way `lower_if`
+remembers `branch_block`.
+
+## So the order is
+
+1. `Error` as a representation, because `catch (e)` binds a value and today
+   there is no value to bind.
+2. A `try` region in the IR, because the single-pass lowering cannot decide the
+   tests and something has to carry the question to a pass that can.
+3. `can_throw`, the fixpoint, which is the easy part and was the part this
+   record originally started with.
+4. The handler merge, N edges, patched late.
+
+The runtime slot for all this was written and then reverted: a pending-exception
+slot nothing sets is scaffolding, and the rule against shipping it is the reason
+this record is longer than the diff.
