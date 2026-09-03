@@ -52,25 +52,33 @@ iteration.
 place we are behind a JIT; it is a place where a tagged sixteen-byte value
 cannot be vectorised and a POD can.
 
-## The fix, which is named rather than done
+## The fix, and a first answer that was wrong
 
-`hir::unerase` already removes erasure "from a site that never needed it" — for
-an **array** whose element type is erased, allocated locally and never escaping,
-every store of which erases the same representation. The pattern here is the
-same idea one level down:
+The first version of this record said `hir::unerase` already had the conditions
+and only the scalar case was missing. That is wrong, and the code says so.
+
+`unerase` narrows an **array** whose element type is erased when
+`single_representation` holds: *every* store into it erases a value of the same
+representation `R`, so the element can become `R` and the tag can go. The
+pattern here cannot satisfy that:
 
     held = cond ? undefined : i       // a block parameter, erased
-    total += held ?? -1               // a tag test and an unerase
+    total += held ?? -1
 
-Every incoming value of that parameter is an `Erase`, and every use of it is a
-`TagOf` or an `Unerase`. Both are the conditions `unerase` already checks for an
-array; what is missing is the scalar case, where the parameter splits into a tag
-and a payload and the tag is a constant on each edge — which is what would let
-the branch fold and the loop vectorise.
+The two incoming erasures are `ConstUndefined` and an `int32`. They do not share
+a representation — that is what makes it a union — so the condition fails by
+construction rather than by omission. Extending `unerase` to block parameters
+would leave this exact shape untouched.
 
-That is a pass, not an afternoon's patch, and writing it at the end of a long
-session is how a false premise reaches a goal. The measurement is here so that
-whoever writes it has a number to move.
+What the shape wants is a **split**, not an unerasure: one `bool` saying whether
+the value is present and one `R` carrying the payload, with the absent edge
+passing anything. Then `held ?? -1` is a select rather than a tag test, and a
+select is what vectorises.
+
+That is the "unions that lay out differently" item the goal lists under the type
+layer, and it is a different pass from this one. Recorded with the wrong answer
+left visible, because the wrong answer is the interesting part: the two look
+alike from the call site and are not alike at all in what they need.
 
 ## What this says about the audit
 
