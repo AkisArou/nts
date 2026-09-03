@@ -645,6 +645,15 @@ bool nts_string_eq(const NtsString *a, const NtsString *b);
 #define NTS_READS_ONLY
 #endif
 
+/* Kept out of its caller. For a cold path inside a hot one -- growing an array
+ * inside an append -- where inlining puts the rare half's code in the common
+ * half's way. */
+#if defined(__GNUC__) || defined(__clang__)
+#define NTS_NOINLINE __attribute__((noinline))
+#else
+#define NTS_NOINLINE
+#endif
+
 /* `new Map()` and `new Set()`. `kind` is one of `NTS_KEY_*`, a double because
  * that is how this ABI passes a number the compiler knew all along. */
 NTS_ALLOCATES NtsMap *nts_map_new(double kind);

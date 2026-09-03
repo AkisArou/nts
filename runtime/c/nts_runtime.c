@@ -1132,8 +1132,20 @@ static double nts_array_offset(const NtsArray *a, double at) {
  * Split out of `nts_array_push` so that an array of references grows the same
  * way an array of numbers does. Nothing here reads an element: the size comes
  * from the descriptor, which is why the split costs nothing. */
-static void nts_array_reserve(NtsArray *a) {
-  if (a->header.length == a->capacity) {
+/* Split in two, and the split is the point.
+ *
+ * The *check* belongs at the call site: `push` is inlined, and asking whether
+ * an array is full is a load and a compare that the caller can often fold away
+ * entirely. The *growth* does not: it is a `malloc`, a copy of everything and a
+ * free, it happens log n times, and inlining it puts the code for the one push
+ * that reallocates into all the ones that do not.
+ *
+ * Marking the whole of `nts_array_reserve` `noinline` was tried first and made
+ * `array-predicates` worse than leaving the compiler alone -- because that
+ * forced the *check* out of line too, and the check is what runs every time.
+ * One call per append, for a comparison. */
+static NTS_NOINLINE void nts_array_grow(NtsArray *a) {
+  {
     /* Doubling, so a loop of pushes is linear rather than quadratic. The first
      * growth moves the elements out of the block the array itself lives in, and
      * every one after reallocates -- but the array object stays where it is, so
@@ -1179,6 +1191,12 @@ static void nts_array_reserve(NtsArray *a) {
     }
     a->elements = moved;
     a->capacity = wanted;
+  }
+}
+
+static inline void nts_array_reserve(NtsArray *a) {
+  if (a->header.length == a->capacity) {
+    nts_array_grow(a);
   }
 }
 
@@ -2384,7 +2402,8 @@ NtsArray *nts_array_slice_ref(const NtsArray *a, double from, double to) {
   uint32_t start = nts_str_clamp(from, a->header.length, 1);
   uint32_t end = nts_str_clamp(to, a->header.length, 1);
   uint32_t count = end > start ? end - start : 0u;
-  NtsArray *out = nts_array_new(a->header.descriptor, (double)count);
+  NtsArray *out =
+      nts_array_new_uninitialized(a->header.descriptor, (double)count);
   void *const *items = NTS_ITEMS(a, void *);
   void **into = NTS_ITEMS(out, void *);
   for (uint32_t at = 0; at < count; at++) {
@@ -2463,7 +2482,8 @@ static NtsArray *nts_array_splice_at(NtsArray *a, double start, double count,
   uint32_t length = a->header.length;
   uint32_t from = nts_str_clamp(start, length, 1);
   uint32_t take = nts_str_clamp(count, length - from, 0);
-  NtsArray *out = nts_array_new(a->header.descriptor, (double)take);
+  NtsArray *out =
+      nts_array_new_uninitialized(a->header.descriptor, (double)take);
   unsigned char *items = (unsigned char *)a->elements;
   if (take != 0) {
     memcpy(out->elements, items + (size_t)from * width, (size_t)take * width);
@@ -2483,6 +2503,12 @@ NtsArray *nts_array_splice_ref(NtsArray *a, double start, double count) {
 }
 
 /* `xs.concat(ys)`, one argument.
+ *
+ * Uninitialized, like `slice` and `splice` beside it: every slot of the result
+ * is written by the copies below, so zeroing it first is a `memset` of the
+ * whole answer thrown away. That claim is checked rather than argued --
+ * `NTS_POISON` fills an uninitialized allocation with a pattern that is not
+ * zero, and the example suite agrees with node under it.
  *
  * JavaScript's `concat` takes any number of them and *spreads* the ones that
  * are arrays while appending the ones that are not, which is two questions --
@@ -2513,7 +2539,8 @@ void nts_array_extend_ref(NtsArray *dst, const NtsArray *src) {
 
 NtsArray *nts_array_concat(const NtsArray *a, const NtsArray *b) {
   uint32_t total = a->header.length + b->header.length;
-  NtsArray *out = nts_array_new(a->header.descriptor, (double)total);
+  NtsArray *out =
+      nts_array_new_uninitialized(a->header.descriptor, (double)total);
   memcpy(nts_numbers(out), nts_numbers(a),
          (size_t)a->header.length * sizeof(double));
   memcpy(nts_numbers(out) + a->header.length, nts_numbers(b),
@@ -2525,7 +2552,8 @@ NtsArray *nts_array_concat(const NtsArray *a, const NtsArray *b) {
  * unlike `splice`, which *moves* them, this one retains. */
 NtsArray *nts_array_concat_ref(const NtsArray *a, const NtsArray *b) {
   uint32_t total = a->header.length + b->header.length;
-  NtsArray *out = nts_array_new(a->header.descriptor, (double)total);
+  NtsArray *out =
+      nts_array_new_uninitialized(a->header.descriptor, (double)total);
   void **into = NTS_ITEMS(out, void *);
   void *const *first = NTS_ITEMS(a, void *);
   void *const *second = NTS_ITEMS(b, void *);
@@ -2545,7 +2573,8 @@ NtsArray *nts_array_slice(const NtsArray *a, double from, double to) {
   uint32_t start = nts_str_clamp(from, a->header.length, 1);
   uint32_t end = nts_str_clamp(to, a->header.length, 1);
   uint32_t count = end > start ? end - start : 0u;
-  NtsArray *out = nts_array_new(a->header.descriptor, (double)count);
+  NtsArray *out =
+      nts_array_new_uninitialized(a->header.descriptor, (double)count);
   if (count != 0) {
     memcpy(nts_numbers(out), nts_numbers(a) + start,
            (size_t)count * sizeof(double));
