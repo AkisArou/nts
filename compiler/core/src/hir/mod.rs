@@ -53,6 +53,7 @@ pub mod runtime;
 pub mod reachable;
 pub mod signatures;
 pub mod simplify;
+pub mod split;
 pub mod specialize;
 pub mod verify;
 pub mod zero_sign;
@@ -1244,10 +1245,11 @@ pub struct Prepared {
     /// Sites that stopped being erased.
     ///
     /// An array whose every store agreed, a parameter whose every caller
-    /// agreed, a return whose every `return` agreed. Each one is a tag that is
-    /// no longer written and no longer tested, which is the whole of what the
-    /// erased representation costs -- `docs/records/0019` measured it at 11%
-    /// on an array and proved it was the tag rather than the size.
+    /// agreed, a return whose every `return` agreed, and a block parameter
+    /// whose every edge carried a known tag (see [`split`]). Each one is a tag
+    /// that is no longer written and no longer tested, which is the whole of
+    /// what the erased representation costs -- `docs/records/0019` measured it
+    /// at 11% on an array and proved it was the tag rather than the size.
     pub narrowed: usize,
     /// Functions cloned for the closure they are called with.
     pub cloned: usize,
@@ -1602,10 +1604,9 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
 
     let (cloned, copied, dropped) = reshape_calls(&mut program, options.roots);
     let pruned = pruned + dropped;
+    let unions_split = split_unions(&mut program);
 
-    let mut specialized = 0;
-    let mut conversions = 0;
-    let mut checks_removed = 0;
+    let (mut specialized, mut conversions, mut checks_removed) = (0, 0, 0);
 
     if specialize_numbers {
         // Analyzed as a program rather than a function at a time: a parameter is
@@ -1686,7 +1687,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // representations: `x | 0` is a coercion until `x` is known to be an `i32`,
     // and then it is nothing. Removing them here keeps every pass below from
     // tracking values that are copies of other values.
-    let narrowed = shed_erasure(&mut program);
+    let narrowed = shed_erasure(&mut program) + unions_split;
 
     let mut simplified = 0;
     for func in &mut program.funcs {
@@ -1839,6 +1840,15 @@ fn reshape_calls(program: &mut Program, roots: reachable::Roots<'_>) -> (usize, 
     let cloned = monomorphize::monomorphize(program);
     let copied = inline::inline(program);
     (cloned, copied, reachable::prune(program, roots))
+}
+
+/// Split every union-typed block parameter the program allows. Reports how many.
+///
+/// Called before specialization, and that is the whole of why it is a separate
+/// step rather than part of one: run afterwards it would find every payload
+/// already committed to a double, which is the conversion it exists to remove.
+fn split_unions(program: &mut Program) -> usize {
+    program.funcs.iter_mut().map(split::split_unions).sum()
 }
 
 fn place_allocations(program: &mut Program) -> usize {
