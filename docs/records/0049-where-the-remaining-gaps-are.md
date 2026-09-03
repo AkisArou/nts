@@ -64,6 +64,23 @@ reference says so in its own comment:
   allocation and `nts_unit`'s per-character width test, were measured and are
   worth nothing.
 
+- **`awfy-bounce` 1.56x.** The reference stores its balls *by value*:
+
+      std::array<Ball, ball_count> balls = {};      // C++
+      const balls: Ball[] = new Array(ballCount);   // ours, references
+
+  A `Ball[]` is an array of references, so the hot loop loads a pointer per ball
+  before it can load a field — `mov (%rcx,%rsi,8),%rdi` is 1.5% of the row on
+  its own and the field loads hang off it. IPC is 3.55 against the C++'s 5.22,
+  which is the shape of a loop chasing pointers against one walking an array.
+
+  **Not proven to be the whole gap.** The harness is time-budgeted, so the two
+  binaries run different iteration counts and their instruction totals do not
+  compare; IPC does, and the sources do, and that is what this rests on. Storing
+  objects inline in an array is a real change — it needs the elements to be
+  provably unaliased and their identity never observed — and it is the same
+  class of thing as 0059's view, on the same axis as 0038.
+
 - **`fib` 1.70x.** The reference is `std::int64_t`. Ours is a `double`, and it
   has to be: `fib`'s return cannot be narrowed because the fixpoint over a
   recursive exponential does not converge to a bound, and `n` is only known to
