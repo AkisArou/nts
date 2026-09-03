@@ -1182,7 +1182,21 @@ static void nts_array_reserve(NtsArray *a) {
   }
 }
 
-double nts_array_push(NtsArray *a, double value) {
+/* Inlined, which is the largest number in `benches/cases/array-predicates`:
+ * 3.73us to 2.19us, and past the `std::vector` it is measured against.
+ *
+ * `filter` appends once per element it keeps, and the whole of an append is a
+ * compare, a store and an increment -- so out of line it was 51% of that
+ * benchmark's instructions, nearly all of it call overhead. Growing is inside
+ * it and stays inside it: marking `nts_array_reserve` `noinline` to keep this
+ * one small made the row *worse* than not inlining at all, which is the
+ * compiler knowing more about the tradeoff than the attribute does.
+ *
+ * `nts_array_push_ref` is the same function for a reference element and is not
+ * inlined, because nothing here measured it and a number is what ships a
+ * change. */
+__attribute__((always_inline)) double nts_array_push(NtsArray *a,
+                                                     double value) {
   nts_array_reserve(a);
   NTS_ITEMS(a, double)[a->header.length] = value;
   a->header.length++;
@@ -2350,12 +2364,13 @@ NtsArray *nts_array_slice_ref(const NtsArray *a, double from, double to) {
   return out;
 }
 
-/* Shorten an array to its first `count` elements, and hand it back.
+/* Shorten an array to its first `count` elements.
  *
- * What `filter` does when it has finished writing them. It allocates the
- * longest result it could need -- one element per element of the input -- and
- * fills it from the front, so the elements it kept are already contiguous and
- * all that is left is to say how many there are.
+ * What `filter` does *before* it writes any: it allocates the longest result it
+ * could need -- one element per element of the input -- and then says the array
+ * is empty, so the room is there and the length is nothing. `push` maintains
+ * the length from then on and never reallocates, and the collector never sees a
+ * slot the loop has not written.
  *
  * **Not a general `truncate`.** One of those would have to release what it
  * drops, and this releases nothing. It does not have to: the slots past `count`
@@ -2363,15 +2378,19 @@ NtsArray *nts_array_slice_ref(const NtsArray *a, double from, double to) {
  * precisely so that this is true. The name says which of the two it is, because
  * the other one is what a caller reaching for a `truncate` would expect.
  *
- * One allocation for the whole method, and no reallocation. Growing a result
- * with `push` would be the other way to write it, and it is what a hand-written
- * loop does, but it pays a fresh block every time it doubles. */
-NtsArray *nts_array_keep_first(NtsArray *a, double count) {
+ * One allocation for the whole method, and no reallocation. Growing from empty
+ * is the other way to write it, and it is what a hand-written loop does, but it
+ * pays a fresh block every time it doubles.
+ *
+ * Returns nothing, which is not an oversight. Handing the array back made the
+ * result a value the caller had to decide the ownership of, and where the
+ * borrow could not be proved safe -- across the loop that follows, it cannot --
+ * that was a retain and a release for an array the function already owned. */
+void nts_array_keep_first(NtsArray *a, double count) {
   uint32_t keep = count > 0.0 ? (uint32_t)count : 0u;
   if (keep < a->header.length) {
     a->header.length = keep;
   }
-  return a;
 }
 
 NtsArray *nts_array_reverse_ref(NtsArray *a) {

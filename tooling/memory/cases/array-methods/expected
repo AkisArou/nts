@@ -27,10 +27,20 @@ because four, so seventeen elements pass through capacities 4, 8, 16 and 32.
 because That is the same four `array-of-objects` pays and the same four a
 because known trip count would remove; the argument is written out there.
 because
-because `filter` is the one. It allocates a result as long as its input, fills
-because it from the front, and shortens it -- so the elements live inline in the
-because header block the way every sized array's do, and one allocation covers
-because the whole method however many elements survive it. Growing the result
-because with `push` is the other way to write it, and it is what a hand-written
-because loop does; it would pay a block every time it doubled, which is up to
-because four more for an input this size.
+because `filter` is the one. It allocates a result as long as its input and
+because then says the array is *empty* -- the room is there, the length is
+because nothing -- and appends what it keeps. So the elements live inline in the
+because header block the way every sized array's do, `push` never reallocates
+because because the capacity is already the most it could need, and one
+because allocation covers the whole method however many elements survive it.
+because
+because Growing from empty is the other way to write it and is what a
+because hand-written loop does; it would pay a block every time it doubled,
+because which is up to four more for an input this size.
+because
+because Allocating the full length and *shortening* at the end is the third,
+because and was the first version. It costs the same one allocation and a
+because `memset` of the whole input besides: the array is live while the
+because callback runs, so a collection would walk slots the loop has not
+because reached, and zeroing is what makes that walk find nulls. Saying the
+because array is empty answers the same question for nothing.

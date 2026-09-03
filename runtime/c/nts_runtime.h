@@ -987,9 +987,9 @@ NtsArray *nts_array_fill_bool(NtsArray *a, bool value);
  * reference is untouched, so this is a store rather than a hand-over. */
 NtsArray *nts_array_fill_ref(NtsArray *a, void *value);
 NtsArray *nts_array_reverse(NtsArray *a);
-/* `filter`'s last step: keep the first `count` and say so. Hands back the array
- * it was given, borrowed -- see `own::RUNTIME_HANDS_BACK`. */
-NtsArray *nts_array_keep_first(NtsArray *a, double count);
+/* `filter`'s *first* step: keep the first `count`, which is none of them, so
+ * the room is there and the length is nothing. See the definition. */
+void nts_array_keep_first(NtsArray *a, double count);
 NtsArray *nts_array_slice(const NtsArray *a, double from, double to);
 
 /* One code unit of a string, whichever width it is stored in.

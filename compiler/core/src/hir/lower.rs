@@ -3107,10 +3107,15 @@ enum CallbackResult {
     /// `element` is the value itself rather than the name bound to it. A
     /// callback may assign to its own parameter, and `filter` keeps what the
     /// array held either way.
+    ///
+    /// `push` because the result is allocated with room and no length -- see
+    /// [`FuncBuilder::iteration_result_array`] -- so appending is what writing
+    /// a kept element *is*, and the count the two paths would otherwise
+    /// disagree about lives in the array instead.
     Keep {
         array: ValueId,
-        out: u32,
         element: ValueId,
+        push: &'static str,
     },
 }
 
@@ -13149,7 +13154,8 @@ impl<'a> FuncBuilder<'a> {
             self.bindings.insert(*name, self.bindings[&accumulator]);
         }
 
-        let result = Self::iteration_delivery(kind, produced, accumulator, index, value);
+        let result =
+            Self::iteration_delivery(kind, produced, accumulator, index, value, element_ty);
         self.callback_returns.push(CallbackReturn {
             depth: record.depth,
             result,
@@ -13188,7 +13194,9 @@ impl<'a> FuncBuilder<'a> {
             (Iteration::ForEach, _, _) => {
                 Ok(self.push(OpKind::ConstFloat(0.0), HirType::Void, origin))
             }
-            (Iteration::Map, Some(array), _) => Ok(array),
+            // `map` filled every slot it allocated; `filter` appended to one
+            // allocated empty. Either way the array is the answer.
+            (Iteration::Map | Iteration::Filter, Some(array), _) => Ok(array),
             // The accumulator's binding after the loop is the exit block's
             // parameter for it, which `end_loop` has just installed.
             (
@@ -13211,14 +13219,6 @@ impl<'a> FuncBuilder<'a> {
                     _ => "nts_array_at",
                 };
                 Ok(self.runtime_call(helper, vec![receiver, at], ty, origin))
-            }
-            // The array is as long as the input and holds its kept elements in
-            // the front, so the last step is to say how many there are. The
-            // helper hands the array back rather than making one.
-            (Iteration::Filter, Some(array), Some(symbol)) => {
-                let kept = self.bindings[&symbol];
-                let ty = self.values[array.0 as usize].ty.clone();
-                Ok(self.runtime_call("nts_array_keep_first", vec![array, kept], ty, origin))
             }
             _ => unreachable!("the result of a kind is decided with the kind"),
         }
@@ -13248,19 +13248,43 @@ impl<'a> FuncBuilder<'a> {
         let ty = self
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "a `map` result"))?;
-        // Zeroed for `filter` and not for `map`, and the difference is which
-        // slots get written. `map` fills every one of them; `filter` fills a
-        // prefix and shortens the array to it, so the tail is read by nothing
-        // *after* the loop -- but during it the array is a live object with a
-        // length, and a collection triggered inside the callback would walk
-        // slots the loop has not reached. Zeroing is what makes that walk find
-        // nulls instead of whatever the allocator last left there.
-        let zeroed = matches!(kind, Iteration::Filter);
-        Ok(Some(self.push(
-            OpKind::ArrayNew { length, zeroed },
-            ty,
+        let made = self.push(
+            OpKind::ArrayNew {
+                length,
+                zeroed: false,
+            },
+            ty.clone(),
             origin.clone(),
-        )))
+        );
+        if !matches!(kind, Iteration::Filter) {
+            return Ok(Some(made));
+        }
+        // `filter` keeps the *room* and gives back the length.
+        //
+        // `map` writes every slot it allocates and `filter` writes a prefix, so
+        // the two differ in what the tail holds while the loop is running --
+        // and the array is a live object throughout, with a length the
+        // collector walks if the callback allocates. An array whose length says
+        // `n` and whose slots hold whatever the allocator last left there is
+        // one the collector reads as `n` references.
+        //
+        // Zeroing the tail answers that and was the first version. It costs a
+        // `memset` of the whole input: 16.4% of `benches/cases/array-predicates`
+        // went to `__memset_avx2_unaligned_erms`.
+        //
+        // Saying the array is *empty* answers it for nothing. The capacity is
+        // the input's length, so `push` never reallocates, and the length is
+        // exactly what has been written -- so the collector never sees a slot
+        // the loop has not reached, the result needs no shortening at the end,
+        // and the two paths through the body no longer disagree about a count.
+        let none = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        self.runtime_call(
+            "nts_array_keep_first",
+            vec![made, none],
+            HirType::Void,
+            origin.clone(),
+        );
+        Ok(Some(made))
     }
 
     /// The names an inlined callback's loop has to carry.
@@ -13340,8 +13364,8 @@ impl<'a> FuncBuilder<'a> {
             // cannot just be rebound the way `some`'s answer is.
             CallbackResult::Keep {
                 array,
-                out,
                 element,
+                push,
             } => {
                 let value = value.ok_or_else(|| {
                     self.unsupported(
@@ -13350,7 +13374,7 @@ impl<'a> FuncBuilder<'a> {
                     )
                 })?;
                 let cond = self.truthy(id, value);
-                self.keep_element(id, *array, *out, *element, cond);
+                self.keep_element(id, *array, *element, push, cond);
                 Ok(())
             }
             CallbackResult::Store { array, index } => {
@@ -13385,6 +13409,7 @@ impl<'a> FuncBuilder<'a> {
         accumulator: Option<u32>,
         index: u32,
         value: ValueId,
+        element: &HirType,
     ) -> CallbackResult {
         match (kind, produced, accumulator) {
             (Iteration::ForEach, _, _) => CallbackResult::Discard,
@@ -13401,10 +13426,14 @@ impl<'a> FuncBuilder<'a> {
             (Iteration::FindIndex | Iteration::Find, _, Some(symbol)) => {
                 CallbackResult::Locate { symbol, index }
             }
-            (Iteration::Filter, Some(array), Some(symbol)) => CallbackResult::Keep {
+            (Iteration::Filter, Some(array), _) => CallbackResult::Keep {
                 array,
-                out: symbol,
                 element: value,
+                push: if matches!(element, HirType::Managed(_)) {
+                    "nts_array_push_ref"
+                } else {
+                    "nts_array_push"
+                },
             },
             _ => unreachable!("the result of a kind is decided with the kind"),
         }
@@ -13471,73 +13500,42 @@ impl<'a> FuncBuilder<'a> {
                 self.bindings.insert(symbol, length);
                 Some(symbol)
             }
-            // `filter` carries how many it has kept, which is both the index
-            // it writes the next one at and the length of the result.
-            Iteration::Filter => {
-                let symbol = self.synthetic_symbol();
-                let start = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-                self.bindings.insert(symbol, start);
-                Some(symbol)
-            }
-            Iteration::ForEach | Iteration::Map => None,
+            Iteration::ForEach | Iteration::Map | Iteration::Filter => None,
         })
     }
 
-    /// Store an element and step the cursor, or do neither.
+    /// Append an element, or do not.
     ///
-    /// `filter`'s body, and the one of these whose two paths *disagree* about a
-    /// carried name: one has kept an element and the other has not, so the
-    /// count differs where they meet. That makes the meeting block a merge and
-    /// the count its parameter, which is what an `if` does for any name its
-    /// arms write -- and the reason this cannot rebind the way `stop_early`
-    /// does, where the path that writes never comes back.
+    /// `filter`'s body. The two paths used to disagree about how many had been
+    /// kept, which made the block they meet in a merge and the count its
+    /// parameter. They do not any more: the result is allocated with room and
+    /// no length, so the count *is* the array's length and `push` is what
+    /// maintains it. Nothing crosses the join.
     fn keep_element(
         &mut self,
         id: NodeId,
         array: ValueId,
-        out: u32,
         element: ValueId,
+        push: &'static str,
         cond: ValueId,
     ) {
         let origin = self.origin(id);
-        let at = self.bindings[&out];
         let keeping = self.new_block();
         let rest = self.new_block();
-        let merged = self.push_block_param(rest, HirType::NUMBER, origin.clone());
         self.terminate(Terminator::Branch {
             cond,
             then_target: keeping,
             then_args: Vec::new(),
             else_target: rest,
-            else_args: vec![at],
+            else_args: Vec::new(),
         });
         self.switch_to(keeping);
-        self.push(
-            OpKind::ArraySet {
-                array,
-                index: at,
-                value: element,
-                checked: true,
-            },
-            HirType::Void,
-            origin.clone(),
-        );
-        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
-        let next = self.push(
-            OpKind::Binary {
-                op: BinOp::Add,
-                lhs: at,
-                rhs: one,
-            },
-            HirType::NUMBER,
-            origin,
-        );
+        self.runtime_call(push, vec![array, element], HirType::NUMBER, origin);
         self.terminate(Terminator::Jump {
             target: rest,
-            args: vec![next],
+            args: Vec::new(),
         });
         self.switch_to(rest);
-        self.bindings.insert(out, merged);
     }
 
     /// Leave the loop with an answer, on the side of a test that decides.
