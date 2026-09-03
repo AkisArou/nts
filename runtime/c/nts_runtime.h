@@ -1030,7 +1030,18 @@ NTS_READS_ONLY double nts_array_at(const NtsArray *a, double at);
  * a throw is a *termination* -- which is what it is for a program with no
  * handler, and what these programs mean by it. When handlers arrive this
  * becomes the last resort rather than the only one. */
-void nts_thrown(const NtsString *message);
+/* An uncaught `throw`, rendered as far as anything here can see it.
+ *
+ * The value rather than a message, because `catch (e)` is `unknown` and a
+ * `throw` therefore carries one representation for every thrown thing.
+ *
+ * `detail` is the thrown object's `message` where the compiler could see one.
+ * A descriptor records where an object's *references* are and not what they are
+ * called, so the runtime cannot find a field by name and the compiler can --
+ * this is that fact handed over rather than guessed at. Null for everything
+ * else, a thrown string included: `value` already carries its text. */
+_Noreturn void nts_uncaught(NtsValue value, const NtsString *detail);
+
 NtsArray *nts_array_fill(NtsArray *a, double value);
 /* The same for an array of booleans, which is a byte per element rather than
  * eight. A separate entry point rather than a generic one taking a width: the

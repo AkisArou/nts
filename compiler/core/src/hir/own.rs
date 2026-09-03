@@ -980,7 +980,26 @@ fn costs_nothing(
     value: ValueId,
 ) -> bool {
     match &func.values[value.0 as usize].kind {
-        OpKind::ConstNull | OpKind::ConstUndefined | OpKind::ObjectNew { frame: true } => true,
+        // The last three are the immortal constants, which [`counted_here`]
+        // already answers `false` for and this used to answer `true` for -- two
+        // lists deciding one question and disagreeing about three of its cases.
+        //
+        // A string literal is static data the runtime treats as immortal, a
+        // named function used as a value is one object for the whole program,
+        // and a frame-placed call result ends with the frame. None of the three
+        // has anything to give back, so a slot that only ever holds them has
+        // nothing to give back either.
+        //
+        // `constant-field` is what measures it: an object literal in a frame
+        // holding one string literal, whose walk over the dying object's fields
+        // loaded it and released it -- a load, a call and a branch an
+        // iteration, to read an immortal word and return.
+        OpKind::ConstNull
+        | OpKind::ConstUndefined
+        | OpKind::ObjectNew { frame: true }
+        | OpKind::ConstString(_)
+        | OpKind::ClosureStatic
+        | OpKind::Call { frame: Some(_), .. } => true,
         OpKind::FieldGet { object, field, .. } => inert.contains(&(*object, *field)),
         _ => false,
     }
@@ -1482,6 +1501,13 @@ fn counted_from(
                 .into_iter()
                 .any(|argument| counted_from(func, layouts, argument, seen))
         }
+        // Erasing takes no reference of its own: an erased value is exactly
+        // what it wraps, seen through a tag. So it costs what the wrapped value
+        // costs, and asking that directly is sharper than the `true` this fell
+        // through to -- `throw new Error(m)` caught in the same function erases
+        // an object that lives in the frame, and the wrapper was retained on
+        // the edge into the handler and released on both ways out of it.
+        OpKind::Erase { value: inner } => counted_from(func, layouts, inner, seen),
         _ => counted_here(func, layouts, value),
     }
 }
@@ -1792,11 +1818,15 @@ fn arriving_at(
                 .iter()
                 .filter(|(_, pending)| {
                     elsewhere.iter().all(|to| {
-                        // A block that throws is not somewhere a value has to
-                        // be accounted for: `nts_thrown` calls `abort`, so
-                        // nothing after it is observed. The same reason
-                        // `crossing_borrows` treats an operation in an
-                        // unreachable block as unobserved.
+                        // A block that ends the program is not somewhere a
+                        // value has to be accounted for: nothing after it is
+                        // observed. The same reason `crossing_borrows` treats
+                        // an operation in an unreachable block as unobserved.
+                        //
+                        // It is the terminator that says so, not the call. A
+                        // `throw` the function *catches* is a jump to the
+                        // handler and its edge is accounted for like any
+                        // other; only one that leaves ends in `Unreachable`.
                         func.blocks.get(to.0 as usize).is_some_and(|block| {
                             matches!(block.terminator, super::Terminator::Unreachable)
                         }) || proves_null(func, *from, to.0 as usize).contains(*pending)

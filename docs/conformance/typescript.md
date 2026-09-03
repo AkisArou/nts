@@ -117,7 +117,7 @@ counter, not by reading the emitted C.
 | ✅ | `break`, `continue`, `return`, `throw` |
 | ✅ | block scope, `const`/`let`/`var` |
 | ✅ | destructuring: object, array, nested, rest element |
-| ✗ | `try`/`catch`/`finally` — no unwinding mechanism yet |
+| ✅ | `try`/`catch`/`finally`, a bare `catch { }`, and a `throw` of any type |
 | ✗ | labelled `break`/`continue` |
 | ✗ | `for...in` |
 | ✗ | `for...of` over a string |
@@ -229,9 +229,10 @@ both the closure that reads it and the declaration that fills it, and those can
 be in different branches, so that is the one placement that always holds.
 
 The cell is empty until the declaration runs, and a body that runs in that
-window would read a zero where JavaScript throws a `ReferenceError`. Nothing
-here throws — `nts_thrown` prints and aborts — so such a cell carries a `ready`
-flag and stops the program instead:
+window would read a zero where JavaScript throws a `ReferenceError`. This
+compiler has a `throw` now, but not one the *runtime* can raise: `nts_uncaught`
+prints and exits, and nothing below the lowering can reach a handler. So such a
+cell carries a `ready` flag and stops the program instead:
 
 ```
 nts: `later` was read before its declaration ran
@@ -1852,7 +1853,7 @@ nothing fails loudly when they are.
 | ✅ | an assignment target evaluated **once** — `xs[next()] += 1` calls `next` once, which is what `place_of` exists for |
 | ✅ | normal, `return`, `break`, `continue` and `throw` completions |
 | ✅ | module evaluation order, and the temporal dead zone as an error |
-| ✗ | abrupt completion through `finally` — no `try` at all |
+| ✅ | abrupt completion through `finally`, including one that replaces the completion leaving it |
 | ✗ | iterator closing on an abrupt completion |
 | ✗ | conversion side effects (`valueOf`, `toString`) in operand position |
 | ∅ | getter, setter and `Proxy` side effects in operand position — §13 |
@@ -2085,7 +2086,7 @@ blocks on, not to start building.
 | ~~array methods on a non-numeric array~~ | **done**, 22 → 4 → 1. Every site wanted a *reference* element, so there is a `_ref` family and no `_bool` one; `shift` and `splice` have since landed for both | what is left is `toSorted`, one site |
 | string methods | 3 — `normalize`. `toLowerCase` and `toUpperCase` are done, which was 39 sites; `split`, `trim`, `replace`, `replaceAll`, `padStart`, `padEnd` and `valueOf` before them | the case tables are vendored and `normalize`'s came with them; it wants `dbuf` and an allocator argument |
 | generators | 4 refusals, but `readline` and several streams are behind them | the suspension machine exists; what is missing is the `Generator<T>` object and §10's protocol |
-| `try`/`catch` | the largest *language* gap, and invisible in this table because the code that needs it does not reach the lowering | needs an unwinding decision — the runtime has none |
+| ~~`try`/`catch`/`finally`~~ | **done**. A handler is a block and a `throw` is a jump to it, carrying the thrown value as a block argument — so there is no unwinder, no landing pad and no table, and a `throw` caught in the same function allocates nothing | what is left is a `throw` that crosses a *call*, which is where 0070's pending slot belongs; 0071 has the shape |
 
 Two rows in the corpus are meant to be zero, and both are: `invalid HIR` and
 `uncompilable C`. Neither is ratcheted any more.

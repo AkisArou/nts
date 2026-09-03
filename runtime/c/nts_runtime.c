@@ -951,18 +951,62 @@ void nts_collect_cycles(void) {
 
 size_t nts_cycle_candidates(void) { return nts_candidates; }
 
-void nts_thrown(const NtsString *message) {
+/* Rendered the way a person reading a crash needs it, which is not the way
+ * `String(e)` would: this is the end of the program, so a thrown object prints
+ * whatever the compiler could tell us about it and otherwise says plainly that
+ * it was an object. */
+_Noreturn void nts_uncaught(NtsValue value, const NtsString *detail) {
   fputs("nts: uncaught ", stderr);
-  if (message) {
+  const NtsString *text = NULL;
+  switch (nts_value_tag(value)) {
+  case NTS_TAG_STRING:
+    text = (const NtsString *)nts_value_reference(value);
+    break;
+  case NTS_TAG_NUMBER:
+    fprintf(stderr, "%g", nts_value_number(value));
+    break;
+  case NTS_TAG_BOOLEAN:
+    fputs(nts_value_boolean(value) ? "true" : "false", stderr);
+    break;
+  case NTS_TAG_UNDEFINED:
+    fputs("undefined", stderr);
+    break;
+  case NTS_TAG_NULL:
+    fputs("null", stderr);
+    break;
+  default: {
+    /* An object or a function. A descriptor does name the class it describes --
+     * `Error`, `TypeError`, whatever a user subclass is called -- so this half
+     * needs nothing from the compiler; only `message` does, being a field. The
+     * two together read the way node's uncaught line does. */
+    const NtsHeader *object = nts_value_reference(value);
+    const char *class_name =
+        object && object->descriptor ? object->descriptor->name : NULL;
+    fputs(class_name ? class_name : "[object]", stderr);
+    if (detail) {
+      fputs(": ", stderr);
+      text = detail;
+    }
+    break;
+  }
+  }
+  if (text) {
     /* Narrow strings are the common case and the only one worth spelling
      * carefully; a wide one is dumped as its code units rather than not at
      * all. */
-    for (uint32_t at = 0; at < message->length; at++) {
-      fputc((int)nts_unit(message, at), stderr);
+    for (uint32_t at = 0; at < text->length; at++) {
+      fputc((int)nts_unit(text, at), stderr);
     }
   }
   fputc('\n', stderr);
-  abort();
+  /* `exit` rather than `abort`, on two counts. Node ends an uncaught throw with
+   * status 1, and an exit status is observable, so the differential would read
+   * 134 against its 1. And `abort` does not flush: anything the program had
+   * already written to a buffered `stdout` would be lost, while node prints it.
+   * The other aborts in this file are compiler or runtime invariants, where a
+   * core file is the point; this one is a program doing something the language
+   * allows. */
+  exit(1);
 }
 
 /* A `const` read through a closure before its declaration ran.

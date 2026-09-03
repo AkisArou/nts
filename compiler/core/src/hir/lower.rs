@@ -2095,6 +2095,26 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     lowered
 }
 
+/// The index of a `message: string` field, if a type has one.
+///
+/// Used by `throw` to hand the runtime something to print. By shape, not by
+/// name: the four classes in [`super::builtin`] have such a field, and so does
+/// every user class that extends one, and nothing here needs to tell them
+/// apart.
+fn message_field(layouts: &[Layout], ty: &HirType) -> Option<u32> {
+    let HirType::Managed(ManagedType::Object(id)) = ty else {
+        return None;
+    };
+    let layout = layouts.iter().find(|layout| layout.types.contains(id))?;
+    layout
+        .fields
+        .iter()
+        .position(|field| {
+            field.name == "message" && matches!(field.ty, HirType::Managed(ManagedType::String))
+        })
+        .and_then(|at| u32::try_from(at).ok())
+}
+
 /// Merge a function's discovered layouts into the program's.
 ///
 /// A layout is a property of the type, not of the function that happened to
@@ -3178,6 +3198,11 @@ struct Breakable {
     latch: Option<BlockId>,
     /// The symbols this construct carries, in parameter order.
     carried: Vec<u32>,
+    /// How deep the exit stack was when this construct began.
+    ///
+    /// A `break` leaves every `try` between it and here, so it has to run the
+    /// `finally` of each -- and this is what says which those are.
+    exits_at: usize,
 }
 
 /// One loop under construction: where it jumps back to, where it leaves
@@ -3205,6 +3230,53 @@ struct Loop {
     header_params: Vec<ValueId>,
 }
 
+/// One reason a `try` has to be noticed while the statements inside it lower.
+///
+/// A `catch` *stops* a `throw`; a `finally` is *run through* by every way out.
+/// One stack rather than two, because interleaving them is exactly what leaving
+/// a `try` has to get right: a `throw` runs the `finally`s above the nearest
+/// `catch` and stops there, a `return` runs every one of them, and a `break`
+/// runs the ones that are inside its loop.
+enum Exit {
+    Handler(Handler),
+    /// A `finally` body, lowered again at each way out of its `try`.
+    ///
+    /// Duplicated rather than shared. Sharing it needs a variable saying where
+    /// to continue afterwards and a switch on that variable at the bottom --
+    /// a branch per exit, and a value carried to feed it -- where duplication
+    /// is a second copy of a block that is usually three lines. It is also the
+    /// only version that composes with `return`, which has to run the body and
+    /// then leave rather than come back.
+    Finally(NodeId),
+}
+
+/// A `try` whose body is being lowered, and every `throw` that has reached it.
+struct Handler {
+    /// The block the handler's code will go in, once something needs one.
+    ///
+    /// Created by the first `throw` rather than by the `try`, because a body
+    /// that cannot throw should leave nothing behind: a block with no
+    /// predecessors is one the verifier rejects, and creating it eagerly meant
+    /// every defensive `try` around code that cannot throw produced an invalid
+    /// function.
+    block: Option<BlockId>,
+    /// One per `throw` in the body, in the order they were lowered.
+    edges: Vec<Edge>,
+}
+
+/// One `throw`'s jump into a handler, before the handler has parameters.
+struct Edge {
+    /// The block the `throw` ended.
+    from: BlockId,
+    /// The thrown value, already erased.
+    thrown: ValueId,
+    /// What every name held at the `throw`.
+    ///
+    /// Cloned rather than referenced because it is a snapshot: the body goes on
+    /// being lowered after this edge is recorded, and the map keeps changing.
+    bindings: rustc_hash::FxHashMap<u32, ValueId>,
+}
+
 struct FuncBuilder<'a> {
     snapshot: &'a SemanticSnapshot,
     /// Every value the function defines.
@@ -3216,6 +3288,15 @@ struct FuncBuilder<'a> {
     /// This is what makes two identifiers with one symbol become one value
     /// rather than two loads.
     bindings: rustc_hash::FxHashMap<u32, ValueId>,
+    /// The `try` blocks this statement is inside, innermost last.
+    ///
+    /// On the builder and not passed down, because a `throw` can be at any
+    /// depth of statement nesting below the `try` and every level between would
+    /// otherwise have to carry it. Per-function by construction: a builder is
+    /// one function, so a `throw` inside a closure written inside a `try` finds
+    /// an empty stack -- which is correct, since the closure runs when it is
+    /// called and not where it is written.
+    exits: Vec<Exit>,
     /// Layouts discovered while lowering this function.
     layouts: Vec<Layout>,
     /// The receiver, in a method.
@@ -3341,6 +3422,7 @@ impl<'a> FuncBuilder<'a> {
             }],
             current: BlockId(0),
             bindings: rustc_hash::FxHashMap::default(),
+            exits: Vec::new(),
             returns: HirType::Void,
             layouts: Vec::new(),
             this: None,
@@ -6121,6 +6203,7 @@ impl<'a> FuncBuilder<'a> {
             origin: origin.clone(),
             latch: None,
             carried: carried.clone(),
+            exits_at: self.exits.len(),
         });
 
         let chain = CaseChain {
@@ -6460,6 +6543,7 @@ impl<'a> FuncBuilder<'a> {
             origin: origin.clone(),
             latch: Some(latch),
             carried: carried.to_vec(),
+            exits_at: self.exits.len(),
         });
         Ok(Loop {
             header,
@@ -6641,6 +6725,13 @@ impl<'a> FuncBuilder<'a> {
     /// reached.
     fn lower_break(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         let depth = self.enclosing(id, "break", |it| it.latch.is_some() || it.latch.is_none())?;
+        // Every `try` between here and the loop is left, so each one's
+        // `finally` runs -- before the carried names are read, because a
+        // `finally` that assigns one of them assigns it before the loop ends.
+        self.run_finallys_to(self.breakables[depth].exits_at)?;
+        if self.is_terminated() {
+            return Ok(());
+        }
         let carried = self.breakables[depth].carried.clone();
         let args = self.carried_now(&carried);
         let (exit, _) = self.exit_of(depth);
@@ -6653,6 +6744,12 @@ impl<'a> FuncBuilder<'a> {
     /// It looks past a `switch`, which is not a thing to continue.
     fn lower_continue(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         let depth = self.enclosing(id, "continue", |it| it.latch.is_some())?;
+        // The same as `break`: an iteration that ends early still leaves every
+        // `try` inside the loop that it was in.
+        self.run_finallys_to(self.breakables[depth].exits_at)?;
+        if self.is_terminated() {
+            return Ok(());
+        }
         let it = self.breakables[depth].clone();
         let args = self.carried_now(&it.carried);
         let latch = it.latch.expect("the predicate above admits only loops");
@@ -7885,38 +7982,104 @@ impl<'a> FuncBuilder<'a> {
             .first()
             .ok_or_else(|| self.unsupported(id, "a `throw` with nothing to throw"))?;
 
-        // `new Error(m)` is the shape every one of these has. The class is not
-        // one this compiler can construct -- it is `lib.d.ts`'s -- so what is
-        // taken from it is the argument.
-        let message = if self.kind_of(thrown) == Some(syntax::NEW_EXPRESSION) {
-            self.children(thrown).get(1).copied()
-        } else {
-            Some(thrown)
-        };
         let origin = self.origin(id);
-        let message = match message {
-            Some(node) => {
-                let value = self.lower_expression(node)?;
-                if !matches!(
-                    self.values[value.0 as usize].ty,
-                    HirType::Managed(ManagedType::String)
-                ) {
-                    return Err(self.unsupported(node, "a `throw` of something that is not text"));
+        // The whole value, not a message taken out of it.
+        //
+        // What stood here reduced `new Error(m)` to `m`, on the reasoning that
+        // `Error` was `lib.d.ts`'s and could not be constructed. It is
+        // [`super::builtin`]'s and has been for some time, and the reduction
+        // was only invisible because nothing could observe the difference: an
+        // uncaught throw prints and aborts either way. A `catch` binding is
+        // exactly what observes it.
+        //
+        // Erased, because `catch (e)` is `unknown`. That is the language's own
+        // answer to what a handler receives, and taking it means `throw "text"`
+        // and `throw new Error(m)` are one operation at one representation
+        // rather than two shapes to keep in agreement.
+        let value = self.lower_expression(thrown)?;
+        let thrown_ty = self.values[value.0 as usize].ty.clone();
+
+        let erased = self.push(OpKind::Erase { value }, HirType::Erased, origin.clone());
+
+        // A `throw` with a handler in this function is a jump to it and nothing
+        // more. The value rides the edge as a block argument, so it never
+        // reaches the runtime's slot -- which is the common case worth making
+        // free, and it is free because releasing what a frame owns along an
+        // edge is what [`super::rc`] already does for every other edge here.
+        //
+        // The arguments are filled in later: the handler's parameters are not
+        // known until the whole body has been lowered. See [`Self::lower_try`].
+        // The nearest `catch` stops this throw; every `finally` between here
+        // and it runs on the way. The value was computed before any of them,
+        // which is when the language says it is computed.
+        let caught_at = self
+            .exits
+            .iter()
+            .rposition(|exit| matches!(exit, Exit::Handler(_)));
+        self.run_finallys_to(caught_at.map_or(0, |at| at + 1))?;
+        if self.is_terminated() {
+            // A `finally` left by itself, so this `throw` never arrives.
+            return Ok(());
+        }
+
+        if let Some(at) = caught_at {
+            let mut target = match &self.exits[at] {
+                Exit::Handler(frame) => frame.block,
+                Exit::Finally(_) => unreachable!("rposition found a handler"),
+            };
+            if target.is_none() {
+                let block = self.new_block();
+                if let Exit::Handler(frame) = &mut self.exits[at] {
+                    frame.block = Some(block);
                 }
-                value
+                target = Some(block);
             }
-            // `throw new Error()`. Nothing to say, and saying nothing is right.
+            let Some(target) = target else {
+                unreachable!("just created above")
+            };
+            let edge = Edge {
+                from: self.current,
+                thrown: erased,
+                bindings: self.bindings.clone(),
+            };
+            if let Exit::Handler(frame) = &mut self.exits[at] {
+                frame.edges.push(edge);
+            }
+            self.terminate(Terminator::Jump {
+                target,
+                args: Vec::new(),
+            });
+            return Ok(());
+        }
+
+        // Only on the path that ends the program, and after the check above so
+        // that a caught `throw` does not load a field nothing reads.
+        //
+        // A descriptor records where an object's references *are*, not what
+        // they are called, so the runtime cannot find `message` by name and
+        // this can. Matched by shape rather than against the four builtin error
+        // classes: any object with a string `message` renders, which covers
+        // every `class MyError extends Error` without needing to know that any
+        // of them is one.
+        let detail = match message_field(&self.layouts, &thrown_ty) {
+            Some(field) => self.push(
+                OpKind::FieldGet {
+                    object: value,
+                    field,
+                },
+                HirType::Managed(ManagedType::String),
+                origin.clone(),
+            ),
             None => self.push(
-                OpKind::ConstString(String::new()),
+                OpKind::ConstNull,
                 HirType::Managed(ManagedType::String),
                 origin.clone(),
             ),
         };
-
         self.push(
             OpKind::Call {
-                callee: Callee::External("nts_thrown".to_owned()),
-                args: vec![message],
+                callee: Callee::External("nts_uncaught".to_owned()),
+                args: vec![erased, detail],
                 frame: None,
             },
             HirType::Void,
@@ -7926,6 +8089,333 @@ impl<'a> FuncBuilder<'a> {
         // treat the code after a throw as unreachable, which it is.
         self.terminate(Terminator::Unreachable);
         Ok(())
+    }
+
+    /// `try { … } catch (e) { … }`.
+    ///
+    /// # A handler is a block, and a `throw` is a jump to it
+    ///
+    /// Nothing here unwinds, and nothing needs to. An unwinder's tables exist
+    /// to *recover*, from a machine frame at run time, which values that frame
+    /// owns; this compiler computes that at compile time already, in
+    /// [`super::own`], and [`super::rc`] emits the releases an edge implies for
+    /// every other edge in the program. A handler edge is not a special kind of
+    /// edge, so it needs no special machinery -- it needs to be an edge.
+    ///
+    /// # Why the parameters cannot be decided first
+    ///
+    /// Every `throw` in the body is one edge into the handler, and they need
+    /// not agree about anything: a name the body assigns before the first
+    /// `throw` holds one value there and another at the second. So the handler
+    /// block is created empty, each `throw` records the bindings it had, and
+    /// the parameter list is computed once the body is finished -- one
+    /// parameter for the thrown value, and one for each name the edges
+    /// disagree about. A name they all agree about is bound to that value
+    /// outright, which is most of them.
+    fn lower_try(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let parts = self.children(id);
+        let Some(&body) = parts.first() else {
+            return Err(self.unsupported(id, "a `try` with nothing in it"));
+        };
+        // The children are the block, an optional catch clause, and an optional
+        // `finally` block. Which is which is read off the shape rather than off
+        // a `CatchClause` kind number: every constant in `syntax` was read from
+        // a real encoded program and pinned by a test, and this one would have
+        // been inferred from the order of a Go `iota` list instead. `has_finally`
+        // reads the same node the same way.
+        let ends_in_block =
+            parts.len() >= 2 && self.kind_of(parts[parts.len() - 1]) == Some(syntax::BLOCK);
+        let (clause, finally_body) = match (parts.len(), ends_in_block) {
+            (2, false) => (parts.get(1).copied(), None),
+            (2, true) => (None, parts.get(1).copied()),
+            (3, true) => (parts.get(1).copied(), parts.get(2).copied()),
+            _ => return Err(self.unsupported(id, "a `try` of unexpected shape")),
+        };
+
+        // Pushed before the handler, because the `finally` encloses the `catch`:
+        // a `throw` in the body is stopped by the `catch` and runs no `finally`,
+        // and a `throw` in the `catch` runs it on the way out.
+        if let Some(body) = finally_body {
+            self.exits.push(Exit::Finally(body));
+        }
+        let guarded = self.lower_guarded(id, body, clause);
+        if finally_body.is_some() {
+            self.exits.pop();
+        }
+        guarded?;
+
+        // Normal completion runs it too, and this is the copy that most
+        // programs execute.
+        if let Some(body) = finally_body.filter(|_| !self.is_terminated()) {
+            self.lower_statement(body)?;
+        }
+        Ok(())
+    }
+
+    /// The `try` and its `catch`, with whatever `finally` encloses them already
+    /// on the exit stack.
+    fn lower_guarded(
+        &mut self,
+        id: NodeId,
+        body: NodeId,
+        clause: Option<NodeId>,
+    ) -> Result<(), Diagnostic> {
+        let Some(clause) = clause else {
+            // `try { … } finally { … }`. Nothing catches, so the body is lowered
+            // as it stands -- a `throw` in it finds the `finally` on the stack
+            // and whatever encloses that.
+            return self.lower_statement(body);
+        };
+        let clause_parts = self.children(clause);
+        let Some(&handler_body) = clause_parts.last() else {
+            return Err(self.unsupported(clause, "a `catch` with no body"));
+        };
+        // `catch { }` is legal and binds nothing.
+        let caught = if clause_parts.len() >= 2 {
+            Some(clause_parts[0])
+        } else {
+            None
+        };
+
+        let origin = self.origin(id);
+        let entry = self.bindings.clone();
+
+        self.exits.push(Exit::Handler(Handler {
+            block: None,
+            edges: Vec::new(),
+        }));
+        let lowered = self.lower_statement(body);
+        // Popped before the refusal is raised, so a refused body does not leave
+        // the stack claiming a handler that is no longer being built. Popped
+        // before the *handler body* is lowered too, which is what makes a
+        // `throw` inside a `catch` belong to the enclosing `try`.
+        let Some(Exit::Handler(frame)) = self.exits.pop() else {
+            unreachable!("pushed immediately above")
+        };
+        lowered?;
+
+        let body_tail = self.current;
+        let body_open = !self.is_terminated();
+        let body_bindings = std::mem::replace(&mut self.bindings, entry.clone());
+
+        let Some(handler) = frame.block else {
+            // Nothing in the body throws, so the `catch` is dead. Not an error
+            // and not a warning: a `try` around code that cannot throw is how a
+            // person writes defensively, and the right answer is to emit the
+            // body and nothing else. No block was ever created for it.
+            self.bindings = body_bindings;
+            return Ok(());
+        };
+
+        let thrown = self.open_handler(handler, &frame, &entry, &origin);
+        self.switch_to(handler);
+        if let Some(declaration) = caught {
+            self.bind_caught(declaration, thrown)?;
+        }
+        self.lower_statement(handler_body)?;
+        let handler_tail = self.current;
+        let handler_open = !self.is_terminated();
+        let handler_bindings = std::mem::replace(&mut self.bindings, entry.clone());
+
+        self.join_try(
+            &origin,
+            (body_tail, body_open, body_bindings),
+            (handler_tail, handler_open, handler_bindings),
+            entry,
+        );
+        Ok(())
+    }
+
+    /// Lower the `finally` bodies above `floor`, innermost first.
+    ///
+    /// For a path that is leaving all of them -- a `throw` on its way to a
+    /// handler further out, a `return`, a `break` out of the loop they are in.
+    ///
+    /// Each body is lowered *here*, inline, which is what makes a `finally`
+    /// duplicated rather than shared. See [`Exit::Finally`].
+    fn run_finallys_to(&mut self, floor: usize) -> Result<(), Diagnostic> {
+        let mut at = self.exits.len();
+        while at > floor {
+            at -= 1;
+            let body = match &self.exits[at] {
+                Exit::Finally(body) => *body,
+                Exit::Handler(_) => continue,
+            };
+            // Taken off the stack while it runs, and put back after. A `throw`
+            // inside a `finally` belongs to whatever encloses the `try`, not to
+            // the `try` whose `finally` it is -- and without this it would find
+            // its own `catch` and loop back into it.
+            let above = self.exits.split_off(at);
+            let lowered = self.lower_statement(body);
+            self.exits.extend(above);
+            lowered?;
+            // A `finally` that returns or throws replaces the completion that
+            // was on its way out, so nothing further runs -- not the outer
+            // `finally`s, and not the `return` this was called for.
+            if self.is_terminated() {
+                return Ok(());
+            }
+        }
+        Ok(())
+    }
+
+    /// Give a handler its parameters and fill in the arguments every edge owes.
+    ///
+    /// Returns the parameter holding the thrown value, and sets `self.bindings`
+    /// to what the handler's first statement sees.
+    fn open_handler(
+        &mut self,
+        handler: BlockId,
+        frame: &Handler,
+        entry: &rustc_hash::FxHashMap<u32, ValueId>,
+        origin: &Origin,
+    ) -> ValueId {
+        // The thrown value first, so its position does not depend on how many
+        // names the edges disagreed about.
+        let thrown = self.push_block_param(handler, HirType::Erased, origin.clone());
+
+        // Sorted, for the same reason the merge in `lower_if` sorts: the source
+        // is a hash map, and a parameter list that varies between runs would
+        // stop the snapshot digest being a cache key.
+        let mut names: Vec<u32> = entry.keys().copied().collect();
+        names.sort_unstable();
+
+        let at = |edge: &Edge, symbol: u32| {
+            edge.bindings
+                .get(&symbol)
+                .copied()
+                .or_else(|| entry.get(&symbol).copied())
+        };
+
+        let mut disagreed = Vec::new();
+        let mut bindings = entry.clone();
+        for symbol in names {
+            let mut values = frame.edges.iter().filter_map(|edge| at(edge, symbol));
+            let Some(first) = values.next() else {
+                continue;
+            };
+            if values.all(|value| value == first) {
+                // Every edge arrives with the same value, so the handler can
+                // read it directly. This is most names, and each one is a
+                // parameter and an argument per edge that never exist.
+                bindings.insert(symbol, first);
+            } else {
+                disagreed.push(symbol);
+            }
+        }
+
+        for &symbol in &disagreed {
+            let ty = frame
+                .edges
+                .iter()
+                .find_map(|edge| at(edge, symbol))
+                .map_or(HirType::Erased, |value| {
+                    self.values[value.0 as usize].ty.clone()
+                });
+            let param = self.push_block_param(handler, ty, origin.clone());
+            bindings.insert(symbol, param);
+        }
+
+        for edge in &frame.edges {
+            let mut args = Vec::with_capacity(1 + disagreed.len());
+            args.push(edge.thrown);
+            args.extend(disagreed.iter().filter_map(|&symbol| at(edge, symbol)));
+            if let Some(Terminator::Jump { args: slot, .. }) =
+                &mut self.blocks[edge.from.0 as usize].terminator
+            {
+                *slot = args;
+            }
+        }
+
+        self.bindings = bindings;
+        thrown
+    }
+
+    /// Bind `catch (e)`'s name to the thrown value.
+    fn bind_caught(&mut self, declaration: NodeId, thrown: ValueId) -> Result<(), Diagnostic> {
+        // The declaration's own symbol if it carries one, and otherwise its
+        // name's -- the same two places every other binding is read from.
+        let symbol = self.node(declaration).symbol.or_else(|| {
+            self.children(declaration)
+                .first()
+                .and_then(|&name| self.node(name).symbol)
+        });
+        let Some(symbol) = symbol else {
+            // `catch ({ code })`. The value is there and nothing names it.
+            return Err(self.unsupported(declaration, "a `catch` that destructures"));
+        };
+        let value = self.open_cell(symbol.0, thrown, declaration);
+        self.bindings.insert(symbol.0, value);
+        Ok(())
+    }
+
+    /// Merge the two ways out of a `try`.
+    fn join_try(
+        &mut self,
+        origin: &Origin,
+        body: (BlockId, bool, rustc_hash::FxHashMap<u32, ValueId>),
+        handler: (BlockId, bool, rustc_hash::FxHashMap<u32, ValueId>),
+        entry: rustc_hash::FxHashMap<u32, ValueId>,
+    ) {
+        let (body_tail, body_open, body_bindings) = body;
+        let (handler_tail, handler_open, handler_bindings) = handler;
+        if !body_open && !handler_open {
+            // Both ways out ended in a `return` or a `throw`. Anything after
+            // the `try` is unreachable and the block is already closed.
+            return;
+        }
+
+        let merge = self.new_block();
+        let mut merged: Vec<(u32, ValueId, ValueId)> = Vec::new();
+        if body_open && handler_open {
+            for (symbol, entering) in &entry {
+                let from_body = body_bindings.get(symbol).copied().unwrap_or(*entering);
+                let from_handler = handler_bindings.get(symbol).copied().unwrap_or(*entering);
+                if from_body != from_handler {
+                    merged.push((*symbol, from_body, from_handler));
+                }
+            }
+            merged.sort_unstable();
+        }
+
+        let mut params = Vec::new();
+        for (symbol, from_body, _) in &merged {
+            let ty = self.values[from_body.0 as usize].ty.clone();
+            params.push((*symbol, self.push_block_param(merge, ty, origin.clone())));
+        }
+
+        if body_open {
+            self.switch_to(body_tail);
+            let args = merged.iter().map(|(_, from_body, _)| *from_body).collect();
+            self.terminate(Terminator::Jump {
+                target: merge,
+                args,
+            });
+        }
+        if handler_open {
+            self.switch_to(handler_tail);
+            let args = merged
+                .iter()
+                .map(|(_, _, from_handler)| *from_handler)
+                .collect();
+            self.terminate(Terminator::Jump {
+                target: merge,
+                args,
+            });
+        }
+
+        self.switch_to(merge);
+        self.bindings = match (body_open, handler_open) {
+            (true, false) => body_bindings,
+            (false, true) => handler_bindings,
+            _ => {
+                let mut live = entry;
+                for (symbol, param) in params {
+                    live.insert(symbol, param);
+                }
+                live
+            }
+        };
     }
 
     /// Lower an expression knowing what type a bare `null` in it should take.
@@ -8914,9 +9404,23 @@ impl<'a> FuncBuilder<'a> {
                     None => None,
                 };
                 if let Some(target) = self.callback_returns.last().copied() {
+                    // Only the `try`s inside the callback. A `return` here means
+                    // "this element is done", so it leaves the `try`s written in
+                    // the callback body and *not* one the call itself is inside
+                    // -- the enclosing `try` is not being left at all.
+                    let floor = self.breakables[target.depth].exits_at;
+                    self.run_finallys_to(floor)?;
+                    if self.is_terminated() {
+                        return Ok(());
+                    }
                     return self.return_from_callback(id, target, value);
                 }
                 if let Some(result) = self.async_result.clone() {
+                    // The whole function is being left, so every one of them.
+                    self.run_finallys_to(0)?;
+                    if self.is_terminated() {
+                        return Ok(());
+                    }
                     return self.settle_and_return(id, &result, value);
                 }
                 // At the type the *signature* declares, and only on this path:
@@ -8944,6 +9448,15 @@ impl<'a> FuncBuilder<'a> {
                     }
                     (value, _) => value,
                 };
+                // A `return` leaves every `try` it is inside, so every pending
+                // `finally` runs before it -- after the returned expression has
+                // been evaluated, which is the order the language specifies.
+                self.run_finallys_to(0)?;
+                if self.is_terminated() {
+                    // A `finally` returned or threw, which replaces this
+                    // return outright.
+                    return Ok(());
+                }
                 self.terminate(Terminator::Return(value));
                 Ok(())
             }
@@ -8975,6 +9488,7 @@ impl<'a> FuncBuilder<'a> {
             // That is a closure, and this is not the path that builds one.
             Some(syntax::EMPTY_STATEMENT | syntax::FUNCTION_DECLARATION) => Ok(()),
             Some(syntax::THROW_STATEMENT) => self.lower_throw(id),
+            Some(syntax::TRY_STATEMENT) => self.lower_try(id),
             Some(syntax::EXPRESSION_STATEMENT) => {
                 let Some(expression) = self.children(id).first().copied() else {
                     return Ok(());

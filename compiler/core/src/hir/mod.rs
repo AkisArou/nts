@@ -625,10 +625,12 @@ pub enum OpKind {
     /// use before declaration in the same scope, so a closure is the only way
     /// into that window.
     ///
-    /// JavaScript throws a `ReferenceError` there. Nothing in this compiler
-    /// throws -- `nts_thrown` prints and aborts -- so this stops the program
-    /// with the name rather than answering with the zero the cell still holds.
-    /// One predictable branch, on the cells that have the window and no others.
+    /// JavaScript throws a `ReferenceError` there. This compiler has a `throw`
+    /// now, but not one the *runtime* can raise: a handler is a block and a
+    /// `throw` is a jump the lowering emits, so nothing below the lowering can
+    /// reach one. So this stops the program with the name rather than answering
+    /// with the zero the cell still holds. One predictable branch, on the cells
+    /// that have the window and no others.
     CellReady {
         cell: ValueId,
         /// The variable's name, for the message. Compile-time text: the check

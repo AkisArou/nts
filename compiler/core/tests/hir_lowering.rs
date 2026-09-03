@@ -544,3 +544,165 @@ fn an_assignment_emits_no_store() {
     // two adds and one constant — nothing else
     assert_eq!(body.ops.len(), 3, "{:?}", body.ops);
 }
+
+/// The blocks a `throw` jumps to: a handler is the only thing that receives an
+/// erased value as its first parameter.
+fn handlers(func: &Func) -> Vec<&hir::Block> {
+    func.blocks
+        .iter()
+        .filter(|block| {
+            block
+                .params
+                .first()
+                .is_some_and(|param| func.values[param.0 as usize].ty == HirType::Erased)
+        })
+        .collect()
+}
+
+#[test]
+fn a_thrown_error_is_the_object_and_not_its_message() {
+    let Some(lowered) = lowered("exceptions") else {
+        return;
+    };
+    // The lowering used to reduce `new Error(m)` to `m` and throw the string,
+    // on the reasoning that `Error` was `lib.d.ts`'s and could not be
+    // constructed. It is `hir::builtin`'s. Nothing could observe the difference
+    // while an uncaught throw was the only outcome -- both spellings print the
+    // message and stop -- and a `catch` binding observes it immediately.
+    let guarded = func(&lowered, "guarded");
+    let erased = guarded
+        .values
+        .iter()
+        .find_map(|op| match op.kind {
+            OpKind::Erase { value } => Some(value),
+            _ => None,
+        })
+        .expect("a `throw` erases what it throws");
+    assert!(
+        matches!(
+            guarded.values[erased.0 as usize].ty,
+            HirType::Managed(ManagedType::Object(_))
+        ),
+        "the thrown value is the `Error`, not its `message`: {:?}",
+        guarded.values[erased.0 as usize].ty
+    );
+}
+
+#[test]
+fn a_handler_receives_the_thrown_value_as_a_block_parameter() {
+    let Some(lowered) = lowered("exceptions") else {
+        return;
+    };
+    // Which is the whole mechanism: no unwinder, no landing pad, no table --
+    // an edge carrying an argument, of the kind every merge in the program
+    // already is.
+    let guarded = func(&lowered, "guarded");
+    let handlers = handlers(guarded);
+    assert_eq!(handlers.len(), 1, "one `try`, one handler");
+    assert_eq!(
+        handlers[0].params.len(),
+        1,
+        "nothing but the thrown value: the single `throw` and the handler agree \
+         about every name in scope"
+    );
+}
+
+#[test]
+fn a_name_the_throws_disagree_about_becomes_a_parameter() {
+    let Some(lowered) = lowered("exceptions") else {
+        return;
+    };
+    // `edgesDisagree` assigns `seen` between its two `throw`s, so the handler
+    // cannot read one value for it -- and it takes a parameter for `seen` and
+    // for nothing else, because every other name in scope is the same value on
+    // both edges.
+    let disagree = func(&lowered, "edgesDisagree");
+    let handlers = handlers(disagree);
+    assert_eq!(handlers.len(), 1);
+    assert_eq!(
+        handlers[0].params.len(),
+        2,
+        "the thrown value, and `seen`, and nothing else"
+    );
+}
+
+#[test]
+fn a_try_that_cannot_throw_leaves_no_handler() {
+    let Some(lowered) = lowered("exceptions") else {
+        return;
+    };
+    // A `try` around code that cannot throw is how a person writes
+    // defensively. It should cost nothing, and the block is not merely dead --
+    // it is never created: a block with no predecessors is one the verifier
+    // rejects, which is how this was found.
+    let never = func(&lowered, "neverThrows");
+    assert!(
+        handlers(never).is_empty(),
+        "no `throw` in the body, so no handler block"
+    );
+}
+
+#[test]
+fn a_throw_in_a_catch_belongs_to_the_enclosing_try() {
+    let Some(lowered) = lowered("exceptions") else {
+        return;
+    };
+    // The handler stack is popped before the handler's own body is lowered, so
+    // a `throw` inside a `catch` finds the *enclosing* `try` and not the one it
+    // is the handler for -- which would be a loop back into itself.
+    let nested = func(&lowered, "nested");
+    assert_eq!(
+        handlers(nested).len(),
+        2,
+        "two `try`s, two handlers, and the inner one throws to the outer"
+    );
+}
+
+#[test]
+fn a_finally_is_lowered_once_per_way_out() {
+    let Some(lowered) = lowered("exceptions") else {
+        return;
+    };
+    // `loopThroughFinally` leaves its `try` three ways -- `break`, `continue`,
+    // and falling off the end of the body -- and the `finally` runs on each. It
+    // is duplicated rather than shared, so its `10` is lowered three times.
+    //
+    // Sharing one copy would need a variable saying where to continue and a
+    // switch on it at the bottom: a branch per exit and a value to carry, for a
+    // block that is one statement.
+    let loop_through = func(&lowered, "loopThroughFinally");
+    let tens = loop_through
+        .values
+        .iter()
+        .filter(|op| matches!(op.kind, OpKind::ConstFloat(ten) if (ten - 10.0).abs() < f64::EPSILON))
+        .count();
+    assert_eq!(tens, 3, "one copy of the `finally` per way out of the `try`");
+}
+
+#[test]
+fn a_finally_that_returns_replaces_the_return() {
+    let Some(lowered) = lowered("exceptions") else {
+        return;
+    };
+    // `try { return 5 } finally { return 99 }` returns 99, and neither 5 nor 6
+    // is ever returned. The `finally` is lowered where the `return` would have
+    // been, it terminates the block itself, and the `return` that called for it
+    // is then never emitted.
+    let replaced = func(&lowered, "finallyReplacesTheReturn");
+    let returned: Vec<f64> = replaced
+        .blocks
+        .iter()
+        .filter_map(|block| match block.terminator {
+            Terminator::Return(Some(value)) => match replaced.values[value.0 as usize].kind {
+                OpKind::ConstFloat(number) => Some(number),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    assert!(!returned.is_empty(), "the function returns something");
+    assert!(
+        returned.iter().all(|number| (number - 99.0).abs() < f64::EPSILON),
+        "every `return` is the `finally`'s: {returned:?}"
+    );
+}

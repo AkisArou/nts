@@ -31,49 +31,49 @@ given back by eliding reference counting the compiler can prove unnecessary —
 see [`benches/README.md`](benches/README.md) for what each row is made of.
 
 <!-- benchmarks:start -->
-
-| case                      |       C++ |   nts (C) |    nts (LLVM) |        V8 |       Bun | nts/C++ | nts/V8 | nts/Bun |
-| ------------------------- | --------: | --------: | ------------: | --------: | --------: | ------: | -----: | ------: |
-| absences                  |  189.2 ns |  189.7 ns |  **190.9 ns** |  806.6 ns |  661.6 ns |   1.01x |  0.24x |   0.29x |
-| accumulate                |   1.09 us |   1.47 us |   **1.08 us** |   2.78 us |  20.98 us |   0.99x |  0.39x |   0.05x |
-| array-methods             |   2.34 us |   1.27 us |   **1.30 us** |   5.72 us |   6.47 us |   0.55x |  0.23x |   0.20x |
-| array-mutations (rc)      |  575.4 ns |  611.5 ns |  **609.5 ns** |   1.73 us |   3.47 us |   1.06x |  0.35x |   0.18x |
-| array-predicates (rc)     |   2.44 us |   2.17 us |   **2.74 us** |   4.68 us |   5.29 us |   1.12x |  0.59x |   0.52x |
-| arrays                    |   1.38 us |   1.43 us |   **1.47 us** |   2.69 us |   2.16 us |   1.07x |  0.55x |   0.68x |
-| awfy-bounce               |   4.27 us |   6.76 us |   **6.80 us** |  12.63 us |  11.16 us |   1.59x |  0.54x |   0.61x |
-| awfy-list                 |   7.64 us |   8.28 us |   **8.27 us** |  16.33 us |  12.95 us |   1.08x |  0.51x |   0.64x |
-| awfy-mandelbrot           |  22.55 ms |  22.51 ms |  **22.46 ms** |  21.97 ms |  21.91 ms |   1.00x |  1.02x |   1.03x |
-| awfy-nbody                |   7.23 ms |   6.78 ms |   **8.20 ms** |  79.39 ms |  14.15 ms |   1.13x |  0.10x |   0.58x |
-| awfy-permute              |   9.24 us |  12.21 us |  **12.19 us** |  21.23 us |  16.62 us |   1.32x |  0.57x |   0.73x |
-| awfy-queens               |   4.64 us |   6.37 us |   **6.33 us** |  16.87 us |  14.12 us |   1.36x |  0.38x |   0.45x |
-| awfy-sieve                |   3.68 us |   4.61 us |   **4.61 us** |  10.03 us |   9.28 us |   1.25x |  0.46x |   0.50x |
-| awfy-towers               |  12.57 us |  17.78 us |  **16.53 us** |  32.21 us |  20.62 us |   1.32x |  0.51x |   0.80x |
-| bigint                    |  335.0 ns |  330.8 ns |  **331.2 ns** |   3.64 us |   3.41 us |   0.99x |  0.09x |   0.10x |
-| bytes                     | 424.21 us | 433.57 us | **430.07 us** | 508.94 us | 722.25 us |   1.01x |  0.85x |   0.60x |
-| case-convert (rc)         |   6.08 us |   2.46 us |   **2.46 us** |   2.96 us |   3.71 us |   0.40x |  0.83x |   0.66x |
-| checksum                  |   4.78 us |   4.78 us |   **4.78 us** |   5.47 us |  22.78 us |   1.00x |  0.87x |   0.21x |
-| closures                  |   1.11 us |   1.13 us |   **1.11 us** |   2.93 us |  18.18 us |   1.00x |  0.38x |   0.06x |
-| dispatch                  |  27.84 us |  22.10 us |  **27.75 us** |  39.59 us |  13.69 us |   1.00x |  0.70x |   2.03x |
-| elementwise               | 153.00 us | 129.03 us | **124.00 us** | 937.21 us | 588.77 us |   0.81x |  0.13x |   0.21x |
-| erasure-stored-typed      |  67.16 us |  70.62 us |  **70.70 us** | 111.17 us |  68.65 us |   1.05x |  0.64x |   1.03x |
-| erasure-stored-unknown    |  67.18 us |  70.15 us |  **70.20 us** |  87.71 us |  68.75 us |   1.04x |  0.80x |   1.02x |
-| erasure-typed             | 133.71 us | 133.72 us | **133.71 us** | 136.01 us |  86.97 us |   1.00x |  0.98x |   1.54x |
-| erasure-unknown           | 133.71 us | 133.71 us | **133.72 us** | 136.01 us |  87.23 us |   1.00x |  0.98x |   1.53x |
-| fib                       | 302.58 us | 518.19 us | **516.65 us** | 996.47 us | 650.62 us |   1.71x |  0.52x |   0.79x |
-| loop                      |  653.5 ns |  649.3 ns |  **649.3 ns** |  667.1 ns |  666.1 ns |   0.99x |  0.97x |   0.97x |
-| map-and-set (rc)          |   9.52 us |   5.16 us |   **5.15 us** |   6.98 us |   5.29 us |   0.54x |  0.74x |   0.97x |
-| node-utf8 (rc)            |        -- |  29.32 us |  **33.90 us** |  36.86 us |  32.48 us |      -- |  0.92x |   1.04x |
-| number-format (rc)        |  838.5 ns |  674.3 ns |  **721.4 ns** |   1.42 us |  823.4 ns |   0.86x |  0.51x |   0.88x |
-| number-format-double (rc) |        -- |   4.55 us |   **4.51 us** |   9.10 us |   5.39 us |      -- |  0.50x |   0.84x |
-| objects (rc)              |   1.51 us |   1.51 us |   **1.51 us** |   1.80 us |   1.41 us |   1.00x |  0.84x |   1.07x |
-| pipeline (rc)             |  28.66 us |  26.68 us |  **26.72 us** | 116.91 us | 118.05 us |   0.93x |  0.23x |   0.23x |
-| strings                   |  337.4 ns |  210.6 ns |  **213.4 ns** |   2.38 us |   2.65 us |   0.63x |  0.09x |   0.08x |
-| substrings (rc)           |   1.70 us |   1.88 us |   **1.56 us** |   6.73 us |  23.76 us |   0.92x |  0.23x |   0.07x |
-| symbol-keys               |  300.8 ns |  307.0 ns |  **308.1 ns** |   1.61 us |  469.1 ns |   1.02x |  0.19x |   0.66x |
+| case | C++ | nts (C) | nts (LLVM) | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| absences | 188.8 ns | 189.3 ns | **190.9 ns** | 802.6 ns | 652.3 ns | 1.01x | 0.24x | 0.29x |
+| accumulate | 1.09 us | 1.47 us | **1.08 us** | 2.78 us | 21.03 us | 0.99x | 0.39x | 0.05x |
+| array-methods | 2.34 us | 1.31 us | **1.29 us** | 5.73 us | 7.83 us | 0.55x | 0.23x | 0.16x |
+| array-mutations (rc) | 574.4 ns | 612.6 ns | **608.0 ns** | 1.73 us | 3.57 us | 1.06x | 0.35x | 0.17x |
+| array-predicates (rc) | 2.45 us | 2.15 us | **2.74 us** | 4.60 us | 5.32 us | 1.12x | 0.59x | 0.51x |
+| arrays | 1.31 us | 1.39 us | **1.39 us** | 2.46 us | 2.08 us | 1.06x | 0.56x | 0.67x |
+| awfy-bounce | 4.03 us | 6.50 us | **6.46 us** | 12.23 us | 10.79 us | 1.60x | 0.53x | 0.60x |
+| awfy-list | 7.30 us | 7.93 us | **7.93 us** | 16.22 us | 12.99 us | 1.09x | 0.49x | 0.61x |
+| awfy-mandelbrot | 22.56 ms | 22.51 ms | **22.47 ms** | 21.95 ms | 21.91 ms | 1.00x | 1.02x | 1.03x |
+| awfy-nbody | 7.00 ms | 6.56 ms | **7.91 ms** | 77.23 ms | 14.12 ms | 1.13x | 0.10x | 0.56x |
+| awfy-permute | 9.16 us | 12.13 us | **12.12 us** | 21.23 us | 16.61 us | 1.32x | 0.57x | 0.73x |
+| awfy-queens | 4.64 us | 6.38 us | **6.30 us** | 16.60 us | 14.24 us | 1.36x | 0.38x | 0.44x |
+| awfy-sieve | 3.71 us | 4.66 us | **4.61 us** | 10.06 us | 9.07 us | 1.24x | 0.46x | 0.51x |
+| awfy-towers | 12.55 us | 17.70 us | **16.56 us** | 31.87 us | 20.61 us | 1.32x | 0.52x | 0.80x |
+| bigint | 335.1 ns | 330.8 ns | **332.9 ns** | 3.65 us | 3.45 us | 0.99x | 0.09x | 0.10x |
+| bytes | 422.87 us | 433.52 us | **430.55 us** | 509.05 us | 719.20 us | 1.02x | 0.85x | 0.60x |
+| case-convert (rc) | 6.07 us | 2.45 us | **2.46 us** | 2.97 us | 3.45 us | 0.41x | 0.83x | 0.71x |
+| checksum | 4.78 us | 4.78 us | **4.78 us** | 5.47 us | 22.79 us | 1.00x | 0.87x | 0.21x |
+| closures | 1.11 us | 1.14 us | **1.11 us** | 2.93 us | 18.03 us | 1.00x | 0.38x | 0.06x |
+| dispatch | 27.83 us | 22.15 us | **27.59 us** | 40.13 us | 13.73 us | 0.99x | 0.69x | 2.01x |
+| elementwise | 150.58 us | 129.84 us | **124.09 us** | 907.32 us | 588.80 us | 0.82x | 0.14x | 0.21x |
+| erasure-stored-typed | 67.21 us | 71.10 us | **71.10 us** | 113.92 us | 68.70 us | 1.06x | 0.62x | 1.03x |
+| erasure-stored-unknown | 67.18 us | 70.30 us | **70.45 us** | 87.76 us | 68.79 us | 1.05x | 0.80x | 1.02x |
+| erasure-typed | 133.71 us | 133.74 us | **133.73 us** | 136.05 us | 87.52 us | 1.00x | 0.98x | 1.53x |
+| erasure-unknown | 133.75 us | 133.76 us | **133.71 us** | 136.02 us | 87.44 us | 1.00x | 0.98x | 1.53x |
+| exceptions | 20.08 us | 33.41 us | **33.44 us** | 14.21 ms | 2.33 ms | 1.67x | 0.00x | 0.01x |
+| fib | 302.49 us | 516.12 us | **516.93 us** | 994.66 us | 655.04 us | 1.71x | 0.52x | 0.79x |
+| loop | 653.2 ns | 649.2 ns | **649.3 ns** | 654.5 ns | 667.4 ns | 0.99x | 0.99x | 0.97x |
+| map-and-set (rc) | 9.52 us | 5.21 us | **5.16 us** | 7.01 us | 5.19 us | 0.54x | 0.74x | 0.99x |
+| node-utf8 (rc) | -- | 29.31 us | **33.84 us** | 37.11 us | 31.72 us | -- | 0.91x | 1.07x |
+| number-format (rc) | 846.1 ns | 666.6 ns | **726.2 ns** | 1.42 us | 834.8 ns | 0.86x | 0.51x | 0.87x |
+| number-format-double (rc) | -- | 4.51 us | **4.51 us** | 9.11 us | 5.49 us | -- | 0.49x | 0.82x |
+| objects (rc) | 1.51 us | 1.51 us | **1.51 us** | 1.80 us | 1.41 us | 1.00x | 0.84x | 1.07x |
+| pipeline (rc) | 28.64 us | 26.71 us | **26.74 us** | 116.78 us | 119.81 us | 0.93x | 0.23x | 0.22x |
+| strings | 337.4 ns | 210.8 ns | **213.4 ns** | 2.28 us | 2.64 us | 0.63x | 0.09x | 0.08x |
+| substrings (rc) | 1.70 us | 1.88 us | **1.57 us** | 6.70 us | 24.74 us | 0.92x | 0.23x | 0.06x |
+| symbol-keys | 301.6 ns | 307.0 ns | **308.1 ns** | 1.61 us | 470.2 ns | 1.02x | 0.19x | 0.66x |
 
 Every ratio is nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and `nts/Bun` under 1.00 beat those engines.
 
-There are two backends and both are measured, in the same run on the same machine: `nts (C)` is the C backend and `nts (LLVM)` is the LLVM one, which is the primary target and is still learning constructs. A `--` there is a program it refuses, not a program it gets wrong — every variant that _does_ run must produce the same checksum as every other, so a bench run is a cross-backend correctness check as well as a measurement.
+There are two backends and both are measured, in the same run on the same machine: `nts (C)` is the C backend and `nts (LLVM)` is the LLVM one, which is the primary target and is still learning constructs. A `--` there is a program it refuses, not a program it gets wrong — every variant that *does* run must produce the same checksum as every other, so a bench run is a cross-backend correctness check as well as a measurement.
 
 **The ratios are the LLVM backend's**, because a ratio is a claim about what a program compiled by this compiler costs, and that is the backend a program will be compiled by. Where it refuses one, the ratio is `--` rather than quietly reporting the other backend's number under the same heading.
 
@@ -83,7 +83,7 @@ The suite also measures the same TypeScript with number specialization switched 
 
 **The table keeps the cases this compiler loses.** A benchmark suite that held only its wins would be an advertisement rather than an instrument, and the rows above 1.50x are the work queue: each is a shape where the emitted code costs more than the C++ a person would write, and the reason is worth finding rather than hiding.
 
-`V8` is node and `Bun` is JavaScriptCore, both running the _same_ TypeScript source the compiler consumes — the harness imports the `.ts` directly, so there is no second copy of the program to drift. Both are timed inside their own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in either column, and both must produce the same checksum as everything else. Bun is skipped where it is not installed.
+`V8` is node and `Bun` is JavaScriptCore, both running the *same* TypeScript source the compiler consumes — the harness imports the `.ts` directly, so there is no second copy of the program to drift. Both are timed inside their own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in either column, and both must produce the same checksum as everything else. Bun is skipped where it is not installed.
 <!-- benchmarks:end -->
 
 ### What it can compile
@@ -94,41 +94,40 @@ and what to do next. The corpus below is the independent measure of the same
 question.
 
 <!-- corpus:start -->
-
 184 single-file cases from TypeScript's own test suite, compiled as ordinary programs.
 
-| outcome                     |  files |
-| --------------------------- | -----: |
-| lowered completely          | **49** |
-| refused a construct         |     48 |
-| rejected by the typechecker |     86 |
-| **the frontend fell over**  |  **1** |
-| **invalid HIR or a panic**  |  **0** |
+| outcome | files |
+| --- | ---: |
+| lowered completely | **49** |
+| refused a construct | 48 |
+| rejected by the typechecker | 86 |
+| **the frontend fell over** | **1** |
+| **invalid HIR or a panic** | **0** |
 
 Of the 97 that typecheck, **50%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
 
 The last two rows are the ones that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do, and so is a query this compiler makes that the typechecker cannot answer.
 
-The second row was counted as a typecheck rejection until it was split out, which is how eight of these hid. Six are now survived: a batched query that crashes tsgo is bisected and retried, so one poisonous location costs its own type rather than the file. The two that remain are an enum member whose value is `NaN`, which tsgo cannot write as JSON at all — and they are reached through queries whose answers are _sets_ rather than positional lists, where dropping the one that failed would quietly change a type rather than leave a hole.
+The second row was counted as a typecheck rejection until it was split out, which is how eight of these hid. Six are now survived: a batched query that crashes tsgo is bisected and retried, so one poisonous location costs its own type rather than the file. The two that remain are an enum member whose value is `NaN`, which tsgo cannot write as JSON at all — and they are reached through queries whose answers are *sets* rather than positional lists, where dropping the one that failed would quietly change a type rather than leave a hole.
 
-What is stopping the rest, in order — and **read this table as breadth rather than as a work queue.** A refusal count and the lowered count are different currencies and do not convert: a file refused for three reasons does not lower when one of them is fixed. Default parameters cleared seven files out of this table in one commit and moved _lowered completely_ by zero. The Node session watched the same thing at a larger scale — twenty-five name collisions cleared, two functions gained, and thirty-five _new_ refusals, as functions that had stopped at the collision were walked further and refused for their real reasons.
+What is stopping the rest, in order — and **read this table as breadth rather than as a work queue.** A refusal count and the lowered count are different currencies and do not convert: a file refused for three reasons does not lower when one of them is fixed. Default parameters cleared seven files out of this table in one commit and moved *lowered completely* by zero. The Node session watched the same thing at a larger scale — twenty-five name collisions cleared, two functions gained, and thirty-five *new* refusals, as functions that had stopped at the collision were walked further and refused for their real reasons.
 
 So a tall row means a construct many files use, which is worth knowing. It does not mean that fixing it moves the number above it.
 
-| refused                                                                                                        | files |
-| -------------------------------------------------------------------------------------------------------------- | ----: |
-| `console.log`, a global member with no definition here                                                         |     7 |
-| a module declaration, which has code in it                                                                     |     6 |
-| `MyEnum`, an enum                                                                                              |     4 |
-| a module-scope variable with no initializer, whose type has no representation for the `undefined` it starts as |     4 |
-| a property `timestamp` of unrepresentable type (`Date`)                                                        |     4 |
-| a rest parameter whose element type has no representation                                                      |     4 |
-| a tagged template expression                                                                                   |     4 |
-| `x`, a name from an enclosing scope                                                                            |     3 |
-| a `for...in` statement, which has code in it                                                                   |     3 |
-| a method on an object literal                                                                                  |     3 |
-| a parameter of unrepresentable type (any)                                                                      |     3 |
-| `a`, which `an anonymous type` does not declare                                                                |     2 |
+| refused | files |
+| --- | ---: |
+| `console.log`, a global member with no definition here | 7 |
+| a module declaration, which has code in it | 6 |
+| `MyEnum`, an enum | 4 |
+| a module-scope variable with no initializer, whose type has no representation for the `undefined` it starts as | 4 |
+| a property `timestamp` of unrepresentable type (`Date`) | 4 |
+| a rest parameter whose element type has no representation | 4 |
+| a tagged template expression | 4 |
+| `x`, a name from an enclosing scope | 3 |
+| a `for...in` statement, which has code in it | 3 |
+| a method on an object literal | 3 |
+| a parameter of unrepresentable type (any) | 3 |
+| `a`, which `an anonymous type` does not declare | 2 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->
