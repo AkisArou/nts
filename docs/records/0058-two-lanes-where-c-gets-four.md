@@ -64,14 +64,38 @@ And the experiment that *did* work is not a fix. `n = 256 + (seed | 0)` reaches
 specializer chose is right. Narrowing it by hand proves the prize; it does not
 propose the method.
 
-## What the legal fix looks like
+## Where the width actually sits, and a fix that was wrong
 
-The payload chain the split introduced is typed `i64` because its source is the
-loop counter — and its only use is `toint32`. A value whose every use truncates
-to 32 bits can be carried at 32 bits, and narrowing *that* is sound where
-narrowing the counter is not.
+The first version of this record proposed one: the payload chain the split
+introduced is `i64` because its source is the loop counter, its only use is
+`toint32`, and addition is congruent modulo 2^32 — so narrowing *that* is sound
+where narrowing the counter is not.
 
-The evidence that the information is there: clang recovers it for the C backend
-from C that says `int64_t` in exactly the same places. The C column is at parity
-today because the C frontend's output gives LLVM more to work with than our IR
-does. So this is not a missing fact, it is a lost one.
+It is sound, and it is worth nothing. Narrowing the payload chain by hand, with
+the truncation placed on the edge where the counter enters it, leaves the output
+exactly as it was: 87 `<2 x i64>`, unchanged to the instruction.
+
+The width that matters is the **induction variable**, and that one is not
+narrowable by us: `256 + (seed | 0)` reaches 2^31+255, so `i64` is the right
+type and an `i32` counter is wrong.
+
+## What clang does that we cannot, still unexplained
+
+The C backend hands clang `int64_t` in the same places and clang narrows it
+anyway — its vectorized loop carries `phi <4 x i32> [ <i32 0, i32 1, i32 2,
+i32 3> ]`, an `i32` induction variable, from a bound that does not fit in one.
+So the transformation is available; something about our IR prevents it.
+
+Four candidates were tested and every one of them is refuted:
+
+    the string-length zext/add/trunc chain      no change
+    the opaque `nts_string_truthy` call         no change under LTO
+    the payload chain, narrowed soundly         no change
+    redundant single-predecessor phis           no change
+
+That is the state. The cause is measured and certain — width caps the
+vectorization factor, and removing the width is worth the entire 2.1x. The fix
+is not found, and four plausible accounts of it are now known to be wrong rather
+than merely unverified. Whoever takes it next should start from what clang's
+pipeline does to the C that it declines to do to our IR, rather than from
+another guess about which value is too wide.
