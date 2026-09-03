@@ -706,3 +706,52 @@ fn a_finally_that_returns_replaces_the_return() {
         "every `return` is the `finally`'s: {returned:?}"
     );
 }
+
+/// Whether a function calls a runtime helper by that name.
+fn calls(func: &Func, helper: &str) -> bool {
+    func.values.iter().any(|op| {
+        matches!(&op.kind, OpKind::Call { callee: Callee::External(name), .. }
+                 if name == helper)
+    })
+}
+
+#[test]
+fn a_promise_executor_is_lowered_where_the_promise_is_built() {
+    let Some(lowered) = lowered("promise-constructor") else {
+        return;
+    };
+    // `new Promise(f)` calls `f` synchronously, so when `f` is written at the
+    // call its body belongs at the construction site -- and then `resolve` is
+    // not a value at all, it is the settle it stands for. No closure is
+    // allocated, nothing is captured, and the whole of `later` is two calls.
+    let later = func(&lowered, "later");
+    assert!(calls(later, "nts_promise_new"));
+    assert!(
+        calls(later, "nts_promise_fulfill_number"),
+        "`resolve(n)` is the fulfil, not a call to anything"
+    );
+    assert!(
+        !later
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::ClosureStatic | OpKind::ObjectNew { .. })),
+        "nothing is captured, so there is no closure and no object at all"
+    );
+}
+
+#[test]
+fn an_async_throw_rejects_its_own_promise() {
+    let Some(lowered) = lowered("promise-constructor") else {
+        return;
+    };
+    // A `throw` in an `async` function rejects the promise it already owns and
+    // hands it back, which is what its `return` does through `settle`. It used
+    // to end the program: node rejects, and a caller awaiting it sees a
+    // rejection rather than a dead process.
+    let failing = func(&lowered, "failing");
+    assert!(calls(failing, "nts_promise_reject"));
+    assert!(
+        !calls(failing, "nts_uncaught"),
+        "an `async` function has somewhere to put a throw"
+    );
+}

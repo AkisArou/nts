@@ -138,6 +138,10 @@ counter, not by reading the emitted C.
 | ✅ | a function held in a **field**, on a class or an object literal, called through it. `f(x): number` is a method the dispatch table holds and `f: (x) => number` is storage; the checker says which, and asking the *type* instead cannot tell them apart |
 | ✅ | recursion |
 | ✅ | `async`/`await` — under both providers |
+| ✅ | `new Promise(executor)` where the executor is an arrow written at the call: it runs synchronously, so its body is lowered where the promise is built and `resolve(v)` *is* the fulfil. No closure, nothing captured |
+| ✅ | a `throw` in an `async` function rejects the promise it owns, the way its `return` settles it |
+| ✗ | an executor that is not an arrow written at the call, or a `resolve` used as a value rather than called (`new Promise(r => { saved = r })`) — both need a real closure over the promise |
+| ✗ | a `catch` that spans an `await`: a rejected resumption goes to one shared exit, and reaching the `try`'s handler needs the suspension to record which handler it is inside |
 | ✅ | type predicates (`x is T`) and `asserts x is T` |
 | ✅ | rest parameters | the call gathers its trailing arguments into the array |
 | ✅ | `function` expressions that do not bind their own `this` — the same closure an arrow is, with the same captures. One that *does* use `this` is still refused, and that is the whole of the difference |
@@ -1480,7 +1484,7 @@ The whole global object, host additions excluded. `∅` rows are §13, not backl
 | keyed | | `Map`, `Set`, `WeakMap`, `WeakSet` | |
 | structured | | `ArrayBuffer`, `DataView`, `JSON`, `Atomics`, `SharedArrayBuffer` | |
 | memory | | `WeakRef`, `FinalizationRegistry` | |
-| control | `Promise` ◐ | `Iterator`, generator objects | |
+| control | `Promise` ◐ — the constructor, `all`, `race` | `Iterator`, generator objects | |
 | internationalization | | | `Intl` — ECMA-402, a separate specification |
 
 ### `Object` is two halves

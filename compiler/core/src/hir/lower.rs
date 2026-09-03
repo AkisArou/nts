@@ -3069,6 +3069,19 @@ struct AsyncResult {
     payload: HirType,
 }
 
+/// What `resolve` or `reject` names inside a `new Promise` executor.
+///
+/// The executor runs *synchronously* -- `new Promise(f)` calls `f` before it
+/// returns -- so its body is lowered at the construction site and these two
+/// names are not values at all. A call to one is the settle it stands for.
+#[derive(Clone)]
+struct Settler {
+    /// The promise being constructed, and the payload it settles with.
+    result: AsyncResult,
+    /// `reject` rather than `resolve`.
+    rejects: bool,
+}
+
 /// An array method that is a loop with the callback's body inlined.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Iteration {
@@ -3288,6 +3301,12 @@ struct FuncBuilder<'a> {
     /// This is what makes two identifiers with one symbol become one value
     /// rather than two loads.
     bindings: rustc_hash::FxHashMap<u32, ValueId>,
+    /// `resolve` and `reject`, while a `new Promise` executor is being lowered.
+    ///
+    /// By symbol, so a name that shadows one outside the executor is unaffected
+    /// and a nested `new Promise` shadows correctly -- the inner binding
+    /// replaces the outer for its own symbol and nothing else.
+    settlers: rustc_hash::FxHashMap<u32, Settler>,
     /// The `try` blocks this statement is inside, innermost last.
     ///
     /// On the builder and not passed down, because a `throw` can be at any
@@ -3422,6 +3441,7 @@ impl<'a> FuncBuilder<'a> {
             }],
             current: BlockId(0),
             bindings: rustc_hash::FxHashMap::default(),
+            settlers: rustc_hash::FxHashMap::default(),
             exits: Vec::new(),
             returns: HirType::Void,
             layouts: Vec::new(),
@@ -3962,6 +3982,22 @@ impl<'a> FuncBuilder<'a> {
                 );
             }
             return format!("`{}`, a global with no definition here", record.name);
+        }
+        // `resolve` and `reject` are not values. The executor's body is lowered
+        // where the promise is built, so a call to one is the settle it stands
+        // for -- and there is nothing to hand to anything that wants it as a
+        // function. Saying so beats "a name from an enclosing scope", which is
+        // true of the symbol and says nothing about why.
+        if self
+            .node(id)
+            .symbol
+            .is_some_and(|symbol| self.settlers.contains_key(&symbol.0))
+        {
+            return format!(
+                "`{}` used as a value rather than called, which needs the executor to be a \
+                 real closure over the promise",
+                record.name
+            );
         }
         if is(SymbolFlags::FUNCTION) {
             return format!("`{}`, a function used as a value", record.name);
@@ -7241,7 +7277,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         result: &AsyncResult,
         value: Option<ValueId>,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<ValueId, Diagnostic> {
         // Settling a promise *with* a promise is adoption: the outer one
         // subscribes to the inner, waits, and takes its value -- two extra
         // ticks that a program can see through any interleaving. Storing the
@@ -7312,8 +7348,7 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(id, "an `async` function settling with `unknown`"));
             }
         };
-        self.runtime_call(helper, args, HirType::Void, origin);
-        Ok(())
+        Ok(self.runtime_call(helper, args, HirType::Void, origin))
     }
 
     /// `return` inside an inlined callback: end this iteration, not the
@@ -8049,6 +8084,31 @@ impl<'a> FuncBuilder<'a> {
                 target,
                 args: Vec::new(),
             });
+            return Ok(());
+        }
+
+        // An `async` function's `throw` rejects the promise it already owns and
+        // hands it back, which is exactly what its `return` does with `settle`.
+        // Without this it ended the program: node rejects, and every caller
+        // awaiting it sees a rejection rather than a dead process.
+        //
+        // The reference and not the erased value, because the runtime holds a
+        // reason as an `NtsHeader *`. A thrown number has none to hold, and
+        // writing one into that slot would be a pointer the collector follows.
+        if let Some(result) = self.async_result.clone() {
+            if !matches!(thrown_ty, HirType::Managed(_)) {
+                return Err(self.unsupported(
+                    id,
+                    "an `async` function throwing something that is not a reference",
+                ));
+            }
+            self.runtime_call(
+                "nts_promise_reject",
+                vec![result.promise, value],
+                HirType::Void,
+                origin,
+            );
+            self.terminate(Terminator::Return(Some(result.promise)));
             return Ok(());
         }
 
@@ -10830,9 +10890,10 @@ impl<'a> FuncBuilder<'a> {
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "a `new`"))?;
 
-        if let HirType::Managed(ManagedType::Map(key, _) | ManagedType::Set(key)) = &ty {
-            let key = key.clone();
-            return self.lower_new_table(id, &ty, &key);
+        // The three the runtime builds rather than the program: a class's `new`
+        // is a call to its constructor, and none of these has one.
+        if let Some(built) = self.lower_new_provided(id, &ty) {
+            return built;
         }
 
         let HirType::Managed(ManagedType::Object(type_id)) = ty else {
@@ -10895,6 +10956,165 @@ impl<'a> FuncBuilder<'a> {
             origin,
         );
         Ok(object)
+    }
+
+    /// `new Map`, `new Set` and `new Promise`, which the runtime builds.
+    ///
+    /// `None` when the type is a class, whose `new` is a call to a constructor
+    /// the program declares.
+    fn lower_new_provided(
+        &mut self,
+        id: NodeId,
+        ty: &HirType,
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        match ty {
+            HirType::Managed(ManagedType::Map(key, _) | ManagedType::Set(key)) => {
+                let key = key.as_ref().clone();
+                Some(self.lower_new_table(id, ty, &key))
+            }
+            HirType::Managed(ManagedType::Promise(payload)) => {
+                let payload = payload.as_ref().clone();
+                Some(self.lower_new_promise(id, ty, &payload))
+            }
+            _ => None,
+        }
+    }
+
+    /// `new Promise<T>(executor)`.
+    ///
+    /// # The executor is not a function here
+    ///
+    /// `new Promise(f)` calls `f` *synchronously*, before the constructor
+    /// returns. So when `f` is written at the call -- which is how essentially
+    /// every one of them is written -- its body belongs at the construction
+    /// site, and `resolve` and `reject` are not values that have to exist. A
+    /// call to `resolve` is the settle it stands for, which is the same helper
+    /// an `async` function's `return` emits.
+    ///
+    /// That is the whole reason this needs no closure over the promise, which
+    /// is what made the feature look hard. The promise is a local, `resolve(v)`
+    /// is `nts_promise_fulfill_*(p, v)`, and nothing is captured by anything.
+    ///
+    /// The same shape, and the same refusal, as an array method whose callback
+    /// is not an arrow written at the call: an executor that arrives as a name
+    /// is a genuine indirect call, and answering it needs a real closure over
+    /// the promise rather than a harder version of this.
+    fn lower_new_promise(
+        &mut self,
+        id: NodeId,
+        ty: &HirType,
+        payload: &HirType,
+    ) -> Result<ValueId, Diagnostic> {
+        let arguments = self.arguments_of(id);
+        let [executor] = arguments.as_slice() else {
+            return Err(self.unsupported(id, "a `new Promise` with more than an executor"));
+        };
+        let executor = *executor;
+        if self.kind_of(executor) != Some(syntax::ARROW_FUNCTION) {
+            return Err(self.unsupported(
+                id,
+                "a `new Promise` whose executor is not an arrow written at the call",
+            ));
+        }
+        let names = self.callback_parameters(executor, "Promise")?;
+        if names.len() > 2 {
+            return Err(self.unsupported(executor, "a `new Promise` executor of this shape"));
+        }
+        let Some(&body) = self.children(executor).last() else {
+            return Err(self.unsupported(executor, "a `new Promise` executor with no body"));
+        };
+
+        let origin = self.origin(id);
+        let promise = self.runtime_call("nts_promise_new", Vec::new(), ty.clone(), origin);
+        let result = AsyncResult {
+            promise,
+            payload: payload.clone(),
+        };
+
+        // Saved and restored rather than inserted and removed: an executor
+        // nested inside another one rebinds the same names, and the outer
+        // meanings have to come back when it ends.
+        let outer = self.settlers.clone();
+        for (at, symbol) in names.into_iter().enumerate() {
+            self.settlers.insert(
+                symbol,
+                Settler {
+                    result: result.clone(),
+                    rejects: at == 1,
+                },
+            );
+        }
+        // A concise body is an expression whose value the executor discards --
+        // `new Promise(r => r(n))` is the shortest spelling there is.
+        let lowered = if self.kind_of(body) == Some(syntax::BLOCK) {
+            self.lower_statement(body)
+        } else {
+            self.lower_expression(body).map(|_| ())
+        };
+        self.settlers = outer;
+        lowered?;
+
+        Ok(promise)
+    }
+
+    /// `resolve(v)` or `reject(e)` inside a `new Promise` executor.
+    ///
+    /// `None` when this call is an ordinary one, which is every call in a
+    /// program that is not inside an executor.
+    fn lower_settler_call(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
+        if self.settlers.is_empty() {
+            return Ok(None);
+        }
+        let Some(&callee) = self.children(id).first() else {
+            return Ok(None);
+        };
+        if self.kind_of(callee) != Some(syntax::IDENTIFIER) {
+            return Ok(None);
+        }
+        let Some(symbol) = self.node(callee).symbol else {
+            return Ok(None);
+        };
+        let Some(settler) = self.settlers.get(&symbol.0).cloned() else {
+            return Ok(None);
+        };
+
+        let arguments = self.arguments_of(id);
+        let value = match arguments.as_slice() {
+            [] => None,
+            [one] => Some(self.lower_expression(*one)?),
+            _ => {
+                return Err(self.unsupported(id, "a `resolve` or `reject` with more than one \
+                                                 argument"));
+            }
+        };
+
+        if !settler.rejects {
+            return self.settle(id, &settler.result, value).map(Some);
+        }
+
+        // A rejection reason is `any`, and the runtime takes a reference:
+        // `reject(new Error(m))` and `reject("text")` are both one, and
+        // `reject(7)` is not. Refused rather than boxed, because a number
+        // written into the reason slot is a pointer the collector would follow.
+        let origin = self.origin(id);
+        let Some(reason) = value else {
+            return Err(self.unsupported(id, "a `reject` with no reason"));
+        };
+        if !matches!(
+            self.values[reason.0 as usize].ty,
+            HirType::Managed(_) | HirType::Erased
+        ) {
+            return Err(self.unsupported(
+                id,
+                "a `reject` with a reason that is not a reference",
+            ));
+        }
+        Ok(Some(self.runtime_call(
+            "nts_promise_reject",
+            vec![settler.result.promise, reason],
+            HirType::Void,
+            origin,
+        )))
     }
 
     /// `xs[i]`, as a read. Writes are handled by the assignment lowering.
@@ -12400,6 +12620,12 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_call(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        // Before the target lookup, because `resolve` is a parameter rather
+        // than a function: the frontend has nothing to resolve it to, and the
+        // call is not a call at all once the executor is inlined.
+        if let Some(settled) = self.lower_settler_call(id)? {
+            return Ok(settled);
+        }
         let Some(target) = self.snapshot.call_targets.get(&id) else {
             return Err(Diagnostic::error(
                 "NTS1002",
@@ -15401,6 +15627,25 @@ fn refused_by_name(snapshot: &SemanticSnapshot, id: NodeId) -> Option<&'static s
         {
             found = Some("a `finally` that spans an `await`");
         }
+        // A rejected `await` inside a `try` has to reach that `try`'s handler,
+        // and it does not: a resumption's rejection goes to one shared exit
+        // that rejects this function's own promise, because until `try`/`catch`
+        // existed that was the whole of what a rejection could do.
+        //
+        // Refused rather than left alone, because leaving it alone is a *wrong
+        // answer*: `try { await failing() } catch { return -99 }` compiled, ran,
+        // and rejected where node returns -99. The shape of the fix is known --
+        // a suspension has to record which handler it is inside, so the
+        // rejection branch can jump there with the reason instead -- and it is
+        // the same question `throw` across a call asks. See 0071.
+        if kind == Some(syntax::TRY_STATEMENT)
+            && has_catch(snapshot, child)
+            && direct_children(snapshot, child)
+                .first()
+                .is_some_and(|block| contains_kind(snapshot, *block, syntax::AWAIT_EXPRESSION))
+        {
+            found = Some("a `catch` that spans an `await`");
+        }
     });
     found
 }
@@ -15411,6 +15656,13 @@ fn refused_by_name(snapshot: &SemanticSnapshot, id: NodeId) -> Option<&'static s
 fn has_finally(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
     let parts = direct_children(snapshot, id);
     parts.len() >= 2 && kind_at(snapshot, parts[parts.len() - 1]) == Some(syntax::BLOCK)
+}
+
+/// A `try` has a `catch` when its second part is not a block -- the same
+/// reading of the same node as [`has_finally`], from the other end.
+fn has_catch(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
+    let parts = direct_children(snapshot, id);
+    parts.len() >= 2 && kind_at(snapshot, parts[1]) != Some(syntax::BLOCK)
 }
 
 /// The syntax kind of a node, or `None` for a list.
