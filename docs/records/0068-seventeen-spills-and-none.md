@@ -108,3 +108,48 @@ The row is 1.25x LLVM-over-C and it is ours. That is a refusal with a reason,
 and the reason is now four steps deeper than "17 spills": they are around calls,
 they are mostly floating-point, x86-64 has no callee-saved xmm, and the IR that
 produces them is indistinguishable in the aggregate from the IR that does not.
+
+## Twelve refuted, and the thing that would answer it
+
+Added since the list above:
+
+    `inbounds` on every GEP                       noise
+    `i64` element indices instead of `i32`        noise
+    `opt -O2` / `-O3` before `clang -O2`          slightly worse
+    `target datalayout` and `triple` on the module  noise
+    runtime calls marked `noinline` at the site   **much worse** (3375 vs 2658)
+
+The last one is informative rather than disappointing: LTO inlining the runtime
+into this function is worth 27%, so the extra sixteen instructions ours carries
+over clang's are *earned*, not waste.
+
+And the ordering hypothesis is refuted too. The two optimized functions are not
+merely similar in aggregate — they are in the same order, instruction for
+instruction:
+
+```text
+ours     clang
+  4        3     tail call nts_array_new
+ 13       12     sitofp i32 -> double
+ 22       21     sitofp i64 -> double
+ 23       22     tail call nts_array_push
+ 33       32     fadd double
+103      108     tail call nts_array_new_uninitialized
+```
+
+Both carry `nounwind` on every runtime declaration. Both get the same datalayout.
+Same types, same counts, same control flow, same order — and one spills seven
+values while the other spills none.
+
+## Why this stops here
+
+What is left is the register allocator's own decisions, and this clang cannot
+show them: `-mllvm -stats` prints nothing and `-debug-only=regalloc` is
+unavailable, because both need an assertions build of LLVM. Every remaining
+hypothesis is a guess about a black box, and twelve of those have already been
+wrong.
+
+The row is 1.25x, it is ours, and the honest state is: measured to the
+instruction, mechanism identified (values live across calls, four of seven of
+them floating-point, and x86-64 has no callee-saved xmm), cause not found. The
+next step is an assertions build of LLVM, not another edit to the `.ll`.
