@@ -2053,6 +2053,13 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
             hierarchy.clone(),
             closures.clone(),
         );
+        // The qualified names, which this builder needs for the same reason
+        // every other one does: a wrapper forwards to the function it stands
+        // for, and where two modules declare that name the function is emitted
+        // under the qualified one. Without this the wrapper called a name the
+        // program does not define -- see `lower_closure`, which is where the
+        // consequence is written down.
+        builder.qualified.clone_from(&shared.naming.qualified);
         match builder.lower_closure(index, &closures[index]) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => lowered.diagnostics.push(diagnostic),
@@ -5122,11 +5129,24 @@ impl<'a> FuncBuilder<'a> {
         // re-lowering the declaration's body here would compile it twice and
         // give recursion two things to mean.
         if info.wraps {
+            // The name the wrapped function is *emitted* under, which is not
+            // always the name written on it: where two modules declare the same
+            // one, `Naming` qualifies both apart, and the definition is emitted
+            // under the qualified name.
+            //
+            // Reading the identifier's text instead called a name that does not
+            // exist. Nothing said so -- the call was to a function the program
+            // does not define, the wrapper was refused for calling something
+            // refused, and the wrapper *is* the closure's only method -- so the
+            // vtable came out null and the compiled program dereferenced it.
+            // `path` has `isPosixPathSeparator` in both `posix.ts` and
+            // `win32.ts` and passes it to `normalizeString`, which is exactly
+            // this shape.
             let called = self
-                .children(id)
-                .into_iter()
-                .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
-                .and_then(|child| self.node(child).text.clone())
+                .qualified
+                .get(&id)
+                .cloned()
+                .or_else(|| self.declared_name(id))
                 .ok_or_else(|| self.unsupported(id, "a function declaration with no name"))?;
             if forwarded.len() + 1 != params.len() {
                 return Err(self.unsupported(
