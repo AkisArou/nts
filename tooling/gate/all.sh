@@ -336,6 +336,12 @@ fi
 step "build"   cargo build --release
 step "clippy"  lint
 step "format"  format
+# Cheap -- filesystem only -- and it answers a question nothing else asks: does
+# `docs/primitives.md` name ratchets that exist. The table is nine claims about
+# what is measured, and a claim nothing checks is how a closed primitive quietly
+# stops being one. The numbers half needs a benchmark log and is run by hand:
+# `tooling/primitives/check.py <log>`.
+step "primitives" tooling/primitives/check.py
 step "tests"   tests
 step "corpus"  corpus
 step "profile"  profile

@@ -17,7 +17,7 @@ column is a row with no hand-written reference; the case says why.
 | primitive | correctness | memory: ops / allocs | speed: vs C++ / node | record |
 |---|---|---|---|---|
 | **number** | `arith`, `mathops`, `bitwise` | `number-to-string` 0 / 0 | `number-format` 0.82 / 0.49<br>`loop` 0.99 / 0.98<br>`fib` 1.71 / 0.52 | 0030, 0034 |
-| **string** | `strings`, `string-methods` | `string-append` 1 / 2<br>`string-build` 1 / 2<br>`case-convert` 18 / 17 | `strings` 0.63 / 0.05<br>`node-utf8` — / 0.93<br>`substrings` 0.93 / 0.23<br>`case-convert` 0.40 / 0.83 | 0029, 0033, 0035, 0059, 0060, 0062 |
+| **string** | `strings`, `string-methods` | `string-append` 1 / 2<br>`string-build` 1 / 2<br>`case-convert` 18 / 17 | `strings` 0.63 / 0.09<br>`node-utf8` — / 0.93<br>`substrings` 0.93 / 0.23<br>`case-convert` 0.40 / 0.83 | 0029, 0033, 0035, 0059, 0060, 0062 |
 | **boolean, null, undefined** | `absent`, `nullish`, `unknown-truthiness` | `boolean-flags` 0 / 0 | `absences` 2.14 / 0.50 | 0031, 0039, 0053, 0057 |
 | **bigint** | `bigint` | `bigint-arithmetic` 0 / 0 | `bigint` 0.99 / 0.09 | 0036 |
 | **symbol** | `symbol-keys` | `symbol-keys` 0 / 0 | `symbol-keys` 1.02 / 0.19 | 0037 |
