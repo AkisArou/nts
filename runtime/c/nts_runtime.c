@@ -2413,6 +2413,45 @@ NtsArray *nts_array_reverse(NtsArray *a) {
   return nts_array_same(a);
 }
 
+/* `xs.splice(start, count)`: remove a run and hand it back.
+ *
+ * Two arguments only. The insert form takes as many more as it is given, and is
+ * a different signature rather than a longer one; ten of the twelve `splice`
+ * calls in `runtime/node` are this shape.
+ *
+ * The removed elements *move*. For an array of references the new array holds
+ * them and the old one no longer does, so the count is unchanged either way and
+ * nothing here retains or releases -- the same reason `nts_array_push_ref` is
+ * consuming.
+ *
+ * Every one of those twelve calls throws the result away, which this cannot see
+ * and so still allocates for. A `_void` form chosen where the result is dead
+ * would be the fix, and it is a question about the caller rather than about
+ * this. */
+static NtsArray *nts_array_splice_at(NtsArray *a, double start, double count,
+                                     size_t width) {
+  uint32_t length = a->header.length;
+  uint32_t from = nts_str_clamp(start, length, 1);
+  uint32_t take = nts_str_clamp(count, length - from, 0);
+  NtsArray *out = nts_array_new(a->header.descriptor, (double)take);
+  unsigned char *items = (unsigned char *)a->elements;
+  if (take != 0) {
+    memcpy(out->elements, items + (size_t)from * width, (size_t)take * width);
+  }
+  memmove(items + (size_t)from * width, items + (size_t)(from + take) * width,
+          (size_t)(length - from - take) * width);
+  a->header.length = length - take;
+  return out;
+}
+
+NtsArray *nts_array_splice(NtsArray *a, double start, double count) {
+  return nts_array_splice_at(a, start, count, sizeof(double));
+}
+
+NtsArray *nts_array_splice_ref(NtsArray *a, double start, double count) {
+  return nts_array_splice_at(a, start, count, sizeof(void *));
+}
+
 NtsArray *nts_array_slice(const NtsArray *a, double from, double to) {
   /* Negative counts from the end, as `String.prototype.slice` does. */
   uint32_t start = nts_str_clamp(from, a->header.length, 1);

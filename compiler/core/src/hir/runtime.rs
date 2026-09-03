@@ -62,6 +62,8 @@ static SIGNATURES: &[Declared] = &[
     ("nts_array_shift_value", &[None], None),
     ("nts_array_slice", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
     ("nts_array_slice_ref", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
+    ("nts_array_splice", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
+    ("nts_array_splice_ref", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
     ("nts_array_unshift", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_array_unshift_ref", &[None, None], Some(HirType::Float { bits: 64 })),
     ("nts_bigint_as_intn", &[Some(HirType::Float { bits: 64 }), Some(HirType::BigInt)], Some(HirType::BigInt)),

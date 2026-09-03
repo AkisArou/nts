@@ -104,3 +104,45 @@ export function shiftedNames(n: number): string {
   const first = names.shift() ?? "-";
   return first + ":" + names.join(",") + ":" + String(names.length);
 }
+
+// `splice(start, count)`, which removes a run and hands it back.
+//
+// Two arguments only: the insert form takes as many more as it is given and is
+// a different signature rather than a longer one. Ten of the twelve `splice`
+// calls in `runtime/node` are this shape, and every one of the twelve throws
+// the result away.
+export function removedOne(n: number): number {
+  const xs = [n, n + 1, n + 2, n + 3, n + 4];
+  const gone = xs.splice(1, 1);
+  return gone[0]! * 1000 + xs.length * 100 + xs[0]! * 10 + xs[1]!;
+}
+
+// A prefix, which is the other shape node writes.
+export function removedPrefix(n: number): number {
+  const xs = [n, n + 1, n + 2, n + 3];
+  const gone = xs.splice(0, 2);
+  return gone.length * 1000 + gone[1]! * 100 + xs.length * 10 + xs[0]!;
+}
+
+// Past the end, and none at all: both clamp rather than fail.
+export function splicedClamped(n: number): number {
+  const xs = [n, n + 1, n + 2];
+  const past = xs.splice(10, 5);
+  const none = xs.splice(1, 0);
+  return past.length * 1000 + none.length * 100 + xs.length * 10 + xs[2]!;
+}
+
+// A negative start counts from the end, as `slice` does.
+export function splicedFromTheEnd(n: number): number {
+  const xs = [n, n + 1, n + 2, n + 3];
+  const gone = xs.splice(-2, 1);
+  return gone[0]! * 100 + xs.length * 10 + xs[2]!;
+}
+
+// References, where the removed elements *move*: the new array holds them and
+// the old one does not, so no count changes.
+export function splicedNames(n: number): string {
+  const names = ["a" + String(n % 10), "b", "c", "d"];
+  const gone = names.splice(1, 2);
+  return gone.join("+") + ":" + names.join(",") + ":" + String(names.length);
+}

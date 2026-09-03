@@ -1737,13 +1737,15 @@ Measured, not assumed — three of these rows were wrong on the first pass.
   in the differential. A target is not a detail of the build — it decides which
   language the compiler is a compiler for.
 - **`Array.prototype`**: `at every fill filter find findIndex forEach includes
-  indexOf lastIndexOf map pop push reduce reverse shift slice some unshift
-  length` on an array of numbers, and `at every filter find findIndex forEach
-  includes indexOf map pop push reduce reverse shift slice some unshift length`
-  — plus `join` — on an array of *references*. `push` and `unshift` take as many
-  elements as they are given. Absent: `concat`, `sort`, `splice`, `flat`,
-  `flatMap`, `findLast`, `findLastIndex`, `reduceRight`, `toSorted`,
-  `toReversed`, and everything on an array of booleans.
+  indexOf lastIndexOf map pop push reduce reverse shift slice some splice
+  unshift length` on an array of numbers, and `at every filter find findIndex
+  forEach includes indexOf map pop push reduce reverse shift slice some splice
+  unshift length` — plus `join` — on an array of *references*. `push` and
+  `unshift` take as many elements as they are given; `splice` takes two
+  arguments, and the insert form is a different signature rather than a longer
+  one. Absent: `concat`, `sort`, `flat`, `flatMap`, `findLast`, `findLastIndex`,
+  `reduceRight`, `toSorted`, `toReversed`, and everything on an array of
+  booleans.
 
   `some`, `every`, `findIndex`, `find` and `filter` are compiled as the loops
   they are, like `forEach`, `map` and `reduce` before them: the callback inlined,
@@ -1751,10 +1753,14 @@ Measured, not assumed — three of these rows were wrong on the first pass.
   mechanism they share; `filter` allocates once, as long as its input, and is
   shortened to what it kept.
 
-  What is absent is absent by *count*. `shift` and `unshift` are here because
-  `runtime/node` uses them seventeen and sixteen times; `flat`, `flatMap`,
-  `findLast`, `findLastIndex`, `reduceRight` and `toReversed` are not, because
-  it uses them zero times between them.
+  What is absent is absent by *count*. `shift`, `unshift` and `splice` are here
+  because `runtime/node` uses them seventeen, sixteen and twelve times; `flat`,
+  `flatMap`, `findLast`, `findLastIndex`, `reduceRight` and `toReversed` are
+  not, because it uses them zero times between them.
+
+  Every one of those twelve `splice` calls throws its result away, and this
+  still allocates the removed run for them. A `_void` form chosen where the
+  result is dead is the fix, and it is a question about the caller.
 
   The 22 profile sites that wanted a method on a non-numeric array all wanted a
   reference element — strings, objects, closures, an `Int32Array` — and not one
@@ -2069,7 +2075,7 @@ blocks on, not to start building.
 | the async iterator protocol | 63, all `AsyncIterableIterator` — and a **second** 62-site row is the same thing under another message, a property `#lineObjectStream` of type `AsyncIterableIterator \| undefined`. One property, counted 62 times | §10 plus the suspension machine, which `async` already has |
 | `symbol` | 46 — `string \| symbol` as a property key, 30 as a parameter and 16 as a property | a representation, and a decision about whether well-known symbols are values or names |
 | a method not in the hierarchy | 52 — `emit` 8, then a long tail | structural dispatch, which is the same question as the anonymous-type row above |
-| ~~array methods on a non-numeric array~~ | **done**, 22 → 4, then → 2. Every site wanted a *reference* element, so there is a `_ref` family and no `_bool` one; `shift` has since landed for both | what is left is `splice` and `toSorted`, one site each |
+| ~~array methods on a non-numeric array~~ | **done**, 22 → 4 → 1. Every site wanted a *reference* element, so there is a `_ref` family and no `_bool` one; `shift` and `splice` have since landed for both | what is left is `toSorted`, one site |
 | string methods | 3 — `normalize`. `toLowerCase` and `toUpperCase` are done, which was 39 sites; `split`, `trim`, `replace`, `replaceAll`, `padStart`, `padEnd` and `valueOf` before them | the case tables are vendored and `normalize`'s came with them; it wants `dbuf` and an allocator argument |
 | generators | 4 refusals, but `readline` and several streams are behind them | the suspension machine exists; what is missing is the `Generator<T>` object and §10's protocol |
 | `try`/`catch` | the largest *language* gap, and invisible in this table because the code that needs it does not reach the lowering | needs an unwinding decision — the runtime has none |

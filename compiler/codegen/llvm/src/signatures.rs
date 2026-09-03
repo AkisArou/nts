@@ -79,6 +79,8 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_array_shift_value", returns: "{ i32, i64 }", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_slice", returns: "ptr", params: &["ptr", "double", "double"], attributes: &[] },
     Signature { name: "nts_array_slice_ref", returns: "ptr", params: &["ptr", "double", "double"], attributes: &[] },
+    Signature { name: "nts_array_splice", returns: "ptr", params: &["ptr", "double", "double"], attributes: &[] },
+    Signature { name: "nts_array_splice_ref", returns: "ptr", params: &["ptr", "double", "double"], attributes: &[] },
     Signature { name: "nts_array_unshift", returns: "double", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_unshift_ref", returns: "double", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_bigint_as_intn", returns: "i128", params: &["double", "i128"], attributes: &[] },

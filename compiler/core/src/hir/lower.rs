@@ -2964,6 +2964,35 @@ struct PartialBlock {
 /// `xs.forEach(f)` where `f` is a *variable* is a genuine dispatch and is not
 /// one of these -- the caller checks that the argument is an arrow written at
 /// the call site before taking this path.
+/// A method on an array of numbers: the runtime function, how many arguments
+/// follow the receiver, and what it evaluates to.
+///
+/// `absent_result` is the checker having left the `undefined` in. `pop`, `shift`
+/// and `at` each have a form that can say `undefined` and a form that cannot,
+/// and the one that cannot is what a caller who has narrowed it away gets.
+fn numeric_array_method(
+    name: &str,
+    absent_result: bool,
+    array: &HirType,
+) -> Option<(&'static str, usize, HirType)> {
+    Some(match name {
+        "pop" if absent_result => ("nts_array_pop_value", 0, HirType::Erased),
+        "pop" => ("nts_array_pop", 0, HirType::NUMBER),
+        "shift" if absent_result => ("nts_array_shift_value", 0, HirType::Erased),
+        "shift" => ("nts_array_shift", 0, HirType::NUMBER),
+        "at" if absent_result => ("nts_array_at_value", 1, HirType::Erased),
+        "at" => ("nts_array_at", 1, HirType::NUMBER),
+        "indexOf" => ("nts_array_index_of", 1, HirType::NUMBER),
+        "lastIndexOf" => ("nts_array_last_index_of", 1, HirType::NUMBER),
+        "includes" => ("nts_array_includes", 1, HirType::Bool),
+        "fill" => ("nts_array_fill", 1, array.clone()),
+        "reverse" => ("nts_array_reverse", 0, array.clone()),
+        "slice" => ("nts_array_slice", 2, array.clone()),
+        "splice" => ("nts_array_splice", 2, array.clone()),
+        _ => return None,
+    })
+}
+
 fn iteration_method(name: &str) -> Option<Iteration> {
     Some(match name {
         "forEach" => Iteration::ForEach,
@@ -12677,21 +12706,9 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_pushes(id, "nts_array_unshift", receiver, arguments);
         }
 
-        // (runtime function, arguments after the receiver, result)
-        let (helper, arity, ty) = match name.as_str() {
-            "pop" if absent_result => ("nts_array_pop_value", 0, HirType::Erased),
-            "pop" => ("nts_array_pop", 0, HirType::NUMBER),
-            "shift" if absent_result => ("nts_array_shift_value", 0, HirType::Erased),
-            "shift" => ("nts_array_shift", 0, HirType::NUMBER),
-            "at" if absent_result => ("nts_array_at_value", 1, HirType::Erased),
-            "indexOf" => ("nts_array_index_of", 1, HirType::NUMBER),
-            "lastIndexOf" => ("nts_array_last_index_of", 1, HirType::NUMBER),
-            "includes" => ("nts_array_includes", 1, HirType::Bool),
-            "at" => ("nts_array_at", 1, HirType::NUMBER),
-            "fill" => ("nts_array_fill", 1, array.clone()),
-            "reverse" => ("nts_array_reverse", 0, array.clone()),
-            "slice" => ("nts_array_slice", 2, array),
-            _ => return Err(self.unsupported(member, "this array method")),
+        let Some((helper, arity, ty)) = numeric_array_method(&name, absent_result, &array)
+        else {
+            return Err(self.unsupported(member, "this array method"));
         };
 
         let mut args = vec![receiver];
@@ -12825,7 +12842,8 @@ impl<'a> FuncBuilder<'a> {
             "indexOf" => ("nts_array_index_of_ref", 1, HirType::NUMBER),
             "includes" if text => ("nts_array_includes_str", 1, HirType::Bool),
             "includes" => ("nts_array_includes_ref", 1, HirType::Bool),
-            "slice" => ("nts_array_slice_ref", 2, array),
+            "slice" => ("nts_array_slice_ref", 2, array.clone()),
+            "splice" => ("nts_array_splice_ref", 2, array),
             "reverse" => ("nts_array_reverse_ref", 0, array),
             _ => {
                 return Err(
