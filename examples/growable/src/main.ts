@@ -274,3 +274,26 @@ export function spreadNames(n: number): string {
   const out = [...xs, "mid", ...ys];
   return out.join(",") + ":" + String(out.length) + ":" + xs.join(",");
 }
+
+// `Array.from(xs)` where `xs` is already an array, which is the same copy
+// `[...xs]` is. Twelve of the twenty-two `Array.from` calls in `runtime/node`
+// take one argument; a mapper, or something iterable that is not an array, is
+// a different question and is refused by name.
+export function fromArray(n: number): number {
+  const xs = [n, n + 1, n + 2];
+  const copy = Array.from(xs);
+  copy[0] = 77;
+  return copy.length * 1000 + copy[0]! * 10 + xs[0]!;
+}
+
+export function fromEmpty(n: number): number {
+  const xs: number[] = [];
+  return Array.from(xs).length + n * 0;
+}
+
+export function fromNames(n: number): string {
+  const names = ["p" + String(n % 10), "q"];
+  const copy = Array.from(names);
+  copy.push("r");
+  return copy.join(",") + ":" + names.join(",");
+}

@@ -6740,6 +6740,13 @@ impl<'a> FuncBuilder<'a> {
 
         match (global.as_str(), name.as_str(), arguments) {
             ("Array", "isArray", [argument]) => Some(self.decide_is_array(id, *argument)),
+            // `Array.from(xs)` where `xs` is already an array is a copy, which
+            // is what `[...xs]` is and what `slice` already does. Twelve of the
+            // twenty-two `Array.from` calls in `runtime/node` take one
+            // argument; the ones that take a mapper, or something that is
+            // iterable without being an array, are a different question and
+            // fall through to being refused by name.
+            ("Array", "from", [argument]) => self.decide_array_from(id, *argument),
             ("Object", "keys", [argument]) => Some(self.decide_object_keys(id, *argument)),
             ("Object", "hasOwn", [argument, key]) => Some(self.decide_has_own(id, *argument, *key)),
             // `BigInt.asIntN(64, v)`, which is how the profile reads a signed
@@ -6755,6 +6762,27 @@ impl<'a> FuncBuilder<'a> {
             }
             _ => None,
         }
+    }
+
+    /// `Array.from(xs)` where `xs` is an array: a copy.
+    ///
+    /// `None` where the argument is not one, so the ordinary path refuses it
+    /// with a message naming `Array.from` rather than this deciding something
+    /// about a `Set` it cannot walk.
+    fn decide_array_from(
+        &mut self,
+        id: NodeId,
+        argument: NodeId,
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        if !matches!(
+            self.type_of(argument),
+            Some(HirType::Managed(ManagedType::Array(_)))
+        ) {
+            return None;
+        }
+        let ty = self.type_of(id)?;
+        let origin = self.origin(id);
+        Some(self.lower_array_copy(argument, &ty, &origin))
     }
 
     /// The field names of whatever the argument's layout is.
@@ -10516,11 +10544,25 @@ impl<'a> FuncBuilder<'a> {
             .children(spread)
             .first()
             .ok_or_else(|| self.unsupported(spread, "a spread of nothing"))?;
+        self.lower_array_copy(inner, ty, origin)
+    }
+
+    /// The whole of an array, copied: `[...xs]` and `Array.from(xs)` alike.
+    ///
+    /// A `slice` from nothing to the length, which is what both mean and what
+    /// `slice` already does -- including retaining each element where they are
+    /// references, since both arrays hold them afterwards.
+    fn lower_array_copy(
+        &mut self,
+        inner: NodeId,
+        ty: &HirType,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
         let source = self.lower_expression(inner)?;
         let HirType::Managed(ManagedType::Array(element)) =
             self.values[source.0 as usize].ty.clone()
         else {
-            return Err(self.unsupported(spread, "a spread of something that is not an array"));
+            return Err(self.unsupported(inner, "a copy of something that is not an array"));
         };
         let helper = match *element {
             HirType::Managed(_) => "nts_array_slice_ref",
@@ -10528,7 +10570,7 @@ impl<'a> FuncBuilder<'a> {
             // `slice` reads the elements as doubles or as pointers, and a
             // narrower one is neither. The array methods refuse the same shape
             // for the same reason.
-            _ => return Err(self.unsupported(spread, "a spread of a typed array")),
+            _ => return Err(self.unsupported(inner, "a copy of a typed array")),
         };
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let length = self.push(OpKind::Length(source), HirType::NUMBER, origin.clone());

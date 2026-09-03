@@ -1827,7 +1827,7 @@ starts, whether it is still going, what it reads. That is what let `break`,
 | ✗ | `[Symbol.iterator]()`, `.next()`, `{ value, done }` — the object itself |
 | ✗ | iterator **closing** (`.return()` on abrupt completion) — a correctness detail, not a convenience |
 | ✗ | `for...of` over a generator, or over a user type with `[Symbol.iterator]` |
-| ✗ | spread over an iterable; `new Map([[k, v]])`, `Array.from` |
+| ◐ | spread over an iterable; `new Map([[k, v]])`. `Array.from(xs)` where `xs` is already an array is a copy and works; a mapper, or anything iterable that is not an array, does not |
 | ✗ | `Map`/`Set` `forEach` |
 | ✗ | a default in a destructuring pattern (`{ a = 1 }`) |
 | ✗ | `yield`, `yield*`, generator objects |
