@@ -54,10 +54,19 @@ About 1.5% on the median and 1.0% on the minimum, in the same direction on both.
 Real, and small, and the reason it is small is that `charCodeAt` is not most of
 what that row does. Said plainly rather than rounded up.
 
-`case-convert` has four checked reads and gets **nothing**, because its index is
-not specialized to an integer at all. That is a separate question and a more
-interesting one — the read is fine, the index is the thing that stayed a double —
-and it is where the next measurement on this path should go.
+`case-convert` has four checked reads and gets **nothing**. Its index is the
+literal `0`, and no pass narrows it: `StringUnitAt` is not among the operations
+that make a class worth specializing, so a lone constant index stays a double.
+
+Adding it to that list was tried, and it is the right shape of change — all four
+reads moved to the integer form. It is also worth exactly zero, and the proof is
+better than a timing: the rebuilt binary is **byte-identical**. With the index a
+compile-time `0`, clang folds `nts_to_integer(0.0)` and the whole range test to
+the same instructions from either helper.
+
+So the double round trip costs only where the index is a runtime value, which is
+the scan, which is the case already fixed. The change was reverted rather than
+kept on the argument that it might help somewhere unmeasured.
 
 ## The check that caught the mistake
 
