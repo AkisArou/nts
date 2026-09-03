@@ -58,3 +58,29 @@ A value of integer type wider than 32 bits, every use of which is either
 Where it belongs is `hir`, after specialization, so both backends get it — the C
 backend already gets this from clang for free, which is exactly why its column
 does not show the gap, and it should not depend on that.
+
+## Built
+
+`hir::narrow`, a fixpoint that starts optimistic and removes: every value wider
+than 32 bits whose definition is retypeable begins in the set, and any whose use
+can observe its width comes out. Starting pessimistic takes nothing, because the
+chains are cyclic through loop parameters — an accumulator's width depends on
+its own.
+
+It runs **before `shed_erasure`**, which is not incidental: that pass removes
+`x | 0` once `x` is an `i32`, and those truncations are exactly the evidence
+this one reads. Run after, it would find nothing. And before `reconcile`, which
+inserts the one truncation the boundary needs.
+
+```text
+absences   2.12x C++ -> 1.02x,  0.51x node -> 0.24x,  0.62x bun -> 0.29x
+           LLVM 402.3ns -> 189.8ns, against the C backend's 188.7
+```
+
+`array-predicates` came along for it: 1.24x to 1.12x. The gate is green on all
+thirteen steps and the memory suite is at every floor.
+
+Seven tests, and the ones that matter are the refusals: a value that is compared
+keeps its width, a value that is returned keeps its width, and **one observing
+use sinks the whole chain** — the shape that made three partial attempts read as
+refutations of the idea.

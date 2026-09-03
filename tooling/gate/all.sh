@@ -348,6 +348,12 @@ step "profile"  profile
 step "sweep"    sweep
 step "llvm"    llvm
 step "llvm-rc" llvm_rc
+# Every benchmark case, compiled by both backends and not run. `corpus` proves
+# arbitrary input compiles and `examples` proves the examples agree with node;
+# nothing covered `benches/cases`, so a code generation bug that only showed up
+# there arrived through a twenty-five minute benchmark run instead of here. One
+# did: see the header of the script.
+step "benches"  ./tooling/gate/benches.sh
 step "examples" ./tooling/gate/gate.sh
 # Last, and the most expensive step by some way -- about four minutes, against
 # two for everything before it. It is here rather than skipped because until it

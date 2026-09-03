@@ -45,6 +45,7 @@ pub mod unerase;
 pub mod lower;
 pub mod inline;
 pub mod monomorphize;
+pub mod narrow;
 /// Who owns what, and for how long: one answer per value, which the counting
 /// pass reads and does no reasoning of its own about.
 pub mod own;
@@ -1688,7 +1689,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // representations: `x | 0` is a coercion until `x` is known to be an `i32`,
     // and then it is nothing. Removing them here keeps every pass below from
     // tracking values that are copies of other values.
-    let narrowed = shed_erasure(&mut program) + unions_split;
+    let narrowed = narrow_widths(&mut program) + shed_erasure(&mut program) + unions_split;
 
     let mut simplified = 0;
     for func in &mut program.funcs {
@@ -1856,6 +1857,15 @@ fn reshape_calls(program: &mut Program, roots: reachable::Roots<'_>) -> (usize, 
 /// Called before specialization, and that is the whole of why it is a separate
 /// step rather than part of one: run afterwards it would find every payload
 /// already committed to a double, which is the conversion it exists to remove.
+/// Narrow every arithmetic value to the width its result is truncated to.
+///
+/// Runs before `reconcile`, which is what inserts the truncation wherever a
+/// value that stayed wide feeds one that did not -- see [`narrow`], where that
+/// boundary is the induction variable and there is exactly one of them.
+fn narrow_widths(program: &mut Program) -> usize {
+    program.funcs.iter_mut().map(narrow::narrow_truncated).sum()
+}
+
 fn split_unions(program: &mut Program) -> usize {
     program.funcs.iter_mut().map(split::split_unions).sum()
 }
