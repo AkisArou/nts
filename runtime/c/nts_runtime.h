@@ -852,6 +852,11 @@ NTS_READS_ONLY bool nts_string_truthy(const NtsString *s);
  * string is falsy however present it is, so this reads the length -- and reads
  * nothing else, and writes nothing. */
 NTS_READS_ONLY bool nts_value_truthy_fn(NtsValue value);
+/* `nts_value_eq_number` and `nts_value_eq_boolean` with names to call. Down
+ * here rather than beside them because `NTS_READS_ONLY` is defined below their
+ * declarations and above this one. */
+NTS_READS_ONLY bool nts_value_eq_number_fn(NtsValue value, double number);
+NTS_READS_ONLY bool nts_value_eq_boolean_fn(NtsValue value, bool boolean);
 uint32_t nts_to_uint32_fn(double x);
 
 NtsString *nts_number_to_string(double x);

@@ -880,6 +880,10 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_to_int32_fn",
     "nts_to_uint32_fn",
     "nts_unit_fn",
+    "nts_value_eq_boolean_fn",
+    "nts_value_eq_number_fn",
+    "nts_value_eq_reference",
+    "nts_value_eq_string",
     "nts_value_release",
     "nts_value_retain",
     "nts_value_strict_eq",
@@ -1466,11 +1470,17 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
         // Before the general binary arm, because it *is* a binary and the
         // general one would match it first -- and an `icmp` on a sixteen-byte
         // aggregate is not an instruction.
+        // Either side, not just the left one. `3 === x` is the same question as
+        // `x === 3` and reaches here written either way round; guarding on the
+        // left alone sent the mirrored spelling to `arithmetic`, which compared
+        // an aggregate with `fcmp`.
         OpKind::Binary {
             op: BinOp::Eq | BinOp::Ne,
             lhs,
-            ..
-        } if func.values[lhs.0 as usize].ty == HirType::Erased => {
+            rhs,
+        } if func.values[lhs.0 as usize].ty == HirType::Erased
+            || func.values[rhs.0 as usize].ty == HirType::Erased =>
+        {
             return tagging(func, value, &out);
         }
         // And before it again, for the same reason one step over: two strings
@@ -1964,6 +1974,58 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
     })
 }
 
+/// `x === 3` where `x` is erased and `3` is not: the tag decides, and the
+/// runtime has a helper per shape of the other side.
+///
+/// Equality is symmetric, so `erased` is whichever side carried the tag however
+/// it was written. The C backend picks among the same four.
+fn mixed_equality(
+    func: &Func,
+    out: &str,
+    same: &str,
+    erased: ValueId,
+    against: ValueId,
+    other: &HirType,
+) -> Result<Vec<String>, Diagnostic> {
+    let mut lines = vec![
+        format!("{out}.t0 = extractvalue {ERASED_TYPE} {}, 0", name(erased)),
+        format!("{out}.p0 = extractvalue {ERASED_TYPE} {}, 1", name(erased)),
+    ];
+    // An integer is compared as the number it is, which is what the erased side
+    // holds: the tag says `number` and the payload is a double whatever width
+    // the other side was proved into.
+    let (helper, argument) = match other {
+        HirType::Float { .. } => ("nts_value_eq_number_fn", format!("double {}", name(against))),
+        HirType::Int { .. } => {
+            let wide = format!("{out}.n");
+            lines.push(format!(
+                "{wide} = sitofp {} {} to double",
+                ty_of(other, func)?,
+                name(against)
+            ));
+            ("nts_value_eq_number_fn", format!("double {wide}"))
+        }
+        HirType::Bool => (
+            "nts_value_eq_boolean_fn",
+            format!("i1 zeroext {}", name(against)),
+        ),
+        HirType::Managed(nts_core::hir::ManagedType::String) => {
+            ("nts_value_eq_string", format!("ptr {}", name(against)))
+        }
+        HirType::Managed(_) => ("nts_value_eq_reference", format!("ptr {}", name(against))),
+        _ => {
+            return Err(refuse(
+                func,
+                "an equality between an erased value and a type with no comparison",
+            ));
+        }
+    };
+    lines.push(format!(
+        "{same} = call zeroext i1 @{helper}(i32 {out}.t0, i64 {out}.p0, {argument})"
+    ));
+    Ok(lines)
+}
+
 /// Putting a value in a tagged one, taking it back out, and comparing two.
 ///
 /// The whole of what a tag is *for*: `1 == true` and `[1] == 1` are questions
@@ -1983,33 +2045,43 @@ fn tagging(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic>
             lhs,
             rhs,
         } => {
-            let parts: Vec<String> = [lhs, rhs]
-                .iter()
-                .enumerate()
-                .flat_map(|(at, held)| {
-                    [
-                        format!(
-                            "{out}.t{at} = extractvalue {ERASED_TYPE} {}, 0",
-                            name(**held)
-                        ),
-                        format!(
-                            "{out}.p{at} = extractvalue {ERASED_TYPE} {}, 1",
-                            name(**held)
-                        ),
-                    ]
-                })
-                .collect();
+            let left = &func.values[lhs.0 as usize].ty;
+            let right = &func.values[rhs.0 as usize].ty;
+            // One of each, in either order: equality is symmetric, so the
+            // erased side becomes the receiver whichever side it was written
+            // on. The C backend picks among the same four helpers.
+            let mixed = match (left, right) {
+                (HirType::Erased, HirType::Erased) => None,
+                (HirType::Erased, other) => Some((*lhs, *rhs, other)),
+                (other, HirType::Erased) => Some((*rhs, *lhs, other)),
+                _ => None,
+            };
             let same = format!("{out}.eq");
-            let call = format!(
-                "{same} = call zeroext i1 @nts_value_strict_eq(i32 {out}.t0, i64 {out}.p0, \
-                 i32 {out}.t1, i64 {out}.p1)"
-            );
-            let answer = if matches!(bin, BinOp::Ne) {
+            let mut lines = Vec::new();
+            if let Some((erased, against, other)) = mixed {
+                lines.extend(mixed_equality(func, &out, &same, erased, against, other)?);
+            } else {
+                for (at, held) in [lhs, rhs].iter().enumerate() {
+                    lines.push(format!(
+                        "{out}.t{at} = extractvalue {ERASED_TYPE} {}, 0",
+                        name(**held)
+                    ));
+                    lines.push(format!(
+                        "{out}.p{at} = extractvalue {ERASED_TYPE} {}, 1",
+                        name(**held)
+                    ));
+                }
+                lines.push(format!(
+                    "{same} = call zeroext i1 @nts_value_strict_eq(i32 {out}.t0, i64 {out}.p0, \
+                     i32 {out}.t1, i64 {out}.p1)"
+                ));
+            }
+            lines.push(if matches!(bin, BinOp::Ne) {
                 format!("{out} = xor i1 {same}, true")
             } else {
                 format!("{out} = add i1 {same}, 0")
-            };
-            format!("{}\n  {call}\n  {answer}", parts.join("\n  "))
+            });
+            lines.join("\n  ")
         }
         // Putting a value in a tagged one. The payload eightbyte holds the
         // union's first member, which is the `double` -- so an *integer* is
@@ -2903,22 +2975,34 @@ fn unary(
         // also settles a value already integral near 2^53 and the negative
         // zero that [-0.5, 0) produces. Reproducing that here would be a
         // second implementation to keep in step with the first.
-        UnOp::Floor => format!(
-            "{out} = call double @llvm.floor.f64(double {})",
-            name(operand)
-        ),
-        UnOp::Ceil => format!(
-            "{out} = call double @llvm.ceil.f64(double {})",
-            name(operand)
-        ),
-        UnOp::Trunc => format!(
-            "{out} = call double @llvm.trunc.f64(double {})",
-            name(operand)
-        ),
-        UnOp::Round => format!(
-            "{out} = call double @nts_round_fn(double {})",
-            name(operand)
-        ),
+        UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round => {
+            let intrinsic = match op {
+                UnOp::Floor => "@llvm.floor.f64",
+                UnOp::Ceil => "@llvm.ceil.f64",
+                UnOp::Trunc => "@llvm.trunc.f64",
+                _ => "@nts_round_fn",
+            };
+            // The *result* may be an integer even where the operand is not:
+            // specialization proves a rounded value fits one and types it so.
+            // The intrinsic still answers a double, so the conversion has to be
+            // written down -- the C backend gets it from assigning to an
+            // `int32_t` and there is no such thing here.
+            //
+            // Without it `Math.floor(x / 65536)` emitted a `double` and the
+            // next instruction read it as an `i32`: "defined with type 'double'
+            // but expected 'i32'", and `examples/mathops` could not be built
+            // through this backend at all.
+            if let HirType::Int { bits, .. } = &func.values[value.0 as usize].ty {
+                let rounded = format!("{out}.r");
+                format!(
+                    "{rounded} = call double {intrinsic}(double {0})\n  \
+                     {out} = fptosi double {rounded} to i{bits}",
+                    name(operand)
+                )
+            } else {
+                format!("{out} = call double {intrinsic}(double {})", name(operand))
+            }
+        }
         UnOp::Sqrt => format!(
             "{out} = call double @llvm.sqrt.f64(double {})",
             name(operand)

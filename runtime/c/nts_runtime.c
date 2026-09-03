@@ -2263,6 +2263,19 @@ bool nts_string_truthy(const NtsString *s) { return s != 0 && s->length != 0; }
  * suffix. */
 bool nts_value_truthy_fn(NtsValue value) { return nts_value_truthy(value); }
 
+/* And the same for the two mixed comparisons that are `static inline`.
+ *
+ * `x === 3` where `x` is erased is a tag test and a compare, which is small
+ * enough to write at the call site and is why the header has it inline. The
+ * second backend still needs a symbol. */
+bool nts_value_eq_number_fn(NtsValue value, double number) {
+  return nts_value_eq_number(value, number);
+}
+
+bool nts_value_eq_boolean_fn(NtsValue value, bool boolean) {
+  return nts_value_eq_boolean(value, boolean);
+}
+
 uint32_t nts_to_uint32_fn(double x) { return nts_to_uint32(x); }
 
 /* `String.fromCharCode(x)`: one UTF-16 code unit, from `ToUint16(x)`.

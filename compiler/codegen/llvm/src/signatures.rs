@@ -231,6 +231,8 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_to_uint32_fn", returns: "i32", params: &["double"], attributes: &[] },
     Signature { name: "nts_to_uint8_fn", returns: "zeroext i8", params: &["double"], attributes: &[] },
     Signature { name: "nts_unit_fn", returns: "zeroext i16", params: &["ptr", "i32"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_value_eq_boolean_fn", returns: "zeroext i1", params: &["i32", "i64", "i1 zeroext"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_value_eq_number_fn", returns: "zeroext i1", params: &["i32", "i64", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_value_eq_reference", returns: "zeroext i1", params: &["i32", "i64", "ptr"], attributes: &[] },
     Signature { name: "nts_value_eq_string", returns: "zeroext i1", params: &["i32", "i64", "ptr"], attributes: &[] },
     Signature { name: "nts_value_release", returns: "void", params: &["i32", "i64"], attributes: &[] },
