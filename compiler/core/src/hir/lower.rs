@@ -9184,6 +9184,20 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let elements = self.children(id);
 
+        // `[...xs]`, which is a copy of `xs` and nothing else -- fourteen of the
+        // twenty-six spreads in `runtime/node` are exactly this shape, and a
+        // copy is what `slice` already is.
+        //
+        // Only this shape. `[...a, ...b]` needs the lengths added before
+        // anything is allocated and `[...a, x]` needs one more slot than the
+        // spread has; both are a different lowering rather than a longer
+        // version of this one, and are refused by name.
+        if let [only] = elements.as_slice()
+            && self.kind_of(*only) == Some(syntax::SPREAD_ELEMENT)
+        {
+            return self.lower_spread_copy(*only, &ty, &origin);
+        }
+
         #[allow(clippy::cast_precision_loss)]
         let count = elements.len() as f64;
         let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
@@ -10380,6 +10394,40 @@ impl<'a> FuncBuilder<'a> {
             return Ok(self.push(OpKind::Convert(read), HirType::NUMBER, origin));
         }
         Ok(read)
+    }
+
+    /// `[...xs]`: the whole of `xs`, copied.
+    ///
+    /// A `slice` from nothing to the length, which is what the spread means and
+    /// what `slice` already does -- including retaining each element where they
+    /// are references, since both arrays hold them afterwards.
+    fn lower_spread_copy(
+        &mut self,
+        spread: NodeId,
+        ty: &HirType,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        let inner = *self
+            .children(spread)
+            .first()
+            .ok_or_else(|| self.unsupported(spread, "a spread of nothing"))?;
+        let source = self.lower_expression(inner)?;
+        let HirType::Managed(ManagedType::Array(element)) =
+            self.values[source.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(spread, "a spread of something that is not an array"));
+        };
+        let helper = match *element {
+            HirType::Managed(_) => "nts_array_slice_ref",
+            HirType::Float { bits: 64 } => "nts_array_slice",
+            // `slice` reads the elements as doubles or as pointers, and a
+            // narrower one is neither. The array methods refuse the same shape
+            // for the same reason.
+            _ => return Err(self.unsupported(spread, "a spread of a typed array")),
+        };
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let length = self.push(OpKind::Length(source), HirType::NUMBER, origin.clone());
+        Ok(self.runtime_call(helper, vec![source, zero, length], ty.clone(), origin.clone()))
     }
 
     /// `s[i]` where `s` is a string, which is a one-unit string rather than an

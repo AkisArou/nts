@@ -180,3 +180,37 @@ export function joinedNames(n: number): string {
   const both = a.concat(b);
   return both.join("-") + ":" + String(both.length) + ":" + String(a.length);
 }
+
+// `[...xs]`, which is a copy of `xs` and nothing else.
+//
+// Fourteen of the twenty-six spreads in `runtime/node` are this shape, and a
+// copy is what `slice` already is. `[...a, ...b]` and `[...a, x]` are a
+// different lowering rather than a longer version of this one, and say so.
+export function copied(n: number): number {
+  const xs = [n, n + 1, n + 2];
+  const copy = [...xs];
+  copy[0] = 99;
+  return copy.length * 1000 + copy[0]! * 10 + xs[0]!;
+}
+
+export function copiedEmpty(n: number): number {
+  const xs: number[] = [];
+  const copy = [...xs];
+  return copy.length + n * 0;
+}
+
+// References, where both arrays hold each element afterwards.
+export function copiedNames(n: number): string {
+  const names = ["a" + String(n % 10), "b"];
+  const copy = [...names];
+  copy.push("c");
+  return copy.join(",") + ":" + names.join(",");
+}
+
+// The copy is a different array, which is the whole reason to write one.
+export function copyIsSeparate(n: number): number {
+  const xs = [n];
+  const copy = [...xs];
+  copy.push(n + 1);
+  return copy.length * 10 + xs.length;
+}
