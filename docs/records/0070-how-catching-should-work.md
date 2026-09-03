@@ -66,6 +66,36 @@ tables, no `setjmp`, no `-fexceptions`, and no divergence between the backends.
 and then resume, which is a second question, and the honest thing is to refuse
 it until this half is measured rather than to design both at once.
 
-Not built here. This is the decision the goal asks for before the code, and the
-next sitting starts with `can_throw` and a `throws` example the differential can
-check against node.
+## What building it immediately found, and why that stops it
+
+`throw` does not throw a value today. It throws a *message*:
+
+```rust
+// `new Error(m)` is the shape every one of these has. The class is not
+// one this compiler can construct -- it is `lib.d.ts`'s -- so what is
+// taken from it is the argument.
+```
+
+`throw new Error("x")` lowers to `nts_thrown("x")`. That is invisible while
+throwing aborts, because nothing observes the value — the program is over. It
+stops being invisible the moment `catch (e)` binds it: node binds an `Error`
+whose `.message` is `"x"`, and we would bind the bare string. `String(e)` is
+`"Error: x"` there and `"x"` here, and the differential fails on the first
+example anyone writes.
+
+So catching is not four pieces of control flow after all. It is those, **plus a
+decision about what a thrown value is**, and there are only two honest answers:
+
+- **Represent `Error`.** A class the compiler constructs, with `message` and the
+  `toString` node agrees with. Then `catch (e)` binds an object and the control
+  flow above is the whole of the rest.
+- **Refuse `throw new Error(...)` where it can be caught**, and support
+  `throw <string>` only. Smaller, and it makes the common shape — which is the
+  one `runtime/node`'s `assert` and `http` use — the one that does not work.
+
+The second is not worth building. The first is the real prerequisite, and it is
+a *representation* question, which is the axis this goal declared closed.
+
+Not built here, and now for a better reason than "it is large": the control flow
+was the easy half, and the half nobody had looked at is what a thrown value is.
+The next sitting starts there, not with `can_throw`.
