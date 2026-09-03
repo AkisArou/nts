@@ -22,7 +22,7 @@ column is a row with no hand-written reference; the case says why.
 | **bigint** | `bigint` | `bigint-arithmetic` 0 / 0 | `bigint` 0.99 / 0.09 | 0036 |
 | **symbol** | `symbol-keys` | `symbol-keys` 0 / 0 | `symbol-keys` 1.02 / 0.19 | 0037 |
 | **array** | `arrays`, `growable`, `callbacks` | `array-methods` 2 / 6<br>`array-mutations` 5 / 9<br>`array-of-objects` 18 / 22 | `arrays` 1.06 / 0.56<br>`array-methods` 0.54 / 0.22<br>`array-predicates` 1.09 / 0.58<br>`array-mutations` 1.04 / 0.37 | 0038, 0043, 0047, 0048, 0052 |
-| **object and class** | `instances`, `classes`, `inheritance` | `subclass-field` 0 / 0<br>`nulled-field` 17 / 17<br>`readonly-anchor` 40 / 2 | `objects` 1.00 / 0.84<br>`dispatch` 0.99 / 0.67 | 0054 |
+| **object and class** | `instances`, `classes`, `inheritance` | `subclass-field` 0 / 0<br>`nulled-field` 17 / 17<br>`readonly-anchor` 40 / 2<br>`cyclic-array` 8 / 4 | `objects` 1.00 / 0.84<br>`dispatch` 0.99 / 0.67 | 0054, 0055, 0056 |
 | **function and closure** | `closures`, `function-values` | `closure-capture` 0 / 0 | `closures` 1.01 / 0.38<br>`dispatch` 0.99 / 0.67 | 0040 |
 | **Map and Set** | `map-and-set`, `iteration` | `map-and-set` 2 / 17 | `map-and-set` 0.56 / 0.76 | 0041 |
 
@@ -50,7 +50,15 @@ ratchets were real and the argument for its representation existed only in the
 code. This table is what made that visible, by giving the record a column and
 leaving one cell empty. 0054 fills it, and found one thing in the writing: an
 array of references is conservatively cyclic where a lone object of the same
-type is not, which is unmeasured.
+type is not.
+
+**That imprecision was unmeasured, and measuring it found a segfault.** The case
+written to price it — `cyclic-array` — crashed instead, because a container the
+collector can *buffer* outlives the release that should have ended it, and so
+outlives the frame whose objects it holds. 0055 has the diagnosis and two tests
+that looked like they refuted it; 0056 has the fix and the price, which is two
+heap allocations where the frame used to do. The shipping build never buffers a
+candidate here at all, because elision removes the releases that would ask.
 
 ## The open number
 

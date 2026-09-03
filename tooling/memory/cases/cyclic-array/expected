@@ -1,0 +1,51 @@
+ideal 8
+allocated 4
+candidates 0
+because This case is a cost rather than an achievement. It is what 0056 charges,
+because held still, so that whoever makes the collector precise can watch the
+because charge come off.
+because
+because The same program before 0056, elided:
+because
+because     retains=0 releases=6 allocated=2 candidates=0
+because
+because and under NTS_RC_NAIVE it exited 139. Two `Leaf`s sat in the frame --
+because `NtsObj_Leaf v1_frame`, and `grep` counted two -- with one of them
+because stored into a heap array. That placement is right by every reachability
+because argument: a `Leaf` here is made, put into an array, and dropped in the
+because same frame, and nothing in the program can see it afterwards.
+because
+because What reachability cannot see is the candidate buffer. `nts_release` on
+because a *buffered* object whose count reaches zero does not free it -- the
+because buffer is holding a pointer, so freeing there would leave that pointer
+because dangling and collection frees it later instead, from `nts_destroy` at
+because exit if nothing collects first. That defers the array's death past the
+because frame the release happened in, and the frame-placed `Leaf` inside it is
+because dead stack by the time the collector walks the array looking for
+because cycles. So being bufferable is a way of outliving a frame, and what
+because such a container holds cannot live in one.
+because
+because Which containers are bufferable is the imprecision 0054 named. An
+because object of `T` can be in a cycle only if `T` is reachable from `T`
+because through reference fields, so neither `Leaf`, holding a number, nor
+because `HoldsOne`, holding a `Leaf`, ever is -- and `HoldsOne` still confines
+because what it holds, one line away from the array that cannot. `Leaf[]`
+because cannot be in a cycle either. But every array of references shares one
+because descriptor, that descriptor describes the element's *shape* rather than
+because what the element points at, so there is nothing per-element-type to be
+because precise with, and unknown has to mean yes.
+because
+because So: 2 allocations become 4 and 6 operations become 8 -- two `Leaf`s to
+because the heap, one retain each. That is the price of the conservative
+because answer, and it is the number 0054 asked for and could not get.
+because
+because `candidates 0` is asserted rather than assumed. The naive column
+because buffers one, which is the array; the `HoldsOne` beside it buffers none.
+because Elision removes the releases that would ask, so the shipping build
+because offers the collector nothing here at all. Both halves are worth
+because holding: the 0 says elision still gets there first, and the naive
+because column is where the cost reappears if it ever stops.
+because
+because A descriptor per element type would take `allocated` back to 2 and the
+because naive `candidates` to 0 in one change. That is what makes it worth
+because doing, and this is what will show it.

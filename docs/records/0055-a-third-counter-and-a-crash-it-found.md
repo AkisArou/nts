@@ -50,7 +50,7 @@ program agrees with node under the differential and runs clean elided; only the
 naive build crashes, and `total heap usage: 4 allocs, 0 frees` says nothing had
 been freed before it.
 
-## The diagnosis, and its contradiction
+## The diagnosis, and two tests that looked like contradictions
 
 The emitted C shows a frame-placed object stored into a heap array:
 
@@ -62,32 +62,41 @@ retain/release around the store-over, which pushes the array's count above zero
 and buffers it. So: the candidate buffer keeps a heap object alive past the
 frame its *contents* live in, and the collector then walks a dead stack slot.
 
-That diagnosis fits every piece of evidence above, and it is wrong, or at least
-not sufficient. Removing the store-over so nothing is released above zero:
+**That diagnosis is right.** 0056 fixes exactly it. What follows was written
+when it looked wrong, and is kept because both tests that seemed to refute it
+were bad tests, which is the part worth having.
+
+*Removing the store-over*, so nothing is released above zero:
 
     retains=2 releases=7 allocated=2 candidates=1 leaked=-7   exit 0
 
-A candidate is still buffered and it does **not** crash. And `leaked=-7` is a
-second anomaly — a negative live-count delta, meaning the collect freed seven
-things the count did not expect.
+A candidate is buffered and it does not crash. But with nothing released above
+zero the array is never *destroyed* while buffered, so its contents are never
+walked -- and the walk is the crash. The test removed the symptom along with
+the cause. Not a contradiction.
 
-So the crash needs more than "buffered": buffered, released to zero, and holding
-a frame pointer. Which of those three is the unsound one is not settled, and the
-standing rule is to distrust a diagnosis nothing has contradicted. This one has
-been contradicted by the second test I ran.
+*Forcing `first` to escape*, so that it could not be frame-placed: still exit
+139, and `grep -c "v1_frame"` returned 0, which I read as "no frame-placed
+objects at all". Wrong grep. `grep -cE "_frame"` returns 14: only `first` had
+been forced out, `second` was still `v6_frame`, and it was still stored into a
+heap array one line further down. Not a contradiction either.
+
+Forcing *every* object out of the frame is the test that was actually decisive,
+and it ends the crash. That is what confirmed the mechanism.
 
 ## What is committed, and what is not
 
 The counter and its assertion are committed: they are an instrument, they made
 the suite able to state something it could not, and the suite is green with them.
 
-The case is **not** in `tooling/memory/cases`. A failing case is a ratchet doing
-its job, but one that segfaults takes the gate down for everyone, and this is
-not a bug to half-fix at the end of a long sitting — it is escape analysis or
-the collector, and both are memory safety. The program is kept at
-`docs/reproductions/cyclic-array-frame-escape.ts` with the recipe above.
+The case is committed too, in 0056 rather than here:
+`tooling/memory/cases/cyclic-array` reproduces the segfault under
+`NTS_RC_NAIVE` against the compiler as this record found it, and reads 8 / 4 / 0
+against the compiler as 0056 leaves it. `leaked=-7` went with the fix, which is
+the same bug seen from the other side, as guessed above.
 
-Two things for whoever picks it up. `leaked=-7` on the non-crashing variant is
-probably the same bug seen from the other side and is the cheaper end to pull.
-And the original question — what the conservative array cyclicity actually costs
-— is still unmeasured, because the case written to measure it never got a number.
+The lesson this record ends on is not about the collector. Twice I ran one test,
+took a single number out of it, and wrote down that the diagnosis was refuted.
+Both times the number was answering a different question than the one I put to
+it. A diagnosis that nothing has contradicted is worth distrusting -- and a
+diagnosis contradicted by exactly one number is worth checking the number.

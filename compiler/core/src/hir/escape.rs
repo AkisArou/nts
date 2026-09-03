@@ -54,7 +54,7 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::liveness;
-use super::{BlockId, Callee, Func, OpKind, Program, Terminator, ValueId};
+use super::{BlockId, Callee, Func, HirType, ManagedType, OpKind, Program, Terminator, ValueId};
 
 /// A bound on the call-graph iteration. Convergence takes a handful of rounds --
 /// the lattice is two points per parameter and only moves one way -- so reaching
@@ -216,6 +216,7 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
     let handed_back: Vec<FxHashSet<u32>> = program.funcs.iter().map(returned_params).collect();
     let put_into: Vec<Vec<(u32, u32)>> = program.funcs.iter().map(stores_into).collect();
 
+
     // Every parameter starts held, and is released to `escapes` by evidence.
     let mut escaping_params: Vec<FxHashSet<u32>> =
         program.funcs.iter().map(|_| FxHashSet::default()).collect();
@@ -225,7 +226,9 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
         results = program
             .funcs
             .iter()
-            .map(|func| analyze(func, &by_name, &in_slot, &arity, &escaping_params, &handed_back, &put_into))
+            .map(|func| {
+                analyze(func, &by_name, &in_slot, &arity, &escaping_params, &handed_back, &put_into)
+            })
             .collect();
 
         let mut changed = false;
@@ -291,6 +294,47 @@ fn escaped(escapes: &mut Escapes, func: &Func, value: ValueId) {
         }
         at = payload;
     }
+}
+
+/// Whether the collector can buffer a container of this type as a cycle
+/// candidate -- and therefore whether what goes into it can live in a frame.
+///
+/// `nts_release` on a *buffered* object whose count reaches zero does not free
+/// it. The candidate buffer is holding a pointer, so freeing there would leave
+/// that pointer dangling, and collection frees it later -- from `nts_destroy`
+/// at exit if nothing collects first.
+///
+/// That defers the container's death past the frame the release happened in. A
+/// frame-placed object stored inside it is dead stack by the time the collector
+/// walks the container looking for cycles. So being bufferable is a way of
+/// outliving a frame, and it is one reachability cannot see: the container
+/// really does die with the frame as far as any program-visible reference
+/// goes, and it is the collector's own bookkeeping that keeps it.
+///
+/// # Why only an array
+///
+/// Being *buffered* takes being *released*, and only a heap allocation is.
+/// `place_allocations` frames every `ObjectNew` that does not escape, and a
+/// frame allocation carries `NTS_IMMORTAL`, so its release returns immediately
+/// and it is never offered to the collector. An object that does escape takes
+/// what it holds with it through the fixpoint below. Either way the question
+/// does not arise for an object.
+///
+/// An array is never frame-placed -- `place_allocations` frames an `ObjectNew`
+/// and a string-returning `Call`, and nothing else -- so it is on the heap, it
+/// is released, and a release above zero asks the collector.
+///
+/// Answering `true` for an object as well was the first version of this, and
+/// `tooling/memory/cases/cycle` refuted it in one line: two objects that point
+/// at each other, both in the frame, both immortal, neither ever buffered --
+/// and eighteen heap allocations appeared where the case says zero.
+///
+/// The answer has to match the descriptor the backend emits or it is a guess.
+/// `element_descriptor` gives every array whose element may hold a reference
+/// `nts_desc_ref`, whose `cyclic` is 1; an array of scalars gets a descriptor
+/// with no reference fields, which the collector never asks about.
+fn buffers(ty: &HirType) -> bool {
+    matches!(ty, HirType::Managed(ManagedType::Array(element)) if element.may_hold_a_reference())
 }
 
 /// One function, given what each callee does with its parameters.
@@ -384,7 +428,8 @@ fn analyze(
                     let confinable = matches!(
                         func.values[container.0 as usize].kind,
                         OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
-                    ) && (!repeated.contains(stored) || repeated.contains(container));
+                    ) && (!repeated.contains(stored) || repeated.contains(container))
+                        && !buffers(&func.values[container.0 as usize].ty);
                     // A parameter stored into a parameter's field is published
                     // rather than escaped: see `stores_into`. The caller knows
                     // whether the container outlives anything and this does not.
@@ -758,7 +803,7 @@ fn put_where_it_went(
         let ours = matches!(
             func.values[container.0 as usize].kind,
             OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
-        );
+        ) && !buffers(&func.values[container.0 as usize].ty);
         let outlived = !repeated.contains(stored) || repeated.contains(container);
         if one && ours && outlived {
             reachable_from.push((*container, *stored));
@@ -1271,6 +1316,66 @@ mod tests {
         let escapes = analyze_program(&program);
         assert!(escapes[0].is_frame_local(ValueId(0)));
         assert!(escapes[0].is_frame_local(ValueId(1)));
+    }
+
+
+    /// ...but not when the collector can *buffer* the container.
+    ///
+    /// `nts_release` on a buffered object whose count reaches zero does not
+    /// free it: the candidate buffer is holding a pointer, so collection frees
+    /// it later -- from `nts_destroy` at exit if nothing collects first. That
+    /// is the container outliving the frame the release happened in, and a
+    /// frame-placed object stored inside it is a pointer into dead stack by the
+    /// time the collector walks it looking for cycles.
+    ///
+    /// An array of references is buffered because every one of them shares a
+    /// single descriptor, and that descriptor is conservatively cyclic. An
+    /// object is not: one that does not escape is in the frame and immortal,
+    /// which is `what_a_frame_local_container_holds_stays_in_the_frame` above.
+    ///
+    /// The program this came from segfaulted under `NTS_RC_NAIVE` and is now
+    /// `tooling/memory/cases/cyclic-array`, which holds the cost still.
+    #[test]
+    fn what_a_bufferable_container_holds_cannot_stay_in_the_frame() {
+        let program = Program {
+            funcs: vec![func(
+                "make",
+                0,
+                vec![
+                    op(OpKind::ConstFloat(1.0), HirType::NUMBER),
+                    op(
+                        OpKind::ArrayNew {
+                            length: ValueId(0),
+                            zeroed: false,
+                        },
+                        HirType::Managed(ManagedType::Array(Box::new(object()))),
+                    ),
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(
+                        OpKind::ArraySet {
+                            array: ValueId(1),
+                            index: ValueId(0),
+                            value: ValueId(2),
+                            checked: false,
+                        },
+                        HirType::Void,
+                    ),
+                ],
+                vec![Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
+                    terminator: Terminator::Return(None),
+                }],
+            )],
+            layouts: Vec::new(),
+            globals: Vec::new(),
+        };
+        let escapes = analyze_program(&program);
+        // The array goes nowhere, and nothing here says otherwise.
+        assert!(escapes[0].is_frame_local(ValueId(1)));
+        // What it holds cannot stay, though it is reachable from nothing else:
+        // the collector can keep the array past this frame.
+        assert!(!escapes[0].is_frame_local(ValueId(2)));
     }
 
     /// ...and when the container leaves, what it holds leaves with it. The
