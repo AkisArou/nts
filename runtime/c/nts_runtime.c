@@ -2452,6 +2452,42 @@ NtsArray *nts_array_splice_ref(NtsArray *a, double start, double count) {
   return nts_array_splice_at(a, start, count, sizeof(void *));
 }
 
+/* `xs.concat(ys)`, one argument.
+ *
+ * JavaScript's `concat` takes any number of them and *spreads* the ones that
+ * are arrays while appending the ones that are not, which is two questions --
+ * how many, and is each one an array -- that the checker can answer and this
+ * cannot. One array argument is the shape worth having a helper for; the rest
+ * is refused by name rather than answered wrongly. */
+NtsArray *nts_array_concat(const NtsArray *a, const NtsArray *b) {
+  uint32_t total = a->header.length + b->header.length;
+  NtsArray *out = nts_array_new(a->header.descriptor, (double)total);
+  memcpy(nts_numbers(out), nts_numbers(a),
+         (size_t)a->header.length * sizeof(double));
+  memcpy(nts_numbers(out) + a->header.length, nts_numbers(b),
+         (size_t)b->header.length * sizeof(double));
+  return out;
+}
+
+/* The same, and each element is a reference the new array now holds too -- so
+ * unlike `splice`, which *moves* them, this one retains. */
+NtsArray *nts_array_concat_ref(const NtsArray *a, const NtsArray *b) {
+  uint32_t total = a->header.length + b->header.length;
+  NtsArray *out = nts_array_new(a->header.descriptor, (double)total);
+  void **into = NTS_ITEMS(out, void *);
+  void *const *first = NTS_ITEMS(a, void *);
+  void *const *second = NTS_ITEMS(b, void *);
+  for (uint32_t at = 0; at < a->header.length; at++) {
+    into[at] = first[at];
+    nts_retain((NtsHeader *)into[at]);
+  }
+  for (uint32_t at = 0; at < b->header.length; at++) {
+    into[a->header.length + at] = second[at];
+    nts_retain((NtsHeader *)into[a->header.length + at]);
+  }
+  return out;
+}
+
 NtsArray *nts_array_slice(const NtsArray *a, double from, double to) {
   /* Negative counts from the end, as `String.prototype.slice` does. */
   uint32_t start = nts_str_clamp(from, a->header.length, 1);

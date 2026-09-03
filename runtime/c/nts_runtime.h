@@ -938,6 +938,10 @@ double nts_array_shift(NtsArray *a);
 /* `splice(start, count)`, two arguments: the removed run, handed back as a new
  * array. See the note beside the definition. */
 NtsArray *nts_array_splice(NtsArray *a, double start, double count);
+/* `concat(ys)`, one array argument. See the note beside the definition for what
+ * the other shapes are and why they are refused instead. */
+NtsArray *nts_array_concat(const NtsArray *a, const NtsArray *b);
+NtsArray *nts_array_concat_ref(const NtsArray *a, const NtsArray *b);
 NtsArray *nts_array_splice_ref(NtsArray *a, double start, double count);
 double nts_array_unshift(NtsArray *a, double value);
 /* `pop` and `at` with the `undefined` the checker already gave them. A number

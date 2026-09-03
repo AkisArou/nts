@@ -146,3 +146,37 @@ export function splicedNames(n: number): string {
   const gone = names.splice(1, 2);
   return gone.join("+") + ":" + names.join(",") + ":" + String(names.length);
 }
+
+// `concat(ys)`, one array argument.
+//
+// JavaScript's `concat` takes any number and *spreads* the ones that are arrays
+// while appending the ones that are not. One array argument is the shape worth
+// a helper; the rest is refused by name rather than answered wrongly.
+export function joined(n: number): number {
+  const xs = [n, n + 1];
+  const ys = [n + 2, n + 3, n + 4];
+  const both = xs.concat(ys);
+  return both.length * 1000 + both[0]! * 100 + both[4]! * 10 + xs.length;
+}
+
+// Neither side is modified, which is what makes it not `push`.
+export function leavesBothAlone(n: number): number {
+  const xs = [n];
+  const ys = [n + 1];
+  const both = xs.concat(ys);
+  return both.length * 100 + xs.length * 10 + ys.length;
+}
+
+export function joinedEmpty(n: number): number {
+  const xs: number[] = [];
+  const ys = [n];
+  return xs.concat(ys).length * 10 + ys.concat(xs).length;
+}
+
+// References, where the new array holds each element too and so retains it.
+export function joinedNames(n: number): string {
+  const a = ["x" + String(n % 10)];
+  const b = ["y", "z"];
+  const both = a.concat(b);
+  return both.join("-") + ":" + String(both.length) + ":" + String(a.length);
+}

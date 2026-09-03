@@ -1737,15 +1737,22 @@ Measured, not assumed — three of these rows were wrong on the first pass.
   in the differential. A target is not a detail of the build — it decides which
   language the compiler is a compiler for.
 - **`Array.prototype`**: `at every fill filter find findIndex forEach includes
-  indexOf lastIndexOf map pop push reduce reverse shift slice some splice
-  unshift length` on an array of numbers, and `at every filter find findIndex
-  forEach includes indexOf map pop push reduce reverse shift slice some splice
-  unshift length` — plus `join` — on an array of *references*. `push` and
+  concat indexOf lastIndexOf map pop push reduce reverse shift slice some
+  splice unshift length` on an array of numbers, and `at concat every filter
+  find findIndex forEach includes indexOf map pop push reduce reverse shift
+  slice some splice unshift length` — plus `join` — on an array of
+  *references*. `push` and
   `unshift` take as many elements as they are given; `splice` takes two
   arguments, and the insert form is a different signature rather than a longer
-  one. Absent: `concat`, `sort`, `flat`, `flatMap`, `findLast`, `findLastIndex`,
-  `reduceRight`, `toSorted`, `toReversed`, and everything on an array of
-  booleans.
+  one, and `concat` takes one array. Absent: `sort`, `flat`, `flatMap`,
+  `findLast`, `findLastIndex`, `reduceRight`, `toSorted`, `toReversed`, and
+  everything on an array of booleans.
+
+  `concat` in JavaScript takes any number of arguments and *spreads* the ones
+  that are arrays while appending the ones that are not — two questions the
+  checker can answer and a runtime helper cannot. One array argument is the
+  shape worth a helper; the rest is refused by name rather than answered
+  wrongly.
 
   `some`, `every`, `findIndex`, `find` and `filter` are compiled as the loops
   they are, like `forEach`, `map` and `reduce` before them: the callback inlined,
