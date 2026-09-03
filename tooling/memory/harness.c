@@ -45,6 +45,10 @@ int main(void) {
   size_t before = nts_live_count();
 
   nts_counting_reset();
+  /* `nts_counting_reset` does not touch this one -- it is "how many have ever
+     been buffered" and the warm-up run above may have buffered some -- so it is
+     a delta rather than a reading. */
+  size_t candidates_before = nts_cycle_candidates();
   double answer = work(1);
   /* Read before collecting. The collector releases as it works, and charging
      the program for that would measure the runtime rather than the code the
@@ -53,12 +57,14 @@ int main(void) {
   size_t retains = nts_counted_retains();
   size_t releases = nts_counted_releases();
   size_t allocated = nts_counted_allocations();
+  size_t candidates = nts_cycle_candidates() - candidates_before;
   nts_collect_cycles();
   size_t after = nts_live_count();
 
   (void)settled;
-  printf("retains=%zu releases=%zu allocated=%zu leaked=%zd answer=%.0f\n",
-         retains, releases, allocated, (ptrdiff_t)after - (ptrdiff_t)before,
-         answer);
+  printf("retains=%zu releases=%zu allocated=%zu candidates=%zu leaked=%zd "
+         "answer=%.0f\n",
+         retains, releases, allocated, candidates,
+         (ptrdiff_t)after - (ptrdiff_t)before, answer);
   return 0;
 }

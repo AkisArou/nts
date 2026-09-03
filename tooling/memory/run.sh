@@ -61,8 +61,8 @@ out=target/memory
 mkdir -p "$out"
 
 fail=0
-printf '%-20s %7s %7s %7s %6s %7s %6s   %s\n' \
-  case naive actual ideal gone alloc floor ''
+printf '%-20s %7s %7s %7s %6s %7s %6s %6s   %s\n' \
+  case naive actual ideal gone alloc floor cand ''
 
 for dir in tooling/memory/cases/*/; do
   name=$(basename "$dir")
@@ -117,6 +117,12 @@ for dir in tooling/memory/cases/*/; do
   answer=$(read_num "$elided" answer)
   naive_answer=$(read_num "$naive" answer)
   alloc=$(read_num "$elided" allocated)
+  # The third counter, and the only one that is optional. A case says
+  # `candidates N` in `expected` when it is *about* the cycle collector; the
+  # rest say nothing and are not checked, because most of them would be
+  # asserting a zero they never come near.
+  cand=$(read_num "$elided" candidates)
+  want_cand=$(grep '^candidates ' "$dir/expected" | awk '{print $2}')
   ideal=$(grep '^ideal ' "$dir/expected" | awk '{print $2}')
   floor=$(grep '^allocated ' "$dir/expected" | awk '{print $2}')
 
@@ -140,13 +146,15 @@ for dir in tooling/memory/cases/*/; do
     over=""
     [ "$a" -gt "$ideal" ] && over="$((a - ideal)) ops"
     [ -n "$floor" ] && [ "$alloc" -gt "$floor" ] && over="${over:+$over, }$((alloc - floor)) allocations"
+    [ -n "$want_cand" ] && [ "$cand" -ne "$want_cand" ] &&
+      over="${over:+$over, }$cand candidates against $want_cand"
     [ -n "$over" ] && { note="$over above"; fail=1; }
   fi
 
   ratio="--"
   [ "$n" -gt 0 ] && ratio=$(awk -v a="$a" -v n="$n" 'BEGIN { printf "%d%%", (n - a) * 100 / n }')
-  printf '%-20s %7s %7s %7s %6s %7s %6s   %s\n' \
-    "$name" "$n" "$a" "$ideal" "$ratio" "$alloc" "$floor" "$note"
+  printf '%-20s %7s %7s %7s %6s %7s %6s %6s   %s\n' \
+    "$name" "$n" "$a" "$ideal" "$ratio" "$alloc" "$floor" "${want_cand:+$cand}" "$note"
 done
 
 if [ "$fail" -ne 0 ]; then
