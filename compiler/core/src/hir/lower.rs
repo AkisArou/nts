@@ -9197,6 +9197,12 @@ impl<'a> FuncBuilder<'a> {
         {
             return self.lower_spread_copy(*only, &ty, &origin);
         }
+        if elements
+            .iter()
+            .any(|element| self.kind_of(*element) == Some(syntax::SPREAD_ELEMENT))
+        {
+            return self.lower_mixed_literal(&elements, &ty, &origin);
+        }
 
         #[allow(clippy::cast_precision_loss)]
         let count = elements.len() as f64;
@@ -10394,6 +10400,105 @@ impl<'a> FuncBuilder<'a> {
             return Ok(self.push(OpKind::Convert(read), HirType::NUMBER, origin));
         }
         Ok(read)
+    }
+
+    /// An array literal with a spread somewhere in it: `[...a, x, ...b]`.
+    ///
+    /// Everything is evaluated first, left to right, because that is the order
+    /// JavaScript evaluates it in and the lengths are not known until it has
+    /// been. Then the lengths are added -- one per plain element, the array's
+    /// own for each spread -- and *then* the result is allocated, with the room
+    /// it needs and no length.
+    ///
+    /// So `push` never reallocates and there is nothing to shorten at the end,
+    /// which is the shape `filter` uses and for the same reasons.
+    fn lower_mixed_literal(
+        &mut self,
+        elements: &[NodeId],
+        ty: &HirType,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        let element_ty = match ty {
+            HirType::Managed(ManagedType::Array(element)) => (**element).clone(),
+            _ => return Err(self.unrepresentable(elements[0], "an array literal")),
+        };
+        let (push, extend) = match &element_ty {
+            HirType::Managed(_) => ("nts_array_push_ref", "nts_array_extend_ref"),
+            HirType::Float { bits: 64 } => ("nts_array_push", "nts_array_extend"),
+            _ => {
+                return Err(self.unsupported(elements[0], "a spread into a typed array"));
+            }
+        };
+
+        // Left to right, and before anything is allocated.
+        let mut lowered = Vec::new();
+        for element in elements {
+            let spread = self.kind_of(*element) == Some(syntax::SPREAD_ELEMENT);
+            let node = if spread {
+                *self
+                    .children(*element)
+                    .first()
+                    .ok_or_else(|| self.unsupported(*element, "a spread of nothing"))?
+            } else {
+                *element
+            };
+            let value = self.lower_expression(node)?;
+            if spread
+                && !matches!(
+                    self.values[value.0 as usize].ty,
+                    HirType::Managed(ManagedType::Array(_))
+                )
+            {
+                return Err(
+                    self.unsupported(node, "a spread of something that is not an array")
+                );
+            }
+            lowered.push((spread, value));
+        }
+
+        let mut total = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        for (spread, value) in &lowered {
+            let more = if *spread {
+                self.push(OpKind::Length(*value), HirType::NUMBER, origin.clone())
+            } else {
+                self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone())
+            };
+            total = self.push(
+                OpKind::Binary {
+                    op: BinOp::Add,
+                    lhs: total,
+                    rhs: more,
+                },
+                HirType::NUMBER,
+                origin.clone(),
+            );
+        }
+
+        let out = self.push(
+            OpKind::ArrayNew {
+                length: total,
+                zeroed: false,
+            },
+            ty.clone(),
+            origin.clone(),
+        );
+        let none = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        self.runtime_call(
+            "nts_array_keep_first",
+            vec![out, none],
+            HirType::Void,
+            origin.clone(),
+        );
+        for (spread, value) in lowered {
+            let helper = if spread { extend } else { push };
+            let result = if spread {
+                HirType::Void
+            } else {
+                HirType::NUMBER
+            };
+            self.runtime_call(helper, vec![out, value], result, origin.clone());
+        }
+        Ok(out)
     }
 
     /// `[...xs]`: the whole of `xs`, copied.

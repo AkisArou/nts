@@ -103,7 +103,7 @@ counter, not by reading the emitted C.
 | ✗ | `??=`, `\|\|=`, `&&=` | |
 | ✅ | `?.` | one link, through either absence or both; a chain after an optional access is refused and named |
 | ✗ | `?.()`, `?.[]` | optional call and optional index |
-| ◐ | spread | `[...a]` alone in an array literal is a copy and works; `[...a, ...b]`, `[...a, x]`, `f(...a)` and `{...o}` do not |
+| ◐ | spread | every shape of it in an **array literal** works — `[...a]` is a copy, and `[...a, x, ...b]` sums the lengths before allocating; `f(...a)` and `{...o}` do not |
 | ✗ | `delete`, `void`, comma | `in` is named above |
 | ✗ | `instanceof` | needs a class as a value |
 | ✗ | tagged templates | |

@@ -2459,6 +2459,28 @@ NtsArray *nts_array_splice_ref(NtsArray *a, double start, double count) {
  * how many, and is each one an array -- that the checker can answer and this
  * cannot. One array argument is the shape worth having a helper for; the rest
  * is refused by name rather than answered wrongly. */
+/* Append every element of `src` to `dst`, which is what a spread inside a
+ * larger array literal does.
+ *
+ * `[...a, x, ...b]` sums the lengths before it allocates, so `dst` already has
+ * the room and `nts_array_push` never reallocates -- the same shape `filter`
+ * uses. The reference form retains, because both arrays hold the element
+ * afterwards, and then pushes through the consuming helper. */
+void nts_array_extend(NtsArray *dst, const NtsArray *src) {
+  const double *items = nts_numbers(src);
+  for (uint32_t at = 0; at < src->header.length; at++) {
+    nts_array_push(dst, items[at]);
+  }
+}
+
+void nts_array_extend_ref(NtsArray *dst, const NtsArray *src) {
+  void *const *items = NTS_ITEMS(src, void *);
+  for (uint32_t at = 0; at < src->header.length; at++) {
+    nts_retain((NtsHeader *)items[at]);
+    nts_array_push_ref(dst, items[at]);
+  }
+}
+
 NtsArray *nts_array_concat(const NtsArray *a, const NtsArray *b) {
   uint32_t total = a->header.length + b->header.length;
   NtsArray *out = nts_array_new(a->header.descriptor, (double)total);

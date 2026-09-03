@@ -941,6 +941,10 @@ NtsArray *nts_array_splice(NtsArray *a, double start, double count);
 /* `concat(ys)`, one array argument. See the note beside the definition for what
  * the other shapes are and why they are refused instead. */
 NtsArray *nts_array_concat(const NtsArray *a, const NtsArray *b);
+/* A spread inside a larger array literal: append every element of `src`. See
+ * the note beside the definition for why `dst` never has to grow. */
+void nts_array_extend(NtsArray *dst, const NtsArray *src);
+void nts_array_extend_ref(NtsArray *dst, const NtsArray *src);
 NtsArray *nts_array_concat_ref(const NtsArray *a, const NtsArray *b);
 NtsArray *nts_array_splice_ref(NtsArray *a, double start, double count);
 double nts_array_unshift(NtsArray *a, double value);

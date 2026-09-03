@@ -214,3 +214,63 @@ export function copyIsSeparate(n: number): number {
   copy.push(n + 1);
   return copy.length * 10 + xs.length;
 }
+
+// A spread among other elements: `[...a, x]`, `[...a, ...b]`, `[x, ...a, y]`.
+//
+// Everything is evaluated first, left to right, because that is the order
+// JavaScript evaluates it in and the lengths are not known until it has been.
+// Then the lengths are added and only then is the result allocated, with the
+// room it needs and no length -- so `push` never reallocates.
+export function spreadThenOne(n: number): number {
+  const xs = [n, n + 1];
+  const out = [...xs, n + 2];
+  return out.length * 1000 + out[0]! * 100 + out[2]! * 10 + xs.length;
+}
+
+export function twoSpreads(n: number): number {
+  const xs = [n];
+  const ys = [n + 1, n + 2];
+  const out = [...xs, ...ys];
+  return out.length * 1000 + out[0]! * 100 + out[2]! * 10 + ys.length;
+}
+
+export function spreadInTheMiddle(n: number): number {
+  const xs = [n + 1, n + 2];
+  const out = [n, ...xs, n + 3];
+  return out.length * 1000 + out[0]! * 100 + out[1]! * 10 + out[3]!;
+}
+
+// An empty spread contributes nothing and must not leave a hole.
+export function emptySpreadAmongst(n: number): number {
+  const none: number[] = [];
+  const out = [n, ...none, n + 1];
+  return out.length * 100 + out[0]! * 10 + out[1]!;
+}
+
+// Left to right, which a counter makes visible: the spread's source is
+// evaluated where it is written, not before or after.
+let ticks = 0;
+
+function tick(v: number): number {
+  ticks = ticks + 1;
+  return v * 10 + ticks;
+}
+
+function tickList(v: number): number[] {
+  ticks = ticks + 1;
+  return [v * 10 + ticks];
+}
+
+export function evaluatedInOrder(n: number): number {
+  ticks = 0;
+  const out = [tick(n), ...tickList(n), tick(n)];
+  return out[0]! * 10000 + out[1]! * 100 + out[2]! + ticks;
+}
+
+// References, where both the source and the result hold each element.
+export function spreadNames(n: number): string {
+  const xs = ["a" + String(n % 10)];
+  const ys = ["b", "c"];
+  const out = [...xs, "mid", ...ys];
+  return out.join(",") + ":" + String(out.length) + ":" + xs.join(",");
+}
