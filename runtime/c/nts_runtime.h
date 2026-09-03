@@ -932,11 +932,16 @@ double nts_math_hypot(double a, double b);
  * are not inline: every reference anyone holds stays valid. */
 double nts_array_push(NtsArray *a, double value);
 double nts_array_pop(NtsArray *a);
+/* `shift` and `unshift`: `pop` and `push` at the front, and a `memmove` for the
+ * rest. See the note beside the definitions. */
+double nts_array_shift(NtsArray *a);
+double nts_array_unshift(NtsArray *a, double value);
 /* `pop` and `at` with the `undefined` the checker already gave them. A number
  * has no bit pattern for absence, so `T | undefined` is an erased value and
  * these are what produce one. The doubles above answer NaN and are reached
  * only where the result was narrowed back to a number. */
 NtsValue nts_array_pop_value(NtsArray *a);
+NtsValue nts_array_shift_value(NtsArray *a);
 NTS_READS_ONLY NtsValue nts_array_at_value(const NtsArray *a, double at);
 /* The same methods on an array of *references*, where the element is a pointer
  * rather than a double. `T | undefined` for a reference is the null pointer, so
@@ -944,6 +949,8 @@ NTS_READS_ONLY NtsValue nts_array_at_value(const NtsArray *a, double at);
  * come in two: a string compares by value and everything else by identity. */
 double nts_array_push_ref(NtsArray *a, void *value);
 void *nts_array_pop_ref(NtsArray *a);
+void *nts_array_shift_ref(NtsArray *a);
+double nts_array_unshift_ref(NtsArray *a, void *value);
 NTS_READS_ONLY void *nts_array_at_ref(const NtsArray *a, double at);
 NTS_READS_ONLY double nts_array_index_of_ref(const NtsArray *a,
                                              const void *needle);

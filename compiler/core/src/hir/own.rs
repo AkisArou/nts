@@ -1702,10 +1702,11 @@ fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHas
 /// element of every array of objects a program builds.
 ///
 /// There is exactly one emitter, `lower_pushes`, and the runtime's own comment
-/// states the convention, so the two cannot drift silently.
+/// states the convention, so the two cannot drift silently. `unshift` is the
+/// same operation at the other end and joins it here for the same reason.
 pub(super) fn consumes(name: &str) -> Option<usize> {
     match name {
-        "nts_array_push_ref" => Some(1),
+        "nts_array_push_ref" | "nts_array_unshift_ref" => Some(1),
         _ => None,
     }
 }

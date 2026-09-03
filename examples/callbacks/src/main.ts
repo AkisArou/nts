@@ -379,3 +379,44 @@ export function filterThenSome(seed: number): number {
   const kept = digits(seed).filter((v) => v > 0);
   return (kept.some((v) => v === 0) ? 1 : 0) + (kept.every((v) => v > 0) ? 2 : 0);
 }
+
+// `find`, which is `findIndex` reading the element out at the end.
+//
+// The seed is the *length* rather than `-1`: both say "nothing matched", and
+// `at` already answers `undefined` for an index that is not there -- so the
+// result is one helper call rather than a conditional built here.
+export function firstNegative(seed: number): number {
+  return digits(seed).find((v) => v < 0) ?? 999;
+}
+
+export function findsNothing(seed: number): number {
+  return digits(seed).find((v) => v === 100000) ?? -7;
+}
+
+export function findEmpty(seed: number): number {
+  const none: number[] = [];
+  return none.find((v) => v === seed) ?? 42;
+}
+
+// The first match wins where several would do.
+export function firstOdd(seed: number): number {
+  return [2, 4, seed * 0 + 5, 7, 8].find((v) => v % 2 === 1) ?? 0;
+}
+
+// Stops where it finds, which a counter makes visible.
+export function findStops(seed: number): number {
+  let seen = 0;
+  const found = digits(seed).find((v) => {
+    seen = seen + 1;
+    return v === 3;
+  });
+  return seen * 100 + (found ?? 0);
+}
+
+// A reference element, where the result is a nullable pointer rather than a
+// tagged value.
+export function findsAName(seed: number): string {
+  const names = ["alpha", "bb", "gamma"];
+  const long = names.find((s) => s.length > 2 + (seed - seed));
+  return long ?? "none";
+}

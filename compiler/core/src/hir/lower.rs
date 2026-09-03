@@ -2973,6 +2973,7 @@ fn iteration_method(name: &str) -> Option<Iteration> {
         "every" => Iteration::All,
         "findIndex" => Iteration::FindIndex,
         "filter" => Iteration::Filter,
+        "find" => Iteration::Find,
         _ => return None,
     })
 }
@@ -3032,6 +3033,8 @@ enum Iteration {
     FindIndex,
     /// `filter`.
     Filter,
+    /// `find`.
+    Find,
 }
 
 impl Iteration {
@@ -3046,6 +3049,7 @@ impl Iteration {
             Self::All => "every",
             Self::FindIndex => "findIndex",
             Self::Filter => "filter",
+            Self::Find => "find",
         }
     }
 
@@ -3061,7 +3065,8 @@ impl Iteration {
             | Self::Any
             | Self::All
             | Self::FindIndex
-            | Self::Filter => 1,
+            | Self::Filter
+            | Self::Find => 1,
             Self::Reduce => 2,
         }
     }
@@ -12593,7 +12598,8 @@ impl<'a> FuncBuilder<'a> {
                     | Iteration::Any
                     | Iteration::All
                     | Iteration::FindIndex
-                    | Iteration::Filter,
+                    | Iteration::Filter
+                    | Iteration::Find,
                     [callback],
                 ) => (*callback, None),
                 // `reduce` with no initial value starts from the first element
@@ -12662,11 +12668,16 @@ impl<'a> FuncBuilder<'a> {
         if name == "push" {
             return self.lower_pushes(id, "nts_array_push", receiver, arguments);
         }
+        if name == "unshift" {
+            return self.lower_pushes(id, "nts_array_unshift", receiver, arguments);
+        }
 
         // (runtime function, arguments after the receiver, result)
         let (helper, arity, ty) = match name.as_str() {
             "pop" if absent_result => ("nts_array_pop_value", 0, HirType::Erased),
             "pop" => ("nts_array_pop", 0, HirType::NUMBER),
+            "shift" if absent_result => ("nts_array_shift_value", 0, HirType::Erased),
+            "shift" => ("nts_array_shift", 0, HirType::NUMBER),
             "at" if absent_result => ("nts_array_at_value", 1, HirType::Erased),
             "indexOf" => ("nts_array_index_of", 1, HirType::NUMBER),
             "lastIndexOf" => ("nts_array_last_index_of", 1, HirType::NUMBER),
@@ -12774,6 +12785,9 @@ impl<'a> FuncBuilder<'a> {
         if name == "push" {
             return self.lower_pushes(id, "nts_array_push_ref", receiver, arguments);
         }
+        if name == "unshift" {
+            return self.lower_pushes(id, "nts_array_unshift_ref", receiver, arguments);
+        }
         // `join`, whose separator defaults to a comma rather than to the
         // infinity the arity filling below supplies. Only on strings: every
         // other element needs a conversion per element, which is the question
@@ -12800,6 +12814,7 @@ impl<'a> FuncBuilder<'a> {
         }
         let (helper, arity, ty) = match name {
             "pop" => ("nts_array_pop_ref", 0, of_element),
+            "shift" => ("nts_array_shift_ref", 0, of_element),
             "at" => ("nts_array_at_ref", 1, of_element),
             "indexOf" if text => ("nts_array_index_of_str", 1, HirType::NUMBER),
             "indexOf" => ("nts_array_index_of_ref", 1, HirType::NUMBER),
@@ -13091,7 +13106,7 @@ impl<'a> FuncBuilder<'a> {
         //
         // The accumulator is a loop-carried name like any other, which is what
         // keeps `reduce` free of an allocation: nothing about it escapes.
-        let accumulator = self.iteration_answer(id, kind, seed, &origin)?;
+        let accumulator = self.iteration_answer(id, kind, seed, length, &origin)?;
         let mut synthetic = vec![index];
         synthetic.extend(accumulator);
         let carried = self.carried_across(body, &synthetic, names);
@@ -13181,6 +13196,22 @@ impl<'a> FuncBuilder<'a> {
                 _,
                 Some(symbol),
             ) => Ok(self.bindings[&symbol]),
+            // The element at the index the loop stopped at, or `undefined`
+            // where it stopped because it ran out -- which is what `at` answers
+            // for an index that is not there, and the reason the seed is the
+            // length.
+            (Iteration::Find, _, Some(symbol)) => {
+                let at = self.bindings[&symbol];
+                let ty = self
+                    .type_of(id)
+                    .ok_or_else(|| self.unrepresentable(id, "a `find` result"))?;
+                let helper = match &ty {
+                    HirType::Erased => "nts_array_at_value",
+                    HirType::Managed(_) => "nts_array_at_ref",
+                    _ => "nts_array_at",
+                };
+                Ok(self.runtime_call(helper, vec![receiver, at], ty, origin))
+            }
             // The array is as long as the input and holds its kept elements in
             // the front, so the last step is to say how many there are. The
             // helper hands the array back rather than making one.
@@ -13367,7 +13398,9 @@ impl<'a> FuncBuilder<'a> {
                 symbol,
                 exits_on: false,
             },
-            (Iteration::FindIndex, _, Some(symbol)) => CallbackResult::Locate { symbol, index },
+            (Iteration::FindIndex | Iteration::Find, _, Some(symbol)) => {
+                CallbackResult::Locate { symbol, index }
+            }
             (Iteration::Filter, Some(array), Some(symbol)) => CallbackResult::Keep {
                 array,
                 out: symbol,
@@ -13393,6 +13426,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         kind: Iteration,
         seed: Option<ValueId>,
+        length: ValueId,
         origin: &Origin,
     ) -> Result<Option<u32>, Diagnostic> {
         Ok(match kind {
@@ -13425,6 +13459,16 @@ impl<'a> FuncBuilder<'a> {
                 let start =
                     self.push(OpKind::ConstFloat(-1.0), HirType::NUMBER, origin.clone());
                 self.bindings.insert(symbol, start);
+                Some(symbol)
+            }
+            // `find` carries the index it stopped at, seeded with the length
+            // rather than with `-1`. Both say "nothing matched", and this one
+            // says it in a number `at` already answers `undefined` for -- so
+            // the value is read out by the helper `xs.at(i)` uses rather than
+            // by a conditional this would have to build.
+            Iteration::Find => {
+                let symbol = self.synthetic_symbol();
+                self.bindings.insert(symbol, length);
                 Some(symbol)
             }
             // `filter` carries how many it has kept, which is both the index

@@ -1288,6 +1288,60 @@ bool nts_array_includes_str(const NtsArray *a, const NtsString *needle) {
   return nts_array_index_of_str(a, needle) >= 0.0;
 }
 
+/* `shift` and `unshift`, which are `pop` and `push` at the other end.
+ *
+ * The other end costs a `memmove`: an array's elements are contiguous and its
+ * length is where they stop, so taking one off the front means moving the rest
+ * down. That is O(n) where `pop` is O(1), and it is what the operation *is* --
+ * V8 pays the same move for an array in this representation.
+ *
+ * Seventeen `shift`s and sixteen `unshift`s in `runtime/node`, which is why
+ * these are here and `flat`, `flatMap` and `findLast` -- zero uses between them
+ * -- are not. */
+double nts_array_shift(NtsArray *a) {
+  /* Shifting nothing is `undefined`, and this one cannot say so. See
+   * `nts_array_pop`, which answers NaN for the same reason. */
+  if (a->header.length == 0) {
+    return (double)NAN;
+  }
+  double *items = NTS_ITEMS(a, double);
+  double first = items[0];
+  a->header.length--;
+  memmove(items, items + 1, (size_t)a->header.length * sizeof(double));
+  return first;
+}
+
+void *nts_array_shift_ref(NtsArray *a) {
+  if (a->header.length == 0) {
+    return NULL;
+  }
+  void **items = NTS_ITEMS(a, void *);
+  void *first = items[0];
+  a->header.length--;
+  memmove(items, items + 1, (size_t)a->header.length * sizeof(void *));
+  return first;
+}
+
+double nts_array_unshift(NtsArray *a, double value) {
+  nts_array_reserve(a);
+  double *items = NTS_ITEMS(a, double);
+  memmove(items + 1, items, (size_t)a->header.length * sizeof(double));
+  items[0] = value;
+  a->header.length++;
+  return (double)a->header.length;
+}
+
+/* **Consuming**, like `nts_array_push_ref`: the caller owes a reference and the
+ * slot takes it. */
+double nts_array_unshift_ref(NtsArray *a, void *value) {
+  nts_array_reserve(a);
+  void **items = NTS_ITEMS(a, void *);
+  memmove(items + 1, items, (size_t)a->header.length * sizeof(void *));
+  items[0] = value;
+  a->header.length++;
+  return (double)a->header.length;
+}
+
 double nts_array_pop(NtsArray *a) {
   /* Popping nothing is `undefined`. This one cannot say so -- it returns a
    * double -- so it answers NaN, and the compiler calls it only where the
@@ -1333,6 +1387,13 @@ NtsValue nts_array_pop_value(NtsArray *a) {
   }
   a->header.length--;
   return nts_value_of_number(NTS_ITEMS(a, double)[a->header.length]);
+}
+
+NtsValue nts_array_shift_value(NtsArray *a) {
+  if (a->header.length == 0) {
+    return nts_absent_number();
+  }
+  return nts_value_of_number(nts_array_shift(a));
 }
 
 /* Copy a string into two-byte slots, whichever way it was stored. */
