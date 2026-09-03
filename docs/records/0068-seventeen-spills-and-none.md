@@ -55,3 +55,56 @@ whole of this row's gap.
 The other row that is ours, `absences`, now has eight refuted hypotheses. This
 one has four. Both are spill-or-width problems in the same backend, and neither
 is explained.
+
+## What the spills are, which narrows it further
+
+Every one of them is around a call, and four of the seven are `movsd`:
+
+```text
+movsd %xmm0,0x20(%rsp)   ...   addsd 0x20(%rsp),%xmm2
+mov   %r12,0x28(%rsp)  -> call nts_release    -> mov   0x28(%rsp),%r12
+movsd %xmm1,0x40(%rsp) -> call nts_array_grow -> movsd 0x40(%rsp),%xmm1
+```
+
+    ours    4 xmm spills   3 integer spills   6 calls
+    clang   0              0                  6 calls
+
+x86-64 has **no callee-saved xmm registers**, so a floating-point value live
+across a call must be spilled. Ours keeps values live across `nts_release` and
+`nts_array_grow`; clang's keeps none, with the same six calls. That is why every
+integer-shaped fix below did nothing.
+
+## And the two optimized IRs are the same
+
+Not similar — the same, by every aggregate available:
+
+    ours    100 instructions  11 phis  23 blocks  7 calls  10 loads
+    clang    93 instructions  11 phis  23 blocks  7 calls  10 loads
+
+    both:  0 double phis, 11 integer phis, 1 fadd, 12 integer adds, 2 sitofp
+
+Same types, same counts, same control flow. One spills seven values and the
+other spills none.
+
+## Ten refuted
+
+    constants materialised as `add i32 0, N`      noise
+    single-predecessor phis substituted away      noise
+    `noinline` on the hot function                noise
+    both foldings together                        noise
+    `reg2mem` (52 phis to allocas, mem2reg rebuilds)  noise
+    `sink`, `slsr`, `separate-const-offset-from-gep`  noise
+    `inbounds` on every GEP                       noise
+    `i64` element indices instead of `i32`        noise
+    `opt -O2` before `clang -O2`                  slightly worse
+    `opt -O3` before `clang -O2`                  slightly worse
+
+What is left is instruction **order**: two IRs that agree on every aggregate can
+still interleave live ranges differently, and no aggregate can see that. Testing
+it means comparing the two optimized functions instruction by instruction rather
+than by histogram, which is where the next person should start.
+
+The row is 1.25x LLVM-over-C and it is ours. That is a refusal with a reason,
+and the reason is now four steps deeper than "17 spills": they are around calls,
+they are mostly floating-point, x86-64 has no callee-saved xmm, and the IR that
+produces them is indistinguishable in the aggregate from the IR that does not.
