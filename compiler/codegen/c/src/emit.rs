@@ -1245,7 +1245,10 @@ fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &P
             format!("nts_vtable_{name}")
         };
 
-        let references = layout.reference_fields();
+        // The *pointer* slots, not every slot that may hold a reference: an
+        // erased one belongs in the table below and in this one it would be
+        // read as a pointer. See `HirType::holds_a_pointer`.
+        let references = layout.pointer_fields();
         let offsets = if references.is_empty() {
             // No table, and no `static const uint32_t x[] = {};` either: a
             // zero-length array is not C.

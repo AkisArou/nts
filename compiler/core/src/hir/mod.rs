@@ -231,6 +231,24 @@ impl HirType {
         matches!(self, Self::Managed(_) | Self::Erased)
     }
 
+    /// Whether a slot of this type holds a *pointer* a collector can follow.
+    ///
+    /// [`Self::may_hold_a_reference`] is the wider question, and the two are
+    /// not interchangeable where a descriptor is built. A descriptor carries
+    /// two tables: `offsets`, whose slots are read as `NtsHeader *`, and
+    /// `erased_offsets`, whose slots are read as `NtsValue`. An erased slot
+    /// answers *yes* to the wider question and belongs only in the second --
+    /// put in both, it is read both ways, and reading a tagged value as a
+    /// pointer is a segfault inside the collector's own walk.
+    ///
+    /// That is not hypothetical: `{ name?: string }` released under counting
+    /// crashed in `nts_release`, reached through `nts_each_reference` from
+    /// `nts_destroy`, on both backends and for this reason.
+    #[must_use]
+    pub fn holds_a_pointer(&self) -> bool {
+        matches!(self, Self::Managed(_))
+    }
+
     /// Whether this type fits in a machine register.
     #[must_use]
     pub const fn is_scalar(&self) -> bool {
@@ -925,6 +943,21 @@ impl Layout {
         self.fields
             .iter()
             .filter(|field| field.ty.may_hold_a_reference())
+            .map(|field| field.name.as_str())
+            .collect()
+    }
+
+    /// The fields holding a *pointer*, which is the narrower question.
+    ///
+    /// A descriptor's two tables are built from the two: `offsets` from this
+    /// one, whose slots it reads as `NtsHeader *`, and `erased_offsets` from
+    /// the erased fields, whose slots it reads as `NtsValue`. See
+    /// [`HirType::holds_a_pointer`] for what a slot in both did.
+    #[must_use]
+    pub fn pointer_fields(&self) -> Vec<&str> {
+        self.fields
+            .iter()
+            .filter(|field| field.ty.holds_a_pointer())
             .map(|field| field.name.as_str())
             .collect()
     }

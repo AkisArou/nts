@@ -490,11 +490,14 @@ fn descriptors(program: &Program) -> String {
             );
             format!("ptr @nts_{which}_{tag}")
         };
+        // The *pointer* slots, not every slot that may hold a reference: an
+        // erased one belongs in the table below and in this one it would be
+        // read as a pointer. See `HirType::holds_a_pointer`.
         let references: Vec<u32> = layout
             .fields
             .iter()
             .enumerate()
-            .filter(|(_, field)| field.ty.may_hold_a_reference())
+            .filter(|(_, field)| field.ty.holds_a_pointer())
             .filter_map(|(at, _)| placed.offsets.get(at).copied())
             .collect();
         let erased: Vec<u32> = layout

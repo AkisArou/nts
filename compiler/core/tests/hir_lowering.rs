@@ -755,3 +755,39 @@ fn an_async_throw_rejects_its_own_promise() {
         "an `async` function has somewhere to put a throw"
     );
 }
+
+#[test]
+fn a_default_that_cannot_apply_is_not_emitted() {
+    let Some(lowered) = lowered("destructuring") else {
+        return;
+    };
+    // `{ a = 99 }` where `a` is required: the representation has no room for
+    // `undefined`, so the default is unreachable. The language says the same --
+    // a default is evaluated only when the value is missing -- so the branch,
+    // the merge and the constant are all absent rather than dead.
+    let cannot = func(&lowered, "aDefaultThatCannotApply");
+    assert!(
+        !cannot
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::ConstFloat(v) if (v - 99.0).abs() < f64::EPSILON)),
+        "the default is not lowered at all"
+    );
+}
+
+#[test]
+fn a_labelled_break_names_the_loop_it_leaves() {
+    let Some(lowered) = lowered("loops") else {
+        return;
+    };
+    // Three loops, two labels, and a `break`/`continue` naming each. That this
+    // function is in the program at all is the assertion: a label is matched by
+    // text, and picking the wrong loop for a name produces a jump to the wrong
+    // block rather than a refusal -- which is what the 174 differential cases
+    // behind it check.
+    let two = func(&lowered, "twoLabels");
+    assert!(
+        two.blocks.len() > 6,
+        "three nested loops, each with a header, a body and an exit"
+    );
+}

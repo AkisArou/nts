@@ -118,10 +118,10 @@ counter, not by reading the emitted C.
 | ✅ | block scope, `const`/`let`/`var` |
 | ✅ | destructuring: object, array, nested, rest element |
 | ✅ | `try`/`catch`/`finally`, a bare `catch { }`, and a `throw` of any type |
-| ✗ | labelled `break`/`continue` |
-| ✗ | `for...in` |
-| ✗ | `for...of` over a string |
-| ✗ | a default inside a destructuring pattern |
+| ✅ | labelled `break`/`continue`, on a loop or a `switch`. A label on a *block* is refused: its `break` is a forward jump, which wants an exit with no latch |
+| ✅ | `for...of` over a string — by code point, so a surrogate pair is one element |
+| ✅ | a default inside a destructuring pattern, including renamed and nested. `{ a: b }` and `{ a = b }` encode identically, and are told apart by which name the binding element *declares* |
+| ✗ | `for...in` — zero uses in the node profile, so it is ordered behind everything that has one |
 
 ## 3. Functions
 

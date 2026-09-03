@@ -12,6 +12,7 @@ because
 because What stands between is the guard. It reads the slot, tests what it
 because found, and only then stores, so the storing block is reached by a join
 because and the pending take has to survive one. The arm that throws is not a
-because problem: `nts_thrown` calls `abort`, so nothing after it is observed,
+because problem: an uncaught `throw` ends the program, so nothing after it is
+because observed,
 because which is the same reason `crossing_borrows` treats an operation in an
 because unreachable block as unobserved.

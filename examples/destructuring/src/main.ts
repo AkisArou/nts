@@ -194,3 +194,58 @@ export function nestedInAWalk(n: number): number {
   }
   return total;
 }
+
+// A default in a pattern: `{ a = d }` uses `d` where the read is `undefined`,
+// and only there. `{ a: b }` and `{ a = b }` encode as the same two identifiers,
+// and are told apart by which one *declares* the symbol it names -- a binding's
+// own identifier is in its symbol's declaration list and a reference is not.
+interface Options {
+  name?: string;
+  flag: number;
+}
+
+function options(n: number): Options {
+  if (n < 0) {
+    return { flag: 1 };
+  }
+  return { flag: 2, name: "abcd" };
+}
+
+export function aDefaultStandsIn(n: number): number {
+  const { name = "xy" } = options(n);
+  return name.length * 10 + n;
+}
+
+// Renamed and defaulted at once, which is the three-part shape.
+export function renamedAndDefaulted(n: number): number {
+  const { name: label = "z", flag } = options(n);
+  return label.length * 10 + flag + n;
+}
+
+// A nested pattern is a binding, not a default -- it declares no symbol of its
+// own, so the rule above needs the second half: a pattern binds too.
+export function nestedAndDefaulted(n: number): number {
+  const outer = { inner: options(n) };
+  const {
+    inner: { name = "wxyz", flag },
+  } = outer;
+  return name.length * 10 + flag + n;
+}
+
+// The property is required, so its representation has no room for `undefined`
+// and the default is unreachable. The language says the same: a default is
+// evaluated only when the value is missing, and this one never is.
+export function aDefaultThatCannotApply(n: number): number {
+  const o = { a: 1, b: 2 };
+  const { a = 99, b } = o;
+  return a * 10 + b + n;
+}
+
+// In a parameter, which is the shape most real code writes.
+function take({ name = "xy", flag }: Options): number {
+  return name.length * 10 + flag;
+}
+
+export function defaultedParameter(n: number): number {
+  return take(options(n)) + n;
+}

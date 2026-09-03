@@ -3211,6 +3211,14 @@ struct Breakable {
     latch: Option<BlockId>,
     /// The symbols this construct carries, in parameter order.
     carried: Vec<u32>,
+    /// The label written on this construct, if it has one.
+    ///
+    /// `break outer` names a construct rather than taking the innermost one,
+    /// and this is what it names. By text, because a label is not a binding:
+    /// the checker gives it no symbol, so there is no id to match on. Nesting
+    /// makes that safe -- the innermost construct carrying the name is the one
+    /// the name refers to, which is what `rposition` finds.
+    label: Option<String>,
     /// How deep the exit stack was when this construct began.
     ///
     /// A `break` leaves every `try` between it and here, so it has to run the
@@ -3301,6 +3309,12 @@ struct FuncBuilder<'a> {
     /// This is what makes two identifiers with one symbol become one value
     /// rather than two loads.
     bindings: rustc_hash::FxHashMap<u32, ValueId>,
+    /// A label just read, waiting for the loop or `switch` it is written on.
+    ///
+    /// Read by the next construct that pushes a [`Breakable`], which is the
+    /// one immediately inside the label -- [`Self::lower_labeled`] refuses a
+    /// label on anything else, so there is nothing else it could reach.
+    pending_label: Option<String>,
     /// `resolve` and `reject`, while a `new Promise` executor is being lowered.
     ///
     /// By symbol, so a name that shadows one outside the executor is unaffected
@@ -3442,6 +3456,7 @@ impl<'a> FuncBuilder<'a> {
             current: BlockId(0),
             bindings: rustc_hash::FxHashMap::default(),
             settlers: rustc_hash::FxHashMap::default(),
+            pending_label: None,
             exits: Vec::new(),
             returns: HirType::Void,
             layouts: Vec::new(),
@@ -6239,6 +6254,7 @@ impl<'a> FuncBuilder<'a> {
             origin: origin.clone(),
             latch: None,
             carried: carried.clone(),
+            label: self.pending_label.take(),
             exits_at: self.exits.len(),
         });
 
@@ -6579,6 +6595,7 @@ impl<'a> FuncBuilder<'a> {
             origin: origin.clone(),
             latch: Some(latch),
             carried: carried.to_vec(),
+            label: self.pending_label.take(),
             exits_at: self.exits.len(),
         });
         Ok(Loop {
@@ -7388,12 +7405,27 @@ impl<'a> FuncBuilder<'a> {
         what: &str,
         mut wanted: impl FnMut(&Breakable) -> bool,
     ) -> Result<usize, Diagnostic> {
-        if self
+        // `break outer` names the construct rather than taking the innermost
+        // one. The name is the whole difference: everything below is the same
+        // jump to the same block, with a different index chosen for it.
+        if let Some(named) = self
             .children(id)
-            .iter()
-            .any(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
         {
-            return Err(self.unsupported(id, &format!("a labelled `{what}`")));
+            let Some(name) = self.node(named).text.clone() else {
+                return Err(self.unsupported(id, &format!("a labelled `{what}` with no name")));
+            };
+            return self
+                .breakables
+                .iter()
+                .rposition(|it| it.label.as_deref() == Some(name.as_str()) && wanted(it))
+                .ok_or_else(|| {
+                    self.unsupported(
+                        id,
+                        &format!("a `{what}` naming a label that is not on a loop around it"),
+                    )
+                });
         }
         self.breakables
             .iter()
@@ -8149,6 +8181,50 @@ impl<'a> FuncBuilder<'a> {
         // treat the code after a throw as unreachable, which it is.
         self.terminate(Terminator::Unreachable);
         Ok(())
+    }
+
+    /// `outer: for (…) { … }`.
+    ///
+    /// The label is not a construct of its own: it names the loop written under
+    /// it, so that a `break` or `continue` inside can say which loop it means.
+    /// So this records the name and lowers the loop, and the loop takes the name
+    /// when it pushes its [`Breakable`].
+    ///
+    /// A label on anything *other* than a loop or a `switch` is refused. `outer:
+    /// { … break outer … }` is legal JavaScript -- a labelled block, where the
+    /// `break` is a forward jump to the end of it -- and it needs a breakable
+    /// with an exit and no latch, which is a block this does not build. Refusing
+    /// it also keeps [`Self::pending_label`] honest: with nothing between the
+    /// label and the loop, the next construct to push is always the one the
+    /// label was written on, and the name cannot land on a loop nested inside
+    /// something else.
+    fn lower_labeled(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let children = self.children(id);
+        let [name, statement] = children.as_slice() else {
+            return Err(self.unsupported(id, "a labelled statement of unexpected shape"));
+        };
+        let (name, statement) = (*name, *statement);
+        if !matches!(
+            self.kind_of(statement),
+            Some(
+                syntax::FOR_STATEMENT
+                    | syntax::FOR_OF_STATEMENT
+                    | syntax::WHILE_STATEMENT
+                    | syntax::DO_STATEMENT
+                    | syntax::SWITCH_STATEMENT
+            )
+        ) {
+            return Err(self.unsupported(id, "a label on something that is not a loop"));
+        }
+        let Some(text) = self.node(name).text.clone() else {
+            return Err(self.unsupported(name, "a label with no name"));
+        };
+        self.pending_label = Some(text);
+        let lowered = self.lower_statement(statement);
+        // Cleared whatever happened: a loop that refused never took it, and a
+        // name left here would be picked up by the next loop in the function.
+        self.pending_label = None;
+        lowered
     }
 
     /// `try { … } catch (e) { … }`.
@@ -9549,6 +9625,7 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::EMPTY_STATEMENT | syntax::FUNCTION_DECLARATION) => Ok(()),
             Some(syntax::THROW_STATEMENT) => self.lower_throw(id),
             Some(syntax::TRY_STATEMENT) => self.lower_try(id),
+            Some(syntax::LABELED_STATEMENT) => self.lower_labeled(id),
             Some(syntax::EXPRESSION_STATEMENT) => {
                 let Some(expression) = self.children(id).first().copied() else {
                     return Ok(());
@@ -12418,18 +12495,43 @@ impl<'a> FuncBuilder<'a> {
             }
             // One identifier for `{ a }` and `[a]`; two for `{ a: renamed }`,
             // the property first.
-            let (property, binding) = match parts.as_slice() {
-                [only] => (*only, *only),
-                [from, to] => (*from, *to),
-                _ => return Err(self.unsupported(element, "a default in a pattern")),
+            // A binding element is one of four shapes, and the encoder gives
+            // the fields it has and no tokens:
+            //
+            //     `{ a }`       [name]
+            //     `{ a: b }`    [property, name]
+            //     `{ a = d }`   [name, default]
+            //     `{ a: b = d}` [property, name, default]
+            //
+            // Two children are ambiguous when both are identifiers, because
+            // `{ a: b }` and `{ a = b }` encode identically. They are told
+            // apart by which identifier is a *declaration*: the checker records
+            // a binding's own identifier in its symbol's declaration list, and
+            // a reference to something else is not in it.
+            //
+            // A nested *pattern* is a binding too, and declares no symbol of
+            // its own -- `{ inner: { name } }` would otherwise read as a
+            // property with the pattern as its default.
+            let binds = |builder: &Self, node: NodeId| {
+                builder.declared_by(element, node)
+                    || matches!(
+                        builder.kind_of(node),
+                        Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
+                    )
+            };
+            let (property, binding, default) = match parts.as_slice() {
+                [only] => (*only, *only, None),
+                [first, second] if binds(self, *second) => (*first, *second, None),
+                [first, second] => (*first, *first, Some(*second)),
+                [first, second, third] => (*first, *second, Some(*third)),
+                _ => return Err(self.unsupported(element, "a binding of unexpected shape")),
             };
             let nested = matches!(
                 self.kind_of(binding),
                 Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
             );
             if !nested && self.kind_of(binding) != Some(syntax::IDENTIFIER) {
-                // `{ a = 1 }` is the property and its default, with no rename.
-                return Err(self.unsupported(element, "a default in a pattern"));
+                return Err(self.unsupported(element, "a binding of unexpected shape"));
             }
             let symbol = if nested {
                 None
@@ -12441,6 +12543,25 @@ impl<'a> FuncBuilder<'a> {
             };
 
             let read = self.read_for_pattern(element, property, value, position, object)?;
+            // `{ a = d }`: the default stands in where the read is `undefined`,
+            // and only there.
+            let read = match default {
+                Some(default) => match self.defaulted_when(element, property, read)? {
+                    // The *binding's* node, not the element's: its type is the
+                    // one the default has already been folded into, which is
+                    // what both arms have to produce.
+                    Some(absent) => self.lower_branching_value(
+                        binding,
+                        absent,
+                        Branch::Expression(default),
+                        Branch::Present(read),
+                    )?,
+                    // No room for an absence, so the default is unreachable.
+                    // The language agrees: it is never evaluated.
+                    None => read,
+                },
+                None => read,
+            };
             // `{ p: { x } }` is a read and then another pattern over what it
             // produced, which is the same function one level down.
             match symbol {
@@ -12451,6 +12572,88 @@ impl<'a> FuncBuilder<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Whether this identifier is the name `element` *declares*.
+    ///
+    /// The checker records a binding's declaration as the **binding element**,
+    /// not as the identifier inside it -- read off a real program, because the
+    /// obvious guess is the identifier and it is wrong. So the question is
+    /// asked of the element: `{ a: b }` has `b`'s symbol declared by this
+    /// element, and in `{ a = b }` the `b` is a reference whose symbol was
+    /// declared somewhere else entirely.
+    ///
+    /// That is the only thing telling the two apart: the encoder gives both as
+    /// the same two identifiers, with no `=` token and no property-name slot to
+    /// distinguish them.
+    fn declared_by(&self, element: NodeId, node: NodeId) -> bool {
+        self.node(node)
+            .symbol
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .is_some_and(|record| record.declarations.contains(&element))
+    }
+
+    /// The condition under which a pattern's default applies.
+    ///
+    /// Not [`Self::absence_of`], which tests for `null` as well. `{ a = 5 }`
+    /// where `a` is `null` keeps the `null` -- only `undefined` reaches a
+    /// default. The two tests coincide for an *optional* property, whose type
+    /// admits no null, and differ for `T | null`.
+    ///
+    /// `None` when the representation has no room for an absence at all, which
+    /// makes the default unreachable. The language says the same thing: a
+    /// default is evaluated only when the value is `undefined`.
+    fn defaulted_when(
+        &mut self,
+        at: NodeId,
+        property: NodeId,
+        value: ValueId,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let ty = self.values[value.0 as usize].ty.clone();
+        let origin = self.origin(at);
+        match ty {
+            // The tag is the answer, and only one of its values is the one.
+            HirType::Erased => {
+                let unsigned = HirType::Int {
+                    bits: 32,
+                    signed: false,
+                };
+                let tag = self.push(OpKind::TagOf { value }, unsigned.clone(), origin.clone());
+                let undefined = self.push(
+                    OpKind::ConstInt(i128::from(super::tags::UNDEFINED)),
+                    unsigned,
+                    origin.clone(),
+                );
+                Ok(Some(self.push(
+                    OpKind::Binary {
+                        op: BinOp::Eq,
+                        lhs: tag,
+                        rhs: undefined,
+                    },
+                    HirType::Bool,
+                    origin,
+                )))
+            }
+            // One null pointer stands for both absences, so the representation
+            // cannot tell them apart and the *type* has to. A property that can
+            // only be missing is answered exactly; one that can also be `null`
+            // is refused rather than answered by the nearest available test,
+            // which would take the default for a `null` the language keeps.
+            HirType::Managed(_) => {
+                let only_missing = self
+                    .absences_of(property)
+                    .is_some_and(|tags| tags == vec![super::tags::UNDEFINED]);
+                if only_missing {
+                    Ok(self.absence_of(at, value))
+                } else {
+                    Err(self.unsupported(
+                        at,
+                        "a default on a property that can be `null` as well as missing",
+                    ))
+                }
+            }
+            _ => Ok(None),
+        }
     }
 
     /// `[a, ...tail]`: everything from `position` on, as a new array.
