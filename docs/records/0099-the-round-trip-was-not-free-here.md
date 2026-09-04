@@ -94,8 +94,30 @@ candidates rather than to pick one.
   rather than left on the stack.
 - **The materialised boolean**, where a comparison is stored rather than
   branched on.
-- **Field specialization**, which is upstream and worth 1.14x here on its own:
-  number specialization narrows locals and not fields, so `Ball` is four
-  doubles on every lane — `_Static_assert(sizeof(NtsObj_Ball) == 56u)` on the
-  C side. A second instance found in the same function: the `bounces`
-  accumulator is a `double` where the loop counter beside it is an `int`.
+- **Field specialization**, which is upstream and worth 1.14x here on its own.
+
+  I read the four `double` fields on both lanes and wrote that "number
+  specialization narrows locals and not fields". **That was wrong**, and the
+  wrong half is the informative one: it narrows fields perfectly well —
+  `Random.seed` in the *same program* is an `int32_t`. What it could not
+  narrow is a field whose value **depends on itself**. `fields` was seeded
+  empty in the interprocedural fixpoint, an absent entry reads as TOP at the
+  use, so round one saw `this.x` as TOP, computed `this.x += this.xVel` as
+  TOP, published TOP, and every round after agreed.
+
+  `Random.seed` escaped only because `(seed * 1309 + 13849) & 65535` is
+  bounded *whatever its input was*, so the mask makes the recursion
+  irrelevant — which is precisely what made the gap look like a property of
+  `Ball`. Found by nts-69 by instrumenting the lattice rather than by reading
+  the emitted struct, which is what I did.
+
+  The lesson is about my evidence, not theirs. Two lanes emitting `double`
+  told me the narrowing had not happened; it could not tell me *why*, and I
+  reported a cause at the granularity my instrument could see rather than at
+  the granularity of the bug. "Fields are not narrowed" and "this field could
+  not be narrowed" produce identical bytecode.
+
+- **The `bounces` accumulator**, which is a `double` (`dadd`) where the loop
+  counter beside it in the same loop is correctly an `int`. Possibly the same
+  self-dependent-field bug if it is a field; a separate gap if it is a local.
+  Open, and named rather than guessed at.
