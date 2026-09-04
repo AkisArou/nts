@@ -186,9 +186,6 @@ export class Interface extends EventEmitter {
   #killRingCursor = 0;
   #yanking = false;
 
-  #previousLine = "";
-  #previousCursor = 0;
-  #previousPrevRows = 0;
   #previousCursorCols = -1;
 
   #lineObjectStream: AsyncIterableIterator<string> | undefined;
@@ -767,12 +764,6 @@ export class Interface extends EventEmitter {
 
   // -- lines and history ----------------------------------------------------
 
-  #savePreviousState(): void {
-    this.#previousLine = this.line;
-    this.#previousCursor = this.cursor;
-    this.#previousPrevRows = this.prevRows;
-  }
-
   clearLine(): void {
     this.#moveCursor(Infinity);
     this.#writeToOutput("\r\n");
@@ -782,7 +773,6 @@ export class Interface extends EventEmitter {
   }
 
   #line(): void {
-    this.#savePreviousState();
     const line = this.#addHistory();
     // The undo history belongs to the line being edited, so it ends with it.
     this.#undoStack = [];

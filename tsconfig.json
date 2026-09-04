@@ -3,6 +3,7 @@
   "files": [],
   "references": [
     { "path": "./tooling/config" },
-    { "path": "./examples/library" }
+    { "path": "./examples/library" },
+    { "path": "./runtime/node" }
   ]
 }

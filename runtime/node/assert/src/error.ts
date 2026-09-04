@@ -65,9 +65,9 @@ export interface AssertionErrorOptions {
   actual?: unknown;
   expected?: unknown;
   operator?: string;
-  stackStartFn?: unknown;
+  stackStartFn?: CallableFunction;
   /** Older spelling of `stackStartFn`, still accepted. */
-  stackStartFunction?: unknown;
+  stackStartFunction?: CallableFunction;
   details?: AssertionErrorDetail[];
   diff?: DiffMode;
 }

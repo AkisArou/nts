@@ -132,7 +132,8 @@ export class Url {
             break;
           case CHAR_HASH:
             hasHash = true;
-          // fall through
+            split = true;
+            break;
           case CHAR_QUESTION_MARK:
             split = true;
             break;

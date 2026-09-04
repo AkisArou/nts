@@ -1,17 +1,7 @@
 {
-  "//": "Typechecks the whole Node profile at once. The per-module tsconfigs are what `nts emit-c` compiles; this is what CI runs `tsc --noEmit` against.",
+  "//": "Buildable aggregate for the root solution. Per-module configs remain no-emit compiler/test entry points.",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ESNext"],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "erasableSyntaxOnly": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "noImplicitReturns": true,
     "types": []
   },
   "include": ["**/*.ts"]

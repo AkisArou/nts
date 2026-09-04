@@ -80,7 +80,7 @@ interface FailArgs {
   expected?: unknown;
   message?: string | Error | undefined;
   operator: string;
-  stackStartFn: unknown;
+  stackStartFn: CallableFunction;
   diff?: DiffMode | undefined;
 }
 
@@ -96,7 +96,12 @@ function innerFail(obj: FailArgs): never {
  * `fn` is where the stack should start, which differs between `assert(x)`,
  * `assert.ok(x)` and `myAssert.ok(x)` -- the reader wants the line they wrote.
  */
-function innerOk(fn: unknown, argLen: number, value?: unknown, message?: string | Error): void {
+function innerOk(
+  fn: CallableFunction,
+  argLen: number,
+  value?: unknown,
+  message?: string | Error,
+): void {
   if (!value) {
     let generatedMessage = false;
 
@@ -184,7 +189,7 @@ class AssertImpl {
     expected?: unknown,
     message?: string | Error,
     operator?: string,
-    stackStartFn?: unknown,
+    stackStartFn?: CallableFunction,
   ): never {
     const argsLen = arguments.length;
 
@@ -498,7 +503,7 @@ function compareExceptionKey(
   key: string,
   message: string | Error | undefined,
   keys: readonly string[],
-  fn: { name: string },
+  fn: CallableFunction,
 ): void {
   if (!(key in actual) || !isDeepStrictEqual(actual[key], expected[key])) {
     if (!message) {
@@ -537,7 +542,7 @@ function expectedException(
   actual: unknown,
   expected: Expectation,
   message: string | Error | undefined,
-  fn: { name: string },
+  fn: CallableFunction,
 ): void {
   let generatedMessage = false;
   let throwError = false;
@@ -701,7 +706,7 @@ async function waitForActual(promiseFn: AnyFn | Promise<unknown>): Promise<unkno
 
 function expectsError(
   this: Configured | void,
-  stackStartFn: { name: string },
+  stackStartFn: CallableFunction,
   actual: unknown,
   error?: Expectation | string,
   message?: string,
@@ -778,7 +783,7 @@ function hasMatchingError(actual: unknown, expected: Expectation): boolean {
 
 function expectsNoError(
   this: Configured | void,
-  stackStartFn: { name: string },
+  stackStartFn: CallableFunction,
   actual: unknown,
   error?: Expectation | string,
   message?: string,
@@ -813,7 +818,7 @@ function internalMatch(
   string: string,
   regexp: RegExp,
   message: string | Error | undefined,
-  fn: { name: string },
+  fn: CallableFunction,
   shouldMatch: boolean,
 ): void {
   if (!isRegExp(regexp)) {
