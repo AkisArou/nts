@@ -103,6 +103,8 @@ fn bigint_operation(op: BinOp) -> Option<(&'static str, &'static str)> {
     })
 }
 
+const MAP_KEY_TO_VALUE: &str = "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;)Lnts/rt/NtsValue;";
+const MAP_AT_TO_VALUE: &str = "(Lnts/rt/NtsMap;D)Lnts/rt/NtsValue;";
 const BIGINT_BINARY: &str = "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
 const BIGINT_BITS: &str = "(DLnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
 const STRING_STRING_TO_D: &str = "(Ljava/lang/String;Ljava/lang/String;)D";
@@ -165,6 +167,31 @@ fn external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
         "nts_str_replace_all" => (RUNTIME, "strReplaceAll", STRING_STRING_STRING_TO_STRING),
 
         "nts_number_to_string" => (RUNTIME, "numberToString", "(D)Ljava/lang/String;"),
+
+        // One class for `Map` and `Set`. `kind` is accepted and ignored: in C
+        // it selects a specialised hash and comparison, which is an
+        // optimisation rather than a semantic, and taking the parameter keeps
+        // `hir::runtime` the single answer about the signature.
+        "nts_map_new" => (types::MAP, "newMap", "(D)Lnts/rt/NtsMap;"),
+        "nts_set_new" => (types::MAP, "newSet", "(D)Lnts/rt/NtsMap;"),
+        "nts_map_get" => (types::MAP, "get", MAP_KEY_TO_VALUE),
+        "nts_map_has" => (types::MAP, "has", "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;)Z"),
+        "nts_map_set" => (
+            types::MAP,
+            "set",
+            "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;Lnts/rt/NtsValue;)Lnts/rt/NtsMap;",
+        ),
+        "nts_set_add" => (
+            types::MAP,
+            "add",
+            "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;)Lnts/rt/NtsMap;",
+        ),
+        "nts_map_delete" => (types::MAP, "delete", "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;)Z"),
+        "nts_map_clear" => (types::MAP, "clear", "(Lnts/rt/NtsMap;)V"),
+        "nts_map_size" => (types::MAP, "size", "(Lnts/rt/NtsMap;)D"),
+        "nts_map_next" => (types::MAP, "next", "(Lnts/rt/NtsMap;D)D"),
+        "nts_map_key_at" => (types::MAP, "keyAt", MAP_AT_TO_VALUE),
+        "nts_map_value_at" => (types::MAP, "valueAt", MAP_AT_TO_VALUE),
 
         "nts_bigint_from_number" => (types::BIGINT, "fromNumber", "(D)Lnts/rt/NtsBigInt;"),
         "nts_bigint_to_string" => (types::BIGINT, "toText", "(Lnts/rt/NtsBigInt;)Ljava/lang/String;"),
@@ -234,7 +261,24 @@ impl Emitter<'_> {
                 ));
             }
         }
-        self.terminator(code, pool, block, &terminator, next, fused)
+        self.terminator(code, pool, block, &terminator, next, fused)?;
+        // And the block as a whole. `Code::bind` refuses a non-empty stack at
+        // the *next* block, which reports a byte offset and the wrong block;
+        // this names the one that left it. The operand stack being empty at
+        // every boundary is what `frames.rs` depends on, so it is worth two
+        // checks rather than one.
+        if code.depth() != 0 {
+            return Err(refuse(
+                self.func,
+                &format!(
+                    "block b{} ended with {} word(s) on the operand stack, and \
+                     every block must leave it empty",
+                    block.0,
+                    code.depth()
+                ),
+            ));
+        }
+        Ok(())
     }
 
     /// The value a branch can consume in place, if there is one.
@@ -434,6 +478,72 @@ impl Emitter<'_> {
         self.load(code, stored)?;
         code.put_static(origin, pool, PROGRAM, &name, &descriptor);
         Ok(Placed::Stored)
+    }
+
+    /// A comparison where one side is erased and the other may not be.
+    ///
+    /// Lifted out because it is a *decision* rather than a step: the erased
+    /// side cannot be unboxed without knowing what it holds, so the other side
+    /// is boxed instead and `strictEq` decides -- which is the language's `===`
+    /// between a value of unknown type and a known one, tags before payloads.
+    fn branch_on_erased(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        test: Test,
+        target: Label,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        let Test { compare, negate, lhs, rhs } = test;
+        if !matches!(compare, Compare::Eq | Compare::Ne) {
+            return Err(refuse(
+                self.func,
+                "an ordering comparison against an erased value, which needs the \
+                 coercion `<` does and this backend does not spell yet",
+            ));
+        }
+        self.push_erased(code, pool, lhs, origin)?;
+        self.push_erased(code, pool, rhs, origin)?;
+        code.invoke_static(
+            origin,
+            pool,
+            types::VALUE,
+            "strictEq",
+            "(Lnts/rt/NtsValue;Lnts/rt/NtsValue;)Z",
+        );
+        // `strictEq` leaves 1 for equal, so the branch is against zero and the
+        // negation flips which way it goes.
+        let branch = match (compare, negate) {
+            (Compare::Eq, false) | (Compare::Ne, true) => Compare::Ne,
+            _ => Compare::Eq,
+        };
+        code.branch_zero(origin, branch, target);
+        Ok(())
+    }
+
+    /// Load a value as an `NtsValue`, boxing it if it is not already one.
+    ///
+    /// `map.get(k) === n` compares an erased value with a raw `f64`, and the
+    /// IR says so: `eq %26, %27` with one operand `erased` and the other
+    /// `f64`. Comparing them as references answers by identity and leaves the
+    /// double's second word on the stack; comparing them as doubles cannot be
+    /// done at all, because the erased side may not hold a number.
+    ///
+    /// So the scalar side is erased and `strictEq` decides, which is the
+    /// language's `===` between a value of unknown type and a known one: the
+    /// tags must match before the payloads are looked at.
+    fn push_erased(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        if *self.ty(value) == HirType::Erased {
+            return self.load(code, value);
+        }
+        self.erase(code, pool, value, origin)?;
+        Ok(())
     }
 
     /// `null` and `undefined`, which are one value or two depending on where
@@ -748,12 +858,33 @@ impl Emitter<'_> {
                 self.adapt(code, Kind::Int, ty, origin)?;
                 Ok(Placed::OnStack)
             }
-            OpKind::Length(of) => {
+            // `map.size` and `set.size` are the same operation on the same
+            // class, and neither is an `arraylength` -- which is what every
+            // non-string `Length` used to become, silently, until the verifier
+            // said "invalid type NtsMap".
+            OpKind::Length(of)
+                if matches!(
+                    self.ty(*of),
+                    HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_))
+                ) =>
+            {
+                self.load(code, *of)?;
+                code.invoke_static(origin, pool, types::MAP, "size", "(Lnts/rt/NtsMap;)D");
+                self.adapt(code, Kind::Double, ty, origin)?;
+                Ok(Placed::OnStack)
+            }
+            OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) => {
                 self.load(code, *of)?;
                 code.array_length(origin);
                 self.adapt(code, Kind::Int, ty, origin)?;
                 Ok(Placed::OnStack)
             }
+            // Anything else has no length this backend knows how to take, and
+            // saying so beats reaching for the array instruction.
+            OpKind::Length(of) => Err(refuse(
+                self.func,
+                &format!("the length of {}", types::describe(&self.ty(*of).clone())),
+            )),
             // Out of range JavaScript answers `NaN` where `charAt` throws, and a
             // fractional index truncates rather than being an error. Where the
             // compiler proved the index in range neither applies, so `charAt`
@@ -920,11 +1051,25 @@ impl Emitter<'_> {
                 "stringEq",
                 "(Ljava/lang/String;Ljava/lang/String;)Z",
             ),
-            HirType::Erased if equality => (
-                types::VALUE,
-                "strictEq",
-                "(Lnts/rt/NtsValue;Lnts/rt/NtsValue;)Z",
-            ),
+            _ if equality
+                && (*self.ty(lhs) == HirType::Erased || *self.ty(rhs) == HirType::Erased) =>
+            {
+                let origin = self.func.values[lhs.0 as usize].origin.clone();
+                self.push_erased(code, pool, lhs, &origin)?;
+                self.push_erased(code, pool, rhs, &origin)?;
+                code.invoke_static(
+                    &origin,
+                    pool,
+                    types::VALUE,
+                    "strictEq",
+                    "(Lnts/rt/NtsValue;Lnts/rt/NtsValue;)Z",
+                );
+                if op == BinOp::Ne {
+                    code.const_int(&origin, pool, 1);
+                    code.bitwise(&origin, insn::XOR, Kind::Int);
+                }
+                return Ok(Some(Placed::OnStack));
+            }
             _ if op == BinOp::Concat => {
                 let origin = self.func.values[lhs.0 as usize].origin.clone();
                 self.load(code, lhs)?;
@@ -1077,6 +1222,9 @@ impl Emitter<'_> {
         let Test { compare, negate, lhs, rhs } = test;
         let origin = self.func.values[lhs.0 as usize].origin.clone();
         let kind = self.kind_of(lhs)?;
+        if *self.ty(lhs) == HirType::Erased || *self.ty(rhs) == HirType::Erased {
+            return self.branch_on_erased(code, pool, test, target, &origin);
+        }
         if matches!(self.ty(lhs), HirType::BigInt) {
             self.load(code, lhs)?;
             self.load(code, rhs)?;
@@ -1101,6 +1249,9 @@ impl Emitter<'_> {
         // runtime compared addresses here for as long as both backends existed,
         // which is the failure that made ordering-on-references a refusal in
         // this backend rather than an `if_acmp`.
+        if *self.ty(lhs) == HirType::Erased || *self.ty(rhs) == HirType::Erased {
+            return self.branch_on_erased(code, pool, test, target, &origin);
+        }
         if matches!(self.ty(lhs), HirType::BigInt) {
             self.load(code, lhs)?;
             self.load(code, rhs)?;
@@ -1536,7 +1687,17 @@ impl Emitter<'_> {
                     self.load(code, arg)?;
                 }
                 code.invoke_static(origin, pool, owner, member, descriptor);
+                let returns = descriptor.rsplit(')').next().unwrap_or("");
                 if matches!(result, HirType::Void) {
+                    // A helper whose answer nothing wants. `nts_map_set`
+                    // returns the map, because that is what `m.set(k, v)`
+                    // evaluates to, and a statement that ignores it leaves a
+                    // reference on the stack. C discards a return value for
+                    // free; the JVM has to say so.
+                    let words = nts_jvm_emitter::descriptor::words(returns);
+                    if words > 0 {
+                        code.pop(origin, words);
+                    }
                     return Ok(Placed::Stored);
                 }
                 // A helper that takes an array of references has to declare
@@ -1545,11 +1706,11 @@ impl Emitter<'_> {
                 // `Object[]` and the slot it is stored into is a `Foo[]`. The
                 // narrowing the middle end already proved has to be spelled for
                 // the verifier, which knows only what the descriptor said.
-                if let Some(want) = types::descriptor(self.program, result) {
-                    let returns = descriptor.rsplit(')').next().unwrap_or("");
-                    if want != returns && types::kind(result) == Some(Kind::Ref) {
-                        code.check_cast(origin, pool, &want);
-                    }
+                if let Some(want) = types::descriptor(self.program, result)
+                    && want != returns
+                    && types::kind(result) == Some(Kind::Ref)
+                {
+                    code.check_cast(origin, pool, &want);
                 }
                 return Ok(Placed::OnStack);
             }

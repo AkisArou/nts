@@ -61,6 +61,10 @@ pub fn class_name(layout: &Layout) -> String {
     jvm_class_name(&layout.name)
 }
 
+/// `Map` and `Set`, which are one table with the values left out of one of them.
+pub const MAP: &str = "nts/rt/NtsMap";
+pub const MAP_DESCRIPTOR: &str = "Lnts/rt/NtsMap;";
+
 /// The 128-bit integer, which the JVM has no primitive for.
 pub const BIGINT: &str = "nts/rt/NtsBigInt";
 pub const BIGINT_DESCRIPTOR: &str = "Lnts/rt/NtsBigInt;";
@@ -99,6 +103,13 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
         // `agrees_with_c` as the oracle because node's arbitrary precision is
         // not one.
         HirType::BigInt => BIGINT_DESCRIPTOR.to_owned(),
+        // One runtime class for both, and its keys and values are erased --
+        // which is why the payload types in `ManagedType::Map` are for the
+        // compiler rather than the runtime, exactly as that type's own comment
+        // says. This is not a monomorphization.
+        HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_)) => {
+            MAP_DESCRIPTOR.to_owned()
+        }
         // A bare JVM array, which is what a Java programmer writes and what the
         // hand-written reference will use. `arraylength` is one instruction,
         // the bounds check is mandatory *and* eliminated in a counted loop, and
@@ -124,7 +135,11 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
         HirType::Erased
         | HirType::BigInt
         | HirType::Managed(
-            ManagedType::Object(_) | ManagedType::String | ManagedType::Array(_),
+            ManagedType::Object(_)
+            | ManagedType::String
+            | ManagedType::Array(_)
+            | ManagedType::Map(..)
+            | ManagedType::Set(_),
         ) => Kind::Ref,
         HirType::Int { bits: 64, .. } => Kind::Long,
         // A `boolean` is an `int` everywhere except in a descriptor: there is
@@ -147,6 +162,9 @@ pub fn vtype(program: &Program, ty: &HirType) -> Option<VType> {
         Kind::Ref => match ty {
             HirType::Erased => VType::Object(VALUE.to_owned()),
             HirType::BigInt => VType::Object(BIGINT.to_owned()),
+            HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_)) => {
+                VType::Object(MAP.to_owned())
+            }
             HirType::Managed(ManagedType::String) => VType::Object(STRING.to_owned()),
             // An array's *class* constant is named by its descriptor rather
             // than by an internal name: `[D`, not `D` and not `L[D;`.
