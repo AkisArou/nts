@@ -67,6 +67,35 @@ four times, which is a JIT intrinsic.
 **Not the prologue.** The definite-assignment stores are once per call, and
 each call runs 50 x 100 bounces, so they are a five-thousandth of the work.
 
+## How much C2 does recover, which is the number that decides the fix
+
+The interpreter executes bytecode literally — nothing eliminated, nothing
+allocated to registers — so the same program run under `-Xint` measures
+**emitted bytecode volume**, and the compiled run measures **what survives
+C2**. The two together separate "I emit too much" from "C2 fails to clean it".
+
+| | nts (JVM) | Java, `double` fields | ratio |
+| --- | --- | --- | --- |
+| interpreted, `-Xint` | 661,828 ns/op | 222,861 ns/op | **2.97x** |
+| compiled | 8,040 ns/op | 5,521 ns/op | **1.46x** |
+
+Stable across 150, 300 and 900 operations — ratios 2.83, 2.87, 2.97, with the
+per-operation cost drifting under 7% — so this is not startup being amortised.
+
+**So C2 recovers a factor of about two, and it is the emitter that hands it
+2.9x the bytecode to start from.** Both halves of that matter and they point
+in opposite directions:
+
+- The round trip is *not* free, which is what this record is about.
+- But it is not full price either. A change that halved the emitted bytecode
+  would not halve the gap, because C2 is already recovering most of that
+  ground and would simply have less to recover.
+
+That is the number that decides whether slot reuse by live range is worth its
+cost — it buys back at most the residue, not the 2.9x — and it is why the
+honest next step is attribution rather than picking the most satisfying
+candidate from the list below.
+
 ## What is left, and why the C backend's answer did not transfer
 
 Record 0004 is about C, and `mem2reg` runs over an entire function with the
