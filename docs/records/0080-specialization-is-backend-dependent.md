@@ -43,31 +43,59 @@ buys no cheaper instruction and costs an `i2d` at every use. The published
 backend — 683.9 against 703.0. What is new is that the same choice is worth
 **−91%** for this one.
 
-## The general shape, which is the reason for the record
+## The general shape, and a correction to the first version of it
 
-A middle-end optimization is usually backend-independent: it either removes work
-or it does not. This one is not. It replaces one representation with another,
-and whether that is a win depends on what the *backend's* machine does with the
-conversions at the boundary — and clang makes them free here while C2 does not.
+The first draft of this record concluded that `specialize_numbers` is a property
+of the program **and the backend**. That is true and it is not the useful
+statement, and the sharper one came from the session that owns the pass.
 
-So `specialize_numbers` is not a property of the program. It is a property of
-the program **and the backend**, and the compiler currently models it as the
-first. That is invisible with two backends whose optimizer erases the
-difference, and it became visible the moment a third arrived without one.
+The question is not "which backend". It is **"do the operations reaching this
+value do integer arithmetic?"** — and that is backend-independent. Where the
+answer is no, narrowing the counter buys no cheaper instruction on *any* lane
+and generates a conversion at every use. C absorbs the conversions and the JVM
+does not, so only one lane pays; but the decision was already wrong for both.
+
+That distinction matters for where the fix belongs. "Ask the backend" would put
+a target property into a middle-end pass. "Ask whether anything does integer
+arithmetic with this" is a fact about the program that `hir::flow` and
+`hir::facts` are already most of the way to answering — they prove integrality
+and carry the interval, and what is missing is the use side.
+
+What the two backends made unfalsifiable is worth stating too: with both
+consumers erasing the difference, the decision was free when right and free when
+wrong, so nothing in the compiler could distinguish a good one from a bad one.
+A third consumer did not create the problem. It made the problem measurable.
 
 This is the second finding of the same shape in a day. The first was that every
 SSA value round-tripping through a local costs nothing in C because mem2reg
 removes it, and 28 of 39 instructions on the JVM. Both are the shared middle end
 being right about the work and wrong about who has to do it.
 
-## What this does not yet say
+## The mechanism: it is latency, not work
 
-*Why* C2 does not absorb the conversion is unmeasured. The candidates are the
-`i2d` landing on the dependency chain, the counted-loop recognition changing, or
-C2 declining an optimization it applies to the `f64` shape. Answering it needs
-`-XX:+PrintAssembly` with `hsdis`, which is not installed. **The decision below
-does not depend on the answer**, but the answer decides whether this is a row
-this backend can win back or one it has to route around.
+`perf stat` over the two paths, same harness, same class file:
+
+    path                     cycles    instructions      IPC
+    specialised int         2.858 G         2.627 G     0.92
+    unspecialised double    2.312 G         5.708 G     2.47
+
+**The double path executes 2.17x more instructions in fewer cycles.** That is
+the whole answer in one line: the specialised path is not doing more work, it is
+stalling. An IPC of 0.92 on a kernel with no memory traffic and a 0.02%
+branch-miss rate is a dependency chain, not a throughput limit.
+
+So the `i2d` conversions are not free instructions sitting beside the
+computation — they are *on* the critical path, feeding the `dmul` that feeds the
+accumulation. Removing the counter's narrowing removes them from the chain.
+
+This matters for whether the row is winnable. If the cost were extra
+instructions, a better emitter or a better C2 could absorb them. Latency on a
+loop-carried chain cannot be absorbed by anything downstream: the only fix is
+not to create the conversion, which is a decision made several passes earlier.
+
+Still unmeasured, and worth knowing before the pass changes: whether C2's
+counted-loop recognition also changes between the two shapes.
+`-XX:+PrintAssembly` needs `hsdis`, which is not installed.
 
 ## What follows
 
