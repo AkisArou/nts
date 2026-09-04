@@ -901,6 +901,28 @@ fn jvm_case(
 ) -> Result<Measured> {
     use std::fmt::Write as _;
 
+    // A case declares `rc` because the *native* lane needs it: `NoGc` never
+    // frees, so a run calibrated to a hundred milliseconds of work would
+    // measure page faults rather than code. This lane has a tracing collector
+    // underneath it and needs no such declaration -- and must not receive one,
+    // because a `Retain` reaching a host-collected object is RFC 13's second
+    // GC inside ART, which this backend refuses by name.
+    //
+    // Inheriting it meant six cases -- `map-and-set`, `pipeline`,
+    // `case-convert`, `node-utf8`, `array-mutations`, `array-predicates` --
+    // reported `refused` and were never timed here at all. That is not a
+    // missing feature; it is the harness asking for a configuration this lane
+    // is defined not to have, and then recording the refusal as the
+    // compiler's. `NtsMap` had no timing on this backend for that reason.
+    //
+    // `NoGc` here is not the native lane's `NoGc`. There, it means nothing is
+    // ever freed. Here, the platform frees, so it means *this compiler emits
+    // no reclamation of its own* -- which is the shipping configuration for
+    // this backend rather than a concession for a benchmark.
+    let provider = match provider {
+        hir::Provider::ReferenceCounting | hir::Provider::NoGc => hir::Provider::NoGc,
+    };
+
     let (callee, arguments) = workload(case)?;
     let program = prepared_program(tsconfig, entry, true, provider)?;
     let emitted = nts_codegen_jvm::emit(&program);
@@ -979,6 +1001,58 @@ fn jvm_case(
 /// unchanged, and it is what makes the checksum comparable across every column
 /// -- a variant that were fast because it computed something else would fail
 /// the runner's cross-variant check rather than win.
+/// Measure a `ref.java` sitting beside the case.
+///
+/// The contract mirrors `ref.cpp`'s exactly: the file declares
+/// `public final class Ref` with a `public static double benchRun()` that is
+/// self-contained -- it declares its own inputs, `volatile` for the reason the
+/// C++ one does, so a loop-invariant argument cannot let the JIT hoist the
+/// whole call out of the timed loop.
+///
+/// Compiled with `-nowarn` and run under the same flags and the same warmup as
+/// every other JVM column, because a reference measured differently from the
+/// thing it is a reference for is not one.
+fn handwritten_java(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+) -> Result<Measured> {
+    use std::fmt::Write as _;
+
+    let dir = out.join(format!("{name}.javaref"));
+    std::fs::create_dir_all(&dir)?;
+    let mut driver = String::from("public final class Case {\n");
+    let _ = writeln!(driver, "    public static void main(String[] argv) {{");
+    let _ = writeln!(driver, "        Bench.measure(new Bench.Work() {{");
+    let _ = writeln!(driver, "            @Override public double run() {{");
+    let _ = writeln!(driver, "                return Ref.benchRun();");
+    let _ = writeln!(driver, "            }}\n        }});\n    }}\n}}");
+    let driver_path = dir.join("Case.java");
+    std::fs::write(&driver_path, driver)?;
+
+    let compiled = std::process::Command::new(java_tool("javac"))
+        .arg("-nowarn")
+        .arg("-d")
+        .arg(dir.as_str())
+        .arg(case.join("ref.java").as_str())
+        .arg(root.join("benches/common/Bench.java").as_str())
+        .arg(driver_path.as_str())
+        .output()
+        .context("running javac over a hand-written Java reference")?;
+    if !compiled.status.success() {
+        bail!("javac: {}", String::from_utf8_lossy(&compiled.stderr));
+    }
+
+    measure(
+        std::process::Command::new(java_tool("java"))
+            .args(["-XX:+UseG1GC", "-Xms512m", "-Xmx512m", "-XX:-UsePerfData"])
+            .arg("-cp")
+            .arg(dir.as_str())
+            .arg("Case"),
+    )
+}
+
 fn java_reference(
     root: &Utf8Path,
     case: &Utf8Path,
@@ -986,6 +1060,20 @@ fn java_reference(
     name: &str,
 ) -> Result<Option<Measured>> {
     use std::fmt::Write as _;
+
+    // A hand-written Java implementation beside the case, which is the Java
+    // analogue of `ref.cpp` and takes precedence over the Are We Fast Yet
+    // lookup below.
+    //
+    // Without this the `Java` column could only exist for the eight cases that
+    // are ports of somebody else's suite, and the one ratio in this table that
+    // divides the runtime out -- our JVM output against a person's Java, on the
+    // same JVM in the same run -- was unavailable for every case this project
+    // wrote itself. `generator` is the first: a 3.2x against the LLVM backend
+    // says nothing about codegen, because it compares a JIT to a native binary.
+    if case.join("ref.java").exists() {
+        return handwritten_java(root, case, out, name).map(Some);
+    }
 
     let Some((_, class, override_iterations)) =
         JAVA_REFERENCES.iter().find(|(which, _, _)| *which == name)
