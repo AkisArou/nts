@@ -384,18 +384,46 @@ impl Code {
 
     /// One of the four-wide arithmetic families: `insn::ADD`, `SUB`, `MUL`,
     /// `DIV`, `REM`.
+    /// The arithmetic families are indexed by [`Kind`], and `Kind::Ref` is one
+    /// past the end of every one of them.
+    ///
+    /// `IADD` through `DADD` are consecutive and `Kind::Ref` is 4, so
+    /// `ADD + Ref` is the opcode *after* `DADD` -- a real instruction, from an
+    /// unrelated family, emitted silently. `NEG + Ref` is `ishl`, which is how
+    /// a negated bigint arrived at the verifier as "type `NtsBigInt` is not
+    /// assignable to integer" a hundred bytes from where it was produced.
+    ///
+    /// So the families refuse a reference rather than indexing past themselves.
+    /// There is no arithmetic instruction for a reference on this machine, and
+    /// an emitter asking for one has made a mistake that should not become
+    /// bytes.
+    fn arithmetic_kind(&mut self, kind: Kind) -> Option<u8> {
+        if kind == Kind::Ref {
+            self.fail(Error::BadDescriptor(
+                "an arithmetic instruction on a reference, which the JVM has none of".to_owned(),
+            ));
+            return None;
+        }
+        Some(kind as u8)
+    }
+
     pub fn arithmetic(&mut self, origin: &Origin, family: u8, kind: Kind) {
+        let Some(index) = self.arithmetic_kind(kind) else { return };
         let words = kind.words();
-        self.op(origin, family + kind as u8, words * 2, words);
+        self.op(origin, family + index, words * 2, words);
     }
 
     pub fn negate(&mut self, origin: &Origin, kind: Kind) {
+        let Some(index) = self.arithmetic_kind(kind) else { return };
         let words = kind.words();
-        self.op(origin, insn::NEG + kind as u8, words, words);
+        self.op(origin, insn::NEG + index, words, words);
     }
 
     /// One of the integral families: `insn::AND`, `OR`, `XOR`.
     pub fn bitwise(&mut self, origin: &Origin, family: u8, kind: Kind) {
+        if self.arithmetic_kind(kind).is_none() {
+            return;
+        }
         let words = kind.words();
         self.op(origin, family + u8::from(kind == Kind::Long), words * 2, words);
     }
@@ -403,6 +431,9 @@ impl Code {
     /// `insn::SHL`, `SHR` or `USHR`. The shift *count* is always an `int` even
     /// when the value is a `long`, which is why this cannot use `bitwise`.
     pub fn shift(&mut self, origin: &Origin, family: u8, kind: Kind) {
+        if self.arithmetic_kind(kind).is_none() {
+            return;
+        }
         let words = kind.words();
         self.op(origin, family + u8::from(kind == Kind::Long), words + 1, words);
     }

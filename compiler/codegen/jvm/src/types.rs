@@ -61,6 +61,10 @@ pub fn class_name(layout: &Layout) -> String {
     jvm_class_name(&layout.name)
 }
 
+/// The 128-bit integer, which the JVM has no primitive for.
+pub const BIGINT: &str = "nts/rt/NtsBigInt";
+pub const BIGINT_DESCRIPTOR: &str = "Lnts/rt/NtsBigInt;";
+
 /// The descriptor for a parameter, result or field.
 ///
 /// `None` is a type this backend cannot represent yet, which is a refusal by
@@ -88,6 +92,13 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
         // which erasing to a bare `Object` and testing with `instanceof` would
         // throw away.
         HirType::Erased => VALUE_DESCRIPTOR.to_owned(),
+        // Two `long`s in a `final class`, not `BigInteger`. This compiler's
+        // `bigint` is exactly 128 bits and refuses a literal that does not fit,
+        // so `BigInteger` would be *more* correct than the C lane -- and the
+        // two would then disagree on precisely the inputs that matter, with
+        // `agrees_with_c` as the oracle because node's arbitrary precision is
+        // not one.
+        HirType::BigInt => BIGINT_DESCRIPTOR.to_owned(),
         // A bare JVM array, which is what a Java programmer writes and what the
         // hand-written reference will use. `arraylength` is one instruction,
         // the bounds check is mandatory *and* eliminated in a counted loop, and
@@ -102,7 +113,7 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
         }
         // Strings, arrays, `Erased` and `BigInt` arrive in later steps.
         // Answering here would emit something for a type nothing implements.
-        HirType::Never | HirType::BigInt | HirType::Managed(_) => return None,
+        HirType::Never | HirType::Managed(_) => return None,
     })
 }
 
@@ -111,6 +122,7 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
 pub fn kind(ty: &HirType) -> Option<Kind> {
     Some(match ty {
         HirType::Erased
+        | HirType::BigInt
         | HirType::Managed(
             ManagedType::Object(_) | ManagedType::String | ManagedType::Array(_),
         ) => Kind::Ref,
@@ -120,7 +132,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
         HirType::Bool | HirType::Int { .. } => Kind::Int,
         HirType::Float { bits: 32 } => Kind::Float,
         HirType::Float { .. } => Kind::Double,
-        HirType::Void | HirType::Never | HirType::BigInt | HirType::Managed(_) => return None,
+        HirType::Void | HirType::Never | HirType::Managed(_) => return None,
     })
 }
 
@@ -134,6 +146,7 @@ pub fn vtype(program: &Program, ty: &HirType) -> Option<VType> {
         Kind::Double => VType::Double,
         Kind::Ref => match ty {
             HirType::Erased => VType::Object(VALUE.to_owned()),
+            HirType::BigInt => VType::Object(BIGINT.to_owned()),
             HirType::Managed(ManagedType::String) => VType::Object(STRING.to_owned()),
             // An array's *class* constant is named by its descriptor rather
             // than by an internal name: `[D`, not `D` and not `L[D;`.
@@ -154,8 +167,7 @@ pub fn vtype(program: &Program, ty: &HirType) -> Option<VType> {
 pub fn describe(ty: &HirType) -> String {
     match ty {
         HirType::Never => "a value of type `never`".to_owned(),
-        HirType::BigInt => "a bigint, which needs a 128-bit pair the JVM has no primitive for"
-            .to_owned(),
+        HirType::BigInt => "a bigint".to_owned(),
         HirType::Erased => "an erased value".to_owned(),
         HirType::Managed(ManagedType::String) => "a string".to_owned(),
         // The element, because the one message that most needs this is two
@@ -221,10 +233,28 @@ mod tests {
 
     #[test]
     fn what_this_slice_does_not_represent_says_so() {
-        for ty in [HirType::BigInt, HirType::Never] {
-            assert_eq!(descriptor(&empty(), &ty), None, "{ty:?}");
-        }
+        assert_eq!(descriptor(&empty(), &HirType::Never), None);
         assert_eq!(descriptor(&empty(), &HirType::Void).as_deref(), Some("V"));
         assert_eq!(kind(&HirType::Void), None, "void has no computational kind");
+    }
+
+    /// A bigint is a reference on this backend, which is the whole of what
+    /// makes it work: there is no 128-bit primitive, so it is a two-field
+    /// object and every operation on one is a call.
+    ///
+    /// Pinned because the alternative that suggests itself -- `BigInteger` --
+    /// would be *more* correct than the C lane rather than equal to it. This
+    /// compiler's bigint is exactly 128 bits and refuses a literal that does
+    /// not fit, so arbitrary precision would disagree with the other backends
+    /// on precisely the inputs that matter, and `agrees_with_c` is the oracle
+    /// here because node's `BigInt` is not one.
+    #[test]
+    fn a_bigint_is_a_reference_to_two_longs() {
+        assert_eq!(descriptor(&empty(), &HirType::BigInt).as_deref(), Some(BIGINT_DESCRIPTOR));
+        assert_eq!(kind(&HirType::BigInt), Some(Kind::Ref));
+        assert_eq!(
+            vtype(&empty(), &HirType::BigInt),
+            Some(VType::Object(BIGINT.to_owned()))
+        );
     }
 }

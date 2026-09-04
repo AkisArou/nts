@@ -78,6 +78,33 @@ fn convert_kind(
     Some(())
 }
 
+/// A binary operation between two bigints, as the runtime method that does it.
+///
+/// `Eq` and `Ne` share one -- `Ne` is `eq` and an `ixor` with 1, the same shape
+/// the string and erased comparisons use. Ordering is not here: it goes through
+/// `compare` and a branch, because a comparison that feeds a branch should not
+/// materialize a boolean first.
+fn bigint_operation(op: BinOp) -> Option<(&'static str, &'static str)> {
+    const BINARY: &str = "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
+    const PREDICATE: &str = "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)Z";
+    Some(match op {
+        BinOp::Add => ("add", BINARY),
+        BinOp::Sub => ("sub", BINARY),
+        BinOp::Mul => ("mul", BINARY),
+        BinOp::Div => ("div", BINARY),
+        BinOp::Rem => ("rem", BINARY),
+        BinOp::BitAnd => ("and", BINARY),
+        BinOp::BitOr => ("or", BINARY),
+        BinOp::BitXor => ("xor", BINARY),
+        BinOp::Shl => ("shl", BINARY),
+        BinOp::Shr => ("shr", BINARY),
+        BinOp::Eq | BinOp::Ne => ("eq", PREDICATE),
+        _ => return None,
+    })
+}
+
+const BIGINT_BINARY: &str = "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
+const BIGINT_BITS: &str = "(DLnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
 const STRING_STRING_TO_D: &str = "(Ljava/lang/String;Ljava/lang/String;)D";
 const STRING_STRING_TO_Z: &str = "(Ljava/lang/String;Ljava/lang/String;)Z";
 const STRING_DD_TO_STRING: &str = "(Ljava/lang/String;DD)Ljava/lang/String;";
@@ -138,6 +165,13 @@ fn external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
         "nts_str_replace_all" => (RUNTIME, "strReplaceAll", STRING_STRING_STRING_TO_STRING),
 
         "nts_number_to_string" => (RUNTIME, "numberToString", "(D)Ljava/lang/String;"),
+
+        "nts_bigint_from_number" => (types::BIGINT, "fromNumber", "(D)Lnts/rt/NtsBigInt;"),
+        "nts_bigint_to_string" => (types::BIGINT, "toText", "(Lnts/rt/NtsBigInt;)Ljava/lang/String;"),
+        "nts_bigint_shl" => (types::BIGINT, "shl", BIGINT_BINARY),
+        "nts_bigint_shr" => (types::BIGINT, "shr", BIGINT_BINARY),
+        "nts_bigint_as_intn" => (types::BIGINT, "asIntN", BIGINT_BITS),
+        "nts_bigint_as_uintn" => (types::BIGINT, "asUintN", BIGINT_BITS),
         "nts_string_from_char_code" => {
             (RUNTIME, "stringFromCharCode", "(D)Ljava/lang/String;")
         }
@@ -753,6 +787,19 @@ impl Emitter<'_> {
     ) -> Result<Placed, Diagnostic> {
         match kind {
             OpKind::ConstBool(flag) => code.const_int(origin, pool, i32::from(*flag)),
+            OpKind::ConstInt(number) if matches!(ty, HirType::BigInt) => {
+                // The two halves, and the cast is the *point*: a 128-bit
+                // literal is exactly a pair of `long`s in two's complement, and
+                // truncating to the low 64 bits is how you get the low half.
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    reason = "the two halves of a 128-bit value are its low and high 64 bits"
+                )]
+                let (hi, lo) = ((*number >> 64) as i64, *number as i64);
+                code.const_long(origin, pool, hi);
+                code.const_long(origin, pool, lo);
+                code.invoke_static(origin, pool, types::BIGINT, "of", "(JJ)Lnts/rt/NtsBigInt;");
+            }
             OpKind::ConstInt(number) => match types::kind(ty) {
                 Some(Kind::Long) => {
                     let Ok(narrow) = i64::try_from(*number) else {
@@ -846,6 +893,26 @@ impl Emitter<'_> {
         lhs: ValueId,
         rhs: ValueId,
     ) -> Result<Option<Placed>, Diagnostic> {
+        // A bigint is a reference on this backend, so every operation on one
+        // is a call rather than an instruction. `hir::verify` has already
+        // checked that both sides are bigints.
+        if matches!(self.ty(lhs), HirType::BigInt) {
+            let Some((name, signature)) = bigint_operation(op) else {
+                return Err(refuse(
+                    self.func,
+                    &format!("a `{op:?}` between two bigints, which has no 128-bit form here"),
+                ));
+            };
+            let origin = self.func.values[lhs.0 as usize].origin.clone();
+            self.load(code, lhs)?;
+            self.load(code, rhs)?;
+            code.invoke_static(&origin, pool, types::BIGINT, name, signature);
+            if op == BinOp::Ne {
+                code.const_int(&origin, pool, 1);
+                code.bitwise(&origin, insn::XOR, Kind::Int);
+            }
+            return Ok(Some(Placed::OnStack));
+        }
         let equality = matches!(op, BinOp::Eq | BinOp::Ne);
         let (owner, name, signature) = match self.ty(lhs) {
             HirType::Managed(ManagedType::String) if equality => (
@@ -1010,6 +1077,20 @@ impl Emitter<'_> {
         let Test { compare, negate, lhs, rhs } = test;
         let origin = self.func.values[lhs.0 as usize].origin.clone();
         let kind = self.kind_of(lhs)?;
+        if matches!(self.ty(lhs), HirType::BigInt) {
+            self.load(code, lhs)?;
+            self.load(code, rhs)?;
+            code.invoke_static(
+                &origin,
+                pool,
+                types::BIGINT,
+                "compare",
+                "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)I",
+            );
+            let test = if negate { compare.inverted() } else { compare };
+            code.branch_zero(&origin, test, target);
+            return Ok(());
+        }
         // `a < b` on two strings is lexicographic by UTF-16 code unit, and
         // `String.compareTo` is that rule exactly -- it compares `char` by
         // `char`, and a Java `char` is a code unit. So this is one of the
@@ -1020,6 +1101,20 @@ impl Emitter<'_> {
         // runtime compared addresses here for as long as both backends existed,
         // which is the failure that made ordering-on-references a refusal in
         // this backend rather than an `if_acmp`.
+        if matches!(self.ty(lhs), HirType::BigInt) {
+            self.load(code, lhs)?;
+            self.load(code, rhs)?;
+            code.invoke_static(
+                &origin,
+                pool,
+                types::BIGINT,
+                "compare",
+                "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)I",
+            );
+            let test = if negate { compare.inverted() } else { compare };
+            code.branch_zero(&origin, test, target);
+            return Ok(());
+        }
         if matches!(self.ty(lhs), HirType::Managed(ManagedType::String)) {
             self.load(code, lhs)?;
             self.load(code, rhs)?;
@@ -1109,6 +1204,19 @@ impl Emitter<'_> {
             // answer that is a plausible number rather than a crash.
             //
             // `examples/mathops` reported -32768 where node says 32768.
+            // A bigint has no `ineg`; negation is a call like every other
+            // operation on one.
+            UnOp::Neg if matches!(result, HirType::BigInt) => {
+                self.load(code, operand)?;
+                code.invoke_static(
+                    &origin,
+                    pool,
+                    types::BIGINT,
+                    "neg",
+                    "(Lnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;",
+                );
+                Kind::Ref
+            }
             UnOp::Neg => {
                 self.push_as(code, operand, kind, &origin)?;
                 code.negate(&origin, kind);
@@ -1315,6 +1423,48 @@ impl Emitter<'_> {
         to: &HirType,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
+        // A bigint is a reference here and a 128-bit integer everywhere else,
+        // so neither direction is an opcode. `BigInt(x)` on a non-integer is a
+        // `RangeError` in the language and a refusal here, which is why it goes
+        // through the runtime rather than being a cast.
+        if matches!(from, HirType::BigInt) || matches!(to, HirType::BigInt) {
+            let (name, signature) = match (from, to) {
+                (HirType::BigInt, HirType::Float { .. }) => {
+                    ("toNumber", "(Lnts/rt/NtsBigInt;)D")
+                }
+                (HirType::Float { .. }, HirType::BigInt) => {
+                    ("fromNumber", "(D)Lnts/rt/NtsBigInt;")
+                }
+                // A boolean is an `int` here and converts to `1n` or `0n`; an
+                // integer of any width widens the same way.
+                (HirType::Bool | HirType::Int { .. }, HirType::BigInt) => {
+                    let have = types::kind(from)
+                        .ok_or_else(|| refuse(self.func, "a conversion from an unrepresentable type"))?;
+                    convert_kind(code, origin, have, Kind::Long).ok_or_else(|| {
+                        refuse(self.func, "an integer that does not widen to 64 bits")
+                    })?;
+                    ("fromLong", "(J)Lnts/rt/NtsBigInt;")
+                }
+                _ => {
+                    return Err(refuse(
+                        self.func,
+                        &format!(
+                            "a conversion between {} and {}",
+                            types::describe(from),
+                            types::describe(to)
+                        ),
+                    ));
+                }
+            };
+            // The operand arrives in whatever width the middle end chose; the
+            // helper takes a `double`, which is the same both-ends rule the
+            // subscripts and the lengths keep.
+            if matches!(from, HirType::Float { bits: 32 }) {
+                code.convert(origin, insn::F2D, Kind::Float, Kind::Double);
+            }
+            code.invoke_static(origin, pool, types::BIGINT, name, signature);
+            return Ok(());
+        }
         let source = types::kind(from)
             .ok_or_else(|| refuse(self.func, "a conversion from an unrepresentable type"))?;
         let target = types::kind(to)
