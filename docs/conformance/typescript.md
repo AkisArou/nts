@@ -100,7 +100,8 @@ counter, not by reading the emitted C.
 | ✅ | member access | `o.x`, `o["x"]`, `o[0]` |
 | ✅ | `new` | user classes, `Array`, typed arrays |
 | ✅ | `??` | the absence test, not the truthiness one — `0 ?? 1` is `0` |
-| ✗ | `??=`, `\|\|=`, `&&=` | |
+| ✅ | `??=`, `\|\|=`, `&&=` | a test and a store that happens on one path only, not `a = a \|\| b`. The right operand is evaluated inside the arm, so `a \|\|= f()` does not call `f` when `a` is truthy; the target is lowered once, so `xs[next()] ??= 1` calls `next` once. `??=` asks the absence question and `\|\|=` the truthiness one — `n \|\|= 1` overwrites a `0` and `n ??= 1` does not |
+| ✗ | `??=`, `\|\|=`, `&&=` **through an accessor** | reads the getter and writes the setter, and the place knows only the setter. Refused and named; a plain `o.x = v` is unaffected |
 | ✅ | `?.`, `?.()`, `?.[]` | member, call and index, through either absence or both. Two *optional* links chain — each tests its own receiver — and a **non**-optional link after an optional one is refused and named |
 | ✗ | a nested object literal assigned where an **optional** property is declared | it gets its own anonymous type, laid out with a pointer where the declared one has a tagged value, and reading it back **segfaults**. Pre-existing; see the anonymous-type row in §4 |
 | ◐ | spread | every shape of it in an **array literal** works — `[...a]` is a copy, and `[...a, x, ...b]` sums the lengths before allocating; `f(...a)` and `{...o}` do not |
@@ -1814,7 +1815,8 @@ above are refused.
 | ✅ | `ToInt32`, `ToUint32` — the bitwise operators |
 | ✅ | `ToIntegerOrInfinity`, `ToLength`, `ToIndex` — array bounds |
 | ✅ | `ToUint8`/`ToInt8`/`ToUint16`… — storing into a typed array |
-| ✅ | strict equality, relational comparison on numbers and strings |
+| ✅ | strict equality on numbers and strings |
+| ✅ | relational comparison — `<` `<=` `>` `>=` — on numbers, and on strings by UTF-16 **code unit** | not `strcmp` and not `memcmp`: a narrow and a wide string compare a byte against a code unit, and above the BMP code-unit order disagrees with code-point order — `"\u{1F600}" < "\uFFFD"` is true because the leading surrogate is 0xD83D. This row read ✅ while both backends compared **addresses**; the sweep had no cell for a relational operator, and now has one |
 | ◐ | `ToNumber` — from a numeric string is refused (`Number("1")`) |
 | ✗ | `ToPrimitive`, `OrdinaryToPrimitive` — `valueOf`/`toString` dispatch |
 | ✗ | `SameValue`, `SameValueZero` — wanted by `Object.is`, `Map`, `Set`, `includes` |

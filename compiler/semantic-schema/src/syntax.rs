@@ -41,6 +41,18 @@ pub const GREATER_THAN_GREATER_THAN_GREATER_THAN_EQUALS_TOKEN: u16 = 72;
 pub const AMPERSAND_EQUALS_TOKEN: u16 = 73;
 pub const BAR_EQUALS_TOKEN: u16 = 74;
 pub const CARET_EQUALS_TOKEN: u16 = 78;
+
+// Logical assignment, which is not compound assignment however much the
+// spelling suggests it: `a += b` always writes, `a ||= b` writes only when the
+// test says to. That difference is observable -- through a setter, and through
+// the release a counted store performs on the value already there -- so they
+// are lowered apart rather than folded into `compound_operator`.
+//
+// The three sit *between* the compound tokens rather than after them, which is
+// what the gap between 74 and 78 above always was.
+pub const BAR_BAR_EQUALS_TOKEN: u16 = 75;
+pub const AMPERSAND_AMPERSAND_EQUALS_TOKEN: u16 = 76;
+pub const QUESTION_QUESTION_EQUALS_TOKEN: u16 = 77;
 pub const MINUS_TOKEN: u16 = 40;
 pub const ASTERISK_TOKEN: u16 = 41;
 pub const ASTERISK_ASTERISK_TOKEN: u16 = 42;

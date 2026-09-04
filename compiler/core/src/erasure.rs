@@ -810,7 +810,15 @@ impl Walk<'_> {
             // variable declaration -- and a module-scope `let` assigned from a
             // parameter is how a value most often leaves the function that
             // received it.
-            syntax::EQUALS_TOKEN if siblings.first().copied() != Some(id) => {
+            // The right operand of *any* assignment lands in the target, so
+            // `=` and the three logical forms are followed the same way. They
+            // differ only in what happens to the target, below.
+            syntax::EQUALS_TOKEN
+            | syntax::BAR_BAR_EQUALS_TOKEN
+            | syntax::AMPERSAND_AMPERSAND_EQUALS_TOKEN
+            | syntax::QUESTION_QUESTION_EQUALS_TOKEN
+                if siblings.first().copied() != Some(id) =>
+            {
                 match siblings.first().copied() {
                     Some(target) if self.kind_of(target) == Some(syntax::IDENTIFIER) => {
                         self.lands_in_binding(target, known)
@@ -827,6 +835,15 @@ impl Walk<'_> {
             syntax::AMPERSAND_AMPERSAND_TOKEN | syntax::BAR_BAR_TOKEN => {
                 Use::Says(Verdict::Examined, "used for its truthiness".to_owned())
             }
+            // The target of `a ||= b` is read to decide whether the write
+            // happens, which is the truthiness answer above rather than the
+            // "assigned to, not read" one `=` gets.
+            syntax::BAR_BAR_EQUALS_TOKEN
+            | syntax::AMPERSAND_AMPERSAND_EQUALS_TOKEN
+            | syntax::QUESTION_QUESTION_EQUALS_TOKEN => Use::Says(
+                Verdict::Examined,
+                "read to decide whether the assignment happens".to_owned(),
+            ),
             _ => Use::Says(Verdict::Examined, "an operand of an operator".to_owned()),
         }
     }

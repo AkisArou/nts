@@ -694,17 +694,39 @@ fn string_comparison(
     lhs: ValueId,
     rhs: ValueId,
 ) -> Option<String> {
-    if !matches!(bin, BinOp::Eq | BinOp::Ne)
-        || !matches!(
-            func.values[lhs.0 as usize].ty,
-            HirType::Managed(ManagedType::String)
-        )
-    {
+    if !matches!(
+        func.values[lhs.0 as usize].ty,
+        HirType::Managed(ManagedType::String)
+    ) {
         return None;
     }
-    let negate = if matches!(bin, BinOp::Ne) { "!" } else { "" };
+    // `===` stops at the first difference and never has to order anything, so
+    // it stays its own call.
+    if matches!(bin, BinOp::Eq | BinOp::Ne) {
+        let negate = if matches!(bin, BinOp::Ne) { "!" } else { "" };
+        return Some(format!(
+            "{name} = {negate}nts_string_eq({}, {});",
+            value_name(lhs),
+            value_name(rhs)
+        ));
+    }
+    // The four relational operators are one code-unit comparison against zero.
+    //
+    // This half of the rule was missing. `===` went through `nts_string_eq`
+    // and `<` fell through to the C operator, which compared the two
+    // *addresses* -- so `"a" < "b"` answered whatever the allocator had done
+    // that run, and `("a" + "b") <= "ab"` was false for two strings the
+    // language calls equal. The same shape as the `icmp eq` on pointers in
+    // record 0044: one half written, the other never.
+    let operator = match bin {
+        BinOp::Lt => "<",
+        BinOp::Le => "<=",
+        BinOp::Gt => ">",
+        BinOp::Ge => ">=",
+        _ => return None,
+    };
     Some(format!(
-        "{name} = {negate}nts_string_eq({}, {});",
+        "{name} = nts_string_cmp({}, {}) {operator} 0;",
         value_name(lhs),
         value_name(rhs)
     ))

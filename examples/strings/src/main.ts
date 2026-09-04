@@ -354,3 +354,41 @@ export function scannedEdges(n: number): number {
     text.indexOf("b", -5)
   );
 }
+
+// Relational comparison, which orders by UTF-16 code unit.
+//
+// Both backends compared the two *addresses* until the sweep grew a cell for
+// it: `===` had `nts_string_eq` and `<` had nothing, so `"a" < "b"` answered
+// whatever the allocator had done. The sweep is where the general check lives;
+// these are here because §9 claimed this worked and no example asked.
+export function ordered(n: number): number {
+  const a = n > 2 ? "apple" : "zebra";
+  return (a < "mango" ? 1 : 0) + (a > "mango" ? 2 : 0);
+}
+
+// Equal contents, two allocations. The pair `nts_string_eq` exists for, asked
+// of the operators that never got it.
+export function equalButBuilt(n: number): number {
+  const built = "ab" + (n > 2 ? "c" : "c");
+  return (
+    (built < "abc" ? 1 : 0) +
+    (built <= "abc" ? 2 : 0) +
+    (built > "abc" ? 4 : 0) +
+    (built >= "abc" ? 8 : 0)
+  );
+}
+
+// A prefix sorts before its extension, and upper case sorts below lower --
+// 'Z' is 90 and 'a' is 97.
+export function prefixAndCase(n: number): number {
+  const short = n > 2 ? "ab" : "Z";
+  return (short < "abc" ? 1 : 0) + (short < "a" ? 2 : 0);
+}
+
+// Above the BMP, where the rule and its plausible neighbour disagree. Compared
+// by code unit the surrogate 0xD83D sorts below 0xFFFD; by code point 0x1F600
+// would sort above it.
+export function aboveTheBmp(n: number): number {
+  const wide = n > 2 ? "\u{1F600}" : "a";
+  return wide < "\uFFFD" ? 1 : 0;
+}

@@ -931,6 +931,7 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_round_fn",
     "nts_str_char_code_at_fn",
     "nts_str_char_code_at_int_fn",
+    "nts_string_cmp",
     "nts_string_eq",
     "nts_string_truthy",
     "nts_to_int32_fn",
@@ -963,6 +964,58 @@ fn string_equality(out: &str, bin: BinOp, lhs: ValueId, rhs: ValueId) -> String 
         format!("{out} = add i1 {same}, 0")
     };
     format!("{call}\n  {answer}")
+}
+
+/// The two rules for a binary operator on strings, which share a guard.
+///
+/// `None` where the operands are not two present strings, which is the caller's
+/// signal to fall through to the ordinary arithmetic path. The absent test has
+/// to come first for the reason `absent_reference` gives: `s === null` asks
+/// about the pointer, and reading contents through it would be reading through
+/// the null one.
+fn string_binary(
+    func: &Func,
+    out: &str,
+    bin: BinOp,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> Option<String> {
+    if func.values[lhs.0 as usize].ty != HirType::Managed(nts_core::hir::ManagedType::String)
+        || absent(func, lhs)
+        || absent(func, rhs)
+    {
+        return None;
+    }
+    match bin {
+        BinOp::Eq | BinOp::Ne => Some(string_equality(out, bin, lhs, rhs)),
+        BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => Some(string_ordering(out, bin, lhs, rhs)),
+        _ => None,
+    }
+}
+
+/// `a < b` and its three siblings on two strings, which order by code unit.
+///
+/// The C operator here would compare the two *addresses*, which is what both
+/// backends did until the sweep grew a cell for it. See the runtime's
+/// `nts_string_cmp` for why the answer is neither `strcmp` nor `memcmp`: the
+/// two sides may be different widths, and the language orders by UTF-16 code
+/// unit rather than by code point.
+fn string_ordering(out: &str, bin: BinOp, lhs: ValueId, rhs: ValueId) -> String {
+    let order = format!("{out}.cmp");
+    let call = format!(
+        "{order} = call i32 @nts_string_cmp(ptr {}, ptr {})",
+        name(lhs),
+        name(rhs)
+    );
+    // Signed, because the runtime answers like `memcmp`: negative, zero or
+    // positive rather than a three-valued enumeration.
+    let predicate = match bin {
+        BinOp::Lt => "slt",
+        BinOp::Le => "sle",
+        BinOp::Gt => "sgt",
+        _ => "sge",
+    };
+    format!("{call}\n  {out} = icmp {predicate} i32 {order}, 0")
 }
 
 /// Whether a value is the absent reference, written as a constant.
@@ -1558,18 +1611,12 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
         //
         // The C backend has had `nts_string_eq` here since it had strings; this
         // is the second half of that rule, arriving late.
-        OpKind::Binary {
-            op: bin @ (BinOp::Eq | BinOp::Ne),
-            lhs,
-            rhs,
-        } if func.values[lhs.0 as usize].ty
-            == HirType::Managed(nts_core::hir::ManagedType::String)
-            && !absent(func, *lhs)
-            && !absent(func, *rhs) =>
-        {
-            string_equality(&out, *bin, *lhs, *rhs)
-        }
-        OpKind::Binary { op: bin, lhs, rhs } => arithmetic(func, &out, *bin, *lhs, *rhs)?,
+        // Both string rules share one precondition, so they are one arm and
+        // one helper: a managed operand, and neither side the absent
+        // reference. Splitting them was what pushed `operation` over its line
+        // limit, and the guard was written twice to do it.
+        OpKind::Binary { op: bin, lhs, rhs } => string_binary(func, &out, *bin, *lhs, *rhs)
+            .map_or_else(|| arithmetic(func, &out, *bin, *lhs, *rhs), Ok)?,
         OpKind::Unary { op: un, operand } => unary(func, &out, value, *un, *operand)?,
         // A representation change specialization decided on. The C backend
         // spells it as a cast; LLVM makes the direction explicit, which is the

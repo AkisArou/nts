@@ -629,6 +629,23 @@ void nts_bounds(double index, uint32_t length);
 NTS_ALLOCATES NtsString *nts_concat(const NtsString *a, const NtsString *b);
 bool nts_string_eq(const NtsString *a, const NtsString *b);
 
+/* Relational comparison, as `memcmp` reports it: negative, zero or positive.
+ *
+ * The four operators `<` `<=` `>` `>=` are this answer against zero, which is
+ * one rule written once rather than four. `!(a > b)` is `a <= b` here because
+ * neither side can be absent -- the reasoning that does *not* survive on
+ * doubles, where NaN makes both false at once.
+ *
+ * Not `strcmp` and not `memcmp` on the storage, for two independent reasons.
+ * A narrow string holds one byte per code unit and a wide one holds two, so a
+ * mixed pair compares a byte against a `uint16_t` and the bytes are not
+ * comparable at all. And the language orders by UTF-16 **code unit**, so above
+ * the BMP the answer differs from code-point order: `"\u{1F600}"` leads with
+ * the surrogate 0xD83D, which is below 0xFFFD, so it sorts *before* it even
+ * though its code point is far above.
+ */
+int nts_string_cmp(const NtsString *a, const NtsString *b);
+
 /* String methods.
  *
  * Every one of these is defined over UTF-16 code units, which is what a

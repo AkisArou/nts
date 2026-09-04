@@ -3371,6 +3371,33 @@ bool nts_string_eq(const NtsString *a, const NtsString *b) {
   return true;
 }
 
+int nts_string_cmp(const NtsString *a, const NtsString *b) {
+  if (a == b) {
+    return 0;
+  }
+  uint32_t shared = a->length < b->length ? a->length : b->length;
+  int a_wide = (a->flags & NTS_TWO_BYTE) != 0;
+  int b_wide = (b->flags & NTS_TWO_BYTE) != 0;
+  /* Code unit by code unit, and never on the storage: the two sides may be
+   * different widths, and a byte is not a `uint16_t`. Widening one side to
+   * compare would allocate, and a comparison must not. */
+  for (uint32_t i = 0; i < shared; i++) {
+    uint16_t left = a_wide ? NTS_ELEMENTS(a, uint16_t)[i]
+                           : (uint16_t)NTS_ELEMENTS(a, unsigned char)[i];
+    uint16_t right = b_wide ? NTS_ELEMENTS(b, uint16_t)[i]
+                            : (uint16_t)NTS_ELEMENTS(b, unsigned char)[i];
+    if (left != right) {
+      return left < right ? -1 : 1;
+    }
+  }
+  /* Every shared unit agreed, so a prefix sorts before its extension and two
+   * strings of the same length are equal. */
+  if (a->length == b->length) {
+    return 0;
+  }
+  return a->length < b->length ? -1 : 1;
+}
+
 /* --- Map and Set (one table) ----------------------------------------------
  *
  * JavaScript's `Map` and `Set` iterate in insertion order, which is observable

@@ -1,5 +1,21 @@
 # 0013 — What a substring costs, and what a view would be worth
 
+> **The number below is retired. `substrings` is 0.92x today, not 6.64x.**
+>
+> Records 0059 and 0062 closed it: `nts_str_substring_into` writes into frame
+> storage, and `hir::substring` declines to build a substring at all where every
+> use of it asks only for its length or one of its characters. What this record
+> decomposes is a gap that no longer exists.
+>
+> Left in place rather than deleted, because the decomposition is still the
+> right way to take a row apart and three quarters of it turned out not to be
+> the thing it looked like -- which is the lesson, and it survives the number.
+> But the headline was being cited in 2026 as evidence of a large
+> reference-counting overhead still sitting in the table, and there is not one:
+> the `(rc)` rows read `objects` 1.00x, `pipeline` 0.93x, `map-and-set` 0.54x,
+> `case-convert` 0.41x. A reader who finds this record first and stops here
+> concludes the opposite of what the table says.
+
 Every benchmark in the suite sits between 0.43x and 1.85x of hand-written C++.
 Slicing sits at 6.64x, which makes it the largest single gap in the project —
 and slicing is what a parser, a tokenizer, and a CSV reader do all day.

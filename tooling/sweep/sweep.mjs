@@ -404,6 +404,65 @@ for (const [id, expr] of BIGINT) {
   out.push("");
 }
 
+// The eighth: relational comparison, which is four operators and was swept for
+// none of them.
+//
+// `a < b` on two strings reached both backends as a comparison of two
+// *addresses*, so it answered whatever the allocator had done. `===` was
+// correct the whole time, because `nts_string_eq` was written and its
+// relational siblings were not -- half a rule, and the missing half had no
+// cell here to fall into. That is the argument this file is built on, turned
+// on the file itself: every correctness bug found by hand has been one cell of
+// a product, and this was a cell the product did not have.
+//
+// All four operators in one cell, because the interesting failures disagree
+// with `===` rather than with each other, and a cell that asks only `<` cannot
+// see a `<=` that forgot its equal case.
+const RELATIONAL = [
+  // Ordered both ways, so a comparison that answers a constant is caught.
+  ["str_ordered", "string", '(n > 0 ? "a" : "b")', '"b"'],
+  ["str_reversed", "string", '(n > 0 ? "b" : "a")', '"a"'],
+  // Equal content, two allocations. The pair `nts_string_eq` exists for, asked
+  // of the operators that never got it: `"a" + "b"` and `"ab"` are one string
+  // to the language and two objects to the runtime.
+  ["str_equal_built", "string", '("a" + (n > 0 ? "b" : "b"))', '"ab"'],
+  // A prefix against its extension. `"a" < "ab"` is true and no length
+  // comparison alone gets there.
+  ["str_prefix", "string", '(n > 0 ? "ab" : "a")', '"a"'],
+  // Upper case sorts below lower: 'Z' is 90 and 'a' is 97. A comparison that
+  // folded case would answer this backwards.
+  ["str_case", "string", '(n > 0 ? "Z" : "a")', '"a"'],
+  // Above the BMP, where the answer distinguishes the rule from its neighbour.
+  // The language compares UTF-16 *code units*: "\u{1F600}" leads with the
+  // surrogate 0xD83D, which is below 0xFFFD, so it sorts first. Compared by
+  // code *point* -- 0x1F600 against 0xFFFD -- it sorts last. Both are
+  // defensible readings of "compare the strings" and only one is JavaScript.
+  ["str_above_bmp", "string", '(n > 0 ? "\\u{1F600}" : "a")', '"\\uFFFD"'],
+  // A wide string against a narrow one, which is the representation seam:
+  // these cannot be compared byte against byte whatever the rule.
+  ["str_wide_narrow", "string", '(n > 0 ? "\\u00ff" : "\\u0100")', '"a"'],
+  ["num_ordered", "number", "n", "0"],
+  // NaN makes every one of the four false, which is the property that makes
+  // `!(a > b)` and `a <= b` different predicates. A backend that implements
+  // one as the negation of the other answers this wrong and nothing else.
+  ["num_nan", "number", "((n - n) / (n - n))", "0"],
+  ["big_ordered", "bigint", "(n > 0 ? 1n : 3n)", "2n"],
+  ["bool_ordered", "boolean", "(n > 0)", "false"],
+];
+
+for (const [id, ts, x, y] of RELATIONAL) {
+  count++;
+  out.push(`export function rel_${id}(n: number): string {`);
+  out.push(`  const x: ${ts} = ${x};`);
+  out.push(`  const y: ${ts} = ${y};`);
+  out.push(
+    `  return (x < y ? "T" : "F") + (x <= y ? "T" : "F") + ` +
+      `(x > y ? "T" : "F") + (x >= y ? "T" : "F");`,
+  );
+  out.push(`}`);
+  out.push("");
+}
+
 // A boolean as text used to be written out here in the three spellings that
 // reach it. The `text` ask now does that for every kind, including this one.
 

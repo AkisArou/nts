@@ -58,3 +58,29 @@ export function readsATypedArrayBuffer(): number {
 export function callsAMethodOnATypedArray(): number {
   return new Uint8Array(4).indexOf(7);
 }
+
+// A logical assignment through an accessor reads the getter and writes the
+// setter, and the place this lowering builds knows only the setter. Refused
+// rather than guessed at, and refused in those words: `??=` is not a compound
+// assignment, so the message that used to say so was naming a construct this
+// file does not contain.
+//
+// A plain `gauge.level = 1` is fine and does not come this way, which is what
+// makes the gap narrower than it reads.
+class Gauge {
+  private held = 0;
+
+  get level(): number {
+    return this.held;
+  }
+
+  set level(v: number) {
+    this.held = v;
+  }
+}
+
+export function nullishThroughAnAccessor(n: number): number {
+  const g = new Gauge();
+  g.level ||= n;
+  return g.level;
+}

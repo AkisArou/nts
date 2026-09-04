@@ -6140,7 +6140,15 @@ impl<'a> FuncBuilder<'a> {
                 match children.as_slice() {
                     [target, operator, _] => {
                         let token = self.kind_of(*operator).unwrap_or(0);
-                        if token == syntax::EQUALS_TOKEN || compound_operator(token).is_some() {
+                        // A logical assignment writes on only one path, but
+                        // "assigned anywhere in this subtree" is the question
+                        // here, and a conditional write is still a write: the
+                        // header needs the parameter or the merge has nothing
+                        // to carry the updated value through.
+                        if token == syntax::EQUALS_TOKEN
+                            || compound_operator(token).is_some()
+                            || logical_assignment(token).is_some()
+                        {
                             Some(*target)
                         } else {
                             None
@@ -9052,7 +9060,11 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
-    /// What a place currently holds. Only a compound assignment and a step ask.
+    /// What a place currently holds.
+    ///
+    /// Asked by the three forms that read a place before writing it: a compound
+    /// assignment, a step, and a logical assignment. A plain `=` does not come
+    /// here, which is what keeps the accessor refusal below narrow.
     fn read_place(&mut self, id: NodeId, place: &Place) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         Ok(match *place {
@@ -9069,12 +9081,17 @@ impl<'a> FuncBuilder<'a> {
                 let read = self.push(OpKind::FieldGet { object, field }, ty, origin);
                 self.narrowed(id, read)?
             }
-            // `o.x += 1` where `x` is an accessor reads through the *getter*
-            // and writes through the setter, and this place knows only the
-            // setter. Refused rather than guessed at, which is a narrower gap
-            // than it looks: a plain `o.x = v` does not come here.
+            // `o.x += 1` and `o.x ??= 1` where `x` is an accessor read
+            // through the *getter* and write through the setter, and this place
+            // knows only the setter. Refused rather than guessed at, which is a
+            // narrower gap than it looks: a plain `o.x = v` does not come here.
+            //
+            // Named for what it is rather than for one of the forms that asks.
+            // The message said "a compound assignment" while `??=` was refused
+            // by it too, which is a refusal naming a construct the source does
+            // not contain.
             Place::Setter { .. } => {
-                return Err(self.unsupported(id, "a compound assignment through an accessor"));
+                return Err(self.unsupported(id, "an assignment that reads through an accessor"));
             }
             Place::Element { array, index } => {
                 let HirType::Managed(ManagedType::Array(element)) =
@@ -12190,6 +12207,16 @@ impl<'a> FuncBuilder<'a> {
             // Without this, `const chosen: number = limit || 1` handed a
             // `number` block parameter an erased value -- rejected by the
             // verifier, and before that check existed, by clang.
+            Branch::Assigned(node, place) => {
+                let value = self.lower_expression(node)?;
+                // `write_place` coerces to what the slot holds; the value the
+                // *expression* has is the one assigned, which the join then
+                // coerces to the type of the whole thing. Those are the same
+                // value at two representations, and conflating them would
+                // store a `double` into an erased field.
+                self.write_place(id, &place, value);
+                Ok(value)
+            }
             Branch::Present(value) => self.narrowed(id, value),
         }
     }
@@ -12268,6 +12295,57 @@ impl<'a> FuncBuilder<'a> {
         };
         self.write_place(id, &place, updated);
         Ok(updated)
+    }
+
+    /// `a ||= b`, `a &&= b`, `a ??= b`.
+    ///
+    /// Spelled as a branch around a write rather than as `a = a || b`, because
+    /// the desugaring is wrong in a way that is easy to miss: it writes on
+    /// every path. `a ||= b` where `a` is truthy performs no store, and the
+    /// difference shows up twice -- a setter that does not run, and a counted
+    /// store that does not release what the place already held. The
+    /// specification is explicit about it, and so is this.
+    ///
+    /// The place is lowered once, before the test, for the reason
+    /// [`Self::place_of`] exists at all.
+    fn lower_logical_assignment(
+        &mut self,
+        id: NodeId,
+        logical: Logical,
+        lhs_node: NodeId,
+        rhs_node: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let place = self.place_of(lhs_node)?;
+        let current = self.read_place(lhs_node, &place)?;
+        let condition = match logical {
+            Logical::Nullish => match self.absence_of(lhs_node, current) {
+                Some(absent) => absent,
+                // Nothing to test, so nothing is ever written. A value with no
+                // room for an absence is never absent, so `n ??= 1` is `n` --
+                // which is what the specification says happens rather than an
+                // optimization of it. TypeScript permits the shape and reports
+                // it as unnecessary.
+                None => return self.narrowed(id, current),
+            },
+            Logical::And | Logical::Or => self.truthy(id, current),
+        };
+        let assign = Branch::Assigned(rhs_node, place);
+        // Which arm keeps the current value, and at what type. Truthy excludes
+        // both absences and so does the nullish test, so those arms may read an
+        // erased value back at the type the whole expression has. `&&=` keeps
+        // its value where it is *falsy*, and `undefined` is falsy -- so that
+        // one is a `Value` and not a `Present`. The distinction is the same
+        // soundness one [`Branch::Present`] documents, and getting it backwards
+        // here would unerase a payload that is not there.
+        let keep = match logical {
+            Logical::Or | Logical::Nullish => Branch::Present(current),
+            Logical::And => Branch::Value(current),
+        };
+        let (then_branch, else_branch) = match logical {
+            Logical::And | Logical::Nullish => (assign, keep),
+            Logical::Or => (keep, assign),
+        };
+        self.lower_branching_value(id, condition, then_branch, else_branch)
     }
 
     /// `a ?? b` -- `a` unless `a` is absent.
@@ -15756,6 +15834,13 @@ impl<'a> FuncBuilder<'a> {
         // Spelling it out here rather than in a desugaring keeps one place that
         // knows a bitwise operator needs its coercions.
         // `x += e` is `x = x + e`: the operator applies, and the name rebinds.
+        // `a ||= b` short-circuits like `a || b` and additionally decides
+        // whether to write at all, so it is taken before the compound path --
+        // which would lower it as `a = a || b` and store on every path.
+        if let Some(logical) = logical_assignment(token) {
+            return self.lower_logical_assignment(id, logical, *lhs_node, *rhs_node);
+        }
+
         if let Some(compound) = compound_operator(token) {
             return self.lower_compound(id, compound, *lhs_node, *rhs_node);
         }
@@ -16119,6 +16204,32 @@ const fn compound_operator(token: u16) -> Option<Compound> {
         syntax::GREATER_THAN_GREATER_THAN_GREATER_THAN_EQUALS_TOKEN => BinOp::UShr,
         _ => return None,
     }))
+}
+
+/// The test a logical assignment applies before it writes.
+///
+/// Separate from [`Compound`] rather than a fourth variant of it, because the
+/// two differ in the thing that matters: a compound assignment always writes,
+/// and these write only when the test says to.
+#[derive(Clone, Copy)]
+enum Logical {
+    /// `&&=`.
+    And,
+    /// `||=`.
+    Or,
+    /// `??=`, which asks a different question from `||=` and not a narrower
+    /// one: `n ||= 1` overwrites a `0` and `n ??= 1` does not.
+    Nullish,
+}
+
+/// The test a logical-assignment token applies.
+const fn logical_assignment(token: u16) -> Option<Logical> {
+    Some(match token {
+        syntax::AMPERSAND_AMPERSAND_EQUALS_TOKEN => Logical::And,
+        syntax::BAR_BAR_EQUALS_TOKEN => Logical::Or,
+        syntax::QUESTION_QUESTION_EQUALS_TOKEN => Logical::Nullish,
+        _ => return None,
+    })
 }
 
 /// A construct refused by name rather than by the blanket `async` rule.
@@ -16535,6 +16646,20 @@ struct CaseChain<'a> {
 enum Branch {
     Expression(NodeId),
     Value(ValueId),
+    /// A logical assignment's right operand, evaluated *and written* here.
+    ///
+    /// Inside the arm rather than before it, for two reasons that happen to
+    /// coincide. The evaluation must not happen on the other path -- `a ||=
+    /// f()` does not call `f` when `a` is truthy -- and neither must the
+    /// write: a logical assignment whose test goes the other way performs no
+    /// store at all. The second is what distinguishes this from
+    /// [`Self::Expression`], and it is observable rather than academic. A
+    /// setter does not run, and a counted store does not release whatever the
+    /// place was already holding.
+    ///
+    /// The place is lowered once, before the branch, so `xs[next()] ??= 1`
+    /// calls `next` a single time whichever way the test goes.
+    Assigned(NodeId, Place),
     /// `undefined`, at whatever type the whole expression has.
     ///
     /// What `a?.b` produces when `a` is absent -- and it is the *expression's*

@@ -216,6 +216,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_str_trim", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_str_trim_end", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_str_trim_start", returns: "ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_string_cmp", returns: "i32", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_string_eq", returns: "zeroext i1", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_string_from_char_code", returns: "ptr", params: &["double"], attributes: &[] },
     Signature { name: "nts_string_from_char_code_into", returns: "ptr", params: &["ptr", "double"], attributes: &[] },

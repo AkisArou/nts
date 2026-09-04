@@ -159,11 +159,22 @@ fn an_unsupported_construct_is_refused_rather_than_skipped() {
         !lowered.is_complete(),
         "the unsupported constructs should have been refused",
     );
-    assert_eq!(
-        lowered.program.funcs.len(),
-        1,
-        "only the supported function"
-    );
+    // Stated over *exports* rather than as a count of functions. Every export
+    // in this fixture is a construct the lowering refuses, save `supported` --
+    // so an export that survives is one that was silently skipped, which is
+    // exactly the failure above. A non-exported helper may lower perfectly well
+    // and says nothing about that: the fixture grew an accessor whose getter
+    // and setter are fine, and it is the function *using* them that is refused.
+    // The count said `1` and started failing the moment that helper arrived,
+    // which is a test breaking on a change it was never about.
+    let exported: Vec<&str> = lowered
+        .program
+        .funcs
+        .iter()
+        .filter(|f| f.exported)
+        .map(|f| f.name.as_str())
+        .collect();
+    assert_eq!(exported, ["supported"], "only the supported export");
     assert!(lowered.diagnostics[0].code.starts_with("NTS"));
 
     let span = lowered.diagnostics[0].primary.span;
@@ -892,5 +903,146 @@ fn a_dispatched_call_keeps_the_return_its_declaration_promises() {
         call.ty,
         HirType::Erased,
         "the call returns what the closure returns, not `number | undefined`"
+    );
+}
+
+#[test]
+fn a_nullish_assignment_to_a_never_absent_target_tests_nothing() {
+    let Some(lowered) = lowered("logical-assignment") else {
+        return;
+    };
+    // `x ??= 99` where `x` is a `number`. The type has no room for an absence,
+    // so there is nothing to test -- and because there is nothing to test,
+    // nothing is ever written. That is what the specification says happens
+    // rather than an optimization of it, and getting it wrong is not subtle:
+    // `nullishOnNeverAbsent(0)` is `0`, and a lowering that treated falsy as
+    // absent would answer `99`.
+    let f = func(&lowered, "nullishOnNeverAbsent");
+    assert_eq!(f.blocks.len(), 1, "no test means no branch: {:?}", f.blocks);
+    assert!(
+        !f.values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::ConstFloat(v) if (v - 99.0).abs() < f64::EPSILON)),
+        "the right operand is not evaluated, so it is not lowered either",
+    );
+}
+
+#[test]
+fn a_logical_assignment_leaves_its_right_operand_unevaluated_on_the_keeping_path() {
+    let Some(lowered) = lowered("logical-assignment") else {
+        return;
+    };
+    // `x ||= bump(n)` must not call `bump` when `x` is truthy. The call
+    // therefore belongs inside the arm the test took, and an entry block
+    // holding it would be a program that calls a function JavaScript does not.
+    for name in [
+        "rightOperandNotEvaluated",
+        "nullishRightOperandNotEvaluated",
+    ] {
+        let f = func(&lowered, name);
+        let calls = |block: &hir::Block| {
+            block.ops.iter().any(|value| {
+                matches!(
+                    &f.values[value.0 as usize].kind,
+                    OpKind::Call { callee: Callee::Direct(target), .. } if target.contains("bump"),
+                )
+            })
+        };
+        assert!(!calls(f.entry()), "`{name}` calls `bump` unconditionally");
+        assert_eq!(
+            f.blocks.iter().filter(|b| calls(b)).count(),
+            1,
+            "`{name}` should call `bump` from exactly one arm",
+        );
+    }
+}
+
+#[test]
+fn nullish_assignment_asks_a_different_question_from_or_assignment() {
+    let Some(lowered) = lowered("logical-assignment") else {
+        return;
+    };
+    // The reason `??=` exists. `||=` overwrites a present `0` and `??=` does
+    // not, so lowering one as the other is wrong on every falsy value the
+    // argument pool supplies -- and the two are close enough in the source
+    // that the mistake reads as a simplification.
+    //
+    // Asserted on the *shape of the test* rather than on an answer, because an
+    // answer only differs on the falsy inputs and a lowering could pass the
+    // arithmetic cases while asking the wrong question.
+    let truthy = |f: &Func| {
+        f.values.iter().any(|op| {
+            matches!(
+                op.kind,
+                OpKind::Unary {
+                    op: hir::UnOp::Truthy,
+                    ..
+                }
+            )
+        })
+    };
+    let tagged = |f: &Func| {
+        f.values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::TagOf { .. }))
+    };
+
+    let nullish = func(&lowered, "nullishOnAbsent");
+    assert!(tagged(nullish), "`??=` tests the tag for an absence");
+    assert!(!truthy(nullish), "`??=` does not ask about truthiness");
+
+    let or = func(&lowered, "orOnAbsent");
+    assert!(truthy(or), "`||=` tests truthiness");
+    assert!(!tagged(or), "`||=` has no reason to read the tag");
+}
+
+#[test]
+fn a_conditional_write_in_a_loop_reaches_the_loop_header() {
+    let Some(lowered) = lowered("logical-assignment") else {
+        return;
+    };
+    // A logical assignment writes on one path, and "assigned anywhere in this
+    // subtree" is still true of it. The collector that builds a loop header's
+    // parameters has to agree, because missing a write there does not produce a
+    // wrong answer -- it produces a header with no parameter for the name, a
+    // body that reads the value it had on entry, and a back edge that never
+    // passes the update.
+    //
+    // `orInALoop` enters carrying two values: the counter and the accumulator
+    // the body writes conditionally. One argument here means the accumulator
+    // was not collected.
+    let f = func(&lowered, "orInALoop");
+    let Terminator::Jump { args, .. } = &f.entry().terminator else {
+        panic!("the entry should jump into the header, got {:?}", f.entry().terminator);
+    };
+    assert_eq!(
+        args.len(),
+        2,
+        "the header carries the counter and the conditionally written accumulator",
+    );
+}
+
+#[test]
+fn an_assignment_that_reads_through_an_accessor_is_refused_in_those_words() {
+    let Some(lowered) = lowered("unsupported") else {
+        return;
+    };
+    // `g.level ||= n` reads the getter and writes the setter, and the place
+    // built here knows only the setter.
+    //
+    // Pinned on the wording and not merely on the refusal, because the message
+    // said "a compound assignment" while it was refusing `??=` as well -- a
+    // refusal naming a construct the source does not contain, which sends
+    // whoever reads it looking for a `+=` that is not there.
+    assert!(
+        lowered.diagnostics.iter().any(|d| d
+            .message
+            .contains("an assignment that reads through an accessor")),
+        "no accessor refusal among {:?}",
+        lowered
+            .diagnostics
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>(),
     );
 }
