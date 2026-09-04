@@ -86,6 +86,25 @@ impl Emitted {
 pub fn emit(program: &Program) -> Emitted {
     let mut pool = Pool::new();
     let mut diagnostics = Vec::new();
+    // Whole-program, so refused whole. A Java array cannot grow, so a program
+    // where any array does needs every array to be an object with a `double[]`
+    // and a length inside it -- and `hir::arrays_can_grow` is true if *anything*
+    // anywhere pushes. Measured across the corpus at false in 2 of 93 examples
+    // and true in 20 of 23 `runtime/node` modules, so the wrapper is what real
+    // code gets and the bare array is what a benchmark gets. Which side of that
+    // cliff costs what is `benches/cases/growth-fixed` against `growth-grown`,
+    // and the wrapper is not worth building before that number exists.
+    if nts_core::hir::arrays_can_grow(program) {
+        diagnostics.push(Diagnostic::error(
+            "NTS4007",
+            "this program grows an array, and a Java array cannot grow -- every \
+             array in it would need a wrapper object, which this backend does \
+             not build yet"
+                .to_owned(),
+            program_origin(program).location,
+        ));
+        return Emitted { classes: Vec::new(), diagnostics };
+    }
     let mut builder = ClassBuilder::new(PROGRAM, "java/lang/Object");
     builder.access = access::PUBLIC | access::SUPER | access::FINAL;
     builder.source_file = Some("nts".to_owned());

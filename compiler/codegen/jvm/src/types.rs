@@ -59,6 +59,18 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
         // string *is*. `length`, `charAt`, `substring` and `equals` are already
         // the language's semantics, and JIT intrinsics besides.
         HirType::Managed(ManagedType::String) => STRING_DESCRIPTOR.to_owned(),
+        // A bare JVM array, which is what a Java programmer writes and what the
+        // hand-written reference will use. `arraylength` is one instruction,
+        // the bounds check is mandatory *and* eliminated in a counted loop, and
+        // there is no header to lay out.
+        //
+        // Only correct for a program where no array grows: a Java array cannot,
+        // so a growing one needs an object with a `double[]` and a length
+        // inside it. `emit` refuses such a program whole, which is the right
+        // granularity because `arrays_can_grow` is a whole-program property.
+        HirType::Managed(ManagedType::Array(element)) => {
+            nts_jvm_emitter::descriptor::array_of(&descriptor(program, element)?)
+        }
         // Strings, arrays, `Erased` and `BigInt` arrive in later steps.
         // Answering here would emit something for a type nothing implements.
         HirType::Never
@@ -72,7 +84,9 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
 #[must_use]
 pub fn kind(ty: &HirType) -> Option<Kind> {
     Some(match ty {
-        HirType::Managed(ManagedType::Object(_) | ManagedType::String) => Kind::Ref,
+        HirType::Managed(
+            ManagedType::Object(_) | ManagedType::String | ManagedType::Array(_),
+        ) => Kind::Ref,
         HirType::Int { bits: 64, .. } => Kind::Long,
         // A `boolean` is an `int` everywhere except in a descriptor: there is
         // no narrower computational type on this machine.
@@ -95,6 +109,11 @@ pub fn vtype(program: &Program, ty: &HirType) -> Option<VType> {
         Kind::Double => VType::Double,
         Kind::Ref => match ty {
             HirType::Managed(ManagedType::String) => VType::Object(STRING.to_owned()),
+            // An array's *class* constant is named by its descriptor rather
+            // than by an internal name: `[D`, not `D` and not `L[D;`.
+            HirType::Managed(ManagedType::Array(_)) => {
+                VType::Object(descriptor(program, ty)?)
+            }
             HirType::Managed(ManagedType::Object(id)) => {
                 VType::Object(class_name(program.layout(*id)?))
             }

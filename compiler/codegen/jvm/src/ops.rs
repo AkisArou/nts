@@ -82,6 +82,9 @@ impl Emitter<'_> {
             OpKind::ConstString(_) | OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
                 self.string_operation(code, pool, &op.kind, &origin)?
             }
+            OpKind::ArrayNew { .. } | OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
+                self.array_operation(code, pool, &op.kind, &op.ty, &origin)?
+            }
             OpKind::Binary { op: bin, lhs, rhs } => self.binary(code, pool, &op.ty, *bin, *lhs, *rhs)?,
             OpKind::Unary { op: un, operand } => self.unary(code, pool, &op.ty, *un, *operand)?,
             OpKind::Convert(operand) => {
@@ -191,6 +194,70 @@ impl Emitter<'_> {
         Ok(())
     }
 
+    /// Allocation, load and store on a bare JVM array.
+    ///
+    /// # `checked` cannot mean what it means in C
+    ///
+    /// The JVM bounds-checks every access whether or not the compiler proved
+    /// the index in range, so `checked: false` is not a licence to skip
+    /// anything -- there is nothing to skip. It means the range analysis found
+    /// the same proof C2's range-check elimination will find in a counted loop,
+    /// and the instruction is identical either way.
+    ///
+    /// `checked: true` is the one that needs care, and not for speed. An
+    /// escaping `ArrayIndexOutOfBoundsException` would reach the differential as
+    /// a Java stack trace with no `nts:` line, and `stopped()` classifies that
+    /// as a **defect** -- so every case the C lane legitimately *declines* would
+    /// be counted as a failure here. The runtime turns it into the same refusal
+    /// the C lane prints.
+    fn array_operation(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        kind: &OpKind,
+        ty: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        match kind {
+            OpKind::ArrayNew { length, .. } => {
+                let element = self.element_descriptor(ty)?;
+                self.load(code, *length)?;
+                // The length arrives as a double, because that is what a
+                // JavaScript length is until something narrows it.
+                code.convert(origin, insn::D2I, Kind::Double, Kind::Int);
+                code.new_array(origin, pool, &element);
+                Ok(Placed::OnStack)
+            }
+            OpKind::ArrayGet { array, index, .. } => {
+                let element = self.element_descriptor(&self.ty(*array).clone())?;
+                self.load(code, *array)?;
+                self.load(code, *index)?;
+                code.convert(origin, insn::D2I, Kind::Double, Kind::Int);
+                code.array_load(origin, &element);
+                Ok(Placed::OnStack)
+            }
+            OpKind::ArraySet { array, index, value, .. } => {
+                let element = self.element_descriptor(&self.ty(*array).clone())?;
+                self.load(code, *array)?;
+                self.load(code, *index)?;
+                code.convert(origin, insn::D2I, Kind::Double, Kind::Int);
+                self.load(code, *value)?;
+                code.array_store(origin, &element);
+                Ok(Placed::Stored)
+            }
+            _ => Err(refuse(self.func, "an array operation this backend does not spell")),
+        }
+    }
+
+    /// The descriptor of what an array holds.
+    fn element_descriptor(&self, ty: &HirType) -> Result<String, Diagnostic> {
+        let HirType::Managed(ManagedType::Array(element)) = ty else {
+            return Err(refuse(self.func, "an array operation on something that is not an array"));
+        };
+        types::descriptor(self.program, element)
+            .ok_or_else(|| refuse(self.func, &format!("an array of {}", types::describe(element))))
+    }
+
     /// The operations `java.lang.String` already is.
     ///
     /// Lifted out of `operation` because it went past a hundred lines, which in
@@ -222,6 +289,12 @@ impl Emitter<'_> {
             OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::String)) => {
                 self.load(code, *of)?;
                 code.invoke_virtual(origin, pool, types::STRING, "length", "()I");
+                code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
+                Ok(Placed::OnStack)
+            }
+            OpKind::Length(of) => {
+                self.load(code, *of)?;
+                code.array_length(origin);
                 code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
                 Ok(Placed::OnStack)
             }
@@ -964,10 +1037,6 @@ fn unsupported(kind: &OpKind) -> String {
         OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::TagOf { .. } => {
             "an erased value".to_owned()
         }
-        OpKind::ArrayNew { .. } | OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
-            "an array".to_owned()
-        }
-        OpKind::Length(_) => "the length of an array".to_owned(),
         OpKind::ClosureStatic => "a function used as a value".to_owned(),
         OpKind::CellReady { .. } => "a captured binding".to_owned(),
         OpKind::Retain(_) | OpKind::Release(_) => {
