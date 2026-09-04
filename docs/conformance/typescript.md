@@ -219,7 +219,7 @@ never had one.
 
 The refusal said *"a name from more than one scope up"* — 41 sites of it, and
 27 were nothing to do with scope depth. It is 1 now, and what replaced the rest
-are refusals at the *read* that say what the thing is: a module-scope variable
+are refusals at the *read* that say what the thing is: a module-scope `let`
 holding a function, an enum, a builtin this compiler does not provide. A refusal
 belongs where it can name the cause.
 
@@ -405,7 +405,8 @@ is what the rest still want, and it is a different feature from this one.
 | ✅ | module-scope state, including references |
 | ✗ | `import def from` — default imports |
 | ✗ | dynamic `import()` |
-| ✗ | a module-scope variable holding a function |
+| ✅ | a module-scope `const` holding a function, called, passed and compared by identity |
+| ✗ | a module-scope `let` holding a function — a second arrow is a second layout |
 
 ## 6. The type system
 

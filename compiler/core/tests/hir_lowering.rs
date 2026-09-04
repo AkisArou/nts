@@ -167,11 +167,18 @@ fn an_unsupported_construct_is_refused_rather_than_skipped() {
     // and setter are fine, and it is the function *using* them that is refused.
     // The count said `1` and started failing the moment that helper arrived,
     // which is a test breaking on a change it was never about.
+    //
+    // `module#init` is excluded by name, and only by that name. It is not a
+    // source export: it is the module initializer, which exists whenever the
+    // file has a module-scope declaration at all -- this fixture gained one
+    // when it grew a refused `let` holding a function. So it can never be the
+    // thing this asserts against, which is a *written* export that lowered
+    // when it should have been refused. Anything else surviving still fails.
     let exported: Vec<&str> = lowered
         .program
         .funcs
         .iter()
-        .filter(|f| f.exported)
+        .filter(|f| f.exported && f.name != "module#init")
         .map(|f| f.name.as_str())
         .collect();
     assert_eq!(exported, ["supported"], "only the supported export");

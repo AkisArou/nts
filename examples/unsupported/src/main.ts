@@ -104,3 +104,21 @@ enum Label {
 export function stringMember(n: number): number {
   return Label.Short.length + n;
 }
+
+// A module-scope `let` holding a function.
+//
+// The `const` is supported, and the difference is the whole soundness
+// argument. A global typed by the closure that initialized it holds exactly
+// that closure -- but `let` can be given a second arrow, and a second arrow is
+// a second layout. clang says it plainly for the pair below: `assigning to
+// 'NtsObj_Closure2 *' from 'NtsObj_Closure3 *'`. One slot cannot be both, and
+// the fix is not a wider slot but a common base the two closures share, which
+// is a hierarchy question rather than a lowering one.
+let current = (x: number): number => x + 1;
+
+export function reassignedFunction(n: number): number {
+  if (n > 2) {
+    current = (x: number): number => x - 1;
+  }
+  return current(n);
+}

@@ -434,3 +434,100 @@ fn a_program_with_several_modules_has_one_initializer() {
         "the statements of every module are concatenated into one initializer",
     );
 }
+
+/// A module-scope `const` holding an arrow is typed by the *closure*, not by
+/// the function type it was declared with.
+///
+/// The two are both `Managed(Object(..))`, which is why nothing between the
+/// lowering and the backend objected when the global took the declared type:
+/// clang did, refusing to assign an `NtsObj_Closure0 *` to an `NtsObj_Fn2 *`.
+/// So the assertion is about *which* object -- a closure id, from the synthetic
+/// partition -- and not merely that the binding lowered.
+#[test]
+fn a_module_scope_const_arrow_is_typed_by_its_closure() {
+    let Some(lowered) = example("module-functions") else {
+        return;
+    };
+    assert_eq!(refusals(&lowered), Vec::<&str>::new(), "no refusal");
+
+    let named = |want: &str| {
+        lowered
+            .program
+            .globals
+            .iter()
+            .find(|global| global.name == want)
+            .unwrap_or_else(|| panic!("`{want}` is a global"))
+            .ty
+            .clone()
+    };
+
+    // Every arrow binding in that file, by name, so adding one there does not
+    // quietly go unchecked here.
+    for name in [
+        "double", "scaled", "inc", "twice", "early", "late", "fact", "negate", "seven", "add",
+        "shout", "record", "clamp",
+    ] {
+        let hir::HirType::Managed(hir::ManagedType::Object(ty)) = named(name) else {
+            panic!("`{name}` holds an object");
+        };
+        assert!(
+            hir::is_closure_type(ty),
+            "`{name}` holds a closure, not a value of its declared function type: {ty:?}",
+        );
+    }
+
+    // The control, and it lands the other way. `thrice = triple` aliases a
+    // *declared function*, and that needs no storage at all: the name resolves
+    // to the function, and `thrice(n)` is a direct call. So the alias is not a
+    // global, and this asserts that rather than assuming the two mechanisms
+    // met -- they do not, and the assumption is what this test caught.
+    assert!(
+        !lowered
+            .program
+            .globals
+            .iter()
+            .any(|global| global.name == "thrice"),
+        "an alias of a declared function needs no slot",
+    );
+
+    // A non-function `const` is untouched by any of it: `scale` folds to a
+    // constant and is not a global at all.
+    assert!(
+        !lowered
+            .program
+            .globals
+            .iter()
+            .any(|global| global.name == "scale"),
+        "a foldable const is still folded",
+    );
+}
+
+/// A module-scope `let` holding a function is refused, and the reason says why
+/// the `const` is different.
+///
+/// Not "a module-scope variable holding a function", which was true of both and
+/// therefore useless: a second arrow is a second layout, and one slot cannot be
+/// both. The refusal has to name reassignment or it does not distinguish the
+/// case that works from the case that does not.
+#[test]
+fn a_module_scope_let_holding_a_function_is_refused() {
+    let Some(lowered) = example("unsupported") else {
+        return;
+    };
+    let reasons = refusals(&lowered);
+    assert!(
+        reasons.iter().any(|reason| {
+            reason.contains("module-scope `let` holding a function")
+                && reason.contains("reassigned")
+        }),
+        "the refusal names reassignment as the reason: {reasons:?}",
+    );
+    // And it is the `let` that is refused, not arrows at module scope
+    // generally: nothing here says the `const` form is unsupported.
+    assert!(
+        !reasons
+            .iter()
+            .any(|reason| reason.contains("module-scope `const`")),
+        "the const form is not refused: {reasons:?}",
+    );
+}

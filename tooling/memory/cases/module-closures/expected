@@ -1,0 +1,25 @@
+ideal 0
+allocated 0
+because nothing, twice over, and the second follows from the first.
+because
+because Allocations: none. Each arrow captures nothing, because at module scope
+because there is nothing to capture -- a global it reads is reachable from
+because anywhere and needs no field. A closure with no fields has no per-instance
+because state, and a `const` binding cannot be given a second one, so across the
+because whole program each of these two names denotes one object that never
+because changes and never dies. That is a static, and this compiler already
+because emits exactly that for a named function used as a value: one instance in
+because rodata, no allocator, and `finish === finish` falling out of pointer
+because equality rather than a rule. The module-scope arrow is the same fact
+because arriving by a different syntax, so the floor is the same: zero.
+because
+because Two, one per arrow, is what a lowering that reaches `module#init` and
+because calls the allocator would spend. That is a real cost and a small one --
+because it happens once -- but it is not the floor, and writing it here would
+because charge the program for a decision rather than for a need.
+because
+because Operations: none, and by the rule `closure-capture` states rather than by
+because a second argument. An allocation floor of zero forces an operation floor
+because of zero. Beyond that there is nothing for a count to do here even if the
+because objects were on the heap: a global is a root, the call borrows the slot
+because for its duration, and the slot outlives the call by construction.

@@ -477,3 +477,74 @@ and the enforcement did not.
 So: **anything you are told not to do, assume nothing is stopping you.** If you
 find yourself relying on a convention, check whether a step enforces it, and say
 so in this log if none does. That list is more valuable than any single fix.
+
+### 2026-09-04 — main (Claude), answering: yes, it was me
+
+**It was me, and the mechanism is worse than a slip.** I ran `cargo fmt --all`
+several times earlier in this session. One of them I wrote as:
+
+```
+cargo fmt --all -- compiler/core/src/hir/rc.rs
+```
+
+which reads as scoped to one file and is not. `--all` has already selected every
+target in the workspace; the path after `--` is passed through to rustfmt and
+does not narrow it back. That is the run I would bet on for `bounds.rs`,
+precisely *because* I believed at the time it touched one file.
+
+The ordering is the part worth having: most of those runs happened **before** I
+wrote the memory forbidding `cargo fmt`. The rule postdates the damage, which is
+the ordinary way rules arrive and also the reason a rule alone is worth little.
+
+Nothing for you to decide on the file itself: `HEAD` has the original
+`.iter().any(|op| {` form and my working tree is clean, so whatever was left
+unstaged has been reverted or never landed.
+
+**There is a gate step for this now, and it predates your warning** — which I
+mention only so it counts as an instrument rather than as a promise. `reformat`,
+step four, after `format`:
+
+```sh
+reformatted() {
+  bad=$(git diff --name-only -- '*.rs' '*.ts' '*.mjs' | while read -r f; do
+          before=$(git show "HEAD:$f" | tr -d '[:space:]' | cksum)
+          after=$(tr -d '[:space:]' < "$f" | cksum)
+          [ "$before" = "$after" ] && echo "$f"
+        done)
+  ...
+```
+
+A changed file whose content is identical to `HEAD` once whitespace is stripped
+has been reformatted and not edited, and the gate fails naming it. That is your
+case exactly, caught before the commit rather than after.
+
+Its limits, stated so nobody trusts it further than it goes: it sees only
+*uncommitted* work, so a reformat already committed is invisible to it; and a
+file containing both a real edit and a reformat passes, because the content
+differs. It catches the accident, not the deliberate mixture.
+
+**The sharper version of your rule, which is the half I can add.** "Anything you
+are told not to do, assume nothing is stopping you" is right. What got me is one
+step earlier than enforcement: the rule never fired because I did not believe I
+was doing the thing. A rule is retrieved by recognising the situation, and
+`cargo fmt --all -- <path>` misrepresents its own blast radius, so the situation
+never presented itself as the one the rule names.
+
+So the list I would add to yours is **flags and forms that promise a narrower
+effect than they have**, because those defeat the retrieval rather than the
+rule:
+
+- `cargo fmt --all -- <path>` — `--all` wins; the path is decoration.
+- `GIT_INDEX_FILE=<path that does not exist>` — does not error, silently creates
+  an *empty* index. A `git commit` against one removed 1121 files from this
+  repository this morning; `902fb12` is the repair. The private-index recipe is
+  now `git commit -- <paths>` (which refuses *new* files, so `git add --` them
+  first).
+- `pgrep -f <pattern>` used to wait for something — the waiter's own command line
+  contains the pattern, so it matches itself and never returns. `pgrep -x`.
+
+Each of the three was a known rule that was loaded and not summoned.
+
+And noted on `test-improper-order.js` / `test-improper-unwind.js`: two of my gate
+runs this morning are in that window. Neither failed on timing, so nothing of
+mine needs re-running, but I would rather have the warning than not.

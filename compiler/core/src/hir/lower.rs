@@ -1131,7 +1131,11 @@ fn storable(probe: &mut FuncBuilder<'_>, name: NodeId, ty: &HirType) -> Result<(
     // Module state holding a closure is a feature rather than an oversight, so
     // it is refused in those words until it is one.
     if probe.is_function_typed(name) {
-        return Err("a module-scope variable holding a function".to_owned());
+        // A `const` arrow no longer reaches here: it is typed by the closure it
+        // becomes, which is the one object that can ever be in the slot. What
+        // is left is a *mutable* one, where two arrows are two layouts and the
+        // slot cannot be both.
+        return Err("a module-scope `let` holding a function, which may be reassigned with a closure of another layout".to_owned());
     }
     // The layout, here, because nothing else will build it: every other one is
     // built by a function that uses the type, and a global whose initializer
@@ -1161,7 +1165,68 @@ fn unshared_name(existing: &[super::Global], spelling: Option<String>, at: u32) 
     spelling
 }
 
-fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
+/// The type a module-scope binding takes when it holds an arrow.
+///
+/// A `const f = (x) => x * 2` holds the *closure* the arrow becomes, not a
+/// value of its function type. Those are two different objects with two
+/// different layouts, and typing the global by the declaration produced a slot
+/// the initializer could not fill: clang refused to assign an
+/// `NtsObj_Closure0 *` to an `NtsObj_Fn2 *`.
+///
+/// Both are references, so nothing between the lowering and the backend
+/// objected -- the same coarse rule that let an array of `i32` into a slot of
+/// `f64`, and the third time this week that "two pointers" answered a question
+/// only the layout could.
+///
+/// `const` only, and that is the whole soundness argument: a slot typed by a
+/// closure holds exactly the closure it was typed by. A `let` can be reassigned
+/// with a *different* arrow, which is a different layout -- clang says so
+/// directly, `assigning to 'NtsObj_Closure2 *' from 'NtsObj_Closure3 *'` -- so a
+/// mutable one keeps the refusal in `storable`.
+fn closure_typed_global(
+    probe: &mut FuncBuilder,
+    closures: &[ClosureInfo],
+    kind: nts_semantic_schema::VariableKind,
+    initializer: Option<NodeId>,
+) -> Option<HirType> {
+    let node = initializer
+        .filter(|_| kind == nts_semantic_schema::VariableKind::Const)
+        .filter(|node| probe.kind_of(*node) == Some(syntax::ARROW_FUNCTION))?;
+    // A refused closure has no layout to name, so the binding falls through to
+    // the ordinary path and is refused there with its own reason.
+    let index = closures
+        .iter()
+        .position(|closure| closure.node == node && closure.refusal.is_none())?;
+    Some(HirType::Managed(ManagedType::Object(closure_type(index))))
+}
+
+/// Declare a global holding a closure, with the initializer deferred to
+/// `module#init` -- an arrow is code, never a constant to fold.
+fn declare_a_closure_global(
+    scope: &mut ModuleScope,
+    probe: &mut FuncBuilder,
+    name_node: NodeId,
+    symbol: SymbolId,
+    ty: HirType,
+    initializer: Option<NodeId>,
+) {
+    let global = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
+    let spelling = probe.node(name_node).text.clone();
+    scope.globals.push(super::Global {
+        name: unshared_name(&scope.globals, spelling, global),
+        ty: ty.clone(),
+        initial: 0.0,
+        exported: false,
+        origin: probe.origin(name_node),
+    });
+    scope.variables.insert(symbol.0, global);
+    scope.types.push(ty);
+    if let Some(initializer) = initializer {
+        scope.deferred.insert(symbol.0, initializer);
+    }
+}
+
+fn collect_module_scope(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> ModuleScope {
     let mut scope = ModuleScope::default();
     let mut probe = FuncBuilder::new(snapshot);
 
@@ -1282,6 +1347,11 @@ fn collect_module_scope(snapshot: &SemanticSnapshot) -> ModuleScope {
         // `module#init`.
         if kind == nts_semantic_schema::VariableKind::Const && constant.is_some() {
             scope.constants.insert(symbol.0, value);
+            continue;
+        }
+
+        if let Some(ty) = closure_typed_global(&mut probe, closures, kind, initializer) {
+            declare_a_closure_global(&mut scope, &mut probe, *name_node, symbol, ty, initializer);
             continue;
         }
 
@@ -1928,9 +1998,13 @@ fn lower_module_initializer(
 #[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
-    let mut module = collect_module_scope(snapshot);
-    lowered.diagnostics.extend(module.refusals.iter().cloned());
+    // Closures first, because a module-scope `const f = () => ...` is typed by
+    // the *closure* the arrow becomes rather than by its function type, and the
+    // closure's layout is decided here. `collect_closures` reads only the
+    // snapshot, so the order is free.
     let closures = collect_closures(snapshot);
+    let mut module = collect_module_scope(snapshot, &closures);
+    lowered.diagnostics.extend(module.refusals.iter().cloned());
     let hierarchy = collect_hierarchy(snapshot, &closures);
     lowered.program.globals.clone_from(&module.globals);
     collect_layouts(&mut lowered.program, module.layouts.clone());
