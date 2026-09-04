@@ -1,0 +1,28 @@
+ideal 0
+allocated 0
+because the `Held` never leaves `work` and holds nothing that is counted.
+because
+because Allocations: none. Nine objects are made -- `8 + n` with the harness's
+because `n` of 1 -- and each dies before the next is built, so one frame slot
+because serves all of them. That is the rule `iterator-protocol` taught me by
+because refusing an over-argued floor: *simultaneously live* is the condition
+because for separate storage, not *repeatedly made*. `store-elsewhere` needs
+because thirty-three because its disks are threaded into a list and every one
+because is alive at the end; this needs one.
+because
+because Operations: none. Both fields are numbers, so there is nothing to
+because retain when the constructor stores them and nothing to release when the
+because frame object dies. The stores themselves are the stores a hand-written
+because constructor emits -- a parameter property is sugar, and this is the
+because case that says the sugar is free rather than cheap.
+because
+because What this deliberately does not measure, because it cannot yet reach
+because zero: the same class with `private label: string` reads **nine**
+because operations, one per iteration. The frame walk releases `label`, which
+because holds a string literal and is immortal, so the release is a load, a
+because call and a branch that do nothing. `constant-field` gets zero for that
+because shape because the literal is stored directly and the pass can see what
+because the slot holds; here the store is `this.label = <parameter>` and a
+because parameter is opaque. Every call site passes a literal and nothing
+because connects the two. That is an interprocedural fact, and naming it is
+because better than arguing a floor of nine for a cost that is avoidable.
