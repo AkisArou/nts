@@ -49,6 +49,7 @@ export interface IncomingSocket {
   remoteAddress?: string | undefined;
   remotePort?: number | undefined;
   destroy(error?: unknown, callback?: (error?: unknown) => void): unknown;
+  setTimeout?(msecs: number, callback?: () => void): unknown;
 }
 
 export class IncomingMessage extends Readable {
@@ -179,8 +180,11 @@ export class IncomingMessage extends Readable {
     const target = this.#inTrailers ? this.trailers : this.headers;
     const rawTarget = this.#inTrailers ? this.rawTrailers : this.rawHeaders;
     for (let i = 0; i < raw.length; i += 2) {
-      const name = raw[i] as string;
-      const value = raw[i + 1] as string;
+      const name = raw[i];
+      const value = raw[i + 1];
+      if (name === undefined || value === undefined) {
+        throw new Error("raw HTTP headers must contain name/value pairs");
+      }
       rawTarget.push(name, value);
       this._addHeaderLine(name, value, target);
     }
@@ -207,8 +211,7 @@ export class IncomingMessage extends Readable {
    * idle connection.
    */
   setTimeout(msecs: number, callback?: () => void): this {
-    const socket = this.socket as { setTimeout?: (m: number, cb?: () => void) => void } | null;
-    socket?.setTimeout?.(msecs, callback);
+    this.socket?.setTimeout?.(msecs, callback);
     return this;
   }
 

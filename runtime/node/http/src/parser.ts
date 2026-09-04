@@ -731,6 +731,10 @@ function stripCR(line: string): string {
  */
 function decode(bytes: Uint8Array): string {
   let out = "";
-  for (let i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i] as number);
+  for (let i = 0; i < bytes.length; i++) {
+    const byte = bytes[i];
+    if (byte === undefined) throw new Error("HTTP parser byte index is outside the input");
+    out += String.fromCharCode(byte);
+  }
   return out;
 }

@@ -24,6 +24,7 @@ import { nextTick } from "../../internal/tick.ts";
 import {
   ERR_HTTP_HEADERS_SENT,
   ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_ARG_VALUE,
   ERR_INVALID_HTTP_TOKEN,
   ERR_STREAM_WRITE_AFTER_END,
 } from "../../internal/errors.ts";
@@ -63,6 +64,16 @@ const TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
  * exactly the wrong property for the check that prevents response splitting.
  */
 const CONTROL = /[\u0000-\u001f\u007f]/;
+
+type OutgoingHeaderValue = string | number | string[];
+type OutgoingHeaders = Record<string, OutgoingHeaderValue>;
+type TrailerEntries = ReadonlyArray<readonly [string, string]>;
+
+function isTrailerEntries(
+  headers: OutgoingHeaders | TrailerEntries,
+): headers is TrailerEntries {
+  return Array.isArray(headers);
+}
 
 function checkHeaderName(name: unknown): asserts name is string {
   if (typeof name !== "string" || !TOKEN.test(name)) {
@@ -139,8 +150,8 @@ export class OutgoingMessage extends EventEmitter {
   chunkedEncoding = false;
 
   /** Lowercased name to `[originalName, value]`. */
-  protected headersMap = new Map<string, [string, string | number | string[]]>();
-  protected trailersMap = new Map<string, [string, string | number | string[]]>();
+  protected headersMap = new Map<string, [string, OutgoingHeaderValue]>();
+  protected trailersMap = new Map<string, [string, OutgoingHeaderValue]>();
 
   /** Filled in by a subclass: the status line or the request line. */
   protected statusLine = "";
@@ -166,7 +177,7 @@ export class OutgoingMessage extends EventEmitter {
     return !this.#ended && !this.destroyed;
   }
 
-  setHeader(name: string, value: string | number | string[]): this {
+  setHeader(name: string, value: OutgoingHeaderValue): this {
     checkHeaderName(name);
     checkHeaderValue(name, value);
     if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("set");
@@ -174,7 +185,7 @@ export class OutgoingMessage extends EventEmitter {
     return this;
   }
 
-  getHeader(name: string): string | number | string[] | undefined {
+  getHeader(name: string): OutgoingHeaderValue | undefined {
     if (typeof name !== "string") {
       throw new ERR_INVALID_ARG_TYPE("name", "string", name);
     }
@@ -182,10 +193,10 @@ export class OutgoingMessage extends EventEmitter {
   }
 
   /** Every header, keyed by lowercased name. A copy: mutating it does nothing. */
-  getHeaders(): Record<string, string | number | string[]> {
+  getHeaders(): OutgoingHeaders {
     // NTS records have no prototype, so `{}` has Node's intended dictionary
     // semantics once compiled.
-    const out: Record<string, string | number | string[]> = {};
+    const out: OutgoingHeaders = {};
     for (const [key, entry] of this.headersMap) out[key] = entry[1];
     return out;
   }
@@ -221,15 +232,18 @@ export class OutgoingMessage extends EventEmitter {
    * checksum, a signature -- and they are dropped without chunked encoding
    * because there is nowhere to put them.
    */
-  addTrailers(headers: Record<string, string | number> | [string, string][]): void {
-    const entries = Array.isArray(headers) ? headers : Object.entries(headers);
-    for (const pair of entries) {
-      const name = pair[0] as string;
-      const value = pair[1] as string | number;
-      checkHeaderName(name);
-      checkHeaderValue(name, value);
-      this.trailersMap.set(name.toLowerCase(), [name, value as string]);
+  addTrailers(headers: OutgoingHeaders | TrailerEntries): void {
+    if (isTrailerEntries(headers)) {
+      for (const [name, value] of headers) this.#setTrailer(name, value);
+      return;
     }
+    for (const [name, value] of Object.entries(headers)) this.#setTrailer(name, value);
+  }
+
+  #setTrailer(name: string, value: OutgoingHeaderValue): void {
+    checkHeaderName(name);
+    checkHeaderValue(name, value);
+    this.trailersMap.set(name.toLowerCase(), [name, value]);
   }
 
   /** Written by a subclass before the headers, as the first line. */
@@ -304,11 +318,9 @@ export class OutgoingMessage extends EventEmitter {
   }
 
   write(chunk: string | Buffer, encoding?: string | (() => void), callback?: () => void): boolean {
-    let enc = encoding;
-    if (typeof enc === "function") {
-      callback = enc;
-      enc = undefined;
-    }
+    let encodingName: string | undefined;
+    if (typeof encoding === "function") callback = encoding;
+    else encodingName = encoding;
     if (this.#ended) {
       const error = new ERR_STREAM_WRITE_AFTER_END();
       nextTick(() => this.emit("error", error));
@@ -318,7 +330,7 @@ export class OutgoingMessage extends EventEmitter {
     if (!this.headersSent) this.flushHeaders();
 
     const buffer = typeof chunk === "string"
-      ? Buffer.from(chunk, (enc as string) ?? "utf8")
+      ? Buffer.from(chunk, encodingName ?? "utf8")
       : chunk;
 
     if (buffer.length === 0) {
@@ -346,14 +358,14 @@ export class OutgoingMessage extends EventEmitter {
     encoding?: string | (() => void),
     callback?: () => void,
   ): this {
-    let body = chunk;
-    let enc = encoding;
-    if (typeof body === "function") {
-      callback = body;
-      body = undefined;
-    } else if (typeof enc === "function") {
-      callback = enc;
-      enc = undefined;
+    let body: string | Buffer | undefined;
+    let encodingName: string | undefined;
+    if (typeof chunk === "function") {
+      callback = chunk;
+    } else {
+      body = chunk;
+      if (typeof encoding === "function") callback = encoding;
+      else encodingName = encoding;
     }
 
     if (this.#ended) {
@@ -361,7 +373,7 @@ export class OutgoingMessage extends EventEmitter {
       return this;
     }
 
-    if (body !== undefined) this.write(body as string | Buffer, enc as string);
+    if (body !== undefined) this.write(body, encodingName);
     else if (!this.headersSent) this.flushHeaders();
 
     if (this.chunkedEncoding) {
@@ -396,8 +408,7 @@ export class OutgoingMessage extends EventEmitter {
   }
 
   setTimeout(msecs: number, callback?: () => void): this {
-    const socket = this.socket as { setTimeout?: (m: number, cb?: () => void) => void } | null;
-    socket?.setTimeout?.(msecs, callback);
+    this.socket?.setTimeout(msecs, callback);
     return this;
   }
 
@@ -435,8 +446,8 @@ export class ServerResponse extends OutgoingMessage {
    */
   writeHead(
     statusCode: number,
-    statusMessage?: string | Record<string, string | number | string[]> | string[],
-    headers?: Record<string, string | number | string[]> | string[],
+    statusMessage?: string | OutgoingHeaders | OutgoingHeaderValue[],
+    headers?: OutgoingHeaders | OutgoingHeaderValue[],
   ): this {
     if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("write");
 
@@ -453,8 +464,17 @@ export class ServerResponse extends OutgoingMessage {
     if (Array.isArray(fields)) {
       // The flat `[name, value, name, value]` form, which is what a proxy
       // forwarding raw headers already has.
+      if (fields.length % 2 !== 0) {
+        throw new ERR_INVALID_ARG_VALUE("headers", fields);
+      }
       for (let i = 0; i < fields.length; i += 2) {
-        this.setHeader(fields[i] as string, fields[i + 1] as string);
+        const name = fields[i];
+        const value = fields[i + 1];
+        checkHeaderName(name);
+        if (value === undefined) {
+          throw new ERR_INVALID_ARG_VALUE("headers", fields);
+        }
+        this.setHeader(name, value);
       }
     } else if (fields) {
       for (const [name, value] of Object.entries(fields)) this.setHeader(name, value);

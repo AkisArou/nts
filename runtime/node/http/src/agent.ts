@@ -223,7 +223,9 @@ export class Agent extends EventEmitter {
   destroy(): void {
     for (const pool of [this.freeSockets, this.sockets]) {
       for (const key of Object.keys(pool)) {
-        for (const socket of pool[key] as Socket[]) socket.destroy();
+        const sockets = pool[key];
+        if (sockets === undefined) continue;
+        for (const socket of sockets) socket.destroy();
         delete pool[key];
       }
     }
