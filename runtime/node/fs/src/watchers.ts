@@ -294,7 +294,7 @@ export class FSWatcher extends EventEmitter {
         if (status < 0) {
           const error = uvException(status, "watch", validatedPath);
           error.filename = validatedPath;
-          this.close();
+          this.#stop(false);
           this.emit("error", error);
           return;
         }
@@ -342,6 +342,10 @@ export class FSWatcher extends EventEmitter {
   }
 
   close(): void {
+    this.#stop(true);
+  }
+
+  #stop(emitClose: boolean): void {
     if (this.#handle === null) return;
     const signal = this.#signal;
     const abortListener = this.#abortListener;
@@ -353,7 +357,7 @@ export class FSWatcher extends EventEmitter {
     nts_fs_watch_stop(this.#handle);
     this.#handle = null;
     this.#destroy();
-    nextTick(emitWatcherClose, this);
+    if (emitClose) nextTick(emitWatcherClose, this);
   }
 
   /**
