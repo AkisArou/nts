@@ -247,6 +247,14 @@ impl Emitter<'_> {
             OpKind::Erase { .. } | OpKind::TagOf { .. } | OpKind::Unerase { .. } => {
                 self.erasure(code, pool, &op.kind, &op.ty, &origin)?
             }
+            // The one instance, read back. Built in `<clinit>`; see
+            // `closure_singletons`.
+            OpKind::ClosureStatic => {
+                let class = self.object_class(&op.ty)?;
+                let field = format!("closure${}", class.rsplit('/').next().unwrap_or(&class));
+                code.get_static(&origin, pool, PROGRAM, &field, &format!("L{class};"));
+                Placed::OnStack
+            }
             OpKind::ConstNull | OpKind::ConstUndefined => {
                 self.absence(code, pool, &op.kind, &op.ty, &origin)?
             }

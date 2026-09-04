@@ -99,7 +99,7 @@ if [ -z "${NTS_SKIP_CLIPPY-}" ] && command -v cargo > /dev/null 2>&1; then
   if grep -qE '^warning: ' /tmp/nts-commit-clippy.$$; then
     echo "commit-mine: note -- clippy warns elsewhere in the workspace," >&2
     echo "  not in these files. The gate will still be red until it is fixed." >&2
-    grep -E '\-\->' /tmp/nts-commit-clippy.$$ | sort -u | head -5 >&2
+    grep -E -- '-->' /tmp/nts-commit-clippy.$$ | sort -u | head -5 >&2
   fi
   rm -f /tmp/nts-commit-clippy.$$
 fi

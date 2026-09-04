@@ -156,7 +156,25 @@ pub fn emit(program: &Program) -> Emitted {
         );
     }
 
-    if let Some(body) = class_initializer(program, &mut pool) {
+    // One static instance per closure class that `ClosureStatic` names.
+    //
+    // A closure standing for a named function captures nothing, so there is
+    // nothing to distinguish two of them -- and `finish === finish` has to be
+    // true, because an event emitter removing a listener finds it by exactly
+    // that comparison. One instance, immortal, and identity falls out of
+    // `if_acmpeq` rather than needing a rule.
+    //
+    // On `nts/gen/Program` rather than as an `INSTANCE` on each closure class,
+    // because which closure types are used as values is a fact about the
+    // *program* -- a scan of its operations -- and `object_class` sees one
+    // layout at a time. `LambdaMetafactory` is wrong here for a reason that
+    // arrives before Android's API 26: it does not promise one instance.
+    let singletons = closure_singletons(program);
+    for (field, class) in &singletons {
+        builder.field(access::PRIVATE | access::STATIC | access::FINAL, field.clone(), format!("L{class};"));
+    }
+
+    if let Some(body) = class_initializer(program, &singletons, &mut pool) {
         builder.method(access::STATIC, "<clinit>", "()V", Some(body));
     }
     if let Err(error) = builder.default_constructor(&program_origin(program), &mut pool) {
@@ -428,21 +446,61 @@ pub(crate) fn instance_descriptor(program: &Program, func: &nts_core::hir::Func)
     ))
 }
 
+/// The closure classes this program uses as *values*, and the field each gets.
+///
+/// A scan rather than a flag on the layout: `ClosureStatic` is a fact about
+/// call sites, and a closure class that is only ever constructed and called
+/// needs no singleton. Sorted, so two runs of one compiler on one input emit
+/// the same program -- the same rule `InstanceOf`'s class list keeps.
+fn closure_singletons(program: &Program) -> Vec<(String, String)> {
+    let mut found = std::collections::BTreeSet::new();
+    for func in &program.funcs {
+        for op in &func.values {
+            if !matches!(op.kind, nts_core::hir::OpKind::ClosureStatic) {
+                continue;
+            }
+            if let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) = op.ty
+                && let Some(layout) = program.layout(id)
+            {
+                found.insert(types::class_name(layout));
+            }
+        }
+    }
+    found
+        .into_iter()
+        .map(|class| {
+            let field = format!("closure${}", class.rsplit('/').next().unwrap_or(&class));
+            (field, class)
+        })
+        .collect()
+}
+
 /// `<clinit>`, where a global that starts as something other than zero is set.
 ///
 /// The JVM zeroes a static field, so a global whose initial value is zero needs
 /// nothing -- which is most of them, and is why this returns `None` rather than
 /// an empty method for a program with no interesting initializers.
-fn class_initializer(program: &Program, pool: &mut Pool) -> Option<nts_jvm_emitter::Body> {
+fn class_initializer(
+    program: &Program,
+    singletons: &[(String, String)],
+    pool: &mut Pool,
+) -> Option<nts_jvm_emitter::Body> {
     let interesting: Vec<_> = program
         .globals
         .iter()
         .filter(|global| global.initial != 0.0 && types::descriptor(program, &global.ty).is_some())
         .collect();
-    if interesting.is_empty() {
+    if interesting.is_empty() && singletons.is_empty() {
         return None;
     }
     let mut code = Code::new(Vec::<VType>::new(), 0);
+    let origin = program_origin(program);
+    for (field, class) in singletons {
+        code.new_object(&origin, pool, class);
+        code.dup(&origin);
+        code.invoke_special(&origin, pool, class, "<init>", "()V");
+        code.put_static(&origin, pool, PROGRAM, field, &format!("L{class};"));
+    }
     for global in interesting {
         let origin = global.origin.clone();
         let descriptor = types::descriptor(program, &global.ty)?;
