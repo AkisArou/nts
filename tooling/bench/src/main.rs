@@ -249,48 +249,12 @@ fn main() -> Result<()> {
 /// Between markers rather than appended, so the surrounding prose is written by
 /// hand and the numbers never are. A table typed out by a person is a table that
 /// drifts from the machine that produced it.
-fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
-    const START: &str = "<!-- benchmarks:start -->";
-    const END: &str = "<!-- benchmarks:end -->";
-
-    let mut table = String::new();
-    let with_bun = rows.iter().any(|row| row.bun.is_some());
-    // `nts f64` is measured on every run and printed by the tool; it is not
-    // published. It answers "what does the analysis buy", which is a question
-    // about this compiler's insides rather than about how fast the thing is,
-    // and a reader comparing against V8 does not need a column for it.
-    table.push_str(if with_bun {
-        "| case | C++ | nts (C) | nts (LLVM) | V8 | Bun | nts/C++ | nts/V8 | nts/Bun |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
-    } else {
-        "| case | C++ | nts (C) | nts (LLVM) | V8 | nts/C++ | nts/V8 |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n"
-    });
-    for row in rows {
-        use std::fmt::Write as _;
-        let bun = if with_bun {
-            format!(" {} |", row.bun.map_or_else(|| "--".to_owned(), human))
-        } else {
-            String::new()
-        };
-        let against_bun = if with_bun {
-            format!(" {} |", row.against(row.bun))
-        } else {
-            String::new()
-        };
-        let _ = writeln!(
-            table,
-            "| {} | {} | {} | **{}** | {} |{bun} {} | {} |{against_bun}",
-            row.case,
-            row.cpp.map_or_else(|| "--".to_owned(), human),
-            human(row.nts),
-            row.llvm.map_or_else(|| "--".to_owned(), human),
-            human(row.node),
-            row.against(row.cpp),
-            row.against(Some(row.node)),
-        );
-    }
-
+/// What a reader has to know before the numbers mean anything.
+///
+/// Split from [`write_readme`] because the two are different kinds of thing:
+/// one is the measurements, the other is the argument that they are
+/// measurements of what the heading says.
+fn legend(root: &Utf8Path) -> String {
     let legend = "\n\
         Every ratio is nts divided by the other, so **lower is better and 1.00 is \
         parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and \
@@ -322,6 +286,31 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         the rows above 1.50x are the work queue: each is a shape where the emitted \
         code costs more than the C++ a person would write, and the reason is worth \
         finding rather than hiding.\n\n\
+        `nts (JVM)` is the same TypeScript compiled to class files and run by \
+        `java`. **`refused` is not `--`**: every case is attempted on every \
+        backend, so a missing JVM number is always a construct the lane \
+        declines by name, and a blank would be indistinguishable from the \
+        `Java` column's blank, which means nobody wrote a reference.\n\n\
+        `Java` is Are We Fast Yet's **own** hand-written Java for the same \
+        benchmark, on the same JVM in the same run — the only reference here \
+        written in the language the column beside it compiles to, which is what \
+        makes `nts (JVM)/Java` a statement about codegen with the runtime \
+        divided out. Every other ratio in this table mixes a codegen \
+        difference with an engine difference and cannot separate them. It is \
+        `--` for every case that is not a port of one of theirs, which is all \
+        but the `awfy-*` rows: writing a second implementation of `substrings` \
+        or `bytes` in Java to have something to divide by would be a \
+        correctness burden rather than a reference, which is the same reason \
+        the `C++` column has the gaps it does.\n\n\
+        **The JVM column excludes startup, deliberately and at this lane's own \
+        cost.** It is timed inside its own process after the same 20,000 warmup \
+        iterations bounded by 300 ms that `V8` and `Bun` get, then calibrated, \
+        then best-of-five. A JIT's first iterations measure the compiler rather \
+        than the code, so including them would report how long HotSpot took to \
+        decide, not what it decided. The honest consequence is that **cold \
+        start is absent from this table and is the one number where this lane \
+        loses by two orders of magnitude** — it belongs in a column of its own \
+        rather than smuggled into these.\n\n\
         `V8` is node and `Bun` is JavaScriptCore, both running the *same* \
         TypeScript source the compiler consumes — the harness imports the `.ts` \
         directly, so there is no second copy of the program to drift. Both are \
@@ -330,6 +319,86 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         produce the same checksum as everything else. Bun is skipped where it \
         is not installed.\n";
 
+    // The commit the numbers are a function of. Benchmarks run from a worktree
+    // pinned to a hash precisely so that they are quotable later; a table that
+    // did not say which hash would be a measurement of a tree nobody can check
+    // out, which is the failure the pinned gate exists to catch one floor up.
+    let commit = std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .current_dir(root)
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map_or_else(
+            || "an unknown commit".to_owned(),
+            |out| String::from_utf8_lossy(&out.stdout).trim().to_owned(),
+        );
+    let legend = format!(
+        "{legend}\nMeasured at `{commit}`, one case at a time, on cores pinned away from \
+         the other sessions sharing this checkout, with the benchmark lock held so nothing \
+         else was running.\n"
+    );
+
+    legend
+}
+
+fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
+    // Split out for the length limit, and because the two are different kinds
+    // of thing: one is the numbers, the other is what a reader has to know
+    // before the numbers mean anything.
+    const START: &str = "<!-- benchmarks:start -->";
+    const END: &str = "<!-- benchmarks:end -->";
+
+    let mut table = String::new();
+    let with_bun = rows.iter().any(|row| row.bun.is_some());
+    // `nts f64` is measured on every run and printed by the tool; it is not
+    // published. It answers "what does the analysis buy", which is a question
+    // about this compiler's insides rather than about how fast the thing is,
+    // and a reader comparing against V8 does not need a column for it.
+    table.push_str(if with_bun {
+        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | V8 | Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+    } else {
+        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | V8 | nts/C++ | nts/V8 | nts (JVM)/Java |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+    });
+    for row in rows {
+        use std::fmt::Write as _;
+        let bun = if with_bun {
+            format!(" {} |", row.bun.map_or_else(|| "--".to_owned(), human))
+        } else {
+            String::new()
+        };
+        let against_bun = if with_bun {
+            format!(" {} |", row.against(row.bun))
+        } else {
+            String::new()
+        };
+        // `refused`, not `--`. Every case is attempted on every backend, so a
+        // missing JVM number is always a construct the lane declines by name
+        // -- and a reader cannot tell that from a blank, which is what a
+        // reference nobody wrote looks like one column over.
+        let jvm = match (row.jvm, row.jvm_absence) {
+            (Some(time), _) => human(time),
+            (None, Some(JvmAbsence::NoDriver)) => "no driver".to_owned(),
+            (None, _) => "refused".to_owned(),
+        };
+        let _ = writeln!(
+            table,
+            "| {} | {} | {} | **{}** | {jvm} | {} | {} |{bun} {} | {} |{against_bun} {} |",
+            row.case,
+            row.cpp.map_or_else(|| "--".to_owned(), human),
+            human(row.nts),
+            row.llvm.map_or_else(|| "--".to_owned(), human),
+            row.java.map_or_else(|| "--".to_owned(), human),
+            human(row.node),
+            row.against(row.cpp),
+            row.against(Some(row.node)),
+            row.jvm_against_java(),
+        );
+    }
+
+    let legend = legend(root);
     let path = root.join("README.md");
     let text = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
     let (Some(from), Some(to)) = (text.find(START), text.find(END)) else {
@@ -364,6 +433,8 @@ struct Row {
     /// is against hand-written Java, which is a column this table does not have
     /// -- which it now does, as `Java`.
     jvm: Option<f64>,
+    /// Why [`Self::jvm`] is empty, where it is.
+    jvm_absence: Option<JvmAbsence>,
     /// Are We Fast Yet's **own** hand-written Java for the same benchmark, on
     /// the same JVM in the same run.
     ///
@@ -415,6 +486,30 @@ impl Row {
             _ => "--".to_owned(),
         }
     }
+}
+
+/// The prefix `jvm_case` bails with when the *backend* is the reason, which is
+/// what tells it apart from every other way that function can fail.
+const DECLINED: &str = "the JVM backend declined ";
+
+/// Why the JVM column has no number for a row.
+///
+/// The distinction is the whole point of the column being honest. A construct
+/// this backend refuses is a fact about this compiler; a program the harness
+/// cannot *call* is a fact about the harness, and `elementwise` and
+/// `optional-chain` compile to class files perfectly well -- their entry points
+/// take an array, and the generated driver declares every argument a
+/// `volatile double`, so `javac` rejects the driver rather than the program.
+///
+/// Reporting the second as `refused` was wrong for exactly one afternoon, and
+/// it read as eight missing features where there are six deliberate refusals
+/// and two harness gaps.
+#[derive(Debug, Clone, Copy)]
+enum JvmAbsence {
+    /// The backend declined a construct, by name, at emit time.
+    Refused,
+    /// The backend emitted it and the harness has no way to drive it.
+    NoDriver,
 }
 
 /// Which memory provider a case runs under.
@@ -495,9 +590,9 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         Err(_) => false,
     };
 
-    let results = variants(root, case, out, name, &tsconfig, &entry, provider, defines,
+    let (results, jvm_absence) = variants(root, case, out, name, &tsconfig, &entry, provider, defines,
         &specialized, &plain, &rendered, renderable, needs_unicode)?;
-    finish_row(case, &shown, &results)
+    finish_row(case, &shown, &results, jvm_absence)
 }
 
 /// Every variant of one case, built and measured in the order `VARIANTS` gives.
@@ -521,8 +616,11 @@ fn variants(
     rendered: &Utf8Path,
     renderable: bool,
     needs_unicode: bool,
-) -> Result<Vec<Option<Measured>>> {
+) -> Result<(Vec<Option<Measured>>, Option<JvmAbsence>)> {
     let mut results: Vec<Option<Measured>> = Vec::new();
+    // Why the JVM column is empty, where it is. Two different absences that a
+    // single blank -- or a single `refused` -- would flatten into one.
+    let mut jvm_absence: Option<JvmAbsence> = None;
     for variant in VARIANTS {
         let binary = out.join(format!(
             "{name}.{}",
@@ -546,7 +644,20 @@ fn variants(
             // program has no classes, which empties the column and leaves the
             // row -- the same bargain the LLVM column keeps.
             Generated::Jvm => {
-                results.push(jvm_case(root, case, out, name, tsconfig, entry, provider).ok());
+                match jvm_case(root, case, out, name, tsconfig, entry, provider) {
+                    Ok(measured) => results.push(Some(measured)),
+                    Err(error) => {
+                        // The backend declining a construct and the harness
+                        // being unable to *call* the program are different
+                        // facts, and only the first is about this compiler.
+                        jvm_absence = Some(if error.to_string().starts_with(DECLINED) {
+                            JvmAbsence::Refused
+                        } else {
+                            JvmAbsence::NoDriver
+                        });
+                        results.push(None);
+                    }
+                }
                 continue;
             }
             Generated::JavaReference => {
@@ -572,7 +683,7 @@ fn variants(
             Err(error) => return Err(error),
         }
     }
-    Ok(results)
+    Ok((results, jvm_absence))
 }
 
 /// The engines, the checksum agreement, and the printed row.
@@ -580,7 +691,12 @@ fn variants(
 /// Split from [`variants`] because they answer different questions: one builds
 /// this compiler's output, the other asks what everybody else got and whether
 /// the answers match.
-fn finish_row(case: &Utf8Path, shown: &str, results: &[Option<Measured>]) -> Result<Row> {
+fn finish_row(
+    case: &Utf8Path,
+    shown: &str,
+    results: &[Option<Measured>],
+    jvm_absence: Option<JvmAbsence>,
+) -> Result<Row> {
     let harness = case.join("bench.mjs");
     let node = measure(std::process::Command::new("node").arg(&harness))?;
     // The same source on the other engine. Bun runs `.ts` natively too, so it
@@ -615,6 +731,7 @@ fn finish_row(case: &Utf8Path, shown: &str, results: &[Option<Measured>]) -> Res
             .get(4)
             .and_then(Option::as_ref)
             .map(|it| it.ns_per_op),
+        jvm_absence,
         java: results
             .get(5)
             .and_then(Option::as_ref)
@@ -788,7 +905,7 @@ fn jvm_case(
     let program = prepared_program(tsconfig, entry, true, provider)?;
     let emitted = nts_codegen_jvm::emit(&program);
     if !emitted.is_complete() {
-        bail!("the JVM backend declined {} function(s)", emitted.diagnostics.len());
+        bail!("{DECLINED}{} function(s)", emitted.diagnostics.len());
     }
     let dir = out.join(format!("{name}.jvm"));
     std::fs::create_dir_all(&dir)?;
