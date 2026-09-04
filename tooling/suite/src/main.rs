@@ -74,6 +74,22 @@ struct Totals {
     /// emitted a cast from a `double` to a pointer, and the corpus called it a
     /// clean run because it never asked clang.
     uncompilable: usize,
+    /// Programs whose generated *class files* the JVM refuses to load.
+    ///
+    /// The third thing that must stay at zero, and it matters more here than
+    /// `uncompilable C` does. A verifier rejection is the characteristic
+    /// failure of a bytecode emitter: the bytes are well formed enough to
+    /// write, the constant pool resolves, and the class is refused at load
+    /// because an abstract interpretation of the code disagrees about a type on
+    /// some path. Nothing short of the verifier answers that, and a program
+    /// only loads the classes it reaches -- so *running* one is not checking
+    /// one.
+    ///
+    /// Two bugs found on 2026-09-04 were exactly this and both surfaced by
+    /// accident, from running a benchmark: `boolean[]` allocated as `int[]`,
+    /// and an array length widened to `double` and stored into a `long` slot.
+    /// Neither was visible in the emitted listing.
+    unverifiable: usize,
     reasons: FxHashMap<String, usize>,
     /// Each refusing case, with the distinct refusals in it.
     ///
@@ -254,6 +270,28 @@ struct Examined {
     outcome: Outcome,
     notes: Vec<String>,
     uncompilable: bool,
+    unverifiable: bool,
+}
+
+/// Whether a JDK is here to answer with.
+///
+/// Cached, because `examine` runs once per corpus file and the answer cannot
+/// change during a run.
+fn has_a_jdk() -> bool {
+    use std::sync::OnceLock;
+    static PRESENT: OnceLock<bool> = OnceLock::new();
+    *PRESENT.get_or_init(|| {
+        if let Ok(home) = std::env::var("JAVA_HOME") {
+            if std::path::Path::new(&home).join("bin/java").exists() {
+                return true;
+            }
+        }
+        std::process::Command::new("sh")
+            .arg("-c")
+            .arg("command -v java")
+            .output()
+            .is_ok_and(|found| found.status.success())
+    })
 }
 
 /// One corpus file, start to finish.
@@ -272,11 +310,13 @@ fn examine(file: &Utf8Path, workspace: &Workspace, tsgo: &str) -> Examined {
             outcome: Outcome::Failed("could not write the case".to_owned()),
             notes: Vec::new(),
             uncompilable: false,
+            unverifiable: false,
         };
     }
 
     let mut notes = Vec::new();
     let mut uncompilable = false;
+    let mut unverifiable = false;
 
     // A fresh frontend per file. Sharing one would be faster and would also
     // share whatever state a pathological input leaves behind, and the point of
@@ -313,6 +353,19 @@ fn examine(file: &Utf8Path, workspace: &Workspace, tsgo: &str) -> Examined {
                         notes.push(format!("UNCOMPILABLE C: {file}: {error}"));
                     }
                 }
+                // And ask the JVM whether what the other backend produced is a
+                // class. Skipped without a JDK, like every other JVM step, and
+                // a backend refusal here is a refusal rather than a rejection
+                // for the same reason it is above.
+                if has_a_jdk() {
+                    match nts_differential::verifies(&prepared.program, &workspace.built) {
+                        Ok(()) | Err(nts_differential::NotC::Refused(_)) => {}
+                        Err(nts_differential::NotC::Rejected(error)) => {
+                            unverifiable = true;
+                            notes.push(format!("UNVERIFIABLE CLASS: {file}: {error}"));
+                        }
+                    }
+                }
                 if prepared.diagnostics.is_empty() {
                     Outcome::Lowered
                 } else {
@@ -343,6 +396,7 @@ fn examine(file: &Utf8Path, workspace: &Workspace, tsgo: &str) -> Examined {
         outcome,
         notes,
         uncompilable,
+        unverifiable,
     }
 }
 
@@ -437,6 +491,7 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         failed: 0,
         invalid: 0,
         uncompilable: 0,
+        unverifiable: 0,
         reasons: FxHashMap::default(),
         blocked: Vec::new(),
     };
@@ -449,6 +504,9 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         }
         if examined.uncompilable {
             totals.uncompilable += 1;
+        }
+        if examined.unverifiable {
+            totals.unverifiable += 1;
         }
         match examined.outcome {
             Outcome::Lowered => totals.lowered += 1,
@@ -497,6 +555,7 @@ fn report(totals: &Totals) {
     // counting it: the two rows that must stay at zero are only a gate if a
     // reader can see both.
     println!("  uncompilable C          {}", totals.uncompilable);
+    println!("  unverifiable class      {}", totals.unverifiable);
 
     let mut reasons: Vec<(&String, &usize)> = totals.reasons.iter().collect();
     reasons.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));

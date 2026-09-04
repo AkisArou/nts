@@ -233,10 +233,26 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
              proves nothing about {}",
             sabotage.example, sabotage.method,
         );
+        // Two causes look identical here and the message has to name both,
+        // because telling them apart took reading `javap` the one time it
+        // fired. Either the harness is blind, or the anchor is wrong -- the
+        // method is compiled into the example and still not on a path whose
+        // result anybody compares.
+        //
+        // That happened: `ofNumber` appears six times in `examples/unknown` and
+        // the fixture still agreed under sabotage, because the middle end had
+        // elided every erasure whose payload is read and the boxes that
+        // survived were only ever asked for their tag. So no check on the
+        // *artifact* can settle it -- "is this method on a path that affects an
+        // answer" is not a fact about the class file, it is the statement "the
+        // output changed", which is this assertion.
         assert!(
             !broken,
-            "breaking `{}` changed nothing that `examples/{}` reports, so \
-             nothing there is checking {}",
+            "breaking `{}` changed nothing that `examples/{}` reports. Either \
+             the harness is not checking {} -- or the anchor is wrong and that \
+             method, though compiled in, is not on a path whose result the \
+             differential compares. Read the emitted class before assuming the \
+             first.",
             sabotage.method, sabotage.example, sabotage.guards,
         );
     }

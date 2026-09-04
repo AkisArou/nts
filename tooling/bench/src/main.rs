@@ -139,20 +139,36 @@ const VARIANTS: &[Variant] = &[
     },
 ];
 
-/// Which of Are We Fast Yet's Java classes a case is a port of.
+/// Which of Are We Fast Yet's Java classes a case is a port of, and how many
+/// inner iterations to ask it for.
 ///
 /// Written out rather than derived from the case name, because `awfy-nbody` is
 /// `NBody` and a capitalisation rule that works for seven and not the eighth is
 /// worse than a list of eight.
-const JAVA_REFERENCES: &[(&str, &str)] = &[
-    ("awfy-bounce", "Bounce"),
-    ("awfy-list", "List"),
-    ("awfy-mandelbrot", "Mandelbrot"),
-    ("awfy-nbody", "NBody"),
-    ("awfy-permute", "Permute"),
-    ("awfy-queens", "Queens"),
-    ("awfy-sieve", "Sieve"),
-    ("awfy-towers", "Towers"),
+///
+/// `None` means "whatever the case's own workload passes", which is right when
+/// both ports hold the problem size in the same place. `nbody` is the exception
+/// and the reason the third column exists: **Are We Fast Yet's ports do not
+/// agree about where the size lives.** Theirs takes 250,000 advances as
+/// `innerBenchmarkLoop`'s argument; ours keeps it as a constant inside the
+/// benchmark and passes 1, the way every other case here holds its size, and
+/// `ref.cpp` passes 250000 to match theirs.
+///
+/// Passing our 1 to their Java ran **one** advance and reported 59.5ns against
+/// 7.36ms for the same work in C++ -- and the cross-variant checksum check
+/// passed, because their `verifyResult` carries an explicit
+/// `innerIterations == 1` branch that returns true. A guard that was satisfied
+/// by a special case in somebody else's code, which is the same failure as a
+/// gate assertion satisfied by node being unable to parse a file.
+const JAVA_REFERENCES: &[(&str, &str, Option<f64>)] = &[
+    ("awfy-bounce", "Bounce", None),
+    ("awfy-list", "List", None),
+    ("awfy-mandelbrot", "Mandelbrot", None),
+    ("awfy-nbody", "NBody", Some(250_000.0)),
+    ("awfy-permute", "Permute", None),
+    ("awfy-queens", "Queens", None),
+    ("awfy-sieve", "Sieve", None),
+    ("awfy-towers", "Towers", None),
 ];
 
 fn main() -> Result<()> {
@@ -191,20 +207,22 @@ fn main() -> Result<()> {
     }
 
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9}",
         "case",
         "C++",
         "nts C",
         "nts LLVM",
         "nts JVM",
+        "Java",
         "nts f64",
         "node",
         "bun",
         "nts/C++",
         "nts/node",
-        "nts/bun"
+        "nts/bun",
+        "jvm/Java"
     );
-    println!("{}", "-".repeat(136));
+    println!("{}", "-".repeat(158));
 
     let mut rows = Vec::new();
     for case in &cases {
@@ -344,8 +362,19 @@ struct Row {
     /// JS engine are both warm JITs and this number excludes startup entirely,
     /// where the native ones have none to exclude. The ratio worth taking here
     /// is against hand-written Java, which is a column this table does not have
-    /// yet.
+    /// -- which it now does, as `Java`.
     jvm: Option<f64>,
+    /// Are We Fast Yet's **own** hand-written Java for the same benchmark, on
+    /// the same JVM in the same run.
+    ///
+    /// The only reference in this table written in the language the column
+    /// being measured compiles to, which is what makes `jvm/Java` a statement
+    /// about codegen with the runtime divided out. Every other ratio here mixes
+    /// a codegen difference with an engine difference and cannot separate them.
+    ///
+    /// `None` for every case that is not a port of one of theirs, which is all
+    /// but the `awfy-*` rows.
+    java: Option<f64>,
     /// Bun, where it is installed. `None` skips the column rather than
     /// reporting a zero that reads like a win.
     bun: Option<f64>,
@@ -369,6 +398,19 @@ impl Row {
     /// parity, `--` is a program the primary backend does not render yet.
     fn against(&self, other: Option<f64>) -> String {
         match (self.primary(), other) {
+            (Some(ours), Some(theirs)) => format!("{ours_over:.2}x", ours_over = ours / theirs),
+            _ => "--".to_owned(),
+        }
+    }
+
+    /// The JVM lane against hand-written Java, which is the one ratio in this
+    /// table with the runtime divided out.
+    ///
+    /// Deliberately not `against`: that one divides the *primary* column, which
+    /// is the C backend, and dividing a native binary by a JVM number would be
+    /// a ratio about HotSpot rather than about anything this compiler decided.
+    fn jvm_against_java(&self) -> String {
+        match (self.jvm, self.java) {
             (Some(ours), Some(theirs)) => format!("{ours_over:.2}x", ours_over = ours / theirs),
             _ => "--".to_owned(),
         }
@@ -573,21 +615,49 @@ fn finish_row(case: &Utf8Path, shown: &str, results: &[Option<Measured>]) -> Res
             .get(4)
             .and_then(Option::as_ref)
             .map(|it| it.ns_per_op),
+        java: results
+            .get(5)
+            .and_then(Option::as_ref)
+            .map(|it| it.ns_per_op),
         bun: bun.map(|result| result.ns_per_op),
     };
+    // A reference and a subject that disagree about how much work to do are not
+    // comparable, and the checksum cannot say so: every AWFY case answers 1 or
+    // 0, and `nbody`'s `verifyResult` returns *true* for one iteration as
+    // happily as for 250,000. So the guard is on the magnitude, against the
+    // other hand-written reference for the same program.
+    //
+    // Twenty times is far outside any codegen difference. Java can beat C++ on
+    // a row and does; it cannot beat it by an order of magnitude on a numeric
+    // kernel, so a gap that size means one of them is doing different work.
+    if let (Some(cpp), Some(java)) = (row.cpp, row.java) {
+        if java * 20.0 < cpp || cpp * 20.0 < java {
+            bail!(
+                "the Java reference for {} ran in {} against {} for the C++ \
+                 reference -- that is not a codegen difference, it is the two \
+                 references doing different amounts of work. Check the \
+                 iteration count in JAVA_REFERENCES.",
+                row.case,
+                human(java),
+                human(cpp)
+            );
+        }
+    }
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9}",
         row.case,
         row.cpp.map_or_else(|| "--".to_owned(), human),
         human(row.nts),
         row.llvm.map_or_else(|| "--".to_owned(), human),
         row.jvm.map_or_else(|| "--".to_owned(), human),
+        row.java.map_or_else(|| "--".to_owned(), human),
         human(row.unspecialized),
         human(row.node),
         row.bun.map_or_else(|| "--".to_owned(), human),
         row.against(row.cpp),
         row.against(Some(row.node)),
         row.against(row.bun),
+        row.jvm_against_java(),
     );
     Ok(row)
 }
@@ -798,7 +868,9 @@ fn java_reference(
 ) -> Result<Option<Measured>> {
     use std::fmt::Write as _;
 
-    let Some((_, class)) = JAVA_REFERENCES.iter().find(|(which, _)| *which == name) else {
+    let Some((_, class, override_iterations)) =
+        JAVA_REFERENCES.iter().find(|(which, _, _)| *which == name)
+    else {
         return Ok(None);
     };
     let sources = root.join("third_party/are-we-fast-yet/benchmarks/Java/src");
@@ -829,8 +901,12 @@ fn java_reference(
     }
 
     let (_, arguments) = workload(case)?;
-    let Some(iterations) = arguments.first() else {
-        bail!("{name} has no workload argument to drive their benchmark with");
+    let iterations = match override_iterations {
+        Some(count) => count.to_string(),
+        None => arguments
+            .first()
+            .cloned()
+            .with_context(|| format!("{name} has no workload argument"))?,
     };
 
     let dir = out.join(format!("{name}.javaref"));

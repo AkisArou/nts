@@ -986,6 +986,77 @@ pub fn compiles(program: &hir::Program, dir: &Utf8Path) -> Result<(), NotC> {
     ))
 }
 
+/// Whether every class the JVM backend emitted survives the JVM's verifier.
+///
+/// The same split as [`compiles`], for the same reason: a backend that declines
+/// is a refusal like any other, and a class the verifier rejects is malformed
+/// output. Only the second is the row that must reach zero.
+///
+/// This matters more here than its C counterpart does there. A verifier
+/// rejection is the *characteristic* failure of a bytecode emitter -- the bytes
+/// are well formed enough to write, the constant pool resolves, and the class
+/// is refused at load because an abstract interpretation of the code says the
+/// stack or a local has the wrong type on some path. Nothing short of the
+/// verifier answers that question, and a program only ever loads the classes it
+/// actually reaches, so running one is not the same as checking one.
+///
+/// Two of today's bugs were exactly this shape and both were found by running
+/// an AWFY case rather than by any check: `boolean[]` allocated as `int[]`, and
+/// an array length widened to `double` and stored into a `long` slot. Neither
+/// was visible in the emitted text and both were a `VerifyError` at load.
+pub fn verifies(program: &hir::Program, dir: &Utf8Path) -> Result<(), NotC> {
+    let emitted = nts_codegen_jvm::emit(program);
+    if !emitted.diagnostics.is_empty() {
+        return Err(NotC::Refused(
+            emitted
+                .diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.message.clone())
+                .collect::<Vec<_>>()
+                .join("; "),
+        ));
+    }
+    if emitted.classes.is_empty() {
+        return Ok(());
+    }
+    let mut names = Vec::with_capacity(emitted.classes.len());
+    for class in &emitted.classes {
+        let path = dir.join(class.path());
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| NotC::Rejected(e.to_string()))?;
+        }
+        std::fs::write(&path, &class.bytes).map_err(|e| NotC::Rejected(e.to_string()))?;
+        names.push(class.binary_name.replace('/', "."));
+    }
+    let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
+    std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref())
+        .map_err(|e| NotC::Rejected(e.to_string()))?;
+
+    let java = std::env::var("JAVA_HOME")
+        .map_or_else(|_| "java".to_owned(), |home| format!("{home}/bin/java"));
+    let loaded = std::process::Command::new("timeout")
+        .arg(TIMEOUT)
+        .arg(java)
+        .args(["-Xmx256m", "-XX:-UsePerfData"])
+        .arg("-cp")
+        .arg(format!("{dir}:{jar}"))
+        .arg("nts.rt.Verify")
+        .args(&names)
+        .output()
+        .map_err(|error| NotC::Rejected(error.to_string()))?;
+    if loaded.status.success() {
+        return Ok(());
+    }
+    Err(NotC::Rejected(
+        String::from_utf8_lossy(&loaded.stdout)
+            .lines()
+            .find(|line| line.starts_with("UNVERIFIABLE"))
+            .unwrap_or("the JVM refused a generated class")
+            .trim()
+            .to_owned(),
+    ))
+}
+
 /// How the runtime says "the program correctly declined", as opposed to
 /// "something here is broken".
 ///
