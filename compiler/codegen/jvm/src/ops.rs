@@ -1171,6 +1171,33 @@ impl Emitter<'_> {
             code.get_static(origin, pool, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR);
             return Ok(Placed::OnStack);
         }
+        // A closure erases to `function`, not `object`. `hir::tags` already
+        // says so -- `of_reference` answers `FUNCTION` for a synthetic closure
+        // type -- and flattening every managed reference to `ofObject` threw
+        // that away: `examples/absent` computed 42 where node computes 45,
+        // because `typeof f === "function"` was false and `typeof f ===
+        // "object"` was true for the same arrow.
+        //
+        // The tag goes on the stack *before* the value, because `ofTagged`
+        // takes it first, which is why this is a branch here rather than one
+        // more row in the table below.
+        if let HirType::Managed(managed) = &from {
+            let tag = nts_core::hir::tags::of_reference(managed);
+            if tag != nts_core::hir::tags::OBJECT
+                && !matches!(managed, ManagedType::String)
+            {
+                code.const_int(origin, pool, i32::try_from(tag).unwrap_or(0));
+                self.load(code, value)?;
+                code.invoke_static(
+                    origin,
+                    pool,
+                    types::VALUE,
+                    "ofTagged",
+                    "(ILjava/lang/Object;)Lnts/rt/NtsValue;",
+                );
+                return Ok(Placed::OnStack);
+            }
+        }
         self.load(code, value)?;
         let (name, signature) = match &from {
             HirType::Bool => ("ofBoolean", "(Z)Lnts/rt/NtsValue;"),
@@ -2469,11 +2496,95 @@ impl Emitter<'_> {
                     Placed::OnStack
                 });
             }
-            Callee::Closure { .. } => {
-                return Err(refuse(self.func, "a call through a closure"));
+            // A closure call is a dispatch like any other, and the only thing
+            // that made it different was that there was nothing to dispatch
+            // *to*: a function type's layout declared no method, so the base a
+            // closure extends had an empty slot.
+            //
+            // With the signature carrying an `abstract_declaration` in that
+            // slot, this is `Callee::Virtual` with the name looked up instead
+            // of given -- and the descriptor comes from the declaration rather
+            // than from the call's own argument types, so every closure of one
+            // type agrees with the base about it by construction.
+            Callee::Closure { slot } => {
+                return self.closure_call(code, pool, result, *slot, args, origin);
             }
         };
         self.direct_call(code, pool, result, name, args, origin)
+    }
+
+    /// `invokevirtual` on the function type's abstract declaration.
+    ///
+    /// See the note on the `Callee::Closure` arm above for why this is a
+    /// dispatch like any other now.
+    fn closure_call(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        result: &HirType,
+        slot: u32,
+        args: &[ValueId],
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        {
+            {
+                let Some(&receiver) = args.first() else {
+                    return Err(refuse(self.func, "a closure call with no receiver"));
+                };
+                let ty = self.ty(receiver).clone();
+                let owner = self.object_class(&ty)?;
+                let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
+                    return Err(refuse(self.func, "a closure call on something that is not an object"));
+                };
+                let Some(layout) = self.program.layout(id) else {
+                    return Err(refuse(self.func, "a closure whose layout this program does not carry"));
+                };
+                let Some(Some(declared)) = layout.methods.get(slot as usize) else {
+                    return Err(refuse(
+                        self.func,
+                        "a closure call through a slot its type declares nothing for",
+                    ));
+                };
+                let Some(target) = self.program.funcs.iter().find(|f| &f.name == declared) else {
+                    return Err(refuse(
+                        self.func,
+                        &format!("a closure call to `{declared}`, which is not in this program"),
+                    ));
+                };
+                let Some(descriptor) = crate::instance_descriptor(self.program, target) else {
+                    return Err(refuse(
+                        self.func,
+                        &format!("a closure call to `{declared}`, whose signature has no representation"),
+                    ));
+                };
+                let member = crate::hierarchy::member_name(declared);
+                for &arg in args {
+                    self.load(code, arg)?;
+                }
+                code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
+                // The declaration says what the *type* returns; the call
+                // site says what this call wants. `f?.(x)` in a statement asks
+                // for nothing from a closure declared to return a double, and
+                // a value left on the stack at a block boundary is a frame
+                // this backend cannot describe. The external path already
+                // reconciles the two; a closure call is the same shape.
+                let returns = descriptor.rsplit(')').next().unwrap_or("");
+                if matches!(result, HirType::Void) {
+                    let words = nts_jvm_emitter::descriptor::words(returns);
+                    if words > 0 {
+                        code.pop(origin, words);
+                    }
+                    return Ok(Placed::Stored);
+                }
+                if let Some(want) = types::descriptor(self.shape, result)
+                    && want != returns
+                    && types::kind(result) == Some(Kind::Ref)
+                {
+                    code.check_cast(origin, pool, &want);
+                }
+                Ok(Placed::OnStack)
+            }
+        }
     }
 
     /// `invokestatic` on `nts/gen/Program`, which is what most calls are.
