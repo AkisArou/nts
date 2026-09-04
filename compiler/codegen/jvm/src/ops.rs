@@ -1290,14 +1290,14 @@ impl Emitter<'_> {
             OpKind::ArrayGet { array, index, checked } => {
                 let element = self.element_descriptor(&self.ty(*array).clone())?;
                 self.load(code, *array)?;
-                self.checked_subscript(code, pool, *array, *index, *checked, origin)?;
+                self.checked_subscript(code, pool, *index, *checked, origin)?;
                 code.array_load(origin, &element);
                 Ok(Placed::OnStack)
             }
             OpKind::ArraySet { array, index, value, checked } => {
                 let element = self.element_descriptor(&self.ty(*array).clone())?;
                 self.load(code, *array)?;
-                self.checked_subscript(code, pool, *array, *index, *checked, origin)?;
+                self.checked_subscript(code, pool, *index, *checked, origin)?;
                 self.load(code, *value)?;
                 code.array_store(origin, &element);
                 Ok(Placed::Stored)
@@ -1323,7 +1323,6 @@ impl Emitter<'_> {
         &mut self,
         code: &mut Code,
         pool: &mut Pool,
-        array: ValueId,
         index: ValueId,
         checked: bool,
         origin: &nts_semantic_schema::Origin,
