@@ -235,3 +235,22 @@ export function callbackTakingTheArray(n: number): number {
   });
   return total;
 }
+
+// The **table** parameter of a `Map` or `Set` `forEach`, which is the third the
+// callback may take.
+//
+// The value and the key are bound; the table is not, for the reason the array's
+// third parameter is refused: handing the receiver to the body lets it be
+// stored where the loop cannot see, and the loop is what proves it does not
+// escape. A `Map` has a second reason -- mutating it during a walk changes what
+// the cursor is walking, and the entry order after an insert is a question this
+// compiler would have to answer the same way node does.
+export function tableForEachTakingTheTable(n: number): number {
+  const scores = new Map<number, number>();
+  scores.set(1, n);
+  let total = 0;
+  scores.forEach((value, key, all) => {
+    total = total + value * key + all.size;
+  });
+  return total;
+}

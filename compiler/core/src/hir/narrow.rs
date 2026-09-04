@@ -256,6 +256,7 @@ mod tests {
             exported: true,
             initializes_receiver: false,
             async_result: None,
+            frame: None,
             abstract_declaration: false,
         }
     }
@@ -461,6 +462,7 @@ mod tests {
             exported: true,
             initializes_receiver: false,
             async_result: None,
+            frame: None,
             abstract_declaration: false,
         };
         assert_eq!(narrow_truncated(&mut it), 2);

@@ -1,12 +1,13 @@
-// Generators, which this compiler refuses.
+// Generators, which this compiler compiles.
 //
-// Here so the refusal says `yield` rather than "this expression". A message
-// that names no construct cannot be grouped, ranked, or counted, and every
-// `yield` in the node profile was landing in the same anonymous bucket as
-// everything else the expression lowering does not handle.
+// This file was here for the *refusal*: so that it said `yield` rather than
+// "this expression", because a message that names no construct cannot be
+// grouped, ranked or counted, and every `yield` in the node profile was landing
+// in the same anonymous bucket as everything else unhandled. Naming it is what
+// made the feature visible enough to build.
 //
 // Node's `readline` key decoder is a generator-based state machine over
-// terminal escape sequences, so this is not hypothetical.
+// terminal escape sequences, so this was never hypothetical.
 function* counter(limit: number): Generator<number, void, unknown> {
   let i = 0;
   while (i < limit) {

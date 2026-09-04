@@ -217,3 +217,133 @@ export function walkedReferences(n: number): string {
   }
   return keys + String(total);
 }
+
+// `forEach` on a `Map` and a `Set`, which is the walk `for...of` already does
+// with the callback's body inlined where the head's bindings would go.
+//
+// The same pieces: `walk_cursor` for the entry index, `walk_condition` for the
+// test, `read_element` for the reads, `Step::Walk` for the advance. Nothing is
+// allocated and nothing is called indirectly.
+//
+// Two things about the callback that are easy to get backwards, so node is
+// asked about both.
+
+// `(value, key)` — and the table stores them the other way round. `for (const
+// [k, v] of map)` binds the key first and `forEach` hands the value first, so
+// this asks about a map whose keys and values are different numbers.
+export function mapForEach(n: number): number {
+  const scores = new Map<number, number>();
+  scores.set(2, n);
+  scores.set(3, n + 10);
+  scores.set(5, n + 20);
+  let total = 0;
+  scores.forEach((value, key) => {
+    total = total + value * key;
+  });
+  return total;
+}
+
+// A `Set` has no values, and node passes the element **twice**: `v === k` for
+// every entry. So the second read is the key again rather than an error.
+export function setForEachSeesTheElementTwice(n: number): number {
+  const seen = new Set<number>();
+  seen.add(n);
+  seen.add(n + 1);
+  let agreed = 0;
+  let total = 0;
+  seen.forEach((value, key) => {
+    total = total + value;
+    if (value === key) {
+      agreed = agreed + 1;
+    }
+  });
+  return total * 10 + agreed;
+}
+
+// One parameter, which is how most callbacks are written.
+export function mapForEachValueOnly(n: number): number {
+  const scores = new Map<string, number>();
+  scores.set("a", n);
+  scores.set("bb", n + 1);
+  let total = 0;
+  scores.forEach((value) => {
+    total = total + value;
+  });
+  return total;
+}
+
+// A key that is a string, so the second parameter is a reference rather than a
+// number and the read has to unerase it.
+export function stringKeysThroughForEach(n: number): number {
+  const widths = new Map<string, number>();
+  widths.set("a", n);
+  widths.set("bbb", n + 1);
+  let total = 0;
+  widths.forEach((value, key) => {
+    total = total + value * key.length;
+  });
+  return total;
+}
+
+// After a delete, which is the case a table walk exists for: the entries are
+// not contiguous, so the cursor asks the runtime for the next live index rather
+// than adding one.
+export function afterADelete(n: number): number {
+  const scores = new Map<number, number>();
+  scores.set(1, n);
+  scores.set(2, n + 1);
+  scores.set(3, n + 2);
+  scores.set(4, n + 3);
+  scores.delete(2);
+  scores.delete(4);
+  let total = 0;
+  scores.forEach((value, key) => {
+    total = total + value * key;
+  });
+  return total;
+}
+
+// A `return` inside the body, which is a `continue` rather than a return from
+// the enclosing function — the same delivery the array's `forEach` uses.
+export function returnsEarly(n: number): number {
+  const scores = new Map<number, number>();
+  scores.set(1, n);
+  scores.set(2, -1);
+  scores.set(3, n + 2);
+  let total = 0;
+  scores.forEach((value) => {
+    if (value < 0) {
+      return;
+    }
+    total = total + value;
+  });
+  return total;
+}
+
+// An empty table, where the cursor's first `nts_map_next` answers "none" and
+// the body never runs.
+export function empty(n: number): number {
+  const scores = new Map<number, number>();
+  let total = 0;
+  scores.forEach((value) => {
+    total = total + value;
+  });
+  return total + n * 0;
+}
+
+// Nested, so two cursors are live at once and neither steps the other.
+export function nested(n: number): number {
+  const outer = new Set<number>();
+  outer.add(n);
+  outer.add(n + 1);
+  const inner = new Map<number, number>();
+  inner.set(2, n + 2);
+  inner.set(3, n + 3);
+  let total = 0;
+  outer.forEach((left) => {
+    inner.forEach((value, key) => {
+      total = total + (left + value) * key;
+    });
+  });
+  return total;
+}

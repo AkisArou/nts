@@ -300,36 +300,35 @@ fn one_unsupported_statement_does_not_darken_the_module() {
     );
 }
 
-/// A `yield` is refused by name, not as "this expression".
+/// A `yield` lowers, and this test used to say the opposite.
 ///
-/// The expression lowering's fallthrough names nothing, and a refusal nobody
-/// can group by is a refusal nobody can rank: every `yield` landed in the same
-/// anonymous bucket as everything else unhandled, so a work-list built from
-/// these messages could not see generators at all.
+/// It was `a_yield_is_refused_by_name`, and its subject was the *message*: the
+/// expression lowering's fallthrough names nothing, so every `yield` landed in
+/// the same anonymous bucket as everything else unhandled and a work-list built
+/// from these refusals could not see generators at all. Naming it was what made
+/// the feature visible enough to build.
 ///
-/// This also pins `syntax::YIELD_EXPRESSION`, which is a bare number read off
-/// the checker's enum. If it were wrong the refusal would silently go back to
-/// being anonymous, which is exactly the failure it was added to fix.
+/// So the test is kept rather than deleted, pointed at the same program, with
+/// the claim turned round: nothing here is refused. `syntax::YIELD_EXPRESSION`
+/// is still pinned, harder than before — a wrong constant now means the
+/// generator does not lower rather than that its refusal is anonymous.
 #[test]
-fn a_yield_is_refused_by_name() {
+fn a_yield_lowers() {
     let Some(lowered) = lower_at("tests/programs/generators", true) else {
         return;
     };
-    assert!(
-        lowered
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.message.contains("`yield`")),
-        "the refusal should name `yield`: {:?}",
+    assert_eq!(
         refusals(&lowered),
+        Vec::<String>::new(),
+        "a generator and the `for...of` that walks it both lower",
     );
     assert!(
-        !lowered
-            .diagnostics
+        lowered
+            .program
+            .funcs
             .iter()
-            .any(|diagnostic| diagnostic.message.starts_with("this expression")),
-        "and nothing here should be refused anonymously: {:?}",
-        refusals(&lowered),
+            .any(|func| func.name == "total"),
+        "the function walking the generator is in the program",
     );
 }
 

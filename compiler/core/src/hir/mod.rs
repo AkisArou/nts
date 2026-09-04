@@ -344,6 +344,30 @@ pub struct Func {
     /// looking for "the `nts_promise_new` in the entry block" would be a
     /// pattern match on the shape of code the lowering happens to emit.
     pub async_result: Option<ValueId>,
+    /// The frame type reserved for this function, where it is a **generator**.
+    ///
+    /// An `async` function's frame is named by [`super::suspend`] from the
+    /// function's index in `funcs`, and nothing outside that pass ever says the
+    /// name. A generator's has to be said twice: once by the pass that builds
+    /// it, and once by the `for...of` that walks one, which is lowered long
+    /// before the pass runs and cannot predict an index that refusals will
+    /// shift. So the lowering reserves it and both sides read it from here.
+    pub frame: Option<GeneratorFrame>,
+}
+
+/// What a generator's frame is, said once so that two passes agree about it.
+///
+/// Reserved by the lowering. [`suspend`] builds the layout from it and the
+/// `for...of` that walks the generator reads its element from it, and if those
+/// two disagreed the load would be typed one way and the store the other --
+/// which is a wrong answer rather than an error, because both are field
+/// accesses on the same object at the same offset.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GeneratorFrame {
+    /// The synthetic type id, from [`generator_frame`].
+    pub ty: TypeId,
+    /// What `yield` produces, at the representation the field holds.
+    pub yields: HirType,
 }
 
 impl Func {
@@ -782,6 +806,25 @@ pub enum OpKind {
     Await {
         promise: ValueId,
     },
+    /// `yield v`: hand `v` to whoever is walking this generator, and stop here.
+    ///
+    /// The mirror of [`OpKind::Await`] and the same transformation: the
+    /// function returns and comes back later with its locals restored from a
+    /// heap frame. What differs is *who* resumes it. An `await` hands control
+    /// to the event loop and is resumed by a subscription; a `yield` hands
+    /// control to the **caller**, and is resumed by the caller asking for
+    /// another element. So there is no subscription and no promise, and the
+    /// suspension is an ordinary `return`.
+    ///
+    /// Produces nothing. `yield` is an expression in TypeScript -- it evaluates
+    /// to whatever is passed to the next `next(v)` -- and that value is refused
+    /// by name, because supplying it means the walk has something to say and
+    /// `for...of` never does.
+    ///
+    /// It survives only as far as [`super::suspend`].
+    Yield {
+        value: ValueId,
+    },
     /// Suspend: subscribe `frame` to `promise`, to be resumed by `resume`.
     ///
     /// One operation rather than a function-pointer *value* plus a call. A
@@ -1103,6 +1146,26 @@ pub const SYNTHETIC_TYPE_FLOOR: u32 = u32::MAX - (1 << 20);
 pub const SYNTHETIC_CELLS: u32 = SYNTHETIC_TYPE_FLOOR;
 pub const SYNTHETIC_FRAMES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18);
 pub const SYNTHETIC_CLOSURES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 19);
+
+/// The upper half of the frames' space, for a **generator**'s frame.
+///
+/// Split from the lower half because the two are numbered by different things
+/// and neither can see the other's counter: an `async` frame is the function's
+/// index in `funcs`, chosen by [`suspend`] after refusals have removed
+/// functions, and a generator's is the lowering's own count, chosen before.
+/// Sharing one counter would have them collide for any program with both.
+pub const SYNTHETIC_GENERATOR_FRAMES: u32 = SYNTHETIC_FRAMES + (1 << 17);
+
+/// The frame type reserved for the `n`th generator the lowering meets.
+#[must_use]
+pub fn generator_frame(index: usize) -> TypeId {
+    let id = SYNTHETIC_GENERATOR_FRAMES + u32::try_from(index).unwrap_or(0);
+    debug_assert!(
+        id < SYNTHETIC_CLOSURES,
+        "more generators than the synthetic id space holds"
+    );
+    TypeId(id)
+}
 
 /// Whether a type id names a closure's class.
 ///
@@ -1711,11 +1774,22 @@ pub fn prepare_with(
 /// does for the other kind of call.
 fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
     loop {
+        // A function about to be split by `suspend` provides two names: its
+        // own and its resumption's. A `for...of` over a generator calls the
+        // second, and this runs *before* the split -- so without them every
+        // such loop is dropped as calling something that was refused.
+        let resumptions: Vec<String> = lowered
+            .program
+            .funcs
+            .iter()
+            .filter_map(suspend::provides)
+            .collect();
         let present: rustc_hash::FxHashSet<&str> = lowered
             .program
             .funcs
             .iter()
             .map(|func| func.name.as_str())
+            .chain(resumptions.iter().map(String::as_str))
             .collect();
         let mut refused = Vec::new();
         for func in &lowered.program.funcs {
@@ -2268,6 +2342,7 @@ mod tests {
                 exported: true,
                 initializes_receiver: false,
                 async_result: None,
+                frame: None,
                 abstract_declaration: false,
             }],
             globals: Vec::new(),

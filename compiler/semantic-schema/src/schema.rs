@@ -156,6 +156,15 @@ impl DeclarationModifiers {
     /// `const` as a modifier, as on `const enum`. Not the `const` of a variable
     /// declaration — that lives in [`NodeRecord::flags`].
     pub const CONST: Self = Self(1 << 11);
+    /// The `*` of `function*` — a generator declaration.
+    ///
+    /// Not a modifier in the grammar: it is the declaration's `asteriskToken`,
+    /// a child node rather than a keyword in the modifier list. It is recorded
+    /// as one because that is where every other "what kind of function is this"
+    /// question is already answered, and because the alternative is for the
+    /// lowering to go looking for a token whose kind it shares with the
+    /// multiplication operator.
+    pub const GENERATOR: Self = Self(1 << 12);
 
     #[must_use]
     pub const fn contains(self, other: Self) -> bool {

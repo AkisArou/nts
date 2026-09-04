@@ -435,6 +435,25 @@ fn assign_modifiers(nodes: &mut [NodeRecord]) {
             };
             modifiers = modifiers.union(mapped);
         }
+        // The `*` of `function*`, which is a child token rather than a
+        // modifier. Restricted to the three declarations that can carry one:
+        // `ASTERISK_TOKEN` is also the multiplication operator, and a
+        // `BinaryExpression`'s children are `a`, `*`, `b`.
+        let function_like = matches!(
+            node.kind,
+            NodeKind::Syntax(
+                syntax::FUNCTION_DECLARATION
+                    | syntax::FUNCTION_EXPRESSION
+                    | syntax::METHOD_DECLARATION
+            )
+        );
+        if function_like
+            && node.children.iter().any(|child| {
+                nodes[child.0 as usize].kind == NodeKind::Syntax(syntax::ASTERISK_TOKEN)
+            })
+        {
+            modifiers = modifiers.union(DeclarationModifiers::GENERATOR);
+        }
         computed[index] = modifiers;
     }
     for (node, modifiers) in nodes.iter_mut().zip(computed) {

@@ -155,7 +155,7 @@ counter, not by reading the emitted C.
 | ✅ | closures over a variable something **assigns to** — the variable moves into a cell |
 | ✗ | a closure over a `for` loop's own variable, which JavaScript rebinds per iteration |
 | ✅ | a closure written *above* the declaration of a local it reads |
-| ✗ | generators (`function*`, `yield`) — needs the `Generator<T>` object |
+| ✅ | generators (`function*`, `yield`) | the `async` state machine with a different protocol: the element goes in the frame and the suspension is an ordinary `return`, because what resumes it is the caller standing there rather than the event loop. There is no `Generator<T>` object — the **frame is the iterator** |
 
 ### A written variable moves into a cell, and the cell is usually not on the heap
 
@@ -1854,14 +1854,17 @@ starts, whether it is still going, what it reads. That is what let `break`,
 | ✅ | mutation during a walk: an entry appended is visited, one deleted ahead is not |
 | ✅ | `[Symbol.iterator]()`, `.next()`, `{ value, done }` — the object itself, where the result type is written out | the fourth walk and the only one with no cursor: `next()` both advances the iterator and produces the element, so one call answers "again?" in the header and "with what?" in the body, which the header dominates. The header is the latch, because `continue` has to reach the step |
 | ✗ | `IteratorResult<T>` from `lib.d.ts` | a union of two object types whose `value` is `T` in one and `any` in the other, so they lay out differently and the union has no representation. A hand-written `{ value: T; done: boolean }` works; the standard spelling is refused and named |
-| ✗ | iterator **closing** (`.return()` on abrupt completion) — a correctness detail, not a convenience |
+| ✗ | iterator **closing** (`.return()` on abrupt completion) | a correctness detail, not a convenience, and generators are what made it observable: a `for...of` left by `break` calls `gen.return()`, which resumes the generator inside its `try` so the `finally` runs. A generator whose `finally` incremented a counter disagreed with node on **26 of 29 cases**, so a `finally` spanning a `yield` is refused by name. A `catch` spanning one is not, and that is measured: 29 of 29 agree |
 | ✅ | `for...of` over a user type with `[Symbol.iterator]` | `break` and `continue` both correct, nested walks independent, the iterator built once per loop. Allocates **nothing**: the result object is one frame slot reused, because each dies before the next is made — `tooling/memory/cases/iterator-protocol` argues it |
-| ✗ | `for...of` over a **generator** | needs `yield`, which is the row below |
+| ✅ | `for...of` over a **generator** | the fifth walk and the second with no cursor. One call to the resumption and one field read an element; **nothing allocated per element and no `{ value, done }` at all**, so a walk of any length allocates once. 1.07x hand-written C++, 0.05x node |
 | ◐ | spread over an iterable; `new Map([[k, v]])`. `Array.from(xs)` where `xs` is already an array is a copy and works; a mapper, or anything iterable that is not an array, does not |
-| ✗ | `Map`/`Set` `forEach` |
+| ✅ | `Map`/`Set` `forEach` | the `for...of` table walk with the callback's body inlined — `walk_cursor`, `walk_condition`, `read_element`, `Step::Walk`. `(value, key)`, which is the reverse of the order the table stores them in; a `Set` passes its element twice |
+| ✗ | the **table** parameter of a `Map`/`Set` `forEach` | the third the callback may take. Handing the receiver to the body lets it be stored where the loop cannot see, and mutating a table during a walk changes what the cursor is walking |
 | ✅ | a default in a destructuring pattern (`{ a = 1 }`) |
-| ✗ | `yield`, `yield*`, generator objects |
-| ✗ | the async iterator protocol, `for await...of` |
+| ✗ | `yield*` | delegates to another iterable, so one `next` on the outer generator is an unbounded number of steps on the inner one — a nested cursor in the frame rather than a state number, and the nesting has no fixed depth |
+| ✗ | the **value** of a `yield` (`const v = yield x`) | what the caller passed to `next(v)`, and a `for...of` passes nothing. Answering `undefined` to a program expecting a two-way conversation runs and produces numbers, which is why this is refused rather than approximated |
+| ✗ | a generator walked anywhere but where it was made | the resumption does not exist when the loop is lowered, so the loop names it from the call that produced the frame. Refused a step earlier, at the parameter: `Generator<T, ...>` has no representation, so a signature cannot name one |
+| ✗ | `async function*`, the async iterator protocol, `for await...of` | the two protocols disagree about what a resumption is *for*: one settles a promise nobody is waiting in front of, the other answers a caller who is. Refused by name rather than by whichever check fired first |
 | ✗ | iterator helpers (`map`, `filter`, `take`, …) |
 
 The mutation row is the one worth keeping honest about. A walk's whole state is

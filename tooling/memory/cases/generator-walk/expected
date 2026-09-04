@@ -1,0 +1,30 @@
+ideal 0
+allocated 0
+because Argued before measuring, and the argument is that a generator's frame
+because is the one frame that does not have to be on the heap.
+because
+because Allocations: none. The program builds exactly one managed object -- the
+because frame -- and it is made by the caller, handed to the resumption as a
+because parameter, and finished with when the loop ends. Nothing stores it
+because anywhere: a generator held in a variable and *returned* is refused,
+because because `Generator<T, ...>` has no representation, and one passed to
+because another function is refused at that function's parameter. So within
+because what this compiler accepts, a generator's frame cannot outlive the
+because function that made it.
+because
+because `hir::suspend` emits it as `ObjectNew { frame: false }` all the same,
+because because that pass was written for `async` -- where the heap is not a
+because choice. An `async` frame is handed to the event loop and read back in a
+because later call, so it must outlive the C frame that made it; that is the
+because whole reason it exists. A generator's is read by a call that returns
+because before its caller does.
+because
+because Operations: none, by the rule `closure-capture` states -- an allocation
+because floor of zero forces an operation floor of zero. The resumption takes
+because the frame as a parameter, and a parameter is borrowed by `hir::rc`'s
+because convention, so a step neither takes a reference nor gives one back.
+because
+because What the case would catch: an implementation that built a
+because `{ value, done }` per element -- which is what the iteration protocol
+because does for a user type that hands one back, and what this walk exists not
+because to do. Every answer would stay right and no test would fail.

@@ -841,10 +841,23 @@ fn render(ty: &HirType) -> String {
         HirType::Int { bits, signed } => format!("{}{bits}", if *signed { 'i' } else { 'u' }),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "managed<str>".to_owned(),
+        // Named by the part of the synthetic space it is in. Every one of them
+        // printed as `closure#N` before, which is the one thing an `async`
+        // frame and a generator's frame are not -- and this dump is where a
+        // frame is looked at.
         HirType::Managed(ManagedType::Object(id))
             if id.0 >= nts_core::hir::SYNTHETIC_TYPE_FLOOR =>
         {
-            format!("managed<closure#{}>", u32::MAX - id.0)
+            let (what, base) = if id.0 >= nts_core::hir::SYNTHETIC_CLOSURES {
+                ("closure", nts_core::hir::SYNTHETIC_CLOSURES)
+            } else if id.0 >= nts_core::hir::SYNTHETIC_GENERATOR_FRAMES {
+                ("generator", nts_core::hir::SYNTHETIC_GENERATOR_FRAMES)
+            } else if id.0 >= nts_core::hir::SYNTHETIC_FRAMES {
+                ("frame", nts_core::hir::SYNTHETIC_FRAMES)
+            } else {
+                ("cell", nts_core::hir::SYNTHETIC_CELLS)
+            };
+            format!("managed<{what}#{}>", id.0 - base)
         }
         HirType::Managed(ManagedType::Object(id)) => format!("managed<obj#{}>", id.0),
         HirType::Managed(ManagedType::Array(element)) => {
@@ -979,6 +992,7 @@ fn suspension(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
     match &op.kind {
         OpKind::Await { promise } => format!("%{index} = await %{} : {ty}", promise.0),
+        OpKind::Yield { value } => format!("yield %{}", value.0),
         OpKind::Suspend {
             promise,
             frame,
@@ -1057,7 +1071,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
             render_element(index, &ty, &op.kind)
         }
-        OpKind::Await { .. } | OpKind::Suspend { .. } => suspension(index, op),
+        OpKind::Await { .. } | OpKind::Yield { .. } | OpKind::Suspend { .. } => {
+            suspension(index, op)
+        }
         OpKind::Unary { op: un, operand } => {
             let operator = match un {
                 nts_core::hir::UnOp::Neg => "neg",

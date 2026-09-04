@@ -43,13 +43,22 @@
 //! in no position to answer it. Here the function is already SSA with a control
 //! flow graph, and [`super::liveness`] answers it directly.
 //!
-//! # What is not done yet
+//! # Spilling
 //!
-//! Spilling. A value that is live across an `await` and is neither a parameter
-//! nor the function's own result promise needs a frame slot and every use of it
-//! rewritten to a load. That is the general case, and it is refused by name
-//! until it is written, because the alternative — dropping the value and
+//! A value live across a suspension and neither a parameter nor the function's
+//! own result needs a frame slot, and every use of it rewritten to a load.
+//! [`crossing`] finds them, [`frame_fields`] gives them slots, and [`reload`]
+//! and [`carry`] rewrite the uses. The alternative — dropping the value and
 //! resuming with whatever the register held — is the kind of wrong that runs.
+//!
+//! This paragraph said the work was *not done* for some time after it was, and
+//! record 0101 is about what that costs: a comment claiming a gap gets
+//! believed, and the belief is what does the damage.
+//!
+//! # Generators
+//!
+//! `function*` is the same machine. See [`Mode`]: what differs is who resumes
+//! it, and everything else follows from that one sentence.
 
 use nts_diagnostics::Diagnostic;
 
@@ -62,6 +71,43 @@ const FIELD_STATE: u32 = 0;
 const FIELD_RESULT: u32 = 1;
 const FIELD_AWAITED: u32 = 2;
 const FIXED_FIELDS: u32 = 3;
+
+/// The element a generator most recently yielded.
+///
+/// Slot one, where an `async` frame keeps its promise, because a generator has
+/// neither a promise nor anything awaited: it has two fixed fields where an
+/// `async` frame has three. The walk reads this by number, which is why it is
+/// public -- the layout is built here and named there.
+pub const FIELD_YIELDED: u32 = 1;
+
+/// Which protocol a function's suspensions speak.
+///
+/// The state machine is the same in both: cut the body at each suspension,
+/// spill what is live across one, dispatch on a stored state. What differs is
+/// *who resumes it and with what*. An `await` hands control to the event loop
+/// and comes back through a subscription; a `yield` hands control to whoever is
+/// walking the generator and comes back when they ask for another element.
+///
+/// So an `async` frame carries a promise to settle and the thing most recently
+/// awaited, and its resumption returns nothing -- there is no caller left to
+/// return to. A generator's carries the element it stopped on, and its
+/// resumption returns *done*, to the caller that is still standing there.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Async,
+    Generator,
+}
+
+impl Mode {
+    /// How many fields sit before the parameters.
+    fn fixed(self) -> u32 {
+        match self {
+            Self::Async => FIXED_FIELDS,
+            // `state` and `yielded`, and nothing else.
+            Self::Generator => 2,
+        }
+    }
+}
 
 /// The synthetic type id for the `n`th frame.
 ///
@@ -80,7 +126,17 @@ fn frame_type(index: usize) -> TypeId {
 }
 
 fn frame_names(function: &str) -> (String, String) {
-    (format!("{function}#frame"), format!("{function}__resume"))
+    (format!("{function}#frame"), resume_name(function))
+}
+
+/// What a function's resumption is called.
+///
+/// Public because a `for...of` over a generator calls it, and is lowered long
+/// before this pass builds it. One function so that the two spellings cannot
+/// drift apart into a link error.
+#[must_use]
+pub fn resume_name(function: &str) -> String {
+    format!("{function}__resume")
 }
 
 /// Every value that is still needed on the far side of a suspension.
@@ -99,7 +155,10 @@ fn crossing(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
     let mut crossing = rustc_hash::FxHashSet::default();
     for (index, block) in func.blocks.iter().enumerate() {
         for (at, value) in block.ops.iter().enumerate() {
-            if !matches!(func.values[value.0 as usize].kind, OpKind::Await { .. }) {
+            if !matches!(
+                func.values[value.0 as usize].kind,
+                OpKind::Await { .. } | OpKind::Yield { .. }
+            ) {
                 continue;
             }
             let later: rustc_hash::FxHashSet<ValueId> = block.ops[at..].iter().copied().collect();
@@ -128,7 +187,19 @@ fn crossing(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
 fn suspends(func: &Func) -> bool {
     func.values
         .iter()
-        .any(|op| matches!(op.kind, OpKind::Await { .. }))
+        .any(|op| matches!(op.kind, OpKind::Await { .. } | OpKind::Yield { .. }))
+}
+
+/// The second name a function about to be split provides.
+///
+/// [`super::drop_callers_of_refused`] runs *before* this pass and drops any
+/// function calling a name that is not in `funcs`. A `for...of` over a
+/// generator calls the resumption, which does not exist yet, so without this
+/// every such loop is dropped as calling something refused. A function that is
+/// going to be split into two provides both of its names.
+#[must_use]
+pub fn provides(func: &Func) -> Option<String> {
+    suspends(func).then(|| frame_names(&func.name).1)
 }
 
 /// Rewrite every `async` function that awaits into a state machine.
@@ -195,7 +266,10 @@ fn suspensions(func: &Func) -> Vec<(usize, usize, ValueId)> {
     let mut found = Vec::new();
     for (block, body) in func.blocks.iter().enumerate() {
         for (at, value) in body.ops.iter().enumerate() {
-            if matches!(func.values[value.0 as usize].kind, OpKind::Await { .. }) {
+            if matches!(
+                func.values[value.0 as usize].kind,
+                OpKind::Await { .. } | OpKind::Yield { .. }
+            ) {
                 found.push((block, at, *value));
             }
         }
@@ -208,24 +282,46 @@ fn rewrite(func: &Func, index: usize) -> Result<Rewritten, Diagnostic> {
     if points.is_empty() {
         return Err(refuse(func, "an `await`"));
     }
-    let result = func
-        .async_result
-        .ok_or_else(|| refuse(func, "an `await` outside an `async` function"))?;
+    let yields = |kind: &OpKind| matches!(kind, OpKind::Yield { .. });
+    let generator = func.frame.as_ref();
+    // An `async function*` is both at once, and the two protocols disagree
+    // about what a resumption is for: one settles a promise nobody is waiting
+    // in front of, the other answers a caller who is. Refused by name rather
+    // than by whichever check happened to fire first.
+    if generator.is_some() != func.values.iter().any(|op| yields(&op.kind)) {
+        return Err(refuse(func, "an `async` generator"));
+    }
+    let mode = if generator.is_some() {
+        Mode::Generator
+    } else {
+        Mode::Async
+    };
+    if mode == Mode::Generator && func.values.iter().any(|op| matches!(op.kind, OpKind::Await { .. }))
+    {
+        return Err(refuse(func, "an `async` generator"));
+    }
+    let result = match mode {
+        Mode::Async => Some(
+            func.async_result
+                .ok_or_else(|| refuse(func, "an `await` outside an `async` function"))?,
+        ),
+        Mode::Generator => None,
+    };
 
     // What goes in the frame. Order is fixed rather than incidental: the fixed
     // three, then the parameters in declaration order, then everything that has
     // to survive a suspension -- sorted, so two compilations of one program
     // produce the same layout.
     let mut slot_of: rustc_hash::FxHashMap<ValueId, u32> = rustc_hash::FxHashMap::default();
-    slot_of.insert(result, FIELD_RESULT);
-    let mut next = FIXED_FIELDS;
+    if let Some(result) = result {
+        slot_of.insert(result, FIELD_RESULT);
+    }
+    let fixed = mode.fixed();
+    let mut next = fixed;
     for (value, op) in func.values.iter().enumerate() {
         if let OpKind::Param(slot) = op.kind {
-            slot_of.insert(
-                ValueId(u32::try_from(value).unwrap_or(0)),
-                FIXED_FIELDS + slot,
-            );
-            next = next.max(FIXED_FIELDS + slot + 1);
+            slot_of.insert(ValueId(u32::try_from(value).unwrap_or(0)), fixed + slot);
+            next = next.max(fixed + slot + 1);
         }
     }
     let mut spilled: Vec<ValueId> = crossing(func)
@@ -238,18 +334,23 @@ fn rewrite(func: &Func, index: usize) -> Result<Rewritten, Diagnostic> {
         next += 1;
     }
 
-    let frame_ty = HirType::Managed(ManagedType::Object(frame_type(index)));
+    // A generator's frame type was reserved by the lowering, because the
+    // `for...of` that walks one had to name it before this pass ran; an
+    // `async` frame is named here from the function's index, which nothing
+    // outside this pass ever says.
+    let frame_id = generator.map_or_else(|| frame_type(index), |frame| frame.ty);
+    let frame_ty = HirType::Managed(ManagedType::Object(frame_id));
     let (frame_name, resume_name) = frame_names(&func.name);
     let layout = Layout {
-        types: vec![frame_type(index)],
+        types: vec![frame_id],
         name: frame_name,
-        fields: frame_fields(func, &spilled),
+        fields: frame_fields(func, &spilled, mode, generator.map(|frame| &frame.yields)),
         methods: Vec::new(),
         // A suspended frame extends nothing.
         base: None,
     };
-    let entry = entry_function(func, &frame_ty, &resume_name, &slot_of);
-    let resume = resume_function(func, &frame_ty, &resume_name, &slot_of, &points);
+    let entry = entry_function(func, &frame_ty, &resume_name, &slot_of, mode);
+    let resume = resume_function(func, &frame_ty, &resume_name, &slot_of, &points, mode);
     Ok(Rewritten {
         entry,
         resume,
@@ -319,6 +420,7 @@ fn entry_function(
     frame_ty: &HirType,
     resume: &str,
     slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
+    mode: Mode,
 ) -> Func {
     let mut build = Build {
         values: Vec::new(),
@@ -339,15 +441,17 @@ fn entry_function(
     let zero = build.constant(0);
     build.set(frame, FIELD_STATE, zero);
 
-    let promise = build.push(
-        OpKind::Call {
-            callee: super::Callee::External("nts_promise_new".to_owned()),
-            args: Vec::new(),
-            frame: None,
-        },
-        func.return_type.clone(),
-    );
-    build.set(frame, FIELD_RESULT, promise);
+    if mode == Mode::Async {
+        let promise = build.push(
+            OpKind::Call {
+                callee: super::Callee::External("nts_promise_new".to_owned()),
+                args: Vec::new(),
+                frame: None,
+            },
+            func.return_type.clone(),
+        );
+        build.set(frame, FIELD_RESULT, promise);
+    }
     for (value, param) in &params {
         let Some(slot) = slot_of.get(&find_param(func, &param.name)).copied() else {
             continue;
@@ -364,16 +468,28 @@ fn entry_function(
     // allocation above took -- while a pending reaction still pointed at it,
     // and the resumption ran on freed memory. Invisible under a provider that
     // frees nothing, which is every provider this was ever tested under.
-    build.push(OpKind::Retain(frame), HirType::Void);
-    build.push(
-        OpKind::Call {
-            callee: super::Callee::Direct(resume.to_owned()),
-            args: vec![frame],
-            frame: None,
-        },
-        HirType::Void,
-    );
-    let settled = build.get(frame, FIELD_RESULT, func.return_type.clone());
+    //
+    // A generator does none of this. Calling one runs *nothing*: the body does
+    // not start until the first `next`, which is the walk's first step. So the
+    // frame is handed straight back, owned by whoever asked for it, and the
+    // resumption borrows it from them on every step -- which is why the
+    // generator's resumption does not give it back the way the `async` one
+    // does.
+    let handed_back = match mode {
+        Mode::Async => {
+            build.push(OpKind::Retain(frame), HirType::Void);
+            build.push(
+                OpKind::Call {
+                    callee: super::Callee::Direct(resume.to_owned()),
+                    args: vec![frame],
+                    frame: None,
+                },
+                HirType::Void,
+            );
+            build.get(frame, FIELD_RESULT, func.return_type.clone())
+        }
+        Mode::Generator => frame,
+    };
 
     Func {
         name: func.name.clone(),
@@ -383,13 +499,14 @@ fn entry_function(
         blocks: vec![super::Block {
             params: Vec::new(),
             ops: build.ops,
-            terminator: Terminator::Return(Some(settled)),
+            terminator: Terminator::Return(Some(handed_back)),
         }],
         origin: func.origin.clone(),
         exported: func.exported,
         initializes_receiver: false,
             abstract_declaration: false,
         async_result: None,
+        frame: None,
     }
 }
 
@@ -466,30 +583,49 @@ fn find_param(func: &Func, name: &str) -> ValueId {
 /// suspension. In the resume function they are not parameters at all -- its one
 /// argument is the frame -- so code *before* the first suspension has nowhere
 /// else to read them from.
-fn frame_fields(func: &Func, spilled: &[ValueId]) -> Vec<Field> {
-    let mut fields = vec![
-        Field {
-            name: "state".to_owned(),
-            ty: HirType::Int {
-                bits: 32,
-                signed: true,
+fn frame_fields(
+    func: &Func,
+    spilled: &[ValueId],
+    mode: Mode,
+    yields: Option<&HirType>,
+) -> Vec<Field> {
+    let state = Field {
+        name: "state".to_owned(),
+        ty: HirType::Int {
+            bits: 32,
+            signed: true,
+        },
+        readonly: false,
+    };
+    let mut fields = match mode {
+        Mode::Async => vec![
+            state,
+            Field {
+                name: "result".to_owned(),
+                ty: func.return_type.clone(),
+                readonly: false,
             },
-            readonly: false,
-        },
-        Field {
-            name: "result".to_owned(),
-            ty: func.return_type.clone(),
-            readonly: false,
-        },
-        Field {
-            name: "awaited".to_owned(),
-            // Whatever was most recently awaited. The payload varies between
-            // suspension points, and the *reader* knows which it is because the
-            // resume block was generated beside the `await` that set it.
-            ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
-            readonly: false,
-        },
-    ];
+            Field {
+                name: "awaited".to_owned(),
+                // Whatever was most recently awaited. The payload varies between
+                // suspension points, and the *reader* knows which it is because the
+                // resume block was generated beside the `await` that set it.
+                ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
+                readonly: false,
+            },
+        ],
+        // Two, and the second is the element. There is no `done` field: the
+        // resumption *returns* done, to a caller that is still there to read
+        // it, so storing it as well would be a second copy of one fact.
+        Mode::Generator => vec![
+            state,
+            Field {
+                name: "yielded".to_owned(),
+                ty: yields.cloned().unwrap_or(HirType::Void),
+                readonly: false,
+            },
+        ],
+    };
     for param in &func.params {
         fields.push(Field {
             name: param.name.clone(),
@@ -525,6 +661,7 @@ fn resume_function(
     name: &str,
     slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
     points: &[(usize, usize, ValueId)],
+    mode: Mode,
 ) -> Func {
     let shift = |value: ValueId| ValueId(value.0 + 1);
     let values = shifted_arena(func, frame_ty);
@@ -540,10 +677,11 @@ fn resume_function(
         origin: func.origin.clone(),
     };
 
-    let (base, starts) = segment_layout(func, points);
+    let (base, starts) = segment_layout(func, points, mode);
     // Immediately after the dispatch chain, which is what `segment_layout`
-    // reserved the extra block for.
-    let reject = super::BlockId(base - 1);
+    // reserved the extra block for. A generator has no such block: a `yield`
+    // cannot reject.
+    let reject = super::BlockId(base.saturating_sub(1));
 
     let mut body: Vec<super::Block> = Vec::new();
     let mut resume_at: Vec<super::BlockId> = vec![super::BlockId(starts[0])];
@@ -570,13 +708,21 @@ fn resume_function(
                 // A parameter and the result promise are computed once, in the
                 // entry function, and stored. Replaying their definitions here
                 // allocated a fresh promise on every resumption.
-                if entry_owned(func, slot_of, original) {
+                if entry_owned(func, slot_of, original, mode) {
                     continue;
                 }
                 carry(&mut build, frame, slot_of, original);
             }
             let Some((op, awaited)) = next else {
-                let terminator = retarget(&block.terminator, &starts, shift);
+                let mut terminator = retarget(&block.terminator, &starts, shift);
+                // A generator's `return` is the end of the walk, and what it
+                // returns is the `TReturn` of `Generator<T, TReturn>`, which a
+                // `for...of` discards. So every finishing exit answers *done*
+                // instead, which is what the resumption's caller asked.
+                if mode == Mode::Generator && matches!(terminator, Terminator::Return(_)) {
+                    let done = build.push(OpKind::ConstBool(true), HirType::Bool);
+                    terminator = Terminator::Return(Some(done));
+                }
                 // A terminator reads values too, and a jump's arguments are the
                 // easiest to forget: a loop's counter is a block parameter of
                 // the header, and a segment reached only from the dispatch is
@@ -591,28 +737,23 @@ fn resume_function(
                 });
                 break;
             };
-            let OpKind::Await { promise } = build.values[awaited.0 as usize].kind else {
-                unreachable!("`suspensions` returns awaits");
-            };
-            let promise = reload(&mut build, frame, slot_of, promise);
-            build.set(frame, FIELD_AWAITED, promise);
-            let marker = build.constant(i64::try_from(resume_at.len()).unwrap_or(0));
-            build.set(frame, FIELD_STATE, marker);
-            build.push(
-                OpKind::Suspend {
-                    promise,
-                    frame,
-                    resume: name.to_owned(),
-                },
-                HirType::Void,
-            );
+            let marker = i64::try_from(resume_at.len()).unwrap_or(0);
+            let paused = pause(&mut build, frame, slot_of, awaited, name, marker);
             body.push(super::Block {
                 params: std::mem::take(&mut params),
                 ops: std::mem::take(&mut build.ops),
-                terminator: Terminator::Return(None),
+                terminator: paused,
             });
             let landing = base + u32::try_from(body.len()).unwrap_or(0);
             resume_at.push(super::BlockId(landing));
+            // A `yield` lands straight back in the body. The rejection test
+            // below exists because a promise can settle either way; nothing
+            // resumes a generator with a failure, because the caller resuming
+            // it is not settling anything.
+            if mode == Mode::Generator {
+                from = op + 1;
+                continue;
+            }
             // The dispatch lands here rather than on the payload read. A
             // rejected promise holds a reason and no value, so both readers
             // assert -- `await` of one aborted the program, which is the
@@ -634,10 +775,57 @@ fn resume_function(
     }
 
     let mut blocks = dispatch_chain(&mut build, frame, &resume_at);
-    blocks.push(rejection_exit(&mut build, frame));
+    if mode == Mode::Async {
+        blocks.push(rejection_exit(&mut build, frame));
+    }
     blocks.extend(body);
-    give_the_frame_back(&mut build, &mut blocks, frame, &func.origin);
-    assembled_resume(name, func, frame_ty.clone(), build, blocks)
+    if mode == Mode::Async {
+        give_the_frame_back(&mut build, &mut blocks, frame, &func.origin);
+    }
+    assembled_resume(name, func, frame_ty.clone(), build, blocks, mode)
+}
+
+/// Stop here, and say how to be started again.
+///
+/// The two protocols in one function because they are the same three steps in
+/// the same order -- put what the far side needs in the frame, write the state
+/// to come back to, leave. What differs is the third: an `await` leaves a
+/// subscription and returns to nobody, and a `yield` returns *not done* to the
+/// caller, which **is** the suspension.
+fn pause(
+    build: &mut Build,
+    frame: ValueId,
+    slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
+    stopping: ValueId,
+    resume: &str,
+    marker: i64,
+) -> Terminator {
+    match build.values[stopping.0 as usize].kind.clone() {
+        OpKind::Await { promise } => {
+            let promise = reload(build, frame, slot_of, promise);
+            build.set(frame, FIELD_AWAITED, promise);
+            let marker = build.constant(marker);
+            build.set(frame, FIELD_STATE, marker);
+            build.push(
+                OpKind::Suspend {
+                    promise,
+                    frame,
+                    resume: resume.to_owned(),
+                },
+                HirType::Void,
+            );
+            Terminator::Return(None)
+        }
+        OpKind::Yield { value } => {
+            let value = reload(build, frame, slot_of, value);
+            build.set(frame, FIELD_YIELDED, value);
+            let marker = build.constant(marker);
+            build.set(frame, FIELD_STATE, marker);
+            let unfinished = build.push(OpKind::ConstBool(false), HirType::Bool);
+            Terminator::Return(Some(unfinished))
+        }
+        _ => unreachable!("`suspensions` returns awaits and yields"),
+    }
 }
 
 /// The resumption, as a function.
@@ -651,6 +839,7 @@ fn assembled_resume(
     frame_ty: HirType,
     build: Build,
     blocks: Vec<super::Block>,
+    mode: Mode,
 ) -> Func {
     Func {
         name: name.to_owned(),
@@ -662,7 +851,13 @@ fn assembled_resume(
             origin: func.origin.clone(),
             known: super::facts::Facts::TOP,
         }],
-        return_type: HirType::Void,
+        // A generator's resumption answers *done*, which is the whole of what
+        // the walk needs to decide whether to go round again; the element it
+        // left in the frame.
+        return_type: match mode {
+            Mode::Async => HirType::Void,
+            Mode::Generator => HirType::Bool,
+        },
         values: build.values,
         blocks,
         origin: func.origin.clone(),
@@ -670,6 +865,7 @@ fn assembled_resume(
         initializes_receiver: false,
             abstract_declaration: false,
         async_result: None,
+        frame: None,
     }
 }
 
@@ -714,10 +910,17 @@ fn assembled_resume(
 /// The dispatch takes the front of the block list: one block per state, plus
 /// one nothing reaches so the last test has somewhere to send a state that
 /// cannot happen. Everything after that is the body, a block per segment.
-fn segment_layout(func: &Func, points: &[(usize, usize, ValueId)]) -> (u32, Vec<u32>) {
+fn segment_layout(
+    func: &Func,
+    points: &[(usize, usize, ValueId)],
+    mode: Mode,
+) -> (u32, Vec<u32>) {
     // The dispatch chain, then one block the whole function shares for
-    // propagating a rejection, then the body.
-    let base = u32::try_from(points.len() + 3).unwrap_or(0);
+    // propagating a rejection, then the body. A generator has no rejection
+    // block and no landing block per suspension, for the same reason: nothing
+    // resumes it with a failure.
+    let shared = usize::from(mode == Mode::Async);
+    let base = u32::try_from(points.len() + 2 + shared).unwrap_or(0);
     let mut starts = Vec::new();
     let mut count = 0u32;
     for index in 0..func.blocks.len() {
@@ -728,8 +931,8 @@ fn segment_layout(func: &Func, points: &[(usize, usize, ValueId)]) -> (u32, Vec<
             .count();
         // Two blocks per suspension, not one: the segment that suspends, and
         // the one the dispatch lands on, which tests for a rejection before
-        // anything reads a payload.
-        count += u32::try_from(2 * cuts + 1).unwrap_or(1);
+        // anything reads a payload. A generator needs only the first.
+        count += u32::try_from((1 + shared) * cuts + 1).unwrap_or(1);
     }
     (base, starts)
 }
@@ -763,10 +966,15 @@ fn shifted_arena(func: &Func, frame_ty: &HirType) -> Vec<Op> {
 /// and stored, so their defining operations are not part of the body any more.
 /// Everything else that is spilled is computed *by* the body and stored right
 /// after.
-fn entry_owned(func: &Func, slot_of: &rustc_hash::FxHashMap<ValueId, u32>, value: ValueId) -> bool {
+fn entry_owned(
+    func: &Func,
+    slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
+    value: ValueId,
+    mode: Mode,
+) -> bool {
     slot_of.get(&value).is_some_and(|slot| {
-        *slot == FIELD_RESULT
-            || *slot < FIXED_FIELDS + u32::try_from(func.params.len()).unwrap_or(0)
+        (mode == Mode::Async && *slot == FIELD_RESULT)
+            || *slot < mode.fixed() + u32::try_from(func.params.len()).unwrap_or(0)
     })
 }
 

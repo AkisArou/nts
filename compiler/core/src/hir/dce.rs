@@ -135,6 +135,7 @@ fn has_effects(kind: &OpKind) -> bool {
         // survive `super::suspend` -- if one reaches this pass the program is
         // already wrong, and deleting it would only hide that.
         OpKind::Await { .. }
+        | OpKind::Yield { .. }
         | OpKind::Param(_)
         | OpKind::BlockParam(_)
         | OpKind::Return(_)

@@ -205,7 +205,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::ClosureStatic
         | OpKind::ObjectNew { .. }
         | OpKind::GlobalGet(_) => {}
-        OpKind::GlobalSet { value, .. } => *value = of(*value),
+        OpKind::Yield { value } | OpKind::GlobalSet { value, .. } => *value = of(*value),
         OpKind::StringUnitAt { string, index, .. } => {
             *string = of(*string);
             *index = of(*index);
@@ -327,6 +327,7 @@ mod tests {
             exported: true,
             initializes_receiver: false,
             async_result: None,
+            frame: None,
             abstract_declaration: false,
         }
     }

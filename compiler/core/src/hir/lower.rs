@@ -986,6 +986,14 @@ struct Naming {
     qualified: rustc_hash::FxHashMap<NodeId, String>,
     /// Declarations that cannot be told apart by anything this compiler has.
     ambiguous: rustc_hash::FxHashSet<NodeId>,
+    /// Which generator each `function*` is, in source order.
+    ///
+    /// Here rather than counted as the lowering goes, because a builder is made
+    /// fresh per function and a counter on one cannot be seen by the next. It
+    /// decides an *identity* that has to be the same in two places -- the frame
+    /// the generator fills and the frame the `for...of` walks -- which is what
+    /// the rest of this struct is for.
+    generators: rustc_hash::FxHashMap<NodeId, usize>,
 }
 
 /// Decide what every function declaration is called in the emitted program.
@@ -1057,6 +1065,16 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
     let probe = FuncBuilder::new(snapshot);
     let mut declarations: rustc_hash::FxHashMap<String, Vec<NodeId>> =
         rustc_hash::FxHashMap::default();
+    let mut generators: rustc_hash::FxHashMap<NodeId, usize> = rustc_hash::FxHashMap::default();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::GENERATOR)
+        {
+            let next = generators.len();
+            generators.insert(NodeId(u32::try_from(index).unwrap_or(u32::MAX)), next);
+        }
+    }
     for (index, node) in snapshot.nodes.iter().enumerate() {
         // Classes as well as functions. A method is spelled `Class#method`, so
         // it cannot collide with a plain function -- but it collides happily
@@ -1109,6 +1127,7 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
             naming.qualified.insert(*id, format!("{name}@{module}"));
         }
     }
+    naming.generators = generators;
     naming
 }
 
@@ -1502,6 +1521,7 @@ impl Shared {
         );
         builder.generic_calls.clone_from(&self.generics.at_call);
         builder.qualified.clone_from(&self.naming.qualified);
+        builder.generators.clone_from(&self.naming.generators);
         builder
     }
 }
@@ -2142,6 +2162,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         // program does not define -- see `lower_closure`, which is where the
         // consequence is written down.
         builder.qualified.clone_from(&shared.naming.qualified);
+        builder.generators.clone_from(&shared.naming.generators);
         match builder.lower_closure(index, &closures[index]) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => lowered.diagnostics.push(diagnostic),
@@ -3795,6 +3816,14 @@ struct FuncBuilder<'a> {
     /// `return e` means "settle this and hand the promise back" there and
     /// keeps its ordinary meaning otherwise.
     async_result: Option<AsyncResult>,
+    /// The frame a `function*` yields into, where this is one.
+    ///
+    /// The mirror of `async_result` and set the same way: for the whole of a
+    /// generator body and `None` everywhere else, so `yield` means something
+    /// there and is refused everywhere else.
+    generator: Option<super::GeneratorFrame>,
+    /// Which generator each `function*` is, decided once by [`naming`].
+    generators: rustc_hash::FxHashMap<NodeId, usize>,
     /// Which of them this function allocated.
     ///
     /// A closure nobody creates is not lowered at all. That is the rule
@@ -3838,6 +3867,8 @@ impl<'a> FuncBuilder<'a> {
             breakables: Vec::new(),
             callback_returns: Vec::new(),
             async_result: None,
+            generator: None,
+            generators: rustc_hash::FxHashMap::default(),
             used_closures: Vec::new(),
             substitution: Substitution::default(),
         }
@@ -5926,8 +5957,22 @@ impl<'a> FuncBuilder<'a> {
             .copied()
             .ok_or_else(|| self.unsupported(id, "a function without a body"))?;
 
-        let return_type = self.return_type_of(id)?;
-        self.materialize(id, &return_type)?;
+        // A generator's *declared* return type is `Generator<T, ...>`, which
+        // has no representation and is not what the compiled function hands
+        // back. What it hands back is the frame, so that is its return type
+        // here -- reserved now, because the `for...of` that walks one has to
+        // name the same type and `hir::suspend` has not run yet.
+        let generated = self.begin_generator(id)?;
+        let return_type = if let Some(frame) = &generated {
+            HirType::Managed(ManagedType::Object(frame.ty))
+        } else {
+            let return_type = self.return_type_of(id)?;
+            // A frame has no snapshot type to materialize a layout from:
+            // `hir::suspend` builds its layout, and it is the only thing that
+            // can, because what goes in one is what survives a suspension.
+            self.materialize(id, &return_type)?;
+            return_type
+        };
 
         // An `async` function allocates its promise before the body runs, so
         // that every `return` has one to settle -- and so that the allocation
@@ -5944,6 +5989,14 @@ impl<'a> FuncBuilder<'a> {
             if !self.is_terminated() {
                 self.settle_and_return(id, &result, None)?;
             }
+        } else if generated.is_some() {
+            // Falling off the end of a generator is the end of the walk, and
+            // `return e` in one is the `TReturn` of `Generator<T, TReturn>`,
+            // which a `for...of` discards. So both are the same exit, and
+            // `hir::suspend` turns it into the *done* the resumption answers.
+            if !self.is_terminated() {
+                self.terminate(Terminator::Return(None));
+            }
         } else {
             self.close_body(&return_type);
         }
@@ -5954,6 +6007,74 @@ impl<'a> FuncBuilder<'a> {
             .modifiers
             .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
         Ok(self.finish(name, params, return_type, origin, exported))
+    }
+
+    /// Reserve the frame a `function*` yields into, if this is one.
+    ///
+    /// Returns `None` for an ordinary function. The reservation is two facts --
+    /// a synthetic type id and what `yield` produces -- and both are said
+    /// *here* because two passes have to agree about them: [`super::suspend`]
+    /// builds the layout, and the `for...of` that walks the generator reads the
+    /// element out of it. A disagreement between those two is a load typed one
+    /// way against a store typed the other, at the same offset of the same
+    /// object, which is a wrong answer rather than an error.
+    fn begin_generator(&mut self, id: NodeId) -> Result<Option<super::GeneratorFrame>, Diagnostic> {
+        if !self
+            .node(id)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::GENERATOR)
+        {
+            return Ok(None);
+        }
+        if self
+            .node(id)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+        {
+            return Err(self.unsupported(id, "an `async` generator"));
+        }
+        // `Generator<T, TReturn, TNext>`, and `T` is the element. Read from the
+        // checker's type arguments rather than from the annotation, so an
+        // unannotated `function*` works the same way -- which is how the
+        // promise's payload is read three functions below.
+        let Some(returned) = self.snapshot.node_types.get(&id).copied() else {
+            return Err(self.unsupported(id, "a generator whose type the checker did not give"));
+        };
+        let Some(TypeKind::Function(signature)) =
+            self.snapshot.types.get(returned.0 as usize).map(|r| &r.kind)
+        else {
+            return Err(self.unsupported(id, "a generator with no call signature"));
+        };
+        let signature = *signature;
+        let Some(signature) = self.snapshot.signatures.get(signature.0 as usize) else {
+            return Err(self.unsupported(id, "a generator with no call signature"));
+        };
+        let declared = signature.return_type;
+        let Some(argument) = self
+            .snapshot
+            .type_arguments
+            .get(&declared)
+            .and_then(|arguments| arguments.first())
+            .copied()
+        else {
+            // No recorded argument is not `Generator<void>`: it means the
+            // frontend stopped at the library boundary. Defaulting to `void`
+            // would make every element nothing, and the walk would read a slot
+            // no `yield` ever filled.
+            return Err(self.unsupported(id, "a generator whose element type is not recorded"));
+        };
+        let Some(yields) = self.represent(argument) else {
+            return Err(self.unrepresentable(id, "a generator's element"));
+        };
+        let Some(index) = self.generators.get(&id).copied() else {
+            return Err(self.unsupported(id, "a generator outside every walk"));
+        };
+        let frame = super::GeneratorFrame {
+            ty: super::generator_frame(index),
+            yields,
+        };
+        self.generator = Some(frame.clone());
+        Ok(Some(frame))
     }
 
     /// Allocate the promise an `async` function settles, if this is one.
@@ -6427,6 +6548,7 @@ impl<'a> FuncBuilder<'a> {
             // being assembled but of what the body did -- and the body has just
             // finished saying so.
             async_result: self.async_result.as_ref().map(|result| result.promise),
+            frame: self.generator.clone(),
         }
     }
 
@@ -7675,6 +7797,66 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// `yield e`.
+    ///
+    /// Lowered to [`OpKind::Yield`] and left there, for the reason `await` is:
+    /// which values have to survive the suspension is a whole-function question
+    /// and this walk cannot answer it. See [`super::suspend`].
+    ///
+    /// Two things are refused here rather than downstream, because both are
+    /// about what the *walk* on the other end can do.
+    ///
+    /// `yield*` delegates to another iterable, which is a loop the caller
+    /// cannot see -- one `next` on this generator is an unbounded number of
+    /// steps on the inner one, and the state machine would need a nested cursor
+    /// in the frame rather than a state number.
+    ///
+    /// The **value** of a `yield` is what the caller passed to `next(v)`, and a
+    /// `for...of` never passes one: it calls `next()` with nothing, so the
+    /// expression is always `undefined` there. Using it means the program
+    /// expects a two-way conversation, and answering `undefined` to that is a
+    /// wrong answer rather than a missing feature.
+    fn lower_yield(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        if self.generator.is_none() {
+            return Err(self.unsupported(id, "a `yield` outside a generator"));
+        }
+        if self
+            .children(id)
+            .iter()
+            .any(|child| self.kind_of(*child) == Some(syntax::ASTERISK_TOKEN))
+        {
+            return Err(self.unsupported(id, "a `yield*`"));
+        }
+        if !self.is_a_statement(id) {
+            return Err(self.unsupported(id, "the value of a `yield`"));
+        }
+        let operand = *self
+            .children(id)
+            .iter()
+            .find(|child| self.kind_of(**child) != Some(syntax::ASTERISK_TOKEN))
+            .ok_or_else(|| self.unsupported(id, "a `yield` of nothing"))?;
+        let yields = self
+            .generator
+            .as_ref()
+            .map_or(HirType::Void, |frame| frame.yields.clone());
+        let value = self.lower_expression(operand)?;
+        // At the frame's representation, exactly as a `return` is at the
+        // function's: the store and the walk's load are the same field, and
+        // coercing at one end only is how they come to disagree.
+        let value = self.coerce(value, &yields, operand)?;
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::Yield { value }, HirType::Void, origin))
+    }
+
+    /// Whether an expression is the whole of an expression statement.
+    fn is_a_statement(&self, id: NodeId) -> bool {
+        self.snapshot
+            .nodes
+            .get(id.0 as usize)
+            .and_then(|node| node.parent)
+            .is_some_and(|parent| self.kind_of(parent) == Some(syntax::EXPRESSION_STATEMENT))
+    }
+
     /// `await e`.
     ///
     /// Lowered to [`OpKind::Await`] and left there. Turning it into a
@@ -7860,6 +8042,123 @@ impl<'a> FuncBuilder<'a> {
             .iter()
             .find(|property| property.optional)
             .map(|property| property.name.clone())
+    }
+
+    /// `map.forEach(cb)` and `set.forEach(cb)`, as the walk they are.
+    ///
+    /// The same loop `for...of` builds over a table -- `walk_cursor` for the
+    /// entry index, `walk_condition` for the test, `read_element` for the reads,
+    /// `Step::Walk` for the advance -- with the callback's body inlined where
+    /// the head's bindings would go. Nothing is allocated and nothing is called
+    /// indirectly, which is what `examples/callbacks` says about the array
+    /// methods and is now true of these.
+    ///
+    /// # The callback's parameters
+    ///
+    /// `(value, key, map)` for a `Map`, which is **not** the order the table
+    /// stores them in: `read_element` answers `[key, value]` because that is
+    /// what `for (const [k, v] of map)` binds, and `forEach` hands the value
+    /// first. Getting that backwards does not fail -- it computes a different
+    /// number -- so the example asks node about a map whose keys and values are
+    /// different.
+    ///
+    /// A `Set` has no values, and node passes the element **twice**:
+    /// `s.forEach((v, k) => ...)` sees `v === k`. So the second parameter is the
+    /// same read as the first rather than an error, which is what the language
+    /// says and what the differential checks.
+    fn lower_table_for_each(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        table: &HirType,
+        callback: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let parameters = self.callback_parameters(callback, "forEach")?;
+        // The value, optionally the key. The third parameter is the table
+        // itself, refused for the reason the array's third is: handing the
+        // receiver to the body lets it be stored where the loop cannot see.
+        if parameters.is_empty() || parameters.len() > 2 {
+            return Err(self.unsupported(
+                callback,
+                &format!(
+                    "a `forEach` callback taking {} parameters, where it may take 1 or 2 -- \
+                     the value and the key",
+                    parameters.len()
+                ),
+            ));
+        }
+        let body = *self
+            .children(callback)
+            .last()
+            .ok_or_else(|| self.unsupported(callback, "a `forEach` callback with no body"))?;
+
+        // Entries for a `Map`, and the same read twice for a `Set`.
+        let walk = match table {
+            HirType::Managed(ManagedType::Map(key, value)) => Walk::Entries {
+                key: (**key).clone(),
+                value: (**value).clone(),
+                value_read: "nts_map_value_at",
+            },
+            HirType::Managed(ManagedType::Set(element)) => Walk::Entries {
+                key: (**element).clone(),
+                value: (**element).clone(),
+                value_read: "nts_map_key_at",
+            },
+            _ => {
+                return Err(self.unsupported(id, "a `forEach` over something that is not a table"));
+            }
+        };
+
+        let origin = self.origin(id);
+        let cursor = self
+            .walk_cursor(&walk, receiver, &origin)
+            .ok_or_else(|| self.unsupported(id, "a table walk with no cursor"))?;
+        let synthetic = vec![cursor];
+        let carried = self.carried_across(body, &synthetic, &parameters);
+        let record = self.begin_loop(id, &carried, true, &origin)?;
+
+        let at = self.bindings[&cursor];
+        let cond = self.walk_condition(&walk, at, receiver, &origin);
+        self.test_loop(cond, &record);
+        self.switch_to(record.body);
+
+        let at = self.bindings[&cursor];
+        let read = self.read_element(&walk, receiver, at, &origin);
+        let [key, value] = read.as_slice() else {
+            return Err(self.unsupported(id, "a table walk that did not read a pair"));
+        };
+        // Value first. See above.
+        self.bindings.insert(parameters[0], *value);
+        if let Some(second) = parameters.get(1) {
+            self.bindings.insert(*second, *key);
+        }
+
+        // `forEach` drops whatever the body produces, and a `return` inside it
+        // is a `continue` -- the same delivery the array's `forEach` uses.
+        let result = CallbackResult::Discard;
+        self.callback_returns.push(CallbackReturn {
+            depth: record.depth,
+            result,
+        });
+        let concise = self.kind_of(body) != Some(syntax::BLOCK);
+        let lowered = if concise {
+            self.lower_expression(body).map(|_| ())
+        } else {
+            self.lower_statement(body)
+        };
+        self.callback_returns.pop();
+        lowered?;
+
+        self.end_loop(
+            &record,
+            Step::Walk {
+                cursor,
+                walk,
+                sequence: receiver,
+            },
+        )?;
+        // `forEach` evaluates to `undefined`, which is `void` here.
+        Ok(self.push(OpKind::ConstFloat(0.0), HirType::Void, origin))
     }
 
     /// `Object.keys(o)`, as the array of names the layout already holds.
@@ -8410,7 +8709,7 @@ impl<'a> FuncBuilder<'a> {
     ) -> ValueId {
         match walk {
         // `done` says when to *stop*, so the loop runs while it is false.
-        Walk::Protocol { .. } => self.push(
+        Walk::Protocol { .. } | Walk::Generator { .. } => self.push(
             OpKind::Unary {
                 op: UnOp::Not,
                 operand: at,
@@ -8460,7 +8759,7 @@ impl<'a> FuncBuilder<'a> {
     /// The protocol has none at all: the iterator holds its own place and
     /// `next()` is what moves it.
     fn walk_cursor(&mut self, walk: &Walk, sequence: ValueId, origin: &Origin) -> Option<u32> {
-        if matches!(walk, Walk::Protocol { .. }) {
+        if matches!(walk, Walk::Protocol { .. } | Walk::Generator { .. }) {
             return None;
         }
         let index = self.synthetic_symbol();
@@ -8486,6 +8785,22 @@ impl<'a> FuncBuilder<'a> {
         walk: &Walk,
         origin: &Origin,
     ) -> Result<(ValueId, ValueId), Diagnostic> {
+        if let Walk::Generator { frame, resume, .. } = walk {
+            let (frame, resume) = (*frame, resume.clone());
+            // The frame is the state and the resumption is the step, so this is
+            // one call and no loads. It answers `done`; the element it left
+            // behind is read in the body, off the same frame.
+            let answered = self.push(
+                OpKind::Call {
+                    callee: resume,
+                    args: vec![frame],
+                    frame: None,
+                },
+                HirType::Bool,
+                origin.clone(),
+            );
+            return Ok((frame, answered));
+        }
         let Walk::Protocol {
             iterator,
             next,
@@ -8515,6 +8830,68 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         Ok((step, answered))
+    }
+
+    /// A generator's frame, and what stepping it looks like.
+    ///
+    /// The frame is already here -- calling the generator made it, and calling
+    /// one runs none of the body -- so unlike [`Self::protocol_walk`] this
+    /// builds nothing. What it has to find is the *name* of the resumption,
+    /// which does not exist yet: [`super::suspend`] splits the generator into
+    /// an entry and a resumption long after this runs. The name is derived from
+    /// the generator's, and the generator is whatever call produced this value.
+    ///
+    /// So a generator has to be walked where it was made. Handed to another
+    /// function it arrives as a parameter, and a parameter has no call behind it
+    /// to take a name from -- refused, by name, rather than guessed at.
+    fn generator_walk(&mut self, sequence: NodeId, value: ValueId) -> Result<Walk, Diagnostic> {
+        let OpKind::Call {
+            callee: Callee::Direct(name),
+            ..
+        } = &self.values[value.0 as usize].kind
+        else {
+            return Err(self.unsupported(
+                sequence,
+                "a `for...of` over a generator that was not called here",
+            ));
+        };
+        let resume = Callee::Direct(super::suspend::resume_name(name));
+        let HirType::Managed(ManagedType::Object(frame)) = self.values[value.0 as usize].ty else {
+            unreachable!("the caller matched an object type");
+        };
+        let Some(layout) = self.generator_element(frame) else {
+            return Err(self.unsupported(sequence, "a generator whose element was not reserved"));
+        };
+        Ok(Walk::Generator {
+            frame: value,
+            resume,
+            element: layout,
+        })
+    }
+
+    /// What the `n`th generator yields, from the reservation the lowering made.
+    ///
+    /// The frames are handed out in source order, so the id says which
+    /// generator this is; asking the frame's *layout* would not work, because
+    /// [`super::suspend`] has not built one yet.
+    fn generator_element(&self, frame: TypeId) -> Option<HirType> {
+        let which = (frame.0 - super::SYNTHETIC_GENERATOR_FRAMES) as usize;
+        let node = self
+            .generators
+            .iter()
+            .find(|(_, index)| **index == which)
+            .map(|(node, _)| *node)?;
+        let ty = self.snapshot.node_types.get(&node).copied()?;
+        let TypeKind::Function(signature) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
+            return None;
+        };
+        let declared = self.snapshot.signatures.get(signature.0 as usize)?.return_type;
+        let argument = *self
+            .snapshot
+            .type_arguments
+            .get(&declared)
+            .and_then(|arguments| arguments.first())?;
+        self.represent(argument)
     }
 
     /// `[Symbol.iterator]()` on a user type, and what stepping it looks like.
@@ -8735,6 +9112,14 @@ impl<'a> FuncBuilder<'a> {
             // built-in above keeps its own walk: an array is a counted loop and
             // a `Map` is a table read, and routing either through the protocol
             // would allocate an iterator to arrive at the same elements.
+            // A generator, recognised by the type its call produced: the frame
+            // ids are their own part of the synthetic space, so nothing else
+            // can be mistaken for one.
+            (HirType::Managed(ManagedType::Object(ty)), None)
+                if ty.0 >= super::SYNTHETIC_GENERATOR_FRAMES && ty.0 < super::SYNTHETIC_CLOSURES =>
+            {
+                self.generator_walk(sequence, value)
+            }
             (HirType::Managed(ManagedType::Object(ty)), None)
                 if self.symbol_property_name(*ty, "iterator").is_some() =>
             {
@@ -8770,8 +9155,8 @@ impl<'a> FuncBuilder<'a> {
             // The protocol advances itself: `next()` moves the iterator, and
             // there is no cursor for a latch to step. `lower_for_of` gives it
             // `Step::None` for exactly this reason, so nothing reaches here.
-            Walk::Protocol { .. } => {
-                unreachable!("the protocol has no cursor; its step is `Step::None`")
+            Walk::Protocol { .. } | Walk::Generator { .. } => {
+                unreachable!("a cursorless walk has no cursor; its step is `Step::None`")
             }
             Walk::Counted(_) => {
                 let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
@@ -8918,7 +9303,9 @@ impl<'a> FuncBuilder<'a> {
             // Handled above, before this match: it is the one shape that reads
             // more than a single value.
             Walk::Entries { .. } => unreachable!("entries reads two and returned already"),
-            Walk::Protocol { .. } => unreachable!("the protocol reads its element from the step"),
+            Walk::Protocol { .. } | Walk::Generator { .. } => {
+                unreachable!("a cursorless walk reads its element from the step")
+            }
         }]
     }
 
@@ -9096,7 +9483,7 @@ impl<'a> FuncBuilder<'a> {
         // that is not a saving but the requirement. `next()` is called in the
         // header, so `continue` has to arrive there; a protocol loop with a
         // latch of its own would step the iterator nowhere and spin.
-        let steps = !matches!(walk, Walk::Protocol { .. });
+        let steps = !matches!(walk, Walk::Protocol { .. } | Walk::Generator { .. });
         let record = self.begin_loop(id, &carried, steps, &origin)?;
 
         // The test, built rather than lowered: the source has no node for it.
@@ -9117,6 +9504,17 @@ impl<'a> FuncBuilder<'a> {
         self.switch_to(record.body);
 
         let values = match (&walk, stepped) {
+            (Walk::Generator { element, .. }, Some(frame)) => {
+                let element = element.clone();
+                vec![self.push(
+                    OpKind::FieldGet {
+                        object: frame,
+                        field: super::suspend::FIELD_YIELDED,
+                    },
+                    element,
+                    origin.clone(),
+                )]
+            }
             (Walk::Protocol { value, element, .. }, Some(step)) => {
                 let (value, element) = (*value, element.clone());
                 vec![self.push(
@@ -11145,6 +11543,7 @@ impl<'a> FuncBuilder<'a> {
                 .ok_or_else(|| self.unsupported(id, "`this` outside a method")),
             Some(syntax::ELEMENT_ACCESS_EXPRESSION) => self.lower_element_access(id),
             Some(syntax::AWAIT_EXPRESSION) => self.lower_await(id),
+            Some(syntax::YIELD_EXPRESSION) => self.lower_yield(id),
             Some(syntax::PROPERTY_ACCESS_EXPRESSION) => self.lower_property_access(id),
             // `x!`, `x as T` and `x satisfies T` are claims about types. The
             // first two narrow what the checker believes; the third asserts
@@ -11226,14 +11625,6 @@ impl<'a> FuncBuilder<'a> {
             // at all -- and node's `readline` key decoder is one.
             //
             // Refusing it is the whole of what this compiler can say today.
-            // `function*` is a suspension like `async`, and `suspend.rs` builds
-            // exactly that machine for `await`; what is missing is not the
-            // transformation but a representation for the `Generator<T>` a call
-            // to one returns.
-            Some(syntax::YIELD_EXPRESSION) => Err(self.unsupported(
-                id,
-                "`yield`, which needs the generator object a call to `function*` returns",
-            )),
             // Carrying the kind, for the same reason `yield` got a name of its
             // own: a refusal nobody can group by is a refusal nobody can rank.
             // The number is not an explanation, but it is enough to sort a
@@ -14678,8 +15069,15 @@ impl<'a> FuncBuilder<'a> {
 
         let args = self.lower_arguments(id, &arguments)?;
 
-        let ty = self
-            .type_of(id)
+        // Calling a generator produces its frame, not the `Generator<T, ...>`
+        // the checker says: that interface describes an object this compiler
+        // does not build, and the frame is what the call actually hands back.
+        // The reservation is read from the declaration, which is the same
+        // authority `begin_generator` used.
+        let ty = declaration
+            .and_then(|declaration| self.generators.get(&declaration).copied())
+            .map(|index| HirType::Managed(ManagedType::Object(super::generator_frame(index))))
+            .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
         let origin = self.origin(id);
         Ok(self.push(
@@ -15839,6 +16237,15 @@ impl<'a> FuncBuilder<'a> {
         let is_a_map = matches!(table, HirType::Managed(ManagedType::Map(_, _)));
         let what = if is_a_map { "Map" } else { "Set" };
 
+        if name == "forEach"
+            && let [callback] = arguments
+            && matches!(
+                self.kind_of(*callback),
+                Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION)
+            )
+        {
+            return self.lower_table_for_each(id, receiver, table, *callback);
+        }
         if matches!(name.as_str(), "keys" | "values" | "entries" | "forEach") {
             return Err(self.unsupported(
                 member,
@@ -17643,6 +18050,31 @@ fn refused_by_name(snapshot: &SemanticSnapshot, id: NodeId) -> Option<&'static s
         {
             found = Some("a `finally` that spans an `await`");
         }
+        // The same for a `yield`, and it is **iterator closing**: a `for...of`
+        // left by `break` or `return` calls `gen.return()` on the way out,
+        // which resumes the generator inside its `try` and runs the `finally`.
+        // Nothing here does that -- an abandoned walk simply stops calling the
+        // resumption, and the frame sits at whatever state it stopped in.
+        //
+        // Measured rather than assumed, and it was a wrong answer that ran:
+        // a generator whose `finally` incremented a module-scope counter
+        // disagreed with node on **26 of 29 cases** the moment the walk had a
+        // `break` in it. The refusal is at the `try` because that is the only
+        // place that can see the question; the loop that abandons it is in
+        // another function.
+        //
+        // A `catch` that spans a `yield` is **not** refused, and that is
+        // measured too: 29 of 29 agree. The `await` rule refuses one because a
+        // rejected resumption goes to a shared exit that knows no handler, and
+        // nothing resumes a generator with a failure -- a `throw` in the body
+        // and the handler that catches it are both in the resumption, in
+        // blocks the split preserved.
+        if kind == Some(syntax::TRY_STATEMENT)
+            && has_finally(snapshot, child)
+            && contains_kind(snapshot, child, syntax::YIELD_EXPRESSION)
+        {
+            found = Some("a `finally` that spans a `yield`, which is iterator closing");
+        }
         // A rejected `await` inside a `try` has to reach that `try`'s handler,
         // and it does not: a resumption's rejection goes to one shared exit
         // that rejects this function's own promise, because until `try`/`catch`
@@ -18011,6 +18443,25 @@ enum Walk {
         result: HirType,
         done: u32,
         value: u32,
+        element: HirType,
+    },
+    /// A generator, stepped by its own resumption.
+    ///
+    /// The protocol without the object. `[Symbol.iterator]()` on a user type
+    /// builds an iterator and `next()` returns a `{ value, done }`; a generator
+    /// *is* its iterator -- the frame [`super::suspend`] builds is the state,
+    /// and the resumption both advances it and answers whether it is over. So
+    /// there is nothing to allocate per step and no result object at all: the
+    /// element is left in the frame and `done` comes back as the return value.
+    ///
+    /// Cursorless for the same reason [`Walk::Protocol`] is, and with the same
+    /// consequence: the header is the latch, because the resumption is called
+    /// there and `continue` has to reach it.
+    Generator {
+        /// The frame, made once by calling the generator before the loop.
+        frame: ValueId,
+        /// `f__resume(frame)`, which [`super::suspend`] has not built yet.
+        resume: Callee,
         element: HirType,
     },
     /// The code points of a string, which are one or two units wide.

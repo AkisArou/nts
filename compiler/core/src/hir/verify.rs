@@ -902,7 +902,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::ClosureStatic
         | OpKind::ObjectNew { .. }
         | OpKind::GlobalGet(_) => Vec::new(),
-        OpKind::GlobalSet { value, .. } => vec![*value],
+        OpKind::Yield { value } | OpKind::GlobalSet { value, .. } => vec![*value],
         OpKind::StringUnitAt { string, index, .. } => vec![*string, *index],
         OpKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
         OpKind::Unary { operand, .. } | OpKind::Convert(operand) => vec![*operand],
@@ -987,6 +987,7 @@ mod tests {
                 exported: true,
                 initializes_receiver: false,
                 async_result: None,
+                frame: None,
                 abstract_declaration: false,
             }],
             ..Program::default()
@@ -1331,6 +1332,7 @@ mod tests {
             exported: false,
             initializes_receiver: false,
             async_result: None,
+            frame: None,
             abstract_declaration: false,
         };
         let passes_one = Func {
@@ -1354,6 +1356,7 @@ mod tests {
             exported: true,
             initializes_receiver: false,
             async_result: None,
+            frame: None,
             abstract_declaration: false,
         };
         let program = Program {

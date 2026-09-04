@@ -2585,7 +2585,7 @@ fn managed_op(
             field,
             value: stored,
         } => field_store(func, op, *object, *field, *stored, context)?,
-        OpKind::Await { .. } | OpKind::Suspend { .. } => suspension(op)?,
+        OpKind::Await { .. } | OpKind::Yield { .. } | OpKind::Suspend { .. } => suspension(op)?,
         OpKind::ArrayNew { length, zeroed } => {
             // Two entry points rather than a flag argument, so the branch is
             // taken here rather than once per allocation at run time.
@@ -2769,6 +2769,7 @@ fn emit_op(
         | OpKind::ArrayGet { .. }
         | OpKind::ArraySet { .. }
         | OpKind::Await { .. }
+        | OpKind::Yield { .. }
         | OpKind::Suspend { .. } => {
             return managed_op(writer, func, value, context);
         }
@@ -2953,6 +2954,7 @@ mod tests {
             exported: false,
             initializes_receiver: false,
             async_result: None,
+            frame: None,
             abstract_declaration: false,
         };
         let op = value(i32_ty);

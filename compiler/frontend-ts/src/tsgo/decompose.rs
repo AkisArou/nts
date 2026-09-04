@@ -839,7 +839,16 @@ impl<'a> Decomposer<'a> {
             .symbols
             .get(symbol.0 as usize)
             .is_some_and(|declared| {
-                matches!(declared.name.as_str(), "Promise" | "Map" | "Set")
+                // `Generator<T, TReturn, TNext>` for the same reason as the
+                // other three: this compiler represents a generator itself --
+                // as the frame `hir::suspend` builds -- so decomposing the
+                // library's interface would pull in `next`, `return`, `throw`
+                // and `IteratorResult` to describe something already compiled.
+                // What is needed of it is `T`, and that is a type argument.
+                matches!(
+                    declared.name.as_str(),
+                    "Promise" | "Map" | "Set" | "Generator"
+                )
             })
     }
 
