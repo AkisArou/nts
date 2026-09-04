@@ -1,5 +1,11 @@
 # Rust
 /target
+# A second target directory, so that three sessions sharing one checkout do not
+# serialise on one `cargo` lock or rebuild each other's artifacts. Ignored for a
+# reason worth stating: with `git status` now something all three of us read
+# after a commit went wrong, 6,793 untracked files in it is not a tidiness
+# complaint -- it is the signal being buried.
+/target-jvm
 
 # TypeScript / pnpm
 node_modules/
