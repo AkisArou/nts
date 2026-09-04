@@ -1046,3 +1046,108 @@ fn an_assignment_that_reads_through_an_accessor_is_refused_in_those_words() {
             .collect::<Vec<_>>(),
     );
 }
+
+#[test]
+fn a_symbol_keyed_method_is_emitted_and_reached_under_one_name() {
+    let Some(lowered) = lowered("computed-members") else {
+        return;
+    };
+    // Three places decide this name and all three have to agree letter for
+    // letter: the declaration decides what the function is emitted as, the
+    // hierarchy decides what a lookup finds, and the call site decides what is
+    // looked up. Only the declaration had a rule for a symbol key.
+    //
+    // Asserted as emitted-*and*-called rather than as either alone, because
+    // each half fails in a way the other half cannot see. With only the
+    // declaration fixed, the method is emitted under `__@kStep@2` and every
+    // call still asks for `kStep`, so it is dead code nothing reports. With the
+    // call site fixed too, the call asks for `__@kStep@2` and the hierarchy has
+    // never heard of it -- a refusal naming the emitted function's own name.
+    let emitted: Vec<&str> = lowered
+        .program
+        .funcs
+        .iter()
+        .map(|func| func.name.as_str())
+        .filter(|name| name.contains("__@kStep@"))
+        .collect();
+    assert_eq!(emitted.len(), 1, "one symbol-keyed method, got {emitted:?}");
+    let declared = emitted[0];
+
+    let reached = lowered.program.funcs.iter().any(|func| {
+        func.values.iter().any(|op| {
+            matches!(
+                &op.kind,
+                OpKind::Call { callee: Callee::Direct(target), .. } if target == declared,
+            )
+        })
+    });
+    assert!(reached, "`{declared}` is emitted and nothing calls it");
+}
+
+#[test]
+fn a_user_iterable_is_stepped_once_per_iteration() {
+    let Some(lowered) = lowered("iteration") else {
+        return;
+    };
+    // The whole design of the protocol walk in one assertion. `next()` both
+    // advances the iterator and produces the element, so calling it for the
+    // test and again for the element would step twice and yield every other
+    // item -- an answer that is wrong by a factor of two and looks like
+    // arithmetic.
+    //
+    // One call, and both reads come out of its result.
+    let func = func(&lowered, "userIterable");
+    let steps: Vec<&hir::Op> = func
+        .values
+        .iter()
+        .filter(|op| {
+            matches!(
+                &op.kind,
+                OpKind::Call { callee: Callee::Direct(target), .. } if target.ends_with("#next"),
+            )
+        })
+        .collect();
+    assert_eq!(steps.len(), 1, "one `next()` per iteration, got {}", steps.len());
+
+    // And the iterator itself is built once, outside the loop -- the entry
+    // block runs exactly once per call.
+    let built: usize = func
+        .entry()
+        .ops
+        .iter()
+        .filter(|value| {
+            matches!(
+                &func.values[value.0 as usize].kind,
+                OpKind::Call { callee: Callee::Direct(target), .. } if target.contains("__@iterator@"),
+            )
+        })
+        .count();
+    assert_eq!(built, 1, "`[Symbol.iterator]()` is called once, before the loop");
+}
+
+#[test]
+fn a_protocol_loop_carries_no_cursor() {
+    let Some(lowered) = lowered("iteration") else {
+        return;
+    };
+    // Every other walk advances an index the loop carries. This one's state is
+    // inside the iterator, so a cursor would be a loop-carried value nothing
+    // reads -- and the *reason* it must not exist is `continue`: the step lives
+    // in the header, so the header has to be the latch, and a loop with a
+    // cursor gets a latch of its own that would step the iterator nowhere.
+    //
+    // `userIterable` carries one value, the accumulator. A cursor would make
+    // it two.
+    let func = func(&lowered, "userIterable");
+    let carried: usize = func
+        .blocks
+        .iter()
+        .map(|block| block.params.len())
+        .max()
+        .unwrap_or(0);
+    assert_eq!(
+        carried, 1,
+        "only the accumulator is carried; a cursor would make it two: {:?}",
+        func.blocks.iter().map(|b| b.params.len()).collect::<Vec<_>>(),
+    );
+}

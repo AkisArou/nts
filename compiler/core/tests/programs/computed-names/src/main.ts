@@ -16,11 +16,22 @@ export class Holder {
     return this.n + 2;
   }
 
-  // A name only the running program knows. Refused: it wants a property map
-  // rather than a field, and reading it as a name would collide it with
-  // whatever `kTag` happens to describe.
+  // A `unique symbol` key, which is *not* a name only the running program
+  // knows: the checker resolves it to one property and spells it
+  // `__@kTag@N` -- the identifier between the brackets and its own id. The
+  // field spelling has always relied on that; the method spelling was refused
+  // until the declaration, the hierarchy and the call site were taught the
+  // same name.
   [kTag](): number {
     return this.n + 3;
+  }
+
+  // The string of the same text, which is a *different member*. This is the
+  // collision the mangled name exists to prevent: resolving `[kTag]` by the
+  // identifier's text would put these two in one slot, and one of them would
+  // silently win.
+  ["kTag"](): number {
+    return this.n + 4;
   }
 
   get "getter"(): number {

@@ -52,6 +52,7 @@ a backlog.
 |---|---|---|
 | ✅ | arithmetic | `+ - * / % **` |
 | ✅ | bitwise | `& \| ^ ~ << >> >>>` |
+| ✅ | integer `+ - *` **wrap** at 32 bits, as `(a + b) \| 0` is defined to | specialization narrows an accumulator to `int32_t` wherever the values are whole, which does not prove the sum fits. The C backend emitted a plain signed `+`, and signed overflow is undefined in C — so a long enough walk answered `3221225471` where node answers `-1073741825`, the same bits read as unsigned. Wrapped through the unsigned counterpart now. The LLVM backend was always right: its `add` carries no `nsw`. Held by a codegen text test, not by the differential, which cannot pin undefined behaviour |
 | ✅ | comparison, equality | `< > <= >= === !==`, and `==`/`!=` where nothing coerces |
 | ◐ | `==` that **coerces** | refused — see below |
 | ✅ | logical | `&& \|\| !` |
@@ -293,6 +294,7 @@ ordinary calls emits no closure struct, no dispatch slot and no table at all.
 | ✗ | a class used as a *value* (`C` itself, passed or returned) |
 | ✗ | methods and getters on **object literals** |
 | ✅ | a member keyed by a **symbol** (`[kRefed]`) — an ordinary field, not a map |
+| ✅ | a **method** keyed by a symbol (`[kStep]() {}`, `[Symbol.iterator]() {}`) — the same name in all three places that decide it: the declaration names the emitted function, the hierarchy answers the lookup, and the call site does the looking. Only the declaration had a rule; the field half had worked all along because a layout takes its field names from the checker's members |
 | ✗ | a member name the program computes from a value the compiler cannot see |
 
 ### `[kRefed]` is a field, not a property map
@@ -1843,9 +1845,11 @@ starts, whether it is still going, what it reads. That is what let `break`,
 | ✅ | over a string, **by code point**: `"a\u{1F600}b"` yields three items, not four |
 | ✅ | array and object destructuring, including nested and renamed — in a declaration **and in the head**: `for (const { from: { x }, weight } of segments)` binds by property off the element, where `[key, value]` over a table stays positional because those two names take two reads and no pair is ever built |
 | ✅ | mutation during a walk: an entry appended is visited, one deleted ahead is not |
-| ✗ | `[Symbol.iterator]()`, `.next()`, `{ value, done }` — the object itself |
+| ✅ | `[Symbol.iterator]()`, `.next()`, `{ value, done }` — the object itself, where the result type is written out | the fourth walk and the only one with no cursor: `next()` both advances the iterator and produces the element, so one call answers "again?" in the header and "with what?" in the body, which the header dominates. The header is the latch, because `continue` has to reach the step |
+| ✗ | `IteratorResult<T>` from `lib.d.ts` | a union of two object types whose `value` is `T` in one and `any` in the other, so they lay out differently and the union has no representation. A hand-written `{ value: T; done: boolean }` works; the standard spelling is refused and named |
 | ✗ | iterator **closing** (`.return()` on abrupt completion) — a correctness detail, not a convenience |
-| ✗ | `for...of` over a generator, or over a user type with `[Symbol.iterator]` |
+| ✅ | `for...of` over a user type with `[Symbol.iterator]` | `break` and `continue` both correct, nested walks independent, the iterator built once per loop. Allocates **nothing**: the result object is one frame slot reused, because each dies before the next is made — `tooling/memory/cases/iterator-protocol` argues it |
+| ✗ | `for...of` over a **generator** | needs `yield`, which is the row below |
 | ◐ | spread over an iterable; `new Map([[k, v]])`. `Array.from(xs)` where `xs` is already an array is a copy and works; a mapper, or anything iterable that is not an array, does not |
 | ✗ | `Map`/`Set` `forEach` |
 | ✅ | a default in a destructuring pattern (`{ a = 1 }`) |

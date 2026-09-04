@@ -2098,27 +2098,8 @@ fn binary_text(
     // get C's operator either, because a negative count reverses the direction
     // and a count past the width saturates, and C leaves both undefined. It
     // gets a second pair of helpers that spell *those* rules on 128 bits.
-    let wide = matches!(func.values[lhs.0 as usize].ty, HirType::BigInt);
-    let helper = match (wide, bin) {
-        (false, BinOp::Shl) => Some("nts_shl"),
-        (false, BinOp::Shr) => Some("nts_shr"),
-        (false, BinOp::UShr) => Some("nts_ushr"),
-        (true, BinOp::Shl) => Some("nts_bigint_shl"),
-        (true, BinOp::Shr) => Some("nts_bigint_shr"),
-        _ => None,
-    };
-    if let Some(helper) = helper {
-        // Cast to the slot the result goes in. `nts_ushr` answers a `uint32_t`
-        // -- `>>>` is defined to -- and the slot is an `int32_t`, so C narrowed
-        // it silently. That is safe only because a shift by one or more clears
-        // the top bit, which is an argument nobody had written down; `x >>> 0`
-        // is the case it does not cover. Saying it makes the one place that has
-        // to think about it visible.
-        // A shift's result is a scalar, so `c_type` answers it without the
-        // program; if it somehow could not, the unannotated call is what this
-        // emitted before and is no worse.
-        let slot = c_type(&op.ty, &op.origin).unwrap_or("");
-        return wrap(format!("({slot}){helper}({}, {})", cast(lhs), cast(rhs)));
+    if let Some(text) = shift_text(func, op, bin, lhs, rhs, &wrap, &cast) {
+        return text;
     }
 
     // A comparison against the absent reference is a comparison of addresses,
@@ -2211,11 +2192,109 @@ fn binary_text(
         return format!("{name} = fmod({}, {});", value_name(lhs), value_name(rhs));
     }
 
+    if let Some(text) = wrapping_arithmetic(op, name, bin, operator, lhs, rhs) {
+        return text;
+    }
+
     format!(
         "{name} = {} {operator} {};",
         value_name(lhs),
         value_name(rhs)
     )
+}
+
+/// A shift, which is a helper call rather than a C operator.
+///
+/// JavaScript masks the count to five bits, where C leaves a shift by 32 or
+/// more undefined; `<<` on a negative signed operand is undefined in C and
+/// defined in JavaScript. Each goes through a helper that spells the real rule.
+///
+/// A `bigint` has neither rule -- the lowering skipped the `ToInt32` pair for it
+/// -- but it does not get C's operator either, because a negative count
+/// reverses the direction and a count past the width saturates, and C leaves
+/// both undefined. It gets a second pair of helpers that spell *those* rules on
+/// 128 bits.
+///
+/// `None` where the operator is not a shift, which is the caller's signal to
+/// carry on.
+fn shift_text(
+    func: &Func,
+    op: &nts_core::hir::Op,
+    bin: BinOp,
+    lhs: ValueId,
+    rhs: ValueId,
+    wrap: &impl Fn(String) -> String,
+    cast: &impl Fn(ValueId) -> String,
+) -> Option<String> {
+    let wide = matches!(func.values[lhs.0 as usize].ty, HirType::BigInt);
+    let helper = match (wide, bin) {
+        (false, BinOp::Shl) => "nts_shl",
+        (false, BinOp::Shr) => "nts_shr",
+        (false, BinOp::UShr) => "nts_ushr",
+        (true, BinOp::Shl) => "nts_bigint_shl",
+        (true, BinOp::Shr) => "nts_bigint_shr",
+        _ => return None,
+    };
+    // Cast to the slot the result goes in. `nts_ushr` answers a `uint32_t` --
+    // `>>>` is defined to -- and the slot is an `int32_t`, so C narrowed it
+    // silently. That is safe only because a shift by one or more clears the top
+    // bit, which is an argument nobody had written down; `x >>> 0` is the case
+    // it does not cover. Saying it makes the one place that has to think about
+    // it visible.
+    //
+    // A shift's result is a scalar, so `c_type` answers it without the program;
+    // if it somehow could not, the unannotated call is what this emitted before
+    // and is no worse.
+    let slot = c_type(&op.ty, &op.origin).unwrap_or("");
+    Some(wrap(format!(
+        "({slot}){helper}({}, {})",
+        cast(lhs),
+        cast(rhs)
+    )))
+}
+
+/// Integer `+`, `-` and `*`, wrapped the way JavaScript defines them.
+///
+/// Signed overflow is undefined in C and *defined* in JavaScript, where
+/// `(a + b) | 0` wraps modulo 2^32.
+///
+/// Specialization narrows an accumulator to `int32_t` wherever the values are
+/// whole, which is not the same as proving the sum fits -- and a plain C
+/// operator then tells clang the overflow cannot happen. It happens:
+/// `total = (total + step.value) | 0` over a long enough walk passed `INT32_MAX`
+/// and the program answered 3221225471 where node answers -1073741825. The same
+/// thirty-two bits, read as unsigned, because the optimizer had been given a
+/// promise the program does not keep.
+///
+/// Wrapped through the unsigned counterpart, which is defined, and cast back --
+/// exactly the spelling `benches/cases/accumulate`'s hand-written reference
+/// uses, with a comment there saying the wrapping *is* the semantics. The C
+/// emitted here is now held to the standard the reference is held to.
+///
+/// Only `+`, `-` and `*`. Division and remainder do not wrap, comparison does
+/// not produce an integer, and the bitwise operators are answered before this.
+///
+/// The LLVM backend needs no equivalent: its `add` carries no `nsw`, so it
+/// wraps by definition. This is a rule about C.
+fn wrapping_arithmetic(
+    op: &nts_core::hir::Op,
+    name: &str,
+    bin: BinOp,
+    operator: &str,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> Option<String> {
+    let HirType::Int { bits, signed: true } = op.ty else {
+        return None;
+    };
+    if !matches!(bin, BinOp::Add | BinOp::Sub | BinOp::Mul) {
+        return None;
+    }
+    Some(format!(
+        "{name} = (int{bits}_t)((uint{bits}_t){} {operator} (uint{bits}_t){});",
+        value_name(lhs),
+        value_name(rhs)
+    ))
 }
 
 /// Whether a bitwise result can be written without going through a `double`.
@@ -2821,6 +2900,59 @@ mod tests {
     #[test]
     fn a_leading_underscore_is_reserved_to_the_implementation() {
         assert_eq!(c_identifier("_internal"), "_internal_");
+    }
+
+    /// Integer `+`, `-` and `*` are emitted as wrapping arithmetic.
+    ///
+    /// Pinned on the emitted *text* rather than on an answer, and that is the
+    /// point. Signed overflow is undefined in C, so a program that relies on it
+    /// may give the right answer on Tuesday: three examples written to catch
+    /// this agreed with node even with the fix reverted, because clang chose to
+    /// wrap anyway at those shapes. A differential cannot hold a rule about
+    /// undefined behaviour -- it can only notice the days the optimizer took
+    /// the other branch.
+    ///
+    /// The rule it *can* hold is that the emitted C never asks. So this reads
+    /// the text.
+    #[test]
+    fn integer_arithmetic_is_emitted_wrapping() {
+        use nts_core::hir::Op;
+        use nts_diagnostics::{Location, SourceId, Span};
+        use nts_semantic_schema::Origin;
+
+        let i32_ty = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
+        let value = |ty: HirType| Op {
+            kind: OpKind::ConstFloat(0.0),
+            ty,
+            origin: origin.clone(),
+        };
+        let func = Func {
+            name: "probe".to_owned(),
+            params: Vec::new(),
+            return_type: i32_ty.clone(),
+            values: vec![value(i32_ty.clone()), value(i32_ty.clone())],
+            blocks: Vec::new(),
+            origin: origin.clone(),
+            exported: false,
+            initializes_receiver: false,
+            async_result: None,
+        };
+        let op = value(i32_ty);
+        for (bin, operator) in [(BinOp::Add, "+"), (BinOp::Sub, "-"), (BinOp::Mul, "*")] {
+            let text = binary_text(&func, &op, "out", bin, ValueId(0), ValueId(1));
+            assert_eq!(
+                text,
+                format!("out = (int32_t)((uint32_t)v0 {operator} (uint32_t)v1);"),
+                "`{operator}` on two int32 must wrap rather than invite the optimizer",
+            );
+        }
     }
 
     #[test]

@@ -74,24 +74,44 @@ fn every_literal_spelling_names_the_same_kind_of_member() {
     }
 }
 
-/// A name the program computes stays refused.
+/// A symbol key and a string of the same text are two members.
 ///
-/// The whole reason a literal is safe is that it is not this: `[kTag]` and
-/// `["kTag"]` are different members, and resolving the first by the identifier's
-/// text would put them in one slot.
+/// This test used to assert that `[kTag]` was *refused* as "a name the program
+/// computes", and that was wrong about the fact while being right about the
+/// hazard. A `unique symbol` is not a name only the running program knows: the
+/// checker resolves it to exactly one property and spells it `__@kTag@N`,
+/// which is why a symbol-keyed *field* has worked since fields existed. What
+/// was missing was the method half -- and the refusal was standing in for it.
+///
+/// The hazard the old assertion protected is real and is what is checked now.
+/// `[kTag]` and `["kTag"]` are different members; resolving the first by the
+/// identifier's text would put both in one slot and one would silently win.
 #[test]
-fn a_name_the_program_computes_is_still_refused() {
+fn a_symbol_key_and_a_string_of_the_same_text_are_two_members() {
     let Some(lowered) = lower_at("tests/programs/computed-names") else {
         return;
     };
-    assert!(named(&lowered, "Holder#kTag").is_none(), "`[kTag]` is not a name");
+    // The string spelling keeps the bare name.
     assert!(
-        messages(&lowered)
+        named(&lowered, "Holder#kTag").is_some(),
+        "`[\"kTag\"]` is the member named `kTag`; lowered {:?}",
+        lowered
+            .program
+            .funcs
             .iter()
-            .any(|m| m.contains("a member whose name the program computes")),
-        "expected the computed-name refusal, got {:?}",
-        messages(&lowered),
+            .map(|f| f.name.as_str())
+            .collect::<Vec<_>>(),
     );
+    // The symbol spelling gets the checker's own, and there is exactly one.
+    let keyed: Vec<&str> = lowered
+        .program
+        .funcs
+        .iter()
+        .map(|func| func.name.as_str())
+        .filter(|name| name.starts_with("Holder#__@kTag@"))
+        .collect();
+    assert_eq!(keyed.len(), 1, "one symbol-keyed member, got {keyed:?}");
+    assert_ne!(keyed[0], "Holder#kTag", "the two spellings share a slot");
 }
 
 /// A setter produces nothing, whatever its name.

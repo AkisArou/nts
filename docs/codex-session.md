@@ -283,3 +283,153 @@ Two small things back:
   an excluded one is exactly the case that would otherwise go dark, and
   "visibly reported" is the part that matters — a skipped test that does not
   say it skipped is how a suite lies.
+
+### 2026-09-04 — runtime/node (Codex), process handoff
+
+The TypeScript `process` lane is now green and non-hollow: **113 files, 55
+pass, 0 fail, 0 skip, 58 N/A**. The full sabotage lane is **0 pass / 55 fail /
+58 N/A**. I found that the profile's `^test-process-*` pattern omitted the
+upstream `test-next-tick*`, `test-memory-usage*`, and `test-resource-usage.js`
+files. Seven unchanged next-tick tests and unchanged `test-resource-usage.js`
+are now explicit `extra-tests`. The two memory files require the
+`memoryUsage.rss` callable-function property and V8 external/ArrayBuffer
+accounting; `local/resource-accounting.js` visibly isolates the supported
+ordinary memory/resource records and fails under sabotage.
+
+That new upstream coverage exposed a conformance-runner bug: Node's CommonJS
+loader calls its wrapper with `module.exports` as top-level `this`, while ours
+called the generated function plainly. `test-next-tick.js` deliberately checks
+the value captured by top-level arrows. `run-one.mjs` now uses
+`run.call(module.exports, ...)`; the unchanged file passes. Sabotage also now
+flushes a failure and ends its disposable child immediately. Before that,
+`test-process-kill-null.js` opened `cat`, reached the missing process method,
+then sat on the unrelated child until the 60-second timeout even though the
+non-hollow verdict was already known.
+
+Native process coverage is **47 of 52 declared seams**. The newly implemented
+C covers identity/metadata/281 pinned allowed flags, cwd/environment reads,
+control and POSIX credentials, hrtime/accounting, raw debug, execve, and Node's
+dotenv parser. The five deliberately not faked are active handles, active
+requests, active resource names, beforeExit registration, and exit
+registration. Those need core runtime access to the loop/slot registry and
+loop-lifecycle callbacks; module-local C has no honest view of either. A
+second core integration ask is to call `uv_setup_args` at standalone startup;
+libuv documents process-title get/set as depending on that setup, and no call
+currently exists outside this module.
+
+The process module's final growing-array operation is gone: credential and
+execve/environment columns now allocate exact lengths and assign by index.
+`tsgo --noEmit`, the process §13 audit, and strict C syntax with
+`-Wall -Wextra -Werror` all pass. I also fixed the shared UTF-16-to-UTF-8 bridge:
+its old capacity condition returned an empty string for a one-character input
+and encoded surrogate pairs as two invalid scalars. Direct C probes cover
+ASCII, BMP, a supplementary pair, and an unpaired surrogate.
+
+Current release compiler boundary: `emit-c --napi` exits 0, writes C, and does
+not panic. HIR reports **190 functions / 228 constructs refused** and **all of
+it verifies (74 after pruning)**. Unlike the earlier async-hooks state, clang
+now builds `target/node/process.node`. The addon exports compiled
+`memoryUsage` and `resourceUsage`; direct calls return real values from the new
+C bridge. It does not export `default` or `process`, because `new Process()` at
+`process/src/main.ts:512` is refused after the `EventEmitter`/open-object/error
+dependency chain is refused. Therefore an unchanged public process test cannot
+yet reach a process object; the focused compiled runner currently ends at
+`TypeError: Cannot read properties of undefined (reading '_fatalException')`
+from its error-dispatch hook. Direct binding aliases such as `uptime` and
+`hrtimeBigInt` are also absent because the current compiler refuses a
+module-scope variable holding a function. I kept the zero-wrapper aliases as
+requested instead of adding runtime call overhead to work around that compiler
+gap.
+
+### 2026-09-04 — runtime/node TypeScript project layout
+
+The user authorized the root solution change. Every per-module
+`runtime/node/*/tsconfig.json` now inherits
+`runtime/node/tsconfig.module.json`, which directly extends the root
+`tsconfig.base.json` (the initially added runtime-specific base was
+unnecessary and has been removed). Therefore all leaves inherit the root's
+`target: "esnext"`. Leaf configs are non-composite/no-emit entry points for
+`nts` and focused typechecking, with `rootDir` widened to `runtime/node`
+because they intentionally import shared `internal/` and sibling modules.
+The explicit leaf `include: ["src"]` was removed: the root base's
+`${configDir}/src/**/*` already resolves against each leaf.
+
+`runtime/node/tsconfig.json` also extends the root base and is the one
+buildable composite aggregate. Root `tsconfig.json` references only
+`./runtime/node` rather than all 22 leaf projects. This is intentional: the
+leaves directly import shared `internal/` and sibling source files, so
+referencing them independently would violate composite ownership or rebuild
+most of the profile repeatedly. The aggregate checks those cross-module
+contracts once. Focused effective configs for `process` and `events` are
+clean under the stricter inherited policy.
+The full aggregate/root build validation is pending the shared gate lock; I
+have not disturbed its current holder.
+
+### 2026-09-04 — runtime/node (Codex), Buffer handoff
+
+The TypeScript Buffer lane is green and non-hollow: **77 files, 50 pass, 0
+fail, 1 environment skip, 26 N/A**. Sabotage is **0 pass / 50 fail / 1 skip /
+26 N/A**. The only skip is Node's `MAX_STRING_LENGTH + 1` allocation test on a
+machine that reports insufficient test memory. The N/A list now distinguishes
+V8/debug allocator representation tests and self-spawned child-process tests
+from language/runtime non-goals. Applicable portions of mixed §13 files are
+visible as eight `local/*.js` cases, including a new focused fill test.
+
+The Buffer source has no growing-array operations, no unsafe TypeScript casts,
+and passes the §13 audit. UInt/Uint aliases and signed/unsigned numeric methods
+no longer forward through another public method: their hot byte-arithmetic
+bodies are statically declared directly, avoiding a second call and, for
+writes, duplicate validation. Node-only `shape.mjs` restores observable alias
+function identity. The `util.inspect.custom` Symbol hook was also removed from
+typed source; only the ordinary `inspect()` algorithm remains there, while the
+Node-only shape bridge installs the metadata alias.
+
+One upstream surprise: `Buffer.from('zz', 'hex')` forgivingly returns an empty
+buffer, but `Buffer.alloc(4).fill('zz', 'hex')` throws
+`ERR_INVALID_ARG_VALUE`. Fill now ports that distinction and Node's actual
+string overload/range-validation order instead of clamping invalid ranges.
+SharedArrayBuffer is no longer accidentally accepted by the implementation
+while its test is classified as a deferred agent/memory-model feature.
+
+Compiler boundary with the current release binary: `emit-c --napi` exits 0,
+writes C, and does not panic. HIR reports **188 functions / 185 constructs
+refused**, **0 verification failures**, and 71 functions after unreachable
+pruning. There are 62 first-order Buffer-source refusals. Representative exact
+diagnostics are:
+
+- `buffer/src/main.ts:372:25` — `a parameter of unrepresentable type (a union
+  of ArrayLike | Iterable)`;
+- `buffer/src/main.ts:441:22` — `a base ArrayBufferView of unrepresentable type
+  (ArrayBufferView)`;
+- `buffer/src/main.ts:518:7` — ``ArrayBuffer.isView`, a global member with no
+  definition here`;
+- `buffer/src/main.ts:577:38` (and the other raw write methods) — `a parameter
+  default that reads offset, another parameter`;
+- `buffer/src/main.ts:721:4` — ``set` on a typed array`;
+- `buffer/src/main.ts:983:36` (and the other bigint writes) — `a value of type
+  BigInt where unknown is expected`;
+- `buffer/src/main.ts:541:54` — ``this` outside a method` (reported twice for
+  the `toString` default parameter);
+- `buffer/src/main.ts:1632:11` — `a function declaration outside every walk`.
+
+Clang builds `target/node/buffer.node`, but the addon is not behaviorally
+callable because no Node-API wrapper is emitted for the exported `Buffer`
+class or its members. The first focused compiled test ends while loading the
+shape bridge with the exact failure `Cannot read properties of undefined
+(reading 'prototype')`. Emit also explicitly says `no wrapper for
+Buffer#swap16` (and the other exported class members). I kept the faithful
+typed class rather than moving behavior into `shape.mjs` to work around this
+compiler limitation.
+
+### 2026-09-04 — runtime/node test-load warning
+
+While adding Node's dedicated `test/async-hooks` directory to the conformance
+oracle, I ran its `test-improper-order.js` and `test-improper-unwind.js` as
+focused cases. Both are host-binary subprocess tests and recursively invoke
+their own script through `process.execPath`; under the substitution runner the
+child re-entered `run-one.mjs`, causing recursive children. I terminated every
+process whose command line named exactly one of those two test files; the count
+was zero afterwards. This overlapped the current gate for roughly thirty
+seconds and may have caused a transient load spike, so treat timing/resource
+failures from that gate run as suspect. I am classifying these two tests before
+running the expanded suite broadly.

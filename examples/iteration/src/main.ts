@@ -419,3 +419,131 @@ export function pairsBreaking(n: number): number {
   }
   return total + n * 0;
 }
+
+
+// --- a user type's own iterator ------------------------------------------
+//
+// The fourth walk, and the only one with no cursor. The other three know where
+// they are from an index the loop advances; this one's whole state lives inside
+// the iterator object, and the *call* to `next()` is what moves it.
+//
+// So one call answers both questions -- whether to go round again, and with
+// what. The result is computed in the header and the element is read back out
+// of that same result in the body, which the header dominates. Calling `next()`
+// once for the test and again for the element would drop every other item.
+//
+// That is also why the header is the latch here. `continue` has to reach the
+// `next()` call; a latch of its own would step the iterator nowhere and spin,
+// which is what `continueReachesTheStep` exists to catch.
+//
+// `[Symbol.iterator]` is an ordinary symbol-keyed method -- see
+// `examples/computed-members` for the three places that had to agree on its
+// name.
+//
+// Every count here is `bounded(n)` rather than `n`. The argument pool is
+// hostile on purpose and hands out values in the billions; a walk whose length
+// *is* the argument turns a correctness example into a benchmark, and the
+// nested one turns it into a quadratic benchmark. The existing walks above are
+// bounded by an array they build, which is the same protection by accident.
+
+type Step = { value: number; done: boolean };
+
+function bounded(n: number): number {
+  // `% 7` keeps it small, keeps a negative negative -- which yields nothing at
+  // all, the case a loop that reads before testing gets wrong -- and keeps a
+  // fraction fractional.
+  return n % 7;
+}
+
+class CountdownSteps {
+  at: number;
+  constructor(at: number) {
+    this.at = at;
+  }
+  next(): Step {
+    this.at = this.at - 1;
+    return { value: this.at < 0 ? 0 : this.at, done: this.at < 0 };
+  }
+}
+
+class Countdown {
+  from: number;
+  constructor(from: number) {
+    this.from = from;
+  }
+  [Symbol.iterator](): CountdownSteps {
+    return new CountdownSteps(this.from);
+  }
+}
+
+export function userIterable(n: number): number {
+  let sum = 0;
+  for (const v of new Countdown(bounded(n))) {
+    sum = sum + v;
+  }
+  return sum;
+}
+
+// A negative `from` yields nothing, which the pool supplies directly.
+export function userIterableEmpty(n: number): number {
+  let seen = 0;
+  for (const _v of new Countdown(bounded(n) - 8)) {
+    seen = seen + 1;
+  }
+  return seen;
+}
+
+export function breaksEarly(n: number): number {
+  let sum = 0;
+  for (const v of new Countdown(bounded(n))) {
+    if (v < 2) {
+      break;
+    }
+    sum = sum + v;
+  }
+  return sum;
+}
+
+// `continue` jumps to the latch, and here the latch *is* the header -- so it
+// must reach `next()`. A loop that stepped the iterator anywhere else would
+// hang rather than answer wrongly, which is why this counts what it saw.
+export function continueReachesTheStep(n: number): number {
+  let sum = 0;
+  let seen = 0;
+  for (const v of new Countdown(bounded(n))) {
+    seen = seen + 1;
+    if (v % 2 === 0) {
+      continue;
+    }
+    sum = sum + v;
+  }
+  return sum * 100 + seen;
+}
+
+// Two at once, so the inner iterator is built per outer iteration and neither
+// loop's state is the other's.
+export function nestedUserIterables(n: number): number {
+  let total = 0;
+  for (const outer of new Countdown(bounded(n))) {
+    for (const inner of new Countdown(outer)) {
+      total = total + inner;
+    }
+  }
+  return total;
+}
+
+// The iterator is made once, before the loop, and stepped by it. Walking the
+// same *source* twice builds two iterators, so the second starts again rather
+// than continuing where the first stopped.
+export function iteratorIsBuiltOnce(n: number): number {
+  const source = new Countdown(bounded(n));
+  let first = 0;
+  for (const v of source) {
+    first = first + v;
+  }
+  let second = 0;
+  for (const v of source) {
+    second = second + v;
+  }
+  return first * 1000 + second;
+}

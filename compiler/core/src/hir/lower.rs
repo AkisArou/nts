@@ -325,7 +325,15 @@ fn collect_hierarchy(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> H
                         Some(syntax::SET_ACCESSOR) => "set ",
                         _ => return None,
                     };
-                    let name = probe.member_name(child)?;
+                    // A symbol-keyed method is named the same way here as at
+                    // its declaration and at its call sites -- three places that
+                    // have to agree letter for letter, and did not. The
+                    // hierarchy skipped what it could not name, so
+                    // `c[kStep](2)` resolved to `__@kStep@2` and then found no
+                    // declaration for it.
+                    let name = probe
+                        .member_name(child)
+                        .or_else(|| probe.symbol_member_name(id, child, Some(ty)))?;
                     Some(format!("{prefix}{name}"))
                 })
                 .collect();
@@ -4362,9 +4370,11 @@ impl<'a> FuncBuilder<'a> {
         let member_name = if is_constructor {
             "constructor".to_owned()
         } else {
-            self.member_name(member).ok_or_else(|| {
-                self.unsupported(member, "a member whose name the program computes")
-            })?
+            self.member_name(member)
+                .or_else(|| self.symbol_member_name(class, member, instance))
+                .ok_or_else(|| {
+                    self.unsupported(member, "a member whose name the program computes")
+                })?
         };
 
         // Neither `#` nor `.` can appear in a TypeScript identifier, so a
@@ -4756,6 +4766,107 @@ impl<'a> FuncBuilder<'a> {
     /// The name a class member is declared under, from the member itself.
     fn member_name(&self, member: NodeId) -> Option<String> {
         self.literal_name(self.name_node(member)?)
+    }
+
+    /// The name a member keyed by a *symbol* carries in its type.
+    ///
+    /// `[Symbol.iterator]() {}` and `[kFlag]() {}` are not names the program
+    /// decides at run time, however much the brackets suggest it. Each resolves
+    /// to exactly one property, and the checker spells it `__@iterator@5`: the
+    /// symbol's description and the checker's own id for it. That is the name
+    /// the layout carries, the name a lookup finds the member by, and so the
+    /// name the method has to be emitted under.
+    ///
+    /// A symbol-keyed *field* has worked all along, because a layout takes its
+    /// field names straight from the checker's members. A symbol-keyed *method*
+    /// did not, because a method's name comes from its declaration -- and the
+    /// declaration node carries no symbol at all. One rule with one of its two
+    /// halves written, which is the same shape as `nts_string_eq` existing
+    /// while `<` compared two addresses.
+    ///
+    /// So the name is found the way [`Self::symbol_keyed`] finds a field: by the
+    /// description the brackets spell, matched against the type's own property
+    /// list. The id is tsgo's and is not reproducible here, so the match is on
+    /// the description alone -- and an ambiguity is *refused* by returning
+    /// nothing rather than guessed at, which is the rule the field side states
+    /// for the same reason.
+    ///
+    /// `[prefix + n]` has no such property and still refuses. The checker cannot
+    /// name what the program computes, so there is nothing to find.
+    fn symbol_member_name(
+        &self,
+        class: NodeId,
+        member: NodeId,
+        instance: Option<TypeId>,
+    ) -> Option<String> {
+        let described = self.symbol_description(self.name_node(member)?)?;
+        // A generic instantiation arrives with its type; an ordinary class does
+        // not, and is lowered once with `instance` unset. The instance type is
+        // still there to be found -- it is what the checker gives the class
+        // declaration's name, which is where `this` takes its type from too.
+        let instance = instance.or_else(|| self.declared_instance_type(class))?;
+        self.symbol_property_name(instance, &described)
+    }
+
+    /// The property a type declares under a symbol with this description.
+    ///
+    /// `__@kFlag@2`: the description the brackets spell and the checker's own id
+    /// for the symbol. The id is tsgo's and is not reproducible here, so the
+    /// match is on the description alone -- and two symbols sharing one
+    /// description on one type is *refused* by returning nothing rather than
+    /// resolved to whichever came first. [`Self::symbol_keyed`] states the same
+    /// rule for the layout side and exists for the same reason.
+    fn symbol_property_name(&self, ty: TypeId, described: &str) -> Option<String> {
+        let record = self.snapshot.types.get(ty.0 as usize)?;
+        let TypeKind::Object { properties } = &record.kind else {
+            return None;
+        };
+        let prefix = format!("__@{described}@");
+        let mut found = properties.iter().map(|property| &property.name).filter(|name| {
+            name.starts_with(&prefix) && name[prefix.len()..].bytes().all(|b| b.is_ascii_digit())
+        });
+        let first = found.next()?.clone();
+        found.next().is_none().then_some(first)
+    }
+
+    /// The *instance* type a class declaration names.
+    ///
+    /// A class symbol's own type is the constructor's, and what `new` produces
+    /// is a different type sharing that symbol. Found by the symbol rather than
+    /// by the name, because two modules may each declare a `Point`.
+    fn declared_instance_type(&self, class: NodeId) -> Option<TypeId> {
+        // The same source `this` takes its type from a few lines below: the
+        // checker gives a class declaration's name the *instance* type, not the
+        // constructor's. Asked through `type_of` rather than by searching the
+        // type table for the class's symbol, because a declaration node in this
+        // snapshot carries no symbol at all -- which is what made the first two
+        // attempts at this return nothing.
+        match self.type_of(class)? {
+            HirType::Managed(ManagedType::Object(ty)) => Some(ty),
+            _ => None,
+        }
+    }
+
+    /// The description of the symbol a computed member name spells.
+    ///
+    /// `[kFlag]` describes `kFlag` and `[Symbol.iterator]` describes `iterator`
+    /// -- in both cases the last identifier written, which is what the checker
+    /// puts between the `@`s. A well-known symbol and a `Symbol("...")` bound to
+    /// a `const` reach this the same way, which is why one rule covers both.
+    fn symbol_description(&self, name: NodeId) -> Option<String> {
+        if self.kind_of(name) != Some(syntax::COMPUTED_PROPERTY_NAME) {
+            return None;
+        }
+        let expression = self.children(name).first().copied()?;
+        // `Symbol.iterator` is a property access whose *name* is the
+        // description; `kFlag` is an identifier and is its own.
+        let described = self
+            .children(expression)
+            .last()
+            .copied()
+            .filter(|_| self.names_a_property(expression))
+            .unwrap_or(expression);
+        self.node(described).text.clone()
     }
 
     /// Whether an expression names a module rather than a value.
@@ -7551,6 +7662,213 @@ impl<'a> FuncBuilder<'a> {
     /// element and this names the index. There is no iterator protocol here --
     /// `Symbol.iterator` is a dynamic dispatch through a property, and an array
     /// is the one case where the answer is known and the loop is a counter.
+    /// Whether the loop runs again, built rather than lowered: the source has
+    /// no node for this test.
+    ///
+    /// A position runs while it is inside the length; an entry index runs until
+    /// the table says there is no next live entry; the protocol runs until the
+    /// step it already took said it was done.
+    fn walk_condition(
+        &mut self,
+        walk: &Walk,
+        at: ValueId,
+        sequence: ValueId,
+        origin: &Origin,
+    ) -> ValueId {
+        match walk {
+        // `done` says when to *stop*, so the loop runs while it is false.
+        Walk::Protocol { .. } => self.push(
+            OpKind::Unary {
+                op: UnOp::Not,
+                operand: at,
+            },
+            HirType::Bool,
+            origin.clone(),
+        ),
+        Walk::Counted(_) | Walk::Text => {
+            let length = self.push(
+                OpKind::Length(sequence),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            self.push(
+                OpKind::Binary {
+                    op: BinOp::Lt,
+                    lhs: at,
+                    rhs: length,
+                },
+                HirType::Bool,
+                origin.clone(),
+            )
+        }
+        Walk::Table { .. } | Walk::Entries { .. } => {
+            let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+            self.push(
+                OpKind::Binary {
+                    op: BinOp::Ge,
+                    lhs: at,
+                    rhs: zero,
+                },
+                HirType::Bool,
+                origin.clone(),
+            )
+        }
+        }
+    }
+
+    /// The cursor a walk steps, and `None` for the one that has none.
+    ///
+    /// A double, like the counter a hand-written `for` produces, so that
+    /// specialization decides its machine type by the same rule rather than by
+    /// which loop it came from. For an array and for text it is a position and
+    /// starts at zero; for a table it is an entry index, and the entries are
+    /// not contiguous, so the first live one is asked for rather than assumed.
+    ///
+    /// The protocol has none at all: the iterator holds its own place and
+    /// `next()` is what moves it.
+    fn walk_cursor(&mut self, walk: &Walk, sequence: ValueId, origin: &Origin) -> Option<u32> {
+        if matches!(walk, Walk::Protocol { .. }) {
+            return None;
+        }
+        let index = self.synthetic_symbol();
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let start = match walk {
+            Walk::Table { .. } | Walk::Entries { .. } => {
+                self.call_runtime("nts_map_next", vec![sequence, zero], HirType::NUMBER, origin)
+            }
+            _ => zero,
+        };
+        self.bindings.insert(index, start);
+        Some(index)
+    }
+
+    /// One turn of the iteration protocol: the call that advances the iterator,
+    /// and the `done` it answered with.
+    ///
+    /// Both come from a single `next()`, and the result is handed back so the
+    /// body can read the element out of the same one.
+    fn protocol_step(
+        &mut self,
+        id: NodeId,
+        walk: &Walk,
+        origin: &Origin,
+    ) -> Result<(ValueId, ValueId), Diagnostic> {
+        let Walk::Protocol {
+            iterator,
+            next,
+            result,
+            done,
+            ..
+        } = walk
+        else {
+            return Err(self.unsupported(id, "a `for...of` with no cursor and no iterator"));
+        };
+        let (iterator, next, result, done) = (*iterator, next.clone(), result.clone(), *done);
+        let step = self.push(
+            OpKind::Call {
+                callee: next,
+                args: vec![iterator],
+                frame: None,
+            },
+            result,
+            origin.clone(),
+        );
+        let answered = self.push(
+            OpKind::FieldGet {
+                object: step,
+                field: done,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        Ok((step, answered))
+    }
+
+    /// `[Symbol.iterator]()` on a user type, and what stepping it looks like.
+    ///
+    /// The iterator is built *here* rather than in the loop, because the
+    /// language builds it once: `for (const x of thing)` calls
+    /// `[Symbol.iterator]` a single time however many elements come out.
+    ///
+    /// Everything else this returns is resolved once too -- the callee for
+    /// `next`, and which fields of its result hold `done` and `value` -- so the
+    /// loop emits a call and two loads an iteration and asks no questions.
+    fn protocol_walk(
+        &mut self,
+        sequence: NodeId,
+        value: ValueId,
+        ty: TypeId,
+    ) -> Result<Walk, Diagnostic> {
+        let Some(iterator_member) = self.symbol_property_name(ty, "iterator") else {
+            return Err(self.unsupported(sequence, "a `for...of` over a type with no iterator"));
+        };
+        let callee = self.callee_for(sequence, ty, &iterator_member)?;
+        let Some(iterator_ty) = self.member_returns(ty, &iterator_member) else {
+            return Err(self.unsupported(
+                sequence,
+                "a `[Symbol.iterator]()` whose result has no representation",
+            ));
+        };
+        let origin = self.origin(sequence);
+        let iterator = self.push(
+            OpKind::Call {
+                callee,
+                args: vec![value],
+                frame: None,
+            },
+            iterator_ty.clone(),
+            origin,
+        );
+
+        let HirType::Managed(ManagedType::Object(iterator_id)) = iterator_ty else {
+            return Err(self.unsupported(sequence, "an iterator that is not an object"));
+        };
+        let next = self.callee_for(sequence, iterator_id, "next")?;
+        let Some(result) = self.member_returns(iterator_id, "next") else {
+            return Err(self.unsupported(sequence, "a `next()` whose result has no representation"));
+        };
+        // `{ value, done }`, by name and in whatever order the type declares
+        // them. `IteratorResult<T>` from `lib.d.ts` does not reach here: it is a
+        // union of two object types whose `value` is `T` in one and `any` in the
+        // other, so they lay out differently and the union has no layout at all.
+        // A hand-written `{ value: T; done: boolean }` does.
+        let HirType::Managed(ManagedType::Object(result_id)) = result else {
+            return Err(self.unsupported(sequence, "a `next()` that does not return an object"));
+        };
+        let layout = self.layout_of(sequence, result_id)?;
+        let (Some(done), Some(value_at)) = (layout.index_of("done"), layout.index_of("value"))
+        else {
+            return Err(self.unsupported(
+                sequence,
+                "a `next()` result without both `value` and `done`",
+            ));
+        };
+        let element = layout.fields[value_at as usize].ty.clone();
+        Ok(Walk::Protocol {
+            iterator,
+            next,
+            result,
+            done,
+            value: value_at,
+            element,
+        })
+    }
+
+    /// What a method declared on a type returns, as a representation.
+    fn member_returns(&self, ty: TypeId, member: &str) -> Option<HirType> {
+        let record = self.snapshot.types.get(ty.0 as usize)?;
+        let TypeKind::Object { properties } = &record.kind else {
+            return None;
+        };
+        let property = properties.iter().find(|property| property.name == member)?;
+        let function = self.snapshot.types.get(property.ty.0 as usize)?;
+        let TypeKind::Function(signature) = function.kind else {
+            return None;
+        };
+        let signature = self.snapshot.signatures.get(signature.0 as usize)?;
+        self.represent(signature.return_type)
+    }
+
     /// A call to an external runtime function.
     fn call_runtime(
         &mut self,
@@ -7680,6 +7998,16 @@ impl<'a> FuncBuilder<'a> {
                 "a `for...of` over a `Map` binding one name, which would be the \
                  `[key, value]` pair itself; bind `[key, value]` instead",
             )),
+            // A user type that declares `[Symbol.iterator]`. Last, so every
+            // built-in above keeps its own walk: an array is a counted loop and
+            // a `Map` is a table read, and routing either through the protocol
+            // would allocate an iterator to arrive at the same elements.
+            (HirType::Managed(ManagedType::Object(ty)), None)
+                if self.symbol_property_name(*ty, "iterator").is_some() =>
+            {
+                let ty = *ty;
+                self.protocol_walk(sequence, value, ty)
+            }
             (_, Some(method)) => Err(self.unsupported(
                 sequence,
                 &format!("`{method}()` on this type, which needs the iteration protocol"),
@@ -7706,6 +8034,12 @@ impl<'a> FuncBuilder<'a> {
     /// Built in the loop's latch, which is where `continue` lands.
     fn advance(&mut self, walk: &Walk, sequence: ValueId, at: ValueId, origin: &Origin) -> ValueId {
         match walk {
+            // The protocol advances itself: `next()` moves the iterator, and
+            // there is no cursor for a latch to step. `lower_for_of` gives it
+            // `Step::None` for exactly this reason, so nothing reaches here.
+            Walk::Protocol { .. } => {
+                unreachable!("the protocol has no cursor; its step is `Step::None`")
+            }
             Walk::Counted(_) => {
                 let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
                 self.push(
@@ -7851,6 +8185,7 @@ impl<'a> FuncBuilder<'a> {
             // Handled above, before this match: it is the one shape that reads
             // more than a single value.
             Walk::Entries { .. } => unreachable!("entries reads two and returned already"),
+            Walk::Protocol { .. } => unreachable!("the protocol reads its element from the step"),
         }]
     }
 
@@ -8008,82 +8343,74 @@ impl<'a> FuncBuilder<'a> {
         // For an array and for text it is a position and starts at zero. For a
         // table it is an entry index, and the entries are not contiguous, so
         // the first live one is asked for rather than assumed.
-        let index = self.synthetic_symbol();
-        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        let start = match &walk {
-            Walk::Table { .. } | Walk::Entries { .. } => self.call_runtime(
-                "nts_map_next",
-                vec![sequence_value, zero],
-                HirType::NUMBER,
-                &origin,
-            ),
-            Walk::Counted(_) | Walk::Text => zero,
-        };
-        self.bindings.insert(index, start);
+        let index = self.walk_cursor(&walk, sequence_value, &origin);
 
-        let mut carried = vec![index];
+        let mut carried: Vec<u32> = index.into_iter().collect();
         self.assigned_symbols(body, &mut carried);
         let mut declared = element_symbols.clone();
         if let Head::Pattern(pattern) = &head {
             self.pattern_symbols(*pattern, &mut declared);
         }
         self.declared_symbols(body, &mut declared);
-        carried.retain(|symbol| *symbol == index || !declared.contains(symbol));
+        carried.retain(|symbol| Some(*symbol) == index || !declared.contains(symbol));
 
-        // `steps: true`, so the loop has a latch of its own. The cursor is
-        // advanced there rather than at the end of the body, because `continue`
-        // jumps to the latch and would otherwise skip the advance and hang.
-        let record = self.begin_loop(id, &carried, true, &origin)?;
+        // `steps: true` where there is a cursor, so the loop has a latch of its
+        // own: the cursor is advanced there rather than at the end of the body,
+        // because `continue` jumps to the latch and would otherwise skip the
+        // advance and hang.
+        //
+        // The protocol takes `false`, which makes the *header* the latch -- and
+        // that is not a saving but the requirement. `next()` is called in the
+        // header, so `continue` has to arrive there; a protocol loop with a
+        // latch of its own would step the iterator nowhere and spin.
+        let steps = !matches!(walk, Walk::Protocol { .. });
+        let record = self.begin_loop(id, &carried, steps, &origin)?;
 
         // The test, built rather than lowered: the source has no node for it.
         // A position runs while it is inside the length; an entry index runs
         // until the table says there is no next live entry.
-        let at = self.bindings[&index];
-        let cond = match &walk {
-            Walk::Counted(_) | Walk::Text => {
-                let length = self.push(
-                    OpKind::Length(sequence_value),
-                    HirType::NUMBER,
-                    origin.clone(),
-                );
-                self.push(
-                    OpKind::Binary {
-                        op: BinOp::Lt,
-                        lhs: at,
-                        rhs: length,
-                    },
-                    HirType::Bool,
-                    origin.clone(),
-                )
-            }
-            Walk::Table { .. } | Walk::Entries { .. } => {
-                let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-                self.push(
-                    OpKind::Binary {
-                        op: BinOp::Ge,
-                        lhs: at,
-                        rhs: zero,
-                    },
-                    HirType::Bool,
-                    origin.clone(),
-                )
-            }
+        // For the protocol `at` is the `done` the step answered, and `stepped`
+        // is the result it came out of -- read again in the body, which the
+        // header dominates. One call answers "again?" here and "with what?"
+        // there; calling `next()` for each would drop every other element.
+        let (stepped, at) = if let Some(index) = index {
+            (None, self.bindings[&index])
+        } else {
+            let (step, done) = self.protocol_step(id, &walk, &origin)?;
+            (Some(step), done)
         };
+        let cond = self.walk_condition(&walk, at, sequence_value, &origin);
         self.test_loop(cond, &record);
         self.switch_to(record.body);
 
-        let values = self.read_element(&walk, sequence_value, at, &origin);
+        let values = match (&walk, stepped) {
+            (Walk::Protocol { value, element, .. }, Some(step)) => {
+                let (value, element) = (*value, element.clone());
+                vec![self.push(
+                    OpKind::FieldGet {
+                        object: step,
+                        field: value,
+                    },
+                    element,
+                    origin.clone(),
+                )]
+            }
+            _ => self.read_element(&walk, sequence_value, at, &origin),
+        };
         self.bind_head(id, &head, &element_symbols, values)?;
 
         self.lower_statement(body)?;
-        self.end_loop(
-            &record,
-            Step::Walk {
-                cursor: index,
+        let step = match index {
+            // Nothing between iterations: the header is the latch, and the
+            // header is where `next()` is called.
+            None => Step::None,
+            Some(cursor) => Step::Walk {
+                cursor,
                 walk,
                 sequence: sequence_value,
             },
-        )
+        };
+        self.end_loop(&record, step)
     }
 
     /// `throw new Error("...")`.
@@ -15299,27 +15626,7 @@ impl<'a> FuncBuilder<'a> {
             return self.call_through_closure(id, member, held, arguments);
         }
 
-        let Some(declaring) = self.hierarchy.declaring(type_id, &member_name) else {
-            return Err(self.unsupported(
-                id,
-                &format!("a method `{member_name}` with no declaration in the hierarchy"),
-            ));
-        };
-        let owner = match self.hierarchy.name.get(&declaring) {
-            Some(name) => name.clone(),
-            None => self.layout_of(id, declaring)?.name,
-        };
-
-        let callee = if self.hierarchy.overridden(type_id, &member_name)
-            && let Some(slot) = self.hierarchy.slot_for(type_id, &member_name)
-        {
-            Callee::Virtual {
-                slot,
-                declared: format!("{owner}#{member_name}"),
-            }
-        } else {
-            Callee::Direct(format!("{owner}#{member_name}"))
-        };
+        let callee = self.callee_for(id, type_id, &member_name)?;
 
         let mut args = vec![receiver];
         args.extend(self.lower_arguments(id, arguments)?);
@@ -15336,6 +15643,61 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         ))
+    }
+
+    /// The callee a method name resolves to on a receiver's type.
+    ///
+    /// Virtual where the hierarchy says the method is overridden, direct
+    /// otherwise, and named `Owner#member` either way -- the naming that keeps
+    /// two classes' `ref` apart.
+    ///
+    /// Split out of [`Self::lower_object_method`] because the iteration
+    /// protocol calls methods the source never writes. `for (const x of it)`
+    /// calls `[Symbol.iterator]()` and then `next()` repeatedly, with no call
+    /// node to lower and no argument list to walk; resolving those by hand
+    /// would be a second rule that agrees with this one until it does not.
+    fn callee_for(
+        &mut self,
+        id: NodeId,
+        type_id: TypeId,
+        member_name: &str,
+    ) -> Result<Callee, Diagnostic> {
+        // `c[kStep](2)` spells the *variable* holding the symbol, and the
+        // hierarchy knows the member as `__@kStep@2`. The declaration side
+        // resolves the same way, so both halves of a symbol-keyed method agree
+        // on one name -- writing only one of them emitted a method nothing
+        // could reach, which is the failure [`Self::member_name`] documents.
+        let keyed;
+        let member_name = if self.hierarchy.declaring(type_id, member_name).is_some() {
+            member_name
+        } else if let Some(mangled) = self.symbol_property_name(type_id, member_name) {
+            keyed = mangled;
+            &keyed
+        } else {
+            member_name
+        };
+        let Some(declaring) = self.hierarchy.declaring(type_id, member_name) else {
+            return Err(self.unsupported(
+                id,
+                &format!("a method `{member_name}` with no declaration in the hierarchy"),
+            ));
+        };
+        let owner = match self.hierarchy.name.get(&declaring) {
+            Some(name) => name.clone(),
+            None => self.layout_of(id, declaring)?.name,
+        };
+        Ok(
+            if self.hierarchy.overridden(type_id, member_name)
+                && let Some(slot) = self.hierarchy.slot_for(type_id, member_name)
+            {
+                Callee::Virtual {
+                    slot,
+                    declared: format!("{owner}#{member_name}"),
+                }
+            } else {
+                Callee::Direct(format!("{owner}#{member_name}"))
+            },
+        )
     }
 
     /// A call into the base class, with `this` as the receiver.
@@ -16607,6 +16969,31 @@ enum Walk {
         /// its `entries()` yields `[v, v]` -- node agrees it is the same value
         /// twice -- so the second read is the key again.
         value_read: &'static str,
+    },
+    /// A user type's own iterator, stepped through `[Symbol.iterator]()` and
+    /// `next()`.
+    ///
+    /// The only walk with no cursor. The other four know where they are from an
+    /// index the loop advances; this one's entire state lives inside the
+    /// iterator object, and the *call* to `next()` is what moves it. So one
+    /// call answers both questions -- whether to go round again, and with what
+    /// -- which is why the result is computed in the header and the body reads
+    /// the element back out of it rather than reading the sequence at all.
+    ///
+    /// That is also why the latch is the header: `continue` has to reach the
+    /// `next()` call, and a step written anywhere else is a step `continue`
+    /// skips. `Step::None` says exactly this.
+    Protocol {
+        /// The iterator, made once before the loop and never reassigned, so it
+        /// is an ordinary dominating value rather than a carried one.
+        iterator: ValueId,
+        /// `next()` on it, resolved once instead of per iteration.
+        next: Callee,
+        /// What `next()` hands back, and where the two fields sit in it.
+        result: HirType,
+        done: u32,
+        value: u32,
+        element: HirType,
     },
     /// The code points of a string, which are one or two units wide.
     ///
