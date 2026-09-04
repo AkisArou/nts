@@ -8,8 +8,13 @@
 #
 # `--date` makes the archive reproducible: without it every rebuild differs in
 # its timestamps and the drift test could never pass.
+#
+# `$1` is where the jar goes, defaulting to beside the sources. A test passes a
+# temporary path so it can rebuild and compare without touching the checked-in
+# artifact -- which is the whole point of a drift check.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+jar_path=${1:-$root/nts-runtime.jar}
 out="$root/classes"
 rm -rf "$out"
 mkdir -p "$out"
@@ -19,10 +24,10 @@ rm -f "$out/sources.txt"
 (
   cd "$out"
   find . -name '*.class' | sed 's|^\./||' | sort > /tmp/nts-jvm-classes.$$
-  jar --create --file "$root/nts-runtime.jar" \
+  jar --create --file "$jar_path" \
       --date=2020-01-01T00:00:00Z \
       $(cat /tmp/nts-jvm-classes.$$)
   rm -f /tmp/nts-jvm-classes.$$
 )
 rm -rf "$out"
-echo "built $root/nts-runtime.jar"
+echo "built $jar_path"
