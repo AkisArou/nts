@@ -159,3 +159,38 @@ to float arithmetic, an `i32` counter is a conversion generator. `hir::flow`
 already proves integrality and `hir::facts` already carries the interval; what
 is missing is the use-side question, and it is worth asking for both backends
 even though only one of them currently pays for the wrong answer.
+
+## The fix is right and it is not the mechanism, and that has to be said here
+
+The use-side test — *do the operations reaching this value do integer
+arithmetic?* — gets this row right. It is still worth building. But it gets it
+right **for the wrong reason**: it would decline the narrowing because the
+conversions look wasteful, and the conversions are not the cost. C2 had already
+reduced three to one, and what actually cost 91% was the unrolling that the
+counted loop invited.
+
+A fix that works for the wrong reason stops working silently on the day the
+incidental correlation breaks, and nobody knows why. So this is written down
+rather than left implied: **the mechanism is not understood well enough to be
+tested for.**
+
+"Narrowing a counter can make a latency-bound loop worse by inviting a
+downstream optimizer to unroll it" is not a question a middle end can answer
+without knowing the backend and the machine — which is the thing a middle end is
+built not to know. That may be a genuine limit rather than a gap. The honest
+position is that the use-side test is a good heuristic with a known-wrong
+justification, and that the row it fixes is evidence for it only by coincidence.
+
+## What the two of us got wrong, which is the part worth keeping
+
+Two sessions reasoned independently to the same hypothesis — redundant
+conversions — from different directions and different starting knowledge. Both
+were wrong, in the same way, and **neither considered unrolling**. One of us
+built an optimization for it and reverted it; the other wrote a pass and parked
+it.
+
+`perf` and `hsdis` took about twenty minutes to answer what four hours of
+careful reasoning got wrong, and the answer was not on either list of candidates.
+That is not a failure of care. It is what reasoning about an optimizer is worth
+against one measurement of it, which this repository's records keep saying and
+which is apparently a thing that has to be relearned per person.
