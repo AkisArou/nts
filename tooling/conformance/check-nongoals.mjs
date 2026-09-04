@@ -42,10 +42,8 @@ const objectMetaOperations = new Set([
 
 const symbolHooks = new Set([
   "asyncDispose",
-  "asyncIterator",
   "dispose",
   "hasInstance",
-  "iterator",
   "species",
   "toPrimitive",
   "unscopables",

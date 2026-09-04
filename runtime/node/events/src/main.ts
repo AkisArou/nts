@@ -138,15 +138,6 @@ function checkListener(listener: unknown): asserts listener is Listener {
   validateFunction(listener, "listener");
 }
 
-function isAbortSignalLike(value: unknown): value is AbortSignalLike {
-  return value !== null && typeof value === "object" &&
-    "aborted" in value &&
-    "addEventListener" in value &&
-    typeof value.addEventListener === "function" &&
-    "removeEventListener" in value &&
-    typeof value.removeEventListener === "function";
-}
-
 function listenerAt(
   listeners: readonly ListenerRecord[],
   index: number,
@@ -235,7 +226,6 @@ export class EventEmitter {
   static readonly captureRejectionSymbol: typeof captureRejectionSymbol = captureRejectionSymbol;
 
   /** Module helpers are the same function values on Node's exported class. */
-  static readonly addAbortListener = addAbortListener;
   static readonly getEventListeners = getEventListeners;
   static readonly getMaxListeners = getMaxListeners;
   static readonly listenerCount = listenerCount;
@@ -1033,61 +1023,6 @@ export function listenerCount(emitter: unknown, type: EventName): number {
 
 export function setMaxListeners(n?: number, ...targets: EventSource[]): void {
   EventEmitter.setMaxListeners(n, ...targets);
-}
-
-export interface Disposable {
-  [Symbol.dispose](): void;
-}
-
-class AbortListenerDisposable implements Disposable {
-  private cleanup: (() => void) | undefined;
-
-  constructor(cleanup?: () => void) {
-    this.cleanup = cleanup;
-  }
-
-  [Symbol.dispose](): void {
-    const cleanup = this.cleanup;
-    this.cleanup = undefined;
-    if (cleanup !== undefined) {
-      cleanup();
-    }
-  }
-}
-
-/** Queue a raw microtask; the shared runtime and Node stand-in own the queue. */
-declare function nts_enqueue_microtask(callback: () => void): void;
-
-/** Public `events.addAbortListener`, from `internal/events/abort_listener.js`. */
-export function addAbortListener(
-  signal: AbortSignalLike,
-  listener: () => void,
-): Disposable;
-export function addAbortListener(
-  signal: unknown,
-  listener: unknown,
-): Disposable {
-  if (!isAbortSignalLike(signal)) {
-    throw new ERR_INVALID_ARG_TYPE("signal", "AbortSignal", signal);
-  }
-  checkListener(listener);
-
-  if (signal.aborted) {
-    nts_enqueue_microtask(listener);
-    return new AbortListenerDisposable();
-  }
-
-  const nativeListener = (): void => {
-    untrackEventTargetListener(signal, "abort", listener);
-    listener();
-  };
-  signal.addEventListener("abort", nativeListener, { once: true });
-  trackEventTargetListener(signal, "abort", listener);
-
-  return new AbortListenerDisposable(() => {
-    signal.removeEventListener("abort", nativeListener);
-    untrackEventTargetListener(signal, "abort", listener);
-  });
 }
 
 export interface OnceOptions {
