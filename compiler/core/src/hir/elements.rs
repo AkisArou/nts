@@ -190,13 +190,56 @@ pub(super) fn representations(
 ) -> FxHashMap<HirType, HirType> {
     let converted = read_into_floating_point(program);
     let borrowed = reaches_a_runtime_helper(program);
+    let anchored = stored_into_a_global(program);
     facts
         .iter()
         .filter(|(element, _)| matches!(element, HirType::Float { .. }))
         .filter(|(element, _)| !converted.contains(*element))
         .filter(|(element, _)| !borrowed.contains(*element))
+        .filter(|(element, _)| !anchored.contains(*element))
         .filter_map(|(element, facts)| Some((element.clone(), width_for(*facts)?)))
         .collect()
+}
+
+/// Element types whose arrays are stored into a module-scope variable.
+///
+/// A global's type is declared once and every store has to fit it, so narrowing
+/// the array without narrowing the global leaves a `[i32]` value in a `[f64]`
+/// slot. `reconcile_stores` cannot rescue that the way it rescues a scalar:
+/// there is no conversion to insert, only a different object to build.
+///
+/// Neither native backend could see it. C spells every array `NtsArray *` and
+/// LLVM spells every reference `ptr`, so the disagreement had nothing to land
+/// on, and `verify` said yes because two references were two pointers however
+/// their types related -- true of `Square` against `Shape`, and false of two
+/// arrays, whose element width *is* their storage.
+///
+/// The JVM backend put the element type in a descriptor and its verifier
+/// refused the class at load: `Type '[I' is not assignable to '[D'`, on
+///
+/// ```text
+/// const arr = [1, 2];
+/// export const [a, b] = arr;
+/// ```
+///
+/// Narrowing the global instead is the other answer and a larger one: a global
+/// is shared, so it would need every store to agree, and the win here is an
+/// array of two integer literals that nothing indexes in a loop.
+fn stored_into_a_global(program: &Program) -> rustc_hash::FxHashSet<HirType> {
+    let mut anchored = rustc_hash::FxHashSet::default();
+    for func in &program.funcs {
+        for op in &func.values {
+            let OpKind::GlobalSet { value, .. } = &op.kind else {
+                continue;
+            };
+            if let HirType::Managed(ManagedType::Array(element)) =
+                &func.values[value.0 as usize].ty
+            {
+                anchored.insert((**element).clone());
+            }
+        }
+    }
+    anchored
 }
 
 /// Element types whose arrays are handed to the runtime.

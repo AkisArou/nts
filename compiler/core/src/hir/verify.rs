@@ -375,6 +375,30 @@ fn compatible(found: &HirType, want: &HirType) -> bool {
     if found == want {
         return true;
     }
+    // An array is the exception to the reference rule below, and the JVM
+    // backend is what found it.
+    //
+    // `Square` where `Shape` is expected is *one object seen through two
+    // types*, and base-first layout is what makes the pointer interchangeable.
+    // `[i32]` where `[f64]` is expected is not that: an array's element width
+    // **is** its storage, so those are two different objects. The coarse
+    // answer -- "both are pointers" -- is being asked a question only the
+    // element type can answer, and it says yes.
+    //
+    // Neither native backend can see the difference. C spells every array
+    // `NtsArray *` and LLVM spells every reference `ptr`, so the disagreement
+    // has nothing to land on. The JVM puts the element type in the descriptor
+    // and its verifier rejects the class at load: `Type '[I' is not assignable
+    // to '[D'` on `const arr = [1, 2]; export const [a, b] = arr;`, where
+    // specialization narrowed the array to `[i32]` and left the global
+    // receiving it at `[f64]`.
+    if let (
+        HirType::Managed(super::ManagedType::Array(found)),
+        HirType::Managed(super::ManagedType::Array(want)),
+    ) = (found, want)
+    {
+        return compatible(found, want);
+    }
     // Two references are two pointers, however their types relate. A `Square`
     // where a `Shape` is expected is a no-op cast under base-first layout, and
     // a `Promise<void>` slot holding a `Promise<number>` is one pointer either
@@ -965,6 +989,41 @@ mod tests {
                 async_result: None,
             }],
         }
+    }
+
+    /// Two arrays of different elements are two different objects.
+    ///
+    /// `Square` where `Shape` is expected is one object seen through two types,
+    /// and base-first layout makes the pointer interchangeable -- that leniency
+    /// is load-bearing and stays. An array is not that: its element width *is*
+    /// its storage.
+    ///
+    /// Neither native backend can tell. C spells every array `NtsArray *`, LLVM
+    /// spells every reference `ptr`. The JVM puts the element in the descriptor
+    /// and refused the class, which is how this was found.
+    #[test]
+    fn two_arrays_of_different_elements_are_not_compatible() {
+        use crate::hir::ManagedType;
+
+        let array = |element: HirType| HirType::Managed(ManagedType::Array(Box::new(element)));
+        let i32_ty = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        let f64_ty = HirType::Float { bits: 64 };
+
+        assert!(
+            !compatible(&array(i32_ty.clone()), &array(f64_ty.clone())),
+            "an array of i32 does not fit a slot declared as an array of f64",
+        );
+        assert!(compatible(&array(f64_ty.clone()), &array(f64_ty)));
+
+        // And the object leniency it must not disturb: two object types are two
+        // pointers, which is what makes an upcast free.
+        let object = |id: u32| {
+            HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(id)))
+        };
+        assert!(compatible(&object(1), &object(2)));
     }
 
     /// A base has to be laid out as the prefix every backend treats it as.
