@@ -260,6 +260,16 @@ pub struct Context {
     /// A field read is otherwise TOP, and a TOP in a loop that touches an
     /// object is a double round trip per iteration.
     pub field_facts: super::fields::FieldFacts,
+    /// What each module-scope variable can hold, from every store in the
+    /// program.
+    ///
+    /// A global read is otherwise TOP, and that TOP is worth more than it
+    /// looks: `benches/cases/module-closures` reads one `let step` inside a
+    /// loop body, and without this every operation after the read is floating
+    /// point however narrow the slot is. Narrowing the storage alone moved that
+    /// case 17.84us to 16.05us against C++'s 2.30us; the arithmetic was never
+    /// waiting on the width.
+    pub global_facts: super::globals::GlobalFacts,
     /// What each array type's elements can hold, from every store in the
     /// program. The same idea as [`Self::field_facts`] for the other kind of
     /// container. See [`super::elements`].
@@ -733,6 +743,14 @@ fn transfer_op(
         OpKind::FieldGet { object, field } => {
             field_facts(context, &func.values[object.0 as usize].ty, *field)
         }
+        // The same idea for the third kind of storage. Absent is TOP, which is
+        // what an exported global gets: a writer outside the compiled set is
+        // not in any join this program can take.
+        OpKind::GlobalGet(global) => context
+            .global_facts
+            .get(global)
+            .copied()
+            .unwrap_or(Facts::TOP),
         // What anything in the program stored into an array of this type,
         // but *only once the storage agrees*.
         //

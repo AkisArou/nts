@@ -24,6 +24,7 @@ column is a row with no hand-written reference; the case says why.
 | **array** | `arrays`, `growable`, `callbacks` | `array-methods` 2 / 6<br>`array-mutations` 5 / 9<br>`array-of-objects` 18 / 22 | `arrays` 1.06 / 0.56<br>`array-methods` 0.55 / 0.21<br>`array-predicates` 1.12 / 0.59<br>`array-mutations` 1.07 / 0.37 | 0038, 0043, 0047, 0048, 0052 |
 | **object and class** | `instances`, `classes`, `inheritance` | `subclass-field` 0 / 0<br>`nulled-field` 17 / 17<br>`readonly-anchor` 40 / 2<br>`cyclic-array` 8 / 4 | `objects` 1.00 / 0.84<br>`dispatch` 0.99 / 0.67 | 0054, 0055, 0056 |
 | **function and closure** | `closures`, `function-values` | `closure-capture` 0 / 0 | `closures` 1.00 / 0.38<br>`dispatch` 0.99 / 0.67 | 0040, 0066 |
+| **module scope** | `module-numbers`, `module-functions`, `module-state` | `module-counter` 0 / 0<br>`module-closures` 0 / 0 | `module-closures` 1.03 / 0.44 | 0085, 0087 |
 | **Map and Set** | `map-and-set`, `iteration` | `map-and-set` 2 / 8 | `map-and-set` 0.55 / 0.74 | 0041, 0065 |
 
 ## What the table says that no single record does

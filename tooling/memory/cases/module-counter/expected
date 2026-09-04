@@ -1,0 +1,19 @@
+ideal 0
+allocated 0
+because nothing, and the argument is short because a number is not an object.
+because
+because Allocations: none. Two module-scope slots holding numbers are two words
+because in the program's static storage, decided at compile time and never
+because handed to an allocator. A loop that reads and writes them touches no
+because heap however many times it goes round.
+because
+because Operations: none, and by the rule `closure-capture` states -- an
+because allocation floor of zero forces an operation floor of zero. There is
+because nothing here with a count to change.
+because
+because So why is this case here at all, if both floors are zero by inspection?
+because Because `hir::globals` narrows the storage of exactly these two slots,
+because and the way that goes wrong is not a leak but a *box*: a global that
+because stopped being a machine number and started being an object would show
+because up here as a pair of allocations per call and nowhere else. The zero is
+because the claim that a module-scope number stays a number.

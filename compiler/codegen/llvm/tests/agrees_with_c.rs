@@ -531,3 +531,57 @@ int main(void) {
     assert!(!llvm.is_empty(), "the run produced nothing");
     assert_eq!(llvm, c, "the backends disagree about an erased value");
 }
+
+/// A bitwise operator whose operands are held as doubles.
+///
+/// `n | 0` is an integer operation, and the representation around it is not
+/// always an integer: when the other arm of a branch can be NaN the join is a
+/// double, so the `|` arrives with `Float` operands. The C backend has always
+/// spelled that `(double)((int32_t)a | (int32_t)b)`. The LLVM backend had no
+/// arm for it and declined the whole function — "the operator `BitOr` on this
+/// representation" — so a program C compiled produced no LLVM module at all.
+///
+/// Found by `examples/module-numbers`, which is the first fixture to put a
+/// `| 0` in a branch beside a NaN, and found *late*: the gate went green on the
+/// run that had it, because the LLVM step scored exactly its floor and a
+/// threshold reports a boolean while discarding which case moved.
+#[test]
+fn the_two_backends_agree_about_bitwise_operators_on_doubles() {
+    let source = r"
+export function orZero(n: number): number {
+  // The join is a double because the first arm is NaN, so `n | 0` is a bitwise
+  // operator on a floating point representation.
+  const held = n === 0 ? 0 / 0 : n | 0;
+  return held === held ? held : -1;
+}
+
+export function andMask(n: number): number {
+  const held = n === 1 ? 1 / 0 : n & 0xffff;
+  return held > 1e308 ? -2 : held;
+}
+
+export function xorFlip(n: number): number {
+  const held = n === 2 ? 0 / 0 : n ^ 0x5555;
+  return held === held ? held : -3;
+}
+";
+    let driver = r#"#include <stdio.h>
+double orZero(double n);
+double andMask(double n);
+double xorFlip(double n);
+int main(void) {
+  double xs[] = {0.0, 1.0, 2.0, -1.0, 3.5, -0.0, 1e21, 0.0/0.0, 1.0/0.0,
+                 -2147483648.0, 2147483647.0, 4294967296.0, 9007199254740993.0};
+  for (int i = 0; i < 13; i++) {
+    printf("%a %a %a\n", orZero(xs[i]), andMask(xs[i]), xorFlip(xs[i]));
+  }
+  return 0;
+}
+"#;
+    let Some((llvm, c)) = both_backends("float-bitwise", source, driver) else {
+        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        return;
+    };
+    assert!(!llvm.is_empty(), "the run produced nothing");
+    assert_eq!(llvm, c, "the backends disagree about bitwise ops on doubles");
+}

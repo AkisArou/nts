@@ -2660,14 +2660,54 @@ fn arithmetic(
     if matches!(op, BinOp::Min | BinOp::Max) {
         return extremum(func, out, op, lhs, rhs);
     }
-    let ty = ty_of(&func.values[lhs.0 as usize].ty, func)?;
     let float = matches!(func.values[lhs.0 as usize].ty, HirType::Float { .. });
+    if float && matches!(op, BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor) {
+        return Ok(float_bitwise(out, op, lhs, rhs));
+    }
+    let ty = ty_of(&func.values[lhs.0 as usize].ty, func)?;
     let instruction = binary(op, float, wraps(&func.values[lhs.0 as usize].ty), func)?;
     Ok(format!(
         "{out} = {instruction} {ty} {}, {}",
         name(lhs),
         name(rhs)
     ))
+}
+
+/// A bitwise operator whose operands are held as doubles.
+///
+/// `x | 0` is an integer operation on a value the *representation* left in a
+/// double, which happens whenever the surrounding expression stayed floating
+/// point -- `n === 0 ? 0 / 0 : n | 0` is the shape, because the other arm can be
+/// NaN so the join is a double.
+///
+/// The C backend has spelled this since it was written: `(double)((int32_t)a |
+/// (int32_t)b)`. This one refused it, so a program the C lane compiled was
+/// declined here with "the operator `BitOr` on this representation" -- found by
+/// `examples/module-numbers`, which is the first example to put a `| 0` in a
+/// branch beside a NaN.
+///
+/// `fptosi` is exact here for the same reason C's cast is: JavaScript's `|`
+/// applies `ToInt32` to both operands first, so the lowering has already emitted
+/// `nts_to_int32` and what reaches this is an integral value widened to a
+/// double. The narrowing is undoing that widening, not performing a conversion.
+///
+/// Shifts do not arrive: the C backend routes every one of them through a
+/// helper, because JavaScript masks the count to five bits and LLVM's `shl` is
+/// poison past the width.
+fn float_bitwise(out: &str, op: BinOp, lhs: ValueId, rhs: ValueId) -> String {
+    let instruction = match op {
+        BinOp::BitAnd => "and",
+        BinOp::BitOr => "or",
+        _ => "xor",
+    };
+    format!(
+        "{out}.l = fptosi double {0} to i32\n  \
+         {out}.r = fptosi double {1} to i32\n  \
+         {out}.v = {instruction} i32 {out}.l, {out}.r\n  \
+         {out} = sitofp i32 {out}.v to double",
+        name(lhs),
+        name(rhs)
+    )
 }
 
 /// A `bigint` shift, which is not a machine shift.

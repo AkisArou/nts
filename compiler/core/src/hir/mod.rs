@@ -31,6 +31,7 @@ pub mod elements;
 pub mod escape;
 pub mod facts;
 pub mod fields;
+pub mod globals;
 pub mod flow;
 pub mod fold;
 pub mod generics;
@@ -1676,6 +1677,29 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
 }
 
 /// should call this.
+/// Hold each field and each module-scope variable as narrowly as its contents
+/// allow, before the bodies that read them are specialized.
+///
+/// `number` is a double, but a slot every store puts a small whole number into
+/// holds one every time -- and an `int32` is half the storage and integer
+/// arithmetic on the other side of the load.
+///
+/// Two of the three kinds of storage. [`elements`] is the third and runs after
+/// this, because what an array holds depends on what the fields feeding it were
+/// narrowed to.
+fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis]) {
+    let widths = fields::representations(program, analyses);
+    fields::narrow(program, &widths);
+
+    // A global had no analysis at all until this, so every read of one was TOP
+    // -- and a TOP in a loop makes the arithmetic after it floating point
+    // whatever the slot holds. The width below is the smaller half of that; the
+    // facts `globals::analyze` puts into the fixpoint are the rest.
+    let facts = globals::analyze(program, analyses);
+    let widths = globals::representations(program, &facts);
+    globals::narrow(program, &widths);
+}
+
 #[must_use]
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
@@ -1731,13 +1755,8 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
             checks_removed += bounds::eliminate_checks(func, analysis, &field_lengths);
         }
 
-        // A field's *storage* before the bodies that read it. `number` is a
-        // double, but a field every store puts a small whole number into holds
-        // one every time -- and an `int32` member is half the object and
-        // integer arithmetic on the other side of the load.
         let analyses = interprocedural::analyze_program(&program, options.roots);
-        let narrowed = fields::representations(&program, &analyses);
-        fields::narrow(&mut program, &narrowed);
+        narrow_storage(&mut program, &analyses);
 
         // And the same for what an array holds. An element that arrives as an
         // integer is what lets a `switch` over one become a jump table, and it

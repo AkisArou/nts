@@ -74,6 +74,11 @@ struct Crossing {
     /// program. Keyed on the element type rather than on the array, for the
     /// aliasing reason [`super::elements`] gives.
     elements: super::elements::ElementFacts,
+    /// What each module-scope variable can hold, over every store in the
+    /// program. In this fixpoint for the same reason fields are: a global is
+    /// written with what a call produced and read to make the next call's
+    /// argument, and outside the loop it would be one round stale.
+    globals: super::globals::GlobalFacts,
     /// How long the array each parameter points at can be, per function and
     /// slot. In this fixpoint rather than beside it because it is read from the
     /// arguments at every call, which is what this loop already walks.
@@ -135,6 +140,7 @@ fn settle(
         slot_returns: FxHashMap::default(),
         fields: FxHashMap::default(),
         elements: FxHashMap::default(),
+        globals: FxHashMap::default(),
         param_lengths: no_lengths(program),
     };
     // A property of the whole program rather than of a round: whether anything
@@ -186,6 +192,7 @@ fn settle(
         // to make an argument for the next one.
         let fields = super::fields::analyze(program, &analyses);
         let elements = super::elements::analyze(program, &analyses, outward);
+        let globals = super::globals::analyze(program, &analyses);
         let param_lengths = if growable {
             no_lengths(program)
         } else {
@@ -196,6 +203,7 @@ fn settle(
             && slot_returns == crossing.slot_returns
             && fields == crossing.fields
             && elements == crossing.elements
+            && globals == crossing.globals
             && param_lengths == crossing.param_lengths
         {
             break;
@@ -206,6 +214,7 @@ fn settle(
             slot_returns,
             fields,
             elements,
+            globals,
             param_lengths,
         };
     }
@@ -280,6 +289,7 @@ fn analyze_all(
                     param_lengths: crossing.param_lengths[index].clone(),
                     slot_returns: crossing.slot_returns.clone(),
                     field_facts: crossing.fields.clone(),
+                    global_facts: crossing.globals.clone(),
                     element_facts: crossing.elements.clone(),
                     caps: caps.get(index).cloned().unwrap_or_default(),
                 },
