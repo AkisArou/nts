@@ -567,9 +567,7 @@ impl Emitter<'_> {
     ) -> Result<(), Diagnostic> {
         let op = self.func.values[value.0 as usize].clone();
         let origin = op.origin.clone();
-        // A constant emits nothing here. It is pushed at each of its uses
-        // instead, which is one instruction against a store, a slot and a
-        // later load. See `body::rematerialised`.
+        // Pushed at each use instead; see `body::rematerialised`.
         if crate::body::rematerialised(self.func, value) {
             return Ok(());
         }
@@ -727,16 +725,29 @@ impl Emitter<'_> {
         };
 
         if placed == Placed::OnStack {
-            if let Some(slot) = self.slot(value) {
-                let kind = self.kind_of(value)?;
-                code.store(&origin, kind, slot);
-            } else {
-                // Nothing reads it. Discard rather than leave the stack dirty,
-                // which `Code::bind` would refuse at the end of the block.
-                let words = types::kind(&op.ty).map_or(0, Kind::words);
-                if words > 0 {
-                    code.pop(&origin, words);
-                }
+            self.place(code, value, &op.ty, &origin)?;
+        }
+        Ok(())
+    }
+
+    /// Put an operation's result where the rest of the function will find it.
+    ///
+    /// A value nothing reads is discarded rather than left on the stack, which
+    /// `Code::bind` would refuse at the end of the block.
+    fn place(
+        &self,
+        code: &mut Code,
+        value: ValueId,
+        ty: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        if let Some(slot) = self.slot(value) {
+            let kind = self.kind_of(value)?;
+            code.store(origin, kind, slot);
+        } else {
+            let words = types::kind(ty).map_or(0, Kind::words);
+            if words > 0 {
+                code.pop(origin, words);
             }
         }
         Ok(())
