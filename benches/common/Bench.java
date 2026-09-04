@@ -28,6 +28,10 @@ public final class Bench {
     }
 
     public static void measure(Work work) {
+        if (System.getenv("NTS_BENCH_ALLOC") != null) {
+            allocated(work);
+            return;
+        }
         // One call before anything: it takes the checksum, loads the classes and
         // runs every `<clinit>`, so none of that lands inside a timed region.
         double checksum = work.run();
@@ -81,5 +85,62 @@ public final class Bench {
         // disagreement it caused itself.
         long bits = Double.doubleToRawLongBits(checksum);
         System.out.printf("%.4f %016x%n", best, bits);
+    }
+
+    /**
+     * Bytes allocated per operation, which is how this project asks "did C2
+     * scalar-replace that?" and gets a number back.
+     *
+     * <p>The obvious instrument is {@code -XX:+PrintEscapeAnalysis}, and it does
+     * not exist on a JDK anyone ships -- it is {@code develop}-only, so it is
+     * present in a debug VM and silently absent in a product one. This counter
+     * is in every HotSpot, it costs nothing, and it answers the question more
+     * directly anyway: escape analysis is a means, and what we actually want to
+     * know is whether the allocation happened. **Zero means it did not.**
+     *
+     * <p>Printed instead of the timing rather than beside it, because the
+     * runner parses that line and a lane that printed two would report a
+     * disagreement it caused itself. So this is a separate run, under
+     * {@code NTS_BENCH_ALLOC=1}, and nothing about the timed path changes.
+     *
+     * <p>The warmup is the timed path's, unchanged and for a sharper reason
+     * here: an interpreter allocates what a C2 frame would not, so measuring
+     * before steady state answers a question about the interpreter. The
+     * measured window is deliberately long enough that the harness's own
+     * fixed cost -- the {@code Work} instance, the counter's own boxing --
+     * divides away to nothing.
+     */
+    private static void allocated(Work work) {
+        com.sun.management.ThreadMXBean threads =
+            (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+        if (!threads.isThreadAllocatedMemorySupported()) {
+            System.out.println("-- this JVM does not count thread allocation");
+            return;
+        }
+        threads.setThreadAllocatedMemoryEnabled(true);
+        long self = Thread.currentThread().getId();
+
+        double sink = work.run();
+        long until = System.nanoTime() + 300_000_000L;
+        for (int i = 0; i < 20000 && System.nanoTime() < until; i++) {
+            sink += work.run();
+        }
+
+        long probe = System.nanoTime();
+        work.run();
+        double one = System.nanoTime() - probe;
+        long reps = (long) Math.floor(1e9 / Math.max(one, 1));
+        reps = Math.min(Math.max(reps, 1000), 10_000_000L);
+
+        long before = threads.getThreadAllocatedBytes(self);
+        for (long i = 0; i < reps; i++) {
+            sink += work.run();
+        }
+        long after = threads.getThreadAllocatedBytes(self);
+
+        if (Double.isNaN(sink)) {
+            throw new AssertionError("unreachable");
+        }
+        System.out.printf("%.2f bytes/op over %d ops%n", (after - before) / (double) reps, reps);
     }
 }

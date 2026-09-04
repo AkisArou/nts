@@ -22,7 +22,7 @@
 use nts_codegen_common::symbols::jvm_member_name;
 use nts_codegen_common::{Copy, block_order, destruct, edge_copies};
 use nts_core::hir::{
-    BinOp, BlockId, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId,
+    BinOp, BlockId, Func, HirType, OpKind, Program, UnOp, ValueId,
 };
 use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::code::{Code, Label};
@@ -150,13 +150,34 @@ impl<'a> Emitter<'a> {
             locals.push(vtype);
         }
 
+        // Whose answer this is matters. `hir::operands_of` says out loud that
+        // it is exposed because "two implementations of what does this
+        // operation read would eventually disagree about a newly added
+        // operation -- in whichever direction was not tested", and this file
+        // had the second implementation. It listed `Binary`, `Unary`,
+        // `Convert`, `Call`, `GlobalSet` and `Return`, and so counted zero
+        // operands for every array, field, string and erasure op -- every
+        // category added after it was written, exactly as predicted.
+        //
+        // Undercounting only ever *lowers* a use count, and the one reader
+        // wants a count of exactly one, so the bug is a comparison fused into a
+        // branch while something else still needed its value. That is a wrong
+        // answer rather than a refusal, which is the kind worth deleting the
+        // duplicate for rather than extending it.
         let mut uses = vec![0u32; func.values.len()];
         for &block in &order {
             let block = &func.blocks[block.0 as usize];
-            for &value in &block.ops {
-                count_uses(&func.values[value.0 as usize].kind, &mut uses);
+            let mut read: Vec<ValueId> = block
+                .ops
+                .iter()
+                .flat_map(|&value| nts_core::hir::operands_of(&func.values[value.0 as usize].kind))
+                .collect();
+            read.extend(nts_core::hir::operands_of_terminator(&block.terminator));
+            for operand in read {
+                if let Some(count) = uses.get_mut(operand.0 as usize) {
+                    *count += 1;
+                }
             }
-            count_terminator(&block.terminator, &mut uses);
         }
 
         Ok(Self {
@@ -305,42 +326,6 @@ impl<'a> Emitter<'a> {
     }
 }
 
-/// Count every value an operation reads.
-fn count_uses(kind: &OpKind, uses: &mut [u32]) {
-    let mut bump = |value: &ValueId| {
-        if let Some(slot) = uses.get_mut(value.0 as usize) {
-            *slot += 1;
-        }
-    };
-    match kind {
-        OpKind::Binary { lhs, rhs, .. } => {
-            bump(lhs);
-            bump(rhs);
-        }
-        OpKind::Unary { operand, .. } | OpKind::Convert(operand) => bump(operand),
-        OpKind::Call { args, .. } => args.iter().for_each(&mut bump),
-        OpKind::GlobalSet { value, .. } | OpKind::Return(Some(value)) => bump(value),
-        _ => {}
-    }
-}
-
-fn count_terminator(terminator: &Terminator, uses: &mut [u32]) {
-    let mut bump = |value: &ValueId| {
-        if let Some(slot) = uses.get_mut(value.0 as usize) {
-            *slot += 1;
-        }
-    };
-    match terminator {
-        Terminator::Return(Some(value)) => bump(value),
-        Terminator::Jump { args, .. } => args.iter().for_each(&mut bump),
-        Terminator::Branch { cond, then_args, else_args, .. } => {
-            bump(cond);
-            then_args.iter().for_each(&mut bump);
-            else_args.iter().for_each(&mut bump);
-        }
-        Terminator::Return(None) | Terminator::Unreachable | Terminator::FellThrough => {}
-    }
-}
 
 /// The comparison a `BinOp` is, where it is one.
 pub(crate) const fn comparison(op: BinOp) -> Option<Compare> {

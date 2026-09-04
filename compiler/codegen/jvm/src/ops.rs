@@ -39,7 +39,36 @@ impl Emitter<'_> {
             if Some(value) == fused {
                 continue;
             }
+            // Every operation loads its operands, operates, and stores or
+            // discards the result -- so the depth after must be the depth
+            // before. That is not an incidental property: it is the reason
+            // `nts_jvm_emitter::frames` can write a StackMapTable in eighty
+            // lines instead of three thousand, since it makes the operand stack
+            // empty at every block boundary and leaves nothing to merge.
+            //
+            // Checked here because it cost an hour when it broke. `ArraySet`
+            // emitted `d2i` on an index specialization had already made an
+            // `int`, popping two words where the load pushed one; the stack ran
+            // one short per subscript and reported an underflow at whichever
+            // instruction hundreds of bytes later finally hit zero -- in a
+            // function whose bytecode could not be printed *because* it had
+            // been refused. Bisecting from TypeScript found it. This names the
+            // operation, before anything downstream is emitted.
+            let before = code.depth();
             self.operation(code, pool, value)?;
+            if code.depth() != before {
+                return Err(refuse(
+                    self.func,
+                    &format!(
+                        "emitting %{} moved the operand stack from {} to {}, and \
+                         an operation must leave it as it found it -- the emitter \
+                         and its own accounting disagree about this one",
+                        value.0,
+                        before,
+                        code.depth()
+                    ),
+                ));
+            }
         }
         self.terminator(code, pool, block, &terminator, next, fused)
     }
@@ -377,31 +406,68 @@ impl Emitter<'_> {
         match kind {
             OpKind::ArrayNew { length, .. } => {
                 let element = self.element_descriptor(ty)?;
-                self.load(code, *length)?;
-                // The length arrives as a double, because that is what a
-                // JavaScript length is until something narrows it.
-                code.convert(origin, insn::D2I, Kind::Double, Kind::Int);
+                self.subscript(code, *length, origin)?;
                 code.new_array(origin, pool, &element);
                 Ok(Placed::OnStack)
             }
             OpKind::ArrayGet { array, index, .. } => {
                 let element = self.element_descriptor(&self.ty(*array).clone())?;
                 self.load(code, *array)?;
-                self.load(code, *index)?;
-                code.convert(origin, insn::D2I, Kind::Double, Kind::Int);
+                self.subscript(code, *index, origin)?;
                 code.array_load(origin, &element);
                 Ok(Placed::OnStack)
             }
             OpKind::ArraySet { array, index, value, .. } => {
                 let element = self.element_descriptor(&self.ty(*array).clone())?;
                 self.load(code, *array)?;
-                self.load(code, *index)?;
-                code.convert(origin, insn::D2I, Kind::Double, Kind::Int);
+                self.subscript(code, *index, origin)?;
                 self.load(code, *value)?;
                 code.array_store(origin, &element);
                 Ok(Placed::Stored)
             }
             _ => Err(refuse(self.func, "an array operation this backend does not spell")),
+        }
+    }
+
+    /// An index or a length, as the `int` the JVM's array instructions want.
+    ///
+    /// A JavaScript length is a double until something narrows it, so this
+    /// emitted `d2i` unconditionally -- and that was wrong for the case the
+    /// backend most wants to be good at. Specialization turns a loop counter
+    /// into an `i32`, so `for (let i = 0; ...) v[i] = x` reaches here with an
+    /// index already in an int slot; `d2i` then popped two words where the load
+    /// had pushed one, and the operand stack went one short per subscript. The
+    /// symptom was an underflow reported hundreds of bytes later, at whichever
+    /// instruction finally ran out -- and only in loops, because a constant
+    /// index stays a double.
+    ///
+    /// So the conversion comes from the value's own kind. That is the rule the
+    /// coercions already keep and the one this backend keeps getting wrong in
+    /// the same direction: **the slot the middle end chose is the slot**, and
+    /// an emitter that assumes a representation instead of reading it is
+    /// writing down a second answer to a question HIR already answered.
+    fn subscript(
+        &mut self,
+        code: &mut Code,
+        value: ValueId,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        self.load(code, value)?;
+        match self.kind_of(value)? {
+            Kind::Int => Ok(()),
+            Kind::Double => {
+                code.convert(origin, insn::D2I, Kind::Double, Kind::Int);
+                Ok(())
+            }
+            Kind::Float => {
+                code.convert(origin, insn::F2I, Kind::Float, Kind::Int);
+                Ok(())
+            }
+            Kind::Long => {
+                code.convert(origin, insn::L2I, Kind::Long, Kind::Int);
+                Ok(())
+            }
+            Kind::Ref => Err(refuse(self.func, "an array index that is a reference")),
         }
     }
 
