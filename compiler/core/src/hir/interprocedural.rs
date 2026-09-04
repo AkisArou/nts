@@ -138,7 +138,10 @@ fn settle(
             .map(|func| (func.name.clone(), Facts::BOTTOM))
             .collect(),
         slot_returns: FxHashMap::default(),
-        fields: FxHashMap::default(),
+        // Not empty: an absent entry reads as TOP at the use, and a field
+        // whose value depends on its own then settles at TOP in round one and
+        // never moves. See `fields::initial`.
+        fields: super::fields::initial(program),
         elements: FxHashMap::default(),
         globals: FxHashMap::default(),
         param_lengths: no_lengths(program),

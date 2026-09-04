@@ -52,6 +52,44 @@ pub type FieldWidths = FxHashMap<(usize, u32), HirType>;
 pub type FieldFacts = FxHashMap<(super::TypeId, u32), Facts>;
 
 /// Join every store into every field it can reach.
+/// A starting fact for every number field, so that none of them is *absent*.
+///
+/// The value is the allocator's zero, and the value is not the point:
+/// [`analyze`] joins that zero in every round anyway, so seeding `BOTTOM` here
+/// gives an identical program -- verified by mutation, which no test and no
+/// example could tell apart. **What matters is that the entry exists.**
+/// `field_facts` answers TOP for a key it does not hold, so an empty map makes
+/// every field read unknown in round one, and a field whose value depends on
+/// its own then converges to TOP and stays there.
+///
+/// `Ball` in Are We Fast Yet is the case: `this.x += this.xVel` makes both
+/// fields depend on themselves, so round one read TOP, round one *published*
+/// TOP, and every round after agreed. Four `double`s where the C++ and Java
+/// references both declare `int32`, on the row 0049 carries at 1.60x. `Random`
+/// in the same program narrowed fine, because `(seed * 1309 + 13849) & 65535`
+/// is bounded whatever its input was -- which is what made this look like a
+/// property of `Ball` rather than of the seed.
+///
+/// The same fix `Crossing::returns` already carries, whose comment says it in
+/// one line: "BOTTOM rather than absent, for the same reason parameters start
+/// there: an absent entry reads as TOP at the use, and a function whose result
+/// depends on its own result then converges to TOP."
+#[must_use]
+pub fn initial(program: &Program) -> FieldFacts {
+    let mut facts: FieldFacts = FxHashMap::default();
+    for (at, layout) in program.layouts.iter().enumerate() {
+        for field in 0..u32::try_from(layout.fields.len()).unwrap_or(0) {
+            if !is_number(program, at, field) {
+                continue;
+            }
+            for ty in &layout.types {
+                facts.insert((*ty, field), Facts::constant(0.0));
+            }
+        }
+    }
+    facts
+}
+
 #[must_use]
 pub fn analyze(program: &Program, analyses: &[Analysis]) -> FieldFacts {
     // By layout while collecting, because a store names one type and the
