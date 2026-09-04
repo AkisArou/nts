@@ -11504,19 +11504,32 @@ impl<'a> FuncBuilder<'a> {
         let name = named(self.snapshot, ty)
             .filter(|name| super::builtin::is_error(name))?
             .to_owned();
+        // `TypeError extends Error`, which the compiler knows and used to
+        // discard. The hierarchy has never heard of these four -- they are not
+        // declarations in this program -- so `Hierarchy::base` has nothing, and
+        // this is where the relation is spelled instead. `lower_instanceof`
+        // already spells the same one for the same reason, through
+        // `provided_errors_under`.
+        //
+        // The comment here used to say a base would be *worse* than none:
+        // all four would carry `Error`, merge on identical fields, methods and
+        // base, and reproduce the defect 0074 names. That was true when it was
+        // written and is not now -- `collect_layouts` grew a nominal guard for
+        // exactly this family, and two differently-named error layouts do not
+        // merge whatever their shape says. The reason outlived the condition it
+        // described, which is the third stale comment found this week.
+        //
+        // Only the JVM can see the difference: an upcast is a pointer here and
+        // a nominal relation checked at class load there, so `examples/
+        // exceptions` emitted `nts/gen/TypeError` extending `Object` and would
+        // not verify.
+        let base = (name != "Error").then(|| self.type_named("Error")).flatten();
         let layout = Layout {
             types: vec![ty],
             name,
             fields: super::builtin::error_fields(),
             methods: vec![None; self.hierarchy.table_size()],
-            // The provided error classes are not declarations in this program,
-            // so the hierarchy has no base for them -- and giving them one from
-            // the checker would be worse than none: all four would carry
-            // `Error` and merge on identical fields, methods *and* base, which
-            // is the defect `0074` names. What keeps them apart is the nominal
-            // guard in `collect_layouts`, because the question asked of this
-            // family is nominal.
-            base: None,
+            base,
         };
         self.layouts.push(layout.clone());
         Some(layout)

@@ -98,3 +98,31 @@ export function neverConstructed(n: number): number {
 export function namesTheUnbuiltClass(w: Unbuilt): number {
   return w.code;
 }
+
+// `instanceof` across all four provided error classes, now that they name
+// `Error` as their base.
+//
+// The base is what the JVM needs — `nts/gen/TypeError` extending `Object`
+// would not verify — and it is invisible here, where an upcast is a pointer.
+// What is *not* invisible is the thing a base could break: record 0074 found
+// that all four have identical fields and an identical method table, so shape
+// merged them into one layout and `e instanceof TypeError` answered true for a
+// `RangeError`. Adding a base gives them a *fourth* identical thing, so this
+// asks node whether the nominal guard still holds.
+export function acrossTheHierarchy(n: number): number {
+  try {
+    if (n > 1) {
+      throw new TypeError("t");
+    }
+    if (n < -1) {
+      throw new RangeError("r");
+    }
+    throw new Error("e");
+  } catch (e) {
+    return (
+      (e instanceof TypeError ? 1 : 0) +
+      (e instanceof RangeError ? 10 : 0) +
+      (e instanceof Error ? 100 : 0)
+    );
+  }
+}
