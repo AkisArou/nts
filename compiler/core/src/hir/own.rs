@@ -82,6 +82,8 @@ pub enum Ownership {
 pub struct Summaries {
     /// Functions that write through something, anywhere they can reach.
     mutates: rustc_hash::FxHashSet<String>,
+    /// Dispatch slots some implementation of which does. See [`mutating_slots`].
+    mutating_slots: rustc_hash::FxHashSet<u32>,
     /// Functions that leave an object exactly as fresh as it arrived.
     harmless: rustc_hash::FxHashSet<String>,
     /// Functions whose result is one of their own parameters.
@@ -120,6 +122,12 @@ impl Summaries {
 #[must_use]
 pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
     let harmless = initializing_only(program, layouts);
+    // Computed before the literal because the slot answer is derived from it:
+    // a slot mutates when an implementation in it does.
+    // One fixpoint for both: a slot reaches a store when an implementation in
+    // it does, and a function reaches one when it calls such a slot. Computing
+    // them in sequence would settle the first against a stale second.
+    let (mutates, mutating_slots) = mutating(program);
     Summaries {
         starts_zero: program
             .globals
@@ -129,7 +137,8 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
             .filter_map(|(at, _)| u32::try_from(at).ok())
             .collect(),
         zeroed: zeroed_parameters(program, layouts, &harmless),
-        mutates: mutating(program),
+        mutating_slots,
+        mutates,
         harmless,
         hands_back: hands_back_a_parameter(program, layouts),
         consumes: program
@@ -299,6 +308,7 @@ fn classify(
         let around = Surroundings {
             live,
             mutates: &summaries.mutates,
+            mutating_slots: &summaries.mutating_slots,
         };
         for param in &block.params {
             if owned(func, layouts, *param) {
@@ -1386,9 +1396,14 @@ fn crossing_borrows(
 struct Surroundings<'a> {
     live: &'a liveness::Liveness,
     mutates: &'a rustc_hash::FxHashSet<String>,
+    /// The same question for a dispatch, which has no single callee.
+    mutating_slots: &'a rustc_hash::FxHashSet<u32>,
 }
 
-fn mutating(program: &Program) -> rustc_hash::FxHashSet<String> {
+fn mutating(
+    program: &Program,
+) -> (rustc_hash::FxHashSet<String>, rustc_hash::FxHashSet<u32>) {
+    let mut slots: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
     let mut mutates: rustc_hash::FxHashSet<String> = program
         .funcs
         .iter()
@@ -1414,6 +1429,18 @@ fn mutating(program: &Program) -> rustc_hash::FxHashSet<String> {
                     callee: super::Callee::Direct(name),
                     ..
                 } => mutates.contains(name),
+                // A dispatch reaches a store when some implementation in the
+                // slot does, which is the same question asked of a set. Before
+                // this it was `true` unconditionally, and the cost was not the
+                // dispatch itself: a *direct* call to a method that merely
+                // contains one inherited the answer through this fixpoint. So
+                // `Shape#describe`, which stores nothing and calls
+                // `this.area()`, counted as mutating -- and every borrow across
+                // a call to it became a retain and a release.
+                OpKind::Call {
+                    callee: super::Callee::Virtual { slot, .. },
+                    ..
+                } => slots.contains(slot),
                 OpKind::Call { .. } => true,
                 _ => false,
             });
@@ -1422,8 +1449,20 @@ fn mutating(program: &Program) -> rustc_hash::FxHashSet<String> {
                 grew = true;
             }
         }
+        // The slots, from the functions, in the same round. A slot that gains an
+        // implementation this round makes its callers mutating in the next one,
+        // which is why the two cannot be computed one after the other.
+        for layout in &program.layouts {
+            for (slot, method) in layout.methods.iter().enumerate() {
+                let Some(method) = method else { continue };
+                let slot = u32::try_from(slot).unwrap_or(u32::MAX);
+                if mutates.contains(method) && slots.insert(slot) {
+                    grew = true;
+                }
+            }
+        }
         if !grew {
-            return mutates;
+            return (mutates, slots);
         }
     }
 }
@@ -2406,6 +2445,14 @@ fn borrows_safely(
                 callee: super::Callee::Direct(name),
                 ..
             } => around.mutates.contains(name),
+            // A dispatch, where the callee is a slot rather than a name. Safe
+            // when no implementation in the slot stores anything -- the same
+            // question `mutates` answers for a direct call, asked of the whole
+            // set because that is what can be reached.
+            OpKind::Call {
+                callee: super::Callee::Virtual { slot, .. },
+                ..
+            } => around.mutating_slots.contains(slot),
             OpKind::Call { .. } => true,
             // A store *into* this value cannot invalidate it. It overwrites a
             // slot inside the container and leaves the reference that names the

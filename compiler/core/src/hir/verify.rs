@@ -987,6 +987,7 @@ mod tests {
                 exported: true,
                 initializes_receiver: false,
                 async_result: None,
+                abstract_declaration: false,
             }],
             ..Program::default()
         }
@@ -1329,6 +1330,7 @@ mod tests {
             exported: false,
             initializes_receiver: false,
             async_result: None,
+            abstract_declaration: false,
         };
         let passes_one = Func {
             name: "g".to_owned(),
@@ -1351,6 +1353,7 @@ mod tests {
             exported: true,
             initializes_receiver: false,
             async_result: None,
+            abstract_declaration: false,
         };
         let program = Program {
             funcs: vec![takes_two, passes_one],

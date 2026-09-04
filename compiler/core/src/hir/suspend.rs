@@ -388,6 +388,7 @@ fn entry_function(
         origin: func.origin.clone(),
         exported: func.exported,
         initializes_receiver: false,
+            abstract_declaration: false,
         async_result: None,
     }
 }
@@ -665,6 +666,7 @@ fn assembled_resume(
         origin: func.origin.clone(),
         exported: false,
         initializes_receiver: false,
+            abstract_declaration: false,
         async_result: None,
     }
 }

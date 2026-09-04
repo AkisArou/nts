@@ -329,6 +329,16 @@ pub fn emit(program: &Program) -> Emitted {
 
     let mut bodies = Vec::new();
     for func in &program.funcs {
+        // An `abstract` method is a signature and no body. It is in `funcs` so
+        // that a call through the slot can take its function-pointer type from
+        // it; nothing calls it and no vtable names it, because an abstract
+        // class is never instantiated. Emitting the stub gave clang an
+        // `unused function 'Shape__area'` under `-Werror`, which only the
+        // benchmark build turns on -- so `examples/abstract-methods` passed and
+        // `benches/cases/upcast` did not.
+        if func.abstract_declaration {
+            continue;
+        }
         let mut body = CodeWriter::new();
         let context = Context {
             program,
@@ -2943,6 +2953,7 @@ mod tests {
             exported: false,
             initializes_receiver: false,
             async_result: None,
+            abstract_declaration: false,
         };
         let op = value(i32_ty);
         for (bin, operator) in [(BinOp::Add, "+"), (BinOp::Sub, "-"), (BinOp::Mul, "*")] {

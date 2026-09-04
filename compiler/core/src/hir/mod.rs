@@ -321,6 +321,22 @@ pub struct Func {
     /// slot held, because the slot held nothing. Without this a class costs a
     /// load, a null test and a call per reference field per construction.
     pub initializes_receiver: bool,
+    /// An `abstract` method: a signature the program declares and no body.
+    ///
+    /// It is in `funcs` because a call through the slot takes its
+    /// function-pointer type from here — refusing the declaration left the
+    /// *caller* undeliverable with "no declaration for `Shape#area` to take a
+    /// signature from". Nothing calls it and no vtable names it: an abstract
+    /// class is never instantiated, so every reachable receiver is a subclass
+    /// whose override filled the slot.
+    ///
+    /// So a backend must **not** emit a body for one. The C backend emitted the
+    /// `__builtin_unreachable()` stub and clang refused the translation unit
+    /// under `-Werror`: `unused function 'Shape__area'`, found by
+    /// `benches/cases/upcast`, whose build is the only one that turns warnings
+    /// into errors. The JVM's answer is `ACC_ABSTRACT` with no `Code`
+    /// attribute, which is the same statement in that file format.
+    pub abstract_declaration: bool,
     /// The promise an `async` function settles, where this is one.
     ///
     /// Recorded by the lowering rather than rediscovered: [`super::suspend`]
@@ -2210,6 +2226,7 @@ mod tests {
                 exported: true,
                 initializes_receiver: false,
                 async_result: None,
+                abstract_declaration: false,
             }],
             globals: Vec::new(),
             layouts: Vec::new(),

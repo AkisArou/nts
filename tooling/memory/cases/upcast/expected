@@ -1,0 +1,21 @@
+ideal 0
+allocated 0
+because nothing, and the point of the case is that widening a declaration did
+because not change it.
+because
+because Allocations: none. Seventeen shapes are built and each dies with the
+because iteration that made it. The declaration says `Shape` rather than the
+because class each arm builds, and that is a statement about the *type* -- it
+because does not make the object outlive anything, so escape analysis still puts
+because each in a frame slot.
+because
+because That is the thing worth holding. The upcast arrives as an `Unerase`,
+because and an erased value is a tagged word rather than a pointer -- so a
+because lowering that boxed the arms to give the tag somewhere to live would
+because show up here as thirty-four allocations and nowhere else. The answer
+because would not change and no test would fail.
+because
+because Operations: none, and by the rule `closure-capture` states -- an
+because allocation floor of zero forces an operation floor of zero. The unerase
+because itself takes no reference and gives none back: it reads a tag it then
+because discards and keeps the pointer that was already there.

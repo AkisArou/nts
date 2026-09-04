@@ -4684,6 +4684,9 @@ impl<'a> FuncBuilder<'a> {
         // A constructor runs over an object `new` allocated a moment ago, so
         // every field it writes is writing over a zero.
         func.initializes_receiver = is_constructor;
+        // A signature and nothing else. `body` is `None` exactly when the
+        // method is `abstract`, which `method_body` is the only decider of.
+        func.abstract_declaration = body.is_none();
         Ok(func)
     }
 
@@ -5148,6 +5151,61 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// Whether every arm of this node's union type is the given class or below
+    /// it.
+    ///
+    /// False for a node whose type is not a union, and deliberately: a single
+    /// type that needed widening would already have the target's
+    /// representation, so reaching here with one means something else is going
+    /// on and the refusal should say so.
+    fn every_arm_descends_from(&mut self, id: NodeId, target: TypeId) -> bool {
+        // The node whose type is the union. For a call argument or a return
+        // that is `id` itself; for a variable declaration it is the
+        // *initializer*, because the declaration's own type is the declared one
+        // -- which is the target, so asking it would compare `Shape` with
+        // `Shape` and answer nothing. Found by kind rather than by trying `id`
+        // and falling back, so the two cases stay distinguishable.
+        let id = if self.kind_of(id) == Some(syntax::VARIABLE_DECLARATION) {
+            let children = self.children(id);
+            let Some(initializer) = children.iter().rev().find(|child| {
+                !syntax::is_type_node(self.kind_of(**child).unwrap_or_default())
+                    && self.kind_of(**child) != Some(syntax::IDENTIFIER)
+            }) else {
+                return false;
+            };
+            *initializer
+        } else {
+            id
+        };
+        let Some(ty) = self.snapshot.node_types.get(&id).copied() else {
+            return false;
+        };
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return false;
+        };
+        let TypeKind::Union(members) = &record.kind else {
+            return false;
+        };
+        let members = members.clone();
+        // `all` rather than `any`, and it is defence in depth rather than a
+        // check a program can reach. TypeScript's own assignability already
+        // requires every arm to satisfy the target, so no well-typed source can
+        // tell the two apart -- weakening this to `any` fails no test and leaves
+        // the corpus at `invalid HIR 0`, which was verified rather than assumed.
+        //
+        // It stays because the lowering should not depend on the checker having
+        // run: `Unerase` is the one operation here whose being wrong is silent
+        // rather than loud, and its other emitter is licensed by a tag test on
+        // the path. This one is licensed by a claim about types, and the claim
+        // is cheap to make locally.
+        //
+        // An empty union cannot license anything.
+        !members.is_empty()
+            && members
+                .iter()
+                .all(|member| *member == target || self.descends_from(*member, target))
+    }
+
     /// A value where a slot of a possibly different type expects it.
     ///
     /// Only erasure today. Every other pair either already matches or is a
@@ -5200,6 +5258,32 @@ impl<'a> FuncBuilder<'a> {
                 let kind = self.values[value.0 as usize].kind.clone();
                 let origin = self.origin(id);
                 return Ok(self.push(kind, want.clone(), origin));
+            }
+            // An erased union every arm of which is the wanted class.
+            //
+            // `const shape: Shape = n > 0 ? new Circle(n) : new Square(-n)` is
+            // the shape, and it is how anyone writes a hierarchy. The
+            // conditional's own type is `Circle | Square` -- two
+            // representations, so an erased value -- and the declaration says
+            // `Shape`, which both of them are.
+            //
+            // That is an *upcast*, and base-first layout makes it free: a
+            // pointer to a `Circle` is a pointer to a `Shape` at the same
+            // address with the base's fields at the same offsets. The tag is
+            // read off and thrown away, which is what `Unerase` is.
+            //
+            // The license is the checker's rather than a narrowing's, and it is
+            // the stronger of the two: narrowing licenses an unerase because a
+            // tag was tested on the path that reaches it, and this licenses one
+            // because *every* arm satisfies the target, so no path can arrive
+            // with anything else. `descends_from` is asked of each arm rather
+            // than of the union, because a union is not a class.
+            if let (HirType::Erased, HirType::Managed(ManagedType::Object(target))) =
+                (&have, want)
+                && self.every_arm_descends_from(id, *target)
+            {
+                let origin = self.origin(id);
+                return Ok(self.push(OpKind::Unerase { value }, want.clone(), origin));
             }
             // Anything else erased, arriving where something concrete is
             // wanted, is refused rather than passed through. Passing it through
@@ -6046,6 +6130,7 @@ impl<'a> FuncBuilder<'a> {
             // and a seventh positional bool next to `exported` would be a
             // parameter waiting to be passed in the wrong order.
             initializes_receiver: false,
+            abstract_declaration: false,
             // Not the caller's, because this one is not a property of what is
             // being assembled but of what the body did -- and the body has just
             // finished saying so.
@@ -8883,7 +8968,35 @@ impl<'a> FuncBuilder<'a> {
             None => return Err(self.unsupported(rhs, "an `in` on a value with no type")),
         };
 
-        // Which arms declare it. The set is what the test becomes.
+        // Every class the value can actually *be*: each arm and everything
+        // below it.
+        //
+        // The first version of this asked the arms alone and was wrong in the
+        // direction that folds to a constant. `const v: Shape | Other = ...`
+        // with `Circle extends Shape`: neither `Shape` nor `Other` declares
+        // `r`, so `"r" in v` folded to `false` -- and at run time `v` is a
+        // `Circle`, which has one. Node says true, nts said false, and the
+        // differential said so on 20 of 29 cases.
+        //
+        // Inheritance is additive, so a subclass declares everything its base
+        // does and possibly more. That makes the `true` direction safe with the
+        // arms alone and the `false` direction unsafe, which is exactly the
+        // asymmetry a "no arm has it" fold walks into.
+        let mut members = members;
+        let below: Vec<TypeId> = self
+            .hierarchy
+            .name
+            .keys()
+            .copied()
+            .filter(|ty| {
+                !members.contains(ty) && members.iter().any(|arm| self.descends_from(*ty, *arm))
+            })
+            .collect();
+        members.extend(below);
+        members.sort_unstable_by_key(|ty| ty.0);
+        members.dedup();
+
+        // Which of them declare it. The set is what the test becomes.
         let mut declaring: Vec<TypeId> = Vec::new();
         for member in &members {
             match self.declares(*member, &key) {

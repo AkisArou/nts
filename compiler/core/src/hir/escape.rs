@@ -881,6 +881,7 @@ mod tests {
             exported: true,
             initializes_receiver: false,
             async_result: None,
+            abstract_declaration: false,
         }
     }
 

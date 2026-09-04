@@ -255,6 +255,7 @@ mod tests {
             exported: true,
             initializes_receiver: false,
             async_result: None,
+            abstract_declaration: false,
         }
     }
 
@@ -459,6 +460,7 @@ mod tests {
             exported: true,
             initializes_receiver: false,
             async_result: None,
+            abstract_declaration: false,
         };
         assert_eq!(narrow_truncated(&mut it), 2);
         assert_eq!(it.values[2].ty, I32);

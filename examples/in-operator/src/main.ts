@@ -127,3 +127,51 @@ export function chained(n: number): number {
   }
   return s.write;
 }
+
+// A subclass declares more than its base, and the value can be one.
+//
+// This is the case the first version of this lowering got wrong. Neither
+// `Base` nor `Other` declares `extra`, so asking the *arms* folds `"extra" in
+// v` to `false` — and at run time `v` is a `Derived`, which has it. Node says
+// true. The differential said so on 20 of 29 cases, and the unit tests at the
+// time did not, because every fixture they had used interfaces with nothing
+// below them.
+//
+// Inheritance is additive: a subclass declares everything its base does and
+// possibly more. So the `true` direction is safe from the arms alone and the
+// `false` direction is not, which is exactly the asymmetry a "no arm has it"
+// fold walks into. The set is each arm *and everything below it*.
+class Base {
+  common: number;
+  constructor(common: number) {
+    this.common = common;
+  }
+}
+
+class Derived extends Base {
+  extra: number;
+  constructor(common: number, extra: number) {
+    super(common);
+    this.extra = extra;
+  }
+}
+
+class Unrelated {
+  own: number;
+  constructor(own: number) {
+    this.own = own;
+  }
+}
+
+export function aSubclassHasMore(n: number): number {
+  const v: Base | Unrelated = n > 0 ? new Derived(1, 2) : new Unrelated(3);
+  return ("extra" in v ? 10 : 0) + ("common" in v ? 100 : 0) + ("own" in v ? 1000 : 0);
+}
+
+// And the base itself, which does not have the subclass's field. Same declared
+// type, a different run-time class, and the answers differ — which is what
+// makes this a test of the *value* rather than of the declaration.
+export function theBaseItselfDoesNot(n: number): number {
+  const v: Base | Unrelated = n > 0 ? new Base(1) : new Unrelated(3);
+  return ("extra" in v ? 10 : 0) + ("common" in v ? 100 : 0);
+}

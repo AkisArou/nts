@@ -87,6 +87,36 @@ fn a_mixed_union_becomes_a_test_against_the_arms_that_declare_it() {
     );
 }
 
+/// The candidate set is each arm *and everything below it*.
+///
+/// The first version of this lowering asked the arms alone, and folded
+/// `"extra" in v` to `false` for a `v: Base | Unrelated` holding a `Derived`
+/// that has one. Node said true on 20 of 29 cases. Inheritance is additive, so
+/// the `true` direction is safe from the arms and the `false` direction is not.
+///
+/// Every test in this file passed before that fix, because every fixture used
+/// interfaces with nothing below them — which is why the assertion here is
+/// about a hierarchy specifically.
+#[test]
+fn the_candidates_include_the_subclasses_of_every_arm() {
+    let Some(lowered) = lowered("in-operator") else {
+        return;
+    };
+    // `Base | Unrelated`, and only `Derived` declares `extra`. Neither arm
+    // does, so an arms-only lowering emits no test at all.
+    let tests = class_tests(func(&lowered, "aSubclassHasMore"));
+    assert!(
+        tests.contains(&1),
+        "`extra` is a test against `Derived` alone: {tests:?}",
+    );
+    // And `common`, which `Base` declares, is a test against `Base` and
+    // `Derived` both -- two classes, because `Unrelated` does not have it.
+    assert!(
+        tests.contains(&2),
+        "`common` is a test against `Base` and `Derived`: {tests:?}",
+    );
+}
+
 /// When every arm declares it, or none does, the answer is a constant and no
 /// test is emitted.
 #[test]
