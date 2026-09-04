@@ -335,8 +335,17 @@ backend_examples() {
   rm -f "$results"
   printf '  %s of %s examples agree with node %s\n' "$passed" "$total" "$said"
   [ "$bare" -gt 0 ] && printf '  %s compared nothing\n' "$bare"
+  # The names, whenever there are any -- not only when the floor is breached.
+  #
+  # The floor answers "did we regress"; the names answer "against what", and
+  # those are different questions. A run sitting exactly *on* its floor printed
+  # nothing at all, so one example failing for an unrelated reason -- a missing
+  # `node_modules` in a fresh worktree, which makes `examples/library` fail to
+  # typecheck -- was indistinguishable from a clean run unless you read the
+  # `of N`. That cost three runs to find once and would have cost one.
+  [ -n "$behind" ] && printf '  not agreeing:%s\n' "$behind"
   if [ "$passed" -lt "$floor" ]; then
-    echo "  ^ fell from $floor to $passed:$behind"
+    echo "  ^ fell from $floor to $passed"
     return 1
   fi
   [ "$passed" -gt "$floor" ] && printf '  ^ raise the floor in tooling/gate/all.sh to %s\n' "$passed"
@@ -346,7 +355,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 88 "through the LLVM backend, counting" ); }
+  backend_examples 89 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -357,7 +366,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 88 "through the LLVM backend" ); }
+  backend_examples 89 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -374,12 +383,12 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  # Sixty-two of eighty-eight, measured at a commit rather than in the shared tree.
+  # Sixty-three of eighty-nine, measured at a commit rather than in the shared tree.
   # The floor is planted on *agreement* rather than on rendering, because
   # rendering is a property of the emitter and agreeing is a property of the
   # language, and a floor on the wrong one rewards emitting more while meaning
   # less.
-  backend_examples 62 "through the JVM backend" ); }
+  backend_examples 63 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \

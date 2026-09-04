@@ -399,13 +399,11 @@ impl Emitter<'_> {
                     return Err(refuse(self.func, "an `instanceof` against an unknown class"));
                 };
                 self.load(code, *value)?;
-                // An erased operand is the common case, and `InstanceOf`'s own
-                // doc says so: "the operand may be erased, in which case its
-                // tag has to say it is a reference before its class can be
-                // asked for -- the lowering emits that test; this operation
-                // assumes it." So the reference comes out of the box before the
-                // class is asked, and `instanceof` on the box itself is always
-                // false.
+                // **Unbox before asking for a class.** An erased operand is the
+                // common case, and `InstanceOf`'s own doc says the operand may
+                // be erased and that the lowering emits the tag test -- which
+                // reads as a note about the tag, and is also a note about the
+                // payload. `NtsValue instanceof Circle` is always false.
                 //
                 // Which is exactly what it was. `benches/cases/instanceof`
                 // returned 3 per iteration where node returns an average of 2:
