@@ -10,6 +10,7 @@ members = [
     "compiler/codegen/common",
     "compiler/codegen/c",
     "compiler/codegen/llvm",
+    "compiler/codegen/jvm",
     "compiler/codegen/napi",
     "compiler/jvm-emitter",
     "build",
@@ -31,6 +32,7 @@ publish = false
 # Internal crates. Kept here so a version or path move happens in one place.
 nts-build = { path = "build" }
 nts-codegen-c = { path = "compiler/codegen/c" }
+nts-codegen-jvm = { path = "compiler/codegen/jvm" }
 nts-codegen-llvm = { path = "compiler/codegen/llvm" }
 nts-codegen-napi = { path = "compiler/codegen/napi" }
 nts-codegen-common = { path = "compiler/codegen/common" }

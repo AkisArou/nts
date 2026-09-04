@@ -129,6 +129,23 @@ fn main() -> Result<()> {
             let rest: Vec<String> = args.collect();
             emit_llvm(&project(&rest))
         }
+        // The third backend. Not textual, so `--text` renders the listing that
+        // stands in for reading `program.c` -- disassembled from the bytes
+        // rather than logged while writing them, so it and `javap -c` are two
+        // readings of the same class rather than one opinion twice.
+        Some("emit-jvm") => {
+            let rest: Vec<String> = args.collect();
+            let out = rest
+                .iter()
+                .position(|arg| arg == "--out")
+                .and_then(|at| rest.get(at + 1))
+                .map(Utf8PathBuf::from);
+            emit_jvm(
+                &project(&rest),
+                out.as_deref(),
+                rest.iter().any(|arg| arg == "--text"),
+            )
+        }
         // Every type the frontend resolved, as the schema records it. A
         // lowering refusal names a *type*, and until now there was no way to see
         // what that type actually is — which is a scavenger hunt for anyone
@@ -1263,6 +1280,67 @@ fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
         eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
     }
     print!("{}", emitted.text);
+    Ok(())
+}
+
+/// `nts emit-jvm <tsconfig> [--out <dir>] [--text]` — the same program, as
+/// class files.
+///
+/// `--out` writes the classes *and* the runtime jar, which is what it takes to
+/// run anything: `java -cp <dir>:<dir>/nts-runtime.jar nts.gen.Program`.
+/// Without it nothing is written, because a class file is bytes and printing
+/// them to a terminal helps nobody -- `--text` is what to read instead.
+fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<()> {
+    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let snapshot = source.snapshot(tsconfig)?;
+    report_snapshot_diagnostics(&snapshot)?;
+    let prepared = match hir::prepare(&snapshot) {
+        Ok(prepared) => prepared,
+        Err(problems) => {
+            for problem in &problems {
+                eprintln!("invalid HIR: {problem:?}");
+            }
+            bail!("refusing to emit code from invalid HIR");
+        }
+    };
+    for diagnostic in &prepared.diagnostics {
+        eprintln!(
+            "{}: {} {}",
+            where_it_is(&snapshot, &diagnostic.primary),
+            diagnostic.code,
+            diagnostic.message
+        );
+    }
+    let emitted = nts_codegen_jvm::emit(&prepared.program);
+    for diagnostic in &emitted.diagnostics {
+        eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
+    }
+    if text {
+        for class in &emitted.classes {
+            println!("class {}", class.binary_name);
+            for method in &class.lines {
+                println!("  {}{}", method.name, method.descriptor);
+            }
+        }
+    }
+    if let Some(out) = out {
+        for class in &emitted.classes {
+            let path = out.join(class.path());
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&path, &class.bytes)?;
+        }
+        std::fs::write(
+            out.join(nts_codegen_jvm::RUNTIME_JAR_NAME),
+            nts_codegen_jvm::RUNTIME_JAR,
+        )?;
+        println!(
+            "wrote {} class(es) and the runtime to {out}",
+            emitted.classes.len()
+        );
+    }
     Ok(())
 }
 
