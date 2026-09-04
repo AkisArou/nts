@@ -567,6 +567,12 @@ impl Emitter<'_> {
     ) -> Result<(), Diagnostic> {
         let op = self.func.values[value.0 as usize].clone();
         let origin = op.origin.clone();
+        // A constant emits nothing here. It is pushed at each of its uses
+        // instead, which is one instruction against a store, a slot and a
+        // later load. See `body::rematerialised`.
+        if crate::body::rematerialised(self.func, value) {
+            return Ok(());
+        }
         let placed = match &op.kind {
             // Already in a slot: a parameter by the calling convention, a block
             // parameter because every edge into this block wrote it.
@@ -606,7 +612,7 @@ impl Emitter<'_> {
             OpKind::Binary { op: bin, lhs, rhs } => self.binary(code, pool, &op.ty, *bin, *lhs, *rhs)?,
             OpKind::Unary { op: un, operand } => self.unary(code, pool, &op.ty, *un, *operand)?,
             OpKind::Convert(operand) => {
-                self.load(code, *operand)?;
+                self.load(code, pool, *operand)?;
                 let from = self.ty(*operand).clone();
                 self.convert(code, pool, &from, &op.ty, &origin)?;
                 Placed::OnStack
@@ -633,14 +639,14 @@ impl Emitter<'_> {
             OpKind::ObjectNew { .. } => self.object_new(code, pool, &op.ty, &origin)?,
             OpKind::FieldGet { object, field } => {
                 let (class, name, descriptor) = self.field_ref(*object, *field)?;
-                self.load(code, *object)?;
+                self.load(code, pool, *object)?;
                 code.get_field(&origin, pool, &class, &name, &descriptor);
                 Placed::OnStack
             }
             OpKind::FieldSet { object, field, value: stored } => {
                 let (class, name, descriptor) = self.field_ref(*object, *field)?;
-                self.load(code, *object)?;
-                self.load(code, *stored)?;
+                self.load(code, pool, *object)?;
+                self.load(code, pool, *stored)?;
                 code.put_field(&origin, pool, &class, &name, &descriptor);
                 return Ok(());
             }
@@ -689,7 +695,7 @@ impl Emitter<'_> {
                 let Some(layout) = self.program.layout(*only) else {
                     return Err(refuse(self.func, "an `instanceof` against an unknown class"));
                 };
-                self.load(code, *value)?;
+                self.load(code, pool, *value)?;
                 // **Unbox before asking for a class.** An erased operand is the
                 // common case, and `InstanceOf`'s own doc says the operand may
                 // be erased and that the lowering emits the tag test -- which
@@ -786,7 +792,7 @@ impl Emitter<'_> {
                 ),
             ));
         }
-        self.load(code, stored)?;
+        self.load(code, pool, stored)?;
         code.put_static(origin, pool, PROGRAM, &name, &descriptor);
         Ok(Placed::Stored)
     }
@@ -875,8 +881,8 @@ impl Emitter<'_> {
         frame: ValueId,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
-        self.load(code, promise)?;
-        self.load(code, frame)?;
+        self.load(code, pool, promise)?;
+        self.load(code, pool, frame)?;
         code.invoke_static(
             origin,
             pool,
@@ -973,7 +979,7 @@ impl Emitter<'_> {
             let Some(layout) = self.program.layout(*class) else {
                 return Err(refuse(self.func, "an `instanceof` against an unknown class"));
             };
-            self.load(code, value)?;
+            self.load(code, pool, value)?;
             // Unbox before asking for a class; see the single-class arm.
             if *self.ty(value) == HirType::Erased {
                 code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
@@ -1062,7 +1068,7 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
         if *self.ty(value) == HirType::Erased {
-            return self.load(code, value);
+            return self.load(code, pool, value);
         }
         self.erase(code, pool, value, origin)?;
         Ok(())
@@ -1137,13 +1143,13 @@ impl Emitter<'_> {
             OpKind::Erase { value } => self.erase(code, pool, *value, origin),
                 // A `Void` erases to `undefined` and has nothing to load.
             OpKind::TagOf { value } => {
-                self.load(code, *value)?;
+                self.load(code, pool, *value)?;
                 code.get_field(origin, pool, types::VALUE, "tag", "I");
                 self.adapt(code, Kind::Int, ty, origin)?;
                 Ok(Placed::OnStack)
             }
             OpKind::Unerase { value } => {
-                self.load(code, *value)?;
+                self.load(code, pool, *value)?;
                 match ty {
                     HirType::Bool => code.invoke_static(
                         origin,
@@ -1221,7 +1227,7 @@ impl Emitter<'_> {
                 && !matches!(managed, ManagedType::String)
             {
                 code.const_int(origin, pool, i32::try_from(tag).unwrap_or(0));
-                self.load(code, value)?;
+                self.load(code, pool, value)?;
                 code.invoke_static(
                     origin,
                     pool,
@@ -1232,7 +1238,7 @@ impl Emitter<'_> {
                 return Ok(Placed::OnStack);
             }
         }
-        self.load(code, value)?;
+        self.load(code, pool, value)?;
         let (name, signature) = match &from {
             HirType::Bool => ("ofBoolean", "(Z)Lnts/rt/NtsValue;"),
             HirType::Managed(ManagedType::String) => {
@@ -1291,15 +1297,15 @@ impl Emitter<'_> {
             // it saves a narrowing at each site.
             OpKind::ArrayNew { length, .. } if self.shape.grows => {
                 let class = self.growable_class(ty)?;
-                self.push_as(code, *length, Kind::Double, origin)?;
+                self.push_as(code, pool, *length, Kind::Double, origin)?;
                 code.invoke_static(origin, pool, &class, "of", &format!("(D)L{class};"));
                 Ok(Placed::OnStack)
             }
             OpKind::ArrayGet { array, index, .. } if self.shape.grows => {
                 let class = self.growable_class(&self.ty(*array).clone())?;
                 let (element, holds) = self.growable_element(&self.ty(*array).clone())?;
-                self.load(code, *array)?;
-                self.push_as(code, *index, Kind::Double, origin)?;
+                self.load(code, pool, *array)?;
+                self.push_as(code, pool, *index, Kind::Double, origin)?;
                 code.invoke_static(
                     origin,
                     pool,
@@ -1326,12 +1332,12 @@ impl Emitter<'_> {
             OpKind::ArraySet { array, index, value, .. } if self.shape.grows => {
                 let class = self.growable_class(&self.ty(*array).clone())?;
                 let (element, holds) = self.growable_element(&self.ty(*array).clone())?;
-                self.load(code, *array)?;
-                self.push_as(code, *index, Kind::Double, origin)?;
+                self.load(code, pool, *array)?;
+                self.push_as(code, pool, *index, Kind::Double, origin)?;
                 if holds == Kind::Ref {
-                    self.load(code, *value)?;
+                    self.load(code, pool, *value)?;
                 } else {
-                    self.push_as(code, *value, holds, origin)?;
+                    self.push_as(code, pool, *value, holds, origin)?;
                 }
                 code.invoke_static(
                     origin,
@@ -1344,22 +1350,22 @@ impl Emitter<'_> {
             }
             OpKind::ArrayNew { length, .. } => {
                 let element = self.element_descriptor(ty)?;
-                self.subscript(code, *length, origin)?;
+                self.subscript(code, pool, *length, origin)?;
                 code.new_array(origin, pool, &element);
                 Ok(Placed::OnStack)
             }
             OpKind::ArrayGet { array, index, checked } => {
                 let element = self.element_descriptor(&self.ty(*array).clone())?;
-                self.load(code, *array)?;
+                self.load(code, pool, *array)?;
                 self.checked_subscript(code, pool, *index, *checked, origin)?;
                 code.array_load(origin, &element);
                 Ok(Placed::OnStack)
             }
             OpKind::ArraySet { array, index, value, checked } => {
                 let element = self.element_descriptor(&self.ty(*array).clone())?;
-                self.load(code, *array)?;
+                self.load(code, pool, *array)?;
                 self.checked_subscript(code, pool, *index, *checked, origin)?;
-                self.load(code, *value)?;
+                self.load(code, pool, *value)?;
                 code.array_store(origin, &element);
                 Ok(Placed::Stored)
             }
@@ -1389,7 +1395,7 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
         if !checked {
-            return self.subscript(code, index, origin);
+            return self.subscript(code, pool, index, origin);
         }
         // An index the middle end already keeps in an integer cannot be
         // fractional, so only the range is in question and the check is two
@@ -1413,7 +1419,7 @@ impl Emitter<'_> {
         // per access.
         code.dup(origin);
         code.array_length(origin);
-        self.push_as(code, index, if integral { kind } else { Kind::Double }, origin)?;
+        self.push_as(code, pool, index, if integral { kind } else { Kind::Double }, origin)?;
         // The length stays an `int` in both forms: widening it only to compare
         // against a double costs an instruction per access and buys nothing --
         // `index < length` promotes the `int` for free.
@@ -1446,10 +1452,11 @@ impl Emitter<'_> {
     fn subscript(
         &mut self,
         code: &mut Code,
+        pool: &mut Pool,
         value: ValueId,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
-        self.push_as(code, value, Kind::Int, origin)
+        self.push_as(code, pool, value, Kind::Int, origin)
     }
 
     /// Load a value and put it in the representation the *instruction* wants.
@@ -1462,11 +1469,12 @@ impl Emitter<'_> {
     fn push_as(
         &mut self,
         code: &mut Code,
+        pool: &mut Pool,
         value: ValueId,
         wanted: Kind,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
-        self.load(code, value)?;
+        self.load(code, pool, value)?;
         let have = self.kind_of(value)?;
         convert_kind(code, origin, have, wanted)
             .ok_or_else(|| refuse(self.func, &format!("a {have:?} where a {wanted:?} is needed")))
@@ -1537,7 +1545,7 @@ impl Emitter<'_> {
             // 4.0x to say so. The widening is explicit here for the same reason
             // the coercion's is: the slot the middle end chose is the slot.
             OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::String)) => {
-                self.load(code, *of)?;
+                self.load(code, pool, *of)?;
                 code.invoke_virtual(origin, pool, types::STRING, "length", "()I");
                 self.adapt(code, Kind::Int, ty, origin)?;
                 Ok(Placed::OnStack)
@@ -1552,7 +1560,7 @@ impl Emitter<'_> {
                     HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_))
                 ) =>
             {
-                self.load(code, *of)?;
+                self.load(code, pool, *of)?;
                 code.invoke_static(origin, pool, types::MAP, "size", "(Lnts/rt/NtsMap;)D");
                 self.adapt(code, Kind::Double, ty, origin)?;
                 Ok(Placed::OnStack)
@@ -1562,13 +1570,13 @@ impl Emitter<'_> {
                     && matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) =>
             {
                 let class = self.growable_class(&self.ty(*of).clone())?;
-                self.load(code, *of)?;
+                self.load(code, pool, *of)?;
                 code.invoke_static(origin, pool, &class, "length", &format!("(L{class};)D"));
                 self.adapt(code, Kind::Double, ty, origin)?;
                 Ok(Placed::OnStack)
             }
             OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) => {
-                self.load(code, *of)?;
+                self.load(code, pool, *of)?;
                 code.array_length(origin);
                 self.adapt(code, Kind::Int, ty, origin)?;
                 Ok(Placed::OnStack)
@@ -1584,13 +1592,13 @@ impl Emitter<'_> {
             // compiler proved the index in range neither applies, so `charAt`
             // is called directly and the helper is not in the program.
             OpKind::StringUnitAt { string, index, checked } => {
-                self.load(code, *string)?;
+                self.load(code, pool, *string)?;
                 if *checked {
-                    self.push_as(code, *index, Kind::Double, origin)?;
+                    self.push_as(code, pool, *index, Kind::Double, origin)?;
                     code.invoke_static(origin, pool, RUNTIME, "charCodeAt", "(Ljava/lang/String;D)D");
                     self.adapt(code, Kind::Double, ty, origin)?;
                 } else {
-                    self.push_as(code, *index, Kind::Int, origin)?;
+                    self.push_as(code, pool, *index, Kind::Int, origin)?;
                     code.invoke_virtual(origin, pool, types::STRING, "charAt", "(I)C");
                     self.adapt(code, Kind::Int, ty, origin)?;
                 }
@@ -1602,7 +1610,7 @@ impl Emitter<'_> {
     }
 
     /// A literal, in whichever width the middle end gave it.
-    fn constant(
+    pub(crate) fn constant(
         &self,
         code: &mut Code,
         pool: &mut Pool,
@@ -1729,8 +1737,8 @@ impl Emitter<'_> {
                 ));
             };
             let origin = self.func.values[lhs.0 as usize].origin.clone();
-            self.load(code, lhs)?;
-            self.load(code, rhs)?;
+            self.load(code, pool, lhs)?;
+            self.load(code, pool, rhs)?;
             code.invoke_static(&origin, pool, types::BIGINT, name, signature);
             if op == BinOp::Ne {
                 code.const_int(&origin, pool, 1);
@@ -1766,8 +1774,8 @@ impl Emitter<'_> {
             }
             _ if op == BinOp::Concat => {
                 let origin = self.func.values[lhs.0 as usize].origin.clone();
-                self.load(code, lhs)?;
-                self.load(code, rhs)?;
+                self.load(code, pool, lhs)?;
+                self.load(code, pool, rhs)?;
                 code.invoke_virtual(
                     &origin,
                     pool,
@@ -1780,8 +1788,8 @@ impl Emitter<'_> {
             _ => return Ok(None),
         };
         let origin = self.func.values[lhs.0 as usize].origin.clone();
-        self.load(code, lhs)?;
-        self.load(code, rhs)?;
+        self.load(code, pool, lhs)?;
+        self.load(code, pool, rhs)?;
         code.invoke_static(&origin, pool, owner, name, signature);
         if op == BinOp::Ne {
             code.const_int(&origin, pool, 1);
@@ -1874,8 +1882,8 @@ impl Emitter<'_> {
             BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr | BinOp::UShr
         ) && matches!(kind, Kind::Double | Kind::Float)
         {
-            self.push_as(code, lhs, Kind::Int, &origin)?;
-            self.push_as(code, rhs, Kind::Int, &origin)?;
+            self.push_as(code, pool, lhs, Kind::Int, &origin)?;
+            self.push_as(code, pool, rhs, Kind::Int, &origin)?;
             match op {
                 BinOp::BitAnd => code.bitwise(&origin, insn::AND, Kind::Int),
                 BinOp::BitOr => code.bitwise(&origin, insn::OR, Kind::Int),
@@ -1903,8 +1911,8 @@ impl Emitter<'_> {
             }
             return Ok(Placed::OnStack);
         }
-        self.load(code, lhs)?;
-        self.load(code, rhs)?;
+        self.load(code, pool, lhs)?;
+        self.load(code, pool, rhs)?;
         match op {
             BinOp::Add => code.arithmetic(&origin, insn::ADD, kind),
             BinOp::Sub => code.arithmetic(&origin, insn::SUB, kind),
@@ -1966,8 +1974,8 @@ impl Emitter<'_> {
             return self.branch_on_erased(code, pool, test, target, &origin);
         }
         if matches!(self.ty(lhs), HirType::BigInt) {
-            self.load(code, lhs)?;
-            self.load(code, rhs)?;
+            self.load(code, pool, lhs)?;
+            self.load(code, pool, rhs)?;
             code.invoke_static(
                 &origin,
                 pool,
@@ -1993,8 +2001,8 @@ impl Emitter<'_> {
             return self.branch_on_erased(code, pool, test, target, &origin);
         }
         if matches!(self.ty(lhs), HirType::BigInt) {
-            self.load(code, lhs)?;
-            self.load(code, rhs)?;
+            self.load(code, pool, lhs)?;
+            self.load(code, pool, rhs)?;
             code.invoke_static(
                 &origin,
                 pool,
@@ -2007,8 +2015,8 @@ impl Emitter<'_> {
             return Ok(());
         }
         if matches!(self.ty(lhs), HirType::Managed(ManagedType::String)) {
-            self.load(code, lhs)?;
-            self.load(code, rhs)?;
+            self.load(code, pool, lhs)?;
+            self.load(code, pool, rhs)?;
             code.invoke_virtual(
                 &origin,
                 pool,
@@ -2020,8 +2028,8 @@ impl Emitter<'_> {
             code.branch_zero(&origin, test, target);
             return Ok(());
         }
-        self.load(code, lhs)?;
-        self.load(code, rhs)?;
+        self.load(code, pool, lhs)?;
+        self.load(code, pool, rhs)?;
         // Integers are totally ordered, so inverting the comparison and
         // inverting the test are the same thing there. Floats are not, which is
         // why only this arm may do it.
@@ -2098,7 +2106,7 @@ impl Emitter<'_> {
             // A bigint has no `ineg`; negation is a call like every other
             // operation on one.
             UnOp::Neg if matches!(result, HirType::BigInt) => {
-                self.load(code, operand)?;
+                self.load(code, pool, operand)?;
                 code.invoke_static(
                     &origin,
                     pool,
@@ -2109,26 +2117,26 @@ impl Emitter<'_> {
                 Kind::Ref
             }
             UnOp::Neg => {
-                self.push_as(code, operand, kind, &origin)?;
+                self.push_as(code, pool, operand, kind, &origin)?;
                 code.negate(&origin, kind);
                 kind
             }
             // `!x` on a boolean, which is an `int` that is 0 or 1.
             UnOp::Not => {
-                self.push_as(code, operand, Kind::Int, &origin)?;
+                self.push_as(code, pool, operand, Kind::Int, &origin)?;
                 code.const_int(&origin, pool, 1);
                 code.bitwise(&origin, insn::XOR, Kind::Int);
                 Kind::Int
             }
             UnOp::ToInt32 | UnOp::ToUint32 => {
-                self.load(code, operand)?;
+                self.load(code, pool, operand)?;
                 self.coercion(code, pool, op, from, result, &origin)?;
                 // `coercion` lands the value in the result's own kind, having
                 // been told what it is.
                 kind
             }
             UnOp::Floor | UnOp::Ceil | UnOp::Sqrt | UnOp::Trunc | UnOp::Round => {
-                self.push_as(code, operand, Kind::Double, &origin)?;
+                self.push_as(code, pool, operand, Kind::Double, &origin)?;
                 let (owner, name) = match op {
                     UnOp::Floor => ("java/lang/Math", "floor"),
                     UnOp::Ceil => ("java/lang/Math", "ceil"),
@@ -2143,7 +2151,7 @@ impl Emitter<'_> {
                 Kind::Double
             }
             UnOp::Abs => {
-                self.push_as(code, operand, kind, &origin)?;
+                self.push_as(code, pool, operand, kind, &origin)?;
                 let descriptor = kind.descriptor();
                 let signature = format!("({descriptor}){descriptor}");
                 code.invoke_static(&origin, pool, "java/lang/Math", "abs", &signature);
@@ -2242,18 +2250,18 @@ impl Emitter<'_> {
     ) -> Result<Placed, Diagnostic> {
         let origin = self.func.values[operand.0 as usize].origin.clone();
         if matches!(self.ty(operand), HirType::Bool) {
-            self.load(code, operand)?;
+            self.load(code, pool, operand)?;
             return Ok(Placed::OnStack);
         }
         // Emptiness, not nullness -- and a null one is falsy too, so a length
         // check alone throws on the case it is meant to answer.
         if matches!(self.ty(operand), HirType::Managed(ManagedType::String)) {
-            self.load(code, operand)?;
+            self.load(code, pool, operand)?;
             code.invoke_static(&origin, pool, RUNTIME, "stringTruthy", "(Ljava/lang/String;)Z");
             return Ok(Placed::OnStack);
         }
         if *self.ty(operand) == HirType::Erased {
-            self.load(code, operand)?;
+            self.load(code, pool, operand)?;
             code.invoke_static(&origin, pool, types::VALUE, "truthy", "(Lnts/rt/NtsValue;)Z");
             return Ok(Placed::OnStack);
         }
@@ -2262,7 +2270,7 @@ impl Emitter<'_> {
         // string rule and only a string rule, which is why that case is above
         // this one rather than folded into it.
         if kind == Kind::Ref {
-            self.load(code, operand)?;
+            self.load(code, pool, operand)?;
             code.invoke_static(&origin, pool, RUNTIME, "isPresent", "(Ljava/lang/Object;)Z");
             return Ok(Placed::OnStack);
         }
@@ -2273,11 +2281,11 @@ impl Emitter<'_> {
         let done = code.label();
         match kind {
             Kind::Int => {
-                self.load(code, operand)?;
+                self.load(code, pool, operand)?;
                 code.branch_zero(&origin, Compare::Eq, falsy);
             }
             Kind::Long => {
-                self.load(code, operand)?;
+                self.load(code, pool, operand)?;
                 code.const_long(&origin, pool, 0);
                 code.compare(&origin, insn::LCMP, Kind::Long);
                 code.branch_zero(&origin, Compare::Eq, falsy);
@@ -2285,10 +2293,10 @@ impl Emitter<'_> {
             Kind::Float | Kind::Double => {
                 // `x != x` is the NaN test, and it must come first: `NaN != 0`
                 // is true, so testing against zero alone calls NaN truthy.
-                self.load(code, operand)?;
-                self.load(code, operand)?;
+                self.load(code, pool, operand)?;
+                self.load(code, pool, operand)?;
                 code.branch_float(&origin, Compare::Ne, kind, falsy);
-                self.load(code, operand)?;
+                self.load(code, pool, operand)?;
                 if kind == Kind::Double {
                     code.const_double(&origin, pool, 0.0);
                 } else {
@@ -2474,7 +2482,7 @@ impl Emitter<'_> {
                     ));
                 };
                 for &arg in args {
-                    self.load(code, arg)?;
+                    self.load(code, pool, arg)?;
                 }
                 code.invoke_static(origin, pool, owner, member, &descriptor);
                 let returns = descriptor.rsplit(')').next().unwrap_or("").to_owned();
@@ -2528,7 +2536,7 @@ impl Emitter<'_> {
                     ));
                 };
                 for &arg in args {
-                    self.load(code, arg)?;
+                    self.load(code, pool, arg)?;
                 }
                 let member = crate::hierarchy::member_name(declared);
                 code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
@@ -2601,7 +2609,7 @@ impl Emitter<'_> {
                 };
                 let member = crate::hierarchy::member_name(declared);
                 for &arg in args {
-                    self.load(code, arg)?;
+                    self.load(code, pool, arg)?;
                 }
                 code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
                 // The declaration says what the *type* returns; the call
@@ -2679,7 +2687,7 @@ impl Emitter<'_> {
             self.assignable_types(&self.ty(arg).clone(), &param.ty)?;
         }
         for &arg in args {
-            self.load(code, arg)?;
+            self.load(code, pool, arg)?;
         }
         let method = crate::body::method_name(name);
         code.invoke_static(origin, pool, PROGRAM, &method, &signature);
@@ -2730,7 +2738,7 @@ impl Emitter<'_> {
             Terminator::Return(value) => {
                 match value {
                     Some(value) => {
-                        self.load(code, *value)?;
+                        self.load(code, pool, *value)?;
                         let kind = self.kind_of(*value)?;
                         code.ret(&origin, Some(kind));
                     }
@@ -2780,10 +2788,10 @@ impl Emitter<'_> {
                 // gets a label of its own and the false arm falls through.
                 let arm = code.label();
                 self.branch_on(code, pool, *cond, fused, false, arm)?;
-                self.apply(code, else_copies)?;
+                self.apply(code, pool, else_copies)?;
                 code.goto(&origin, else_label);
                 code.bind(arm);
-                self.apply(code, then_copies)?;
+                self.apply(code, pool, then_copies)?;
                 code.goto(&origin, then_label);
                 Ok(())
             }
@@ -2814,7 +2822,7 @@ impl Emitter<'_> {
             };
             return self.compare_and_branch(code, pool, Test { compare, negate: invert, lhs, rhs }, target);
         }
-        self.load(code, cond)?;
+        self.load(code, pool, cond)?;
         let compare = if invert { Compare::Eq } else { Compare::Ne };
         code.branch_zero(&origin, compare, target);
         Ok(())
@@ -2834,7 +2842,7 @@ impl Emitter<'_> {
     ) -> Result<(), Diagnostic> {
         let _ = pool;
         let copies = self.copies(target, args);
-        self.apply(code, copies)
+        self.apply(code, pool, copies)
     }
 
     /// A sequenced parallel copy, as loads and stores.
@@ -2842,14 +2850,19 @@ impl Emitter<'_> {
     /// The sequencing is `nts_codegen_common`'s, not this backend's -- two
     /// emitters ordering a swap independently is exactly the drift that crate
     /// exists to prevent.
-    fn apply(&mut self, code: &mut Code, copies: Vec<Copy>) -> Result<(), Diagnostic> {
+    fn apply(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        copies: Vec<Copy>,
+    ) -> Result<(), Diagnostic> {
         for copy in copies {
             match copy {
                 Copy::Move { to, from } => {
                     self.assignable(from, to)?;
                     let kind = self.kind_of(from)?;
                     let origin = self.func.values[from.0 as usize].origin.clone();
-                    self.load(code, from)?;
+                    self.load(code, pool, from)?;
                     let Some(slot) = self.slot(to) else {
                         return Err(refuse(self.func, "a block parameter with no storage"));
                     };
@@ -2858,7 +2871,7 @@ impl Emitter<'_> {
                 Copy::Save { temp, from } => {
                     let kind = self.kind_of(from)?;
                     let origin = self.func.values[from.0 as usize].origin.clone();
-                    self.load(code, from)?;
+                    self.load(code, pool, from)?;
                     let Some(&slot) = self.temps.get(&(temp, kind as u8)) else {
                         return Err(refuse(self.func, "a copy cycle with no scratch slot"));
                     };
@@ -2908,7 +2921,7 @@ impl Emitter<'_> {
             return Err(refuse(self.func, "a guarded cell with no `ready` field"));
         };
         let (owner, member, descriptor) = self.field_ref(cell, u32::try_from(at).unwrap_or(0))?;
-        self.load(code, cell)?;
+        self.load(code, pool, cell)?;
         code.get_field(origin, pool, &owner, &member, &descriptor);
         code.const_string(origin, pool, name);
         code.invoke_static(

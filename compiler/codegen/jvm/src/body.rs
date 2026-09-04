@@ -48,6 +48,27 @@ pub fn refuse(func: &Func, what: &str) -> Diagnostic {
     )
 }
 
+/// A constant this backend re-emits at each use rather than storing once.
+///
+/// The JVM is a stack machine and a constant is one instruction that cannot
+/// fail: `iconst_1` is a byte, where `istore` plus a later `iload` is four
+/// bytes, a local slot, and a dependency the JIT has to see through. Every
+/// constant was going to a slot, and `upTo__resume` opened `iconst_1; istore
+/// 40; iload 39; iload 40; iadd` where `iload 39; iconst_1; iadd` is the same
+/// program.
+///
+/// A 128-bit literal is excluded because it is not a push: it is
+/// `NtsBigInt.of(J J)`, which allocates, and re-emitting that per use would
+/// trade four bytes for an object.
+pub(crate) fn rematerialised(func: &Func, value: ValueId) -> bool {
+    let op = &func.values[value.0 as usize];
+    match op.kind {
+        OpKind::ConstBool(_) | OpKind::ConstFloat(_) => true,
+        OpKind::ConstInt(_) => !matches!(op.ty, HirType::BigInt),
+        _ => false,
+    }
+}
+
 /// Whether an operation produced its value on the stack or wrote it away.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Placed {
@@ -137,6 +158,11 @@ impl<'a> Emitter<'a> {
             }
             let ty = &func.values[at].ty;
             if matches!(ty, HirType::Void) {
+                continue;
+            }
+            // A constant is pushed where it is read, so it needs no storage --
+            // which also buys back slot headroom against the 65,535 limit.
+            if rematerialised(func, value) {
                 continue;
             }
             let Some(vtype) = types::vtype(types::Shape::of(program), ty) else {
@@ -319,12 +345,22 @@ impl<'a> Emitter<'a> {
             .ok_or_else(|| refuse(self.func, &format!("a value of type {:?}", self.ty(value))))
     }
 
-    pub(crate) fn load(&self, code: &mut Code, value: ValueId) -> Result<(), Diagnostic> {
+    pub(crate) fn load(
+        &self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.func.values[value.0 as usize].origin.clone();
+        if rematerialised(self.func, value) {
+            let op = &self.func.values[value.0 as usize];
+            self.constant(code, pool, &op.kind, &op.ty, &origin)?;
+            return Ok(());
+        }
         let kind = self.kind_of(value)?;
         let Some(slot) = self.slot(value) else {
             return Err(refuse(self.func, "a value read before it was given storage"));
         };
-        let origin = self.func.values[value.0 as usize].origin.clone();
         code.load(&origin, kind, slot);
         Ok(())
     }
