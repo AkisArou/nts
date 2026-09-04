@@ -2150,6 +2150,8 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         collect_layouts(&mut lowered.program, builder.layouts);
     }
 
+    relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
+
     canonicalize_objects(&mut lowered.program);
     // The conservation law, enforced rather than merely measured: every
     // function the checker knows about is either lowered or refused, and never
@@ -2212,6 +2214,41 @@ fn generated_name(name: &str) -> bool {
         .is_some_and(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()))
 }
 
+/// A function type's layout name, from its *signature* rather than its type id.
+///
+/// Two ids for one written signature must share a layout -- the arrow's
+/// inferred type and the declared type of the slot it is stored into are
+/// different ids over the same contents -- and two different signatures must
+/// not. Neither is a question `same_shape` can answer, because every function
+/// type's layout is empty.
+///
+/// So the name carries the signature: parameter type ids, then `__`, then the
+/// return's. The separator matters -- `Fn2_2__2` is `(a, b) => c` and `Fn2__2`
+/// is `(a) => b`, and joining with one underscore would make those the same
+/// string. `A` marks an async signature, whose return is a promise the caller
+/// sees differently.
+fn signature_name(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
+    let Some((params, returns, asynchronous)) = signature_key(snapshot, ty) else {
+        return format!("Fn{}", ty.0);
+    };
+    let params: Vec<String> = params.iter().map(|param| param.0.to_string()).collect();
+    format!(
+        "Fn{}{}__{}",
+        if asynchronous { "A" } else { "" },
+        params.join("_"),
+        returns.0
+    )
+}
+
+/// Whether a layout name was made by [`signature_name`].
+///
+/// By prefix and shape rather than by a flag on the layout: `Layout` is what
+/// three backends read, and a field that exists to tell two of its own names
+/// apart is a field they would all have to ignore.
+fn is_signature_name(name: &str) -> bool {
+    name.starts_with("Fn") && name.contains("__")
+}
+
 fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
     for layout in layouts {
         if let Some(existing) = program.layouts.iter_mut().find(|known| {
@@ -2240,8 +2277,31 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
             let two_errors = super::builtin::is_error(&known.name)
                 && super::builtin::is_error(&layout.name)
                 && known.name != layout.name;
+            // Function types are the second family shape cannot answer for, and
+            // for the same reason: every one of them is *empty*. A function
+            // type is a signature rather than a class, so `Fn` layouts have no
+            // fields, no methods and no base -- and `same_shape` therefore says
+            // all of them are one layout.
+            //
+            // That was harmless while nothing dispatched through a function
+            // type. It stopped being harmless the moment a closure declared its
+            // `call` in one: `examples/function-values` collapsed
+            // `(number) => number`, `(number) => void` and
+            // `(number, number) => number` into a single layout holding eight
+            // type ids, and every closure then declared it overrode a signature
+            // two thirds of them do not have. The JVM said so --
+            // `Closure9.call is (D)V where the method it overrides is (D)D` --
+            // and nothing on a lane with pointers could.
+            //
+            // The names are structural, so this merges two ids for one written
+            // signature and separates two signatures. That is the distinction
+            // `same_shape` cannot make about a shape that is empty.
+            let two_signatures = is_signature_name(&known.name)
+                && is_signature_name(&layout.name)
+                && known.name != layout.name;
             known.types.iter().any(|ty| layout.types.contains(ty))
                 || (!two_errors
+                    && !two_signatures
                     && known.same_shape(&layout.fields, &layout.methods, layout.base))
         }) {
             for ty in layout.types {
@@ -2257,6 +2317,181 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
         } else {
             program.layouts.push(layout);
         }
+    }
+}
+
+/// A function type's signature as the ids it is made of, or `None` when the
+/// type is not a function.
+///
+/// Two type ids for one written signature compare equal here, which is the
+/// whole point: the checker interns the parameter and return types, so the
+/// inferred type of an arrow and the declared type of the variable it is
+/// assigned to are different ids over the same contents.
+fn signature_key(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Vec<TypeId>, TypeId, bool)> {
+    let record = snapshot.types.get(ty.0 as usize)?;
+    let TypeKind::Function(signature) = record.kind else {
+        return None;
+    };
+    let signature = snapshot.signatures.get(signature.0 as usize)?;
+    Some((
+        signature.parameters.iter().map(|param| param.ty).collect(),
+        signature.return_type,
+        signature.is_async,
+    ))
+}
+
+/// Give a closure's layout the function type it is a value of as its base, and
+/// give that function type an abstract declaration to dispatch through.
+///
+/// # Why the base alone is not enough
+///
+/// `closure_layout` builds `Closure{index}` with the closure's `call` in the
+/// shared closure slot; the function-type arm of `layout_of` builds `Fn{ty}`
+/// with **no fields and no methods**, because a function type is a signature
+/// rather than a class. Relating them by `base` alone therefore produces a
+/// base that declares nothing, and a call through an `Fn{ty}`-typed value has
+/// no method to reach -- on a machine with a vtable that is a null slot, and on
+/// the JVM it is a class that will not verify.
+///
+/// So the function type also gets an [`Func::abstract_declaration`], which is
+/// exactly what that field means: a signature the program declares, that
+/// nothing calls directly, and that every reachable receiver overrides. It was
+/// added for `abstract` methods and it turns out to name the same concept here.
+///
+/// # The signature is taken from the closure rather than from the checker
+///
+/// Every closure that is a value of one function type must agree with the
+/// others about the descriptor, or dispatch through the base is meaningless --
+/// which is the same requirement an override already has. Taking the signature
+/// from the first closure makes that agreement *checkable* rather than assumed:
+/// a backend comparing an override against what it overrides sees a real
+/// disagreement, where a signature synthesized from the checker would have
+/// quietly been a third opinion neither closure held.
+///
+/// # Named function types only
+///
+/// An inline `(x: number) => number` written in two places can be two type ids
+/// for one structural type, and two closures would then extend two different
+/// bases for the same signature. A type with no symbol is left alone, which
+/// leaves those programs exactly as they are today rather than differently
+/// wrong.
+fn relate_closures_to_signatures(
+    snapshot: &SemanticSnapshot,
+    closures: &[ClosureInfo],
+    hierarchy: &Hierarchy,
+    program: &mut Program,
+) {
+    let Some(slot) = hierarchy.closure_slot.map(|slot| slot as usize) else {
+        return;
+    };
+    // Collected first and applied after, because deciding needs the funcs and
+    // the layouts at once and applying mutates both.
+    let mut relate: Vec<(usize, TypeId, String)> = Vec::new();
+    let mut declare: Vec<(usize, Func)> = Vec::new();
+    // One declaration per signature, not per closure. Every closure of a type
+    // queues the same relation, and the layout is only written after the loop,
+    // so a test against the layout is a test against the state before any of
+    // them -- sixteen `Fn2#call`s in `captured-by-reference`, which `verify`
+    // caught as `DuplicateFunction` on the first run.
+    let mut declared_for: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
+
+
+    for (index, info) in closures.iter().enumerate() {
+        let (class, method) = closure_names(index);
+        let Some(at) = program.layouts.iter().position(|layout| layout.name == class) else {
+            continue;
+        };
+        let Some(&ty) = snapshot.node_types.get(&info.node) else {
+            continue;
+        };
+        let Some(record) = snapshot.types.get(ty.0 as usize) else {
+            continue;
+        };
+        // A function type, and one the program named. See above.
+        if !matches!(record.kind, TypeKind::Function(_)) || record.symbol.is_none() {
+            continue;
+        }
+        // *Not* the layout for this exact type id. The arrow's own type is the
+        // signature the checker inferred for it, and the slot it is stored into
+        // is declared with the type the program *wrote* -- two ids for one
+        // signature, and only the second has a layout. `function-values` has
+        // the arrow at type 1 and the declaration at type 8.
+        //
+        // So the two are related by their signatures rather than by their ids:
+        // the parameter types and the return type, which are themselves ids the
+        // checker has already interned. That is asking the checker whether two
+        // function types are the same signature, which it can answer, rather
+        // than guessing from a shape.
+        let Some(key) = signature_key(snapshot, ty) else {
+            continue;
+        };
+        let matching: Vec<usize> = program
+            .layouts
+            .iter()
+            .enumerate()
+            .filter(|(_, layout)| {
+                layout.types.iter().any(|&other| {
+                    other != ty && signature_key(snapshot, other).is_some_and(|found| found == key)
+                })
+            })
+            .map(|(at, _)| at)
+            .collect();
+        // Exactly one, or leave it alone. Two layouts for one signature is the
+        // case that would give two closures two different bases for the same
+        // type, which is what this is forbidden from guessing at.
+        let [signature] = matching[..] else {
+            continue;
+        };
+        let Some(call) = program.funcs.iter().find(|func| func.name == method) else {
+            continue;
+        };
+        // The id the *signature's layout* carries, not the arrow's. `base` is
+        // resolved by finding the layout that holds the id, and no layout holds
+        // the arrow's own -- which is the whole reason the two had to be
+        // matched by signature rather than by identity a few lines up. The
+        // declaration's receiver is typed with it for the same reason: a
+        // parameter whose type no layout answers for has no representation,
+        // and the backend refuses the dispatch rather than the type.
+        let Some(&base) = program.layouts[signature].types.first() else {
+            continue;
+        };
+        let declared = format!("{}#call", program.layouts[signature].name);
+        if declared_for.insert(signature)
+            && program.layouts[signature].methods.get(slot).is_none_or(Option::is_none)
+        {
+            let mut shell = call.clone();
+            shell.name.clone_from(&declared);
+            if let Some(receiver) = shell.params.first_mut() {
+                receiver.ty = HirType::Managed(ManagedType::Object(base));
+            }
+            // A declaration is its signature. The parameters keep their value
+            // ops because those *are* the signature in this IR; everything the
+            // body computed goes, and the single block says so.
+            shell.values.truncate(shell.params.len());
+            shell.blocks = vec![Block {
+                params: Vec::new(),
+                ops: Vec::new(),
+                terminator: Terminator::Unreachable,
+            }];
+            shell.exported = false;
+            shell.initializes_receiver = false;
+            shell.async_result = None;
+            shell.abstract_declaration = true;
+            declare.push((signature, shell));
+        }
+        relate.push((at, base, declared));
+    }
+
+    for (signature, shell) in declare {
+        let table = hierarchy.table_size();
+        if program.layouts[signature].methods.len() < table {
+            program.layouts[signature].methods.resize(table, None);
+        }
+        program.layouts[signature].methods[slot] = Some(shell.name.clone());
+        program.funcs.push(shell);
+    }
+    for (at, ty, _) in relate {
+        program.layouts[at].base = Some(ty);
     }
 }
 
@@ -11740,7 +11975,7 @@ impl<'a> FuncBuilder<'a> {
         if matches!(record.kind, TypeKind::Function(_)) {
             let layout = Layout {
                 types: vec![ty],
-                name: format!("Fn{}", ty.0),
+                name: signature_name(self.snapshot, ty),
                 fields: Vec::new(),
                 methods: Vec::new(),
                 // A function type is a signature, not a class.

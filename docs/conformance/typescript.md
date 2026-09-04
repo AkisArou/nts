@@ -406,7 +406,7 @@ is what the rest still want, and it is a different feature from this one.
 | ✅ | cycles: self, three-way, crossed by a function, re-export, late read |
 | ✅ | the temporal dead zone as a **compile-time** error (NTS1004) |
 | ✅ | module-scope state, including references |
-| ✗ | `import def from` — default imports |
+| ✅ | `import def from` — default imports | `export default x` binds the name `default` in the module's namespace, so this is `import { default as d }` and needs nothing of its own. Marked ✗ until an audit of this table against the compiler tried it; the gap was a missing fixture, not a missing feature |
 | ✗ | dynamic `import()` |
 | ✅ | a module-scope `const` holding a function, called, passed and compared by identity |
 | ✗ | a module-scope `let` holding a function — a second arrow is a second layout |
