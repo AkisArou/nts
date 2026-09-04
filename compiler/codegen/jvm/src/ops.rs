@@ -1399,22 +1399,30 @@ impl Emitter<'_> {
         // Routing this through the `double` form instead cost a widening, two
         // floating compares, a `Math.floor` and a narrowing per element, in
         // loops that previously emitted nothing at all.
-        let integral = self.kind_of(index)? == Kind::Int;
+        // An `i64` index is exactly as unable to be fractional as an `i32`, and
+        // testing only for `Int` sent it through the `double` form: an `l2d`,
+        // two floating compares and a whole-number test provably true of a
+        // long, per element. `awfy-nbody` indexes with an `i64`, which is why
+        // it sat at 39.28ms against hand-written Java's 7.97ms *after* the
+        // integral path was built -- the fix existed and did not cover it.
+        let kind = self.kind_of(index)?;
+        let integral = matches!(kind, Kind::Int | Kind::Long);
         // The array is already on the stack, so `dup` it for the length rather
         // than loading it again -- which is why `bounds` takes the length
         // first. The reloaded version emitted `aload 11; aload 11; arraylength`
         // per access.
         code.dup(origin);
         code.array_length(origin);
-        self.push_as(code, index, if integral { Kind::Int } else { Kind::Double }, origin)?;
+        self.push_as(code, index, if integral { kind } else { Kind::Double }, origin)?;
         // The length stays an `int` in both forms: widening it only to compare
         // against a double costs an instruction per access and buys nothing --
         // `index < length` promotes the `int` for free.
-        if integral {
-            code.invoke_static(origin, pool, RUNTIME, "bounds", "(II)I");
-        } else {
-            code.invoke_static(origin, pool, RUNTIME, "bounds", "(ID)I");
-        }
+        let descriptor = match kind {
+            Kind::Int => "(II)I",
+            Kind::Long => "(IJ)I",
+            _ => "(ID)I",
+        };
+        code.invoke_static(origin, pool, RUNTIME, "bounds", descriptor);
         Ok(())
     }
 
@@ -2926,6 +2934,7 @@ fn unsupported(kind: &OpKind) -> String {
                 .to_owned()
         }
         OpKind::Await { .. } | OpKind::Suspend { .. } => "an `await`".to_owned(),
+        OpKind::Yield { .. } => "a `yield`".to_owned(),
         OpKind::Return(_) => "a return operation".to_owned(),
         other => format!("{other:?}"),
     }

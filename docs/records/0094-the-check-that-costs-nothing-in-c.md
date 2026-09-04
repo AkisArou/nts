@@ -72,3 +72,41 @@ The C lane cannot see this one at all. Its failure path is `abort`, which the
 optimizer treats as the end of the world and therefore as free. On a platform
 where failure means an exception with observable state, the same three
 comparisons are not the same three comparisons.
+
+## Resolved: the fast path existed and was not selected
+
+**39.28ms → 8.62ms**, and `nts (JVM)/Java` from **4.93x to 1.08x**.
+
+`checked_subscript` chose the integral bounds check with
+`self.kind_of(index)? == Kind::Int`. `awfy-nbody` indexes with an **`i64`**, so
+`Kind::Long` failed that test and every access took the `double` form: an
+`l2d`, two floating-point compares, and `index == (double)(int) index` — a
+whole-number test that is *provably true of a long* — per element.
+
+The fix is a `bounds(int, long)` overload and `matches!(kind, Kind::Int |
+Kind::Long)`.
+
+### Why this record's four refuted hypotheses were all in the wrong place
+
+They were: not the call (C2 reports `inline (hot)`), not `Math.floor`, not the
+array reload, not the growable wrapper. Every one asks *why does the JIT not
+optimise this check away*. None asks **whether the check being emitted is the
+one that was meant to be**.
+
+That framing came from this record's own title, which is true and points away
+from the answer: the check does cost nothing in C, and it did cost 4.6x here,
+and neither fact locates the defect.
+
+### The part worth keeping
+
+`NtsRuntime.bounds(int, int)` exists **because of this row**. Its doc comment
+names `awfy-nbody`, quotes 8.66ms and 40.15ms, and explains that an integer
+cannot be fractional so only the range is in question. Someone measured this
+regression, diagnosed it, built the integral path and wrote the numbers down —
+and the fix did not cover the case it was written for, because the index was a
+`long`.
+
+So the row sat at 39.28ms with its own cure in the tree, beside a comment that
+stayed true the whole time. A fix that names its own motivating case is not
+evidence that the case is fixed, and the doc comment is what made it look like
+one.

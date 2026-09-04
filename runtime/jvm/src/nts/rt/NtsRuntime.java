@@ -1260,6 +1260,28 @@ public final class NtsRuntime {
         return outside(index, length);
     }
 
+    /**
+     * The same, for an index the middle end keeps in an `i64`.
+     *
+     * <p>A `long` is exactly as unable to be fractional as an `int`, and this
+     * overload exists because the emitter tested for `int` alone: an `i64`
+     * index fell through to the `double` form and paid an `l2d`, two floating
+     * compares and a whole-number test that is *provably true of a long*, per
+     * element. `awfy-nbody` indexes with an `i64` and was still at 39.28ms
+     * against hand-written Java's 7.97ms with the `int` overload already in
+     * place -- the fix for that row had been written and did not cover it.
+     *
+     * <p>The narrowing is safe rather than merely convenient: `arraylength` is
+     * an `int`, so an index that passes `index < length` is below 2^31 by
+     * construction, and one that does not passes through {@link #outside}.
+     */
+    public static int bounds(int length, long index) {
+        if (index >= 0L && index < length) {
+            return (int) index;
+        }
+        return outside((double) index, length);
+    }
+
     // ----- the bare-array searches ----------------------------------------
     //
     // A program that never grows an array keeps `double[]` and friends, so
