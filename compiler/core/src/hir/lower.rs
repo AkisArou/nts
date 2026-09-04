@@ -4027,7 +4027,15 @@ impl<'a> FuncBuilder<'a> {
             return format!("`{}`, a namespace", record.name);
         }
         if is(SymbolFlags::ENUM) {
-            return format!("`{}`, an enum", record.name);
+            // A *member* access is a constant and is lowered as one. Reaching
+            // here means the enum itself is wanted as an object -- which is
+            // `Colour[1]`, the reverse mapping, and that needs the table a
+            // plain enum emits alongside its members. Saying which keeps this
+            // from reading as "enums are unsupported", which they are not.
+            return format!(
+                "`{}` as an object rather than a member, which is the reverse mapping",
+                record.name
+            );
         }
         if record.declarations.is_empty() {
             // Nothing in the compiled set declares it, so it is a global the
@@ -12110,6 +12118,30 @@ impl<'a> FuncBuilder<'a> {
 
     /// `xs.length`. Other members are not lowered yet.
     fn lower_property_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        // `Colour.Red` is a constant, and the checker has already worked out
+        // which one: it gives the access a *literal* type carrying the value.
+        // So there is nothing to look up at run time and no object to look it
+        // up in -- which is why an enum was refused as "used as a value rather
+        // than as a type". It is not being used as a value; the member is.
+        //
+        // A `const enum` is the same thing said twice. TypeScript's own erasure
+        // of one is exactly this substitution, and a plain `enum` differs only
+        // in also emitting a reverse-mapping object, which nothing in a
+        // compiled program can reach without `Colour[n]`.
+        match self.enum_member(id) {
+            Some(EnumMember::Number(value)) => {
+                let origin = self.origin(id);
+                return Ok(self.push(OpKind::ConstFloat(value), HirType::NUMBER, origin));
+            }
+            // A string enum member is a constant too, and a *managed* one. It
+            // wants the interned static a string literal gets rather than an
+            // immediate, which is a different emission and not this one.
+            // Refused by name so the message says which enum and not "an enum".
+            Some(EnumMember::Text) => {
+                return Err(self.unsupported(id, "a string enum member"));
+            }
+            None => {}
+        }
         let children = self.children(id);
         // `a?.b`, which is three children because the `?.` is a token of its
         // own between the receiver and the name.
@@ -12753,6 +12785,36 @@ impl<'a> FuncBuilder<'a> {
             Logical::Or => (keep, assign),
         };
         self.lower_branching_value(id, condition, then_branch, else_branch)
+    }
+
+    /// The value of an enum member access, where that is what this is.
+    ///
+    /// Both halves are asked. The *object* has to be an enum -- otherwise any
+    /// property access whose type happens to be a literal would fold, which is
+    /// constant propagation and not this. And the access's own type has to be a
+    /// numeric literal, which is where the value comes from.
+    ///
+    /// A string enum answers `LiteralValue::String` and falls through to the
+    /// refusal, which is correct for now: `Colour.Red` as a string is a
+    /// constant too, but it is a *managed* constant and wants the interned
+    /// static a string literal gets rather than an immediate.
+    fn enum_member(&self, id: NodeId) -> Option<EnumMember> {
+        let object = *self.children(id).first()?;
+        let symbol = self.node(object).symbol?;
+        let record = self.snapshot.symbols.get(symbol.0 as usize)?;
+        if !record.flags.contains(SymbolFlags::ENUM) {
+            return None;
+        }
+        let ty = self.snapshot.node_types.get(&id)?;
+        match &self.snapshot.types.get(ty.0 as usize)?.kind {
+            TypeKind::Literal(nts_semantic_schema::LiteralValue::Number(value)) => {
+                Some(EnumMember::Number(*value))
+            }
+            TypeKind::Literal(nts_semantic_schema::LiteralValue::String(_)) => {
+                Some(EnumMember::Text)
+            }
+            _ => None,
+        }
     }
 
     /// `a ?? b` -- `a` unless `a` is absent.
@@ -16902,6 +16964,17 @@ fn math_constant(name: &str) -> Option<f64> {
         "SQRT1_2" => std::f64::consts::FRAC_1_SQRT_2,
         _ => return None,
     })
+}
+
+/// What an enum member access resolved to.
+///
+/// Two kinds because they need two emissions, not because they are two
+/// features: a number is an immediate and a string is the interned static a
+/// string literal gets.
+#[derive(Clone, Copy)]
+enum EnumMember {
+    Number(f64),
+    Text,
 }
 
 /// What a compound assignment applies to the place it reads.

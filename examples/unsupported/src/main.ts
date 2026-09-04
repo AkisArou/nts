@@ -78,3 +78,29 @@ export function nullishThroughAnAccessor(n: number): number {
   g.level ||= n;
   return g.level;
 }
+
+// An enum's *members* are constants and lower to immediates. The enum itself
+// as an object is the reverse mapping -- `Colour[1]` is `"Red"` -- and that
+// needs the table a plain enum emits alongside its members. Refused in those
+// words rather than as "an enum", which would read as the feature being absent
+// when it is present.
+enum Shade {
+  Dark = 1,
+  Light = 2,
+}
+
+export function reverseMapping(n: number): number {
+  return (Shade[1] === "Dark" ? 1 : 0) + n;
+}
+
+// A string enum member is a constant too, and a *managed* one: it wants the
+// interned static a string literal gets rather than an immediate. A different
+// emission, so a separate refusal with its own name.
+enum Label {
+  Short = "s",
+  Long = "l",
+}
+
+export function stringMember(n: number): number {
+  return Label.Short.length + n;
+}

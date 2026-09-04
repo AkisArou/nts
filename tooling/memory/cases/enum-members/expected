@@ -1,0 +1,25 @@
+ideal 0
+allocated 0
+because an enum has no run-time existence here at all.
+because
+because Allocations: none, and what nothing stands in for is the point. `tsc`
+because emits an object per enum -- a forward mapping and a reverse one -- and
+because every `Colour.Red` is a property read off it. A compiler that lowered
+because an enum the way JavaScript describes it would allocate one table per
+because enum and read a field per use, and both would be counted here. Neither
+because happens: the checker gives the member access a *literal* type carrying
+because the value, so it is an immediate.
+because
+because Operations: none. An immediate has no count, and there is no object for
+because a frame walk to give back.
+because
+because The floor is zero because the feature compiles to nothing rather than
+because to something small, and the check that says so directly is not this one:
+because the emitted C for this program is **byte-identical** to the same loop
+because written with `1`, `2` and `4`. That is why there is no benchmark row --
+because a row would compile the same program twice.
+because
+because What this pins that the `diff` does not: if an enum ever starts being
+because materialised -- for the reverse mapping, which is refused today and
+because wanted eventually -- the object appears here as an allocation before it
+because appears anywhere else.

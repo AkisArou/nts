@@ -1201,3 +1201,60 @@ fn a_parameter_property_stores_the_field_before_the_body() {
         "the store must precede the body's read: store {first_store:?}, read {first_read:?}",
     );
 }
+
+#[test]
+fn an_enum_member_is_an_immediate_and_not_a_lookup() {
+    let Some(lowered) = lowered("enums") else {
+        return;
+    };
+    // The whole claim: an enum has no run-time existence. The checker gives
+    // `Colour.Red` a literal type carrying the value, so the member is an
+    // immediate and there is no object to read it from.
+    //
+    // Asserted as "no loads at all" rather than "a constant appears", because a
+    // constant appearing beside a load would still be a lookup -- and a lookup
+    // is what an enum lowered as an object would produce.
+    let func = func(&lowered, "explicitMembers");
+    assert!(
+        !func.values.iter().any(|op| matches!(
+            op.kind,
+            OpKind::FieldGet { .. } | OpKind::GlobalGet { .. } | OpKind::ArrayGet { .. }
+        )),
+        "an enum member must not be read from anything: {:?}",
+        func.values.iter().map(|op| &op.kind).collect::<Vec<_>>(),
+    );
+
+    // `Red = 1`, `Green = 2`, `Blue = 4` all present as immediates.
+    for want in [1.0, 2.0, 4.0] {
+        assert!(
+            func.values
+                .iter()
+                .any(|op| matches!(op.kind, OpKind::ConstFloat(v) if (v - want).abs() < f64::EPSILON)),
+            "no immediate for the member valued {want}",
+        );
+    }
+}
+
+#[test]
+fn the_two_enum_shapes_that_are_refused_are_named() {
+    let Some(lowered) = lowered("unsupported") else {
+        return;
+    };
+    // Both are constants the compiler could produce and does not, for two
+    // different reasons, so they get two messages. "An enum" over both of them
+    // ranks neither and reads as the feature being absent when it is present --
+    // which is the mistake `0074` records for a different family.
+    let messages: Vec<&str> = lowered
+        .diagnostics
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        messages.iter().any(|m| m.contains("the reverse mapping")),
+        "the reverse mapping should be named: {messages:?}",
+    );
+    assert!(
+        messages.iter().any(|m| m.contains("a string enum member")),
+        "a string enum member should be named: {messages:?}",
+    );
+}
