@@ -64,6 +64,10 @@ enum Generated {
     /// cell: the C backend's number is still worth having, and the gap is the
     /// point rather than an embarrassment to hide by failing the row.
     Llvm,
+    /// Class files, run by `java`. Not a C++ file linked against a generated
+    /// object: a different artifact *and* a different runner, which is the same
+    /// split `run_native`/`run_jvm` already made in the differential.
+    Jvm,
 }
 
 /// What a variant is called and how it is built.
@@ -104,6 +108,11 @@ const VARIANTS: &[Variant] = &[
         source: "nts.cpp",
         generated: Generated::Llvm,
     },
+    Variant {
+        label: "nts (jvm)",
+        source: "nts.cpp",
+        generated: Generated::Jvm,
+    },
 ];
 
 fn main() -> Result<()> {
@@ -142,11 +151,12 @@ fn main() -> Result<()> {
     }
 
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
         "case",
         "C++",
         "nts C",
         "nts LLVM",
+        "nts JVM",
         "nts f64",
         "node",
         "bun",
@@ -154,7 +164,7 @@ fn main() -> Result<()> {
         "nts/node",
         "nts/bun"
     );
-    println!("{}", "-".repeat(124));
+    println!("{}", "-".repeat(136));
 
     let mut rows = Vec::new();
     for case in &cases {
@@ -287,6 +297,15 @@ struct Row {
     /// The same program through the second backend. `None` where it refused
     /// the program, which is most of them today and is the honest answer.
     llvm: Option<f64>,
+    /// The same program as class files, run by `java`. `None` where the JVM
+    /// backend refused it, which is most of them today.
+    ///
+    /// **Not comparable to the native columns without saying so.** A JVM and a
+    /// JS engine are both warm JITs and this number excludes startup entirely,
+    /// where the native ones have none to exclude. The ratio worth taking here
+    /// is against hand-written Java, which is a column this table does not have
+    /// yet.
+    jvm: Option<f64>,
     /// Bun, where it is installed. `None` skips the column rather than
     /// reporting a zero that reads like a win.
     bun: Option<f64>,
@@ -394,6 +413,33 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         Err(_) => false,
     };
 
+    let results = variants(root, case, out, name, &tsconfig, &entry, provider, defines,
+        &specialized, &plain, &rendered, renderable, needs_unicode)?;
+    finish_row(case, &shown, &results)
+}
+
+/// Every variant of one case, built and measured in the order `VARIANTS` gives.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the paths a case builds from are computed once by its caller; \
+              bundling them into a struct would name a thing that exists for \
+              the length of one call"
+)]
+fn variants(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+    tsconfig: &Utf8Path,
+    entry: &[String],
+    provider: hir::Provider,
+    defines: &[&str],
+    specialized: &Utf8Path,
+    plain: &Utf8Path,
+    rendered: &Utf8Path,
+    renderable: bool,
+    needs_unicode: bool,
+) -> Result<Vec<Option<Measured>>> {
     let mut results: Vec<Option<Measured>> = Vec::new();
     for variant in VARIANTS {
         let binary = out.join(format!(
@@ -413,9 +459,17 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         let cpp = vec![source, root.join("benches/common/main.cpp")];
         let mut c = runtime_sources(out, needs_unicode);
         match variant.generated {
-            Generated::Specialized => c.push(specialized.clone()),
-            Generated::Unspecialized => c.push(plain.clone()),
-            Generated::Llvm if renderable => c.push(rendered.clone()),
+            // Not a C++ file linked against a generated object, so it leaves
+            // this loop rather than joining the command line below. A refused
+            // program has no classes, which empties the column and leaves the
+            // row -- the same bargain the LLVM column keeps.
+            Generated::Jvm => {
+                results.push(jvm_case(root, case, out, name, tsconfig, entry, provider).ok());
+                continue;
+            }
+            Generated::Specialized => c.push(specialized.to_owned()),
+            Generated::Unspecialized => c.push(plain.to_owned()),
+            Generated::Llvm if renderable => c.push(rendered.to_owned()),
             Generated::Llvm => {
                 results.push(None);
                 continue;
@@ -432,7 +486,15 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
             Err(error) => return Err(error),
         }
     }
+    Ok(results)
+}
 
+/// The engines, the checksum agreement, and the printed row.
+///
+/// Split from [`variants`] because they answer different questions: one builds
+/// this compiler's output, the other asks what everybody else got and whether
+/// the answers match.
+fn finish_row(case: &Utf8Path, shown: &str, results: &[Option<Measured>]) -> Result<Row> {
     let harness = case.join("bench.mjs");
     let node = measure(std::process::Command::new("node").arg(&harness))?;
     // The same source on the other engine. Bun runs `.ts` natively too, so it
@@ -441,7 +503,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         .map(|binary| measure(std::process::Command::new(binary).arg(&harness)))
         .transpose()?;
 
-    agreed(&results, bun.as_ref(), &node)?;
+    agreed(results, bun.as_ref(), &node)?;
 
     let required = |at: usize| -> Result<f64> {
         Ok(results
@@ -451,7 +513,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
             .ns_per_op)
     };
     let row = Row {
-        case: shown,
+        case: shown.to_owned(),
         cpp: results
             .get(2)
             .and_then(Option::as_ref)
@@ -463,14 +525,19 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
             .get(3)
             .and_then(Option::as_ref)
             .map(|it| it.ns_per_op),
+        jvm: results
+            .get(4)
+            .and_then(Option::as_ref)
+            .map(|it| it.ns_per_op),
         bun: bun.map(|result| result.ns_per_op),
     };
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9}",
         row.case,
         row.cpp.map_or_else(|| "--".to_owned(), human),
         human(row.nts),
         row.llvm.map_or_else(|| "--".to_owned(), human),
+        row.jvm.map_or_else(|| "--".to_owned(), human),
         human(row.unspecialized),
         human(row.node),
         row.bun.map_or_else(|| "--".to_owned(), human),
@@ -537,6 +604,153 @@ fn bun_binary() -> Option<Utf8PathBuf> {
 /// `nts.cpp` declares -- it is the only caller the compiled program has. Taking
 /// them from the file rather than fixing a name keeps a case free to call its
 /// workload whatever the workload is.
+/// What `bench_run` actually calls, read out of the one place it is written.
+///
+/// # Why this is parsed rather than declared again
+///
+/// Every case states its workload once, in `nts.cpp`: a `volatile` input at the
+/// call site and one call taking it. A hand-written `Case.java` beside it would
+/// be a second statement of the same thing, free to drift -- and a JVM column
+/// measuring a different workload than the C column would be a ratio about the
+/// harnesses. So the JVM lane reads the C shim rather than duplicating it, and
+/// the workload is the same by construction instead of by inspection.
+///
+/// The parse is narrow on purpose. Thirty-nine cases share one shape, and a
+/// case that does not match is refused rather than guessed at.
+fn workload(case: &Utf8Path) -> Result<(String, Vec<String>)> {
+    let source = std::fs::read_to_string(case.join("nts.cpp"))
+        .with_context(|| format!("reading {case}/nts.cpp"))?;
+    let body = source
+        .split_once("double bench_run(void) {")
+        .context("no `bench_run` to read a workload from")?
+        .1;
+    let mut inputs: Vec<(String, String)> = Vec::new();
+    for line in body.lines().map(str::trim) {
+        if let Some(rest) = line.strip_prefix("volatile ")
+            && let Some((declaration, value)) = rest.split_once('=')
+            && let Some(name) = declaration.split_whitespace().last()
+        {
+            inputs.push((name.to_owned(), value.trim_end_matches(';').trim().to_owned()));
+        }
+        if let Some(call) = line.strip_prefix("return ")
+            && let Some(open) = call.find('(')
+        {
+            let callee = call[..open].trim().to_owned();
+            let arguments = call[open + 1..]
+                .rsplit_once(')')
+                .context("an unterminated call in `bench_run`")?
+                .0;
+            let mut resolved = Vec::new();
+            for argument in arguments.split(',').map(str::trim).filter(|a| !a.is_empty()) {
+                let value = inputs
+                    .iter()
+                    .find(|(name, _)| name == argument)
+                    .map(|(_, value)| value.clone())
+                    .with_context(|| format!("`{argument}` is not a `volatile` input"))?;
+                resolved.push(value);
+            }
+            return Ok((callee, resolved));
+        }
+    }
+    bail!("{case}/nts.cpp has no `return <call>` in `bench_run`")
+}
+
+/// One case through the JVM backend: classes, the runtime jar, a generated
+/// driver, and `java`.
+fn jvm_case(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+    tsconfig: &Utf8Path,
+    entry: &[String],
+    provider: hir::Provider,
+) -> Result<Measured> {
+    use std::fmt::Write as _;
+
+    let (callee, arguments) = workload(case)?;
+    let program = prepared_program(tsconfig, entry, true, provider)?;
+    let emitted = nts_codegen_jvm::emit(&program);
+    if !emitted.is_complete() {
+        bail!("the JVM backend declined {} function(s)", emitted.diagnostics.len());
+    }
+    let dir = out.join(format!("{name}.jvm"));
+    std::fs::create_dir_all(&dir)?;
+    for class in &emitted.classes {
+        let path = dir.join(class.path());
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, &class.bytes)?;
+    }
+    let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
+    std::fs::write(&jar, nts_codegen_jvm::RUNTIME_JAR)?;
+
+    // The driver, from the workload the C shim already declares. Every input is
+    // a `volatile` field for the reason the C shim makes them `volatile`: a
+    // loop-invariant argument lets the JIT hoist the whole call out of the timed
+    // loop and report an impressive zero.
+    let mut driver = String::from("public final class Case {\n");
+    let mut passed = Vec::new();
+    for (at, value) in arguments.iter().enumerate() {
+        let _ = writeln!(driver, "    private static volatile double in{at} = {value};");
+        passed.push(format!("in{at}"));
+    }
+    let _ = writeln!(driver, "    public static void main(String[] argv) {{");
+    let _ = writeln!(driver, "        Bench.measure(new Bench.Work() {{");
+    let _ = writeln!(driver, "            @Override public double run() {{");
+    let _ = writeln!(
+        driver,
+        "                return nts.gen.Program.{}({});",
+        nts_codegen_jvm::body::method_name(&callee),
+        passed.join(", ")
+    );
+    let _ = writeln!(driver, "            }}\n        }});\n    }}\n}}");
+    let driver_path = dir.join("Case.java");
+    std::fs::write(&driver_path, driver)?;
+
+    let javac = java_tool("javac");
+    let built = std::process::Command::new(javac)
+        .arg("-cp")
+        .arg(&dir)
+        .arg("-d")
+        .arg(&dir)
+        .arg(root.join("benches/common/Bench.java"))
+        .arg(&driver_path)
+        .output()
+        .context("running javac")?;
+    if !built.status.success() {
+        bail!("javac: {}", String::from_utf8_lossy(&built.stderr));
+    }
+
+    let java = java_tool("java");
+    measure(
+        std::process::Command::new(java)
+            // Explicit rather than ergonomic: the default collector changes with
+            // the host, and a column that changes meaning with the machine is
+            // not an instrument. Equal bounds so no resizing happens mid-run.
+            .args(["-XX:+UseG1GC", "-Xms512m", "-Xmx512m", "-XX:-UsePerfData"])
+            .arg("-cp")
+            .arg(format!("{dir}:{jar}"))
+            .arg("Case"),
+    )
+}
+
+/// `JAVA_HOME` if it has the tool, else the bare name for `PATH` to resolve.
+///
+/// Infallible: a JDK that is absent is reported by the `Command` that fails to
+/// start, with the name in it, which is a better message than anything this
+/// could construct.
+fn java_tool(name: &str) -> Utf8PathBuf {
+    if let Ok(home) = std::env::var("JAVA_HOME") {
+        let path = Utf8PathBuf::from(home).join("bin").join(name);
+        if path.exists() {
+            return path;
+        }
+    }
+    Utf8PathBuf::from(name)
+}
+
 fn entry_points(case: &Utf8Path) -> Result<Vec<String>> {
     let source = std::fs::read_to_string(case.join("nts.cpp"))
         .with_context(|| format!("reading {case}/nts.cpp"))?;
@@ -574,6 +788,40 @@ fn emit(
     provider: hir::Provider,
     llvm: bool,
 ) -> Result<String> {
+    let program = prepared_program(tsconfig, entry, specialize, provider)?;
+    if llvm {
+        let emitted = nts_codegen_llvm::emit(&program);
+        // Silent by default: the second backend refuses whole categories of
+        // program and says so once per function, and twenty cases' worth of
+        // that would bury the table printed above it. `NTS_DECLINES=1` asks,
+        // because a refusal nothing prints is how a *regression* looks exactly
+        // like a feature that was never built.
+        if std::env::var_os("NTS_DECLINES").is_some() {
+            for diagnostic in &emitted.diagnostics {
+                eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
+            }
+        }
+        return Ok(emitted.text);
+    }
+    let emitted = nts_codegen_c::emit(&program);
+    for diagnostic in &emitted.diagnostics {
+        eprintln!("  {} {}", diagnostic.code, diagnostic.message);
+    }
+    Ok(emitted.writer.text().to_owned())
+}
+
+/// The middle end, run once and shared by every lane.
+///
+/// Split out of [`emit`] so the JVM backend gets the same program the C and
+/// LLVM columns do -- including the `Roots::Entry` argument the comment below
+/// exists to justify, which is the difference between measuring a benchmark and
+/// measuring a library.
+fn prepared_program(
+    tsconfig: &Utf8Path,
+    entry: &[String],
+    specialize: bool,
+    provider: hir::Provider,
+) -> Result<hir::Program> {
     let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(tsconfig)?;
     if snapshot.has_errors() {
@@ -609,26 +857,7 @@ fn emit(
     for diagnostic in &prepared.diagnostics {
         eprintln!("  {} {}", diagnostic.code, diagnostic.message);
     }
-
-    if llvm {
-        let emitted = nts_codegen_llvm::emit(&prepared.program);
-        // Silent by default: the second backend refuses whole categories of
-        // program and says so once per function, and twenty cases' worth of
-        // that would bury the table printed above it. `NTS_DECLINES=1` asks,
-        // because a refusal nothing prints is how a *regression* looks exactly
-        // like a feature that was never built.
-        if std::env::var_os("NTS_DECLINES").is_some() {
-            for diagnostic in &emitted.diagnostics {
-                eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
-            }
-        }
-        return Ok(emitted.text);
-    }
-    let emitted = nts_codegen_c::emit(&prepared.program);
-    for diagnostic in &emitted.diagnostics {
-        eprintln!("  {} {}", diagnostic.code, diagnostic.message);
-    }
-    Ok(emitted.writer.text().to_owned())
+    Ok(prepared.program)
 }
 
 /// Build one variant.
