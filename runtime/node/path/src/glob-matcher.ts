@@ -415,27 +415,78 @@ function splitPattern(pattern: string, windows: boolean): string[] {
        (windows && pattern.charAt(index + 1) === "\\"))) index++;
     start = index + 1;
   }
-  return optimizeParts(parts);
+  return parts;
 }
 
-function optimizeParts(parts: string[]): string[] {
-  const optimized: string[] = [];
-  for (let index = 0; index < parts.length; index++) {
-    const part = parts[index];
-    if (part === undefined) throw new Error(`glob pattern is missing component ${index}`);
-    if (part === "." && index !== 0) continue;
-    if (part === ".." && optimized.length > 0) {
-      const previous = optimized[optimized.length - 1];
-      if (previous !== undefined && previous !== "" && previous !== "." &&
-          previous !== ".." && previous !== "**") {
-        optimized.pop();
-        continue;
+/** Minimatch's level-two preprocessing, optimized for filesystem walking. */
+function preprocessPatternParts(initial: string[]): string[][] {
+  const patterns: string[][] = [initial];
+  let changed: boolean;
+  do {
+    changed = false;
+    for (let patternIndex = 0; patternIndex < patterns.length; patternIndex++) {
+      const parts = patterns[patternIndex];
+      if (parts === undefined) throw new Error(`glob is missing pattern ${patternIndex}`);
+
+      let globstar = -1;
+      while ((globstar = parts.indexOf("**", globstar + 1)) !== -1) {
+        let finalGlobstar = globstar;
+        while (parts[finalGlobstar + 1] === "**") finalGlobstar++;
+        if (finalGlobstar > globstar) {
+          parts.splice(globstar + 1, finalGlobstar - globstar);
+          changed = true;
+        }
+
+        const next = parts[globstar + 1];
+        const afterParent = parts[globstar + 2];
+        const following = parts[globstar + 3];
+        if (next !== ".." || afterParent === undefined || afterParent === "" ||
+            afterParent === "." || afterParent === ".." || following === undefined ||
+            following === "" || following === "." || following === "..") {
+          continue;
+        }
+
+        // `<pre>/**/../<p>/<p>/<rest>` is the union of walking out of
+        // `<pre>` and keeping the recursive walk below it. Expanding that
+        // union avoids repeatedly restarting a filesystem traversal.
+        changed = true;
+        parts.splice(globstar, 1);
+        const recursive = parts.slice();
+        recursive[globstar] = "**";
+        patterns.push(recursive);
+        globstar--;
+      }
+
+      for (let index = 1; index < parts.length - 1; index++) {
+        const part = parts[index];
+        if (part === "." || part === "") {
+          parts.splice(index, 1);
+          index--;
+          changed = true;
+        }
+      }
+      if (parts[0] === "." && parts.length === 2 &&
+          (parts[1] === "." || parts[1] === "")) {
+        parts.pop();
+        changed = true;
+      }
+
+      let parent = 0;
+      while ((parent = parts.indexOf("..", parent + 1)) !== -1) {
+        const previous = parts[parent - 1];
+        if (previous !== undefined && previous !== "" && previous !== "." &&
+            previous !== ".." && previous !== "**") {
+          const keepDot = parent === 1 && parts[parent + 1] === "**";
+          if (keepDot) parts.splice(parent - 1, 2, ".");
+          else parts.splice(parent - 1, 2);
+          if (parts.length === 0) parts.push("");
+          parent -= 2;
+          changed = true;
+        }
       }
     }
-    if (part === "**" && optimized[optimized.length - 1] === "**") continue;
-    optimized.push(part);
-  }
-  return optimized;
+  } while (changed);
+  return patterns;
 }
 
 export function compileGlobPatterns(
@@ -444,11 +495,21 @@ export function compileGlobPatterns(
 ): CompiledGlobPattern[] {
   const expanded: string[] = [];
   expandBracesInto(pattern, expanded);
-  const compiled = new Array<CompiledGlobPattern>(expanded.length);
+  const componentPatterns: string[][] = [];
   for (let index = 0; index < expanded.length; index++) {
     const alternative = expanded[index];
     if (alternative === undefined) throw new Error(`glob is missing alternative ${index}`);
-    compiled[index] = new CompiledGlobPattern(splitPattern(alternative, windows));
+    const preprocessed = preprocessPatternParts(splitPattern(alternative, windows));
+    for (let patternIndex = 0; patternIndex < preprocessed.length; patternIndex++) {
+      const parts = preprocessed[patternIndex];
+      if (parts !== undefined) componentPatterns.push(parts);
+    }
+  }
+  const compiled = new Array<CompiledGlobPattern>(componentPatterns.length);
+  for (let index = 0; index < componentPatterns.length; index++) {
+    const parts = componentPatterns[index];
+    if (parts === undefined) throw new Error(`glob is missing component pattern ${index}`);
+    compiled[index] = new CompiledGlobPattern(parts);
   }
   return compiled;
 }
@@ -550,6 +611,15 @@ export function matchesGlobPattern(
   windows: boolean,
 ): boolean {
   const alternatives = compileGlobPatterns(pattern, windows);
+  return matchesCompiledGlobPatterns(path, alternatives, windows);
+}
+
+/** Match using an already compiled pattern list, for filesystem exclusions. */
+export function matchesCompiledGlobPatterns(
+  path: string,
+  alternatives: CompiledGlobPattern[],
+  windows: boolean,
+): boolean {
   const values = splitValue(path, windows);
   for (let index = 0; index < alternatives.length; index++) {
     const alternative = alternatives[index];

@@ -37,6 +37,7 @@ import { Buffer } from "../../buffer/src/main.ts";
 import {
   bigintStatFs,
   BigIntStats,
+  Dirent,
   numberStatFs,
   type StatOptions,
   type StatFs,
@@ -44,6 +45,13 @@ import {
   type StatSyncOptions,
   Stats,
 } from "./stats.ts";
+import {
+  direntFromStats,
+  globWithFileSystem,
+  type AsyncGlobFileSystem,
+  type GlobOptions,
+  type GlobPatternInput,
+} from "./glob.ts";
 import {
   decodeScandirRows,
   normalizeReaddirOptions,
@@ -109,6 +117,71 @@ import { emitWarning } from "../../internal/process-warning.ts";
 import { asRequest, type Callback } from "./request.ts";
 
 export type { Callback } from "./request.ts";
+
+class PublicAsyncGlobFileSystem implements AsyncGlobFileSystem {
+  lstat(path: string): Promise<Dirent | null> {
+    return new Promise<Dirent | null>((resolve) => {
+      lstat(path, (error: unknown, stats?: AnyStats) => {
+        if (error !== null && error !== undefined || !(stats instanceof Stats)) {
+          resolve(null);
+        } else {
+          resolve(direntFromStats(path, stats));
+        }
+      });
+    });
+  }
+
+  stat(path: string): Promise<Stats | null> {
+    return new Promise<Stats | null>((resolve) => {
+      stat(path, (error: unknown, stats?: AnyStats) => {
+        if (error !== null && error !== undefined || !(stats instanceof Stats)) resolve(null);
+        else resolve(stats);
+      });
+    });
+  }
+
+  readdir(path: string): Promise<Dirent[]> {
+    return new Promise<Dirent[]>((resolve, reject) => {
+      readdir(
+        path,
+        { encoding: "utf8", withFileTypes: true },
+        (error: unknown, value?: ReaddirResult) => {
+          if (error !== null && error !== undefined || value === undefined) {
+            resolve([]);
+            return;
+          }
+          const entries = new Array<Dirent>(value.length);
+          for (let index = 0; index < value.length; index++) {
+            const entry = value[index];
+            if (!isTextDirent(entry)) {
+              reject(new Error(`fs readdir returned a non-text entry at index ${index}`));
+              return;
+            }
+            entries[index] = entry;
+          }
+          resolve(entries);
+        },
+      );
+    });
+  }
+
+  realpath(path: string): Promise<string | null> {
+    return new Promise<string | null>((resolve) => {
+      realpath(path, (error: unknown, value?: EncodedFileName) => {
+        if (error !== null && error !== undefined || typeof value !== "string") resolve(null);
+        else resolve(value);
+      });
+    });
+  }
+}
+
+function isTextDirent(
+  value: EncodedFileName | Dirent<EncodedFileName> | undefined,
+): value is Dirent {
+  return value instanceof Dirent && typeof value.name === "string";
+}
+
+const publicAsyncGlobFileSystem = new PublicAsyncGlobFileSystem();
 
 declare function nts_fs_open_async(
   path: string, flags: number, mode: number, callback: (errno: number, fd: number) => void,
@@ -1590,6 +1663,43 @@ export function readdir(
   } else {
     nts_fs_scandir_bytes_async(validatedPath, complete);
   }
+}
+
+export function glob(
+  pattern: GlobPatternInput,
+  callback: Callback<string[]>,
+): void;
+export function glob(
+  pattern: GlobPatternInput,
+  options: GlobOptions & { withFileTypes: true },
+  callback: Callback<Dirent[]>,
+): void;
+export function glob(
+  pattern: GlobPatternInput,
+  options: GlobOptions,
+  callback: Callback<Array<string | Dirent>>,
+): void;
+export function glob(
+  pattern: unknown,
+  optionsOrCallback: unknown,
+  suppliedCallback?: unknown,
+): void {
+  let options: unknown;
+  let callback: unknown;
+  if (typeof optionsOrCallback === "function") {
+    options = undefined;
+    callback = optionsOrCallback;
+  } else {
+    options = optionsOrCallback;
+    callback = suppliedCallback;
+  }
+  validateFunction(callback, "cb");
+  const request = asRequest(callback, "glob");
+  const operation = globWithFileSystem(pattern, options, publicAsyncGlobFileSystem);
+  operation.then(
+    (results: Array<string | Dirent>) => nextTick(() => request(null, results)),
+    (error: unknown) => nextTick(() => request(error)),
+  );
 }
 
 export function mkdir(

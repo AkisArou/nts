@@ -55,6 +55,13 @@ import {
   type ReaddirResult,
 } from "./readdir.ts";
 import {
+  direntFromStats,
+  globSyncWithFileSystem,
+  type GlobOptions,
+  type GlobPatternInput,
+  type SyncGlobFileSystem,
+} from "./glob.ts";
+import {
   bufferLengths,
   fillBuffers,
   flattenBuffers,
@@ -113,7 +120,7 @@ export { toUnixTimestamp as _toUnixTimestamp } from "./options.ts";
 // The callback surface, which shares this module's argument handling and its
 // errors: the work is the same system call and only the route back differs.
 export {
-  access, appendFile, chmod, chown, close, copyFile, cp, exists, fdatasync, fstat,
+  access, appendFile, chmod, chown, close, copyFile, cp, exists, fdatasync, fstat, glob,
   fsync, ftruncate, lchown, link, lstat, mkdir, mkdtemp, open, read, readFile, readdir,
   readlink, realpath, rename, rm, rmdir, stat, symlink, truncate, unlink,
   utimes, lutimes, write, writeFile, writev, readv, fchmod, fchown, futimes,
@@ -123,6 +130,7 @@ export {
 // `fs.promises` and `node:fs/promises` are the same object.
 export * as promises from "./promises.ts";
 export type { CopyOptions, CopySyncOptions } from "./cp-common.ts";
+export type { GlobExclude, GlobOptions, GlobPatternInput } from "./glob.ts";
 
 export { ReadStream, WriteStream, createReadStream, createWriteStream } from "./streams.ts";
 export { FSWatcher, StatWatcher, watch, watchFile, unwatchFile } from "./watchers.ts";
@@ -820,6 +828,10 @@ export type { ReaddirOptions } from "./readdir.ts";
 export function readdirSync(path: BytePathLike): string[];
 export function readdirSync(
   path: BytePathLike,
+  options: ReaddirOptions & { encoding: "utf8"; withFileTypes: true },
+): Dirent[];
+export function readdirSync(
+  path: BytePathLike,
   options: string | ReaddirOptions | null,
 ): ReaddirResult;
 export function readdirSync(
@@ -834,6 +846,55 @@ export function readdirSync(
   const displayPath = displayBytePath(validatedPath);
   checkErrno("scandir", displayPath);
   return decodeScandirRows(rows, displayPath, settings);
+}
+
+class PublicSyncGlobFileSystem implements SyncGlobFileSystem {
+  lstat(path: string): Dirent | null {
+    try {
+      return direntFromStats(path, lstatSync(path));
+    } catch {
+      return null;
+    }
+  }
+
+  stat(path: string): Stats | null {
+    try {
+      return statSync(path);
+    } catch {
+      return null;
+    }
+  }
+
+  readdir(path: string): Dirent[] {
+    try {
+      return readdirSync(path, { encoding: "utf8", withFileTypes: true });
+    } catch {
+      return [];
+    }
+  }
+
+  realpath(path: string): string | null {
+    try {
+      return realpathSync(path);
+    } catch {
+      return null;
+    }
+  }
+}
+
+const publicSyncGlobFileSystem = new PublicSyncGlobFileSystem();
+
+export function globSync(
+  pattern: GlobPatternInput,
+  options: GlobOptions & { withFileTypes: true },
+): Dirent[];
+export function globSync(pattern: GlobPatternInput, options?: GlobOptions): string[];
+export function globSync(
+  pattern: GlobPatternInput,
+  options: GlobOptions,
+): Array<string | Dirent>;
+export function globSync(pattern: unknown, options?: unknown): Array<string | Dirent> {
+  return globSyncWithFileSystem(pattern, options, publicSyncGlobFileSystem);
 }
 
 export interface MkdirOptions {
