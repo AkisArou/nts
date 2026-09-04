@@ -44,6 +44,35 @@ for path in "$@"; do
   git ls-files --error-unmatch -- "$path" > /dev/null 2>&1 || git add -N -- "$path"
 done
 
+# Clippy before the commit, not after the floor.
+#
+# The gate is a serialised shared resource: three sessions queue on it, and a
+# step that fails in second position discards everything behind it. So the cost
+# of a lint warning is not the thirty seconds it takes me to find it, it is the
+# twenty-minute gate run somebody else loses -- incurred by one session and paid
+# by another. That asymmetry is why this is here rather than in anybody's
+# habits; it went wrong four times in one day with the habit fully understood.
+#
+# `NTS_SKIP_CLIPPY=1` for a commit that has to happen anyway, which is a
+# decision worth having to type.
+if [ -z "${NTS_SKIP_CLIPPY-}" ] && command -v cargo > /dev/null 2>&1; then
+  if ! cargo clippy --workspace --all-targets > /tmp/nts-commit-clippy.$$ 2>&1; then
+    echo "commit-mine: REFUSING -- clippy is not clean:" >&2
+    grep -E '^(warning|error)' /tmp/nts-commit-clippy.$$ | head -20 >&2
+    rm -f /tmp/nts-commit-clippy.$$
+    exit 1
+  fi
+  # `--all-targets` exits zero on warnings unless denied, so the text is the
+  # check rather than the status.
+  if grep -qE '^warning: ' /tmp/nts-commit-clippy.$$; then
+    echo "commit-mine: REFUSING -- clippy reported warnings:" >&2
+    grep -E '^warning: [a-z]' -A 2 /tmp/nts-commit-clippy.$$ | head -20 >&2
+    rm -f /tmp/nts-commit-clippy.$$
+    exit 1
+  fi
+  rm -f /tmp/nts-commit-clippy.$$
+fi
+
 before=$(git ls-tree -r HEAD --name-only | wc -l)
 
 # shellcheck disable=SC2086

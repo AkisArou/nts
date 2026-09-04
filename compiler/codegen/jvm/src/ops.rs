@@ -32,6 +32,21 @@ use crate::types;
 /// the reason `nts_runtime.h` gives about its own: the compiler knows the
 /// element type, and a runtime that had to be told it would be told it wrongly
 /// one day.
+/// One comparison, as the four things that decide which instructions it becomes.
+///
+/// A struct rather than four parameters because `negate` and `compare` are not
+/// independent on floats -- the comparison chooses the `dcmp` form and the
+/// negation chooses only the branch, since `!(a > b)` is not `a <= b` when
+/// `NaN` makes both false. Keeping them together is a reminder that they are
+/// read as a pair.
+#[derive(Clone, Copy)]
+pub(crate) struct Test {
+    pub compare: Compare,
+    pub negate: bool,
+    pub lhs: ValueId,
+    pub rhs: ValueId,
+}
+
 /// The one conversion instruction between two computational kinds, or none when
 /// they are already the same. `None` means there is no such instruction --
 /// which is every case involving a reference.
@@ -63,6 +78,12 @@ fn convert_kind(
     Some(())
 }
 
+const STRING_STRING_TO_D: &str = "(Ljava/lang/String;Ljava/lang/String;)D";
+const STRING_STRING_TO_Z: &str = "(Ljava/lang/String;Ljava/lang/String;)Z";
+const STRING_DD_TO_STRING: &str = "(Ljava/lang/String;DD)Ljava/lang/String;";
+const STRING_STRING_STRING_TO_STRING: &str =
+    "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;";
+
 fn external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match name {
         "nts_uncaught" => (RUNTIME, "uncaught", "(Lnts/rt/NtsValue;Ljava/lang/String;)V"),
@@ -73,6 +94,56 @@ fn external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
             "arrayFillRef",
             "([Ljava/lang/Object;Ljava/lang/Object;)[Ljava/lang/Object;",
         ),
+
+        // The coercions. Already in the runtime and simply not named here,
+        // which is the inverse of the C lane's `static inline` trap: there the
+        // definition is invisible to other backends, here the definition was
+        // present and the *name* was missing, and both spell as a refusal.
+        "nts_to_int8" => (RUNTIME, "toInt8", "(D)I"),
+        "nts_to_int16" => (RUNTIME, "toInt16", "(D)I"),
+        "nts_to_int32" => (RUNTIME, "toInt32", "(D)I"),
+        "nts_to_uint8" => (RUNTIME, "toUint8", "(D)I"),
+        "nts_to_uint16" => (RUNTIME, "toUint16", "(D)I"),
+        "nts_to_uint32" => (RUNTIME, "toUint32", "(D)I"),
+
+        "nts_math_pow" => (RUNTIME, "mathPow", "(DD)D"),
+        "nts_math_sinh" => (RUNTIME, "mathSinh", "(D)D"),
+        "nts_is_finite" => (RUNTIME, "isFinite", "(D)Z"),
+
+        "nts_str_index_of" => (RUNTIME, "strIndexOf", STRING_STRING_TO_D),
+        "nts_str_last_index_of" => (RUNTIME, "strLastIndexOf", STRING_STRING_TO_D),
+        "nts_str_includes" => (RUNTIME, "strIncludes", STRING_STRING_TO_Z),
+        "nts_str_starts_with" => (RUNTIME, "strStartsWith", STRING_STRING_TO_Z),
+        "nts_str_ends_with" => (RUNTIME, "strEndsWith", STRING_STRING_TO_Z),
+        "nts_str_point_width" => (RUNTIME, "strPointWidth", "(Ljava/lang/String;D)D"),
+        "nts_str_trim" => (RUNTIME, "strTrim", "(Ljava/lang/String;)Ljava/lang/String;"),
+        "nts_str_repeat" => (
+            RUNTIME,
+            "strRepeat",
+            "(Ljava/lang/String;D)Ljava/lang/String;",
+        ),
+        "nts_str_pad_start" => (
+            RUNTIME,
+            "strPadStart",
+            "(Ljava/lang/String;DLjava/lang/String;)Ljava/lang/String;",
+        ),
+        "nts_str_substring" => (RUNTIME, "strSubstring", STRING_DD_TO_STRING),
+        "nts_str_slice" => (RUNTIME, "strSlice", STRING_DD_TO_STRING),
+        "nts_str_split" => (
+            RUNTIME,
+            "strSplit",
+            "(Ljava/lang/String;Ljava/lang/String;)[Ljava/lang/String;",
+        ),
+        "nts_str_replace" => (RUNTIME, "strReplace", STRING_STRING_STRING_TO_STRING),
+        "nts_str_replace_all" => (RUNTIME, "strReplaceAll", STRING_STRING_STRING_TO_STRING),
+
+        "nts_string_from_char_code" => {
+            (RUNTIME, "stringFromCharCode", "(D)Ljava/lang/String;")
+        }
+        "nts_string_from_code_point" => {
+            (RUNTIME, "stringFromCodePoint", "(D)Ljava/lang/String;")
+        }
+
         _ => return None,
     })
 }
@@ -187,58 +258,8 @@ impl Emitter<'_> {
                 Placed::OnStack
             }
 
-            OpKind::GlobalGet(global) => {
-                let Some(entry) = self.program.globals.get(*global as usize) else {
-                    return Err(refuse(self.func, "a global this program does not declare"));
-                };
-                let Some(descriptor) = types::descriptor(self.program, &entry.ty) else {
-                    return Err(refuse(self.func, "a global of unrepresentable type"));
-                };
-                let name = crate::body::method_name(&entry.name);
-                code.get_static(&origin, pool, PROGRAM, &name, &descriptor);
-                Placed::OnStack
-            }
-            OpKind::GlobalSet { global, value: stored } => {
-                let Some(entry) = self.program.globals.get(*global as usize) else {
-                    return Err(refuse(self.func, "a global this program does not declare"));
-                };
-                let Some(descriptor) = types::descriptor(self.program, &entry.ty) else {
-                    return Err(refuse(self.func, "a global of unrepresentable type"));
-                };
-                let name = crate::body::method_name(&entry.name);
-                // The value's type and the global's have to be the same type,
-                // and on this backend that is a *descriptor*, checked at load.
-                //
-                // They can differ. Specialization narrows an array of integer
-                // literals to `managed<[i32]>` and does not narrow the global
-                // it is stored into, so `const arr = [1, 2]` at module scope
-                // produces `array.new : managed<[i32]>` feeding
-                // `global.set` on a `managed<[f64]>`. `hir::verify` accepts it
-                // and the other two backends cannot see it -- C spells every
-                // array `NtsArray *` and LLVM spells every reference `ptr`, so
-                // the disagreement has nothing to land on. Here it is a
-                // `VerifyError` at class load.
-                //
-                // Refused by name rather than emitted, which is the whole
-                // contract: a class the JVM will not load is worse than a
-                // function that is absent and reported.
-                let held = self.ty(*stored).clone();
-                if types::descriptor(self.program, &held).as_deref() != Some(descriptor.as_str()) {
-                    return Err(refuse(
-                        self.func,
-                        &format!(
-                            "a store of {} into the global `{}`, which is {} -- the \
-                             middle end narrowed one and not the other, and the JVM \
-                             would refuse the class rather than the store",
-                            types::describe(&held),
-                            entry.name,
-                            types::describe(&entry.ty)
-                        ),
-                    ));
-                }
-                self.load(code, *stored)?;
-                code.put_static(&origin, pool, PROGRAM, &name, &descriptor);
-                return Ok(());
+            OpKind::GlobalGet(_) | OpKind::GlobalSet { .. } => {
+                self.global(code, pool, &op.kind, &origin)?
             }
 
             OpKind::Call { callee, args, .. } => self.call(code, pool, &op.ty, callee, args, &origin)?,
@@ -315,6 +336,61 @@ impl Emitter<'_> {
             }
         }
         Ok(())
+    }
+
+    /// Module-scope storage, which is a static field on the program class.
+    fn global(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        kind: &OpKind,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        let (index, storing) = match kind {
+            OpKind::GlobalGet(global) => (*global, None),
+            OpKind::GlobalSet { global, value } => (*global, Some(*value)),
+            _ => return Err(refuse(self.func, "a global operation that is neither a read nor a write")),
+        };
+        let Some(entry) = self.program.globals.get(index as usize) else {
+            return Err(refuse(self.func, "a global this program does not declare"));
+        };
+        let Some(descriptor) = types::descriptor(self.program, &entry.ty) else {
+            return Err(refuse(self.func, "a global of unrepresentable type"));
+        };
+        let name = crate::body::method_name(&entry.name);
+        let Some(stored) = storing else {
+            code.get_static(origin, pool, PROGRAM, &name, &descriptor);
+            return Ok(Placed::OnStack);
+        };
+        // The value's type and the global's have to be the same type, and on
+        // this backend that is a *descriptor*, checked at load.
+        //
+        // They can differ. Specialization narrowed an array of integer literals
+        // to `managed<[i32]>` and did not narrow the global it was stored into,
+        // so `const arr = [1, 2]` at module scope produced `array.new :
+        // managed<[i32]>` feeding a `global.set` on a `managed<[f64]>`. Neither
+        // other backend could see it -- C spells every array `NtsArray *` and
+        // LLVM spells every reference `ptr` -- and here it was a `VerifyError`
+        // at class load. Fixed upstream in `hir::elements` since, and the check
+        // stays: it is the only place in this compiler where the two types have
+        // to be *identical* rather than merely both pointers.
+        let held = self.ty(stored).clone();
+        if types::descriptor(self.program, &held).as_deref() != Some(descriptor.as_str()) {
+            return Err(refuse(
+                self.func,
+                &format!(
+                    "a store of {} into the global `{}`, which is {} -- the middle \
+                     end narrowed one and not the other, and the JVM would refuse \
+                     the class rather than the store",
+                    types::describe(&held),
+                    entry.name,
+                    types::describe(&entry.ty)
+                ),
+            ));
+        }
+        self.load(code, stored)?;
+        code.put_static(origin, pool, PROGRAM, &name, &descriptor);
+        Ok(Placed::Stored)
     }
 
     /// `null` and `undefined`, which are one value or two depending on where
@@ -816,7 +892,7 @@ impl Emitter<'_> {
         };
         let taken = code.label();
         let done = code.label();
-        self.compare_and_branch(code, compare, false, lhs, rhs, taken)?;
+        self.compare_and_branch(code, pool, Test { compare, negate: false, lhs, rhs }, taken)?;
         code.const_int(&origin, pool, 0);
         code.store(&origin, Kind::Int, scratch);
         code.goto(&origin, done);
@@ -918,14 +994,37 @@ impl Emitter<'_> {
     pub(crate) fn compare_and_branch(
         &mut self,
         code: &mut Code,
-        compare: Compare,
-        negate: bool,
-        lhs: ValueId,
-        rhs: ValueId,
+        pool: &mut Pool,
+        test: Test,
         target: Label,
     ) -> Result<(), Diagnostic> {
+        let Test { compare, negate, lhs, rhs } = test;
         let origin = self.func.values[lhs.0 as usize].origin.clone();
         let kind = self.kind_of(lhs)?;
+        // `a < b` on two strings is lexicographic by UTF-16 code unit, and
+        // `String.compareTo` is that rule exactly -- it compares `char` by
+        // `char`, and a Java `char` is a code unit. So this is one of the
+        // places the platform's own method *is* the language's semantics, like
+        // `Math.min` and unlike `Math.round`.
+        //
+        // It is also a place a pointer comparison would be wrong quietly: the C
+        // runtime compared addresses here for as long as both backends existed,
+        // which is the failure that made ordering-on-references a refusal in
+        // this backend rather than an `if_acmp`.
+        if matches!(self.ty(lhs), HirType::Managed(ManagedType::String)) {
+            self.load(code, lhs)?;
+            self.load(code, rhs)?;
+            code.invoke_virtual(
+                &origin,
+                pool,
+                types::STRING,
+                "compareTo",
+                "(Ljava/lang/String;)I",
+            );
+            let test = if negate { compare.inverted() } else { compare };
+            code.branch_zero(&origin, test, target);
+            return Ok(());
+        }
         self.load(code, lhs)?;
         self.load(code, rhs)?;
         // Integers are totally ordered, so inverting the comparison and
@@ -1412,7 +1511,7 @@ impl Emitter<'_> {
             let Some(compare) = comparison(op) else {
                 return Err(refuse(self.func, "a fused condition that is not a comparison"));
             };
-            return self.compare_and_branch(code, compare, invert, lhs, rhs, target);
+            return self.compare_and_branch(code, pool, Test { compare, negate: invert, lhs, rhs }, target);
         }
         self.load(code, cond)?;
         let compare = if invert { Compare::Eq } else { Compare::Ne };

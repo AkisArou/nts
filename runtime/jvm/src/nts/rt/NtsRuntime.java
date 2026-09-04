@@ -294,4 +294,258 @@ public final class NtsRuntime {
         java.util.Arrays.fill(array, value);
         return array;
     }
+
+    // ----- Math -----------------------------------------------------------
+
+    /**
+     * {@code Math.pow}, and Java's agrees with JavaScript where C's does not.
+     *
+     * <p>C99 says {@code pow(1, NaN)} is 1.0. JavaScript says NaN, and so does
+     * {@code java.lang.Math.pow} -- "if the second argument is NaN, then the
+     * result is NaN", with no exception for a base of one. So the native
+     * runtime needs its own and this one does not, which is the same shape as
+     * {@code Math.min} agreeing about {@code -0.0} where {@code fmin} does not.
+     */
+    public static double mathPow(double base, double exponent) {
+        return Math.pow(base, exponent);
+    }
+
+    public static double mathSinh(double x) {
+        return Math.sinh(x);
+    }
+
+    /** `isFinite`: not NaN and not either infinity. */
+    public static boolean isFinite(double x) {
+        return !Double.isNaN(x) && !Double.isInfinite(x);
+    }
+
+    // ----- strings --------------------------------------------------------
+
+    /**
+     * `ToInteger`: truncate toward zero, and NaN is zero.
+     *
+     * <p>Not `(long) x`, which is right for the finite case and wrong for NaN
+     * only by accident -- `(long) NaN` is 0 on the JVM and undefined in C, and
+     * relying on that is how a rule ends up holding for a reason nobody wrote
+     * down.
+     */
+    private static double toInteger(double x) {
+        if (Double.isNaN(x)) {
+            return 0.0;
+        }
+        return x < 0.0 ? Math.ceil(x) : Math.floor(x);
+    }
+
+    /**
+     * An index into a string of {@code length}, clamped the way the language
+     * clamps it.
+     *
+     * <p>{@code relative} is what separates `slice` from `substring`: a
+     * negative index counts back from the end for the first and clamps to zero
+     * for the second. A transliteration of `nts_str_clamp`, including that a
+     * fraction and a NaN both go through `ToInteger` rather than being
+     * truncated by the cast.
+     */
+    private static int clamp(double index, int length, boolean relative) {
+        double at = toInteger(index);
+        if (relative && at < 0.0) {
+            at += length;
+        }
+        if (at < 0.0) {
+            return 0;
+        }
+        if (at >= length) {
+            return length;
+        }
+        return (int) at;
+    }
+
+    public static double strIndexOf(String s, String needle) {
+        return s.indexOf(needle);
+    }
+
+    public static double strLastIndexOf(String s, String needle) {
+        return s.lastIndexOf(needle);
+    }
+
+    public static boolean strIncludes(String s, String needle) {
+        return s.contains(needle);
+    }
+
+    public static boolean strStartsWith(String s, String prefix) {
+        return s.startsWith(prefix);
+    }
+
+    public static boolean strEndsWith(String s, String suffix) {
+        return s.endsWith(suffix);
+    }
+
+    /**
+     * How many code units the code point starting at {@code at} occupies: two
+     * for a surrogate pair and one for everything else, including an unpaired
+     * surrogate.
+     */
+    public static double strPointWidth(String s, double at) {
+        int index = (int) at;
+        if (index < 0 || index >= s.length()) {
+            return 1.0;
+        }
+        return Character.charCount(s.codePointAt(index));
+    }
+
+    /** `String.fromCharCode`, which is `ToUint16` and then one code unit. */
+    public static String stringFromCharCode(double code) {
+        return String.valueOf((char) toUint16(code));
+    }
+
+    /** `String.fromCodePoint`, which is one or two code units. */
+    public static String stringFromCodePoint(double code) {
+        return new String(Character.toChars((int) toInteger(code)));
+    }
+
+    /**
+     * `repeat`. Written out rather than `String.repeat`, which arrived in Java
+     * 11 and this runtime targets 8 -- the floor that keeps the Android path
+     * open.
+     */
+    public static String strRepeat(String s, double times) {
+        int count = (int) toInteger(times);
+        if (count <= 0 || s.isEmpty()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(s.length() * count);
+        for (int i = 0; i < count; i++) {
+            out.append(s);
+        }
+        return out.toString();
+    }
+
+    /** `padStart`, likewise a Java 11 method written out. */
+    public static String strPadStart(String s, double target, String pad) {
+        int want = (int) toInteger(target);
+        if (want <= s.length() || pad.isEmpty()) {
+            return s;
+        }
+        StringBuilder out = new StringBuilder(want);
+        while (out.length() < want - s.length()) {
+            out.append(pad);
+        }
+        out.setLength(want - s.length());
+        return out.append(s).toString();
+    }
+
+    /** `substring`: negatives clamp to zero and the ends swap if out of order. */
+    public static String strSubstring(String s, double from, double to) {
+        int start = clamp(from, s.length(), false);
+        int end = clamp(to, s.length(), false);
+        if (start > end) {
+            int swap = start;
+            start = end;
+            end = swap;
+        }
+        return s.substring(start, end);
+    }
+
+    /** `slice`: negatives count from the end, and an inverted range is empty. */
+    public static String strSlice(String s, double from, double to) {
+        int start = clamp(from, s.length(), true);
+        int end = clamp(to, s.length(), true);
+        return start >= end ? "" : s.substring(start, end);
+    }
+
+    /**
+     * `trim`.
+     *
+     * <p>Not `String.trim`, which strips everything at or below U+0020 and
+     * nothing above it -- JavaScript strips Unicode whitespace, which includes
+     * U+00A0 and U+FEFF and excludes most control characters. `String.strip`
+     * is the right one and is Java 11, so the predicate is spelled here.
+     */
+    public static String strTrim(String s) {
+        int start = 0;
+        int end = s.length();
+        while (start < end && isJsWhitespace(s.charAt(start))) {
+            start++;
+        }
+        while (end > start && isJsWhitespace(s.charAt(end - 1))) {
+            end--;
+        }
+        return s.substring(start, end);
+    }
+
+    /**
+     * The `WhiteSpace` and `LineTerminator` productions, which is what `trim`
+     * removes and is not what any of Java's three answers removes.
+     */
+    private static boolean isJsWhitespace(char c) {
+        switch (c) {
+            case '\t': case '\n': case '\u000B': case '\f': case '\r': case ' ':
+            case '\u00A0': case '\u1680': case '\u2028': case '\u2029':
+            case '\u202F': case '\u205F': case '\u3000': case '\uFEFF':
+                return true;
+            default:
+                return c >= '\u2000' && c <= '\u200A';
+        }
+    }
+
+    /**
+     * `split` with a string separator.
+     *
+     * <p>Not `String.split`, which takes a **regular expression**: `"a.b".split(".")`
+     * is three empty strings there and `["a", "b"]` in JavaScript. The empty
+     * separator is its own rule too -- it splits into code units, not code
+     * points, so a surrogate pair becomes two halves.
+     */
+    public static String[] strSplit(String s, String separator) {
+        if (separator.isEmpty()) {
+            String[] units = new String[s.length()];
+            for (int i = 0; i < s.length(); i++) {
+                units[i] = String.valueOf(s.charAt(i));
+            }
+            return units;
+        }
+        java.util.ArrayList<String> parts = new java.util.ArrayList<>();
+        int from = 0;
+        while (true) {
+            int at = s.indexOf(separator, from);
+            if (at < 0) {
+                parts.add(s.substring(from));
+                break;
+            }
+            parts.add(s.substring(from, at));
+            from = at + separator.length();
+        }
+        return parts.toArray(new String[0]);
+    }
+
+    /** `replace` with a string pattern: the first occurrence only. */
+    public static String strReplace(String s, String pattern, String with) {
+        int at = s.indexOf(pattern);
+        if (at < 0) {
+            return s;
+        }
+        return s.substring(0, at) + with + s.substring(at + pattern.length());
+    }
+
+    /** `replaceAll` with a string pattern; an empty pattern matches everywhere. */
+    public static String strReplaceAll(String s, String pattern, String with) {
+        if (pattern.isEmpty()) {
+            StringBuilder out = new StringBuilder();
+            out.append(with);
+            for (int i = 0; i < s.length(); i++) {
+                out.append(s.charAt(i)).append(with);
+            }
+            return out.toString();
+        }
+        StringBuilder out = new StringBuilder();
+        int from = 0;
+        while (true) {
+            int at = s.indexOf(pattern, from);
+            if (at < 0) {
+                return out.append(s, from, s.length()).toString();
+            }
+            out.append(s, from, at).append(with);
+            from = at + pattern.length();
+        }
+    }
 }
