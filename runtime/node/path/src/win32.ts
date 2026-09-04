@@ -29,6 +29,7 @@ import {
   type FormatInputPathObject,
   type ParsedPath,
 } from "./internal.ts";
+import { matchesGlobPattern } from "./glob-matcher.ts";
 
 /** The native half. Compiled these are externs; on node they are globals. */
 declare function nts_process_cwd(): string;
@@ -40,6 +41,13 @@ const isWindows = false;
 
 export const sep = "\\";
 export const delimiter = ";";
+
+/** Upstream `lib/path.js:1214`, interpreting both slash spellings as separators. */
+export function matchesGlob(path: string, pattern: string): boolean {
+  validateString(path, "path");
+  validateString(pattern, "pattern");
+  return matchesGlobPattern(path, pattern, true);
+}
 
 function isPathSeparator(code: number): boolean {
   return code === CHAR_FORWARD_SLASH || code === CHAR_BACKWARD_SLASH;

@@ -22,12 +22,20 @@ import {
   type FormatInputPathObject,
   type ParsedPath,
 } from "./internal.ts";
+import { matchesGlobPattern } from "./glob-matcher.ts";
 
 /** The native half. Compiled this is an extern; on node it is a global. */
 declare function nts_process_cwd(): string;
 
 export const sep = "/";
 export const delimiter = ":";
+
+/** Upstream `lib/path.js:1696`, using Node's fixed minimatch options. */
+export function matchesGlob(path: string, pattern: string): boolean {
+  validateString(path, "path");
+  validateString(pattern, "pattern");
+  return matchesGlobPattern(path, pattern, false);
+}
 
 function isPosixPathSeparator(code: number): boolean {
   return code === CHAR_FORWARD_SLASH;
