@@ -195,6 +195,25 @@ impl Emitter<'_> {
 
         let kind = types::kind(result)
             .ok_or_else(|| refuse(self.func, "an arithmetic result of unrepresentable type"))?;
+        // The opcode and its stack effect come from the *result*, and the
+        // operands are loaded by their own kinds. Those agree in every prepared
+        // HIR seen so far -- and where they did not, the symptom was a stack
+        // that stopped balancing several instructions later. So the agreement
+        // is checked here rather than assumed, which is record 0077's rule: the
+        // second place that must agree should assert rather than compute.
+        let left = self.kind_of(lhs)?;
+        let right = self.kind_of(rhs)?;
+        let counts_as_shift = matches!(op, BinOp::Shl | BinOp::Shr | BinOp::UShr);
+        if left != kind || (right != kind && !(counts_as_shift && right == Kind::Int)) {
+            return Err(refuse(
+                self.func,
+                &format!(
+                    "a `{op:?}` whose operands are {left:?} and {right:?} but whose \
+                     result is {kind:?} -- the middle end usually agrees, and where \
+                     it does not this backend would emit an unbalanced stack"
+                ),
+            ));
+        }
         self.load(code, lhs)?;
         self.load(code, rhs)?;
         match op {
@@ -300,19 +319,8 @@ impl Emitter<'_> {
                 code.const_int(&origin, pool, 1);
                 code.bitwise(&origin, insn::XOR, Kind::Int);
             }
-            // JavaScript's coercions, not the JVM's. `d2i` saturates where
-            // `ToInt32` wraps, and it is *defined* rather than undefined, which
-            // makes it the more dangerous of the two wrong answers.
-            UnOp::ToInt32 | UnOp::ToUint32 if from == Kind::Double => {
-                let name = if op == UnOp::ToInt32 { "toInt32" } else { "toUint32" };
-                code.invoke_static(&origin, pool, RUNTIME, name, "(D)I");
-            }
             UnOp::ToInt32 | UnOp::ToUint32 => {
-                // Already an integer: the operation is the identity on the
-                // thirty-two bits, whichever way they are read.
-                if from == Kind::Long {
-                    code.convert(&origin, insn::L2I, Kind::Long, Kind::Int);
-                }
+                self.coercion(code, pool, op, from, result, &origin)?;
             }
             UnOp::Floor => code.invoke_static(&origin, pool, "java/lang/Math", "floor", "(D)D"),
             UnOp::Ceil => code.invoke_static(&origin, pool, "java/lang/Math", "ceil", "(D)D"),
@@ -330,6 +338,81 @@ impl Emitter<'_> {
             UnOp::Truthy => unreachable!("handled above"),
         }
         Ok(Placed::OnStack)
+    }
+
+    /// `ToInt32` and `ToUint32`: a reduction to thirty-two bits, and then a
+    /// widening into whatever slot the middle end gave the result.
+    ///
+    /// # The widening is not optional, and the sign lives in it
+    ///
+    /// The prepared HIR for `h >>> 7` contains `touint32 %2 : i64` -- an `i32`
+    /// operand and an `i64` result. The coercion *is* a reduction to thirty-two
+    /// bits, and where it lands afterwards is a separate decision the middle
+    /// end already made. Emitting the reduction alone leaves an `int` on the
+    /// stack where the slot wants a `long`, which is not a wrong number: it is
+    /// a stack that no longer balances, and `Code`'s tracking catches it at the
+    /// next block boundary rather than at the cause.
+    ///
+    /// The LLVM backend records the same bug from the other side -- "producing
+    /// `i32` and calling it the result's type made a value whose emitted width
+    /// disagreed with its recorded one … the module stopped verifying several
+    /// instructions away from the cause".
+    ///
+    /// And the sign belongs to the *widening*, not to the reduction: both
+    /// coercions reduce to the same thirty-two bits and differ only in whether
+    /// widening them keeps a negative number negative. `ToUint32` therefore
+    /// widens through `Integer.toUnsignedLong`, which is the JVM's spelling of
+    /// `zext` on a machine with no unsigned types.
+    fn coercion(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        op: UnOp,
+        from: Kind,
+        result: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        // Step one: down to thirty-two bits.
+        match from {
+            Kind::Double | Kind::Float => {
+                if from == Kind::Float {
+                    code.convert(origin, insn::F2D, Kind::Float, Kind::Double);
+                }
+                // The ten-instruction reduction the runtime spells out, called
+                // rather than reproduced: inlining it would be a second
+                // implementation of `ToInt32` to keep in step with the first.
+                let name = if op == UnOp::ToInt32 { "toInt32" } else { "toUint32" };
+                code.invoke_static(origin, pool, RUNTIME, name, "(D)I");
+            }
+            Kind::Long => code.convert(origin, insn::L2I, Kind::Long, Kind::Int),
+            Kind::Int => {}
+            Kind::Ref => return Err(refuse(self.func, "a coercion of a reference")),
+        }
+
+        // Step two: back out to the slot the middle end chose.
+        let signed = op == UnOp::ToInt32;
+        let target = types::kind(result)
+            .ok_or_else(|| refuse(self.func, "a coercion into an unrepresentable type"))?;
+        if target == Kind::Int {
+            return Ok(());
+        }
+        if signed {
+            let opcode = match target {
+                Kind::Long => insn::I2L,
+                Kind::Float => insn::I2F,
+                _ => insn::I2D,
+            };
+            code.convert(origin, opcode, Kind::Int, target);
+            return Ok(());
+        }
+        // Unsigned: widen through `long` so the top bit does not sign-extend.
+        code.invoke_static(origin, pool, "java/lang/Integer", "toUnsignedLong", "(I)J");
+        match target {
+            Kind::Long => {}
+            Kind::Float => code.convert(origin, insn::L2F, Kind::Long, Kind::Float),
+            _ => code.convert(origin, insn::L2D, Kind::Long, Kind::Double),
+        }
+        Ok(())
     }
 
     /// JavaScript truthiness for a scalar, which is not `!= 0`.

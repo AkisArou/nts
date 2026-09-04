@@ -3,32 +3,38 @@
 //
 // `hir::arrays_can_grow` is a **whole-program** predicate: one `push` anywhere
 // puts every array in the program behind a pointer, because an array that grows
-// cannot keep its elements inline after its own header without moving -- and
-// moving invalidates every reference someone holds. So the two halves of this
-// pair differ by one call in *setup* and get different representations in the
-// hot loop, which is the thing being priced.
+// cannot keep its elements inline after its own header without moving. So the
+// two halves differ by one call in *setup* and get different representations in
+// the hot loop, which is the thing being priced.
 //
-// Nothing measured this before. `benches/cases/array-mutations` grows an array
-// but is *about* growing one; `array-predicates` and `case-convert` each have a
-// stray `push` in setup and are silently on the far side of the cliff without
-// saying so. And `examples/growable` states outright that "the `arrays`
-// benchmark measured the difference at nothing" -- which `arrays` cannot have
-// done, because it contains no `push` and is therefore on one side only.
+// Nothing measured this before. `array-mutations` grows an array but is *about*
+// growing one; `array-predicates` and `case-convert` each have a stray `push` in
+// setup and sit on the far side of the cliff without saying so. And
+// `examples/growable` states outright that "the `arrays` benchmark measured the
+// difference at nothing" -- which `arrays` cannot have done, because it contains
+// no `push` and is therefore on one side only.
 //
-// Setup is 2048 elements against a hot loop of 64 rounds over 2047, so it is
-// about one and a half per cent of the work: the ratio is the access cost, not
-// the construction.
+// **Each round reads what the round before it wrote.** An earlier draft summed a
+// read-only array, which is an invariant inner loop that a compiler may hoist
+// out of the outer one and multiply by the round count -- the same shape that
+// made a sibling case read 1.3 ns per call by being solvable in closed form.
+// A weighted average in place cannot be hoisted, cannot be reassociated in
+// floating point, and keeps its values bounded.
+
 export function scan(seed: number): number {
   const n = 2048;
   const xs = new Array<number>(n);
   for (let i = 0; i < n; i++) {
     xs[i] = i * 7 + (seed | 0);
   }
-  let total = 0;
   for (let round = 0; round < 64; round++) {
     for (let i = 1; i < n; i++) {
-      total = total + xs[i]! * xs[i - 1]!;
+      xs[i] = xs[i]! * 0.75 + xs[i - 1]! * 0.25;
     }
+  }
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    total = total + xs[i]!;
   }
   return total;
 }

@@ -101,6 +101,12 @@ fn run_main(
     std::fs::write(dir.join(built.path()), &built.bytes).expect("write the class");
     let output = Command::new(java)
         .arg("-Xverify:all")
+        // Two JVMs starting at once contend for the hsperfdata file and the
+        // loser prints a warning -- on *stdout*, which is what this test
+        // compares. The program was right and the capture was wrong. Killing
+        // the contention at the source beats trimming the output, which would
+        // make the test tolerant of anything else the JVM decides to say.
+        .arg("-XX:-UsePerfData")
         .arg("-cp")
         .arg(&dir)
         .arg(name)
@@ -397,6 +403,12 @@ fn a_generated_class_with_a_field() {
     }
     let output = Command::new(java)
         .arg("-Xverify:all")
+        // Two JVMs starting at once contend for the hsperfdata file and the
+        // loser prints a warning -- on *stdout*, which is what this test
+        // compares. The program was right and the capture was wrong. Killing
+        // the contention at the source beats trimming the output, which would
+        // make the test tolerant of anything else the JVM decides to say.
+        .arg("-XX:-UsePerfData")
         .arg("-cp")
         .arg(&dir)
         .arg("UsePoint")
