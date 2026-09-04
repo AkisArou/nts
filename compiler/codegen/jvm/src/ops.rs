@@ -113,12 +113,14 @@ fn bigint_operation(op: BinOp) -> Option<(&'static str, &'static str)> {
 /// `_value` and `_ref` both land on `NtsArrayL` because an `NtsValue` *is* a
 /// reference here -- what differs is the static type the caller reads back,
 /// which the `checkcast` in `call` restores from the HIR result type.
-fn growable_external(name: &str, references: bool) -> Option<(String, &'static str, String)> {
+fn growable_external(name: &str, holds: &str) -> Option<(String, &'static str, String)> {
     const VALUE: &str = "Lnts/rt/NtsValue;";
     let stem = name.strip_prefix("nts_array_")?;
-    let class = if references { "nts/rt/NtsArrayL" } else { "nts/rt/NtsArrayD" };
-    // What the array *holds*, which is the class's business.
-    let element = if references { "Ljava/lang/Object;" } else { "D" };
+    let (class, element) = match holds {
+        "D" => ("nts/rt/NtsArrayD", "D"),
+        "Z" => ("nts/rt/NtsArrayZ", "Z"),
+        _ => ("nts/rt/NtsArrayL", "Ljava/lang/Object;"),
+    };
 
     // The suffix says which variant, and it says three different things.
     //
@@ -949,31 +951,34 @@ impl Emitter<'_> {
         let HirType::Managed(ManagedType::Array(element)) = ty else {
             return Err(refuse(self.func, "an array operation on something that is not an array"));
         };
-        Ok(match types::kind(element) {
-            Some(Kind::Double) => "nts/rt/NtsArrayD".to_owned(),
-            Some(Kind::Ref) => "nts/rt/NtsArrayL".to_owned(),
-            _ => {
-                return Err(refuse(
-                    self.func,
-                    &format!(
-                        "a growable array of {} -- only `double` and reference \
-                         elements have a wrapper, and widening a boolean into the \
-                         first would answer 1 where the language answers true",
-                        types::describe(element)
-                    ),
-                ));
-            }
+        types::wrapper(element).map(str::to_owned).ok_or_else(|| {
+            refuse(
+                self.func,
+                &format!("a growable array of {}", types::describe(element)),
+            )
         })
     }
 
-    /// The descriptor of what a growable array holds, as its wrapper spells it.
-    fn growable_element(&self, ty: &HirType) -> Result<String, Diagnostic> {
+    /// What a growable array holds, as its wrapper spells it: the descriptor
+    /// and the computational kind that goes with it.
+    ///
+    /// The two can differ from the *element's* own kind. A `managed<[i32]>`
+    /// lives in `NtsArrayD`, because the wrapper is chosen by storage width
+    /// and an `i32` fits a `double` exactly -- so the element converts on the
+    /// way in and back on the way out, which is the both-ends rule these arms
+    /// keep everywhere else.
+    fn growable_element(&self, ty: &HirType) -> Result<(String, Kind), Diagnostic> {
         let HirType::Managed(ManagedType::Array(element)) = ty else {
             return Err(refuse(self.func, "an array operation on something that is not an array"));
         };
         Ok(match types::kind(element) {
-            Some(Kind::Double) => "D".to_owned(),
-            _ => "Ljava/lang/Object;".to_owned(),
+            Some(Kind::Double | Kind::Int | Kind::Long | Kind::Float)
+                if !matches!(**element, HirType::Bool) =>
+            {
+                ("D".to_owned(), Kind::Double)
+            }
+            Some(Kind::Int) => ("Z".to_owned(), Kind::Int),
+            _ => ("Ljava/lang/Object;".to_owned(), Kind::Ref),
         })
     }
 
@@ -1206,7 +1211,7 @@ impl Emitter<'_> {
             }
             OpKind::ArrayGet { array, index, .. } if self.shape.grows => {
                 let class = self.growable_class(&self.ty(*array).clone())?;
-                let element = self.growable_element(&self.ty(*array).clone())?;
+                let (element, holds) = self.growable_element(&self.ty(*array).clone())?;
                 self.load(code, *array)?;
                 self.push_as(code, *index, Kind::Double, origin)?;
                 code.invoke_static(
@@ -1216,6 +1221,9 @@ impl Emitter<'_> {
                     "get",
                     &format!("(L{class};D){element}"),
                 );
+                if holds != Kind::Ref {
+                    self.adapt(code, holds, ty, origin)?;
+                }
                 // `NtsArrayL` stores `Object`, so an array of strings hands
                 // back an `Object` and the slot wants a `String`. The narrowing
                 // the middle end already proved has to be spelled for the
@@ -1231,10 +1239,14 @@ impl Emitter<'_> {
             }
             OpKind::ArraySet { array, index, value, .. } if self.shape.grows => {
                 let class = self.growable_class(&self.ty(*array).clone())?;
-                let element = self.growable_element(&self.ty(*array).clone())?;
+                let (element, holds) = self.growable_element(&self.ty(*array).clone())?;
                 self.load(code, *array)?;
                 self.push_as(code, *index, Kind::Double, origin)?;
-                self.load(code, *value)?;
+                if holds == Kind::Ref {
+                    self.load(code, *value)?;
+                } else {
+                    self.push_as(code, *value, holds, origin)?;
+                }
                 code.invoke_static(
                     origin,
                     pool,
@@ -2282,7 +2294,7 @@ impl Emitter<'_> {
                     // A growable program has no bare arrays, so every array
                     // helper is a method on a wrapper and the element-width
                     // overloads below do not apply.
-                    growable_external(name, element.as_deref() != Some("D"))
+                    growable_external(name, element.as_deref().unwrap_or("L"))
                         .map(|(class, member, signature)| (leak(class), member, signature))
                         .or_else(|| external(name))
                 } else {

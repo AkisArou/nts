@@ -93,16 +93,37 @@ impl<'a> Shape<'a> {
 
 /// The wrapper class for an array of this element type.
 fn growable(shape: Shape<'_>, element: &HirType) -> Option<String> {
-    Some(match kind(element)? {
-        Kind::Double => "Lnts/rt/NtsArrayD;".to_owned(),
-        Kind::Ref => "Lnts/rt/NtsArrayL;".to_owned(),
-        // `boolean[]` and the narrow integers have no wrapper yet. Refused by
-        // name rather than widened to `NtsArrayD`, which would answer `1` where
-        // the language answers `true`.
-        _ => {
-            let _ = shape;
-            return None;
-        }
+    let _ = shape;
+    Some(nts_jvm_emitter::descriptor::object(wrapper(element)?))
+}
+
+/// The wrapper class for a growable array of this element type.
+///
+/// **One function, three callers** -- the descriptor, the frame entry, and the
+/// operations. The first version had the choice written out at each, and the
+/// two that disagreed disagreed about `boolean`: one refused it and one would
+/// have widened it into the `double` wrapper, which answers `1` where the
+/// language answers `true`.
+#[must_use]
+pub fn wrapper(element: &HirType) -> Option<&'static str> {
+    Some(match descriptor_of_element(element)? {
+        "D" => "nts/rt/NtsArrayD",
+        "Z" => "nts/rt/NtsArrayZ",
+        _ => "nts/rt/NtsArrayL",
+    })
+}
+
+/// Which storage width an element type belongs to.
+///
+/// A boolean is its own, not widened into the `double` one: `true` and `1` are
+/// different answers, and an array is the one place this backend cannot let the
+/// operand stack's `int` stand in for both.
+fn descriptor_of_element(element: &HirType) -> Option<&'static str> {
+    Some(match element {
+        HirType::Float { bits: 64 } | HirType::Int { .. } => "D",
+        HirType::Bool => "Z",
+        HirType::Erased | HirType::Managed(_) => "L",
+        _ => return None,
     })
 }
 
@@ -243,11 +264,10 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             // there is `ClassFormatError: Illegal class name
             // "Lnts/rt/NtsArrayD;"` at load.
             HirType::Managed(ManagedType::Array(element)) if shape.grows => {
-                VType::Object(match kind(element) {
-                    Some(Kind::Double) => "nts/rt/NtsArrayD".to_owned(),
-                    Some(Kind::Ref) => "nts/rt/NtsArrayL".to_owned(),
-                    _ => return None,
-                })
+                // The same answer `growable` gives, from the same function --
+                // a second copy of "which wrapper" is exactly the drift that
+                // put `NtsArrayD.pop` where an `NtsValue` was wanted.
+                VType::Object(wrapper(element)?.to_owned())
             }
             HirType::Managed(ManagedType::Array(_)) => {
                 VType::Object(descriptor(shape, ty)?)
