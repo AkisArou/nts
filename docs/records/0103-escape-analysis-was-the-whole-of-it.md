@@ -85,3 +85,60 @@ is worth building because the copy is what defeats escape analysis.
 
 Two allocation sites merging into one reference may need more than coalescing;
 if so, the second `new` is the thing to remove.
+
+## Correction: it is not the whole of it, and the title is wrong
+
+**Both sides are scalar-replaced.** `getThreadAllocatedBytes`, 2,000 frames per
+operation:
+
+| | EA on | EA off |
+| --- | ---: | ---: |
+| hand-written Java, plain | **0 B/op** | 80,000 |
+| hand-written Java, padded to 149 bytecodes | **0 B/op** | 400,000 |
+| nts (JVM) | **0 B/op** | 64,000 |
+
+So the frame this backend emits *is* eliminated by escape analysis, exactly as
+the reference's object is. The conclusion above -- that we do not get an
+optimisation the reference gets -- is false as stated.
+
+What survives is the asymmetry, and it is stranger than the original claim:
+
+    reference   172.5 -> 623.8 us with EA off   (+451, a 3.6x loss)
+    ours        589.9 -> 601.0 us with EA off   (+11, a 2% loss)
+
+Both allocate nothing with EA on. Both allocate ~2,000 objects per operation
+with it off. The reference pays 451us for that and we pay 11us. **Escape
+analysis removes the same allocation from both and is worth forty times more
+to them**, which means what it buys the reference is not the allocation.
+
+### What was wrong with the reasoning
+
+`-XX:-DoEscapeAnalysis` was read as a switch for one thing. It is not: it
+disables scalar replacement *and* everything downstream of knowing an object
+does not escape, including keeping its fields in registers across a loop. The
+allocation is the visible half and the register promotion is the half that
+mattered, and the flag conflates them.
+
+The reference's `UpTo` becomes four registers. Ours is eliminated as an
+allocation and its values still move through memory -- which is what IPC 1.23
+against 3.36 was saying all along, with identical branch counts.
+
+### Two confounded experiments on the way here, both mine
+
+**"Size breaks escape analysis."** Padding the reference from 29 to 65
+bytecodes doubled its time, which looked like confirmation. The padding added
+six field writes per element -- real work, not just bytes. With EA off the
+padded version is still 1.8x slower, so EA was never lost; the doubling was
+the work I added. At 149 bytecodes it allocates 0 B/op, so size does not break
+scalar replacement at any width this program reaches.
+
+**"Ours allocates nothing, so nothing escapes."** The first allocation probe
+called `work(5.0)` with a literal. `work` is pure, so C2 was free to fold the
+call away entirely and the zero would have meant nothing. It survived a
+`volatile` input, so the reading stands -- but it was luck, not method, and it
+is the third time today an instrument of mine measured something other than
+what I read off it.
+
+The open question is now sharp and different from the one this record opened
+with: **why do the frame's values stay in memory when the frame itself is
+gone.**
