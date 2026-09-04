@@ -1427,12 +1427,12 @@ fn run_jvm(
     // one place that does not matter.
     let mut cases = String::new();
     for (one, at, tuple) in interleaved(testable) {
-        let Some(returns) = nts_codegen_jvm::types::descriptor(program, &one.returns) else {
+        let Some(returns) = nts_codegen_jvm::types::descriptor(nts_codegen_jvm::types::Shape::of(program), &one.returns) else {
             bail!("`{}` returns a type the JVM backend rendered but this harness cannot", one.name);
         };
         let mut parameters = Vec::with_capacity(one.params.len());
         for (ty, _) in &one.params {
-            let Some(descriptor) = nts_codegen_jvm::types::descriptor(program, ty) else {
+            let Some(descriptor) = nts_codegen_jvm::types::descriptor(nts_codegen_jvm::types::Shape::of(program), ty) else {
                 bail!("`{}` takes a type the JVM backend rendered but this harness cannot", one.name);
             };
             parameters.push(descriptor);

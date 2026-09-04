@@ -103,6 +103,68 @@ fn bigint_operation(op: BinOp) -> Option<(&'static str, &'static str)> {
     })
 }
 
+/// The array helpers, as calls on a growable array's wrapper.
+///
+/// The element kind is already in the *name*: `_ref`, `_str` and `_value` all
+/// mean the elements are references, and a bare name means they are doubles.
+/// So this is a rule rather than a table, and a helper the middle end adds with
+/// the same convention needs one line rather than three.
+///
+/// `_value` and `_ref` both land on `NtsArrayL` because an `NtsValue` *is* a
+/// reference here -- what differs is the static type the caller reads back,
+/// which the `checkcast` in `call` restores from the HIR result type.
+fn growable_external(name: &str, references: bool) -> Option<(String, &'static str, String)> {
+    const VALUE: &str = "Lnts/rt/NtsValue;";
+    let stem = name.strip_prefix("nts_array_")?;
+    let class = if references { "nts/rt/NtsArrayL" } else { "nts/rt/NtsArrayD" };
+    // What the array *holds*, which is the class's business.
+    let element = if references { "Ljava/lang/Object;" } else { "D" };
+
+    // The suffix says which variant, and it says three different things.
+    //
+    //   `_value`  the **return** is an erased value, because `T | undefined`
+    //             has no bit pattern in a double. The elements may be numbers.
+    //   `_ref`, `_str`  the **argument** is a reference rather than a double.
+    //   `join_str`      the *separator* is a string, over an array of anything.
+    //
+    // Reading `_value` as "the elements are references" put `NtsArrayD.pop`
+    // where an `NtsValue` was wanted, and the stack was one short from there
+    // on. So the class comes from the argument's type -- which cannot be
+    // wrong -- and the suffix only chooses among the forms.
+    let (method, signature) = match stem {
+        "push" | "push_ref" => ("push", format!("(L{class};{element})D")),
+        "pop" => ("pop", format!("(L{class};){element}")),
+        "pop_value" | "pop_ref" => ("popValue", format!("(L{class};){VALUE}")),
+        "shift" => ("shift", format!("(L{class};){element}")),
+        "shift_value" | "shift_ref" => ("shiftValue", format!("(L{class};){VALUE}")),
+        "unshift" | "unshift_ref" => ("unshift", format!("(L{class};{element})D")),
+        "at" => ("at", format!("(L{class};D){element}")),
+        "at_value" | "at_ref" => ("atValue", format!("(L{class};D){VALUE}")),
+        // `_ref` and `_str` are not the same helper: `===` between two objects
+        // is identity and between two strings is value, and two equal strings
+        // need not be one object.
+        "index_of" | "index_of_ref" => ("indexOf", format!("(L{class};{element})D")),
+        "index_of_str" => ("indexOfStr", format!("(L{class};{element})D")),
+        "last_index_of" | "last_index_of_ref" => {
+            ("lastIndexOf", format!("(L{class};{element})D"))
+        }
+        "last_index_of_str" => ("lastIndexOfStr", format!("(L{class};{element})D")),
+        "includes" | "includes_ref" => ("includes", format!("(L{class};{element})Z")),
+        "includes_str" => ("includesStr", format!("(L{class};{element})Z")),
+        "fill" | "fill_ref" | "fill_bool" => ("fill", format!("(L{class};{element})L{class};")),
+        "reverse" | "reverse_ref" => ("reverse", format!("(L{class};)L{class};")),
+        "slice" | "slice_ref" => ("slice", format!("(L{class};DD)L{class};")),
+        "concat" | "concat_ref" => ("concat", format!("(L{class};L{class};)L{class};")),
+        "extend" | "extend_ref" => ("extend", format!("(L{class};L{class};)L{class};")),
+        "splice" | "splice_ref" => ("splice", format!("(L{class};DD)L{class};")),
+        "keep_first" => ("keepFirst", format!("(L{class};D)V")),
+        "join_str" => ("joinStr", format!("(L{class};Ljava/lang/String;)Ljava/lang/String;")),
+        "new" | "new_uninitialized" => ("of", format!("(D)L{class};")),
+        _ => return None,
+    };
+    Some((class.to_owned(), method, signature))
+}
+
 /// The array helpers, which need one entry point per element width.
 ///
 /// `element` is `"D"`, `"Z"` or `"L"` -- the two primitive widths that appear
@@ -135,6 +197,16 @@ fn array_external(name: &str, element: &str) -> Option<(&'static str, &'static s
         ),
         _ => return None,
     })
+}
+
+/// A class name that outlives this call.
+///
+/// The externals tables hand back `&'static str` owners because almost every
+/// one is a literal; the growable wrapper's name is computed from the element
+/// type, so it is interned here rather than changing every other signature.
+/// Two class names per program, both immortal by construction.
+fn leak(name: String) -> &'static str {
+    Box::leak(name.into_boxed_str())
 }
 
 const D_TO_D: &str = "(D)D";
@@ -638,7 +710,7 @@ impl Emitter<'_> {
         let Some(entry) = self.program.globals.get(index as usize) else {
             return Err(refuse(self.func, "a global this program does not declare"));
         };
-        let Some(descriptor) = types::descriptor(self.program, &entry.ty) else {
+        let Some(descriptor) = types::descriptor(self.shape, &entry.ty) else {
             return Err(refuse(self.func, "a global of unrepresentable type"));
         };
         let name = crate::body::method_name(&entry.name);
@@ -659,7 +731,7 @@ impl Emitter<'_> {
         // stays: it is the only place in this compiler where the two types have
         // to be *identical* rather than merely both pointers.
         let held = self.ty(stored).clone();
-        if types::descriptor(self.program, &held).as_deref() != Some(descriptor.as_str()) {
+        if types::descriptor(self.shape, &held).as_deref() != Some(descriptor.as_str()) {
             return Err(refuse(
                 self.func,
                 &format!(
@@ -872,6 +944,39 @@ impl Emitter<'_> {
         Ok(Placed::OnStack)
     }
 
+    /// The wrapper class for a growable array, by its element type.
+    fn growable_class(&self, ty: &HirType) -> Result<String, Diagnostic> {
+        let HirType::Managed(ManagedType::Array(element)) = ty else {
+            return Err(refuse(self.func, "an array operation on something that is not an array"));
+        };
+        Ok(match types::kind(element) {
+            Some(Kind::Double) => "nts/rt/NtsArrayD".to_owned(),
+            Some(Kind::Ref) => "nts/rt/NtsArrayL".to_owned(),
+            _ => {
+                return Err(refuse(
+                    self.func,
+                    &format!(
+                        "a growable array of {} -- only `double` and reference \
+                         elements have a wrapper, and widening a boolean into the \
+                         first would answer 1 where the language answers true",
+                        types::describe(element)
+                    ),
+                ));
+            }
+        })
+    }
+
+    /// The descriptor of what a growable array holds, as its wrapper spells it.
+    fn growable_element(&self, ty: &HirType) -> Result<String, Diagnostic> {
+        let HirType::Managed(ManagedType::Array(element)) = ty else {
+            return Err(refuse(self.func, "an array operation on something that is not an array"));
+        };
+        Ok(match types::kind(element) {
+            Some(Kind::Double) => "D".to_owned(),
+            _ => "Ljava/lang/Object;".to_owned(),
+        })
+    }
+
     /// The descriptor of what an array holds, or `None` if this is not one.
     ///
     /// Used to pick between overloads: `arraySlice(double[], ..)` and
@@ -882,7 +987,7 @@ impl Emitter<'_> {
         let HirType::Managed(ManagedType::Array(element)) = ty else {
             return None;
         };
-        let descriptor = types::descriptor(self.program, element)?;
+        let descriptor = types::descriptor(self.shape, element)?;
         // Three overloads cover every element type: the two primitive widths
         // that appear, and references. `Object[]` accepts any reference array
         // by Java's array covariance, and the result is `checkcast` back.
@@ -998,7 +1103,7 @@ impl Emitter<'_> {
                     }
                     HirType::Managed(_) => {
                         code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
-                        let descriptor = types::descriptor(self.program, ty).ok_or_else(|| {
+                        let descriptor = types::descriptor(self.shape, ty).ok_or_else(|| {
                             refuse(self.func, "unerasing to an unrepresentable reference")
                         })?;
                         // Unchecked by construction upstream, but the verifier
@@ -1089,6 +1194,56 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         match kind {
+            // The wrapper, where the program grows an array anywhere. Every
+            // index is a `double` across this boundary, matching the C ABI:
+            // that is how it passes a number the compiler knew all along, and
+            // it saves a narrowing at each site.
+            OpKind::ArrayNew { length, .. } if self.shape.grows => {
+                let class = self.growable_class(ty)?;
+                self.push_as(code, *length, Kind::Double, origin)?;
+                code.invoke_static(origin, pool, &class, "of", &format!("(D)L{class};"));
+                Ok(Placed::OnStack)
+            }
+            OpKind::ArrayGet { array, index, .. } if self.shape.grows => {
+                let class = self.growable_class(&self.ty(*array).clone())?;
+                let element = self.growable_element(&self.ty(*array).clone())?;
+                self.load(code, *array)?;
+                self.push_as(code, *index, Kind::Double, origin)?;
+                code.invoke_static(
+                    origin,
+                    pool,
+                    &class,
+                    "get",
+                    &format!("(L{class};D){element}"),
+                );
+                // `NtsArrayL` stores `Object`, so an array of strings hands
+                // back an `Object` and the slot wants a `String`. The narrowing
+                // the middle end already proved has to be spelled for the
+                // verifier, which knows only what the descriptor said -- the
+                // same restoration the external-call path does.
+                if let Some(want) = types::descriptor(self.shape, ty)
+                    && want != element
+                    && types::kind(ty) == Some(Kind::Ref)
+                {
+                    code.check_cast(origin, pool, &want);
+                }
+                Ok(Placed::OnStack)
+            }
+            OpKind::ArraySet { array, index, value, .. } if self.shape.grows => {
+                let class = self.growable_class(&self.ty(*array).clone())?;
+                let element = self.growable_element(&self.ty(*array).clone())?;
+                self.load(code, *array)?;
+                self.push_as(code, *index, Kind::Double, origin)?;
+                self.load(code, *value)?;
+                code.invoke_static(
+                    origin,
+                    pool,
+                    &class,
+                    "set",
+                    &format!("(L{class};D{element})V"),
+                );
+                Ok(Placed::Stored)
+            }
             OpKind::ArrayNew { length, .. } => {
                 let element = self.element_descriptor(ty)?;
                 self.subscript(code, *length, origin)?;
@@ -1191,7 +1346,7 @@ impl Emitter<'_> {
         let HirType::Managed(ManagedType::Array(element)) = ty else {
             return Err(refuse(self.func, "an array operation on something that is not an array"));
         };
-        types::descriptor(self.program, element)
+        types::descriptor(self.shape, element)
             .ok_or_else(|| refuse(self.func, &format!("an array of {}", types::describe(element))))
     }
 
@@ -1242,6 +1397,16 @@ impl Emitter<'_> {
             {
                 self.load(code, *of)?;
                 code.invoke_static(origin, pool, types::MAP, "size", "(Lnts/rt/NtsMap;)D");
+                self.adapt(code, Kind::Double, ty, origin)?;
+                Ok(Placed::OnStack)
+            }
+            OpKind::Length(of)
+                if self.shape.grows
+                    && matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) =>
+            {
+                let class = self.growable_class(&self.ty(*of).clone())?;
+                self.load(code, *of)?;
+                code.invoke_static(origin, pool, &class, "length", &format!("(L{class};)D"));
                 self.adapt(code, Kind::Double, ty, origin)?;
                 Ok(Placed::OnStack)
             }
@@ -1367,7 +1532,7 @@ impl Emitter<'_> {
         // came from `Shape` is a `NoSuchFieldError` at link time rather than
         // anything the verifier catches.
         let owner = crate::hierarchy::declares_field(self.program, layout, field as usize);
-        let Some(descriptor) = types::descriptor(self.program, &entry.ty) else {
+        let Some(descriptor) = types::descriptor(self.shape, &entry.ty) else {
             return Err(refuse(
                 self.func,
                 &format!("a field of unrepresentable type: {}", types::describe(&entry.ty)),
@@ -2109,12 +2274,21 @@ impl Emitter<'_> {
                 // promises first and the values second, and it is the values
                 // that carry the payload representation.
                 let which = usize::from(name == "nts_promise_all");
-                let element = args
-                    .get(which)
-                    .map(|&first| self.ty(first).clone())
-                    .and_then(|ty| self.array_element_descriptor(&ty));
-                let found = external(name)
-                    .or_else(|| element.as_deref().and_then(|e| array_external(name, e)));
+                let subject = args.get(which).map(|&first| self.ty(first).clone());
+                let element = subject
+                    .as_ref()
+                    .and_then(|ty| self.array_element_descriptor(ty));
+                let found = if self.shape.grows {
+                    // A growable program has no bare arrays, so every array
+                    // helper is a method on a wrapper and the element-width
+                    // overloads below do not apply.
+                    growable_external(name, element.as_deref() != Some("D"))
+                        .map(|(class, member, signature)| (leak(class), member, signature))
+                        .or_else(|| external(name))
+                } else {
+                    external(name)
+                        .or_else(|| element.as_deref().and_then(|e| array_external(name, e)))
+                };
                 let Some((owner, member, descriptor)) = found else {
                     return Err(refuse(
                         self.func,
@@ -2145,7 +2319,7 @@ impl Emitter<'_> {
                 // `Object[]` and the slot it is stored into is a `Foo[]`. The
                 // narrowing the middle end already proved has to be spelled for
                 // the verifier, which knows only what the descriptor said.
-                if let Some(want) = types::descriptor(self.program, result)
+                if let Some(want) = types::descriptor(self.shape, result)
                     && want != returns
                     && types::kind(result) == Some(Kind::Ref)
                 {

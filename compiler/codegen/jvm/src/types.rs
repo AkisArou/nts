@@ -70,6 +70,42 @@ pub const PROMISE_DESCRIPTOR: &str = "Lnts/rt/NtsPromise;";
 /// names a frame and a function, and both are emitted here.
 pub const RESUMABLE: &str = "nts/rt/NtsResumable";
 
+/// The program a backend is rendering, and the one whole-program fact that
+/// changes how a type is spelled.
+///
+/// A struct rather than two parameters because `grows` is not a property of the
+/// *type* -- `number[]` is a `[D` in one program and an `NtsArrayD` in another,
+/// and which it is depends on whether anything, anywhere, calls `push`. Passing
+/// the program without it made that decision unavailable at the only place it
+/// could be made.
+#[derive(Clone, Copy, Debug)]
+pub struct Shape<'a> {
+    pub program: &'a Program,
+    pub grows: bool,
+}
+
+impl<'a> Shape<'a> {
+    #[must_use]
+    pub fn of(program: &'a Program) -> Self {
+        Self { program, grows: nts_core::hir::arrays_can_grow(program) }
+    }
+}
+
+/// The wrapper class for an array of this element type.
+fn growable(shape: Shape<'_>, element: &HirType) -> Option<String> {
+    Some(match kind(element)? {
+        Kind::Double => "Lnts/rt/NtsArrayD;".to_owned(),
+        Kind::Ref => "Lnts/rt/NtsArrayL;".to_owned(),
+        // `boolean[]` and the narrow integers have no wrapper yet. Refused by
+        // name rather than widened to `NtsArrayD`, which would answer `1` where
+        // the language answers `true`.
+        _ => {
+            let _ = shape;
+            return None;
+        }
+    })
+}
+
 /// `Map` and `Set`, which are one table with the values left out of one of them.
 pub const MAP: &str = "nts/rt/NtsMap";
 pub const MAP_DESCRIPTOR: &str = "Lnts/rt/NtsMap;";
@@ -83,7 +119,8 @@ pub const BIGINT_DESCRIPTOR: &str = "Lnts/rt/NtsBigInt;";
 /// `None` is a type this backend cannot represent yet, which is a refusal by
 /// name rather than a guess.
 #[must_use]
-pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
+pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
+    let program = shape.program;
     Some(match ty {
         HirType::Void => "V".to_owned(),
         HirType::Bool => "Z".to_owned(),
@@ -134,7 +171,21 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
         // inside it. `emit` refuses such a program whole, which is the right
         // granularity because `arrays_can_grow` is a whole-program property.
         HirType::Managed(ManagedType::Array(element)) => {
-            nts_jvm_emitter::descriptor::array_of(&descriptor(program, element)?)
+            if shape.grows {
+                // Whole-program: one `push` anywhere puts every array behind a
+                // wrapper, because an array that grows cannot keep its elements
+                // inline after its own header without moving.
+                //
+                // Record 0088 measured that at **1.4%** here against **4.02x**
+                // on the native lane, so the refusal this replaces was worth
+                // having until the number existed and is not worth having now.
+                // The bare array stays for a program that never grows one,
+                // because 1.4% on the AWFY rows is 1.4% off the only comparison
+                // this lane exists to make.
+                growable(shape, element)?
+            } else {
+                nts_jvm_emitter::descriptor::array_of(&descriptor(shape, element)?)
+            }
         }
         // Every `ManagedType` is spelled above, so there is no catch-all here
         // and adding a variant upstream is a compile error rather than a
@@ -170,7 +221,8 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
 
 /// The frame entry for a slot holding this type.
 #[must_use]
-pub fn vtype(program: &Program, ty: &HirType) -> Option<VType> {
+pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
+    let program = shape.program;
     Some(match kind(ty)? {
         Kind::Int => VType::Integer,
         Kind::Long => VType::Long,
@@ -185,9 +237,20 @@ pub fn vtype(program: &Program, ty: &HirType) -> Option<VType> {
             HirType::Managed(ManagedType::Promise(_)) => VType::Object(PROMISE.to_owned()),
             HirType::Managed(ManagedType::String) => VType::Object(STRING.to_owned()),
             // An array's *class* constant is named by its descriptor rather
-            // than by an internal name: `[D`, not `D` and not `L[D;`.
+            // than by an internal name: `[D`, not `D` and not `L[D;`. That is
+            // true of a **bare** array only -- a growable one is an ordinary
+            // class and wants its internal name, and passing the descriptor
+            // there is `ClassFormatError: Illegal class name
+            // "Lnts/rt/NtsArrayD;"` at load.
+            HirType::Managed(ManagedType::Array(element)) if shape.grows => {
+                VType::Object(match kind(element) {
+                    Some(Kind::Double) => "nts/rt/NtsArrayD".to_owned(),
+                    Some(Kind::Ref) => "nts/rt/NtsArrayL".to_owned(),
+                    _ => return None,
+                })
+            }
             HirType::Managed(ManagedType::Array(_)) => {
-                VType::Object(descriptor(program, ty)?)
+                VType::Object(descriptor(shape, ty)?)
             }
             HirType::Managed(ManagedType::Object(id)) => {
                 VType::Object(class_name(program.layout(*id)?))
@@ -248,29 +311,29 @@ mod tests {
     #[test]
     fn a_narrow_integer_is_an_int_in_every_vocabulary_but_none() {
         let byte = HirType::Int { bits: 8, signed: true };
-        assert_eq!(descriptor(&empty(), &byte).as_deref(), Some("I"));
+        assert_eq!(descriptor(Shape::of(&empty()), &byte).as_deref(), Some("I"));
         assert_eq!(kind(&byte), Some(Kind::Int));
-        assert_eq!(vtype(&empty(), &byte), Some(VType::Integer));
+        assert_eq!(vtype(Shape::of(&empty()), &byte), Some(VType::Integer));
     }
 
     #[test]
     fn a_bool_is_an_int_to_compute_and_a_z_to_declare() {
-        assert_eq!(descriptor(&empty(), &HirType::Bool).as_deref(), Some("Z"));
+        assert_eq!(descriptor(Shape::of(&empty()), &HirType::Bool).as_deref(), Some("Z"));
         assert_eq!(kind(&HirType::Bool), Some(Kind::Int));
     }
 
     #[test]
     fn sixty_four_bits_is_the_only_wide_integer() {
         let long = HirType::Int { bits: 64, signed: true };
-        assert_eq!(descriptor(&empty(), &long).as_deref(), Some("J"));
+        assert_eq!(descriptor(Shape::of(&empty()), &long).as_deref(), Some("J"));
         assert_eq!(kind(&long), Some(Kind::Long));
-        assert_eq!(vtype(&empty(), &long), Some(VType::Long));
+        assert_eq!(vtype(Shape::of(&empty()), &long), Some(VType::Long));
     }
 
     #[test]
     fn what_this_slice_does_not_represent_says_so() {
-        assert_eq!(descriptor(&empty(), &HirType::Never), None);
-        assert_eq!(descriptor(&empty(), &HirType::Void).as_deref(), Some("V"));
+        assert_eq!(descriptor(Shape::of(&empty()), &HirType::Never), None);
+        assert_eq!(descriptor(Shape::of(&empty()), &HirType::Void).as_deref(), Some("V"));
         assert_eq!(kind(&HirType::Void), None, "void has no computational kind");
     }
 
@@ -286,10 +349,10 @@ mod tests {
     /// here because node's `BigInt` is not one.
     #[test]
     fn a_bigint_is_a_reference_to_two_longs() {
-        assert_eq!(descriptor(&empty(), &HirType::BigInt).as_deref(), Some(BIGINT_DESCRIPTOR));
+        assert_eq!(descriptor(Shape::of(&empty()), &HirType::BigInt).as_deref(), Some(BIGINT_DESCRIPTOR));
         assert_eq!(kind(&HirType::BigInt), Some(Kind::Ref));
         assert_eq!(
-            vtype(&empty(), &HirType::BigInt),
+            vtype(Shape::of(&empty()), &HirType::BigInt),
             Some(VType::Object(BIGINT.to_owned()))
         );
     }

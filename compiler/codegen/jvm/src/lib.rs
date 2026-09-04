@@ -109,25 +109,20 @@ impl Emitted {
 pub fn emit(program: &Program) -> Emitted {
     let mut pool = Pool::new();
     let mut diagnostics = Vec::new();
-    // Whole-program, so refused whole. A Java array cannot grow, so a program
-    // where any array does needs every array to be an object with a `double[]`
-    // and a length inside it -- and `hir::arrays_can_grow` is true if *anything*
-    // anywhere pushes. Measured across the corpus at false in 2 of 93 examples
-    // and true in 20 of 23 `runtime/node` modules, so the wrapper is what real
-    // code gets and the bare array is what a benchmark gets. Which side of that
-    // cliff costs what is `benches/cases/growth-fixed` against `growth-grown`,
-    // and the wrapper is not worth building before that number exists.
-    if nts_core::hir::arrays_can_grow(program) {
-        diagnostics.push(Diagnostic::error(
-            "NTS4007",
-            "this program grows an array, and a Java array cannot grow -- every \
-             array in it would need a wrapper object, which this backend does \
-             not build yet"
-                .to_owned(),
-            program_origin(program).location,
-        ));
-        return Emitted { classes: Vec::new(), diagnostics };
-    }
+    // An array that grows is a wrapper rather than a bare `double[]`, chosen
+    // whole-program because `hir::arrays_can_grow` is: one `push` anywhere and
+    // every array in the program needs a length beside its storage.
+    //
+    // This used to refuse such a program outright, on the plan's reasoning that
+    // the wrapper is a real cost and should be priced before it is built.
+    // Record 0088 priced it: **1.4% here against 4.02x on the native lane**,
+    // because the bare array was already this shape -- a `double[]` is a heap
+    // object with a header, and `xs[i]` is already a reference load, a bounds
+    // check against a field, and a load through it.
+    //
+    // The bare array stays for a program that never grows one. 1.4% is small
+    // and it is not nothing, and the AWFY rows -- which never `push` -- are the
+    // only comparison against hand-written Java this lane has.
     let mut builder = ClassBuilder::new(PROGRAM, "java/lang/Object");
     builder.access = access::PUBLIC | access::SUPER | access::FINAL;
     builder.source_file = Some("nts".to_owned());
@@ -136,7 +131,7 @@ pub fn emit(program: &Program) -> Emitted {
     // exports it, for the reason the C backend makes it `static`: a name
     // outside the program is a name something outside can collide with.
     for global in &program.globals {
-        let Some(descriptor) = types::descriptor(program, &global.ty) else {
+        let Some(descriptor) = types::descriptor(types::Shape::of(program), &global.ty) else {
             diagnostics.push(Diagnostic::error(
                 "NTS4002",
                 format!(
@@ -256,7 +251,7 @@ fn object_class(program: &Program, layout: &nts_core::hir::Layout) -> Result<Opt
     // so redeclaring them here would give the object two of each and leave
     // `getfield` reading whichever the descriptor named.
     for field in hierarchy::declared(program, layout) {
-        let Some(descriptor) = types::descriptor(program, &field.ty) else {
+        let Some(descriptor) = types::descriptor(types::Shape::of(program), &field.ty) else {
             return Err(Diagnostic::error(
                 "NTS4006",
                 format!(
@@ -420,7 +415,7 @@ fn dispatch_forwarders(
 
         let mut locals = vec![VType::Object(types::class_name(layout))];
         for param in target.params.iter().skip(1) {
-            let Some(vtype) = types::vtype(program, &param.ty) else {
+            let Some(vtype) = types::vtype(types::Shape::of(program), &param.ty) else {
                 return Err(Diagnostic::error(
                     "NTS4008",
                     format!("`{func_name}` takes a parameter with no representation"),
@@ -464,13 +459,13 @@ fn dispatch_forwarders(
 pub(crate) fn instance_descriptor(program: &Program, func: &nts_core::hir::Func) -> Option<String> {
     let mut params = Vec::with_capacity(func.params.len());
     for param in func.params.iter().skip(1) {
-        params.push(types::descriptor(program, &param.ty)?);
+        params.push(types::descriptor(types::Shape::of(program), &param.ty)?);
     }
     func.params.first()?;
     let borrowed: Vec<&str> = params.iter().map(String::as_str).collect();
     Some(nts_jvm_emitter::descriptor::method(
         &borrowed,
-        &types::descriptor(program, &func.return_type)?,
+        &types::descriptor(types::Shape::of(program), &func.return_type)?,
     ))
 }
 
@@ -542,7 +537,7 @@ fn class_initializer(
     let interesting: Vec<_> = program
         .globals
         .iter()
-        .filter(|global| global.initial != 0.0 && types::descriptor(program, &global.ty).is_some())
+        .filter(|global| global.initial != 0.0 && types::descriptor(types::Shape::of(program), &global.ty).is_some())
         .collect();
     if interesting.is_empty() && singletons.is_empty() {
         return None;
@@ -557,7 +552,7 @@ fn class_initializer(
     }
     for global in interesting {
         let origin = global.origin.clone();
-        let descriptor = types::descriptor(program, &global.ty)?;
+        let descriptor = types::descriptor(types::Shape::of(program), &global.ty)?;
         match types::kind(&global.ty)? {
             Kind::Double => code.const_double(&origin, pool, global.initial),
             #[allow(

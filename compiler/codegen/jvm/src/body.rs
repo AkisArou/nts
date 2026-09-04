@@ -58,6 +58,9 @@ pub(crate) enum Placed {
 #[derive(Debug)]
 pub struct Emitter<'a> {
     pub(crate) program: &'a Program,
+    /// The program plus the one whole-program fact that changes a type's
+    /// spelling; see [`types::Shape`].
+    pub(crate) shape: types::Shape<'a>,
     pub(crate) func: &'a Func,
     /// Slot per value. `None` for a value nothing reads.
     pub(crate) slots: Vec<Option<u16>>,
@@ -76,14 +79,14 @@ impl<'a> Emitter<'a> {
     /// Lay out storage, or refuse a type this slice has no representation for.
     pub fn new(program: &'a Program, func: &'a Func) -> Result<Self, Diagnostic> {
         for param in &func.params {
-            if types::descriptor(program, &param.ty).is_none() {
+            if types::descriptor(types::Shape::of(program), &param.ty).is_none() {
                 return Err(refuse(
                     func,
                     &format!("a parameter of unrepresentable type: {}", types::describe(&param.ty)),
                 ));
             }
         }
-        if types::descriptor(program, &func.return_type).is_none() {
+        if types::descriptor(types::Shape::of(program), &func.return_type).is_none() {
             return Err(refuse(
                 func,
                 &format!(
@@ -103,7 +106,7 @@ impl<'a> Emitter<'a> {
         // every later one.
         let mut param_slot = Vec::with_capacity(func.params.len());
         for param in &func.params {
-            let Some(vtype) = types::vtype(program, &param.ty) else {
+            let Some(vtype) = types::vtype(types::Shape::of(program), &param.ty) else {
                 return Err(refuse(func, "a parameter with no verification type"));
             };
             param_slot.push(u16::try_from(next).unwrap_or(u16::MAX));
@@ -136,7 +139,7 @@ impl<'a> Emitter<'a> {
             if matches!(ty, HirType::Void) {
                 continue;
             }
-            let Some(vtype) = types::vtype(program, ty) else {
+            let Some(vtype) = types::vtype(types::Shape::of(program), ty) else {
                 return Err(refuse(
                     func,
                     &format!("a value of unrepresentable type: {}", types::describe(ty)),
@@ -182,6 +185,7 @@ impl<'a> Emitter<'a> {
 
         Ok(Self {
             program,
+            shape: types::Shape::of(program),
             func,
             slots,
             locals,
@@ -216,7 +220,7 @@ impl<'a> Emitter<'a> {
                 .func
                 .params
                 .iter()
-                .filter_map(|param| types::vtype(self.program, &param.ty))
+                .filter_map(|param| types::vtype(self.shape, &param.ty))
                 .map(|vtype| vtype.slots())
                 .sum();
             let origin = self.func.origin.clone();
@@ -351,11 +355,11 @@ pub fn method_name(raw: &str) -> String {
 pub fn signature(program: &Program, func: &Func) -> Option<String> {
     let mut params = Vec::with_capacity(func.params.len());
     for param in &func.params {
-        params.push(types::descriptor(program, &param.ty)?);
+        params.push(types::descriptor(types::Shape::of(program), &param.ty)?);
     }
     let borrowed: Vec<&str> = params.iter().map(String::as_str).collect();
     Some(nts_jvm_emitter::descriptor::method(
         &borrowed,
-        &types::descriptor(program, &func.return_type)?,
+        &types::descriptor(types::Shape::of(program), &func.return_type)?,
     ))
 }
