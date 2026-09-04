@@ -24,6 +24,58 @@ correct, and normally an improvement -- and leaves `limit` a `double`, so
 on the previous value of that register. Reused across iterations, the
 conversions serialise and the loop becomes latency-bound.
 
+## Correction: the conversion is at the accumulator, not the comparison
+
+The paragraph above says `i < limit` widens the counter. It does not. The
+emitted code is:
+
+    getfield upTo$frame.yielded:I
+    i2d                              <- every element
+    dload  total
+    dadd
+
+`yielded` is narrowed to `i32`; `total` is an f64 accumulator; each element
+widens on the way in. `specialize.rs` names this and prices it -- *"Left apart,
+the counter and its comparison become integers and only the accumulation pays a
+conversion"* -- and the conversion lands on the accumulator's **loop-carried
+chain**, which is the whole cost.
+
+The identification stands: an `int` counter in the reference reproduces our
+time to 0.2%, because it produces the same widening on the same chain. Only the
+account of *where* was wrong.
+
+A prototype that joined comparison operands across a parameter changed nothing,
+because those operands were already joined -- the parameter exclusion never
+fired on this program. It is removed rather than kept.
+
+## And it is not a wrong decision, it is a backend-asymmetric one
+
+`target/bench/generator.specialized.c` carries `int32_t yielded; double limit;`
+and five `(double)` casts in the same places. The C lane makes the identical
+choice:
+
+    C lane      180.46 us against C++ 170.22   = 1.06x
+    JVM lane    590 us against Java 172.5      = 3.43x
+
+**The same conversion on the same chain costs 6% on one backend and 243% on the
+other.** `cvtsi2sd` merges into its destination register, so a reused register
+serialises the chain; clang breaks the dependency and C2 does not. No IR
+expresses that, and no instruction count shows it -- 1.25x the instructions
+against 3.41x the cycles.
+
+So the pass is right by its own reasoning, and its reasoning names the compiler
+it was reasoned against: *"which the C compiler hoists out of the loop"*. A
+decision correct on the lane it was measured on, carried to a lane where the
+same instruction is not the same cost.
+
+The rule that would fix it is narrower than joining arithmetic operands, which
+was tried and sank the counters: **a class whose every use requires a
+conversion has nothing to gain from being narrow.** `yielded` is multiplied by
+three and immediately widened; the integer multiply buys one instruction and
+the widening costs a loop-carried dependency. `specialize.rs` already has the
+mirror of that check -- "a class with no arithmetic in it has nothing to make
+faster".
+
 ## Everything the counters said, in order, and what each was worth
 
 | measurement | said |
