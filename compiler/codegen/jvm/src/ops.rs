@@ -2455,6 +2455,24 @@ impl Emitter<'_> {
         let Some(target) = self.program.funcs.iter().find(|func| &func.name == name) else {
             return Err(refuse(self.func, &format!("a call to `{name}`, which is not in this program")));
         };
+        // An abstract declaration has no static body -- it is `ACC_ABSTRACT`
+        // with no `Code` on its class, reached only through `Callee::Virtual`.
+        // A *direct* call to one would emit `invokestatic` at a name this
+        // backend deliberately does not write, and that is a
+        // `NoSuchMethodError` on whatever path first reaches it rather than a
+        // verifier error at load: resolution is lazy, so `Verify` forcing
+        // linkage over the corpus would not see it either.
+        //
+        // The C lane gets this check from `-Werror=unused-function` -- but
+        // only in the benchmark build, and only in the direction of a body
+        // nobody calls. This is the other direction, and it is the one this
+        // backend can make loud.
+        if target.abstract_declaration {
+            return Err(refuse(
+                self.func,
+                &format!("a direct call to `{name}`, which is abstract and has no body to call"),
+            ));
+        }
         let Some(signature) = crate::body::signature(self.program, target) else {
             return Err(refuse(self.func, &format!("a call to `{name}`, whose signature has no representation")));
         };

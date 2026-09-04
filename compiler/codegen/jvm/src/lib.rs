@@ -181,6 +181,21 @@ pub fn emit(program: &Program) -> Emitted {
     }
 
     for func in &program.funcs {
+        // An abstract declaration is carried in `program.funcs` so that a call
+        // through the slot can take its descriptor from somewhere, and that is
+        // the whole of what it is for: nothing calls it, because an abstract
+        // class is never instantiated and every reachable receiver is a
+        // subclass whose override filled the slot. So there is no body to
+        // emit. `object_class` gives it `ACC_ABSTRACT` with no `Code` instead.
+        //
+        // The flag is what makes this readable rather than inferred. The shape
+        // is otherwise "one block, `Unreachable`, no operations beyond
+        // `Param`" -- which is also exactly what a function that legitimately
+        // cannot return looks like, and emitting nothing for one of those
+        // would be a linkage error at the call site rather than dead bytes.
+        if func.abstract_declaration {
+            continue;
+        }
         match render(program, func, &mut pool) {
             Ok((name, signature, rendered)) => {
                 builder.method(
@@ -411,6 +426,25 @@ fn dispatch_forwarders(
                     origin.location,
                 ));
             }
+        }
+
+        // An abstract declaration gets the method with no `Code`, and the
+        // verifier is what makes the absence safe: `invokevirtual` on an
+        // abstract method is legal exactly because a receiver can only be a
+        // subclass that overrode it, and `new` on the abstract class does not
+        // verify at all. That is the same guarantee the C lane gets from
+        // nobody naming the symbol -- but enforced by the platform rather than
+        // by the absence of a caller, which is the stronger of the two.
+        //
+        // `ACC_ABSTRACT` and `ACC_FINAL` together are rejected at load time.
+        // `hierarchy::extended` is already true for any class worth declaring
+        // abstract, so clearing it is belt-and-braces against a base nothing
+        // happens to extend.
+        if target.abstract_declaration {
+            builder.access |= access::ABSTRACT;
+            builder.access &= !access::FINAL;
+            builder.method(access::PUBLIC | access::ABSTRACT, member, descriptor, None);
+            continue;
         }
 
         let mut locals = vec![VType::Object(types::class_name(layout))];

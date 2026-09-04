@@ -27,13 +27,67 @@
 # `trap` installed only on the path where the `mkdir` returned zero, and there is
 # no second test to get wrong.
 #
-# # Staleness
+# # Staleness, and the check that used to be here
 #
-# Nothing releases the lock if its holder dies, so a directory with no live
-# `gate/all.sh` or `nts-bench` behind it is reclaimed rather than waited on. The
-# check is `pgrep` against the *processes*, never against a waiter's own command
-# line -- `until ! pgrep -f "gate/all.sh"` matches the waiter and never exits.
+# Nothing releases the lock if its holder dies, so a lock with no live holder is
+# reclaimed rather than waited on. **The holder writes its pid into the lock**
+# and staleness is `kill -0` against that pid. It is not a `pgrep`.
+#
+# It was a `pgrep -af 'gate/all\.sh|nts-bench'`, directly below a comment saying
+# the check must never match a waiter's own command line. It matched this
+# script's own command line: the normal invocation is
+#
+#     with-lock.sh tooling/gate/all.sh
+#
+# so this process's argv *contains* `gate/all.sh`, the pattern found it, and a
+# stale lock was reported as a live measurement and never reclaimed. It only
+# ever bit when the lock was already there -- when `mkdir` succeeds on the first
+# try the loop body does not run at all -- so it survived every use until the
+# first one that mattered.
+#
+# A pid is the thing the question is actually about. `pgrep` asks "does a
+# process matching this text exist", which is a different question that happens
+# to agree most of the time, and the disagreement is always self-inflicted.
+#
+# Run `with-lock.sh --self-test` to see both halves demonstrated.
 set -eu
+
+lock=/tmp/nts-gate/gate.lock.d
+
+# `mkdir` then write the pid; a reader that finds no pid file has caught a
+# holder between the two, so it waits a beat and looks again rather than
+# reclaiming a lock somebody is in the middle of taking.
+held_by() {
+    holder=$(cat "$lock/pid" 2>/dev/null || true)
+    [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null
+}
+
+if [ "${1-}" = "--self-test" ]; then
+    scratch=$(mktemp -d)
+    trap 'rm -rf "$scratch"' EXIT
+    lock="$scratch/lock.d"
+
+    # A lock held by a process that is gone is stale, whatever is running.
+    mkdir "$lock"
+    sh -c 'echo $$ > "$1/pid"' _ "$lock"          # a pid that exits immediately
+    if held_by; then
+        echo "self-test FAILED: a dead holder read as live" >&2
+        exit 1
+    fi
+    echo "self-test: a dead holder is stale -- correct"
+
+    # And the case that broke: this very process's argv names gate/all.sh.
+    echo $$ > "$lock/pid"
+    if ! held_by; then
+        echo "self-test FAILED: a live holder read as dead" >&2
+        exit 1
+    fi
+    if pgrep -af 'gate/all\.sh|nts-bench' > /dev/null 2>&1; then
+        echo "self-test: pgrep -af still matches something -- which is why it is gone"
+    fi
+    echo "self-test: a live holder is held -- correct"
+    exit 0
+fi
 
 wait_for_it=false
 if [ "${1-}" = "--wait" ]; then
@@ -41,28 +95,33 @@ if [ "${1-}" = "--wait" ]; then
     shift
 fi
 
-lock=/tmp/nts-gate/gate.lock.d
 mkdir -p "$(dirname "$lock")"
 
-# The loop body runs at most twice without `--wait`: once for the lock being
-# held, once more after reclaiming a stale one.
 while ! mkdir "$lock" 2>/dev/null; do
-    if pgrep -af 'gate/all\.sh|nts-bench' > /dev/null 2>&1; then
-        if [ "$wait_for_it" = true ]; then
-            sleep 20
+    if ! held_by; then
+        # No pid, or a pid that is gone. The first can be a holder caught
+        # mid-acquisition, so look once more before taking their lock away.
+        sleep 1
+        if ! held_by; then
+            echo "with-lock: the lock is stale -- pid ${holder:-none} is not running" >&2
+            rm -f "$lock/pid"
+            if ! rmdir "$lock" 2>/dev/null; then
+                echo "with-lock: could not reclaim the lock" >&2
+                exit 75
+            fi
             continue
         fi
-        echo "with-lock: a measurement is running; not starting another" >&2
-        exit 75
     fi
-    echo "with-lock: the lock is stale -- no gate or bench process holds it" >&2
-    if ! rmdir "$lock" 2>/dev/null; then
-        echo "with-lock: could not reclaim the lock" >&2
-        exit 75
+    if [ "$wait_for_it" = true ]; then
+        sleep 20
+        continue
     fi
+    echo "with-lock: pid $holder is measuring; not starting another" >&2
+    exit 75
 done
 
 # Only reached when *this* shell created the directory, which is the whole point.
-trap 'rmdir "$lock" 2>/dev/null || true' EXIT INT TERM
+echo $$ > "$lock/pid"
+trap 'rm -f "$lock/pid"; rmdir "$lock" 2>/dev/null || true' EXIT INT TERM
 
 "$@"
