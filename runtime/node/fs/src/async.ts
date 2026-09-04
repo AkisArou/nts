@@ -47,6 +47,7 @@ import {
 } from "./stats.ts";
 import {
   direntFromStats,
+  globIteratorWithFileSystem,
   globWithFileSystem,
   type AsyncGlobFileSystem,
   type GlobOptions,
@@ -182,6 +183,30 @@ function isTextDirent(
 }
 
 const publicAsyncGlobFileSystem = new PublicAsyncGlobFileSystem();
+
+/** Incremental source shared by fs/promises.glob and callback fs.glob. */
+export function globIterator(
+  pattern: GlobPatternInput,
+  options: GlobOptions & { withFileTypes: true },
+): AsyncIterable<Dirent>;
+export function globIterator(
+  pattern: GlobPatternInput,
+  options?: GlobOptions,
+): AsyncIterable<string>;
+export function globIterator(
+  pattern: unknown,
+  options?: unknown,
+): AsyncIterable<string | Dirent>;
+export function globIterator(
+  pattern: unknown,
+  options?: unknown,
+): AsyncIterable<string | Dirent> {
+  return globIteratorWithFileSystem(
+    pattern,
+    options,
+    publicAsyncGlobFileSystem,
+  );
+}
 
 declare function nts_fs_open_async(
   path: string, flags: number, mode: number, callback: (errno: number, fd: number) => void,

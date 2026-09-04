@@ -700,32 +700,36 @@ class AsyncGlobWalker {
     this.results = new GlobResults(this.root, isExcluded);
   }
 
-  async run(): Promise<Array<string | Dirent>> {
+  async *run(): AsyncGenerator<string | Dirent, void, undefined> {
     this.queue.push({ path: ".", patterns: this.patterns });
     while (this.queue.length !== 0) {
       const item = this.queue.pop();
       if (item === undefined) throw new Error("glob queue lost its final item");
       for (let index = 0; index < item.patterns.length; index++) {
         const pattern = item.patterns[index];
-        if (pattern !== undefined) await this.addSubpatterns(item.path, pattern);
+        if (pattern !== undefined) yield* this.addSubpatterns(item.path, pattern);
       }
       this.subpatterns.forEach((patterns, path) => {
         this.queue.push({ path, patterns });
       });
       this.subpatterns.clear();
     }
+  }
 
-    if (!this.withFileTypes) return this.results.values;
-    const entries = new Array<Dirent>(this.results.values.length);
-    for (let index = 0; index < this.results.values.length; index++) {
-      const path = this.results.values[index];
-      if (path === undefined) throw new Error(`glob result is missing path ${index}`);
-      const fullpath = isAbsolutePath(path) ? path : joinPath(this.root, path);
-      const entry = await this.cache.lstat(fullpath);
-      if (entry === null) throw new Error(`glob result disappeared: ${path}`);
-      entries[index] = entry;
-    }
-    return entries;
+  /** Record and shape a match whose Dirent is already in the traversal cache. */
+  private addKnownResult(path: string, entry: Dirent): string | Dirent | undefined {
+    if (!this.results.add(path)) return undefined;
+    return this.withFileTypes ? entry : path;
+  }
+
+  /** Record and shape a match found by path rather than during child walking. */
+  private async addResult(path: string): Promise<string | Dirent | undefined> {
+    if (!this.results.add(path)) return undefined;
+    if (!this.withFileTypes) return path;
+    const fullpath = isAbsolutePath(path) ? path : joinPath(this.root, path);
+    const entry = await this.cache.lstat(fullpath);
+    if (entry === null) throw new Error(`glob result disappeared: ${path}`);
+    return entry;
   }
 
   private async isDirectory(
@@ -780,7 +784,10 @@ class AsyncGlobWalker {
     else current.push(pattern);
   }
 
-  private async addSubpatterns(path: string, pattern: TraversalPattern): Promise<void> {
+  private async *addSubpatterns(
+    path: string,
+    pattern: TraversalPattern,
+  ): AsyncGenerator<string | Dirent, void, undefined> {
     if (this.cache.add(path, pattern)) return;
     const fullpath = resolvePath(this.root, path);
     const stat = await this.cache.lstat(fullpath);
@@ -807,12 +814,16 @@ class AsyncGlobWalker {
     if (isLast && typeof finalPart === "string") {
       const childStat = await this.cache.lstat(joinPath(fullpath, finalPart));
       if (childStat !== null && (finalPart.length !== 0 || isDirectory)) {
-        this.results.add(joinPath(path, finalPart));
+        const result = this.addKnownResult(joinPath(path, finalPart), childStat);
+        if (result !== undefined) yield result;
       }
       if (pattern.indexes.size === 1 && pattern.indexes.has(last)) return;
     } else if (isLast && finalPart instanceof GlobStar &&
       (path !== "." || pattern.at(0) === "." || (last === 0 && stat !== null))) {
-      this.results.add(path);
+      const result = stat === null
+        ? await this.addResult(path)
+        : this.addKnownResult(path, stat);
+      if (result !== undefined) yield result;
     }
 
     if (!isDirectory || await this.isCyclic(fullpath, isDirectory, pattern)) return;
@@ -862,10 +873,14 @@ class AsyncGlobWalker {
             continue;
           }
           if (!fromSymlink && entryIsDirectory) childIndexes.add(index);
-          else if (!fromSymlink && index === last) this.results.add(entryPath);
+          else if (!fromSymlink && index === last) {
+            const result = this.addKnownResult(entryPath, entry);
+            if (result !== undefined) yield result;
+          }
 
           if (nextMatches && nextIndex === last && !isLast) {
-            this.results.add(entryPath);
+            const result = this.addKnownResult(entryPath, entry);
+            if (result !== undefined) yield result;
           } else if (nextMatches && entryIsDirectory) {
             childIndexes.add(index + 2);
           }
@@ -894,13 +909,17 @@ class AsyncGlobWalker {
               if (!this.cache.seen(path, pattern, nextIndex)) {
                 const child = pattern.child(new Set<number>([nextIndex]));
                 this.cache.add(path, child);
-                this.results.add(path);
+                const result = stat === null
+                  ? await this.addResult(path)
+                  : this.addKnownResult(path, stat);
+                if (result !== undefined) yield result;
               }
               if (!this.cache.seen(path, pattern, nextIndex) ||
                   !this.cache.seen(parent, pattern, nextIndex)) {
                 const child = pattern.child(new Set<number>([nextIndex]));
                 this.cache.add(parent, child);
-                this.results.add(parent);
+                const result = await this.addResult(parent);
+                if (result !== undefined) yield result;
               }
             }
           }
@@ -910,11 +929,17 @@ class AsyncGlobWalker {
           if (pattern.test(index, entry.name) && index !== last) {
             childIndexes.add(nextIndex);
           } else if (current === "." && pattern.test(nextIndex, entry.name)) {
-            if (nextIndex === last) this.results.add(entryPath);
+            if (nextIndex === last) {
+              const result = this.addKnownResult(entryPath, entry);
+              if (result !== undefined) yield result;
+            }
             else childIndexes.add(nextIndex + 1);
           }
         } else if (current instanceof GlobSegmentMatcher && pattern.test(index, entry.name)) {
-          if (index === last) this.results.add(entryPath);
+          if (index === last) {
+            const result = this.addKnownResult(entryPath, entry);
+            if (result !== undefined) yield result;
+          }
           else if (entryIsDirectory) childIndexes.add(nextIndex);
         }
       }
@@ -941,17 +966,34 @@ export function globSyncWithFileSystem(
   ).run();
 }
 
-export function globWithFileSystem(
+export function globIteratorWithFileSystem(
   pattern: unknown,
   options: unknown,
   fileSystem: AsyncGlobFileSystem,
-): Promise<Array<string | Dirent>> {
+): AsyncIterable<string | Dirent> {
   const normalized = normalizeGlobOptions(pattern, options);
   return new AsyncGlobWalker(
     normalized.patterns,
     normalized.options,
     fileSystem,
   ).run();
+}
+
+/** Collect the incremental walker for callback-style fs.glob(). */
+export async function globWithFileSystem(
+  pattern: unknown,
+  options: unknown,
+  fileSystem: AsyncGlobFileSystem,
+): Promise<Array<string | Dirent>> {
+  const results: Array<string | Dirent> = [];
+  for await (const result of globIteratorWithFileSystem(
+    pattern,
+    options,
+    fileSystem,
+  )) {
+    results.push(result);
+  }
+  return results;
 }
 
 /** Build a public Dirent for a path obtained through `lstat`. */

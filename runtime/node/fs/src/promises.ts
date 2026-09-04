@@ -71,6 +71,7 @@ import {
   type RmOptions,
 } from "./options.ts";
 import { normalizeCpOptions, type CopyOptions } from "./cp-common.ts";
+import type { GlobOptions, GlobPatternInput } from "./glob.ts";
 import { bufferLengths, flattenBuffers } from "./vector-io.ts";
 import type { FileStreamOptions, ReadStream, WriteStream } from "./streams.ts";
 import {
@@ -1638,6 +1639,20 @@ export function readFile(
   });
 }
 export const readdir = promisifyValue(callbacks.readdir, "readdir");
+export function glob(
+  pattern: GlobPatternInput,
+  options: GlobOptions & { withFileTypes: true },
+): AsyncIterable<Dirent>;
+export function glob(
+  pattern: GlobPatternInput,
+  options?: GlobOptions,
+): AsyncIterable<string>;
+export function glob(
+  pattern: unknown,
+  options?: unknown,
+): AsyncIterable<string | Dirent> {
+  return callbacks.globIterator(pattern, options);
+}
 export const readlink = promisifyValue(callbacks.readlink, "readlink");
 export const realpath = promisifyValue(callbacks.realpath, "realpath");
 export const rename = promisifyVoid(callbacks.rename);
