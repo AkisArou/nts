@@ -274,6 +274,22 @@ export class Dir {
     if (result < 0) throw uvException(result, "closedir", this.#path);
   }
 
+  async *[Symbol.asyncIterator](): AsyncGenerator<
+    DirectoryEntry,
+    void,
+    undefined
+  > {
+    try {
+      while (true) {
+        const entry = await this.read();
+        if (entry === null) return;
+        yield entry;
+      }
+    } finally {
+      await this.close();
+    }
+  }
+
   #readImpl(callback: DirReadCallback, deferBuffered: boolean): void {
     if (this.#closed) throw new ERR_DIR_CLOSED();
     if (this.#busy) {

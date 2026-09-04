@@ -1,6 +1,5 @@
-// Applicable subset of upstream `test/parallel/test-fs-opendir.js` and
-// `test/sequential/test-fs-opendir-recursive.js`. The omitted blocks require
-// runtime Symbol.asyncIterator hooks or constructor.prototype inspection.
+// Applicable subset of upstream `test/parallel/test-fs-opendir.js`. The
+// omitted assertion requires constructor.prototype inspection.
 'use strict';
 
 const common = require('../common');
@@ -105,4 +104,46 @@ fs.opendir(root, common.mustSucceed((directory) => {
     [...files, 'nested', path.join('nested', 'child')].sort(),
   );
   await recursive.close();
+
+  const iterated = await fs.promises.opendir(root, {
+    recursive: true,
+    bufferSize: 1,
+  });
+  const iteratedEntries = [];
+  for await (const iteratedEntry of iterated) {
+    assert(iteratedEntry instanceof fs.Dirent);
+    iteratedEntries.push(
+      path.relative(root, path.join(iteratedEntry.parentPath, iteratedEntry.name)),
+    );
+  }
+  assert.deepStrictEqual(
+    iteratedEntries.sort(),
+    [...files, 'nested', path.join('nested', 'child')].sort(),
+  );
+  await assert.rejects(iterated.read(), { code: 'ERR_DIR_CLOSED' });
+
+  const broken = await fs.promises.opendir(root);
+  for await (const brokenEntry of broken) {
+    assert(brokenEntry instanceof fs.Dirent);
+    break;
+  }
+  await assert.rejects(broken.read(), { code: 'ERR_DIR_CLOSED' });
+
+  const returned = await fs.promises.opendir(root);
+  await (async () => {
+    for await (const returnedEntry of returned) {
+      assert(returnedEntry instanceof fs.Dirent);
+      return;
+    }
+  })();
+  await assert.rejects(returned.read(), { code: 'ERR_DIR_CLOSED' });
+
+  const thrown = await fs.promises.opendir(root);
+  await assert.rejects(async () => {
+    for await (const thrownEntry of thrown) {
+      assert(thrownEntry instanceof fs.Dirent);
+      throw new Error('iterator failure');
+    }
+  }, /iterator failure/);
+  await assert.rejects(thrown.read(), { code: 'ERR_DIR_CLOSED' });
 })().then(common.mustCall());
