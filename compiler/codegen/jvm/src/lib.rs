@@ -285,6 +285,20 @@ fn object_class(program: &Program, layout: &nts_core::hir::Layout) -> Result<Opt
     // forwarder, and the reason promises are not blocked behind the closure
     // base question: this relationship is created here rather than recovered
     // from the IR.
+    // A layout whose dispatched method is `()V` is something the runtime can
+    // call without knowing its class, which is what a timer callback has to
+    // be. Decided from the *descriptor* rather than from a list of class
+    // names, so it stays true of whatever the lowering names a closure next.
+    if layout.methods.iter().flatten().any(|name| {
+        program
+            .funcs
+            .iter()
+            .find(|func| &func.name == name)
+            .and_then(|func| instance_descriptor(program, func))
+            .is_some_and(|descriptor| descriptor == "()V")
+    }) {
+        builder.interfaces.push(types::CALLBACK.to_owned());
+    }
     if let Some(resume) = resumes(program, layout) {
         builder.interfaces.push(types::RESUMABLE.to_owned());
         let origin = program_origin(program);

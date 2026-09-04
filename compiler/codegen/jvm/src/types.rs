@@ -68,6 +68,10 @@ pub const PROMISE_DESCRIPTOR: &str = "Lnts/rt/NtsPromise;";
 /// The interface a suspended function's frame implements, so the loop can run
 /// it. Created by this backend rather than recovered from the IR: `Suspend`
 /// names a frame and a function, and both are emitted here.
+/// The interface a zero-argument closure declares, so the runtime can call it
+/// without knowing its class. See `NtsCallback`.
+pub const CALLBACK: &str = "nts/rt/NtsCallback";
+
 pub const RESUMABLE: &str = "nts/rt/NtsResumable";
 
 /// The program a backend is rendering, and the one whole-program fact that

@@ -257,6 +257,69 @@ public final class NtsRuntime {
     }
 
     /**
+     * `setTimeout`, with the signature the C header declares.
+     *
+     * <p>Every parameter is a `double` because `hir::runtime` says so, and
+     * that table is the single answer about conversions: a version taking an
+     * `int` delay would make the middle end insert a different conversion for
+     * this backend than for the others, which is the exact trap
+     * `runtime_agrees_with_hir` exists to catch.
+     *
+     * <p>`slot` is accepted and unused. The C runtime reaches the callback
+     * through the object's descriptor at that slot; this backend dispatches by
+     * name through {@link NtsCallback}, so the slot is already spent by the
+     * time the call arrives. Dropping it from the signature would be this lane
+     * disagreeing with `hir::runtime` about an entry point, which is worth
+     * more than an unused parameter.
+     */
+    public static double setTimeout(Object callback, double slot, double delayMs, boolean repeating) {
+        if (!(callback instanceof NtsCallback)) {
+            // Not a refusal: a callback whose class does not declare the
+            // interface is this backend having emitted the wrong class, which
+            // is a defect and says so with the prefix that means one.
+            System.out.flush();
+            System.err.println("nts: a timer callback that is not callable");
+            System.err.flush();
+            System.exit(1);
+            return 0.0;
+        }
+        return NtsLoop.postDelayed((NtsCallback) callback, delayMs, repeating);
+    }
+
+    /** `clearTimeout`. An id that already fired, or was never issued, is a no-op. */
+    public static void clearTimeout(double id) {
+        NtsLoop.cancelDelayed(id);
+    }
+
+    /**
+     * A captured binding read before its declaration ran.
+     *
+     * <p>A transliteration of `nts_cell_unready`, and the wording is copied
+     * rather than paraphrased because it is compared: the differential reads
+     * stderr, and a line starting {@code "nts: "} that is <em>not</em>
+     * {@code "nts: refused: "} is how both lanes say <em>defect</em>. Throwing
+     * an {@link NtsRefusal} here would have prefixed it {@code refused:} and
+     * quietly reclassified a temporal-dead-zone violation as a declined case --
+     * the same class of mistake as a `VerifyError` reading as a decline, one
+     * layer down.
+     *
+     * <p>The flag is a parameter rather than a branch at the call site because
+     * this backend emits an operation as straight-line code and gets its
+     * branches from terminators -- the same reason {@code bounds} takes the
+     * index rather than being inlined as a compare. C2 inlines a method this
+     * small, so what runs is the one predictable branch the C lane emits.
+     */
+    public static void cellReady(boolean ready, String name) {
+        if (ready) {
+            return;
+        }
+        System.out.flush();
+        System.err.println("nts: `" + name + "` was read before its declaration ran");
+        System.err.flush();
+        System.exit(1);
+    }
+
+    /**
      * `%g`, which is what the C runtime prints an uncaught number with.
      *
      * <p>Not `Double.toString`: that gives `1.0E21` where C gives `1e+21`, and

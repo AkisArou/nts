@@ -254,6 +254,13 @@ const STRING_STRING_STRING_TO_STRING: &str =
 fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match name {
         "nts_uncaught" => (RUNTIME, "uncaught", "(Lnts/rt/NtsValue;Ljava/lang/String;)V"),
+        // Every parameter a `double`, because `hir::runtime` says so. The
+        // `slot` is spent already on this lane -- the callback declares
+        // `NtsCallback` and is reached by name -- and is still in the
+        // signature, because disagreeing with that table about an entry point
+        // is how one backend gets a conversion the others do not.
+        "nts_set_timeout" => (RUNTIME, "setTimeout", "(Ljava/lang/Object;DDZ)D"),
+        "nts_clear_timeout" => (RUNTIME, "clearTimeout", "(D)V"),
         "nts_array_fill" => (RUNTIME, "arrayFill", "([DD)[D"),
         "nts_array_fill_bool" => (RUNTIME, "arrayFillBool", "([ZZ)[Z"),
         "nts_array_fill_ref" => (
@@ -576,6 +583,14 @@ impl Emitter<'_> {
             }
             OpKind::Erase { .. } | OpKind::TagOf { .. } | OpKind::Unerase { .. } => {
                 self.erasure(code, pool, &op.kind, &op.ty, &origin)?
+            }
+            // `let` read before its declaration ran, inside a closure that
+            // captured it. One predictable branch on the cells that have the
+            // window and no others -- which is `is_guarded`, upstream, so a
+            // cell without a `ready` field never reaches here.
+            OpKind::CellReady { cell, name } => {
+                self.cell_ready(code, pool, *cell, name, &origin)?;
+                Placed::Stored
             }
             // The one instance, read back. Built in `<clinit>`; see
             // `closure_singletons`.
@@ -1082,7 +1097,26 @@ impl Emitter<'_> {
             code.const_null(origin);
             return Ok(Placed::OnStack);
         }
-        Err(refuse(self.func, "an absent value with no reference to be"))
+        // A scalar. `o?.level` where `o` is never absent still lowers the
+        // absence the optional chain admits, and its type is the one the
+        // narrowing left -- a `double`, with no reference for a null to be and
+        // no tag for an `undefined` to sit in.
+        //
+        // The C lane answers `(ty)0` here on the reasoning that the value
+        // cannot be read: the branch that produces it is the one the receiver
+        // never takes. Same answer, same reasoning, and the zero is a constant
+        // rather than a helper so nothing is paid for a value nothing reads.
+        let Some(kind) = types::kind(ty) else {
+            return Err(refuse(self.func, "an absent value with no representation"));
+        };
+        match kind {
+            Kind::Double => code.const_double(origin, pool, 0.0),
+            Kind::Float => code.const_float(origin, pool, 0.0),
+            Kind::Long => code.const_long(origin, pool, 0),
+            Kind::Int => code.const_int(origin, pool, 0),
+            Kind::Ref => code.const_null(origin),
+        }
+        Ok(Placed::OnStack)
     }
 
     /// Putting a tag on a value, reading it off, and taking it back.
@@ -2836,6 +2870,46 @@ impl Emitter<'_> {
                 }
             }
         }
+        Ok(())
+    }
+
+    /// The temporal dead zone, as a call rather than a branch.
+    ///
+    /// The `ready` field is found by *name* in the cell's own layout rather
+    /// than by the position `cell_layout` happens to put it in. A cell has one
+    /// field when it is unguarded and two when it is guarded, so an index
+    /// hard-coded here would read `value` as a boolean on the day an unguarded
+    /// cell reached this -- which it cannot today, and "cannot today" is how
+    /// index 1 becomes wrong later.
+    fn cell_ready(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        cell: ValueId,
+        name: &str,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        let ty = self.ty(cell).clone();
+        let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
+            return Err(refuse(self.func, "a cell that is not an object"));
+        };
+        let Some(layout) = self.program.layout(id) else {
+            return Err(refuse(self.func, "a cell whose layout this program does not carry"));
+        };
+        let Some(at) = layout.fields.iter().position(|field| field.name == "ready") else {
+            return Err(refuse(self.func, "a guarded cell with no `ready` field"));
+        };
+        let (owner, member, descriptor) = self.field_ref(cell, u32::try_from(at).unwrap_or(0))?;
+        self.load(code, cell)?;
+        code.get_field(origin, pool, &owner, &member, &descriptor);
+        code.const_string(origin, pool, name);
+        code.invoke_static(
+            origin,
+            pool,
+            crate::RUNTIME,
+            "cellReady",
+            "(ZLjava/lang/String;)V",
+        );
         Ok(())
     }
 }
