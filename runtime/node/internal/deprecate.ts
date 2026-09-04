@@ -7,12 +7,7 @@
 // `node:util` re-exports this as its public `deprecate`.
 
 import { ERR_INVALID_ARG_TYPE } from "./errors.ts";
-
-declare function nts_process_emit_warning(
-  message: string,
-  name: string,
-  code: string,
-): void;
+import { emitWarning } from "./process-warning.ts";
 
 /**
  * Wrap `fn` so that calling it warns once.
@@ -20,22 +15,20 @@ declare function nts_process_emit_warning(
  * Once, not every call: a deprecation that prints on every invocation of a
  * function in a loop is noise that hides everything else.
  */
-export function deprecate<T extends (...args: never[]) => unknown>(
-  fn: T,
+export function deprecate<This, Args extends unknown[], Result>(
+  fn: (this: This, ...args: Args) => Result,
   message: string,
   code?: string,
-): T {
+): (this: This, ...args: Args) => Result {
   if (code !== undefined && typeof code !== "string") {
     throw new ERR_INVALID_ARG_TYPE("code", "string", code);
   }
   let warned = false;
-  const deprecated = function (this: unknown, ...args: never[]): unknown {
+  return function deprecated(this: This, ...args: Args): Result {
     if (!warned) {
       warned = true;
-      nts_process_emit_warning(message, "DeprecationWarning", code ?? "");
+      emitWarning(message, "DeprecationWarning", code ?? "");
     }
-    return Reflect.apply(fn, this, args);
+    return fn.apply(this, args);
   };
-  Object.defineProperty(deprecated, "name", { value: fn.name });
-  return deprecated as unknown as T;
 }

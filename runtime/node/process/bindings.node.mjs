@@ -18,6 +18,25 @@ import "../os/bindings.node.mjs";
 import "../events/bindings.node.mjs";
 import host from "node:process";
 
+// The runner itself owns its stdout/stderr pipes. Node's upstream process
+// tests run without those harness-only resources and compare exact counts, so
+// remember what existed before the test and remove only those initial counts
+// from the stand-in's answer. Resources created by the test remain visible.
+const initialResourceCounts = new Map();
+for (const name of host.getActiveResourcesInfo()) {
+  initialResourceCounts.set(name, (initialResourceCounts.get(name) ?? 0) + 1);
+}
+
+const resourcesAfterHarness = () => {
+  const remainingInitial = new Map(initialResourceCounts);
+  return host.getActiveResourcesInfo().filter((name) => {
+    const remaining = remainingInitial.get(name) ?? 0;
+    if (remaining === 0) return true;
+    remainingInitial.set(name, remaining - 1);
+    return false;
+  });
+};
+
 /** Run a node call that throws, and report libuv's errno instead. */
 const errnoOf = (fn) => {
   try {
@@ -50,8 +69,6 @@ globalThis.nts_process_title = () => host.title;
 globalThis.nts_process_set_title = (title) => { host.title = title; };
 globalThis.nts_process_allowed_env_flags = () => [...host.allowedNodeEnvironmentFlags];
 
-globalThis.nts_process_env_set = (name, value) => { host.env[name] = value; };
-globalThis.nts_process_env_delete = (name) => { delete host.env[name]; };
 globalThis.nts_process_env_keys = () => Object.keys(host.env);
 
 globalThis.nts_process_uptime = () => host.uptime();
@@ -96,15 +113,52 @@ globalThis.nts_process_getgroups = () => host.getgroups();
 // the seam carries two columns rather than a union: `setuid(0)` and
 // `setuid("0")` are different requests, and a single argument would have to
 // re-derive which one this was.
-const byIdOrName = (call) => (id, name) => errnoOf(() => call(name === "" ? id : name));
+const byIdOrName = (call) => (id, name) => {
+  try {
+    call(name === "" ? id : name);
+    return 0;
+  } catch (e) {
+    if (e?.code === "ERR_UNKNOWN_CREDENTIAL") return 1;
+    if (typeof e?.errno !== "number") throw e;
+    return e.errno > 0 ? -e.errno : e.errno;
+  }
+};
 globalThis.nts_process_setuid = byIdOrName((v) => host.setuid(v));
 globalThis.nts_process_setgid = byIdOrName((v) => host.setgid(v));
 globalThis.nts_process_seteuid = byIdOrName((v) => host.seteuid(v));
 globalThis.nts_process_setegid = byIdOrName((v) => host.setegid(v));
-globalThis.nts_process_setgroups = (ids, names) =>
-  errnoOf(() => host.setgroups(ids.map((id, i) => (names[i] === "" ? id : names[i]))));
-globalThis.nts_process_initgroups = (user, group) =>
-  errnoOf(() => host.initgroups(user, group));
+globalThis.nts_process_setgroups = (ids, names) => {
+  const groups = ids.map((id, i) => (names[i] === "" ? id : names[i]));
+  try {
+    host.setgroups(groups);
+    return 0;
+  } catch (e) {
+    if (e?.code === "ERR_UNKNOWN_CREDENTIAL") {
+      const message = String(e.message);
+      const index = groups.findIndex((group) => message.endsWith(`: ${group}`));
+      // The host names the missing group in the error. If its wording ever
+      // changes, returning the first column still preserves the protocol and
+      // makes the mismatch visible in the TypeScript error assertion.
+      return index < 0 ? 1 : index + 1;
+    }
+    if (typeof e?.errno !== "number") throw e;
+    return e.errno > 0 ? -e.errno : e.errno;
+  }
+};
+globalThis.nts_process_initgroups = (userId, userName, groupId, groupName) => {
+  const user = userName === "" ? userId : userName;
+  const group = groupName === "" ? groupId : groupName;
+  try {
+    host.initgroups(user, group);
+    return 0;
+  } catch (e) {
+    if (e?.code === "ERR_UNKNOWN_CREDENTIAL") {
+      return String(e.message).startsWith("User ") ? 1 : 2;
+    }
+    if (typeof e?.errno !== "number") throw e;
+    return e.errno > 0 ? -e.errno : e.errno;
+  }
+};
 
 // Build metadata as JSON. Node keeps these as live objects; serializing and
 // reparsing gives our module its own copy, which is what a compiled build
@@ -112,23 +166,16 @@ globalThis.nts_process_initgroups = (user, group) =>
 // through into node's.
 globalThis.nts_process_metadata = (name) => JSON.stringify(host[name] ?? {});
 
-globalThis.nts_process_active_resources = () => host.getActiveResourcesInfo();
+globalThis.nts_process_active_resources = resourcesAfterHarness;
 globalThis.nts_process_active_handles = () => host._getActiveHandles();
 globalThis.nts_process_active_requests = () => host._getActiveRequests();
-
-// Node keeps this as a flag the C++ side reads when an exception escapes.
-// There is nothing to tell node here -- its own `process` is not the one being
-// asked -- so this records the intent and the uncaught path reads it.
-let abortOnUncaught = true;
-globalThis.nts_process_set_abort_on_uncaught = (value) => { abortOnUncaught = value; };
-globalThis.nts_process_abort_on_uncaught = () => abortOnUncaught;
 
 globalThis.nts_process_execve = (path, args, env) => host.execve(path, args,
   Object.fromEntries(env.map((pair) => {
     const at = pair.indexOf("=");
     return [pair.slice(0, at), pair.slice(at + 1)];
   })));
-globalThis.nts_process_load_env_file = (path) => host.loadEnvFile(path);
+globalThis.nts_process_load_env_file = (path) => errnoOf(() => host.loadEnvFile(path));
 globalThis.nts_process_raw_debug = (text) => host._rawDebug(text);
 
 // The loop's lifecycle, forwarded from node's process to ours. In a compiled
@@ -138,8 +185,47 @@ globalThis.nts_process_on_before_exit = (callback) => {
   host.on("beforeExit", callback);
 };
 globalThis.nts_process_on_exit = (callback) => {
-  host.on("exit", callback);
+  // The conformance runner also grades from an exit listener, registered
+  // before this module is imported. The runtime's lifecycle delivery must
+  // happen before that grading listener, just as it happens before a real
+  // program has finished exiting.
+  host.prependListener("exit", (code) => {
+    callback(code);
+    // In this lane our process object is hosted inside node. Propagate an exit
+    // listener's final choice back to the host so the child has the status the
+    // process under test selected. A compiled program owns that status itself.
+    if (globalThis.process?.exitCode !== undefined) {
+      host.exitCode = globalThis.process.exitCode;
+    }
+  });
 };
+
+// Exceptions that leave a host timer callback and promise rejections with no
+// user handler arrive at Node's process object. The tests, however, listen on
+// the process implementation installed by this profile. Relay those runtime
+// escape points into its ordinary `_fatalException` algorithm. This is only
+// transport: monitor/capture/event ordering remains in typed source.
+const installedProcess = () => {
+  const candidate = globalThis.process;
+  if (candidate === host || typeof candidate?._fatalException !== "function") return null;
+  return candidate;
+};
+
+host.on("uncaughtException", (error, origin) => {
+  const target = installedProcess();
+  if (target === null || !target._fatalException(error, origin === "unhandledRejection")) {
+    throw error;
+  }
+});
+
+host.on("unhandledRejection", (reason, promise) => {
+  const target = installedProcess();
+  if (target === null) throw reason;
+  if (!target.emit("unhandledRejection", reason, promise) &&
+      !target._fatalException(reason, true)) {
+    throw reason;
+  }
+});
 
 // The tick queue's exception path.
 //

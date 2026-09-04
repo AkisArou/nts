@@ -25,33 +25,100 @@
  * call in wall-clock order, which is exactly the distinction that makes this a
  * VM primitive rather than a variable.
  */
-declare function nts_async_context_get(): object | undefined;
+declare function nts_async_context_get(): AsyncContextFrame | undefined;
 
 /** Attach `frame` to the current continuation and every one derived from it. */
-declare function nts_async_context_set(frame: object | undefined): void;
+declare function nts_async_context_set(frame: AsyncContextFrame | undefined): void;
 
 /**
- * One layer of context: everything the enclosing scope had, plus one change.
+ * A detached snapshot of every storage active on one continuation.
  *
- * A `Map` because the keys are the `AsyncLocalStorage` instances themselves,
- * and there can be any number of them independently in play. Copied from the
- * parent rather than chained to it, because reads happen far more often than
- * writes -- every `getStore()` in a request's lifetime against one `run()` --
- * and a chain would make the common operation walk.
+ * Node uses a `Map<AsyncLocalStorage, unknown>` and clones it when a storage
+ * changes. A heterogeneous map would throw away the relationship between a
+ * storage's `T` and its value here. Instead, each immutable entry knows how to
+ * install its own correctly typed value into the new frame. The frame only
+ * handles entry identity and copying; it never reads an erased store value.
  *
- * Frames are never mutated after construction. A scope that could edit the
- * frame it inherited would edit its caller's context too, which is the bug the
- * whole design exists to prevent.
+ * Entries are shared by snapshots until their storage changes. Sharing is
+ * safe because an entry is immutable, and it matters for `run()`: restoring
+ * one storage must preserve changes made to other storages inside the call,
+ * without retaining the frame that held the temporary store.
  */
-export class AsyncContextFrame extends Map<object, unknown> {
-  constructor(store: object, data: unknown) {
-    super(AsyncContextFrame.current() as Iterable<[object, unknown]> | undefined);
-    this.set(store, data);
+export interface AsyncContextEntry {
+  storageId(): number;
+  install(frame: AsyncContextFrame): void;
+  remove(frame: AsyncContextFrame): void;
+}
+
+export class AsyncContextFrame {
+  #entries: Array<AsyncContextEntry | undefined>;
+  #entryCount: number;
+
+  constructor() {
+    this.#entries = new Array<AsyncContextEntry | undefined>(4);
+    this.#entryCount = 0;
+
+    const source = AsyncContextFrame.current();
+    if (source !== undefined) source.#copyInto(this);
+  }
+
+  /** Add or replace one storage's immutable typed entry. */
+  setEntry(entry: AsyncContextEntry): void {
+    const storageId = entry.storageId();
+    for (let index = 0; index < this.#entryCount; index += 1) {
+      const current = this.#entries[index];
+      if (current !== undefined && current.storageId() === storageId) {
+        this.#entries[index] = entry;
+        entry.install(this);
+        return;
+      }
+    }
+
+    if (this.#entryCount === this.#entries.length) this.#grow();
+    this.#entries[this.#entryCount] = entry;
+    this.#entryCount += 1;
+    entry.install(this);
+  }
+
+  /** Remove one storage from this continuation's snapshot. */
+  removeEntry(storageId: number): void {
+    for (let index = 0; index < this.#entryCount; index += 1) {
+      const entry = this.#entries[index];
+      if (entry === undefined || entry.storageId() !== storageId) continue;
+
+      entry.remove(this);
+      for (let next = index + 1; next < this.#entryCount; next += 1) {
+        this.#entries[next - 1] = this.#entries[next];
+      }
+      this.#entryCount -= 1;
+      this.#entries[this.#entryCount] = undefined;
+      return;
+    }
+  }
+
+  #copyInto(target: AsyncContextFrame): void {
+    if (target.#entries.length < this.#entries.length) {
+      target.#entries = new Array<AsyncContextEntry | undefined>(this.#entries.length);
+    }
+    target.#entryCount = this.#entryCount;
+    for (let index = 0; index < this.#entryCount; index += 1) {
+      const entry = this.#entries[index];
+      target.#entries[index] = entry;
+      if (entry !== undefined) entry.install(target);
+    }
+  }
+
+  #grow(): void {
+    const larger = new Array<AsyncContextEntry | undefined>(this.#entries.length * 2);
+    for (let index = 0; index < this.#entryCount; index += 1) {
+      larger[index] = this.#entries[index];
+    }
+    this.#entries = larger;
   }
 
   /** The frame the current continuation carries, if any. */
   static current(): AsyncContextFrame | undefined {
-    return nts_async_context_get() as AsyncContextFrame | undefined;
+    return nts_async_context_get();
   }
 
   /** Make `frame` the context from here forward. */
@@ -66,15 +133,4 @@ export class AsyncContextFrame extends Map<object, unknown> {
     return prior;
   }
 
-  /**
-   * Forget one storage's value in the current frame.
-   *
-   * In place, unlike everything else here, and node's `disable()` is the only
-   * caller. It is the one operation whose point is to affect contexts that
-   * have already been derived -- `disable()` means "this storage is finished",
-   * not "this scope is finished".
-   */
-  static disable(store: object): void {
-    AsyncContextFrame.current()?.delete(store);
-  }
 }

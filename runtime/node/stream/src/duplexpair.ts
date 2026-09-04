@@ -52,16 +52,26 @@ class DuplexSide extends Duplex {
     return this.#callback !== null;
   }
 
+  #peer(): DuplexSide {
+    if (this.#otherSide === null) {
+      throw new Error("duplex pair side has not been connected");
+    }
+    return this.#otherSide;
+  }
+
   override _read(): void {
     // Reading is what releases the writer on the other side.
     this.release();
   }
 
-  override _write(chunk: unknown, _encoding: string, callback: WriteCb): void {
-    const other = this.#otherSide as DuplexSide;
+  override _write(chunk: unknown, _encoding: string | undefined, callback: WriteCb): void {
+    const other = this.#peer();
     // An empty chunk carries nothing to read, so holding the callback for a
     // read that will never be prompted would deadlock the pair.
-    if ((chunk as { length: number }).length === 0) {
+    if (
+      (typeof chunk === "string" || chunk instanceof Uint8Array) &&
+      chunk.length === 0
+    ) {
       nextTick(callback);
     } else {
       other.push(chunk);
@@ -70,7 +80,7 @@ class DuplexSide extends Duplex {
   }
 
   override _final(callback: WriteCb): void {
-    const other = this.#otherSide as DuplexSide;
+    const other = this.#peer();
     // Not finished until the other side has actually seen the end.
     other.on("end", callback);
     other.push(null);

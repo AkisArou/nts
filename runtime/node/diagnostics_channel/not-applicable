@@ -1,0 +1,31 @@
+test-diagnostics-channel-child-process.js: cross-module integration; host node:child_process publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http.js: cross-module integration; host node:http publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http-server-start.js: cross-module integration; host node:http publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-client-stream-body-multiple-buffers-and-strings.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-client-stream-body-multiple-buffers.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-client-stream-body-no-chunks.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-client-stream-body-single-buffer.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-client-stream-body-single-string.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-client-stream-close.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-client-stream-close-error.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-client-stream-created.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-client-stream-error.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-client-stream-finish.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-client-stream-start.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-server-stream-close.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-server-stream-close-error.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-server-stream-created-start-timing.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-server-stream-created.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-server-stream-error.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-server-stream-finish.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-http2-server-stream-start.js: cross-module integration; host node:http2 publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-module-import-error.js: cross-module integration; host ESM loader publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-module-import.js: cross-module integration; host ESM loader publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-module-require-error.js: cross-module integration; host CommonJS loader publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-module-require.js: cross-module integration; host CommonJS loader publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-net-client-socket-tls.js: cross-module integration; host node:net and node:tls publish into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-net.js: cross-module integration; host node:net publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-process.js: cross-module integration; host node:cluster and node:child_process publish into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-udp.js: cross-module integration; host node:dgram publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-web-locks.js: cross-module integration; host Web Locks publishes into host Node's private channel registry, not this substituted module
+test-diagnostics-channel-worker-threads.js: cross-module integration; host node:worker_threads publishes into host Node's private channel registry, not this substituted module

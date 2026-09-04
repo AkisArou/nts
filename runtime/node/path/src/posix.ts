@@ -46,7 +46,7 @@ export function resolve(...args: string[]): string {
   let resolvedAbsolute = false;
 
   for (let i = args.length - 1; i >= 0 && !resolvedAbsolute; i--) {
-    const path = args[i]!;
+    const path = args[i];
     validateString(path, `paths[${i}]`);
 
     if (path.length === 0) {
@@ -111,7 +111,7 @@ export function join(...args: string[]): string {
 
   let joined: string | undefined;
   for (let i = 0; i < args.length; ++i) {
-    const arg = args[i]!;
+    const arg = args[i];
     validateString(arg, "path");
     if (arg.length > 0) {
       if (joined === undefined) {

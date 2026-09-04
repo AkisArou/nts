@@ -12,5 +12,18 @@
 /* process */
 NtsString *nts_process_cwd(void);
 NtsString *nts_process_env(NtsString *name);
+bool nts_process_env_has(NtsString *name);
+double nts_process_pid(void);
+NtsString *nts_platform(void);
+NtsString *nts_os_release(void);
+__int128 nts_hrtime_ns(void);
+double nts_write_stdout(NtsString *text);
+double nts_write_stderr(NtsString *text);
+double nts_debug_write(NtsString *text);
+bool nts_stdout_is_tty(void);
+bool nts_stderr_is_tty(void);
+void nts_process_really_exit(double code);
+void nts_process_emit_warning_object(NtsString *message, NtsString *name,
+                                     NtsHeader *warning);
 
 #endif

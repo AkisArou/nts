@@ -12,6 +12,7 @@
 
 import { getCIDR } from "../../internal/net.ts";
 import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
+import { systemError } from "../../internal/uv.ts";
 
 // -------------------------------------------------------------- the bindings
 
@@ -58,6 +59,7 @@ declare function nts_os_constant_values(): number[];
 
 declare function nts_os_get_priority(pid: number): number;
 declare function nts_os_set_priority(pid: number, priority: number): number;
+declare function nts_errno(): number;
 
 // ----------------------------------------------------------------- the types
 
@@ -96,66 +98,56 @@ export interface UserInfo {
 // ------------------------------------------------------------- the functions
 
 export function hostname(): string {
-  return nts_os_hostname();
+  const value = nts_os_hostname();
+  const errno = nts_errno();
+  if (errno !== 0) throw systemError(-errno, "uv_os_gethostname");
+  return value;
 }
-
-export function type(): string {
-  return nts_os_type();
-}
-
-export function release(): string {
-  return nts_os_release();
-}
-
-export function version(): string {
-  return nts_os_version();
-}
-
-export function machine(): string {
-  return nts_os_machine();
-}
-
-export function arch(): string {
-  return nts_os_arch();
-}
-
-export function platform(): string {
-  return nts_os_platform();
-}
+export const type = nts_os_type;
+export const release = nts_os_release;
+export const version = nts_os_version;
+export const machine = nts_os_machine;
+export const arch = nts_os_arch;
+export const platform = nts_os_platform;
 
 export function homedir(): string {
-  return nts_os_homedir();
+  const value = nts_os_homedir();
+  const errno = nts_errno();
+  if (errno !== 0) throw systemError(-errno, "uv_os_homedir");
+  return value;
 }
 
 /** Upstream `lib/os.js:181`. The posix branch; Windows consults `%TEMP%`. */
 export function tmpdir(): string {
-  return nts_os_tmpdir() || "/tmp";
+  const value = nts_os_tmpdir();
+  const errno = nts_errno();
+  if (errno !== 0) throw systemError(-errno, "uv_os_tmpdir");
+  return value || "/tmp";
 }
 
-export function endianness(): string {
-  return nts_os_endianness();
-}
+export const endianness = nts_os_endianness;
 
 export function uptime(): number {
-  return nts_os_uptime();
+  const value = nts_os_uptime();
+  const errno = nts_errno();
+  if (errno !== 0) throw systemError(-errno, "uv_uptime");
+  return value;
 }
 
-export function totalmem(): number {
-  return nts_os_totalmem();
-}
-
-export function freemem(): number {
-  return nts_os_freemem();
-}
-
-export function availableParallelism(): number {
-  return nts_os_available_parallelism();
-}
+export const totalmem = nts_os_totalmem;
+export const freemem = nts_os_freemem;
+export const availableParallelism = nts_os_available_parallelism;
 
 /** Upstream `lib/os.js:121`. One-, five- and fifteen-minute averages. */
 export function loadavg(): number[] {
   const values = nts_os_loadavg();
-  return [values[0]!, values[1]!, values[2]!];
+  const one = values[0];
+  const five = values[1];
+  const fifteen = values[2];
+  if (one === undefined || five === undefined || fifteen === undefined) {
+    throw new Error("nts_os_loadavg returned fewer than three values");
+  }
+  return [one, five, fifteen];
 }
 
 /** Upstream `lib/os.js:141`. */
@@ -163,19 +155,30 @@ export function cpus(): CpuInfo[] {
   const models = nts_os_cpu_models();
   const speeds = nts_os_cpu_speeds();
   const times = nts_os_cpu_times();
-  const result: CpuInfo[] = [];
+  const result = new Array<CpuInfo>(models.length);
   for (let i = 0; i < models.length; i++) {
-    result.push({
-      model: models[i]!,
-      speed: speeds[i]!,
+    const model = models[i];
+    const speed = speeds[i];
+    const user = times[i * 5];
+    const nice = times[i * 5 + 1];
+    const sys = times[i * 5 + 2];
+    const idle = times[i * 5 + 3];
+    const irq = times[i * 5 + 4];
+    if (model === undefined || speed === undefined || user === undefined ||
+        nice === undefined || sys === undefined || idle === undefined || irq === undefined) {
+      throw new Error(`incomplete native CPU record at index ${i}`);
+    }
+    result[i] = {
+      model,
+      speed,
       times: {
-        user: times[i * 5]!,
-        nice: times[i * 5 + 1]!,
-        sys: times[i * 5 + 2]!,
-        idle: times[i * 5 + 3]!,
-        irq: times[i * 5 + 4]!,
+        user,
+        nice,
+        sys,
+        idle,
+        irq,
       },
-    });
+    };
   }
   return result;
 }
@@ -183,6 +186,8 @@ export function cpus(): CpuInfo[] {
 /** Upstream `lib/os.js:217`. */
 export function networkInterfaces(): Record<string, NetworkInterfaceInfo[]> {
   const names = nts_os_if_names();
+  const errno = nts_errno();
+  if (errno !== 0) throw systemError(-errno, "uv_interface_addresses");
   const addresses = nts_os_if_addresses();
   const netmasks = nts_os_if_netmasks();
   const families = nts_os_if_families();
@@ -191,32 +196,49 @@ export function networkInterfaces(): Record<string, NetworkInterfaceInfo[]> {
   const scopeids = nts_os_if_scopeids();
 
   const result: Record<string, NetworkInterfaceInfo[]> = {};
+  const counts = new Map<string, number>();
   for (let i = 0; i < names.length; i++) {
-    const address = addresses[i]!;
-    const netmask = netmasks[i]!;
-    const family = families[i]!;
+    const name = names[i];
+    if (name === undefined) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  for (const [name, count] of counts) {
+    result[name] = new Array<NetworkInterfaceInfo>(count);
+  }
+
+  const positions = new Map<string, number>();
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
+    const address = addresses[i];
+    const netmask = netmasks[i];
+    const family = families[i];
+    const mac = macs[i];
+    const internalFlag = internal[i];
+    const scopeid = scopeids[i];
+    if (name === undefined || address === undefined || netmask === undefined ||
+        family === undefined || mac === undefined || internalFlag === undefined ||
+        scopeid === undefined) {
+      throw new Error(`incomplete native network-interface record at index ${i}`);
+    }
     const entry: NetworkInterfaceInfo = {
       address,
       netmask,
       family,
-      mac: macs[i]!,
-      internal: internal[i] !== 0,
+      mac,
+      internal: internalFlag !== 0,
       cidr: getCIDR(address, netmask, family),
     };
     // A scope id of -1 means the address has none; node omits the key rather
     // than reporting a sentinel.
-    const scopeid = scopeids[i]!;
     if (scopeid !== -1) {
       entry.scopeid = scopeid;
     }
 
-    const name = names[i]!;
-    const existing = result[name];
-    if (existing !== undefined) {
-      existing.push(entry);
-    } else {
-      result[name] = [entry];
-    }
+    const list = result[name];
+    const position = positions.get(name) ?? 0;
+    if (list === undefined) throw new Error(`missing network-interface group ${name}`);
+    list[position] = entry;
+    positions.set(name, position + 1);
   }
   return result;
 }
@@ -224,6 +246,8 @@ export function networkInterfaces(): Record<string, NetworkInterfaceInfo[]> {
 /** Upstream `lib/os.js:298`. */
 export function userInfo(): UserInfo {
   const shell = nts_os_user_shell();
+  const errno = nts_errno();
+  if (errno !== 0) throw systemError(-errno, "uv_os_get_passwd");
   return {
     uid: nts_os_user_uid(),
     gid: nts_os_user_gid(),
@@ -251,7 +275,10 @@ function validateInt32(value: number, name: string, min = -2147483648, max = 214
 /** Upstream `lib/os.js:271`. `pid` of 0 means the calling process. */
 export function getPriority(pid = 0): number {
   validateInt32(pid, "pid");
-  return nts_os_get_priority(pid);
+  const priority = nts_os_get_priority(pid);
+  const errno = nts_errno();
+  if (errno !== 0) throw systemError(-errno, "uv_os_getpriority");
+  return priority;
 }
 
 /** Upstream `lib/os.js:252`. Nice values run -20 (highest) to 19 (lowest). */
@@ -262,38 +289,12 @@ export function setPriority(pid: number, priority?: number): void {
   }
   validateInt32(pid, "pid");
   validateInt32(priority, "priority", -20, 19);
-  nts_os_set_priority(pid, priority);
+  const status = nts_os_set_priority(pid, priority);
+  if (status !== 0) throw systemError(status, "uv_os_setpriority");
 }
 
 // Node makes these functions stringify to their own result, so `${os.hostname}`
 // is the hostname rather than the source of a function. Upstream
-// `lib/os.js:104`: `getHostname[SymbolToPrimitive] = () => getHostname()`.
-//
-// It has to be a property on the function object, which is why this is a loop
-// over pairs rather than a decoration on each declaration.
-const stringifiesToItsResult: Array<[() => string | number, string]> = [
-  [hostname, "hostname"],
-  [type, "type"],
-  [release, "release"],
-  [version, "version"],
-  [machine, "machine"],
-  [arch, "arch"],
-  [platform, "platform"],
-  [homedir, "homedir"],
-  [tmpdir, "tmpdir"],
-  [endianness, "endianness"],
-  [uptime, "uptime"],
-  [totalmem, "totalmem"],
-  [freemem, "freemem"],
-  [availableParallelism, "availableParallelism"],
-];
-
-for (const [fn] of stringifiesToItsResult) {
-  Object.defineProperty(fn, Symbol.toPrimitive, {
-    value: () => fn(),
-  });
-}
-
 export const EOL = nts_os_eol();
 export const devNull = nts_os_devnull();
 
@@ -318,13 +319,18 @@ function readConstants(): OsConstants {
   const values = nts_os_constant_values();
   const out: OsConstants = { signals: {}, errno: {}, priority: {}, dlopen: {} };
   for (let i = 0; i < names.length; i++) {
-    const group = groups[i]!;
+    const group = groups[i];
+    const name = names[i];
+    const value = values[i];
+    if (group === undefined || name === undefined || value === undefined) {
+      throw new Error(`incomplete native OS constant record at index ${i}`);
+    }
     const table =
       group === "signals" ? out.signals
       : group === "errno" ? out.errno
       : group === "priority" ? out.priority
       : out.dlopen;
-    table[names[i]!] = values[i]!;
+    table[name] = value;
   }
   return out;
 }

@@ -10,8 +10,36 @@ import { isIterable, isNodeStream, isWebStream } from "./utils.ts";
 import { pipelineImpl } from "./pipeline.ts";
 import type { PipelineOptions } from "./pipeline.ts";
 import { finished } from "./end-of-stream.ts";
+import type { AbortSignalLike } from "./end-of-stream.ts";
+import { ERR_INVALID_ARG_TYPE } from "../../internal/errors.ts";
+import { validateBoolean } from "../../internal/validators.ts";
 
 export { finished };
+
+function isAbortSignalLike(value: unknown): value is AbortSignalLike {
+  return value !== null && typeof value === "object" &&
+    "aborted" in value && typeof value.aborted === "boolean" &&
+    "reason" in value &&
+    "addEventListener" in value && typeof value.addEventListener === "function" &&
+    "removeEventListener" in value && typeof value.removeEventListener === "function";
+}
+
+function readOptions(value: object): PipelineOptions {
+  let signal: AbortSignalLike | undefined;
+  if ("signal" in value && value.signal !== undefined) {
+    if (!isAbortSignalLike(value.signal)) {
+      throw new ERR_INVALID_ARG_TYPE("options.signal", "AbortSignal", value.signal);
+    }
+    signal = value.signal;
+  }
+
+  let end: boolean | undefined;
+  if ("end" in value && value.end !== undefined) {
+    validateBoolean(value.end, "options.end");
+    end = value.end;
+  }
+  return { signal, end };
+}
 
 export function pipeline(...streams: unknown[]): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -30,7 +58,8 @@ export function pipeline(...streams: unknown[]): Promise<unknown> {
       !isIterable(last) &&
       !isWebStream(last)
     ) {
-      const options = streams.pop() as PipelineOptions;
+      streams.pop();
+      const options = readOptions(last);
       signal = options.signal;
       end = options.end;
     }

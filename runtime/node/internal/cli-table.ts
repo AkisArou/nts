@@ -20,13 +20,13 @@ const tableChars = {
   left: "│ ",
   right: " │",
   middle: " │ ",
-} as const;
+};
 
 function renderRow(row: readonly string[], columnWidths: readonly number[]): string {
   let out: string = tableChars.left;
   for (let i = 0; i < row.length; i++) {
-    const cell = row[i]!;
-    const needed = columnWidths[i]! - getStringWidth(cell);
+    const cell = row[i] ?? "";
+    const needed = (columnWidths[i] ?? 0) - getStringWidth(cell);
     out += cell + " ".repeat(Math.ceil(needed));
     if (i !== row.length - 1) {
       out += tableChars.middle;
@@ -43,18 +43,26 @@ function renderRow(row: readonly string[], columnWidths: readonly number[]): str
  * which is what makes a heterogeneous array of objects printable.
  */
 export function cliTable(head: readonly string[], columns: readonly string[][]): string {
-  const rows: string[][] = [];
   const columnWidths = head.map((h) => getStringWidth(h));
-  const longestColumn = Math.max(...columns.map((a) => a.length));
+  let longestColumn = 0;
+  for (const column of columns) {
+    longestColumn = Math.max(longestColumn, column.length);
+  }
+  const rows = Array.from(
+    { length: longestColumn },
+    () => new Array<string>(head.length).fill(""),
+  );
 
   for (let i = 0; i < head.length; i++) {
-    const column = columns[i]!;
+    const column = columns[i] ?? [];
     for (let j = 0; j < longestColumn; j++) {
-      rows[j] ??= [];
+      const row = rows[j];
+      if (row === undefined) continue;
       // A hole in a sparse column is an empty cell, not `undefined`: the
       // column arrays `console.table` builds are indexed by row and are sparse
       // whenever a row lacks that key.
-      const value = rows[j]![i] = Object.hasOwn(column, j) ? column[j]! : "";
+      const value = Object.hasOwn(column, j) ? (column[j] ?? "") : "";
+      row[i] = value;
       columnWidths[i] = Math.max(columnWidths[i] ?? 0, getStringWidth(value));
     }
   }

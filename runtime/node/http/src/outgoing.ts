@@ -31,12 +31,25 @@ import { STATUS_CODES } from "./status.ts";
 
 /** As much of a socket as an outgoing message uses. */
 export interface OutgoingSocket {
-  write(chunk: Buffer | string, encoding?: string, callback?: () => void): boolean;
-  end(chunk?: Buffer | string): unknown;
-  destroy(error?: unknown): void;
+  write(
+    chunk: Buffer | string,
+    encoding?: string | ((error?: unknown) => void) | null,
+    callback?: (error?: unknown) => void,
+  ): boolean;
+  end(
+    chunk?: Buffer | string,
+    encoding?: string | ((error?: unknown) => void) | null,
+    callback?: (error?: unknown) => void,
+  ): unknown;
+  destroy(error?: unknown, callback?: (error?: unknown) => void): unknown;
   writable?: boolean;
-  on(event: string, listener: (...args: never[]) => void): unknown;
-  [key: string]: unknown;
+  on<Args extends unknown[]>(
+    event: string | symbol,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+  setTimeout(msecs: number, callback?: () => void): unknown;
+  setNoDelay(enable?: boolean): unknown;
+  setKeepAlive(enable?: boolean, initialDelay?: number): unknown;
 }
 
 /** RFC 9110's `token`: what a header name may contain. */
@@ -170,7 +183,9 @@ export class OutgoingMessage extends EventEmitter {
 
   /** Every header, keyed by lowercased name. A copy: mutating it does nothing. */
   getHeaders(): Record<string, string | number | string[]> {
-    const out = Object.create(null) as Record<string, string | number | string[]>;
+    // NTS records have no prototype, so `{}` has Node's intended dictionary
+    // semantics once compiled.
+    const out: Record<string, string | number | string[]> = {};
     for (const [key, entry] of this.headersMap) out[key] = entry[1];
     return out;
   }
@@ -234,6 +249,17 @@ export class OutgoingMessage extends EventEmitter {
 
     const declared = this.headersMap.get("content-length");
     const encoding = this.headersMap.get("transfer-encoding");
+    const connection = this.headersMap.get("connection");
+
+    // The header is not merely text on the wire; it controls ownership of the
+    // socket after this message. Without this, an explicit `Connection:
+    // close` response is nevertheless returned to the keep-alive path and a
+    // graceful `server.close(callback)` can wait forever for it.
+    if (connection !== undefined) {
+      const connectionValue = String(connection[1]).toLowerCase();
+      if (connectionValue.includes("close")) this.shouldKeepAlive = false;
+      else if (connectionValue.includes("keep-alive")) this.shouldKeepAlive = true;
+    }
 
     if (declared) {
       this.chunkedEncoding = false;

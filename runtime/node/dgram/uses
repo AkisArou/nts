@@ -1,3 +1,7 @@
 timers
 process
 buffer
+net
+events
+async_hooks
+diagnostics_channel

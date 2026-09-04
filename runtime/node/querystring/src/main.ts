@@ -56,40 +56,40 @@ const unhexTable: number[] = (() => {
  * rather than join the digits with commas.
  */
 export function unescapeBuffer(s: string, decodeSpaces = false): Buffer {
-  const out: number[] = [];
+  const out = Buffer.allocUnsafe(s.length);
   let index = 0;
+  let outIndex = 0;
   const maxLength = s.length - 2;
   let hasHex = false;
 
   while (index < s.length) {
     let currentChar = s.charCodeAt(index);
     if (currentChar === 43 /* + */ && decodeSpaces) {
-      out.push(32);
+      out[outIndex++] = 32;
       index++;
       continue;
     }
     if (currentChar === 37 /* % */ && index < maxLength) {
       currentChar = s.charCodeAt(++index);
-      const hexHigh = unhexTable[currentChar]!;
+      const hexHigh = unhexTable[currentChar] ?? -1;
       if (!(hexHigh >= 0)) {
-        out.push(37);
+        out[outIndex++] = 37;
         continue;
       }
       const nextChar = s.charCodeAt(++index);
-      const hexLow = unhexTable[nextChar]!;
+      const hexLow = unhexTable[nextChar] ?? -1;
       if (!(hexLow >= 0)) {
-        out.push(37);
+        out[outIndex++] = 37;
         index--;
       } else {
         hasHex = true;
         currentChar = hexHigh * 16 + hexLow;
       }
     }
-    out.push(currentChar);
+    out[outIndex++] = currentChar;
     index++;
   }
-  void hasHex;
-  return Buffer.from(out);
+  return hasHex ? out.slice(0, outIndex) : out;
 }
 
 /** Upstream `lib/querystring.js:131`. */
@@ -103,14 +103,17 @@ export function unescape(s: string, decodeSpaces?: boolean): string {
 
 /** Upstream `lib/querystring.js:163`. `encodeURIComponent`, table-driven. */
 export function escape(str: unknown): string {
+  let value: string;
   if (typeof str !== "string") {
     if (typeof str === "object" && str !== null) {
-      str = String(str);
+      value = String(str);
     } else {
-      str = `${str}`;
+      value = `${str}`;
     }
+  } else {
+    value = str;
   }
-  return encodeStr(str as string, noEscape, hexTable);
+  return encodeStr(value, noEscape, hexTable);
 }
 
 /** Upstream `lib/querystring.js:178`. */
@@ -232,7 +235,7 @@ function addKeyVal(
   keyEncoded: boolean,
   valEncoded: boolean,
   decode: (s: string) => string,
-): void {
+): ParsedUrlQuery {
   if (key.length > 0 && keyEncoded) {
     key = decodeStr(key, decode);
   }
@@ -240,14 +243,30 @@ function addKeyVal(
     value = decodeStr(value, decode);
   }
 
-  const current = obj[key];
+  const current = Object.hasOwn(obj, key) ? obj[key] : undefined;
   if (current === undefined) {
+    // In the direct TypeScript lane an ordinary object inherits the legacy
+    // `__proto__` setter. A computed property in an object literal is always
+    // an own data property, so seed that one exceptional key this way and
+    // preserve everything already parsed. NTS records have no prototype, but
+    // taking the same path keeps both representations observably identical.
+    if (key === "__proto__") {
+      const replacement: ParsedUrlQuery = { ["__proto__"]: value };
+      for (const existingKey of Object.keys(obj)) {
+        const existingValue = obj[existingKey];
+        if (existingValue !== undefined) {
+          replacement[existingKey] = existingValue;
+        }
+      }
+      return replacement;
+    }
     obj[key] = value;
   } else if (Array.isArray(current)) {
     current.push(value);
   } else {
     obj[key] = [current, value];
   }
+  return obj;
 }
 
 export interface ParseOptions {
@@ -262,9 +281,10 @@ export function parse(
   eq?: string,
   options?: ParseOptions,
 ): ParsedUrlQuery {
-  // A null prototype, so a query containing `__proto__` is a key rather than a
-  // way to reach `Object.prototype`.
-  const obj = Object.create(null) as ParsedUrlQuery;
+  // NTS records have no prototype pointer, so an ordinary record already has
+  // Node's intended null-prototype behavior in compiled code: `__proto__` is
+  // just a key and no inherited name can collide with a query parameter.
+  let obj: ParsedUrlQuery = {};
 
   if (typeof qs !== "string" || qs.length === 0) {
     return obj;
@@ -319,7 +339,7 @@ export function parse(
           value += qs.slice(lastPos, end);
         }
 
-        addKeyVal(obj, key, value, keyEncoded, valEncoded, decode);
+        obj = addKeyVal(obj, key, value, keyEncoded, valEncoded, decode);
 
         if (--pairs === 0) {
           return obj;
@@ -403,7 +423,7 @@ export function parse(
     return obj;
   }
 
-  addKeyVal(obj, key, value, keyEncoded, valEncoded, decode);
+  obj = addKeyVal(obj, key, value, keyEncoded, valEncoded, decode);
 
   return obj;
 }

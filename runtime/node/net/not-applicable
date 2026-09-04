@@ -1,0 +1,28 @@
+test-net-binary.js: language non-goal (typescript.md section 13); constructs its byte fixture with eval and invokes the Server class as a callable function without new
+test-net-access-byteswritten.js: language non-goal (typescript.md section 13); reads accessors through several constructor prototype chains, including TLS and TTY classes
+test-net-bytes-stats.js: language non-goal (typescript.md section 13); invokes the Server class as a callable function without new
+test-net-connect-buffer.js: language non-goal (typescript.md section 13); invokes the Server class as a callable function without new
+test-net-connect-buffer2.js: language non-goal (typescript.md section 13); invokes the Server class as a callable function without new
+test-net-connect-call-socket-connect.js: language non-goal (typescript.md section 13); monkey-patches Socket.prototype.connect and invokes the original through Function.apply
+test-net-listen-invalid-port.js: language non-goal (typescript.md section 13); invokes the Server class as a callable function without new
+test-net-server-call-listen-multiple-times.js: language non-goal (typescript.md section 13); invokes the Server class as a callable function without new
+test-net-server-try-ports.js: language non-goal (typescript.md section 13); invokes the Server class as a callable function without new
+test-net-socket-timeout.js: language non-goal (typescript.md section 13); invokes the Server class as a callable function without new
+test-net-write-arguments.js: language non-goal (typescript.md section 13); invokes the legacy Stream class alias as a callable function without new
+test-net-server-capture-rejection.js: language non-goal (typescript.md section 13); requires EventEmitter's runtime Symbol rejection hook
+test-net-server-keepalive.js: implementation-detail test; mutates methods on the private native server and client handles exposed by Node's C++ binding
+test-net-server-nodelay.js: implementation-detail test; mutates methods on the private native server and client handles exposed by Node's C++ binding
+test-net-connect-keepalive.js: implementation-detail test; overwrites setKeepAlive on Node's private native handle object, while this profile's native handle is deliberately opaque
+test-net-connect-nodelay.js: implementation-detail test; overwrites setNoDelay on Node's private native handle object, while this profile's native handle is deliberately opaque
+test-net-keepalive-interval-count.js: implementation-detail test; overwrites setKeepAlive on Node's private native handle object to inspect binding arguments
+test-net-socket-setnodelay.js: implementation-detail test; constructs sockets around fabricated Node C++ handle objects and mutates their methods
+test-net-socket-write-after-close.js: implementation-detail test; directly closes and replaces Node's private native handle object
+test-net-child-process-connect-reset.js: harness limitation; spawns process.execPath, so the child runs Node's builtin net rather than this implementation
+test-net-listen-handle-in-cluster-1.js: harness limitation; forks a cluster worker and transfers a native server outside the substituted module process
+test-net-listen-handle-in-cluster-2.js: harness limitation; forks a cluster worker and requires Node's private TCP binding
+test-net-server-transfer-worker.js: language non-goal (typescript.md section 13); requires worker structured-clone transfer hooks implemented through runtime Symbols
+test-net-socket-transfer-worker-http.js: language non-goal (typescript.md section 13); requires worker structured-clone transfer hooks implemented through runtime Symbols
+test-net-socket-transfer-worker.js: language non-goal (typescript.md section 13); requires worker structured-clone transfer hooks implemented through runtime Symbols
+test-net-transfer-guards.js: language non-goal (typescript.md section 13); directly exercises structured-clone transfer hooks implemented through runtime Symbols
+test-net-listen-exclusive-random-ports.js: harness limitation; forks cluster workers and asserts on values sent from processes running Node's builtin net
+test-net-socket-constructor.js: harness limitation; most cases fork a cluster worker or adopt and inspect Node's private native socket handles

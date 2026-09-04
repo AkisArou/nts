@@ -7,9 +7,9 @@
 // not look like a TTY get coloured output.
 
 import { stderr } from "./stdio.ts";
+import { getColorDepth } from "./color-depth.ts";
 
 declare function nts_process_env_has(name: string): boolean;
-declare function nts_stdio_color_depth(): number;
 
 /** Just enough of a stream for the decision: is it a terminal, and how deep. */
 export interface ColorCapableStream {
@@ -35,7 +35,7 @@ export const colors: {
 };
 
 export function refresh(): void {
-  if (shouldColorize(stderr as ColorCapableStream)) {
+  if (shouldColorize(stderr)) {
     colors.blue = "\u001b[34m";
     colors.green = "\u001b[32m";
     colors.white = "\u001b[39m";
@@ -60,7 +60,7 @@ export function refresh(): void {
 
 export function shouldColorize(stream: ColorCapableStream | null | undefined): boolean {
   if (nts_process_env_has("FORCE_COLOR")) {
-    return nts_stdio_color_depth() > 2;
+    return getColorDepth() > 2;
   }
   // Depth 1 is monochrome and depth 4 is 16 colours; `> 2` is node's line
   // between "can show colour" and "cannot".

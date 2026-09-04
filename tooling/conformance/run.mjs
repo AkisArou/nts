@@ -34,7 +34,8 @@ import process from "node:process";
 
 const HERE = dirname(new URL(import.meta.url).pathname);
 const ROOT = resolvePath(HERE, "../..");
-const SUITE = join(ROOT, "third_party/node/test/parallel");
+const NODE_ROOT = join(ROOT, "third_party/node");
+const PARALLEL_SUITE = join(NODE_ROOT, "test/parallel");
 
 const argv = process.argv;
 const arg = (name, fallback = null) => {
@@ -65,8 +66,8 @@ if (!moduleName) {
   );
   process.exit(2);
 }
-if (!existsSync(SUITE)) {
-  console.error(`no node checkout at ${SUITE}; see the clone command in .gitignore`);
+if (!existsSync(PARALLEL_SUITE)) {
+  console.error(`no node checkout at ${PARALLEL_SUITE}; see the clone command in .gitignore`);
   process.exit(0);
 }
 
@@ -95,29 +96,88 @@ function readList(path) {
 }
 
 const notApplicable = readList(join(ROOT, "runtime/node", moduleName, "not-applicable"));
+const moduleDir = join(ROOT, "runtime/node", moduleName);
 
 // A module's tests are `test-<module>.js` and `test-<module>-*.js`. Node also
 // files some under other names; those are found by hand and listed in the
 // module's `extra-tests` file when they exist.
-const extraPath = join(ROOT, "runtime/node", moduleName, "extra-tests");
+const extraPath = join(moduleDir, "extra-tests");
 const extra = [...readList(extraPath).keys()];
 
 // `test-<module>.js` and `test-<module>-*.js` by default. Node does not name
 // them all that way -- `events` has thirty-odd `test-event-emitter-*.js` -- so a
 // module may say which files are its own in a `test-pattern` file holding one
 // regular expression.
-const patternPath = join(ROOT, "runtime/node", moduleName, "test-pattern");
+const patternPath = join(moduleDir, "test-pattern");
 const pattern = existsSync(patternPath)
   ? new RegExp(readFileSync(patternPath, "utf8").trim())
   : new RegExp(`^test-${moduleName}(-.*)?\\.js$`);
 
-const files = [
-  ...readdirSync(SUITE).filter((f) => pattern.test(f)),
-  ...extra,
-]
-  .filter((f, i, all) => all.indexOf(f) === i)
-  .filter((f) => !only || f === only)
-  .sort();
+const upstream = [
+  ...readdirSync(PARALLEL_SUITE)
+    .filter((fileName) => pattern.test(fileName))
+    .map((fileName) => ({ name: fileName, path: join(PARALLEL_SUITE, fileName) })),
+  ...extra.map((fileName) => ({ name: fileName, path: join(PARALLEL_SUITE, fileName) })),
+];
+
+// Some Node subsystems have a dedicated suite in addition to `test/parallel`.
+// A module opts in through `test-suites`, one path below `third_party/node/test`
+// per line. A path can name a suite directory (every `test-*.js` in it) or one
+// exact test file when a shared suite contains tests for many subsystems. Names
+// retain the directory prefix so duplicate basenames remain auditable.
+const additionalSuitesPath = join(moduleDir, "test-suites");
+if (existsSync(additionalSuitesPath)) {
+  for (const suiteName of readFileSync(additionalSuitesPath, "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))) {
+    const suite = join(ROOT, "third_party/node/test", suiteName);
+    if (!existsSync(suite)) continue;
+    if (suiteName.endsWith(".js")) {
+      upstream.push({ name: suiteName, path: suite });
+      continue;
+    }
+    for (const fileName of readdirSync(suite)) {
+      if (!/^test-.*\.js$/.test(fileName)) continue;
+      upstream.push({ name: `${suiteName}/${fileName}`, path: join(suite, fileName) });
+    }
+  }
+}
+
+upstream.sort((left, right) => left.name.localeCompare(right.name));
+
+// A Node file can mix a permanently excluded §13 operation with otherwise
+// supported behavior. Excluding the whole file would hide the latter. A
+// module may keep focused CommonJS tests under `test/`; their names are
+// deliberately prefixed in the report so they cannot be mistaken for
+// upstream files. Each such test must name its upstream source in a comment.
+const localDir = join(moduleDir, "test");
+const local = existsSync(localDir)
+  ? readdirSync(localDir).filter((f) => f.endsWith(".js")).sort()
+  : [];
+
+const allTests = [
+  ...upstream.filter((test, index, all) =>
+    all.findIndex((candidate) => candidate.name === test.name) === index),
+  ...local.map((fileName) => ({ name: `local/${fileName}`, path: join(localDir, fileName) })),
+];
+
+let tests = allTests;
+if (only !== null) {
+  const exact = allTests.filter((test) => test.name === only);
+  if (exact.length > 0) {
+    tests = exact;
+  } else {
+    const byBasename = allTests.filter((test) => test.name.split("/").pop() === only);
+    if (byBasename.length > 1) {
+      console.error(
+        `ambiguous --only ${only}; use one of: ${byBasename.map((test) => test.name).join(", ")}`,
+      );
+      process.exit(2);
+    }
+    tests = byBasename;
+  }
+}
 
 /**
  * The `node` flags a test asks for in its `// Flags:` line.
@@ -134,11 +194,17 @@ const PASSED_THROUGH_FLAGS = new Set([
   "--expose-gc",
   "--no-warnings",
   "--pending-deprecation",
+  "--experimental-stream-iter",
+  "--expose-externalize-string",
   "--allow-natives-syntax",
+  "--test-udp-no-try-send",
+  "--no-network-family-autoselection",
 ]);
 
 function nodeFlags(path) {
-  const first = readFileSync(path, "utf8").split("\n", 20).find((l) => l.startsWith("// Flags:"));
+  // Node's standard licence header already occupies more than twenty lines;
+  // flagged tests commonly place metadata immediately after it.
+  const first = readFileSync(path, "utf8").split("\n", 64).find((l) => l.startsWith("// Flags:"));
   if (!first) return [];
   return first
     .slice("// Flags:".length)
@@ -150,24 +216,35 @@ function nodeFlags(path) {
     // which then failed on `globalThis.gc is not a function` -- a statement
     // about how they were run, not about the module.
     .map((f) => f.replaceAll("_", "-"))
-    .filter((f) => PASSED_THROUGH_FLAGS.has(f));
+    .filter((f) =>
+      PASSED_THROUGH_FLAGS.has(f) ||
+      f.startsWith("--title=") ||
+      f.startsWith("--network-family-autoselection-attempt-timeout="));
 }
 
 const rows = [];
-for (const name of files) {
+for (const test of tests) {
+  const { name } = test;
   let result;
-  if (notApplicable.has(name)) {
-    rows.push({ name, kind: "n/a", why: notApplicable.get(name) });
+  const shortName = name.split("/").pop();
+  const notApplicableReason = notApplicable.get(name) ??
+    (shortName === undefined ? undefined : notApplicable.get(shortName));
+  if (notApplicableReason !== undefined) {
+    rows.push({ name, kind: "n/a", why: notApplicableReason });
     continue;
   }
   try {
     const out = execFileSync(
       process.execPath,
-      [...nodeFlags(join(SUITE, name)), join(HERE, "run-one.mjs"), moduleName, join(SUITE, name), addon ?? "-"],
+      [...nodeFlags(test.path), join(HERE, "run-one.mjs"), moduleName, test.path, addon ?? "-"],
       {
         encoding: "utf8",
         timeout: 60_000,
         stdio: ["ignore", "pipe", "pipe"],
+        // Node's own runner starts each test from the checkout root. A few
+        // upstream tests intentionally resolve `./test/...`; launching them
+        // from the NTS root turns those into unrelated ENOENT failures.
+        cwd: NODE_ROOT,
         env: { ...process.env, NTS_CONFORMANCE_SABOTAGE: sabotage ? "1" : "" },
       },
     );
@@ -214,7 +291,7 @@ if (asJson) {
     }
   }
   console.log(
-    `\n  ${files.length} file(s): ${tally.pass} passed, ${tally.fail} failed, ` +
+    `\n  ${tests.length} file(s): ${tally.pass} passed, ${tally.fail} failed, ` +
       `${tally.skip} skipped, ${tally["n/a"]} not applicable`,
   );
 }

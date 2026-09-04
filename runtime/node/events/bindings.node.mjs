@@ -1,13 +1,4 @@
-// The native half of `node:events`, for the node-side run only.
-//
-// One binding: a warning has to reach somewhere, and where that is belongs to
-// the process rather than to `events`. Node calls `process.emitWarning`; the
-// compiled form will call whatever the runtime's warning sink turns out to be.
+// The native half of `node:events`, for the node-side run only. The shared
+// bindings provide both process-warning delivery and the raw microtask queue
+// used by `addAbortListener` for an already-aborted signal.
 import "../internal/bindings.node.mjs";
-import process from "node:process";
-
-globalThis.nts_events_emit_max_listeners_warning = (message, warning) => {
-  // The object the implementation built, not a fresh one: node's tests read
-  // `emitter`, `type` and `count` off the warning they catch.
-  process.emitWarning(warning instanceof Error ? warning : new Error(message));
-};

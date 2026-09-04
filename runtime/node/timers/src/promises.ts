@@ -70,10 +70,10 @@ interface Cancellable {
  * detach the listener however the wait ends. Written once because getting the
  * detach wrong is invisible until a program has run for a while.
  */
-function withCancellation<T>(
+function withCancellation<T, Handle extends Cancellable>(
   promise: Promise<T>,
-  handle: Cancellable,
-  cancel: (handle: never) => void,
+  handle: Handle,
+  cancel: (handle: Handle) => void,
   reject: (reason: unknown) => void,
   signal: AbortSignal | undefined,
 ): Promise<T> {
@@ -84,7 +84,7 @@ function withCancellation<T>(
     // now would be rejecting a settled promise -- harmless, but it would also
     // cancel a *reused* handle if one had taken its place.
     if (!handle._destroyed) {
-      cancel(handle as never);
+      cancel(handle);
       reject(new AbortError(undefined, { cause: signal.reason }));
     }
   };
@@ -108,11 +108,17 @@ function checkOptions(options: TimerOptions): void {
  * who wrote `await setTimeout(...)` inside a `try` expects both kinds of
  * failure to land in the same `catch`.
  */
-export function setTimeout<T = void>(
+export function setTimeout(after?: number): Promise<void>;
+export function setTimeout<T>(
+  after: number | undefined,
+  value: T,
+  options?: TimerOptions,
+): Promise<T>;
+export function setTimeout<T>(
   after?: number,
   value?: T,
   options: TimerOptions = kEmptyOptions,
-): Promise<T> {
+): Promise<T | undefined> {
   try {
     if (after !== undefined) validateNumber(after, "delay");
     checkOptions(options);
@@ -126,17 +132,20 @@ export function setTimeout<T = void>(
     return Promise.reject(new AbortError(undefined, { cause: signal.reason }));
   }
 
-  const { promise, resolve, reject } = Promise.withResolvers<T>();
-  const timeout = new Timeout(resolve as never, after, [value], false, ref);
+  const { promise, resolve, reject } = Promise.withResolvers<T | undefined>();
+  const args: [T | undefined] = [value];
+  const timeout = new Timeout(resolve, after, args, false, ref);
   insert(timeout, timeout._idleTimeout);
-  return withCancellation(promise, timeout, clearTimeout as never, reject, signal);
+  return withCancellation(promise, timeout, clearTimeout, reject, signal);
 }
 
 /** Resolve with `value` on the next pass of the check phase. */
-export function setImmediate<T = void>(
+export function setImmediate(): Promise<void>;
+export function setImmediate<T>(value: T, options?: TimerOptions): Promise<T>;
+export function setImmediate<T>(
   value?: T,
   options: TimerOptions = kEmptyOptions,
-): Promise<T> {
+): Promise<T | undefined> {
   try {
     checkOptions(options);
   } catch (err) {
@@ -149,10 +158,11 @@ export function setImmediate<T = void>(
     return Promise.reject(new AbortError(undefined, { cause: signal.reason }));
   }
 
-  const { promise, resolve, reject } = Promise.withResolvers<T>();
-  const immediate = new Immediate(resolve as never, [value]);
+  const { promise, resolve, reject } = Promise.withResolvers<T | undefined>();
+  const args: [T | undefined] = [value];
+  const immediate = new Immediate(resolve, args);
   if (!ref) immediate.unref();
-  return withCancellation(promise, immediate, clearImmediate as never, reject, signal);
+  return withCancellation(promise, immediate, clearImmediate, reject, signal);
 }
 
 /**
@@ -163,11 +173,17 @@ export function setImmediate<T = void>(
  * every tick increments, and the loop yields once per tick even when several
  * accumulated while the consumer was away. Node calls it `notYielded`.
  */
-export async function* setInterval<T = void>(
+export function setInterval(after?: number): AsyncGenerator<void, void, void>;
+export function setInterval<T>(
+  after: number | undefined,
+  value: T,
+  options?: TimerOptions,
+): AsyncGenerator<T, void, void>;
+export async function* setInterval<T>(
   after?: number,
   value?: T,
   options: TimerOptions = kEmptyOptions,
-): AsyncGenerator<T, void, void> {
+): AsyncGenerator<T | undefined, void, void> {
   if (after !== undefined) validateNumber(after, "delay");
   checkOptions(options);
 
@@ -184,13 +200,13 @@ export async function* setInterval<T = void>(
     let wake: ((value?: unknown) => void) | undefined;
 
     interval = new Timeout(
-      (() => {
+      () => {
         pending++;
         if (wake) {
           wake();
           wake = undefined;
         }
-      }) as never,
+      },
       after,
       undefined,
       true,
@@ -200,7 +216,7 @@ export async function* setInterval<T = void>(
 
     if (signal) {
       onCancel = () => {
-        clearTimeout(interval as Timeout);
+        clearTimeout(interval);
         if (wake) {
           // Handed a rejected promise rather than called with a value: the
           // loop below awaits whatever this resolves with, so this is how the
@@ -219,7 +235,7 @@ export async function* setInterval<T = void>(
         });
       }
       for (; pending > 0; pending--) {
-        yield value as T;
+        yield value;
       }
     }
     throw new AbortError(undefined, { cause: signal?.reason });
@@ -227,12 +243,13 @@ export async function* setInterval<T = void>(
     // Reached however the generator ends, including a `break` in the caller's
     // `for await`, which is the common case and the one that would otherwise
     // leave an interval running forever.
-    clearTimeout(interval as Timeout);
+    clearTimeout(interval);
     if (onCancel) signal?.removeEventListener("abort", onCancel);
   }
 }
 
 const kScheduler = Symbol("kScheduler");
+const schedulerToken = {};
 
 /**
  * The WICG scheduling API, as much of it as node exposes.
@@ -245,8 +262,9 @@ const kScheduler = Symbol("kScheduler");
 class Scheduler {
   [kScheduler]?: boolean;
 
-  constructor() {
-    throw new ERR_ILLEGAL_CONSTRUCTOR();
+  constructor(token?: object) {
+    if (token !== schedulerToken) throw new ERR_ILLEGAL_CONSTRUCTOR();
+    this[kScheduler] = true;
   }
 
   /** Give the loop a turn, and resume on the next check phase. */
@@ -263,16 +281,9 @@ class Scheduler {
 }
 
 /**
- * The one instance, built without running the constructor that refuses.
- *
- * `Reflect.construct` takes the prototype from `Scheduler` and the body from
- * the function given, which is how a class can be uninstantiable from outside
- * and still have exactly one instance.
+ * The one instance. Its constructor requires a module-private token, so a
+ * caller reaching the class through `scheduler.constructor` still cannot make
+ * another one. This is the same invariant as node's `Reflect.construct`
+ * scaffolding without requiring a runtime metaobject protocol.
  */
-export const scheduler: Scheduler = Reflect.construct(
-  function (this: Scheduler) {
-    this[kScheduler] = true;
-  },
-  [],
-  Scheduler,
-) as Scheduler;
+export const scheduler = new Scheduler(schedulerToken);

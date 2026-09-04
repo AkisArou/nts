@@ -4,9 +4,15 @@
 // `console.log` is built from), `types`, `isDeepStrictEqual` (what
 // `assert.deepStrictEqual` compares with), and the small helpers around them.
 
-import { inspect, inspectColors, inspectDefaultOptions, type InspectOptions } from "./inspect.ts";
+import {
+  inspect,
+  inspectColors,
+  inspectDefaultOptions,
+  inspectStyles,
+  type InspectOptions,
+} from "./inspect.ts";
 import { format, formatWithOptions } from "./format.ts";
-import { isDeepStrictEqual } from "./deep-equal.ts";
+import { isDeepStrictEqual as compareDeepStrict } from "./deep-equal.ts";
 import * as types from "./types.ts";
 import {
   captureStackTrace,
@@ -15,41 +21,22 @@ import {
 import { nextTick } from "../../internal/tick.ts";
 import { deprecate } from "../../internal/deprecate.ts";
 import {
-  validateBoolean, validateFunction, validateObject, validateOneOf, validateString,
+  validateBoolean, validateFunction, validateNumber, validateObject, validateOneOf, validateString,
 } from "../../internal/validators.ts";
 import { isNodeStream, isReadableStream, isWritableStream } from "../../internal/streams/utils.ts";
 import { shouldColorize } from "../../internal/colors.ts";
 import { stdout } from "../../internal/stdio.ts";
 
-export { inspect, inspectDefaultOptions, format, formatWithOptions, isDeepStrictEqual, types };
+export { inspect, inspectDefaultOptions, format, formatWithOptions, types };
 export { deprecate };
 export type { InspectOptions };
 
-declare function nts_process_env(name: string): string;
+// Keep the imported implementation as the exported function value. A
+// forwarding wrapper would add a call on every assertion solely to give the
+// re-export a local declaration.
+export const isDeepStrictEqual = compareDeepStrict;
 
-/**
- * ES5 prototype inheritance, upstream `lib/util.js`.
- *
- * Predates `class` and is still exported because a great deal of code uses it.
- * Node sets `super_` as well, which subclasses read to reach the base.
- */
-export function inherits(ctor: Function, superCtor: Function): void {
-  if (ctor === undefined || ctor === null) {
-    throw new ERR_INVALID_ARG_TYPE("ctor", "Function", ctor);
-  }
-  if (superCtor === undefined || superCtor === null) {
-    throw new ERR_INVALID_ARG_TYPE("superCtor", "Function", superCtor);
-  }
-  if (superCtor.prototype === undefined) {
-    throw new ERR_INVALID_ARG_TYPE("superCtor.prototype", "Object", superCtor.prototype);
-  }
-  Object.defineProperty(ctor, "super_", {
-    value: superCtor,
-    writable: true,
-    configurable: true,
-  });
-  Object.setPrototypeOf(ctor.prototype, superCtor.prototype);
-}
+declare function nts_process_env(name: string): string;
 
 /** Enabled sections of `NODE_DEBUG`, upstream `lib/internal/util/debuglog.js`. */
 const enabledSections = (() => {
@@ -77,7 +64,7 @@ export function debuglogEnabled(section: string): boolean {
   return enabledSections.includes(section.toUpperCase());
 }
 
-declare function nts_debug_write(text: string): void;
+declare function nts_debug_write(text: string): number;
 declare function nts_process_pid(): number;
 
 /**
@@ -120,7 +107,7 @@ export function toUSVString(str: string): string {
     if (c >= 0xd800 && c <= 0xdbff) {
       const next = i + 1 < str.length ? str.charCodeAt(i + 1) : 0;
       if (next >= 0xdc00 && next <= 0xdfff) {
-        out += str[i]! + str[i + 1]!;
+        out += str.slice(i, i + 2);
         i++;
         continue;
       }
@@ -143,24 +130,27 @@ export function toUSVString(str: string): string {
  * Needs promises, which the runtime does not have yet; the shape is here so it
  * arrives complete rather than as an afterthought.
  */
-export const kCustomPromisifiedSymbol = Symbol.for("nodejs.util.promisify.custom");
+type CallbackTakingFunction = (
+  this: unknown,
+  ...args: unknown[]
+) => unknown;
+
+type PromisifiedFunction = (
+  this: unknown,
+  ...args: unknown[]
+) => Promise<unknown>;
 
 export function promisify(
-  original: (...args: never[]) => unknown,
-): (...args: unknown[]) => Promise<unknown> {
+  original: CallbackTakingFunction,
+): PromisifiedFunction {
   validateFunction(original, "original");
-
-  const custom = (original as unknown as Record<symbol, unknown>)[kCustomPromisifiedSymbol];
-  if (custom !== undefined) {
-    validateFunction(custom, "util.promisify.custom");
-    return custom as (...args: unknown[]) => Promise<unknown>;
-  }
 
   function promisified(this: unknown, ...args: unknown[]): Promise<unknown> {
     return new Promise((resolve, reject) => {
       // Node's callbacks are `(err, value)`, so the promise settles on the
       // first argument and resolves with the second.
-      Reflect.apply(original, this, [
+      original.call(
+        this,
         ...args,
         (err: unknown, value: unknown) => {
           if (err) {
@@ -169,17 +159,10 @@ export function promisify(
             resolve(value);
           }
         },
-      ] as never[]);
+      );
     });
   }
 
-  Object.setPrototypeOf(promisified, Object.getPrototypeOf(original));
-  Object.defineProperty(promisified, kCustomPromisifiedSymbol, {
-    value: promisified,
-    enumerable: false,
-    writable: false,
-    configurable: true,
-  });
   return promisified;
 }
 
@@ -193,10 +176,12 @@ export function promisify(
  */
 function callbackifyOnRejected(reason: unknown, cb: (err: unknown) => void): void {
   if (!reason) {
-    reason = new ERR_FALSY_VALUE_REJECTION(reason);
+    const wrapped = new ERR_FALSY_VALUE_REJECTION(reason);
     // Without this the stack would start inside `callbackify`, which is not
     // where anything went wrong.
-    captureStackTrace(reason as object, callbackifyOnRejected);
+    captureStackTrace(wrapped, callbackifyOnRejected);
+    cb(wrapped);
+    return;
   }
   cb(reason);
 }
@@ -211,40 +196,25 @@ function callbackifyOnRejected(reason: unknown, cb: (err: unknown) => void): voi
  * `uncaughtException` rather than the promise machinery.
  */
 export function callbackify(
-  original: (...args: never[]) => Promise<unknown>,
+  original: (this: unknown, ...args: unknown[]) => PromiseLike<unknown>,
 ): (...args: unknown[]) => void {
   validateFunction(original, "original");
 
   function callbackified(this: unknown, ...args: unknown[]): void {
     const maybeCb = args.pop();
     validateFunction(maybeCb, "last argument");
-    const cb = (maybeCb as (...a: unknown[]) => void).bind(this);
-    Reflect.apply(original, this, args as never[]).then(
+    const cb = maybeCb.bind(this);
+    original.call(this, ...args).then(
       (ret: unknown) => nextTick(cb, null, ret),
       (rej: unknown) => nextTick(callbackifyOnRejected, rej, cb),
     );
   }
 
-  // Copied rather than assigned, so that a function whose `length` or `name`
-  // has been redefined keeps whatever it was redefined to -- with the two
-  // adjustments the wrapper implies: one more argument, and a longer name.
-  const descriptors = Object.getOwnPropertyDescriptors(original);
-  if (typeof descriptors["length"]?.value === "number") {
-    descriptors["length"].value++;
-  }
-  if (typeof descriptors["name"]?.value === "string") {
-    descriptors["name"].value += "Callbackified";
-  }
-  Object.defineProperties(callbackified, descriptors);
   return callbackified;
 }
 
 
 export const isArray = Array.isArray;
-
-export function isDeepStrictEqualExport(a: unknown, b: unknown): boolean {
-  return isDeepStrictEqual(a, b);
-}
 
 export default {
   inspect,
@@ -252,7 +222,6 @@ export default {
   formatWithOptions,
   isDeepStrictEqual,
   types,
-  inherits,
   deprecate,
   debuglog,
   debuglogEnabled,
@@ -269,6 +238,8 @@ export default {
  * colour can use it both in `styleText` and in a custom `inspect` style.
  */
 export const colors: Record<string, [number, number] | undefined> = inspectColors;
+/** Internal handoff to `shape.mjs`; removed from the public module there. */
+export const styles: Record<string, string | undefined> = inspectStyles;
 
 /**
  * Turn this style back on wherever the inner text turned it off, upstream
@@ -403,10 +374,22 @@ export function styleText(
         stream,
       );
     }
-    skipColorize = !shouldColorize(stream as { isTTY?: boolean });
+    if (stream === null || typeof stream !== "object") {
+      throw new ERR_INVALID_ARG_TYPE("stream", "Object", stream);
+    }
+    skipColorize = !shouldColorize(stream);
   }
 
-  const formats = Array.isArray(format) ? format : [format as string];
+  const allowedFormats = Object.keys(colors);
+  let formats: readonly unknown[];
+  if (typeof format === "string") {
+    formats = [format];
+  } else if (Array.isArray(format)) {
+    formats = format;
+  } else {
+    validateOneOf(format, "format", allowedFormats);
+    return text;
+  }
 
   let openCodes = "";
   let closeCodes = "";
@@ -432,11 +415,11 @@ export function styleText(
       continue;
     }
 
-    const codes = colors[key as string];
+    const codes = typeof key === "string" ? colors[key] : undefined;
     if (!codes) {
       // Through `validateOneOf` so the message lists what is allowed, and over
-      // `getOwnPropertyNames` so the aliases -- `grey`, `faint` -- count.
-      validateOneOf(key, "format", Object.getOwnPropertyNames(colors));
+      // the same explicit static table used for lookup, so aliases count.
+      validateOneOf(key, "format", allowedFormats);
       continue;
     }
     const { openSeq, closeSeq, keepClose } = codesToStyle(codes);
@@ -458,39 +441,94 @@ export function parseEnv(content: string): Record<string, string> {
   if (typeof content !== "string") {
     throw new ERR_INVALID_ARG_TYPE("content", "string", content);
   }
-  const out: Record<string, string> = Object.create(null);
-  for (const raw of content.split("\n")) {
-    const line = raw.trim();
-    if (line.length === 0 || line.startsWith("#")) {
+
+  const source = content.replaceAll("\r", "");
+  const out: Record<string, string> = {};
+  let position = 0;
+  while (position < source.length) {
+    const newline = source.indexOf("\n", position);
+    const lineEnd = newline === -1 ? source.length : newline;
+    const rawLine = source.slice(position, lineEnd);
+    const trimmedLine = rawLine.trim();
+    if (trimmedLine.length === 0 || trimmedLine.startsWith("#")) {
+      position = newline === -1 ? source.length : newline + 1;
       continue;
     }
-    const at = line.indexOf("=");
-    if (at === -1) {
+
+    const equals = source.indexOf("=", position);
+    if (equals === -1 || equals > lineEnd) {
+      position = newline === -1 ? source.length : newline + 1;
       continue;
     }
-    const key = line.slice(0, at).trim().replace(/^export\s+/, "");
-    let value = line.slice(at + 1).trim();
-    // A quoted value keeps its spaces and any `#`; an unquoted one stops at a
-    // comment.
-    const quoted =
-      value.length > 1 &&
-      ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'")) ||
-        (value.startsWith("`") && value.endsWith("`")));
-    if (quoted) {
-      value = value.slice(1, -1);
-    } else {
-      const comment = value.indexOf(" #");
-      if (comment !== -1) {
-        value = value.slice(0, comment).trim();
+
+    let key = source.slice(position, equals).trim();
+    if (key.startsWith("export ")) {
+      key = key.slice(7).trim();
+    }
+    if (key.length === 0) {
+      position = newline === -1 ? source.length : newline + 1;
+      continue;
+    }
+
+    let valueStart = equals + 1;
+    while (valueStart < lineEnd) {
+      const code = source.charCodeAt(valueStart);
+      if (code !== 32 && code !== 9) break;
+      valueStart++;
+    }
+    if (valueStart >= lineEnd) {
+      out[key] = "";
+      position = newline === -1 ? source.length : newline + 1;
+      continue;
+    }
+
+    const quote = source.charAt(valueStart);
+    if (quote === "'" || quote === '"' || quote === "`") {
+      const closingQuote = source.indexOf(quote, valueStart + 1);
+      if (closingQuote === -1) {
+        out[key] = source.slice(valueStart, lineEnd);
+        position = newline === -1 ? source.length : newline + 1;
+        continue;
       }
+
+      let value = source.slice(valueStart + 1, closingQuote);
+      if (quote === '"') {
+        value = value.replaceAll("\\n", "\n");
+      }
+      out[key] = value;
+      const closingLineEnd = source.indexOf("\n", closingQuote + 1);
+      position = closingLineEnd === -1 ? source.length : closingLineEnd + 1;
+      continue;
     }
-    out[key] = value;
+
+    let value = source.slice(valueStart, lineEnd);
+    const comment = value.indexOf("#");
+    if (comment !== -1) {
+      value = value.slice(0, comment);
+    }
+    out[key] = value.trim();
+    position = newline === -1 ? source.length : newline + 1;
   }
   return out;
 }
 
 declare function nts_uv_err_name(code: number): string;
+
+/** Fixed-layout form of the properties Node exposes on system errors. */
+class ErrnoException extends Error {
+  code: string;
+  errno: number;
+  syscall: string;
+  address?: string | null;
+  port?: number;
+
+  constructor(message: string, code: string, errno: number, syscall: string) {
+    super(message);
+    this.code = code;
+    this.errno = errno;
+    this.syscall = syscall;
+  }
+}
 
 /** `util._exceptionWithHostPort`, upstream `lib/internal/errors.js`. */
 /**
@@ -520,15 +558,12 @@ export function _exceptionWithHostPort(
     details += ` - Local (${additional})`;
   }
 
-  const ex = new Error(`${syscall} ${code}${details}`) as Error & Record<string, unknown>;
-  ex["errno"] = err;
-  ex["code"] = code;
-  ex["syscall"] = syscall;
+  const ex = new ErrnoException(`${syscall} ${code}${details}`, code, err, syscall);
   // Set even when null: a caller reads `address` to report what it tried, and
   // an absent property and an explicit `null` mean different things.
-  ex["address"] = address;
+  ex.address = address;
   if (port) {
-    ex["port"] = port;
+    ex.port = port;
   }
   // The frames start at the caller: this function is not where the failure is.
   captureStackTrace(ex, _exceptionWithHostPort);
@@ -537,13 +572,10 @@ export function _exceptionWithHostPort(
 
 /** `util._errnoException`, upstream `lib/internal/errors.js`. */
 export function _errnoException(err: number, syscall: string, original?: string): Error {
+  validateSystemErrorCode(err);
   const code = nts_uv_err_name(err);
-  const ex = new Error(original ? `${syscall} ${code} ${original}` : `${syscall} ${code}`) as
-    Error & Record<string, unknown>;
-  ex["code"] = code;
-  ex["errno"] = err;
-  ex["syscall"] = syscall;
-  return ex;
+  const message = original ? `${syscall} ${code} ${original}` : `${syscall} ${code}`;
+  return new ErrnoException(message, code, err, syscall);
 }
 
 declare function nts_uv_err_message(code: number): string;
@@ -556,11 +588,20 @@ declare function nts_uv_error_names(): string[];
  * From libuv rather than a table written here, for the reason `os.constants`
  * is: the numbers are the platform's.
  */
+function validateSystemErrorCode(err: number): void {
+  validateNumber(err, "err");
+  if (err >= 0 || !Number.isSafeInteger(err)) {
+    throw new ERR_OUT_OF_RANGE("err", "a negative integer", err);
+  }
+}
+
 export function getSystemErrorName(err: number): string {
+  validateSystemErrorCode(err);
   return nts_uv_err_name(err);
 }
 
 export function getSystemErrorMessage(err: number): string {
+  validateSystemErrorCode(err);
   return nts_uv_err_message(err);
 }
 
@@ -568,8 +609,13 @@ export function getSystemErrorMap(): Map<number, [string, string]> {
   const codes = nts_uv_error_codes();
   const names = nts_uv_error_names();
   const map = new Map<number, [string, string]>();
-  for (let i = 0; i < codes.length; i++) {
-    map.set(codes[i]!, [names[i]!, nts_uv_err_message(codes[i]!)]);
+  const length = Math.min(codes.length, names.length);
+  for (let i = 0; i < length; i++) {
+    const code = codes[i];
+    const name = names[i];
+    if (code !== undefined && name !== undefined) {
+      map.set(code, [name, nts_uv_err_message(code)]);
+    }
   }
   return map;
 }

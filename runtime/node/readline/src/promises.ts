@@ -16,10 +16,19 @@
 import { ERR_INVALID_ARG_TYPE } from "../../internal/errors.ts";
 import { validateBoolean, validateInteger } from "../../internal/validators.ts";
 import { nextTick } from "../../internal/tick.ts";
-import { CSI } from "../../internal/readline-callbacks.ts";
 import {
-  Interface as CallbackInterface,
+  kClearLine,
+  kClearScreenDown,
+  kClearToLineBeginning,
+  kClearToLineEnd,
+} from "../../internal/readline-callbacks.ts";
+import {
+  InterfaceBase,
+  kQuestionPromise,
+  type Completer,
+  type InputStream,
   type InterfaceOptions,
+  type OutputStream,
   type QuestionOptions,
 } from "./interface.ts";
 
@@ -34,61 +43,17 @@ function isWritable(stream: unknown): stream is WritableLike {
   return (
     typeof stream === "object" &&
     stream !== null &&
-    typeof (stream as WritableLike).write === "function"
+    "write" in stream &&
+    typeof stream.write === "function"
   );
 }
 
-export class Interface extends CallbackInterface {
-  /**
-   * Ask, and resolve with the answer.
-   *
-   * The rejection path is the reason this is not a two-line wrapper: closing
-   * the interface while a question is outstanding has to reject rather than
-   * leave the promise pending forever, and Ctrl+C and Ctrl+D both close.
-   */
-  override question(query: string, options?: QuestionOptions): Promise<string>;
-  override question(query: string, callback: (answer: string) => void): void;
-  override question(
-    query: string,
-    options: QuestionOptions,
-    callback: (answer: string) => void,
-  ): void;
-  override question(
-    query: string,
-    optionsOrCallback?: QuestionOptions | ((answer: string) => void),
-    maybeCallback?: (answer: string) => void,
-  ): Promise<string> | void {
-    // The callback forms are the base class's and still work. Node's promises
-    // interface rejects them -- it treats the callback as an options object
-    // and fails validation -- and the difference is forced rather than chosen:
-    // an override has to accept everything the method it overrides accepts.
-    if (typeof optionsOrCallback === "function") {
-      super.question(query, optionsOrCallback);
-      return;
-    }
-    if (maybeCallback !== undefined) {
-      super.question(query, optionsOrCallback as QuestionOptions, maybeCallback);
-      return;
-    }
-    const options = optionsOrCallback;
+export class Interface extends InterfaceBase {
+  protected override deferCompletions = true;
 
-    return new Promise<string>((resolve, reject) => {
-      const onClose = (): void => {
-        reject(new Error("The question was cancelled because the interface closed"));
-      };
-      this.once("close", onClose as never);
-
-      const answered = (answer: string): void => {
-        this.removeListener("close", onClose as never);
-        resolve(answer);
-      };
-
-      if (options?.signal) {
-        super.question(query, options, answered);
-      } else {
-        super.question(query, answered);
-      }
-    });
+  /** Ask, and resolve with the answer. */
+  question(query: string, options?: QuestionOptions): Promise<string> {
+    return this[kQuestionPromise](query, options);
   }
 }
 
@@ -152,23 +117,19 @@ export class Readline {
   clearLine(dir: -1 | 0 | 1): this {
     validateInteger(dir, "dir", -1, 1);
     this.#queue(
-      dir < 0 ? CSI.kClearToLineBeginning : dir > 0 ? CSI.kClearToLineEnd : CSI.kClearLine,
+      dir < 0 ? kClearToLineBeginning : dir > 0 ? kClearToLineEnd : kClearLine,
     );
     return this;
   }
 
   clearScreenDown(): this {
-    this.#queue(CSI.kClearScreenDown);
+    this.#queue(kClearScreenDown);
     return this;
   }
 
   /** Write everything recorded so far, as one. */
   commit(): Promise<void> {
     return new Promise<void>((resolve) => {
-      if (this.#todo.length === 0) {
-        resolve();
-        return;
-      }
       const data = this.#todo.join("");
       this.#todo = [];
       this.#stream.write(data, () => resolve());
@@ -182,9 +143,21 @@ export class Readline {
   }
 }
 
+export function createInterface(options: InterfaceOptions): Interface;
 export function createInterface(
-  options: InterfaceOptions | unknown,
-  ...rest: unknown[]
+  input: InputStream,
+  output?: OutputStream | null,
+  completer?: Completer,
+  terminal?: boolean,
+): Interface;
+export function createInterface(
+  options: InterfaceOptions | InputStream,
+  output?: OutputStream | null,
+  completer?: Completer,
+  terminal?: boolean,
 ): Interface {
-  return new Interface(options as InterfaceOptions, ...rest);
+  if ("input" in options) {
+    return new Interface(options);
+  }
+  return new Interface(options, output, completer, terminal);
 }

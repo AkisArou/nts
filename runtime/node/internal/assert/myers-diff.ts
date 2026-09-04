@@ -18,11 +18,17 @@ import { colors } from "../colors.ts";
 /** Consecutive unchanged lines beyond this are collapsed to `...`. */
 const kNopLinesToCollapse = 5;
 
-export const kOperations = {
+interface Operations {
+  readonly DELETE: -1;
+  readonly NOP: 0;
+  readonly INSERT: 1;
+}
+
+export const kOperations: Operations = {
   DELETE: -1,
   NOP: 0,
   INSERT: 1,
-} as const;
+};
 
 export type Operation = (typeof kOperations)[keyof typeof kOperations];
 export type Edit = [Operation, string];
@@ -60,6 +66,10 @@ export function myersDiff(
   const expectedLength = expected.length;
   const max = actualLength + expectedLength;
 
+  if (max === 0) {
+    return [];
+  }
+
   if (max > 2 ** 31 - 1) {
     throw new ERR_OUT_OF_RANGE("myersDiff input size", "< 2^31", max);
   }
@@ -74,22 +84,28 @@ export function myersDiff(
 
     for (let diagonalIndex = -diffLevel; diagonalIndex <= diffLevel; diagonalIndex += 2) {
       const offset = diagonalIndex + max;
-      const previousOffset = v[offset - 1]!;
-      const nextOffset = v[offset + 1]!;
       // Take whichever neighbouring diagonal reached further: down (an
       // insertion) or right (a deletion).
-      let x = diagonalIndex === -diffLevel ||
-        (diagonalIndex !== diffLevel && previousOffset < nextOffset)
-        ? nextOffset
-        : previousOffset + 1;
+      let x: number;
+      if (diagonalIndex === -diffLevel) {
+        x = v[offset + 1] ?? 0;
+      } else if (diagonalIndex === diffLevel) {
+        x = (v[offset - 1] ?? 0) + 1;
+      } else {
+        const previousOffset = v[offset - 1] ?? 0;
+        const nextOffset = v[offset + 1] ?? 0;
+        x = previousOffset < nextOffset ? nextOffset : previousOffset + 1;
+      }
       let y = x - diagonalIndex;
 
       // Then run the free diagonal: matching lines cost nothing.
-      while (
-        x < actualLength &&
-        y < expectedLength &&
-        areLinesEqual(actual[x]!, expected[y]!, checkCommaDisparity)
-      ) {
+      while (x < actualLength && y < expectedLength) {
+        const actualLine = actual[x];
+        const expectedLine = expected[y];
+        if (actualLine === undefined || expectedLine === undefined ||
+            !areLinesEqual(actualLine, expectedLine, checkCommaDisparity)) {
+          break;
+        }
         x++;
         y++;
       }
@@ -122,30 +138,34 @@ function backtrack(
   const result: Edit[] = [];
 
   for (let diffLevel = trace.length - 1; diffLevel >= 0; diffLevel--) {
-    const v = trace[diffLevel]!;
+    const v = trace[diffLevel];
+    if (v === undefined) return result;
     const diagonalIndex = x - y;
     const offset = diagonalIndex + max;
 
     let prevDiagonalIndex: number;
     if (
       diagonalIndex === -diffLevel ||
-      (diagonalIndex !== diffLevel && v[offset - 1]! < v[offset + 1]!)
+      (diagonalIndex !== diffLevel &&
+       (v[offset - 1] ?? 0) < (v[offset + 1] ?? 0))
     ) {
       prevDiagonalIndex = diagonalIndex + 1;
     } else {
       prevDiagonalIndex = diagonalIndex - 1;
     }
 
-    const prevX = v[prevDiagonalIndex + max]!;
+    const prevX = v[prevDiagonalIndex + max] ?? 0;
     const prevY = prevX - prevDiagonalIndex;
 
     while (x > prevX && y > prevY) {
-      const actualItem = actual[x - 1]!;
+      const actualItem = actual[x - 1];
+      const expectedItem = expected[y - 1];
+      if (actualItem === undefined || expectedItem === undefined) return result;
       // Where the two lines differ only by a comma, print the expected
       // spelling: the comma belongs to the surrounding structure rather than
       // to the line, and showing the actual one would look like a difference.
       const value = checkCommaDisparity && !actualItem.endsWith(",")
-        ? expected[y - 1]!
+        ? expectedItem
         : actualItem;
       result.push([kOperations.NOP, value]);
       x--;
@@ -154,9 +174,13 @@ function backtrack(
 
     if (diffLevel > 0) {
       if (x > prevX) {
-        result.push([kOperations.INSERT, actual[--x]!]);
+        const value = actual[--x];
+        if (value === undefined) return result;
+        result.push([kOperations.INSERT, value]);
       } else {
-        result.push([kOperations.DELETE, expected[--y]!]);
+        const value = expected[--y];
+        if (value === undefined) return result;
+        result.push([kOperations.DELETE, value]);
       }
     }
   }
@@ -169,7 +193,9 @@ export function printSimpleMyersDiff(diff: readonly Edit[]): string {
   let message = "";
 
   for (let diffIdx = diff.length - 1; diffIdx >= 0; diffIdx--) {
-    const [operation, value] = diff[diffIdx]!;
+    const edit = diff[diffIdx];
+    if (edit === undefined) continue;
+    const [operation, value] = edit;
     let color = colors.white;
 
     if (operation === kOperations.INSERT) {
@@ -200,21 +226,28 @@ export function printMyersDiff(
   let nopCount = 0;
 
   for (let diffIdx = diff.length - 1; diffIdx >= 0; diffIdx--) {
-    const [operation, value] = diff[diffIdx]!;
-    const previousOperation = diffIdx < diff.length - 1 ? diff[diffIdx + 1]![0] : null;
+    const edit = diff[diffIdx];
+    if (edit === undefined) continue;
+    const [operation, value] = edit;
+    const previousEdit = diffIdx < diff.length - 1 ? diff[diffIdx + 1] : undefined;
+    const previousOperation = previousEdit?.[0] ?? null;
 
     // Closing a run of unchanged lines. Collapsing is only worth it when it
     // saves more than it costs: one or two hidden lines are printed instead,
     // since `...` standing in for a single line helps nobody.
     if (previousOperation === kOperations.NOP && operation !== previousOperation) {
       if (nopCount === kNopLinesToCollapse + 1) {
-        message += `${colors.white}  ${diff[diffIdx + 1]![1]}\n`;
+        const retained = diff[diffIdx + 1];
+        if (retained !== undefined) message += `${colors.white}  ${retained[1]}\n`;
       } else if (nopCount === kNopLinesToCollapse + 2) {
-        message += `${colors.white}  ${diff[diffIdx + 2]![1]}\n`;
-        message += `${colors.white}  ${diff[diffIdx + 1]![1]}\n`;
+        const first = diff[diffIdx + 2];
+        const second = diff[diffIdx + 1];
+        if (first !== undefined) message += `${colors.white}  ${first[1]}\n`;
+        if (second !== undefined) message += `${colors.white}  ${second[1]}\n`;
       } else if (nopCount >= kNopLinesToCollapse + 3) {
         message += `${colors.blue}...${colors.white}\n`;
-        message += `${colors.white}  ${diff[diffIdx + 1]![1]}\n`;
+        const retained = diff[diffIdx + 1];
+        if (retained !== undefined) message += `${colors.white}  ${retained[1]}\n`;
         skipped = true;
       }
       nopCount = 0;

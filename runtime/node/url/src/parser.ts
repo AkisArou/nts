@@ -24,23 +24,29 @@
 import { ERR_INVALID_URL } from "../../internal/errors.ts";
 import { decodeIn } from "../../buffer/src/encodings.ts";
 
-/** The schemes the standard calls special, and the port each implies. */
-const specialSchemes: Record<string, number | null> = {
-  __proto__: null,
-  ftp: 21,
-  file: null,
-  http: 80,
-  https: 443,
-  ws: 80,
-  wss: 443,
-} as never;
-
 export function isSpecialScheme(scheme: string): boolean {
-  return specialSchemes[scheme] !== undefined;
+  switch (scheme) {
+    case "ftp":
+    case "file":
+    case "http":
+    case "https":
+    case "ws":
+    case "wss":
+      return true;
+    default:
+      return false;
+  }
 }
 
 function defaultPort(scheme: string): number | null {
-  return specialSchemes[scheme] ?? null;
+  switch (scheme) {
+    case "ftp": return 21;
+    case "http":
+    case "ws": return 80;
+    case "https":
+    case "wss": return 443;
+    default: return null;
+  }
 }
 
 /**
@@ -61,8 +67,26 @@ export interface UrlRecord {
   fragment: string | null;
 }
 
-export function hasOpaquePath(url: UrlRecord): boolean {
+export function hasOpaquePath(
+  url: UrlRecord,
+): url is UrlRecord & { path: string } {
   return typeof url.path === "string";
+}
+
+function hierarchicalPath(url: UrlRecord): string[] {
+  const path = url.path;
+  if (typeof path === "string") {
+    throw new Error("URL hierarchical-path state invariant violated");
+  }
+  return path;
+}
+
+function opaquePath(url: UrlRecord): string {
+  const path = url.path;
+  if (typeof path !== "string") {
+    throw new Error("URL opaque-path state invariant violated");
+  }
+  return path;
 }
 
 // ------------------------------------------------------------- code points
@@ -101,7 +125,7 @@ function isNormalizedWindowsDriveLetter(s: string): boolean {
 function startsWithWindowsDriveLetter(input: string, at: number): boolean {
   const rest = input.length - at;
   return rest >= 2 && isWindowsDriveLetter(input.slice(at, at + 2)) &&
-    (rest === 2 || "/\\?#".includes(input[at + 2]!));
+    (rest === 2 || "/\\?#".includes(input[at + 2] ?? ""));
 }
 
 function isSingleDot(segment: string): boolean {
@@ -134,7 +158,7 @@ function percentEncode(codePoint: string): string {
 function utf8Bytes(str: string): number[] {
   const out: number[] = [];
   for (const ch of str) {
-    const c = ch.codePointAt(0)!;
+    const c = ch.codePointAt(0) ?? 0;
     if (c < 0x80) {
       out.push(c);
     } else if (c < 0x800) {
@@ -223,7 +247,7 @@ type EncodeSet = (c: number) => boolean;
 function utf8PercentEncodeString(input: string, inSet: EncodeSet): string {
   let out = "";
   for (const ch of input) {
-    const c = ch.codePointAt(0)!;
+    const c = ch.codePointAt(0) ?? 0;
     out += inSet(c) ? percentEncode(ch) : ch;
   }
   return out;
@@ -234,13 +258,16 @@ export function percentDecodeBytes(input: string): Uint8Array {
   const bytes: number[] = [];
   const raw = utf8Bytes(input);
   for (let i = 0; i < raw.length; i++) {
-    const byte = raw[i]!;
-    if (byte !== 0x25 || i + 2 >= raw.length ||
-        !isAsciiHexDigit(raw[i + 1]!) || !isAsciiHexDigit(raw[i + 2]!)) {
+    const byte = raw[i];
+    if (byte === undefined) break;
+    const firstHex = raw[i + 1];
+    const secondHex = raw[i + 2];
+    if (byte !== 0x25 || firstHex === undefined || secondHex === undefined ||
+        !isAsciiHexDigit(firstHex) || !isAsciiHexDigit(secondHex)) {
       bytes.push(byte);
       continue;
     }
-    bytes.push(Number.parseInt(String.fromCharCode(raw[i + 1]!, raw[i + 2]!), 16));
+    bytes.push(Number.parseInt(String.fromCharCode(firstHex, secondHex), 16));
     i += 2;
   }
   return new Uint8Array(bytes);
@@ -271,7 +298,7 @@ function isForbiddenDomainCodePoint(c: number): boolean {
 
 function parseOpaqueHost(input: string): string | null {
   for (const ch of input) {
-    if (FORBIDDEN_HOST.has(ch.codePointAt(0)!)) {
+    if (FORBIDDEN_HOST.has(ch.codePointAt(0) ?? 0)) {
       return null;
     }
   }
@@ -326,7 +353,8 @@ function endsInANumber(input: string): boolean {
     parts.pop();
   }
   if (parts.length === 0) return false;
-  const last = parts[parts.length - 1]!;
+  const last = parts[parts.length - 1];
+  if (last === undefined) return false;
   if (last !== "" && /^[0-9]+$/.test(last)) return true;
   return parseIPv4Number(last) !== null;
 }
@@ -340,27 +368,24 @@ function parseIPv4(input: string): number | false {
   }
   if (parts.length > 4) return false;
 
-  const numbers: number[] = [];
-  for (const part of parts) {
+  let address = 0;
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index];
+    if (part === undefined) return false;
     const parsed = parseIPv4Number(part);
     if (parsed === null) return false;
-    numbers.push(parsed.value);
-  }
-
-  for (const n of numbers) {
-    if (n > 255) {
-      // Only the last part may exceed 255, and then it fills the remainder:
+    const isLast = index === parts.length - 1;
+    if (isLast) {
+      // The last part fills every byte left in the address:
       // `1.2.65534` is `1.2.255.254`.
-      if (n !== numbers[numbers.length - 1]) return false;
+      if (parsed.value >= 256 ** (5 - parts.length)) return false;
+      address += parsed.value;
+    } else {
+      if (parsed.value > 255) return false;
+      address += parsed.value * 256 ** (3 - index);
     }
   }
-  if (numbers[numbers.length - 1]! >= 256 ** (5 - numbers.length)) return false;
-
-  let ipv4 = numbers.pop()!;
-  for (let i = 0; i < numbers.length; i++) {
-    ipv4 += numbers[i]! * 256 ** (3 - i);
-  }
-  return ipv4;
+  return address;
 }
 
 function serializeIPv4(address: number): string {
@@ -401,10 +426,12 @@ function parseIPv6(input: string): number[] | null {
     }
     let value = 0;
     let length = 0;
-    while (length < 4 && c() !== undefined && isAsciiHexDigit(c()!.charCodeAt(0))) {
-      value = value * 16 + Number.parseInt(c()!, 16);
+    let current = c();
+    while (length < 4 && current !== undefined && isAsciiHexDigit(current.charCodeAt(0))) {
+      value = value * 16 + Number.parseInt(current, 16);
       pointer++;
       length++;
+      current = c();
     }
     if (c() === ".") {
       // An IPv4 address in the last two pieces: `::ffff:192.0.2.1`.
@@ -421,9 +448,10 @@ function parseIPv6(input: string): number[] | null {
             return null;
           }
         }
-        if (c() === undefined || !isAsciiDigit(c()!.charCodeAt(0))) return null;
-        while (c() !== undefined && isAsciiDigit(c()!.charCodeAt(0))) {
-          const number = Number(c());
+        current = c();
+        if (current === undefined || !isAsciiDigit(current.charCodeAt(0))) return null;
+        while (current !== undefined && isAsciiDigit(current.charCodeAt(0))) {
+          const number = Number(current);
           if (ipv4Piece === null) {
             ipv4Piece = number;
           } else if (ipv4Piece === 0) {
@@ -433,8 +461,10 @@ function parseIPv6(input: string): number[] | null {
           }
           if (ipv4Piece > 255) return null;
           pointer++;
+          current = c();
         }
-        address[pieceIndex] = address[pieceIndex]! * 256 + ipv4Piece!;
+        if (ipv4Piece === null) return null;
+        address[pieceIndex] = (address[pieceIndex] ?? 0) * 256 + ipv4Piece;
         numbersSeen++;
         if (numbersSeen === 2 || numbersSeen === 4) pieceIndex++;
       }
@@ -455,8 +485,8 @@ function parseIPv6(input: string): number[] | null {
     let swaps = pieceIndex - compress;
     pieceIndex = 7;
     while (pieceIndex !== 0 && swaps > 0) {
-      const tmp = address[compress + swaps - 1]!;
-      address[compress + swaps - 1] = address[pieceIndex]!;
+      const tmp = address[compress + swaps - 1] ?? 0;
+      address[compress + swaps - 1] = address[pieceIndex] ?? 0;
       address[pieceIndex] = tmp;
       pieceIndex--;
       swaps--;
@@ -502,7 +532,7 @@ function serializeIPv6(address: readonly number[]): string {
       ignore0 = true;
       continue;
     }
-    out += address[pieceIndex]!.toString(16);
+    out += (address[pieceIndex] ?? 0).toString(16);
     if (pieceIndex !== 7) out += ":";
   }
   return out;
@@ -542,7 +572,7 @@ export function parseHost(input: string, isNotSpecial: boolean): string | null {
   if (ascii === null || ascii === "") return null;
 
   for (const ch of ascii) {
-    if (isForbiddenDomainCodePoint(ch.codePointAt(0)!)) return null;
+    if (isForbiddenDomainCodePoint(ch.codePointAt(0) ?? 0)) return null;
   }
 
   if (endsInANumber(ascii)) {
@@ -619,10 +649,12 @@ function includesCredentials(url: UrlRecord): boolean {
 
 /** A single `.` or `..` segment is removed rather than kept, except for a drive. */
 function shortenPath(url: UrlRecord): void {
-  const path = url.path as string[];
+  const path = hierarchicalPath(url);
   if (path.length === 0) return;
   // A Windows drive letter is not a path segment that `..` can climb out of.
-  if (url.scheme === "file" && path.length === 1 && isNormalizedWindowsDriveLetter(path[0]!)) {
+  const first = path[0];
+  if (url.scheme === "file" && path.length === 1 &&
+      first !== undefined && isNormalizedWindowsDriveLetter(first)) {
     return;
   }
   path.pop();
@@ -667,7 +699,7 @@ export function basicUrlParse(
 
   for (; pointer <= len; pointer++) {
     const c = at(pointer);
-    const code = c === undefined ? -1 : c.codePointAt(0)!;
+    const code = c === undefined ? -1 : (c.codePointAt(0) ?? -1);
 
     switch (state) {
       case State.SchemeStart: {
@@ -766,17 +798,18 @@ export function basicUrlParse(
       }
 
       case State.Relative: {
-        url.scheme = base!.scheme;
+        if (base === undefined || base === null) return fail();
+        url.scheme = base.scheme;
         if (c === "/" || (isSpecialScheme(url.scheme) && c === "\\")) {
           state = State.RelativeSlash;
           break;
         }
-        url.username = base!.username;
-        url.password = base!.password;
-        url.host = base!.host;
-        url.port = base!.port;
-        url.path = Array.isArray(base!.path) ? base!.path.slice() : base!.path;
-        url.query = base!.query;
+        url.username = base.username;
+        url.password = base.password;
+        url.host = base.host;
+        url.port = base.port;
+        url.path = Array.isArray(base.path) ? base.path.slice() : base.path;
+        url.query = base.query;
         if (c === "?") {
           url.query = "";
           state = State.Query;
@@ -793,15 +826,16 @@ export function basicUrlParse(
       }
 
       case State.RelativeSlash: {
+        if (base === undefined || base === null) return fail();
         if (isSpecialScheme(url.scheme) && (c === "/" || c === "\\")) {
           state = State.SpecialAuthorityIgnoreSlashes;
         } else if (c === "/") {
           state = State.Authority;
         } else {
-          url.username = base!.username;
-          url.password = base!.password;
-          url.host = base!.host;
-          url.port = base!.port;
+          url.username = base.username;
+          url.password = base.password;
+          url.host = base.host;
+          url.port = base.port;
           state = State.Path;
           pointer--;
         }
@@ -969,12 +1003,15 @@ export function basicUrlParse(
         }
         if (base && base.scheme === "file") {
           url.host = base.host;
-          const basePath = base.path as string[];
+          if (hasOpaquePath(base)) return fail();
+          const basePath = base.path;
+          const firstBaseSegment = basePath[0];
           // `/x` against `file://h/C:/a` keeps the drive: on Windows an
           // absolute path is absolute within a drive, not above it.
           if (!startsWithWindowsDriveLetter(input, pointer) &&
-              basePath.length > 0 && isNormalizedWindowsDriveLetter(basePath[0]!)) {
-            (url.path as string[]).push(basePath[0]!);
+              firstBaseSegment !== undefined &&
+              isNormalizedWindowsDriveLetter(firstBaseSegment)) {
+            hierarchicalPath(url).push(firstBaseSegment);
           }
         }
         state = State.Path;
@@ -1033,7 +1070,7 @@ export function basicUrlParse(
           break;
         }
         if (isOverride && url.host === null) {
-          (url.path as string[]).push("");
+          hierarchicalPath(url).push("");
         }
         break;
       }
@@ -1044,10 +1081,12 @@ export function basicUrlParse(
           (isSpecialScheme(url.scheme) && c === "\\") ||
           (!isOverride && (c === "?" || c === "#"));
         if (!atEnd) {
-          buffer += utf8PercentEncodeString(c!, inPathPercentEncodeSet);
+          if (c !== undefined) {
+            buffer += utf8PercentEncodeString(c, inPathPercentEncodeSet);
+          }
           break;
         }
-        const path = url.path as string[];
+        const path = hierarchicalPath(url);
         if (isDoubleDot(buffer)) {
           shortenPath(url);
           if (c !== "/" && !(isSpecialScheme(url.scheme) && c === "\\")) {
@@ -1080,7 +1119,7 @@ export function basicUrlParse(
         // Without this the space would serialise bare and re-parse as the end
         // of the path, losing it: `x:a ?q` and `x:a?q` would be one URL.
         if (c === " " && (at(pointer + 1) === "?" || at(pointer + 1) === "#")) {
-          url.path = `${url.path as string}%20`;
+          url.path = `${opaquePath(url)}%20`;
           break;
         }
         if (c === "?") {
@@ -1094,7 +1133,7 @@ export function basicUrlParse(
           break;
         }
         if (c !== undefined) {
-          url.path = (url.path as string) + utf8PercentEncodeString(c, inC0ControlPercentEncodeSet);
+          url.path = opaquePath(url) + utf8PercentEncodeString(c, inC0ControlPercentEncodeSet);
         }
         break;
       }
@@ -1138,8 +1177,7 @@ export function serializeUrl(url: UrlRecord, excludeFragment = false): string {
       out += "@";
     }
     out += serializeHost(url);
-  } else if (!hasOpaquePath(url) && (url.path as string[]).length > 1 &&
-             (url.path as string[])[0] === "") {
+  } else if (!hasOpaquePath(url) && url.path.length > 1 && url.path[0] === "") {
     // `non-special:/.//p` — without the `/.` the URL would re-parse with an
     // empty host rather than a path that begins with two slashes.
     out += "/.";
@@ -1156,8 +1194,9 @@ export function serializeHost(url: UrlRecord): string {
 }
 
 export function serializePath(url: UrlRecord): string {
-  if (hasOpaquePath(url)) return url.path as string;
-  return (url.path as string[]).map((segment) => `/${segment}`).join("");
+  const path = url.path;
+  if (typeof path === "string") return path;
+  return path.map((segment) => `/${segment}`).join("");
 }
 
 /**
@@ -1175,7 +1214,7 @@ export function serializeOrigin(url: UrlRecord): string {
     case "wss":
       return `${url.scheme}://${serializeHost(url)}`;
     case "blob": {
-      const path = hasOpaquePath(url) ? (url.path as string) : "";
+      const path = hasOpaquePath(url) ? url.path : "";
       const inner = basicUrlParse(path);
       return inner === null ? "null" : serializeOrigin(inner);
     }

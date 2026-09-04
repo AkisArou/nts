@@ -7,7 +7,12 @@
 // because node makes both monkey-patchable through `process._kill` and
 // `process.reallyExit` and its own tests rely on that.
 
-import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, ERR_UNKNOWN_SIGNAL } from "../../internal/errors.ts";
+import {
+  ERR_INVALID_ARG_TYPE,
+  ERR_OUT_OF_RANGE,
+  ERR_UNKNOWN_CREDENTIAL,
+  ERR_UNKNOWN_SIGNAL,
+} from "../../internal/errors.ts";
 import { parseFileMode, validateArray, validateString } from "../../internal/validators.ts";
 import { constants } from "../../os/src/main.ts";
 import { errnoException, uvException } from "../../internal/uv.ts";
@@ -40,11 +45,22 @@ declare function nts_process_setegid(id: number, name: string): number;
  * is out of range".
  */
 declare function nts_process_setgroups(ids: number[], names: string[]): number;
-declare function nts_process_initgroups(user: string, group: number): number;
+/**
+ * Resolve the two credentials and call `initgroups(3)`.
+ *
+ * Empty names select the numeric column. The result is zero on success, one
+ * for an unknown user, two for an unknown group, or a negative errno for a
+ * failed system call. The two columns preserve the distinction between `0`
+ * and `"0"`; they are different credential requests.
+ */
+declare function nts_process_initgroups(
+  userId: number,
+  userName: string,
+  groupId: number,
+  groupName: string,
+): number;
 
-export function cwd(): string {
-  return nts_process_cwd();
-}
+export const cwd = nts_process_cwd;
 
 export function chdir(directory: string): void {
   validateString(directory, "directory");
@@ -78,23 +94,17 @@ export function umask(mask?: number | string): number {
  * `node:os`. Hard-coding them would be wrong on the second platform: `SIGUSR1`
  * is 10 on Linux and 30 on macOS.
  */
-export function signalNumber(signal: string | number): number {
-  // The parentheses matter. `signal as number | 0` is a *type* -- the union of
-  // `number` and the literal `0`, which is just `number` -- so the bitwise or
-  // disappears and the comparison is `signal === signal`, true for everything.
-  // Written that way it accepted `process.kill(0, "test")` and passed the
-  // string to the system call.
-  if (signal === ((signal as number) | 0)) return signal as number;
-  const name = signal === undefined || signal === null || signal === 0 ? "SIGTERM" : signal;
-  const number = constants.signals[name as string];
+export function signalNumber(signal: string | number | null | undefined): number {
+  if (typeof signal === "number" && signal === (signal | 0)) return signal;
+  const name = signal === undefined || signal === null ? "SIGTERM" : signal;
+  if (typeof name !== "string") throw new ERR_UNKNOWN_SIGNAL(String(name));
+  const number = constants.signals[name];
   if (number === undefined) throw new ERR_UNKNOWN_SIGNAL(String(name));
   return number;
 }
 
 /** The raw system call, which `process.kill` validates for. */
-export function rawKill(pid: number, signal: number): number {
-  return nts_process_kill(pid, signal);
-}
+export const rawKill = nts_process_kill;
 
 /**
  * End the process immediately, without unwinding or running exit handlers.
@@ -109,25 +119,13 @@ export function abort(): never {
   throw new Error("process.abort did not abort");
 }
 
-export function reallyExit(code: number): void {
-  nts_process_really_exit(code);
-}
+export const reallyExit = nts_process_really_exit;
 
-export function getuid(): number {
-  return nts_process_getuid();
-}
-export function getgid(): number {
-  return nts_process_getgid();
-}
-export function geteuid(): number {
-  return nts_process_geteuid();
-}
-export function getegid(): number {
-  return nts_process_getegid();
-}
-export function getgroups(): number[] {
-  return nts_process_getgroups();
-}
+export const getuid = nts_process_getuid;
+export const getgid = nts_process_getgid;
+export const geteuid = nts_process_geteuid;
+export const getegid = nts_process_getegid;
+export const getgroups = nts_process_getgroups;
 
 /**
  * A user or group, given either as a number or as a name to look up.
@@ -136,7 +134,7 @@ export function getgroups(): number[] {
  * user literally called `0` has to mean that user. Node distinguishes them by
  * type and so does this.
  */
-function identify(value: number | string, what: string): { id: number; name: string } {
+function identify(value: unknown, what: string): { id: number; name: string } {
   if (typeof value === "number") {
     if (!Number.isInteger(value) || value < 0 || value > 0xffff_ffff) {
       throw new ERR_OUT_OF_RANGE(what, "an unsigned integer", value);
@@ -157,41 +155,65 @@ function applyId(
   value: number | string,
   what: string,
   operation: string,
+  credential: "User" | "Group",
 ): void {
   const { id, name } = identify(value, what);
-  const err = call(id, name);
-  if (err !== 0) throw errnoException(err, operation);
+  const result = call(id, name);
+  // Node's native credential bindings reserve a positive result for a name
+  // that could not be resolved. System failures use libuv's negative errno.
+  // Keeping those two channels distinct matters for an unprivileged caller:
+  // an unknown name is ERR_UNKNOWN_CREDENTIAL, while a known name usually
+  // reaches the syscall and fails with EPERM.
+  if (result === 1) throw new ERR_UNKNOWN_CREDENTIAL(credential, value);
+  if (result !== 0) throw errnoException(result, operation);
 }
 
 export function setuid(value: number | string): void {
-  applyId(nts_process_setuid, value, "id", "setuid");
+  applyId(nts_process_setuid, value, "id", "setuid", "User");
 }
 export function setgid(value: number | string): void {
-  applyId(nts_process_setgid, value, "id", "setgid");
+  applyId(nts_process_setgid, value, "id", "setgid", "Group");
 }
 export function seteuid(value: number | string): void {
-  applyId(nts_process_seteuid, value, "id", "seteuid");
+  applyId(nts_process_seteuid, value, "id", "seteuid", "User");
 }
 export function setegid(value: number | string): void {
-  applyId(nts_process_setegid, value, "id", "setegid");
+  applyId(nts_process_setegid, value, "id", "setegid", "Group");
 }
 
 export function setgroups(groups: (number | string)[]): void {
   validateArray(groups, "groups");
-  const ids: number[] = [];
-  const names: string[] = [];
+  const ids = new Array<number>(groups.length);
+  const names = new Array<string>(groups.length);
   for (let i = 0; i < groups.length; i++) {
-    const { id, name } = identify(groups[i] as number | string, `groups[${i}]`);
-    ids.push(id);
-    names.push(name);
+    const { id, name } = identify(groups[i], `groups[${i}]`);
+    ids[i] = id;
+    names[i] = name;
   }
-  const err = nts_process_setgroups(ids, names);
-  if (err !== 0) throw errnoException(err, "setgroups");
+  const result = nts_process_setgroups(ids, names);
+  if (result > 0) {
+    const missing = groups[result - 1];
+    if (missing === undefined) {
+      throw new Error(`setgroups returned an invalid group index ${result - 1}`);
+    }
+    throw new ERR_UNKNOWN_CREDENTIAL(
+      "Group",
+      missing,
+    );
+  }
+  if (result !== 0) throw errnoException(result, "setgroups");
 }
 
 export function initgroups(user: number | string, extraGroup: number | string): void {
-  const { name } = identify(user, "user");
-  const { id } = identify(extraGroup, "extraGroup");
-  const err = nts_process_initgroups(name, id);
-  if (err !== 0) throw errnoException(err, "initgroups");
+  const identifiedUser = identify(user, "user");
+  const identifiedGroup = identify(extraGroup, "extraGroup");
+  const result = nts_process_initgroups(
+    identifiedUser.id,
+    identifiedUser.name,
+    identifiedGroup.id,
+    identifiedGroup.name,
+  );
+  if (result === 1) throw new ERR_UNKNOWN_CREDENTIAL("User", user);
+  if (result === 2) throw new ERR_UNKNOWN_CREDENTIAL("Group", extraGroup);
+  if (result !== 0) throw errnoException(result, "initgroups");
 }

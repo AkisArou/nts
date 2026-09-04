@@ -18,9 +18,8 @@
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_URL } from "../../internal/errors.ts";
 import { validateObject, validateString } from "../../internal/validators.ts";
 import { parse as parseQuery, stringify as stringifyQuery } from "../../querystring/src/main.ts";
+import { emitWarning } from "../../internal/process-warning.ts";
 import { URL } from "./url.ts";
-
-declare function nts_process_emit_warning(message: string, name: string, code: string): void;
 
 const CHAR_TAB = 9;
 const CHAR_LINE_FEED = 10;
@@ -78,6 +77,36 @@ const forbiddenHostChars = /[\0\t\n\r #%/:<>?@[\\\]^|]/;
 const forbiddenHostCharsIpv6 = /[\0\t\n\r #%/<>?@\\^|]/;
 
 export type LegacyQuery = string | Record<string, string | string[]> | null;
+
+/** The statically readable fields accepted by legacy `url.format(object)`. */
+export interface LegacyUrlLike {
+  protocol?: string | null;
+  slashes?: boolean | null;
+  auth?: string | null;
+  host?: string | null;
+  port?: string | null;
+  hostname?: string | null;
+  hash?: string | null;
+  search?: string | null;
+  query?: LegacyQuery;
+  pathname?: string | null;
+}
+
+/** Copy the fixed legacy URL record without a dynamic property walk. */
+function copyUrl(target: Url, source: Url, includeProtocol = true): void {
+  if (includeProtocol) target.protocol = source.protocol;
+  target.slashes = source.slashes;
+  target.auth = source.auth;
+  target.host = source.host;
+  target.port = source.port;
+  target.hostname = source.hostname;
+  target.hash = source.hash;
+  target.search = source.search;
+  target.query = source.query;
+  target.pathname = source.pathname;
+  target.path = source.path;
+  target.href = source.href;
+}
 
 export class Url {
   protocol: string | null = null;
@@ -167,7 +196,7 @@ export class Url {
       if (simplePath) {
         this.path = rest;
         this.href = rest;
-        this.pathname = simplePath[1]!;
+        this.pathname = simplePath[1] ?? "";
         if (simplePath[2]) {
           this.search = simplePath[2];
           this.query = parseQueryString
@@ -175,7 +204,9 @@ export class Url {
             : this.search.slice(1);
         } else if (parseQueryString) {
           this.search = null;
-          this.query = Object.create(null) as Record<string, string>;
+          // Compiled records have no prototype, so an empty typed record is
+          // already the representation Node seeks with `Object.create(null)`.
+          this.query = {};
         }
         return this;
       }
@@ -195,14 +226,14 @@ export class Url {
     if (slashesDenoteHost || proto || hostPattern.test(rest)) {
       slashes = rest.charCodeAt(0) === CHAR_FORWARD_SLASH &&
         rest.charCodeAt(1) === CHAR_FORWARD_SLASH;
-      if (slashes && !(proto && hostlessProtocol.has(lowerProto!))) {
+      if (slashes && !(proto && hostlessProtocol.has(lowerProto ?? ""))) {
         rest = rest.slice(2);
         this.slashes = true;
       }
     }
 
     if (
-      !hostlessProtocol.has(lowerProto!) &&
+      !hostlessProtocol.has(lowerProto ?? "") &&
       (slashes || (proto && !slashedProtocol.has(proto)))
     ) {
       // The host ends at the first `/`, `?`, `;` or `#`. An `@` moves that
@@ -267,39 +298,40 @@ export class Url {
       this.parseHost();
 
       // A URL that has a host at all has a hostname, even an empty one.
-      if (typeof this.hostname !== "string") this.hostname = "";
-
-      const hostname = this.hostname;
+      let hostname = this.hostname ?? "";
       const ipv6Hostname = isIpv6Hostname(hostname);
 
       if (!ipv6Hostname) {
         rest = getHostname(this, rest, hostname, url);
+        hostname = this.hostname ?? "";
       }
 
-      if (this.hostname!.length > hostnameMaxLen) {
-        this.hostname = "";
+      if (hostname.length > hostnameMaxLen) {
+        hostname = "";
       } else {
-        this.hostname = this.hostname!.toLowerCase();
+        hostname = hostname.toLowerCase();
       }
 
-      if (this.hostname !== "") {
+      if (hostname !== "") {
         if (ipv6Hostname) {
-          if (forbiddenHostCharsIpv6.test(this.hostname!)) {
+          if (forbiddenHostCharsIpv6.test(hostname)) {
             throw new ERR_INVALID_URL(url);
           }
         } else {
-          this.hostname = asciiOf(this.hostname!) ?? "";
+          hostname = asciiOf(hostname) ?? "";
 
           // Two spoofing routes, both closed here rather than corrected.
           // An empty hostname now must have been emptied by the IDNA step,
           // since it was non-empty above; a forbidden character now must have
           // been introduced by it, since the loop would have rejected one.
           // Either is severe enough to throw rather than repair.
-          if (this.hostname === "" || forbiddenHostChars.test(this.hostname)) {
+          if (hostname === "" || forbiddenHostChars.test(hostname)) {
             throw new ERR_INVALID_URL(url);
           }
         }
       }
+
+      this.hostname = hostname;
 
       const p = this.port ? `:${this.port}` : "";
       const h = this.hostname || "";
@@ -307,14 +339,14 @@ export class Url {
 
       // `host` keeps the brackets, `hostname` does not.
       if (ipv6Hostname) {
-        this.hostname = this.hostname!.slice(1, -1);
+        this.hostname = hostname.slice(1, -1);
         if (rest[0] !== "/") {
           rest = `/${rest}`;
         }
       }
     }
 
-    if (!unsafeProtocol.has(lowerProto!)) {
+    if (!unsafeProtocol.has(lowerProto ?? "")) {
       // Delimiters and RFC 2396's "unwise" characters, escaped even where
       // `encodeURIComponent` would leave them -- including the single quote,
       // which would otherwise close an attribute in generated HTML.
@@ -342,12 +374,10 @@ export class Url {
         this.search = rest.slice(questionIdx, hashIdx);
         this.query = rest.slice(questionIdx + 1, hashIdx);
       }
-      if (parseQueryString) {
-        this.query = parseQuery(this.query as string);
-      }
+      if (parseQueryString) this.query = parseQuery(this.query);
     } else if (parseQueryString) {
       this.search = null;
-      this.query = Object.create(null) as Record<string, string>;
+      this.query = {};
     }
 
     const useQuestionIdx = questionIdx !== -1 && (hashIdx === -1 || questionIdx < hashIdx);
@@ -357,7 +387,7 @@ export class Url {
     } else if (firstIdx > 0) {
       this.pathname = rest.slice(0, firstIdx);
     }
-    if (slashedProtocol.has(lowerProto!) && this.hostname && !this.pathname) {
+    if (slashedProtocol.has(lowerProto ?? "") && this.hostname && !this.pathname) {
       this.pathname = "/";
     }
 
@@ -371,77 +401,7 @@ export class Url {
   }
 
   format(): string {
-    let auth = this.auth || "";
-    if (auth) {
-      auth = encodeAuth(auth);
-      auth += "@";
-    }
-
-    let protocol = this.protocol || "";
-    if (protocol && protocol.charCodeAt(protocol.length - 1) !== CHAR_COLON) {
-      protocol += ":";
-    }
-
-    let pathname = this.pathname || "";
-    let hash = this.hash || "";
-    let host = "";
-    let query = "";
-
-    if (this.host) {
-      host = auth + this.host;
-    } else if (this.hostname) {
-      host = auth + (
-        this.hostname.includes(":") && !isIpv6Hostname(this.hostname)
-          ? `[${this.hostname}]`
-          : this.hostname
-      );
-      if (this.port) {
-        host += `:${this.port}`;
-      }
-    }
-
-    if (this.query !== null && typeof this.query === "object") {
-      query = stringifyQuery(this.query as Record<string, string>);
-    }
-    let search = this.search || (query && `?${query}`) || "";
-
-    // A `#` or `?` inside the path would end it, so they are escaped even
-    // though the caller wrote them into `pathname` deliberately.
-    if (pathname.includes("#") || pathname.includes("?")) {
-      let newPathname = "";
-      let lastPos = 0;
-      for (let i = 0; i < pathname.length; i++) {
-        const code = pathname.charCodeAt(i);
-        if (code === CHAR_HASH || code === CHAR_QUESTION_MARK) {
-          if (i > lastPos) newPathname += pathname.slice(lastPos, i);
-          newPathname += code === CHAR_HASH ? "%23" : "%3F";
-          lastPos = i + 1;
-        }
-      }
-      if (lastPos < pathname.length) newPathname += pathname.slice(lastPos);
-      pathname = newPathname;
-    }
-
-    // Only the slashed protocols get `//`, unless the input had it.
-    if (this.slashes || slashedProtocol.has(protocol)) {
-      if (this.slashes || host) {
-        if (pathname && pathname.charCodeAt(0) !== CHAR_FORWARD_SLASH) {
-          pathname = `/${pathname}`;
-        }
-        host = `//${host}`;
-      } else if (protocol.length >= 4 && protocol.slice(0, 4) === "file") {
-        host = "//";
-      }
-    }
-
-    if (search.includes("#")) {
-      search = search.replaceAll("#", "%23");
-    }
-
-    if (hash && hash.charCodeAt(0) !== CHAR_HASH) hash = `#${hash}`;
-    if (search && search.charCodeAt(0) !== CHAR_QUESTION_MARK) search = `?${search}`;
-
-    return protocol + host + pathname + search + hash;
+    return formatLegacyUrl(this);
   }
 
   resolve(relative: string): string {
@@ -456,7 +416,7 @@ export class Url {
     }
 
     const result = new Url();
-    Object.assign(result, this);
+    copyUrl(result, this);
 
     // The fragment is always replaced, even by an empty reference.
     result.hash = relative.hash;
@@ -468,14 +428,9 @@ export class Url {
 
     // `//foo/bar` keeps only the scheme.
     if (relative.slashes && !relative.protocol) {
-      for (const key of Object.keys(relative)) {
-        if (key !== "protocol") {
-          (result as unknown as Record<string, unknown>)[key] =
-            (relative as unknown as Record<string, unknown>)[key];
-        }
-      }
+      copyUrl(result, relative, false);
 
-      if (slashedProtocol.has(result.protocol!) && result.hostname && !result.pathname) {
+      if (slashedProtocol.has(result.protocol ?? "") && result.hostname && !result.pathname) {
         result.path = result.pathname = "/";
       }
 
@@ -488,7 +443,7 @@ export class Url {
       // whole; a known one must have a host, and the first path segment
       // becomes it when there is none.
       if (!slashedProtocol.has(relative.protocol)) {
-        Object.assign(result, relative);
+        copyUrl(result, relative);
         result.href = result.format();
         return result;
       }
@@ -682,7 +637,7 @@ export class Url {
   }
 
   parseHost(): void {
-    let host = this.host!;
+    let host = this.host ?? "";
     const port = portPattern.exec(host)?.[0];
     if (port) {
       if (port !== ":") {
@@ -692,6 +647,80 @@ export class Url {
     }
     if (host) this.hostname = host;
   }
+}
+
+/** Shared formatter for a `Url` instance and the legacy plain-object form. */
+function formatLegacyUrl(url: LegacyUrlLike): string {
+  let auth = url.auth || "";
+  if (auth) {
+    auth = encodeAuth(auth);
+    auth += "@";
+  }
+
+  let protocol = url.protocol || "";
+  if (protocol && protocol.charCodeAt(protocol.length - 1) !== CHAR_COLON) {
+    protocol += ":";
+  }
+
+  let pathname = url.pathname || "";
+  let hash = url.hash || "";
+  let host = "";
+  let query = "";
+
+  if (url.host) {
+    host = auth + url.host;
+  } else if (url.hostname) {
+    host = auth + (
+      url.hostname.includes(":") && !isIpv6Hostname(url.hostname)
+        ? `[${url.hostname}]`
+        : url.hostname
+    );
+    if (url.port) {
+      host += `:${url.port}`;
+    }
+  }
+
+  if (url.query !== null && url.query !== undefined && typeof url.query === "object") {
+    query = stringifyQuery(url.query);
+  }
+  let search = url.search || (query && `?${query}`) || "";
+
+  // A `#` or `?` inside the path would end it, so they are escaped even when
+  // the caller deliberately wrote them into `pathname`.
+  if (pathname.includes("#") || pathname.includes("?")) {
+    let escapedPathname = "";
+    let lastPosition = 0;
+    for (let i = 0; i < pathname.length; i++) {
+      const code = pathname.charCodeAt(i);
+      if (code === CHAR_HASH || code === CHAR_QUESTION_MARK) {
+        if (i > lastPosition) escapedPathname += pathname.slice(lastPosition, i);
+        escapedPathname += code === CHAR_HASH ? "%23" : "%3F";
+        lastPosition = i + 1;
+      }
+    }
+    if (lastPosition < pathname.length) escapedPathname += pathname.slice(lastPosition);
+    pathname = escapedPathname;
+  }
+
+  if (url.slashes || slashedProtocol.has(protocol)) {
+    if (url.slashes || host) {
+      if (pathname && pathname.charCodeAt(0) !== CHAR_FORWARD_SLASH) {
+        pathname = `/${pathname}`;
+      }
+      host = `//${host}`;
+    } else if (protocol.length >= 4 && protocol.slice(0, 4) === "file") {
+      host = "//";
+    }
+  }
+
+  if (search.includes("#")) {
+    search = search.replaceAll("#", "%23");
+  }
+
+  if (hash && hash.charCodeAt(0) !== CHAR_HASH) hash = `#${hash}`;
+  if (search && search.charCodeAt(0) !== CHAR_QUESTION_MARK) search = `?${search}`;
+
+  return protocol + host + pathname + search + hash;
 }
 
 function isIpv6Hostname(hostname: string): boolean {
@@ -720,7 +749,7 @@ function getHostname(self: Url, rest: string, hostname: string, url: string): st
 
     if (!isValid) {
       if (warnInvalidPort && code === CHAR_COLON) {
-        nts_process_emit_warning(
+        emitWarning(
           `The URL ${url} is invalid. Future versions of Node.js will throw an error.`,
           "DeprecationWarning",
           "DEP0170",
@@ -811,14 +840,15 @@ function encodeAuth(str: string): string {
 
     if (c < 0x800) {
       lastPos = i + 1;
-      out += hexTable[0xc0 | (c >> 6)]! + hexTable[0x80 | (c & 0x3f)];
+      out += (hexTable[0xc0 | (c >> 6)] ?? "") +
+        (hexTable[0x80 | (c & 0x3f)] ?? "");
       continue;
     }
     if (c < 0xd800 || c >= 0xe000) {
       lastPos = i + 1;
-      out += hexTable[0xe0 | (c >> 12)]! +
-        hexTable[0x80 | ((c >> 6) & 0x3f)]! +
-        hexTable[0x80 | (c & 0x3f)];
+      out += (hexTable[0xe0 | (c >> 12)] ?? "") +
+        (hexTable[0x80 | ((c >> 6) & 0x3f)] ?? "") +
+        (hexTable[0x80 | (c & 0x3f)] ?? "");
       continue;
     }
     // A surrogate pair, which is one code point in two units.
@@ -829,10 +859,10 @@ function encodeAuth(str: string): string {
     const c2 = str.charCodeAt(i) & 0x3ff;
     lastPos = i + 1;
     c = 0x10000 + (((c & 0x3ff) << 10) | c2);
-    out += hexTable[0xf0 | (c >> 18)]! +
-      hexTable[0x80 | ((c >> 12) & 0x3f)]! +
-      hexTable[0x80 | ((c >> 6) & 0x3f)]! +
-      hexTable[0x80 | (c & 0x3f)];
+    out += (hexTable[0xf0 | (c >> 18)] ?? "") +
+      (hexTable[0x80 | ((c >> 12) & 0x3f)] ?? "") +
+      (hexTable[0x80 | ((c >> 6) & 0x3f)] ?? "") +
+      (hexTable[0x80 | (c & 0x3f)] ?? "");
   }
   if (lastPos === 0) return str;
   if (lastPos < str.length) return out + str.slice(lastPos);
@@ -848,7 +878,7 @@ export function parse(
 ): Url {
   if (!urlParseWarned) {
     urlParseWarned = true;
-    nts_process_emit_warning(
+    emitWarning(
       "`url.parse()` behavior is not standardized and prone to " +
         "errors that have security implications. Use the WHATWG URL API " +
         "instead. CVEs are not issued for `url.parse()` vulnerabilities.",
@@ -880,7 +910,10 @@ export interface FormatOptions {
   auth?: boolean;
 }
 
-export function format(urlObject: string | Url | URL | object, options?: FormatOptions): string {
+export function format(
+  urlObject: string | Url | URL | LegacyUrlLike,
+  options?: FormatOptions,
+): string {
   if (typeof urlObject === "string") {
     urlObject = urlParse(urlObject);
   } else if (typeof urlObject !== "object" || urlObject === null) {
@@ -902,7 +935,7 @@ export function format(urlObject: string | Url | URL | object, options?: FormatO
     return formatWhatwg(urlObject, fragment, unicode, search, auth);
   }
 
-  return Url.prototype.format.call(urlObject as Url);
+  return formatLegacyUrl(urlObject);
 }
 
 /**
@@ -964,7 +997,7 @@ export function resolve(source: string, relative: string): string {
   return urlParse(source, false, true).resolve(relative);
 }
 
-export function resolveObject(source: string | Url, relative: string | Url): Url {
-  if (!source) return relative as Url;
+export function resolveObject(source: string | Url, relative: string | Url): string | Url {
+  if (!source) return relative;
   return urlParse(source, false, true).resolveObject(relative);
 }

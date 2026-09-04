@@ -23,7 +23,11 @@ import type { WriteCallback } from "./writable.ts";
 export type TransformCallback = (error?: unknown, data?: unknown) => void;
 
 export interface TransformOptions extends DuplexOptions {
-  transform?: (chunk: never, encoding: string, callback: TransformCallback) => void;
+  transform?: (
+    chunk: unknown,
+    encoding: string | undefined,
+    callback: TransformCallback,
+  ) => void;
   flush?: (callback: TransformCallback) => void;
 }
 
@@ -71,22 +75,33 @@ export class Transform extends Duplex {
     // Through `prefinish` rather than by relying on `_final`, because some
     // transforms in the wild implement `_final` themselves, and overriding it
     // would silently replace theirs.
-    this.on("prefinish", () => {
-      if (this._final !== transformFinal) transformFinal.call(this);
-    });
+    if (typeof options?.final === "function") {
+      // Capture the statically known transform. EventEmitter's dynamic
+      // listener receiver is not part of NTS's function model, and this
+      // internal listener has no reason to depend on it.
+      this.on("prefinish", () => transformFinal(this));
+    }
   }
 
   /** What the stream does to each chunk. A subclass must provide one. */
-  _transform(_chunk: unknown, _encoding: string, _callback: TransformCallback): void {
+  _transform(
+    _chunk: unknown,
+    _encoding: string | undefined,
+    _callback: TransformCallback,
+  ): void {
     throw new ERR_METHOD_NOT_IMPLEMENTED("_transform()");
   }
 
-  override _write(chunk: unknown, encoding: string, callback: WriteCallback): void {
+  override _write(
+    chunk: unknown,
+    encoding: string | undefined,
+    callback: WriteCallback,
+  ): void {
     const rState = this._readableState;
     const wState = this._writableState;
     const lengthBefore = rState.length;
 
-    this._transform(chunk as never, encoding, (error, value) => {
+    this._transform(chunk, encoding, (error, value) => {
       if (error) {
         callback(error);
         return;
@@ -123,6 +138,10 @@ export class Transform extends Duplex {
       callback();
     }
   }
+
+  override _final(callback: WriteCallback): void {
+    transformFinal(this, callback);
+  }
 }
 
 /**
@@ -131,22 +150,20 @@ export class Transform extends Duplex {
  * `_flush` is where a transform emits its trailer: the last block of a
  * compressor, the final line of a parser with no newline after it.
  */
-function transformFinal(this: Transform, callback?: WriteCallback): void {
-  if (typeof this._flush === "function" && !this.destroyed) {
-    this._flush((error, data) => {
+function transformFinal(transform: Transform, callback?: WriteCallback): void {
+  if (typeof transform._flush === "function" && !transform.destroyed) {
+    transform._flush((error, data) => {
       if (error) {
         if (callback) callback(error);
-        else this.destroy(error);
+        else transform.destroy(error);
         return;
       }
-      if (data != null) this.push(data);
-      this.push(null);
+      if (data != null) transform.push(data);
+      transform.push(null);
       if (callback) callback();
     });
   } else {
-    this.push(null);
+    transform.push(null);
     if (callback) callback();
   }
 }
-
-Transform.prototype._final = transformFinal;

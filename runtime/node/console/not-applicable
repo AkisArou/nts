@@ -1,0 +1,16 @@
+test-console-instance.js: language non-goal: requires Console to be both callable without new and dynamically bind methods found through a JavaScript subclass prototype; local/instance-static.js retains typed construction, error validation, instance identity, and detached calls
+test-console-issue-43095.js: language non-goal: its entire input is a revoked Proxy and the assertion is that console inspection can interrogate that proxy without throwing
+test-console-methods.js: language non-goal: observes every method's function name and uses Reflect.construct to probe constructibility; neither function metadata nor Reflect is part of the compiled object model
+test-console-table.js: language non-goal: includes observable anonymous-function naming, direct Object.prototype inspection, and unbrandable Map/Set iterator objects; local/table-static.js retains the table algorithms over statically representable arrays, maps, sets, records, and typed arrays
+test-console-tty-colors.js: language non-goal: its invalid-option oracle uses util.inspect's observable anonymous-function metadata; local/color-options-static.js retains TTY color selection and typed option validation
+test-console-with-frozen-intrinsics.js: language non-goal: the file only verifies operation under Node's --frozen-intrinsics prototype hardening; compiled NTS operations do not dispatch through mutable JavaScript intrinsic prototypes
+test-console.js: language non-goal: requires the runtime Symbol-based util.inspect.custom hook and inspects that symbol-keyed function's metadata; local/core-static.js retains ordinary routing, formatting, dir, trace, assertions, and timers
+parallel/test-global-console-exists.js: cross-module integration: provokes an EventEmitter leak warning through process warning machinery and contains no assertion of console behavior
+parallel/test-inspector-console-top-frame.js: cross-module integration: validates Inspector protocol stack-frame attribution for a console call
+parallel/test-inspector-console.js: cross-module integration: launches an Inspector child and validates the inspector module's separate console endpoint
+parallel/test-snapshot-console.js: cross-module integration: builds and loads a V8 startup snapshot in child processes, then compares host console namespace keys
+parallel/test-trace-events-console.js: cross-module integration: forks a process with node.console tracing enabled and validates the host trace-event file
+parallel/test-worker-console-listeners.js: cross-module integration: creates Worker-owned consoles and verifies host process listener accounting across worker exits
+pseudo-tty/console-dumb-tty.js: cross-module integration: launches Node inside a pseudo-terminal to validate host terminal detection and TERM=dumb behavior
+pseudo-tty/console_colors.js: cross-module integration: launches Node inside a pseudo-terminal to validate host TTY color policy; in-process color selection is covered separately
+wpt/test-console.js: language non-goal: the WPT console corpus includes namespace/prototype identity, function-name metadata, and cross-realm global-object assertions

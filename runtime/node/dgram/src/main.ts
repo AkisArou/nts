@@ -17,22 +17,57 @@
 
 import { EventEmitter } from "../../events/src/main.ts";
 import { Buffer } from "../../buffer/src/main.ts";
+import { AsyncContextFrame } from "../../internal/async-context.ts";
+import {
+  emitAfter,
+  emitBefore,
+  emitDestroy,
+  emitInit,
+  getDefaultTriggerAsyncId,
+  initHooksExist,
+  newAsyncId,
+} from "../../internal/async-hooks.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
+  ERR_BUFFER_OUT_OF_BOUNDS,
   ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_ARG_VALUE,
+  ERR_IP_BLOCKED,
+  ERR_MISSING_ARGS,
   ERR_SOCKET_ALREADY_BOUND,
+  ERR_SOCKET_BAD_BUFFER_SIZE,
   ERR_SOCKET_BAD_PORT,
   ERR_SOCKET_BAD_TYPE,
   ERR_SOCKET_DGRAM_IS_CONNECTED,
   ERR_SOCKET_DGRAM_NOT_CONNECTED,
   ERR_SOCKET_DGRAM_NOT_RUNNING,
 } from "../../internal/errors.ts";
-import { exceptionWithHostPort } from "../../internal/uv.ts";
-import { validateString } from "../../internal/validators.ts";
+import {
+  dnsException,
+  exceptionWithHostPort,
+  socketBufferError,
+} from "../../internal/uv.ts";
+import {
+  validateNumber,
+  validateObject,
+  validateString,
+  validateUint32,
+} from "../../internal/validators.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
+import type { AddressInfo } from "../../net/src/main.ts";
+import { isIP } from "../../net/src/address.ts";
+import { BlockList, type IPFamily } from "../../net/src/block-list.ts";
+import { channel } from "../../diagnostics_channel/src/main.ts";
+
+export type { AddressInfo } from "../../net/src/main.ts";
 
 /** Open a datagram socket. `type` is `udp4` or `udp6`. */
-declare function nts_udp_new(type: string, reuseAddr: boolean, ipv6Only: boolean): number;
+declare function nts_udp_new(
+  type: string,
+  reuseAddr: boolean,
+  reusePort: boolean,
+  ipv6Only: boolean,
+): number;
 /**
  * Bind, and call back when the socket actually has the port.
  *
@@ -41,12 +76,7 @@ declare function nts_udp_new(type: string, reuseAddr: boolean, ipv6Only: boolean
  * Reporting success synchronously would let `address()` be called on a socket
  * that does not have one yet, which is exactly the failure it caused.
  */
-declare function nts_udp_bind(
-  handle: number,
-  address: string,
-  port: number,
-  onBound: (errno: number) => void,
-): number;
+declare function nts_udp_bind_sync(handle: number, address: string, port: number): number;
 declare function nts_udp_close(handle: number): void;
 /**
  * `[address, family, port]`, or `[errno]` when there is none.
@@ -58,23 +88,23 @@ declare function nts_udp_close(handle: number): void;
 declare function nts_udp_address(handle: number, remote: boolean): (string | number)[];
 declare function nts_udp_send(
   handle: number,
-  bytes: number[],
+  chunks: Uint8Array[],
   port: number,
   address: string,
   callback: (errno: number, sent: number) => void,
 ): number;
 declare function nts_udp_recv_start(
   handle: number,
-  onMessage: (bytes: number[], address: string, family: string, port: number) => void,
+  onMessage: (bytes: Uint8Array, address: string, family: string, port: number) => void,
   onError: (errno: number) => void,
 ): number;
 declare function nts_udp_recv_stop(handle: number): number;
-declare function nts_udp_connect(
-  handle: number,
-  address: string,
-  port: number,
-  onConnected: (errno: number) => void,
-): number;
+declare function nts_udp_connect_sync(handle: number, address: string, port: number): number;
+declare function nts_udp_lookup(
+  hostname: string,
+  family: number,
+  callback: (errno: number, address: string, family: number) => void,
+): void;
 declare function nts_udp_disconnect(handle: number): number;
 declare function nts_udp_set_broadcast(handle: number, on: boolean): number;
 declare function nts_udp_set_ttl(handle: number, ttl: number): number;
@@ -87,7 +117,16 @@ declare function nts_udp_membership(
   iface: string,
   join: boolean,
 ): number;
+declare function nts_udp_source_membership(
+  handle: number,
+  source: string,
+  group: string,
+  iface: string,
+  join: boolean,
+): number;
 declare function nts_udp_buffer_size(handle: number, size: number, receive: boolean): number;
+declare function nts_udp_send_queue_size(handle: number): number;
+declare function nts_udp_send_queue_count(handle: number): number;
 declare function nts_udp_ref(handle: number, keepProcessAlive: boolean): void;
 
 /**
@@ -104,6 +143,17 @@ const DISCONNECTED = 0;
 const CONNECTING = 1;
 const CONNECTED = 2;
 
+const udpSocketChannel = channel("udp.socket");
+
+class QueuedOperation {
+  readonly callback: () => void;
+  next: QueuedOperation | null = null;
+
+  constructor(callback: () => void) {
+    this.callback = callback;
+  }
+}
+
 export interface RemoteInfo {
   address: string;
   family: "IPv4" | "IPv6";
@@ -111,18 +161,16 @@ export interface RemoteInfo {
   size: number;
 }
 
-export interface AddressInfo {
-  address: string;
-  family: string;
-  port: number;
-}
-
 export interface SocketOptions {
-  type?: "udp4" | "udp6" | undefined;
+  type: "udp4" | "udp6";
   reuseAddr?: boolean | undefined;
+  reusePort?: boolean | undefined;
   ipv6Only?: boolean | undefined;
   recvBufferSize?: number | undefined;
   sendBufferSize?: number | undefined;
+  lookup?: LookupFunction | undefined;
+  receiveBlockList?: BlockList | undefined;
+  sendBlockList?: BlockList | undefined;
   signal?: AbortSignalLike | undefined;
 }
 
@@ -133,6 +181,83 @@ export interface BindOptions {
 }
 
 type SendCallback = (error: Error | null, bytes?: number) => void;
+type ConnectCallback = (error?: Error) => void;
+type LookupCallback = (error: Error | null, address: string, family: number) => void;
+export type LookupFunction = (
+  hostname: string,
+  family: number,
+  callback: LookupCallback,
+) => void;
+type DatagramChunk = string | ArrayBufferView;
+type DatagramData = DatagramChunk | readonly DatagramChunk[];
+
+function isVoidCallback(value: unknown): value is () => void {
+  return typeof value === "function";
+}
+
+function isSendCallback(value: unknown): value is SendCallback {
+  return typeof value === "function";
+}
+
+function isLookupFunction(value: unknown): value is LookupFunction {
+  return typeof value === "function";
+}
+
+function isUnknownArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
+}
+
+function toUint32(value: unknown): number {
+  if (typeof value === "bigint") {
+    throw new TypeError("Cannot mix BigInt and other types, use explicit conversions");
+  }
+  return Number(value) >>> 0;
+}
+
+function bufferFromView(view: ArrayBufferView): Buffer {
+  const backing = view.buffer;
+  if (!(backing instanceof ArrayBuffer)) {
+    throw new ERR_INVALID_ARG_TYPE("buffer", "non-shared ArrayBuffer view", view);
+  }
+  return Buffer.from(backing, view.byteOffset, view.byteLength);
+}
+
+function udpFamily(value: string): RemoteInfo["family"] {
+  if (value !== "IPv4" && value !== "IPv6") {
+    throw new Error(`native UDP returned invalid address family ${value}`);
+  }
+  return value;
+}
+
+function blockListFamily(family: RemoteInfo["family"]): IPFamily {
+  return family === "IPv4" ? "ipv4" : "ipv6";
+}
+
+function defaultLookup(
+  hostname: string,
+  family: number,
+  callback: LookupCallback,
+): void {
+  if (isIP(hostname) === family) {
+    nextTick(callback, null, hostname, family);
+    return;
+  }
+  nts_udp_lookup(hostname, family, (errno, address, resolvedFamily) => {
+    const error = errno < 0 ? dnsException(errno, "getaddrinfo", hostname) : null;
+    callback(error, address, resolvedFamily);
+  });
+}
+
+function addressInfo(columns: (string | number)[], operation: string): AddressInfo {
+  const address = columns[0];
+  const family = columns[1];
+  const port = columns[2];
+  if (typeof address !== "string" || typeof family !== "string" || typeof port !== "number") {
+    const errno = typeof address === "number" ? address : -1;
+    throw exceptionWithHostPort(errno, operation);
+  }
+  return { address, family, port };
+}
 
 /**
  * A port, as `bind` and `send` accept one.
@@ -162,39 +287,79 @@ export class Socket extends EventEmitter {
   #bindState = UNBOUND;
   #connectState = DISCONNECTED;
   #receiving = false;
-  /**
-   * Calls made before the socket was bound.
-   *
-   * Present only while a bind is in flight -- `undefined` rather than an empty
-   * array, because "there is a queue" is what tells a later call to join it
-   * rather than to run.
-   */
-  #queue: (() => void)[] | undefined;
+  /** Calls made before the socket was bound, in insertion order. */
+  #queueHead: QueuedOperation | null = null;
+  #queueTail: QueuedOperation | null = null;
   #recvBufferSize: number | undefined;
   #sendBufferSize: number | undefined;
+  #lookup: LookupFunction;
+  #receiveBlockList: BlockList | undefined;
+  #sendBlockList: BlockList | undefined;
+  #asyncId: number;
+  #triggerAsyncId: number;
+  #contextFrame: AsyncContextFrame | undefined;
 
-  constructor(type?: SocketOptions | "udp4" | "udp6", listener?: (msg: Buffer, rinfo: RemoteInfo) => void) {
+  constructor(type: "udp4" | "udp6", listener?: (msg: Buffer, rinfo: RemoteInfo) => void);
+  constructor(type: SocketOptions, listener?: (msg: Buffer, rinfo: RemoteInfo) => void);
+  constructor(
+    type: SocketOptions | "udp4" | "udp6",
+    listener?: (msg: Buffer, rinfo: RemoteInfo) => void,
+  ) {
     super();
 
-    let options: SocketOptions = {};
+    let options: SocketOptions | undefined;
     let kind: unknown = type;
     if (type !== null && typeof type === "object") {
       options = type;
       kind = options.type;
     }
 
+    const recvBufferSize = options?.recvBufferSize;
+    const sendBufferSize = options?.sendBufferSize;
+    if (recvBufferSize) validateUint32(recvBufferSize, "options.recvBufferSize");
+    if (sendBufferSize) validateUint32(sendBufferSize, "options.sendBufferSize");
+    const receiveBlockList = options?.receiveBlockList;
+    const sendBlockList = options?.sendBlockList;
+    const lookup: unknown = options?.lookup;
+    if (receiveBlockList && !BlockList.isBlockList(receiveBlockList)) {
+      throw new ERR_INVALID_ARG_TYPE(
+        "options.receiveBlockList",
+        "net.BlockList",
+        receiveBlockList,
+      );
+    }
+    if (sendBlockList && !BlockList.isBlockList(sendBlockList)) {
+      throw new ERR_INVALID_ARG_TYPE("options.sendBlockList", "net.BlockList", sendBlockList);
+    }
+    if (lookup !== undefined && !isLookupFunction(lookup)) {
+      throw new ERR_INVALID_ARG_TYPE("lookup", "Function", lookup);
+    }
+
     if (kind !== "udp4" && kind !== "udp6") throw new ERR_SOCKET_BAD_TYPE();
     this.type = kind;
+    this.#recvBufferSize = recvBufferSize;
+    this.#sendBufferSize = sendBufferSize;
+    this.#receiveBlockList = receiveBlockList;
+    this.#sendBlockList = sendBlockList;
+    this.#lookup = lookup ?? defaultLookup;
+    this.#handle = nts_udp_new(
+      kind,
+      !!options?.reuseAddr,
+      !!options?.reusePort,
+      !!options?.ipv6Only,
+    );
+    this.#asyncId = newAsyncId();
+    this.#triggerAsyncId = getDefaultTriggerAsyncId();
+    this.#contextFrame = AsyncContextFrame.current();
+    if (initHooksExist()) {
+      emitInit(this.#asyncId, "UDPWRAP", this.#triggerAsyncId, this);
+    }
 
-    this.#recvBufferSize = options.recvBufferSize;
-    this.#sendBufferSize = options.sendBufferSize;
-    this.#handle = nts_udp_new(kind, !!options.reuseAddr, !!options.ipv6Only);
+    if (typeof listener === "function") this.on("message", listener);
 
-    if (typeof listener === "function") this.on("message", listener as never);
-
-    const signal = options.signal;
+    const signal = options?.signal;
     if (signal !== undefined && signal !== null) {
-      if (typeof (signal as AbortSignalLike).addEventListener !== "function") {
+      if (typeof signal.addEventListener !== "function") {
         throw new ERR_INVALID_ARG_TYPE("options.signal", "AbortSignal", signal);
       }
       const onAborted = (): void => {
@@ -204,8 +369,12 @@ export class Socket extends EventEmitter {
         onAborted();
       } else {
         signal.addEventListener("abort", onAborted, { once: true });
-        this.once("close", (() => signal.removeEventListener("abort", onAborted)) as never);
+        this.once("close", () => signal.removeEventListener("abort", onAborted));
       }
+    }
+
+    if (udpSocketChannel.hasSubscribers) {
+      udpSocketChannel.publish({ socket: this });
     }
   }
 
@@ -213,6 +382,18 @@ export class Socket extends EventEmitter {
   #healthCheck(): number {
     if (this.#handle === null) throw new ERR_SOCKET_DGRAM_NOT_RUNNING();
     return this.#handle;
+  }
+
+  /** Run a native UDP callback under this socket's resource identity. */
+  #inScope<Result>(callback: () => Result): Result {
+    const prior = AsyncContextFrame.exchange(this.#contextFrame);
+    emitBefore(this.#asyncId, this.#triggerAsyncId, this);
+    try {
+      return callback();
+    } finally {
+      emitAfter(this.#asyncId);
+      AsyncContextFrame.setCurrent(prior);
+    }
   }
 
   /**
@@ -229,19 +410,26 @@ export class Socket extends EventEmitter {
     this.#receiving = true;
     nts_udp_recv_start(
       handle,
-      (bytes: number[], address: string, family: string, port: number) => {
-        const message = Buffer.from(bytes);
-        // The sender travels with the packet, not with the socket -- there is
-        // no connection for it to be a property of.
-        this.emit("message", message, {
-          address,
-          family: family as "IPv4" | "IPv6",
-          port,
-          size: message.length,
-        } as RemoteInfo);
+      (bytes: Uint8Array, address: string, family: string, port: number) => {
+        this.#inScope(() => {
+          const remoteFamily = udpFamily(family);
+          if (this.#receiveBlockList?.check(address, blockListFamily(remoteFamily))) return;
+          const message = bufferFromView(bytes);
+          // The sender travels with the packet, not with the socket -- there is
+          // no connection for it to be a property of.
+          const remote: RemoteInfo = {
+            address,
+            family: remoteFamily,
+            port,
+            size: message.length,
+          };
+          this.emit("message", message, remote);
+        });
       },
       (errno: number) => {
-        this.emit("error", exceptionWithHostPort(errno, "recvmsg"));
+        this.#inScope(() => {
+          this.emit("error", exceptionWithHostPort(errno, "recvmsg"));
+        });
       },
     );
   }
@@ -259,27 +447,30 @@ export class Socket extends EventEmitter {
    * may need resolving and a `bind` that was sometimes synchronous would make
    * `listening` sometimes arrive before the caller could listen for it.
    */
+  bind(port?: number, address?: string, callback?: () => void): this;
+  bind(port?: number, callback?: () => void): this;
+  bind(callback?: () => void): this;
+  bind(options: BindOptions, callback?: () => void): this;
   bind(...args: unknown[]): this {
     this.#healthCheck();
     if (this.#bindState !== UNBOUND) throw new ERR_SOCKET_ALREADY_BOUND();
     this.#bindState = BINDING;
 
-    const callback = args.length > 0 && typeof args[args.length - 1] === "function"
-      ? (args[args.length - 1] as () => void)
-      : undefined;
+    const last = args.at(-1);
+    const callback = isVoidCallback(last) ? last : undefined;
     if (callback) {
       // Removed on either outcome, so a socket that failed and was rebuilt
       // does not call an old callback on its next success.
       const onListening = (): void => {
-        this.removeListener("error", cleanup as never);
+        this.removeListener("error", cleanup);
         callback.call(this);
       };
       const cleanup = (): void => {
-        this.removeListener("error", cleanup as never);
-        this.removeListener("listening", onListening as never);
+        this.removeListener("error", cleanup);
+        this.removeListener("listening", onListening);
       };
-      this.on("error", cleanup as never);
-      this.on("listening", onListening as never);
+      this.on("error", cleanup);
+      this.on("listening", onListening);
     }
 
     // A function in first position is the callback, not a port. `bind(cb)`
@@ -289,52 +480,141 @@ export class Socket extends EventEmitter {
     let address: string | undefined;
 
     if (port !== null && port !== undefined && typeof port === "object") {
-      const options = port as BindOptions;
-      address = options.address || "";
-      port = options.port;
+      const options = port;
+      const optionAddress = "address" in options ? options.address : undefined;
+      if (optionAddress !== undefined && typeof optionAddress !== "string") {
+        throw new ERR_INVALID_ARG_TYPE("options.address", "string", optionAddress);
+      }
+      address = optionAddress || "";
+      port = "port" in options ? options.port : undefined;
     } else {
-      address = typeof args[1] === "function" ? "" : (args[1] as string | undefined);
+      const givenAddress = args[1];
+      if (givenAddress === undefined || isVoidCallback(givenAddress)) {
+        address = "";
+      } else {
+        validateString(givenAddress, "address");
+        address = givenAddress;
+      }
     }
 
     // The unspecified address, which means "every interface". Different in the
     // two families, and not interchangeable: an `udp6` socket bound to
     // `0.0.0.0` is an error rather than a socket on every interface.
-    if (!address) address = this.type === "udp4" ? "0.0.0.0" : "::";
+    const bindAddress = address || (this.type === "udp4" ? "0.0.0.0" : "::");
 
     const bindPort = port === undefined || port === null ? 0 : validatePort(port, "Port", true);
 
-    nextTick(() => {
+    const family = this.type === "udp4" ? 4 : 6;
+    this.#lookup(bindAddress, family, (lookupError, resolvedAddress) => {
       if (this.#handle === null) return;
-      nts_udp_bind(this.#handle, address as string, bindPort, (errno: number) => {
-        if (this.#handle === null) return;
-        if (errno !== 0) {
-          this.#bindState = UNBOUND;
-          this.emit("error", exceptionWithHostPort(errno, "bind", address, bindPort));
-          this.#drainQueue();
-          return;
-        }
-        this.#bindState = BOUND;
-        if (this.#recvBufferSize !== undefined) {
-          nts_udp_buffer_size(this.#handle, this.#recvBufferSize, true);
-        }
-        if (this.#sendBufferSize !== undefined) {
-          nts_udp_buffer_size(this.#handle, this.#sendBufferSize, false);
-        }
-        this.#startReceiving();
-        this.emit("listening");
-        this.#drainQueue();
-      });
+      if (lookupError) {
+        this.#bindState = UNBOUND;
+        this.#clearQueue();
+        this.emit("error", lookupError);
+        return;
+      }
+      const errno = nts_udp_bind_sync(this.#handle, resolvedAddress, bindPort);
+      if (errno !== 0) {
+        this.#bindState = UNBOUND;
+        this.#clearQueue();
+        this.emit(
+          "error",
+          exceptionWithHostPort(errno, "bind", resolvedAddress, bindPort),
+        );
+        return;
+      }
+      this.#bindState = BOUND;
+      if (this.#recvBufferSize) {
+        nts_udp_buffer_size(this.#handle, this.#recvBufferSize, true);
+      }
+      if (this.#sendBufferSize) {
+        nts_udp_buffer_size(this.#handle, this.#sendBufferSize, false);
+      }
+      this.#startReceiving();
+      this.emit("listening");
+      this.#drainQueue();
     });
 
     return this;
   }
 
+  /**
+   * Bind without name resolution, upstream `lib/dgram.js:438`.
+   *
+   * The kernel's bind operation is local and non-blocking. Only DNS makes the
+   * ordinary method asynchronous, so this form accepts numeric addresses and
+   * leaves message delivery asynchronous.
+   */
+  bindSync(options?: BindOptions): AddressInfo {
+    const handle = this.#healthCheck();
+    const given: unknown = options === undefined ? {} : options;
+    validateObject(given, "options");
+    if (this.#bindState !== UNBOUND) throw new ERR_SOCKET_ALREADY_BOUND();
+
+    const rawPort = "port" in given ? given.port : undefined;
+    const port = validatePort(rawPort ?? 0, "options.port", true);
+    const rawAddress = "address" in given ? given.address : undefined;
+    let address: string;
+    if (!rawAddress) {
+      address = this.type === "udp4" ? "0.0.0.0" : "::";
+    } else {
+      validateString(rawAddress, "options.address");
+      if (isIP(rawAddress) === 0) {
+        throw new ERR_INVALID_ARG_VALUE(
+          "options.address",
+          rawAddress,
+          "must be a numeric IP address; bindSync does not perform DNS resolution",
+        );
+      }
+      address = rawAddress;
+    }
+
+    this.#bindState = BINDING;
+    const err = nts_udp_bind_sync(handle, address, port);
+    if (err !== 0) {
+      this.#bindState = UNBOUND;
+      throw exceptionWithHostPort(err, "bind", address, port);
+    }
+
+    this.#bindState = BOUND;
+    if (this.#recvBufferSize) {
+      nts_udp_buffer_size(handle, this.#recvBufferSize, true);
+    }
+    if (this.#sendBufferSize) {
+      nts_udp_buffer_size(handle, this.#sendBufferSize, false);
+    }
+    this.#startReceiving();
+    nextTick(() => {
+      if (this.#handle !== null) this.emit("listening");
+    });
+    return this.address();
+  }
+
   /** Run whatever was asked for while the bind was in flight. */
   #drainQueue(): void {
-    const queue = this.#queue;
-    this.#queue = undefined;
-    if (!queue) return;
-    for (const work of queue) work();
+    let operation = this.#queueHead;
+    this.#clearQueue();
+    while (operation !== null) {
+      const next = operation.next;
+      operation.callback();
+      operation = next;
+    }
+  }
+
+  #clearQueue(): void {
+    this.#queueHead = null;
+    this.#queueTail = null;
+  }
+
+  #enqueue(callback: () => void): void {
+    const operation = new QueuedOperation(callback);
+    const tail = this.#queueTail;
+    if (tail === null) {
+      this.#queueHead = operation;
+    } else {
+      tail.next = operation;
+    }
+    this.#queueTail = operation;
   }
 
   /**
@@ -344,31 +624,65 @@ export class Socket extends EventEmitter {
    * needs no address, and makes the socket ignore packets from anyone else,
    * which is the only part the kernel is involved in.
    */
-  connect(port: number, address?: string | (() => void), callback?: () => void): void {
+  connect(
+    port: number,
+    address?: string | ConnectCallback,
+    callback?: ConnectCallback,
+  ): void {
+    const targetPort = validatePort(port, "Port", false);
     if (typeof address === "function") {
       callback = address;
       address = undefined;
     }
+    const rawAddress: unknown = address ?? "";
+    validateString(rawAddress, "address");
     if (this.#connectState !== DISCONNECTED) throw new ERR_SOCKET_DGRAM_IS_CONNECTED();
 
-    const target = address || (this.type === "udp4" ? "127.0.0.1" : "::1");
-    const targetPort = validatePort(port, "Port", false);
+    const target = rawAddress || (this.type === "udp4" ? "127.0.0.1" : "::1");
     this.#connectState = CONNECTING;
-    if (callback) this.once("connect", callback as never);
+    if (callback) this.once("connect", callback);
+
+    const fail = (error: Error): void => {
+      this.#connectState = DISCONNECTED;
+      if (callback !== undefined) {
+        this.removeListener("connect", callback);
+        nextTick(callback, error);
+      } else {
+        nextTick(() => {
+          if (this.#handle !== null) this.emit("error", error);
+        });
+      }
+    };
 
     const run = (): void => {
       if (this.#handle === null) return;
-      // Also asynchronous, and for the same reason: the address may need
-      // resolving before there is anything to remember.
-      nts_udp_connect(this.#handle, target, targetPort, (errno: number) => {
+      const family = this.type === "udp4" ? 4 : 6;
+      this.#lookup(target, family, (lookupError, resolvedAddress) => {
         if (this.#handle === null) return;
+        if (lookupError) {
+          fail(lookupError);
+          return;
+        }
+        const resolvedFamily = isIP(resolvedAddress);
+        if (
+          resolvedFamily !== 0 &&
+          this.#sendBlockList?.check(
+            resolvedAddress,
+            resolvedFamily === 4 ? "ipv4" : "ipv6",
+          )
+        ) {
+          fail(new ERR_IP_BLOCKED(resolvedAddress));
+          return;
+        }
+        const errno = nts_udp_connect_sync(this.#handle, resolvedAddress, targetPort);
         if (errno !== 0) {
-          this.#connectState = DISCONNECTED;
-          this.emit("error", exceptionWithHostPort(errno, "connect", target, targetPort));
+          fail(exceptionWithHostPort(errno, "connect", target, targetPort));
           return;
         }
         this.#connectState = CONNECTED;
-        this.emit("connect");
+        nextTick(() => {
+          if (this.#handle !== null) this.emit("connect");
+        });
       });
     };
 
@@ -376,14 +690,61 @@ export class Socket extends EventEmitter {
     // reason a send does.
     if (this.#bindState === UNBOUND) {
       this.bind({ port: 0, exclusive: true });
-      (this.#queue ??= []).push(run);
+      this.#enqueue(run);
       return;
     }
     if (this.#bindState === BINDING) {
-      (this.#queue ??= []).push(run);
+      this.#enqueue(run);
       return;
     }
-    nextTick(run);
+    run();
+  }
+
+  /** Synchronous numeric-address counterpart of `connect`. */
+  connectSync(port: number, address?: string): void;
+  connectSync(port: unknown, address?: unknown): void {
+    const handle = this.#healthCheck();
+    const targetPort = validatePort(port, "Port", false);
+    if (this.#connectState !== DISCONNECTED) {
+      throw new ERR_SOCKET_DGRAM_IS_CONNECTED();
+    }
+
+    let target: string;
+    if (address === undefined || address === null || address === "") {
+      target = this.type === "udp4" ? "127.0.0.1" : "::1";
+    } else {
+      validateString(address, "address");
+      if (isIP(address) === 0) {
+        throw new ERR_INVALID_ARG_VALUE(
+          "address",
+          address,
+          "must be a numeric IP address; connectSync does not perform DNS resolution",
+        );
+      }
+      target = address;
+    }
+
+    if (this.#bindState === UNBOUND) {
+      this.bindSync();
+    } else if (this.#bindState !== BOUND) {
+      throw new ERR_SOCKET_ALREADY_BOUND();
+    }
+
+    const family = isIP(target) === 4 ? "ipv4" : "ipv6";
+    if (this.#sendBlockList?.check(target, family)) {
+      throw new ERR_IP_BLOCKED(target);
+    }
+
+    this.#connectState = CONNECTING;
+    const err = nts_udp_connect_sync(handle, target, targetPort);
+    if (err !== 0) {
+      this.#connectState = DISCONNECTED;
+      throw exceptionWithHostPort(err, "connect", target, targetPort);
+    }
+    this.#connectState = CONNECTED;
+    nextTick(() => {
+      if (this.#handle !== null) this.emit("connect");
+    });
   }
 
   disconnect(): void {
@@ -403,76 +764,158 @@ export class Socket extends EventEmitter {
    * the whole of why the method is long.
    */
   send(
-    buffer: Buffer | string | (Buffer | string)[],
-    offset?: number | SendCallback,
-    length?: number | SendCallback,
-    port?: number | string | SendCallback,
-    address?: string | SendCallback,
+    buffer: DatagramData,
+    port?: number | string,
+    address?: string,
     callback?: SendCallback,
+  ): void;
+  send(buffer: DatagramData, port?: number | string, callback?: SendCallback): void;
+  send(buffer: DatagramData, callback?: SendCallback): void;
+  send(
+    buffer: DatagramChunk,
+    offset: number,
+    length: number,
+    port?: number | string,
+    address?: string,
+    callback?: SendCallback,
+  ): void;
+  send(
+    buffer: DatagramChunk,
+    offset: number,
+    length: number,
+    port?: number | string,
+    callback?: SendCallback,
+  ): void;
+  send(buffer: DatagramChunk, offset: number, length: number, callback?: SendCallback): void;
+  send(
+    buffer: unknown,
+    first?: unknown,
+    second?: unknown,
+    third?: unknown,
+    fourth?: unknown,
+    fifth?: unknown,
   ): void {
     const connected = this.#connectState === CONNECTED;
-    let data = buffer;
-    let sendPort: unknown = port;
-    let sendAddress: unknown = address;
-    let done: SendCallback | undefined = callback;
+    let data: unknown = buffer;
+    let rawPort: unknown = third;
+    let rawAddress: unknown = fourth;
+    let rawCallback: unknown = fifth;
+    let sendPort = 0;
+    let target = "";
 
     if (!connected) {
-      if (address || (port && typeof port !== "function")) {
-        data = sliceBuffer(buffer, offset as number, length as number);
+      if (fourth || (third && typeof third !== "function")) {
+        data = sliceBuffer(buffer, first, second);
       } else {
-        // `send(buf, port, address, cb)` -- the offset and length were never
-        // there and everything has shifted left by two.
-        done = port as SendCallback;
-        sendPort = offset;
-        sendAddress = length;
+        rawCallback = third;
+        rawPort = first;
+        rawAddress = second;
       }
     } else {
-      if (typeof length === "number") {
-        data = sliceBuffer(buffer, offset as number, length);
-        if (typeof port === "function") {
-          done = port;
-          sendPort = null;
+      if (typeof second === "number") {
+        data = sliceBuffer(buffer, first, second);
+        if (typeof third === "function") {
+          rawCallback = third;
+          rawPort = null;
         }
       } else {
-        done = offset as SendCallback;
+        rawCallback = first;
       }
-      if (sendPort || sendAddress) throw new ERR_SOCKET_DGRAM_IS_CONNECTED();
+      if (rawPort || rawAddress) throw new ERR_SOCKET_DGRAM_IS_CONNECTED();
     }
 
     const list = toBufferList(data);
-    if (!connected) sendPort = validatePort(sendPort, "Port", false);
-    if (typeof done !== "function") done = undefined;
 
-    if (typeof sendAddress === "function") {
-      done = sendAddress as SendCallback;
-      sendAddress = undefined;
-    } else if (sendAddress != null) {
-      validateString(sendAddress, "address");
+    if (!connected) sendPort = validatePort(rawPort, "Port", false);
+
+    let done = isSendCallback(rawCallback) ? rawCallback : undefined;
+    if (isSendCallback(rawAddress)) {
+      done = rawAddress;
+    } else if (rawAddress !== undefined && rawAddress !== null) {
+      validateString(rawAddress, "address");
+      target = rawAddress;
+    }
+    if (!connected && target === "") {
+      target = this.type === "udp4" ? "127.0.0.1" : "::1";
     }
 
     this.#healthCheck();
 
-    const target = (sendAddress as string | undefined) ??
-      (this.type === "udp4" ? "127.0.0.1" : "::1");
-    const payload = list.length === 1 ? (list[0] as Buffer) : Buffer.concat(list);
+    const onSent = done;
 
-    const run = (): void => {
+    const sendResolved = (resolvedTarget: string): void => {
       if (this.#handle === null) return;
+      const family = isIP(resolvedTarget);
+      if (
+        family !== 0 &&
+        this.#sendBlockList?.check(resolvedTarget, family === 4 ? "ipv4" : "ipv6")
+      ) {
+        if (onSent !== undefined) nextTick(onSent, new ERR_IP_BLOCKED(resolvedTarget));
+        return;
+      }
+      const asyncId = newAsyncId();
+      // Node creates the SendWrap inside a default-trigger scope owned by the
+      // socket. DNS may resume from a TickObject, but that tick did not cause
+      // the send: the socket did. Recording the id directly is the same
+      // contract without a process-global scope mutation.
+      const triggerAsyncId = this.#asyncId;
+      const contextFrame = AsyncContextFrame.current();
+      const resource = { socket: this };
+      if (initHooksExist()) {
+        emitInit(asyncId, "UDPSENDWRAP", triggerAsyncId, resource);
+      }
+
+      const complete = (error: Error | null, sent: number): void => {
+        const prior = AsyncContextFrame.exchange(contextFrame);
+        emitBefore(asyncId, triggerAsyncId, resource);
+        try {
+          if (onSent !== undefined) {
+            if (error === null) onSent(null, sent);
+            else onSent(error);
+          }
+        } finally {
+          emitAfter(asyncId);
+          emitDestroy(asyncId);
+          AsyncContextFrame.setCurrent(prior);
+        }
+      };
+
       const err = nts_udp_send(
         this.#handle,
-        Array.from(payload) as number[],
-        connected ? 0 : (sendPort as number),
-        connected ? "" : target,
-        (errno: number, sent: number) => {
-          if (!done) return;
-          if (errno < 0) done(exceptionWithHostPort(errno, "send", target, sendPort as number));
-          else done(null, sent);
+        list,
+        sendPort,
+        resolvedTarget,
+        (errno: number, sent: number): void => {
+          const error = errno < 0
+            ? exceptionWithHostPort(errno, "send", target, sendPort)
+            : null;
+          complete(error, sent);
         },
       );
-      if (err !== 0 && done) {
-        const ex = exceptionWithHostPort(err, "send", target, sendPort as number);
-        nextTick(() => (done as SendCallback)(ex));
+      if (err !== 0) {
+        nextTick(complete, exceptionWithHostPort(err, "send", target, sendPort), 0);
       }
+    };
+
+    const run = (): void => {
+      if (connected) {
+        sendResolved("");
+        return;
+      }
+      const family = this.type === "udp4" ? 4 : 6;
+      this.#lookup(target, family, (lookupError, resolvedAddress) => {
+        if (lookupError) {
+          if (onSent !== undefined) {
+            nextTick(onSent, lookupError);
+          } else {
+            nextTick(() => {
+              if (this.#handle !== null) this.emit("error", lookupError);
+            });
+          }
+          return;
+        }
+        sendResolved(resolvedAddress);
+      });
     };
 
     // An unbound socket binds itself first. The packet is not dropped and not
@@ -480,23 +923,60 @@ export class Socket extends EventEmitter {
     // this module does.
     if (this.#bindState === UNBOUND) {
       this.bind({ port: 0, exclusive: true });
-      (this.#queue ??= []).push(run);
+      this.#enqueue(run);
       return;
     }
     if (this.#bindState === BINDING) {
-      (this.#queue ??= []).push(run);
+      this.#enqueue(run);
       return;
     }
+    // Default lookup defers numeric literals itself; a user-supplied lookup is
+    // allowed to call back synchronously, exactly as Node's is.
     run();
   }
 
+  /** Legacy fixed-arity spelling of `send`, upstream `lib/dgram.js:627`. */
+  sendto(
+    buffer: DatagramChunk,
+    offset: number,
+    length: number,
+    port: number,
+    address: string,
+    callback?: SendCallback,
+  ): void;
+  sendto(
+    buffer?: unknown,
+    offset?: unknown,
+    length?: unknown,
+    port?: unknown,
+    address?: unknown,
+    callback?: unknown,
+  ): void {
+    validateNumber(offset, "offset");
+    validateNumber(length, "length");
+    validateNumber(port, "port");
+    validateString(address, "address");
+    if (callback !== undefined && !isSendCallback(callback)) {
+      throw new ERR_INVALID_ARG_TYPE("callback", "Function", callback);
+    }
+    if (typeof buffer === "string" || ArrayBuffer.isView(buffer)) {
+      this.send(buffer, offset, length, port, address, callback);
+      return;
+    }
+    throw new ERR_INVALID_ARG_TYPE(
+      "buffer",
+      ["Buffer", "TypedArray", "DataView", "string"],
+      buffer,
+    );
+  }
+
   close(callback?: () => void): this {
-    if (typeof callback === "function") this.on("close", callback as never);
+    if (typeof callback === "function") this.on("close", callback);
 
     // A close asked for while a bind is in flight joins the queue rather than
     // tearing down a handle the bind is about to use.
-    if (this.#queue !== undefined) {
-      this.#queue.push(() => this.close());
+    if (this.#queueHead !== null) {
+      this.#enqueue(() => this.close());
       return this;
     }
 
@@ -504,28 +984,23 @@ export class Socket extends EventEmitter {
     this.#stopReceiving();
     nts_udp_close(handle);
     this.#handle = null;
+    emitDestroy(this.#asyncId);
+    this.#asyncId = 0;
+    this.#triggerAsyncId = 0;
+    this.#contextFrame = undefined;
     nextTick(() => this.emit("close"));
     return this;
   }
 
-  async [Symbol.asyncDispose](): Promise<void> {
-    if (this.#handle === null) return;
-    await new Promise<void>((resolve) => this.close(() => resolve()));
-  }
-
   address(): AddressInfo {
     const handle = this.#healthCheck();
-    const out = nts_udp_address(handle, false);
-    if (out.length < 3) throw exceptionWithHostPort(out[0] as number, "getsockname");
-    return { address: out[0] as string, family: out[1] as string, port: out[2] as number };
+    return addressInfo(nts_udp_address(handle, false), "getsockname");
   }
 
   remoteAddress(): AddressInfo {
-    this.#healthCheck();
+    const handle = this.#healthCheck();
     if (this.#connectState !== CONNECTED) throw new ERR_SOCKET_DGRAM_NOT_CONNECTED();
-    const out = nts_udp_address(this.#handle as number, true);
-    if (out.length < 3) throw exceptionWithHostPort(out[0] as number, "getpeername");
-    return { address: out[0] as string, family: out[1] as string, port: out[2] as number };
+    return addressInfo(nts_udp_address(handle, true), "getpeername");
   }
 
   setBroadcast(on: boolean): void {
@@ -534,14 +1009,14 @@ export class Socket extends EventEmitter {
   }
 
   setTTL(ttl: number): number {
-    validateNumberInRange(ttl, "ttl", 1, 255);
+    validateNumber(ttl, "ttl");
     const err = nts_udp_set_ttl(this.#healthCheck(), ttl);
     if (err !== 0) throw exceptionWithHostPort(err, "setTTL");
     return ttl;
   }
 
   setMulticastTTL(ttl: number): number {
-    validateNumberInRange(ttl, "ttl", 0, 255);
+    validateNumber(ttl, "ttl");
     const err = nts_udp_set_multicast_ttl(this.#healthCheck(), ttl);
     if (err !== 0) throw exceptionWithHostPort(err, "setMulticastTTL");
     return ttl;
@@ -553,43 +1028,84 @@ export class Socket extends EventEmitter {
     return on;
   }
 
-  setMulticastInterface(iface: string): void {
-    this.#healthCheck();
-    validateString(iface, "multicastInterface");
-    const err = nts_udp_set_multicast_interface(this.#handle as number, iface);
+  setMulticastInterface(interfaceAddress: string): void {
+    const handle = this.#healthCheck();
+    validateString(interfaceAddress, "interfaceAddress");
+    const err = nts_udp_set_multicast_interface(handle, interfaceAddress);
     if (err !== 0) throw exceptionWithHostPort(err, "setMulticastInterface");
   }
 
   addMembership(address: string, iface?: string): void {
     const handle = this.#healthCheck();
-    if (!address) throw new ERR_INVALID_ARG_TYPE("multicastAddress", "string", address);
+    if (!address) throw new ERR_MISSING_ARGS("multicastAddress");
     const err = nts_udp_membership(handle, address, iface ?? "", true);
     if (err !== 0) throw exceptionWithHostPort(err, "addMembership");
   }
 
   dropMembership(address: string, iface?: string): void {
     const handle = this.#healthCheck();
-    if (!address) throw new ERR_INVALID_ARG_TYPE("multicastAddress", "string", address);
+    if (!address) throw new ERR_MISSING_ARGS("multicastAddress");
     const err = nts_udp_membership(handle, address, iface ?? "", false);
     if (err !== 0) throw exceptionWithHostPort(err, "dropMembership");
   }
 
+  addSourceSpecificMembership(sourceAddress: string, groupAddress: string, iface?: string): void {
+    const handle = this.#healthCheck();
+    validateString(sourceAddress, "sourceAddress");
+    validateString(groupAddress, "groupAddress");
+    const err = nts_udp_source_membership(
+      handle,
+      sourceAddress,
+      groupAddress,
+      iface ?? "",
+      true,
+    );
+    if (err !== 0) throw exceptionWithHostPort(err, "addSourceSpecificMembership");
+  }
+
+  dropSourceSpecificMembership(sourceAddress: string, groupAddress: string, iface?: string): void {
+    const handle = this.#healthCheck();
+    validateString(sourceAddress, "sourceAddress");
+    validateString(groupAddress, "groupAddress");
+    const err = nts_udp_source_membership(
+      handle,
+      sourceAddress,
+      groupAddress,
+      iface ?? "",
+      false,
+    );
+    if (err !== 0) throw exceptionWithHostPort(err, "dropSourceSpecificMembership");
+  }
+
   setRecvBufferSize(size: number): void {
-    const err = nts_udp_buffer_size(this.#healthCheck(), size, true);
-    if (err !== 0) throw exceptionWithHostPort(err, "setRecvBufferSize");
+    this.#bufferSize(size, true);
   }
 
   setSendBufferSize(size: number): void {
-    const err = nts_udp_buffer_size(this.#healthCheck(), size, false);
-    if (err !== 0) throw exceptionWithHostPort(err, "setSendBufferSize");
+    this.#bufferSize(size, false);
   }
 
   getRecvBufferSize(): number {
-    return nts_udp_buffer_size(this.#healthCheck(), 0, true);
+    return this.#bufferSize(0, true);
   }
 
   getSendBufferSize(): number {
-    return nts_udp_buffer_size(this.#healthCheck(), 0, false);
+    return this.#bufferSize(0, false);
+  }
+
+  #bufferSize(size: number, receive: boolean): number {
+    if ((size >>> 0) !== size) throw new ERR_SOCKET_BAD_BUFFER_SIZE();
+    const result = nts_udp_buffer_size(this.#healthCheck(), size, receive);
+    if (result < 0) throw socketBufferError(result, receive);
+    return result;
+  }
+
+  getSendQueueSize(): number {
+    return nts_udp_send_queue_size(this.#healthCheck());
+  }
+
+  getSendQueueCount(): number {
+    return nts_udp_send_queue_count(this.#healthCheck());
   }
 
   /**
@@ -610,27 +1126,26 @@ export class Socket extends EventEmitter {
   }
 }
 
-function validateNumberInRange(value: unknown, name: string, min: number, max: number): void {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    throw new ERR_INVALID_ARG_TYPE(name, "number", value);
-  }
-  if (value < min || value > max) {
-    throw new ERR_SOCKET_BAD_PORT(name, value, true);
-  }
-}
-
 /** `send(buf, offset, length, ...)` — the slice, when one was asked for. */
-function sliceBuffer(buffer: unknown, offset: number, length: number): Buffer {
-  if (typeof buffer === "string") return Buffer.from(buffer);
-  if (!ArrayBuffer.isView(buffer as ArrayBufferView)) {
-    throw new ERR_INVALID_ARG_TYPE(
-      "buffer",
-      ["Buffer", "TypedArray", "DataView", "string"],
-      buffer,
-    );
+function sliceBuffer(buffer: unknown, offset: unknown, length: unknown): Buffer {
+  let view: Buffer;
+  if (typeof buffer === "string") {
+    view = Buffer.from(buffer);
+  } else {
+    if (!ArrayBuffer.isView(buffer)) {
+      throw new ERR_INVALID_ARG_TYPE(
+        "buffer",
+        ["Buffer", "TypedArray", "DataView", "string"],
+        buffer,
+      );
+    }
+    view = bufferFromView(buffer);
   }
-  const view = buffer as Buffer;
-  return view.subarray(offset >>> 0, (offset >>> 0) + (length >>> 0)) as Buffer;
+  const start = toUint32(offset);
+  const size = toUint32(length);
+  if (start > view.byteLength) throw new ERR_BUFFER_OUT_OF_BOUNDS("offset");
+  if (start + size > view.byteLength) throw new ERR_BUFFER_OUT_OF_BOUNDS("length");
+  return view.subarray(start, start + size);
 }
 
 /**
@@ -642,32 +1157,43 @@ function sliceBuffer(buffer: unknown, offset: number, length: number): Buffer {
  */
 function toBufferList(data: unknown): Buffer[] {
   if (typeof data === "string") return [Buffer.from(data)];
-  if (Array.isArray(data)) {
-    return data.map((part) => {
-      if (typeof part === "string") return Buffer.from(part);
-      if (!ArrayBuffer.isView(part as ArrayBufferView)) {
+  if (isUnknownArray(data)) {
+    if (data.length === 0) return [Buffer.alloc(0)];
+    const buffers = new Array<Buffer>(data.length);
+    for (let index = 0; index < data.length; index++) {
+      const part = data[index];
+      if (typeof part === "string") {
+        buffers[index] = Buffer.from(part);
+        continue;
+      }
+      if (!ArrayBuffer.isView(part)) {
         throw new ERR_INVALID_ARG_TYPE(
           "buffer list arguments",
           ["Buffer", "TypedArray", "DataView", "string"],
-          part,
+          data,
         );
       }
-      return part as Buffer;
-    });
+      buffers[index] = bufferFromView(part);
+    }
+    return buffers;
   }
-  if (!ArrayBuffer.isView(data as ArrayBufferView)) {
-    throw new ERR_INVALID_ARG_TYPE(
-      "buffer",
-      ["Buffer", "TypedArray", "DataView", "string"],
-      data,
-    );
+  if (!ArrayBuffer.isView(data)) {
+    throw new ERR_INVALID_ARG_TYPE("buffer", ["Buffer", "TypedArray", "DataView", "string"], data);
   }
-  return [data as Buffer];
+  return [bufferFromView(data)];
 }
 
 export function createSocket(
-  type?: SocketOptions | "udp4" | "udp6",
+  type: "udp4" | "udp6",
+  listener?: (msg: Buffer, rinfo: RemoteInfo) => void,
+): Socket;
+export function createSocket(
+  type: SocketOptions,
+  listener?: (msg: Buffer, rinfo: RemoteInfo) => void,
+): Socket;
+export function createSocket(
+  type: SocketOptions | "udp4" | "udp6",
   listener?: (msg: Buffer, rinfo: RemoteInfo) => void,
 ): Socket {
-  return new Socket(type, listener);
+  return typeof type === "string" ? new Socket(type, listener) : new Socket(type, listener);
 }

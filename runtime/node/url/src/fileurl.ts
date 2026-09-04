@@ -118,20 +118,54 @@ export function fileURLToPath(path: string | URL, options?: FileUrlOptions): str
  * where it ends.
  */
 function encodePathChars(filepath: string, windows: boolean): string {
-  if (filepath.includes("%")) {
-    filepath = filepath.replaceAll("%", "%25");
+  let encoded = "";
+  for (const character of filepath) {
+    const code = character.codePointAt(0) ?? 0;
+    const unsafeAscii =
+      code <= 0x20 ||
+      code === 0x22 || // "
+      code === 0x23 || // #
+      code === 0x25 || // %
+      code === 0x3c || // <
+      code === 0x3e || // >
+      code === 0x3f || // ?
+      code === 0x5b || // [
+      code === 0x5d || // ]
+      code === 0x5e || // ^
+      code === 0x60 || // `
+      code === 0x7b || // {
+      code === 0x7c || // |
+      code === 0x7d || // }
+      code === 0x7e || // ~
+      code === 0x7f ||
+      (!windows && code === CHAR_BACKWARD_SLASH);
+    encoded += unsafeAscii
+      ? `%${code.toString(16).toUpperCase().padStart(2, "0")}`
+      : character;
   }
-  // A backslash is a separator on Windows and an ordinary character elsewhere,
-  // so only the non-Windows case escapes it.
-  if (!windows && filepath.includes("\\")) {
-    filepath = filepath.replaceAll("\\", "%5C");
+  return encoded;
+}
+
+/**
+ * Apply the URL parser's hostname-state rules to the server part of a UNC path.
+ *
+ * Node finds the resource boundary at the first backslash, then parses the
+ * preceding text as a URL hostname. `/`, `?`, and `#` end that hostname; any
+ * text between the terminator and the resource boundary is consequently not
+ * part of either the server or the resource. ASCII tab and newlines are ignored
+ * by URL parsing rather than percent-encoded.
+ */
+function normalizeUncHostname(input: string): string {
+  let hostname = "";
+  for (const character of input) {
+    if (character === "/" || character === "?" || character === "#") {
+      break;
+    }
+    if (character !== "\t" && character !== "\n" && character !== "\r") {
+      hostname += character;
+    }
   }
-  if (filepath.includes("\n")) filepath = filepath.replaceAll("\n", "%0A");
-  if (filepath.includes("\r")) filepath = filepath.replaceAll("\r", "%0D");
-  if (filepath.includes("\t")) filepath = filepath.replaceAll("\t", "%09");
-  if (filepath.includes("#")) filepath = filepath.replaceAll("#", "%23");
-  if (filepath.includes("?")) filepath = filepath.replaceAll("?", "%3F");
-  return filepath;
+  return hostname;
 }
 
 export function pathToFileURL(filepath: string, options?: FileUrlOptions): URL {
@@ -140,7 +174,11 @@ export function pathToFileURL(filepath: string, options?: FileUrlOptions): URL {
   const isUNC = windows && filepath.startsWith("\\\\");
   let resolved = isUNC ? filepath : (windows ? win32.resolve(filepath) : posix.resolve(filepath));
 
-  if (isUNC || (windows && resolved.startsWith("\\\\"))) {
+  const isExtendedLocalPath =
+    windows && resolved.startsWith("\\\\?\\") && !resolved.startsWith("\\\\?\\UNC\\");
+  if (isExtendedLocalPath) {
+    resolved = resolved.slice(4);
+  } else if (isUNC || (windows && resolved.startsWith("\\\\"))) {
     // `\\server\share\resource`, possibly with the extended `\\?\UNC\`
     // prefix, which names the same thing and is ignored.
     const isExtendedUNC = resolved.startsWith("\\\\?\\UNC\\");
@@ -149,10 +187,10 @@ export function pathToFileURL(filepath: string, options?: FileUrlOptions): URL {
     if (hostnameEndIndex === -1) {
       throw new ERR_INVALID_ARG_VALUE("path", resolved, "Missing UNC resource path");
     }
-    if (hostnameEndIndex === 2) {
+    const hostname = normalizeUncHostname(resolved.slice(prefixLength, hostnameEndIndex));
+    if (hostname === "") {
       throw new ERR_INVALID_ARG_VALUE("path", resolved, "Empty UNC servername");
     }
-    const hostname = resolved.slice(prefixLength, hostnameEndIndex);
     const rest = encodePathChars(resolved.slice(hostnameEndIndex), true).replaceAll("\\", "/");
     return new URL(`file://${hostname}${rest}`);
   }
@@ -180,7 +218,6 @@ export function urlToHttpOptions(url: URL): Record<string, unknown> {
   validateObject(url, "url");
   const { hostname, pathname, port, username, password, search } = url;
   const options: Record<string, unknown> = {
-    __proto__: null,
     protocol: url.protocol,
     // An IPv6 literal is bracketed in a URL and bare in a socket address.
     hostname: hostname && hostname[0] === "[" ? hostname.slice(1, -1) : hostname,

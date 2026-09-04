@@ -1,23 +1,43 @@
-# Each of these spawns a real `node` and asserts on what the child did. The
-# child is node running node's own `async_hooks`, so the assertion is about
-# node's binary; there is no way to install our module into a process we did
-# not start.
-#
-# The three stack-overflow files are worth naming precisely, because the thing
-# they test is real and we will want it later: that a `RangeError` from an
-# exhausted stack still reaches `uncaughtException` when hooks are enabled,
-# rather than aborting. It is untestable from here only because the overflow
-# has to happen in a process the test controls from the outside.
-test-async-hooks-fatal-error.js: spawns node to watch a throwing hook abort the child
-test-async-hooks-stack-overflow.js: spawns node to overflow its stack with hooks enabled
-test-async-hooks-stack-overflow-nested-async.js: spawns node, same, from nested async frames
-test-async-hooks-stack-overflow-try-catch.js: spawns node, same, inside a try/catch
-
-# These four run the whole test inside a `worker_threads` Worker, which is
-# node's thread running node's `async_hooks` from an `eval` string. Our module
-# is never loaded in there. They pass with this module blanked, which is what
-# gave them away.
-test-async-hooks-worker-asyncfn-terminate-1.js: runs in a node Worker, on node's async_hooks
-test-async-hooks-worker-asyncfn-terminate-2.js: runs in a node Worker, on node's async_hooks
-test-async-hooks-worker-asyncfn-terminate-3.js: runs in a node Worker, on node's async_hooks
-test-async-hooks-worker-asyncfn-terminate-4.js: runs in a node Worker, on node's async_hooks
+test-asyncresource-bind.js: language non-goal (§13); Node asserts deprecated asyncResource and observable length metadata on the returned function; supported binding behavior is covered by local/asyncresource-bind-static.js
+test-async-hooks-execution-async-resource-await.js: language non-goal (§13); setup uses util.promisify.custom on setTimeout; supported async-resource propagation through await and HTTP is covered by local/execution-async-resource-await.js
+test-async-hooks-fatal-error.js: host-binary subprocess; every assertion runs process.execPath without module substitution; our fatal hook path is covered by local/fatal-hook-errors.js
+test-async-hooks-run-in-async-scope-caught-exception.js: structurally hollow crash-only oracle; an absent AsyncResource throws inside the test's catch and still passes sabotage; supported exception propagation and context-stack restoration are covered by local/run-in-async-scope-caught-exception.js
+test-async-hooks-stack-overflow-nested-async.js: host-binary subprocess; the test runs only a fresh Node process and asserts V8 stack-overflow recovery rather than this module
+test-async-hooks-stack-overflow-try-catch.js: host-binary subprocess; the test runs only a fresh Node process and asserts V8 stack-overflow recovery rather than this module
+test-async-hooks-stack-overflow.js: host-binary subprocess; the test runs only a fresh Node process and asserts V8 uncaught-exception recovery rather than this module
+test-async-hooks-worker-asyncfn-terminate-1.js: host-worker isolate; the only async_hooks require is inside an eval Worker and reaches Node's builtin, while the outer test observes only worker exit
+test-async-hooks-worker-asyncfn-terminate-2.js: host-worker isolate; the only async_hooks require is inside an eval Worker and reaches Node's builtin, while the outer test observes only worker exit
+test-async-hooks-worker-asyncfn-terminate-3.js: host-worker isolate; the only async_hooks require is inside an eval Worker and reaches Node's builtin, while the outer test observes only worker exit
+test-async-hooks-worker-asyncfn-terminate-4.js: host-worker isolate; the only async_hooks require is inside an eval Worker and reaches Node's builtin, while the outer test observes only worker exit and a SharedArrayBuffer counter
+test-async-local-storage-run-scope.js: language non-goal (§13); most cases use explicit resource management through the runtime Symbol.dispose hook; supported withScope/dispose restoration is covered by local/run-scope-static.js
+test-http-agent-handle-reuse-parallel.js: language non-goal (§13); the assertions read Node-private Symbol-keyed async-id slots from Socket objects, which require dynamic property metadata rather than the supported public async_hooks API
+test-http-agent-handle-reuse-serial.js: language non-goal (§13); the assertions read Node-private Symbol-keyed async-id slots from Socket objects, including the internal idle sentinel, which is not representable on NTS fixed-layout objects
+test-async-hooks-http-agent.js: language non-goal (§13); the assertions read Node-private Symbol-keyed async-id slots from Socket objects and their internal idle sentinel rather than observing the public async_hooks event stream
+test-async-hooks-http-agent-destroy.js: language non-goal (§13); although it also watches destroy events, its test setup and identity oracle require Node-private Symbol-keyed Socket slots; public queued-request propagation remains covered by test-async-local-storage-http-agent.js
+async-hooks/test-improper-order.js: host-binary subprocess; the file recursively spawns process.execPath with itself and every actual stack-corruption assertion executes Node's builtin async_hooks outside module substitution
+async-hooks/test-improper-unwind.js: host-binary subprocess; the file recursively spawns process.execPath with itself and every actual stack-unwind assertion executes Node's builtin async_hooks outside module substitution
+async-hooks/test-emit-before-on-destroyed.js: host-binary subprocess; the asserted fatal path runs only in a process.execPath child that loads Node's builtin async_hooks
+async-hooks/test-emit-after-on-destroyed.js: host-binary subprocess; the asserted fatal path runs only in a process.execPath child that loads Node's builtin async_hooks
+async-hooks/test-embedder.api.async-resource-no-type.js: host-binary subprocess; the missing-provider-type assertion runs only in a process.execPath child that loads Node's builtin async_hooks
+async-hooks/test-callback-error.js: host-binary subprocess; its hook-error cases all run through spawnSync(process.execPath) and therefore exercise Node's builtin async_hooks rather than this profile
+async-hooks/test-async-wrap-providers.js: language non-goal (§13) and private binding oracle; it reads internalBinding('async_wrap').Providers, requires a null-prototype object, and asserts runtime immutability through Object.freeze semantics
+async-hooks/test-track-promises-false-check.js: private native-binding oracle; it inspects internalBinding('async_wrap').getPromiseHooks rather than public async_hooks behavior; public trackPromises:false behavior remains covered by test-track-promises-false.js
+async-hooks/test-filehandle-no-reuse.js: unavailable provider; all observed work is driven through node:http2 and its private FileHandle wrapping, while this profile has no http2 module
+async-hooks/test-crypto-pbkdf2.js: unavailable provider; it exclusively asserts PBKDF2REQUEST events emitted by node:crypto, for which this profile has no crypto module
+async-hooks/test-crypto-randomBytes.js: unavailable provider; it exclusively asserts RANDOMBYTESREQUEST events emitted by node:crypto, for which this profile has no crypto module
+async-hooks/test-getaddrinforeqwrap.js: unavailable provider; it exclusively asserts GETADDRINFOREQWRAP events emitted by node:dns, for which this profile has no dns module
+async-hooks/test-getnameinforeqwrap.js: unavailable provider; it exclusively asserts GETNAMEINFOREQWRAP events emitted by node:dns, for which this profile has no dns module
+async-hooks/test-querywrap.js: unavailable provider; it exclusively asserts QUERYWRAP events emitted by node:dns, for which this profile has no dns module
+async-hooks/test-pipewrap.js: unavailable provider; it exclusively observes PROCESSWRAP and PIPEWRAP resources created by node:child_process, for which this profile has no child_process module
+async-hooks/test-graph.pipe.js: unavailable provider; its entire graph consists of PROCESSWRAP and PIPEWRAP resources created by node:child_process, for which this profile has no child_process module
+async-hooks/test-signalwrap.js: unavailable provider; it exclusively observes SIGNALWRAP resources created by Node's native process signal machinery, which this profile does not implement
+async-hooks/test-graph.signal.js: unavailable providers; its graph is composed of Node-native SIGNALWRAP plus child_process PROCESSWRAP/PIPEWRAP resources, none of which this profile implements
+async-hooks/test-async-local-storage-tlssocket.js: unavailable provider; the asynchronous boundary under test is node:tls, for which this profile has no tls module
+async-hooks/test-graph.tls-write.js: unavailable provider; the asserted graph requires node:tls TLSWRAP resources, and this profile has no tls module
+async-hooks/test-graph.tls-write-12.js: unavailable provider; this TLS 1.2 wrapper executes test-graph.tls-write.js, whose graph requires node:tls resources absent from this profile
+async-hooks/test-tlswrap.js: unavailable provider; it exclusively asserts TLSWRAP events emitted by node:tls, for which this profile has no tls module
+async-hooks/test-ttywrap.readstream.js: unavailable provider; it exclusively asserts Node-native TTYWRAP events from process.stdin, and the profile's stdio seam does not implement a TTY async resource
+async-hooks/test-zlib.zlib-binding.deflate.js: private unavailable provider; it constructs internalBinding('zlib').Zlib directly and asserts that native handle's ZLIB events rather than the public node:zlib surface
+async-hooks/test-destroy-not-blocked.js: host finalizer-timing mismatch; its threshold assertion requires V8 weak callbacks to enqueue over 16,384 promise destroys synchronously inside global.gc(), while the node-side native stand-in can only receive FinalizationRegistry callbacks on a later turn; deterministic priority and threshold behavior is covered by local/destroy-priority-static.js
+async-hooks/test-async-await.js: language non-goal (§13); its only timer boundary is constructed through util.promisify(setTimeout), which requires the runtime Symbol.promisify.custom operation hook; promise-hook balance across await remains covered by the other promise and AsyncLocalStorage async-await tests
+async-hooks/test-httpparser-reuse.js: language non-goal (§13); its reuse oracle writes and reads a fresh Symbol-keyed property on every parser resource; parser identity and destroy behavior remain covered by the direct HTTP parser tests and test-async-hooks-http-parser-destroy.js

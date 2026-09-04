@@ -5,6 +5,8 @@
 // `node:test` reports durations the same way, and the format is specified once
 // so that two subsystems cannot drift apart in how they print `1.500s`.
 
+import { emitWarning } from "./process-warning.ts";
+
 /** Monotonic nanoseconds. A duration measured with a wall clock is not one. */
 declare function nts_hrtime_ns(): bigint;
 
@@ -44,9 +46,12 @@ export function formatTime(ms: number): string {
   if (hours !== 0 || minutes !== 0) {
     // `toFixed` first, so that 59.9995 seconds reads as `1:00.000` in both
     // halves rather than `0:59.1000`.
-    const [wholeSeconds, millis] = seconds.toFixed(3).split(".");
+    const fixed = seconds.toFixed(3);
+    const decimal = fixed.indexOf(".");
+    const wholeSeconds = decimal === -1 ? fixed : fixed.slice(0, decimal);
+    const millis = decimal === -1 ? "000" : fixed.slice(decimal + 1);
     const head = hours !== 0 ? `${hours}:${pad(minutes)}` : String(minutes);
-    return `${head}:${pad(wholeSeconds!)}.${millis} (${hours !== 0 ? "h:m" : ""}m:ss.mmm)`;
+    return `${head}:${pad(wholeSeconds)}.${millis} (${hours !== 0 ? "h:m" : ""}m:ss.mmm)`;
   }
 
   if (seconds !== 0) {
@@ -60,11 +65,7 @@ export function formatTime(ms: number): string {
 /** What a started timer records. Monotonic, so a clock change cannot skew it. */
 export type Timestamp = bigint;
 
-export function now(): Timestamp {
-  return nts_hrtime_ns();
-}
-
-declare function nts_process_emit_warning(message: string, name: string, code: string): void;
+export const now: () => Timestamp = nts_hrtime_ns;
 
 /** A label started twice is a mistake worth reporting, and the second start is ignored. */
 export function time(
@@ -73,7 +74,7 @@ export function time(
   label: string,
 ): void {
   if (times.has(label)) {
-    nts_process_emit_warning(`Label '${label}' already exists for ${implementation}`, "Warning", "");
+    emitWarning(`Label '${label}' already exists for ${implementation}`, "Warning", "");
     return;
   }
   times.set(label, now());
@@ -91,7 +92,7 @@ function timeLogImpl(
 ): boolean {
   const started = times.get(label);
   if (started === undefined) {
-    nts_process_emit_warning(`No such label '${label}' for ${implementation}`, "Warning", "");
+    emitWarning(`No such label '${label}' for ${implementation}`, "Warning", "");
     return false;
   }
   log(label, formatTime(Number(now() - started) / 1e6), args);

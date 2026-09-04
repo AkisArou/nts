@@ -56,11 +56,6 @@ NtsString *nts_os_type(void) {
     return uname_into(&u) == 0 ? utf8(u.sysname) : utf8("");
 }
 
-NtsString *nts_os_release(void) {
-    uv_utsname_t u;
-    return uname_into(&u) == 0 ? utf8(u.release) : utf8("");
-}
-
 NtsString *nts_os_version(void) {
     uv_utsname_t u;
     return uname_into(&u) == 0 ? utf8(u.version) : utf8("");
@@ -173,44 +168,51 @@ NtsArray *nts_os_loadavg(void) {
 
 /* -------------------------------------------------------------------- cpus */
 
-NtsArray *nts_os_cpu_models(void) {
-    uv_cpu_info_t *infos = NULL;
-    int count = 0;
-    if (uv_cpu_info(&infos, &count) != 0) return string_array(NULL, 0);
-    NtsArray *a = nts_array_new(&nts_desc_ref, (double)count);
-    for (int i = 0; i < count; i++) {
-        NTS_ITEMS(a, void *)[i] = utf8(infos[i].model);
+/* `cpus()` reads these three columns consecutively. Keep one libuv snapshot
+ * across them: CPU speed can change between calls, and three independent
+ * `uv_cpu_info` allocations would be both inconsistent and unnecessary. */
+static uv_cpu_info_t *cpu_infos = NULL;
+static int cpu_count = 0;
+
+static int refresh_cpus(void) {
+    if (cpu_infos) {
+        uv_free_cpu_info(cpu_infos, cpu_count);
+        cpu_infos = NULL;
+        cpu_count = 0;
     }
-    uv_free_cpu_info(infos, count);
+    return uv_cpu_info(&cpu_infos, &cpu_count);
+}
+
+NtsArray *nts_os_cpu_models(void) {
+    if (refresh_cpus() != 0) return string_array(NULL, 0);
+    NtsArray *a = nts_array_new(&nts_desc_ref, (double)cpu_count);
+    for (int i = 0; i < cpu_count; i++) {
+        NTS_ITEMS(a, void *)[i] = utf8(cpu_infos[i].model);
+    }
     return a;
 }
 
 NtsArray *nts_os_cpu_speeds(void) {
-    uv_cpu_info_t *infos = NULL;
-    int count = 0;
-    if (uv_cpu_info(&infos, &count) != 0) return number_array(NULL, 0);
-    NtsArray *a = nts_array_new(&nts_desc_double, (double)count);
-    for (int i = 0; i < count; i++) {
-        NTS_ITEMS(a, double)[i] = (double)infos[i].speed;
+    NtsArray *a = nts_array_new(&nts_desc_double, (double)cpu_count);
+    for (int i = 0; i < cpu_count; i++) {
+        NTS_ITEMS(a, double)[i] = (double)cpu_infos[i].speed;
     }
-    uv_free_cpu_info(infos, count);
     return a;
 }
 
 NtsArray *nts_os_cpu_times(void) {
-    uv_cpu_info_t *infos = NULL;
-    int count = 0;
-    if (uv_cpu_info(&infos, &count) != 0) return number_array(NULL, 0);
-    NtsArray *a = nts_array_new(&nts_desc_double, (double)(count * 5));
-    for (int i = 0; i < count; i++) {
+    NtsArray *a = nts_array_new(&nts_desc_double, (double)(cpu_count * 5));
+    for (int i = 0; i < cpu_count; i++) {
         double *at = &NTS_ITEMS(a, double)[i * 5];
-        at[0] = (double)infos[i].cpu_times.user;
-        at[1] = (double)infos[i].cpu_times.nice;
-        at[2] = (double)infos[i].cpu_times.sys;
-        at[3] = (double)infos[i].cpu_times.idle;
-        at[4] = (double)infos[i].cpu_times.irq;
+        at[0] = (double)cpu_infos[i].cpu_times.user;
+        at[1] = (double)cpu_infos[i].cpu_times.nice;
+        at[2] = (double)cpu_infos[i].cpu_times.sys;
+        at[3] = (double)cpu_infos[i].cpu_times.idle;
+        at[4] = (double)cpu_infos[i].cpu_times.irq;
     }
-    uv_free_cpu_info(infos, count);
+    if (cpu_infos) uv_free_cpu_info(cpu_infos, cpu_count);
+    cpu_infos = NULL;
+    cpu_count = 0;
     return a;
 }
 
@@ -229,7 +231,9 @@ static void refresh_interfaces(void) {
         interfaces = NULL;
         interface_count = 0;
     }
-    if (uv_interface_addresses(&interfaces, &interface_count) != 0) {
+    int err = uv_interface_addresses(&interfaces, &interface_count);
+    nts_node_set_errno(err);
+    if (err != 0) {
         interfaces = NULL;
         interface_count = 0;
     }
@@ -309,8 +313,12 @@ static uv_passwd_t passwd;
 
 static const uv_passwd_t *user(void) {
     if (!passwd_loaded) {
-        if (uv_os_get_passwd(&passwd) != 0) return NULL;
+        int err = uv_os_get_passwd(&passwd);
+        nts_node_set_errno(err);
+        if (err != 0) return NULL;
         passwd_loaded = 1;
+    } else {
+        nts_node_set_errno(0);
     }
     return &passwd;
 }

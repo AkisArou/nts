@@ -9,9 +9,8 @@ declare function nts_uv_err_name(code: number): string;
 declare function nts_uv_err_message(code: number): string;
 
 /** libuv's name for a negative errno: `-2` is `ENOENT`. */
-export function errName(code: number): string {
-  return nts_uv_err_name(code);
-}
+export const errName = nts_uv_err_name;
+export const errMessage = nts_uv_err_message;
 
 /**
  * The exception every failing `fs` call throws.
@@ -28,6 +27,34 @@ export interface UVError extends Error {
   syscall: string;
   path?: string;
   dest?: string;
+  filename?: string;
+}
+
+/** Static representation of Node's Error-with-libuv-fields shape. */
+class UVExceptionError extends Error implements UVError {
+  code: string;
+  errno: number;
+  syscall: string;
+  path?: string;
+  dest?: string;
+  filename?: string;
+
+  constructor(
+    message: string,
+    code: string,
+    errno: number,
+    syscall: string,
+    path?: string,
+    dest?: string,
+  ) {
+    super(message);
+    this.code = code;
+    this.errno = errno;
+    this.syscall = syscall;
+    this.path = path;
+    this.dest = dest;
+    this.filename = undefined;
+  }
 }
 
 export function uvException(
@@ -46,17 +73,7 @@ export function uvException(
     message += ` -> '${dest}'`;
   }
 
-  const error = new Error(message) as UVError;
-  error.code = name;
-  error.errno = code;
-  error.syscall = syscall;
-  if (path !== undefined) {
-    error.path = path;
-  }
-  if (dest !== undefined) {
-    error.dest = dest;
-  }
-  return error;
+  return new UVExceptionError(message, name, code, syscall, path, dest);
 }
 
 /**
@@ -77,11 +94,143 @@ export function uvException(
  */
 export function errnoException(code: number, syscall: string): UVError {
   const name = nts_uv_err_name(code);
-  const error = new Error(`${name}, ${nts_uv_err_message(code)}`) as UVError;
-  error.code = name;
-  error.errno = code;
-  error.syscall = syscall;
-  return error;
+  return new UVExceptionError(
+    `${name}, ${nts_uv_err_message(code)}`,
+    name,
+    code,
+    syscall,
+  );
+}
+
+/** The closed context carried by Node's `SystemError`. */
+export interface SystemErrorInfo {
+  errno: number;
+  code: string;
+  message: string;
+  syscall: string;
+  path?: string;
+  dest?: string;
+}
+
+/**
+ * A failed libuv operation reported through Node's `ERR_SYSTEM_ERROR` shape.
+ *
+ * Node installs `errno` and `syscall` as accessors onto a dynamic Error
+ * object. NTS has fixed layouts, so these are ordinary typed fields referring
+ * to the same values also retained in `info`.
+ */
+export interface SystemError extends Error {
+  readonly code: "ERR_SYSTEM_ERROR";
+  readonly info: SystemErrorInfo;
+  errno: number;
+  syscall: string;
+}
+
+class SystemErrorException extends Error implements SystemError {
+  readonly code = "ERR_SYSTEM_ERROR";
+  readonly info: SystemErrorInfo;
+  errno: number;
+  syscall: string;
+
+  constructor(errno: number, syscall: string, path?: string, dest?: string) {
+    const code = nts_uv_err_name(errno);
+    const description = nts_uv_err_message(errno);
+    let message = `A system error occurred: ${syscall} returned ${code} (${description})`;
+    if (path !== undefined) message += ` ${path}`;
+    if (dest !== undefined) message += ` => ${dest}`;
+    super(message);
+    this.name = "SystemError";
+    this.errno = errno;
+    this.syscall = syscall;
+    this.info = {
+      errno,
+      code,
+      message: description,
+      syscall,
+      path,
+      dest,
+    };
+  }
+
+  override toString(): string {
+    return `${this.name} [${this.code}]: ${this.message}`;
+  }
+}
+
+/** Build the error used by `node:os` when one of its libuv calls fails. */
+export function systemError(
+  errno: number,
+  syscall: string,
+  path?: string,
+  dest?: string,
+): SystemError {
+  return new SystemErrorException(errno, syscall, path, dest);
+}
+
+/** The fixed-layout form of dgram's `ERR_SOCKET_BUFFER_SIZE`. */
+export interface SocketBufferSystemError extends Error {
+  readonly code: "ERR_SOCKET_BUFFER_SIZE";
+  readonly info: SystemErrorInfo;
+  errno: number;
+  syscall: string;
+}
+
+const SocketBufferSystemErrorClass = class SystemError
+  extends Error
+  implements SocketBufferSystemError
+{
+  readonly code = "ERR_SOCKET_BUFFER_SIZE";
+  readonly info: SystemErrorInfo;
+  errno: number;
+  syscall: string;
+
+  constructor(errno: number, receive: boolean) {
+    const code = nts_uv_err_name(errno);
+    const description = nts_uv_err_message(errno);
+    const syscall = `uv_${receive ? "recv" : "send"}_buffer_size`;
+    super(
+      `Could not get or set buffer size: ${syscall} returned ${code} (${description})`,
+    );
+    this.name = "SystemError";
+    this.errno = errno;
+    this.syscall = syscall;
+    this.info = { errno, code, message: description, syscall };
+  }
+
+  override toString(): string {
+    return `${this.name} [${this.code}]: ${this.message}`;
+  }
+};
+
+export function socketBufferError(errno: number, receive: boolean): SocketBufferSystemError {
+  return new SocketBufferSystemErrorClass(errno, receive);
+}
+
+/** Static representation of Node's DNSException error shape. */
+class DNSExceptionError extends Error implements UVError {
+  code: string;
+  errno: number;
+  syscall: string;
+  hostname?: string;
+
+  constructor(code: number, syscall: string, hostname?: string) {
+    const systemName = nts_uv_err_name(code);
+    const publicCode = systemName === "EAI_NODATA" || systemName === "EAI_NONAME"
+      ? "ENOTFOUND"
+      : systemName;
+    super(`${syscall} ${publicCode}${hostname === undefined ? "" : ` ${hostname}`}`);
+    this.code = publicCode;
+    this.errno = code;
+    this.syscall = syscall;
+    this.hostname = hostname;
+  }
+
+  override get ["constructor"](): unknown { return Error; }
+}
+
+/** A name-resolution failure, including Node's historical ENOTFOUND mapping. */
+export function dnsException(code: number, syscall: string, hostname?: string): UVError {
+  return new DNSExceptionError(code, syscall, hostname);
 }
 
 export interface UVHostPortError extends Error {
@@ -90,6 +239,31 @@ export interface UVHostPortError extends Error {
   syscall: string;
   address?: string;
   port?: number;
+}
+
+/** Static representation of Node's address-bearing libuv error shape. */
+class UVAddressError extends Error implements UVHostPortError {
+  code: string;
+  errno: number;
+  syscall: string;
+  address?: string;
+  port?: number;
+
+  constructor(
+    message: string,
+    code: string,
+    errno: number,
+    syscall: string,
+    address?: string,
+    port?: number,
+  ) {
+    super(message);
+    this.code = code;
+    this.errno = errno;
+    this.syscall = syscall;
+    this.address = address;
+    this.port = port;
+  }
 }
 
 /**
@@ -123,11 +297,34 @@ export function exceptionWithHostPort(
   if (port !== undefined && port > 0) details = ` ${address}:${port}`;
   else if (address) details = ` ${address}`;
 
-  const error = new Error(`${syscall} ${name}${details}`) as UVHostPortError;
-  error.code = name;
-  error.errno = code;
-  error.syscall = syscall;
-  if (address !== undefined) error.address = address;
-  if (port !== undefined && port > 0) error.port = port;
-  return error;
+  return new UVAddressError(
+    `${syscall} ${name}${details}`,
+    name,
+    code,
+    syscall,
+    address,
+    port !== undefined && port > 0 ? port : undefined,
+  );
+}
+
+/** The newer libuv address error form used by listen failures. */
+export function exceptionWithHostPortDescription(
+  code: number,
+  syscall: string,
+  address?: string,
+  port?: number,
+): UVHostPortError {
+  const name = nts_uv_err_name(code);
+  let details = "";
+  if (port !== undefined && port > 0) details = ` ${address}:${port}`;
+  else if (address) details = ` ${address}`;
+
+  return new UVAddressError(
+    `${syscall} ${name}: ${nts_uv_err_message(code)}${details}`,
+    name,
+    code,
+    syscall,
+    address,
+    port !== undefined && port > 0 ? port : undefined,
+  );
 }

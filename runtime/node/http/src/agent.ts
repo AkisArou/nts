@@ -18,7 +18,11 @@
 import { EventEmitter } from "../../events/src/main.ts";
 import { Socket, connect as netConnect } from "../../net/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
-import { kAsyncId } from "../../internal/async-hooks.ts";
+import { AsyncResource } from "../../async_hooks/src/resource.ts";
+
+interface SocketReceiver {
+  onSocket(socket: Socket): void;
+}
 
 export interface AgentOptions {
   /** Keep idle sockets for reuse. Off by default, as node's is. */
@@ -34,7 +38,8 @@ export interface AgentOptions {
 
 interface Pending {
   options: { host: string; port: number };
-  callback: (error: unknown, socket?: Socket) => void;
+  request: SocketReceiver;
+  resource: AsyncResource;
 }
 
 export class Agent extends EventEmitter {
@@ -46,11 +51,11 @@ export class Agent extends EventEmitter {
   options: AgentOptions;
 
   /** In use, by `host:port`. */
-  sockets: Record<string, Socket[]> = Object.create(null) as Record<string, Socket[]>;
+  sockets: Record<string, Socket[]> = {};
   /** Idle and reusable, by the same key. */
-  freeSockets: Record<string, Socket[]> = Object.create(null) as Record<string, Socket[]>;
+  freeSockets: Record<string, Socket[]> = {};
   /** Waiting for a socket because the host is at `maxSockets`. */
-  requests: Record<string, Pending[]> = Object.create(null) as Record<string, Pending[]>;
+  requests: Record<string, Pending[]> = {};
 
   constructor(options: AgentOptions = {}) {
     super();
@@ -81,7 +86,7 @@ export class Agent extends EventEmitter {
 
   /** Give `request` a socket, now or when one comes free. */
   addRequest(
-    request: { onSocket(socket: Socket): void },
+    request: SocketReceiver,
     options: { host?: string; port?: number },
   ): void {
     const host = options.host ?? "localhost";
@@ -100,6 +105,7 @@ export class Agent extends EventEmitter {
         // new identity. Keeping the old one would attribute this request to
         // whichever request happened to release the socket.
         socket.asyncReset();
+        this.reuseSocket(socket, request);
         (this.sockets[name] ??= []).push(socket);
         nextTick(() => request.onSocket(socket));
         return;
@@ -113,9 +119,11 @@ export class Agent extends EventEmitter {
       // the program cannot see or act on.
       (this.requests[name] ??= []).push({
         options: { host, port },
-        callback: (_error, socket) => {
-          if (socket) request.onSocket(socket);
-        },
+        request,
+        // The socket becomes available from a different request's callback.
+        // This explicit resource carries the queuing request's identity and
+        // AsyncLocalStorage frame across that gap.
+        resource: new AsyncResource("QueuedRequest", { requireManualDestroy: true }),
       });
       return;
     }
@@ -161,20 +169,35 @@ export class Agent extends EventEmitter {
     // free list and taking it out again.
     const waiting = this.requests[name];
     if (waiting && waiting.length > 0 && reusable && !socket.destroyed) {
-      const next = waiting.shift() as Pending;
+      const next = waiting.shift();
+      if (next === undefined) return;
       if (waiting.length === 0) delete this.requests[name];
-      (this.sockets[name] ??= []).push(socket);
-      next.callback(null, socket);
+      try {
+        next.resource.runInAsyncScope(() => {
+          socket.asyncReset();
+          (this.sockets[name] ??= []).push(socket);
+          next.request.onSocket(socket);
+        });
+      } finally {
+        next.resource.emitDestroy();
+      }
       return;
     }
 
     if (waiting && waiting.length > 0) {
-      const next = waiting.shift() as Pending;
+      const next = waiting.shift();
+      if (next === undefined) return;
       if (waiting.length === 0) delete this.requests[name];
-      const replacement = this.createConnection(next.options);
-      (this.sockets[name] ??= []).push(replacement);
-      replacement.once("close", () => this.#release(name, replacement, false));
-      next.callback(null, replacement);
+      try {
+        next.resource.runInAsyncScope(() => {
+          const replacement = this.createConnection(next.options);
+          (this.sockets[name] ??= []).push(replacement);
+          replacement.once("close", () => this.#release(name, replacement, false));
+          next.request.onSocket(replacement);
+        });
+      } finally {
+        next.resource.emitDestroy();
+      }
       return;
     }
 
@@ -189,10 +212,10 @@ export class Agent extends EventEmitter {
       return;
     }
     free.push(socket);
-    // Idle in the pool, belonging to no request. Node marks it -1 rather than
-    // leaving the finished request's id on it, so that anything reading the
-    // socket's id sees "not currently anyone's" instead of a stale answer.
-    (socket as unknown as Record<symbol, number>)[kAsyncId] = -1;
+    // Idle in the pool, belonging to no request. The next acquisition calls
+    // `asyncReset()` before handing it out, so no request observes stale
+    // identity or context. Node's additional Symbol mirror is internal
+    // metaobject state and is deliberately not part of the typed socket.
     this.keepSocketAlive(socket);
   }
 

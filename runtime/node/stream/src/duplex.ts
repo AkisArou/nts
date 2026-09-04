@@ -7,19 +7,52 @@
 // are tied together.
 //
 // JavaScript has single inheritance, so node builds this by inheriting from
-// `Readable` and copying `Writable`'s prototype across. That looks like a
-// hack and is the right call: the alternative is a second implementation of
-// every writable method, and two implementations of one rule drift. The same
-// choice is made here, with an interface declaration so the copied members are
-// visible to the type checker rather than merely present at runtime.
+// `Readable` and copying `Writable`'s prototype across. NTS has a closed,
+// statically compiled object model: prototype copying is unavailable and
+// would throw away exactly the type information the compiler can exploit.
+// The writable algorithms therefore accept the explicit structural contract
+// implemented by both classes, while this class declares its public surface
+// normally.
 
+import { Buffer } from "../../buffer/src/main.ts";
+import {
+  ERR_METHOD_NOT_IMPLEMENTED,
+  ERR_STREAM_ALREADY_FINISHED,
+  ERR_STREAM_DESTROYED,
+  ERR_STREAM_WRITE_AFTER_END,
+  ERR_UNKNOWN_ENCODING,
+} from "../../internal/errors.ts";
+import { nextTick } from "../../internal/tick.ts";
 import { Readable, ReadableState, onReadableConstructed } from "./readable.ts";
-import { Writable, WritableState, onWritableConstructed } from "./writable.ts";
+import {
+  WritableState,
+  clearBuffer,
+  errorBuffer,
+  finishMaybe,
+  isWriteCallback,
+  onWritableConstructed,
+  writeToWritable,
+} from "./writable.ts";
 import type { ReadableOptions } from "./readable.ts";
-import type { WritableOptions, WriteCallback } from "./writable.ts";
+import type {
+  BufferedWrite,
+  WritableOptions,
+  WriteCallback,
+} from "./writable.ts";
 import { construct, destroy } from "./destroy.ts";
-import type { DestroyableStream } from "./destroy.ts";
 import { addAbortSignalNoValidate } from "./add-abort-signal.ts";
+import { captureRejectionSymbol } from "../../events/src/main.ts";
+
+const duplexEventShape = [
+  "close",
+  "error",
+  "prefinish",
+  "finish",
+  "drain",
+  "data",
+  "end",
+  "readable",
+];
 
 export interface DuplexOptions extends ReadableOptions, WritableOptions {
   /** Keep the readable side open after the writable side ends. Default true. */
@@ -30,38 +63,14 @@ export interface DuplexOptions extends ReadableOptions, WritableOptions {
   writable?: boolean | undefined;
 }
 
-/**
- * What `Writable`'s prototype contributes, copied on below.
- *
- * Written out rather than derived with `Pick`, because `Pick` turns a method
- * into a property of function type and a subclass may then not override it
- * with a method -- which `Transform` does, for `_write`.
- */
-interface WritableSide {
-  write(chunk: unknown, encoding?: string | WriteCallback | null, callback?: WriteCallback): boolean;
-  end(chunk?: unknown, encoding?: string | WriteCallback | null, callback?: WriteCallback): this;
-  cork(): void;
-  uncork(): void;
-  setDefaultEncoding(encoding: string): this;
-  _write(chunk: unknown, encoding: string, callback: WriteCallback): void;
-  _writev: ((chunks: never, callback: WriteCallback) => void) | null;
-  _final?(callback: WriteCallback): void;
-  readonly writable: boolean;
-  readonly writableFinished: boolean;
-  readonly writableObjectMode: boolean;
-  readonly writableBuffer: unknown;
-  readonly writableEnded: boolean;
-  readonly writableNeedDrain: boolean;
-  readonly writableHighWaterMark: number | undefined;
-  readonly writableCorked: number;
-  readonly writableLength: number | undefined;
-  readonly writableAborted: boolean;
+/** Optional vector hook installed by constructor options or a subclass. */
+export interface Duplex {
+  _writev?(chunks: BufferedWrite[], callback: WriteCallback): void;
 }
-
-export interface Duplex extends WritableSide {}
 
 export class Duplex extends Readable {
   _writableState: WritableState;
+  _final?(callback: WriteCallback): void;
 
   /**
    * Whether the readable side survives the writable side ending.
@@ -74,12 +83,19 @@ export class Duplex extends Readable {
 
   constructor(options?: DuplexOptions) {
     super();
+    this._initializeEventShape(duplexEventShape);
+    this._configureCaptureRejections(options?.captureRejections);
+    if (options?.captureRejections === true) {
+      this[captureRejectionSymbol] = (error: unknown): void => {
+        this.destroy(error);
+      };
+    }
 
     // Both states are built with `isDuplex` set, which is what makes
     // `readableHighWaterMark` and `writableHighWaterMark` mean anything: on a
     // one-sided stream they are keys that do nothing.
     this._readableState = new ReadableState(options, this, true);
-    this._writableState = new WritableState(options, this as unknown as Writable, true);
+    this._writableState = new WritableState(options, this, true);
 
     if (options) {
       this.allowHalfOpen = options.allowHalfOpen !== false;
@@ -101,9 +117,9 @@ export class Duplex extends Readable {
       }
 
       if (typeof options.read === "function") this._read = options.read;
-      if (typeof options.write === "function") this._write = options.write as never;
+      if (typeof options.write === "function") this._write = options.write;
       if (typeof options.writev === "function") this._writev = options.writev;
-      if (typeof options.destroy === "function") this._destroy = options.destroy as never;
+      if (typeof options.destroy === "function") this._destroy = options.destroy;
       if (typeof options.final === "function") this._final = options.final;
       if (typeof options.construct === "function") this._construct = options.construct;
       if (options.signal) addAbortSignalNoValidate(options.signal, this);
@@ -111,9 +127,9 @@ export class Duplex extends Readable {
 
     if (this._construct != null) {
       // Both sides, because a duplex constructs once for the pair.
-      construct(this as unknown as DestroyableStream, () => {
+      construct(this, () => {
         onReadableConstructed(this);
-        onWritableConstructed(this as unknown as Writable);
+        onWritableConstructed(this);
       });
     }
   }
@@ -137,33 +153,175 @@ export class Duplex extends Readable {
   }
 
   override destroy(error?: unknown, callback?: WriteCallback): this {
-    // `Writable`'s, because it flushes the pending write callbacks first --
-    // a duplex torn down mid-write has callers waiting on both sides.
-    Writable.prototype.destroy.call(this as unknown as Writable, error, callback);
+    const state = this._writableState;
+    if ((state.buffered.length > 0 || state.onfinishCallbacks) && !state.destroyed) {
+      nextTick(errorBuffer, state);
+    }
+    destroy(this, error, callback);
     return this;
   }
 
-  static from(body: unknown): Duplex {
+  write(
+    chunk: unknown,
+    encoding?: string | WriteCallback | null,
+    callback?: WriteCallback,
+  ): boolean {
+    if (isWriteCallback(encoding)) {
+      callback = encoding;
+      encoding = null;
+    }
+    return writeToWritable(this, chunk, encoding ?? null, callback) === true;
+  }
+
+  _write(chunk: unknown, encoding: string | undefined, callback: WriteCallback): void {
+    if (this._writev !== undefined) {
+      this._writev([{ chunk, encoding, callback: ignoreWrite }], callback);
+      return;
+    }
+    throw new ERR_METHOD_NOT_IMPLEMENTED("_write()");
+  }
+
+  _writeAfterEndError(): Error {
+    return new ERR_STREAM_WRITE_AFTER_END();
+  }
+
+  cork(): void {
+    this._writableState.corked++;
+  }
+
+  uncork(): void {
+    const state = this._writableState;
+    if (state.corked > 0) {
+      state.corked--;
+      if (!state.writing) clearBuffer(this, state);
+    }
+  }
+
+  setDefaultEncoding(encoding: string): this {
+    const normalized = encoding.toLowerCase();
+    if (!Buffer.isEncoding(normalized)) throw new ERR_UNKNOWN_ENCODING(normalized);
+    this._writableState.defaultEncoding = normalized;
+    return this;
+  }
+
+  end(
+    chunk?: unknown,
+    encoding?: string | WriteCallback | null,
+    callback?: WriteCallback,
+  ): this {
+    if (isWriteCallback(chunk)) {
+      callback = chunk;
+      chunk = null;
+      encoding = null;
+    } else if (isWriteCallback(encoding)) {
+      callback = encoding;
+      encoding = null;
+    }
+
+    const state = this._writableState;
+    let error: unknown;
+    if (chunk != null) {
+      const result = writeToWritable(this, chunk, encoding ?? null);
+      if (result instanceof Error) error = result;
+    }
+
+    if (state.corked > 0) {
+      state.corked = 1;
+      this.uncork();
+    }
+
+    if (error) {
+      // The rejected write reports through the callback below.
+    } else if (!state.ending && !state.errored) {
+      state.ending = true;
+      finishMaybe(this, state, true);
+      state.ended = true;
+    } else if (state.finished) {
+      error = new ERR_STREAM_ALREADY_FINISHED("end");
+    } else if (state.destroyed) {
+      error = new ERR_STREAM_DESTROYED("end");
+    }
+
+    if (callback !== undefined) {
+      if (error) nextTick(callback, error);
+      else if (state.errored) nextTick(callback, state.errored);
+      else if (state.finished) nextTick(callback, null);
+      else (state.onfinishCallbacks ??= []).push(callback);
+    }
+    return this;
+  }
+
+  override get closed(): boolean {
+    return this._writableState.closed;
+  }
+
+  get writable(): boolean {
+    const state = this._writableState;
+    return state.writable !== false &&
+      !state.ending &&
+      !state.ended &&
+      !state.destroyed &&
+      !state.errored;
+  }
+
+  set writable(value: boolean) {
+    this._writableState.writable = value;
+    this._writableState.hasWritable = true;
+  }
+
+  get writableFinished(): boolean {
+    return this._writableState.finished;
+  }
+
+  get writableObjectMode(): boolean {
+    return this._writableState.objectMode;
+  }
+
+  get writableBuffer(): BufferedWrite[] {
+    return this._writableState.getBuffer();
+  }
+
+  get writableEnded(): boolean {
+    return this._writableState.ending;
+  }
+
+  get writableNeedDrain(): boolean {
+    const state = this._writableState;
+    return !state.destroyed && !state.ending && state.needDrain;
+  }
+
+  get writableHighWaterMark(): number {
+    return this._writableState.highWaterMark;
+  }
+
+  get writableCorked(): number {
+    return this._writableState.corked;
+  }
+
+  get writableLength(): number {
+    return this._writableState.length;
+  }
+
+  override get errored(): unknown {
+    return this._writableState.errored;
+  }
+
+  get writableAborted(): boolean {
+    const state = this._writableState;
+    return !(state.hasWritable && state.writable) &&
+      Boolean(state.destroyed || state.errored) &&
+      !state.finished;
+  }
+
+  static override from(body: unknown): Duplex {
     // Assigned by `duplexify.ts` once it is loaded, to avoid a cycle: making
     // a duplex out of arbitrary things needs `Duplex` itself.
     return duplexifyImpl(body, "body");
   }
+
 }
 
-// The writable half, installed once. Only the members `Duplex` does not
-// define itself: its own `destroy` and `destroyed` are deliberately different,
-// and `pipe` belongs to the readable side.
-{
-  const own = Object.getOwnPropertyNames(Writable.prototype);
-  for (const name of own) {
-    if (name === "constructor" || name === "destroy" || name === "destroyed" || name === "pipe") {
-      continue;
-    }
-    if (Object.prototype.hasOwnProperty.call(Duplex.prototype, name)) continue;
-    const descriptor = Object.getOwnPropertyDescriptor(Writable.prototype, name);
-    if (descriptor) Object.defineProperty(Duplex.prototype, name, descriptor);
-  }
-}
+function ignoreWrite(): void {}
 
 /**
  * `Duplex.from`, supplied by `duplexify.ts`.

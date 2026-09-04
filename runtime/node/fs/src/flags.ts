@@ -11,7 +11,8 @@
 // on nothing but the constants, and it was only in `main.ts` because that is
 // where it was first written.
 
-import { ERR_INVALID_ARG_TYPE } from "../../internal/errors.ts";
+import { ERR_INVALID_ARG_VALUE } from "../../internal/errors.ts";
+import { validateInteger } from "../../internal/validators.ts";
 import * as constants from "./constants.ts";
 
 /**
@@ -26,28 +27,28 @@ import * as constants from "./constants.ts";
  * `stringToFlags`, upstream `lib/internal/fs/utils.js`. The `O_*` values are
  * POSIX's, so the arithmetic is the same everywhere `node:fs` runs.
  */
-export function flagsOf(flags: string | number): number {
+export function flagsOf(flags: string | number | null | undefined): number {
   if (typeof flags === "number") {
-    return flags;
+    validateInteger(flags, "flags", -2_147_483_648, 2_147_483_647);
+    return flags + 0;
   }
-  const O_CREAT = 0o100;
-  const O_EXCL = 0o200;
-  const O_TRUNC = 0o1000;
-  const O_APPEND = 0o2000;
+  if (flags === null || flags === undefined) return constants.O_RDONLY;
   switch (flags) {
     case "r": return constants.O_RDONLY;
-    case "rs": case "sr": return constants.O_RDONLY;
+    case "rs": case "sr": return constants.O_RDONLY | constants.O_SYNC;
     case "r+": return constants.O_RDWR;
-    case "rs+": case "sr+": return constants.O_RDWR;
-    case "w": return O_TRUNC | O_CREAT | constants.O_WRONLY;
-    case "wx": case "xw": return O_TRUNC | O_CREAT | constants.O_WRONLY | O_EXCL;
-    case "w+": return O_TRUNC | O_CREAT | constants.O_RDWR;
-    case "wx+": case "xw+": return O_TRUNC | O_CREAT | constants.O_RDWR | O_EXCL;
-    case "a": return O_APPEND | O_CREAT | constants.O_WRONLY;
-    case "ax": case "xa": return O_APPEND | O_CREAT | constants.O_WRONLY | O_EXCL;
-    case "a+": return O_APPEND | O_CREAT | constants.O_RDWR;
-    case "ax+": case "xa+": return O_APPEND | O_CREAT | constants.O_RDWR | O_EXCL;
+    case "rs+": case "sr+": return constants.O_RDWR | constants.O_SYNC;
+    case "w": return constants.O_TRUNC | constants.O_CREAT | constants.O_WRONLY;
+    case "wx": case "xw": return constants.O_TRUNC | constants.O_CREAT | constants.O_WRONLY | constants.O_EXCL;
+    case "w+": return constants.O_TRUNC | constants.O_CREAT | constants.O_RDWR;
+    case "wx+": case "xw+": return constants.O_TRUNC | constants.O_CREAT | constants.O_RDWR | constants.O_EXCL;
+    case "a": return constants.O_APPEND | constants.O_CREAT | constants.O_WRONLY;
+    case "ax": case "xa": return constants.O_APPEND | constants.O_CREAT | constants.O_WRONLY | constants.O_EXCL;
+    case "as": case "sa": return constants.O_APPEND | constants.O_CREAT | constants.O_WRONLY | constants.O_SYNC;
+    case "a+": return constants.O_APPEND | constants.O_CREAT | constants.O_RDWR;
+    case "ax+": case "xa+": return constants.O_APPEND | constants.O_CREAT | constants.O_RDWR | constants.O_EXCL;
+    case "as+": case "sa+": return constants.O_APPEND | constants.O_CREAT | constants.O_RDWR | constants.O_SYNC;
     default:
-      throw new ERR_INVALID_ARG_TYPE("flags", "string", flags);
+      throw new ERR_INVALID_ARG_VALUE("flags", flags);
   }
 }

@@ -12,8 +12,6 @@ import { AssertionError, type AssertionErrorDetail } from "./error.ts";
 
 declare function nts_process_is_exiting(): boolean;
 
-function noop(): void {}
-
 /** One recorded call: what it was called on, and with what. */
 export interface TrackedCall {
   thisArg: unknown;
@@ -44,10 +42,9 @@ class CallTrackerContext {
   }
 
   track(thisArg: unknown, args: readonly unknown[]): void {
-    // Frozen, so that a caller mutating its arguments afterwards cannot change
-    // what the record says was passed.
-    const argsClone = Object.freeze(args.slice());
-    this.#calls.push(Object.freeze({ thisArg, arguments: argsClone }));
+    // A rest array belongs to this invocation, so retaining it records the
+    // call without another copy. `getCalls` copies it before exposing it.
+    this.#calls.push({ thisArg, arguments: args });
   }
 
   get delta(): number {
@@ -59,7 +56,13 @@ class CallTrackerContext {
   }
 
   getCalls(): readonly TrackedCall[] {
-    return Object.freeze(this.#calls.slice());
+    const copy = new Array<TrackedCall>(this.#calls.length);
+    for (let i = 0; i < this.#calls.length; i++) {
+      const call = this.#calls[i];
+      if (call === undefined) continue;
+      copy[i] = { thisArg: call.thisArg, arguments: call.arguments.slice() };
+    }
+    return copy;
   }
 
   report(): AssertionErrorDetail | undefined {
@@ -80,9 +83,12 @@ class CallTrackerContext {
 
 export class CallTracker {
   #callChecks = new Set<CallTrackerContext>();
-  #trackedFunctions = new WeakMap<object, CallTrackerContext>();
+  #trackedFunctions = new WeakMap<CallableFunction, CallTrackerContext>();
 
-  #getTrackedFunction(tracked: object): CallTrackerContext {
+  #getTrackedFunction(tracked: unknown): CallTrackerContext {
+    if (typeof tracked !== "function") {
+      throw new ERR_INVALID_ARG_VALUE("tracked", tracked, "is not a tracked function");
+    }
     const context = this.#trackedFunctions.get(tracked);
     if (context === undefined) {
       throw new ERR_INVALID_ARG_VALUE("tracked", tracked, "is not a tracked function");
@@ -91,15 +97,18 @@ export class CallTracker {
   }
 
   /** Forget the calls recorded so far, for one function or for all of them. */
-  reset(tracked?: object): void {
+  reset(): void;
+  reset(tracked: CallableFunction): void;
+  reset(tracked?: unknown): void {
     if (tracked === undefined) {
-      this.#callChecks.forEach((check) => check.reset());
+      for (const check of this.#callChecks) check.reset();
       return;
     }
     this.#getTrackedFunction(tracked).reset();
   }
 
-  getCalls(tracked: object): readonly TrackedCall[] {
+  getCalls(tracked: CallableFunction): readonly TrackedCall[];
+  getCalls(tracked: unknown): readonly TrackedCall[] {
     return this.#getTrackedFunction(tracked).getCalls();
   }
 
@@ -107,20 +116,26 @@ export class CallTracker {
    * A wrapper around `fn` that records its calls and expects `expected` of
    * them.
    *
-   * A `Proxy` rather than a wrapping function, so the result keeps the
-   * original's name, length and identity as far as anything else can see --
-   * code that inspects the callback it was handed sees the real one.
+   * Function metadata and transparent proxy identity belong to JavaScript's
+   * metaobject protocol. The compiled API instead returns an ordinary,
+   * precisely typed forwarding closure.
    */
-  calls<T extends (...args: never[]) => unknown>(fn?: T | number, expected = 1): T {
+  calls(expected?: number): (...args: unknown[]) => void;
+  calls<This, Args extends unknown[], Result>(
+    fn: (this: This, ...args: Args) => Result,
+    expected?: number,
+  ): (this: This, ...args: Args) => Result;
+  calls<This, Args extends unknown[], Result>(
+    fn?: ((this: This, ...args: Args) => Result) | number,
+    expected = 1,
+  ): CallableFunction {
     if (nts_process_is_exiting()) {
       throw new ERR_UNAVAILABLE_DURING_EXIT();
     }
-    let target: (...args: never[]) => unknown;
+    let target: ((this: This, ...args: Args) => Result) | undefined;
     if (typeof fn === "number") {
       expected = fn;
-      target = noop;
     } else if (fn === undefined) {
-      target = noop;
     } else {
       target = fn;
     }
@@ -130,17 +145,16 @@ export class CallTracker {
     const context = new CallTrackerContext({
       expected,
       stackTrace: new Error(),
-      name: target.name || "calls",
+      // Observable function names are a section-13 non-goal. The operation's
+      // stable public name remains useful in diagnostics.
+      name: "calls",
     });
-    const tracked = new Proxy(target, {
-      __proto__: null,
-      apply(inner, thisArg, argList): unknown {
-        context.track(thisArg, argList);
-        return Reflect.apply(inner, thisArg, argList);
-      },
-    } as ProxyHandler<(...args: never[]) => unknown>) as T;
+    const tracked = function (this: This, ...args: Args): Result | void {
+      context.track(this, args);
+      if (target !== undefined) return target.call(this, ...args);
+    };
     this.#callChecks.add(context);
-    this.#trackedFunctions.set(tracked as object, context);
+    this.#trackedFunctions.set(tracked, context);
     return tracked;
   }
 
@@ -162,8 +176,9 @@ export class CallTracker {
     if (errors.length === 0) {
       return;
     }
-    const message = errors.length === 1
-      ? errors[0]!.message
+    const first = errors[0];
+    const message = errors.length === 1 && first !== undefined
+      ? first.message
       : "Functions were not called the expected number of times";
     throw new AssertionError({ message, details: errors });
   }

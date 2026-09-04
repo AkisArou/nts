@@ -8,10 +8,11 @@
 // thing being debugged is worse than useless.
 //
 // Two objects come out of here. `Console` is the class, which takes streams.
-// The global `console` is *not* an instance of it: node builds it as a plain
-// namespace object with the methods bound to it, so that `const { log } =
-// console` works and so that `Console.prototype` is not in the global's
-// prototype chain. That distinction is observable and the tests check it.
+// The global `console` is one eagerly constructed instance with the same
+// statically listed bound methods. Node builds its global as a prototype-less
+// namespace and customises `instanceof`; both operations require the §13
+// metaobject protocol. A real instance preserves the typed behavior while
+// leaving prototype identity deliberately unmodelled.
 
 import { channel } from "../../diagnostics_channel/src/main.ts";
 import { formatWithOptions } from "../../util/src/format.ts";
@@ -23,6 +24,7 @@ import { clearScreenDown, cursorTo } from "../../internal/readline-callbacks.ts"
 import * as stdio from "../../internal/stdio.ts";
 import type { WritableLike } from "../../internal/stdio.ts";
 import { formatTime, time, timeEnd, timeLog, type Timestamp } from "../../internal/time.ts";
+import { emitWarning } from "../../internal/process-warning.ts";
 import {
   captureStackTrace,
   ERR_CONSOLE_WRITABLE_STREAM,
@@ -48,6 +50,14 @@ export interface ConsoleOptions {
   groupIndentation?: number;
 }
 
+/**
+ * Structural view used only to distinguish the two constructor overloads.
+ * A stream supplies `write`; an options bag supplies `stdout` instead.
+ */
+interface ConsoleConstructorOptions extends ConsoleOptions {
+  write?: WritableLike["write"];
+}
+
 /** A `group` deeper than this is a runaway loop, not a formatting choice. */
 const kMaxGroupIndentation = 1000;
 
@@ -70,36 +80,57 @@ const kNoColorInspectOptions: InspectOptions = {};
 
 function noop(): void {}
 
-/**
- * Which of the two streams a method writes to.
- *
- * The stream is looked up at write time rather than captured, because the
- * global console resolves its streams lazily and a test may replace one.
- */
-/**
- * What answers `instanceof Console`. A marker rather than the prototype chain,
- * because node's global console is not an instance and still has to say yes.
- */
-const kIsConsole: unique symbol = Symbol("kIsConsole") as never;
+class CollectedValue {
+  readonly value: unknown;
+  next: CollectedValue | null = null;
+
+  constructor(value: unknown) {
+    this.value = value;
+  }
+}
+
+/** Materialize an iterator once without selecting growable array storage. */
+function collectIterable(iterable: Iterable<unknown>): unknown[] {
+  let head: CollectedValue | null = null;
+  let tail: CollectedValue | null = null;
+  let length = 0;
+
+  for (const value of iterable) {
+    const node = new CollectedValue(value);
+    if (tail === null) head = node;
+    else tail.next = node;
+    tail = node;
+    length++;
+  }
+
+  const values = new Array<unknown>(length);
+  let node = head;
+  let index = 0;
+  while (node !== null) {
+    values[index] = node.value;
+    node = node.next;
+    index++;
+  }
+  return values;
+}
 
 type Target = "stdout" | "stderr";
 
 /**
  * The `console.log` family over a pair of streams.
  *
- * Every method is rebound to the instance in the constructor, so that
- * `const { log } = console` and `[1, 2].forEach(console.log)` both work --
- * which is why node does it, and why the bound copies get their `name`
- * restored afterwards.
+ * Public operations are arrow-valued fields, so that `const { log } = console`
+ * and `[1, 2].forEach(console.log)` both retain their receiver without a
+ * constructor-time binding pass or prototype inspection.
  */
 export class Console {
-  declare _stdout: WritableLike;
-  declare _stderr: WritableLike;
-  declare _ignoreErrors: boolean;
-  declare _stdoutErrorHandler: (err?: Error | null) => void;
-  declare _stderrErrorHandler: (err?: Error | null) => void;
+  _stdout: WritableLike;
+  _stderr: WritableLike;
+  _ignoreErrors: boolean;
+  _stdoutErrorHandler: (err?: Error | null) => void;
+  _stderrErrorHandler: (err?: Error | null) => void;
   /** Node exposes the timer table; its own tests read it. */
-  declare _times: Map<string, Timestamp>;
+  _times: Map<string, Timestamp>;
 
   #counts = new Map<string, number>();
   #colorMode: boolean | "auto" = "auto";
@@ -110,20 +141,26 @@ export class Console {
   constructor(options: ConsoleOptions);
   constructor(stdout: WritableLike, stderr?: WritableLike, ignoreErrors?: boolean);
   constructor(
-    options: ConsoleOptions | WritableLike,
+    options: ConsoleConstructorOptions | WritableLike | null | undefined,
     maybeStderr?: WritableLike,
     maybeIgnoreErrors?: boolean,
   ) {
     // `new Console(out, err)` predates the options object and is still the
     // spelling most code uses. A stream is told apart from an options bag by
     // having a `write` method, which is node's own test.
-    const opts: ConsoleOptions = (!options || typeof (options as WritableLike).write === "function")
-      ? {
-          stdout: options as WritableLike,
-          stderr: maybeStderr,
-          ignoreErrors: maybeIgnoreErrors,
-        }
-      : (options as ConsoleOptions);
+    let opts: ConsoleConstructorOptions;
+    if (isWritableLike(options)) {
+      opts = {
+        stdout: options,
+        stderr: maybeStderr,
+        ignoreErrors: maybeIgnoreErrors,
+      };
+    } else {
+      if (options === null || options === undefined) {
+        throw new ERR_CONSOLE_WRITABLE_STREAM("stdout");
+      }
+      opts = options;
+    }
 
     const {
       stdout: out,
@@ -134,10 +171,10 @@ export class Console {
       groupIndentation,
     } = opts;
 
-    if (!out || typeof out.write !== "function") {
+    if (!isWritableLike(out)) {
       throw new ERR_CONSOLE_WRITABLE_STREAM("stdout");
     }
-    if (!err || typeof err.write !== "function") {
+    if (!isWritableLike(err)) {
       throw new ERR_CONSOLE_WRITABLE_STREAM("stderr");
     }
 
@@ -150,47 +187,30 @@ export class Console {
     if (inspectOptions !== undefined) {
       validateObject(inspectOptions, "options.inspectOptions");
 
-      const perStream = isMap(inspectOptions)
-        ? inspectOptions as Map<WritableLike, InspectOptions>
+      const perStream = inspectOptions instanceof Map
+        ? inspectOptions
         : new Map<WritableLike, InspectOptions>([
-            [out, inspectOptions as InspectOptions],
-            [err, inspectOptions as InspectOptions],
+            [out, inspectOptions],
+            [err, inspectOptions],
           ]);
 
       for (const streamOptions of perStream.values()) {
         // Both say what colour to use, and there is no sensible tie-break.
-        if (streamOptions.colors !== undefined && (opts as ConsoleOptions).colorMode !== undefined) {
+        if (streamOptions.colors !== undefined && opts.colorMode !== undefined) {
           throw new ERR_INCOMPATIBLE_OPTION_PAIR("options.inspectOptions.color", "colorMode");
         }
       }
       this.#inspectOptions = perStream;
     }
 
-    bindMethodsTo(this);
-    definePrivate(this, "_stdout", out);
-    definePrivate(this, "_stderr", err);
-    this.#bindProperties(ignoreErrors, colorMode, groupIndentation);
-  }
-
-  /**
-   * The non-stream state, split out because the global console needs it
-   * without going through the constructor.
-   */
-  #bindProperties(
-    ignoreErrors: boolean,
-    colorMode: boolean | "auto",
-    groupIndentation = 2,
-  ): void {
-    definePrivate(this, "_stdoutErrorHandler", createWriteErrorHandler(this, "stdout"));
-    definePrivate(this, "_stderrErrorHandler", createWriteErrorHandler(this, "stderr"));
-    definePrivate(this, "_ignoreErrors", Boolean(ignoreErrors));
-    definePrivate(this, "_times", new Map<string, Timestamp>());
+    this._stdout = out;
+    this._stderr = err;
+    this._stdoutErrorHandler = createWriteErrorHandler(this, "stdout");
+    this._stderrErrorHandler = createWriteErrorHandler(this, "stderr");
+    this._ignoreErrors = Boolean(ignoreErrors);
+    this._times = new Map<string, Timestamp>();
     this.#colorMode = colorMode;
-    this.#groupIndentWidth = groupIndentation;
-    // `instanceof Console` is answered by this marker, not by the prototype
-    // chain: node's global console is not an instance and still has to say yes.
-    definePrivate(this, kIsConsole, true);
-    definePrivate(this, Symbol.toStringTag, "console", false);
+    this.#groupIndentWidth = groupIndentation ?? 2;
   }
 
   /**
@@ -272,56 +292,54 @@ export class Console {
 
   // ------------------------------------------------------------ the family
 
-  log(...args: unknown[]): void {
+  log = (...args: unknown[]): void => {
     if (onLog.hasSubscribers) {
       onLog.publish(args);
     }
     this.#writeToConsole("stdout", this.#format("stdout", args));
-  }
+  };
 
-  info(...args: unknown[]): void {
+  info = (...args: unknown[]): void => {
     if (onInfo.hasSubscribers) {
       onInfo.publish(args);
     }
     this.#writeToConsole("stdout", this.#format("stdout", args));
-  }
+  };
 
-  debug(...args: unknown[]): void {
+  debug = (...args: unknown[]): void => {
     if (onDebug.hasSubscribers) {
       onDebug.publish(args);
     }
     this.#writeToConsole("stdout", this.#format("stdout", args));
-  }
+  };
 
-  dirxml(...args: unknown[]): void {
-    this.#writeToConsole("stdout", this.#format("stdout", args));
-  }
+  dirxml = this.log;
 
-  warn(...args: unknown[]): void {
+  warn = (...args: unknown[]): void => {
     if (onWarn.hasSubscribers) {
       onWarn.publish(args);
     }
     this.#writeToConsole("stderr", this.#format("stderr", args));
-  }
+  };
 
-  error(...args: unknown[]): void {
+  error = (...args: unknown[]): void => {
     if (onError.hasSubscribers) {
       onError.publish(args);
     }
     this.#writeToConsole("stderr", this.#format("stderr", args));
-  }
+  };
 
   /** One value inspected. Format specifiers are not interpreted. */
-  dir(object: unknown, options?: InspectOptions): void {
+  dir = (object: unknown, options?: InspectOptions): void => {
     this.#writeToConsole("stdout", inspect(object, {
       customInspect: false,
       ...this.#getInspectOptions(this._stdout),
       ...options,
     }));
-  }
+  };
 
   /** The message with a stack trace under it, on stderr. */
-  trace(...args: unknown[]): void {
+  trace = (...args: unknown[]): void => {
     const err = {
       name: "Trace",
       message: this.#format("stderr", args),
@@ -331,63 +349,62 @@ export class Console {
     // called from, not that it went through `console`.
     captureStackTrace(err, this.trace);
     this.error(err.stack);
-  }
+  };
 
   /** https://console.spec.whatwg.org/#assert -- reports, never throws. */
-  assert(expression?: unknown, ...args: unknown[]): void {
+  assert = (expression?: unknown, ...args: unknown[]): void => {
     if (!expression) {
       if (args.length > 0 && typeof args[0] === "string") {
         args[0] = `Assertion failed: ${args[0]}`;
+        this.warn(...args);
       } else {
-        args.unshift("Assertion failed");
+        this.warn("Assertion failed", ...args);
       }
-      // Through `warn`, so the arguments are format-expanded there.
-      this.warn(...args);
     }
-  }
+  };
 
   /** https://console.spec.whatwg.org/#clear -- a no-op unless stdout is a TTY. */
-  clear(): void {
+  clear = (): void => {
     if (this._stdout.isTTY && nts_process_env("TERM") !== "dumb") {
       cursorTo(this._stdout, 0, 0);
       clearScreenDown(this._stdout);
     }
-  }
+  };
 
   // ------------------------------------------------------------- counting
 
   /** https://console.spec.whatwg.org/#count */
-  count(label: string = "default"): void {
+  count = (label: string = "default"): void => {
     // Coerces anything but a symbol, which throws -- as it should, since a
     // symbol has no string form and a count table is keyed by strings.
     label = `${label}`;
     const count = (this.#counts.get(label) ?? 0) + 1;
     this.#counts.set(label, count);
     this.log(`${label}: ${count}`);
-  }
+  };
 
   /** https://console.spec.whatwg.org/#countreset */
-  countReset(label: string = "default"): void {
+  countReset = (label: string = "default"): void => {
     if (!this.#counts.has(label)) {
-      nts_process_emit_warning(`Count for '${label}' does not exist`, "Warning", "");
+      emitWarning(`Count for '${label}' does not exist`, "Warning", "");
       return;
     }
     this.#counts.delete(`${label}`);
-  }
+  };
 
   // --------------------------------------------------------------- timing
 
-  time(label: string = "default"): void {
+  time = (label: string = "default"): void => {
     time(this._times, "console.time()", `${label}`);
-  }
+  };
 
-  timeEnd(label: string = "default"): void {
+  timeEnd = (label: string = "default"): void => {
     timeEnd(this._times, "console.timeEnd()", this.#timeLogImpl, `${label}`);
-  }
+  };
 
-  timeLog(label: string = "default", ...data: unknown[]): void {
+  timeLog = (label: string = "default", ...data: unknown[]): void => {
     timeLog(this._times, "console.timeLog()", this.#timeLogImpl, `${label}`, data);
-  }
+  };
 
   #timeLogImpl = (label: string, formatted: string, args?: unknown[]): void => {
     if (args === undefined) {
@@ -399,23 +416,21 @@ export class Console {
 
   // ------------------------------------------------------------- grouping
 
-  group(...data: unknown[]): void {
+  group = (...data: unknown[]): void => {
     if (data.length > 0) {
       this.log(...data);
     }
     this.#groupIndent += " ".repeat(this.#groupIndentWidth);
-  }
+  };
 
-  groupCollapsed(...data: unknown[]): void {
-    this.group(...data);
-  }
+  groupCollapsed = this.group;
 
-  groupEnd(): void {
+  groupEnd = (): void => {
     this.#groupIndent = this.#groupIndent.slice(
       0,
       this.#groupIndent.length - this.#groupIndentWidth,
     );
-  }
+  };
 
   // ---------------------------------------------------------------- table
 
@@ -428,7 +443,7 @@ export class Console {
    * object at all falls through to `log`, which is node's behaviour rather
    * than an invented shape for it.
    */
-  table(tabularData: unknown, properties?: readonly string[]): void {
+  table = (tabularData: unknown, properties?: readonly string[]): void => {
     if (properties !== undefined) {
       validateArray(properties, "properties");
     }
@@ -447,7 +462,7 @@ export class Console {
     // columns rather than the values.
     const _inspect = (v: unknown): string => {
       const depth = v !== null && typeof v === "object" && !isArrayLike(v) &&
-        Object.keys(v as object).length > 2 ? -1 : 0;
+        Object.keys(v).length > 2 ? -1 : 0;
       return inspect(v, {
         depth,
         maxArrayLength: 3,
@@ -459,86 +474,132 @@ export class Console {
       Array.from({ length }, (_, i) => _inspect(i));
 
     let data: unknown = tabularData;
-    const mapIter = isMapIterator(data);
+    let fromMapIterator = false;
     let isKeyValue = false;
-    if (mapIter) {
+    if (isMapIterator(data)) {
       // A map iterator yields entries, and the pairs are what to tabulate.
-      const entries = [...(data as Iterable<unknown>)];
-      isKeyValue = entries.every((e) => Array.isArray(e) && e.length === 2);
+      const entries = collectIterable(data);
+      fromMapIterator = true;
+      isKeyValue = entries.every(isPair);
       data = entries;
     }
 
-    if (isKeyValue || isMap(data)) {
-      const keys: string[] = [];
-      const values: string[] = [];
-      let length = 0;
-      for (const entry of data as Iterable<[unknown, unknown]>) {
-        keys.push(_inspect(entry[0]));
-        values.push(_inspect(entry[1]));
-        length++;
+    if (isKeyValue && Array.isArray(data) && data.every(isPair)) {
+      const length = data.length;
+      const keys = new Array<string>(length);
+      const values = new Array<string>(length);
+      for (let index = 0; index < length; index++) {
+        const entry = data[index];
+        if (entry === undefined) continue;
+        keys[index] = _inspect(entry[0]);
+        values[index] = _inspect(entry[1]);
       }
       final([iterKey, keyKey, valuesKey], [getIndexArray(length), keys, values]);
       return;
     }
 
-    const setIter = isSetIterator(data);
-    if (setIter) {
-      data = [...(data as Iterable<unknown>)];
+    if (isMap(data)) {
+      const length = data.size;
+      const keys = new Array<string>(length);
+      const values = new Array<string>(length);
+      let index = 0;
+      for (const [key, value] of data) {
+        keys[index] = _inspect(key);
+        values[index] = _inspect(value);
+        index++;
+      }
+      final([iterKey, keyKey, valuesKey], [getIndexArray(length), keys, values]);
+      return;
     }
 
-    if (setIter || mapIter || isSet(data)) {
-      const values: string[] = [];
-      let length = 0;
-      for (const v of data as Iterable<unknown>) {
-        values.push(_inspect(v));
-        length++;
+    let fromSetIterator = false;
+    if (isSetIterator(data)) {
+      fromSetIterator = true;
+      data = collectIterable(data);
+    }
+
+    if ((fromSetIterator || fromMapIterator) && Array.isArray(data)) {
+      const length = data.length;
+      const values = new Array<string>(length);
+      for (let index = 0; index < length; index++) {
+        values[index] = _inspect(data[index]);
       }
       final([iterKey, valuesKey], [getIndexArray(length), values]);
       return;
     }
 
-    const map: Record<string, string[]> = { __proto__: null } as never;
+    if (isSet(data)) {
+      const length = data.size;
+      const values = new Array<string>(length);
+      let index = 0;
+      for (const value of data) {
+        values[index] = _inspect(value);
+        index++;
+      }
+      final([iterKey, valuesKey], [getIndexArray(length), values]);
+      return;
+    }
+
+    if (!isPropertyRecord(data)) {
+      this.log(data);
+      return;
+    }
+
+    const columns = new Map<string, string[]>();
     let hasPrimitives = false;
-    const valuesKeyArray: string[] = [];
-    const indexKeyArray = Object.keys(data as object);
+    const indexKeyArray = Object.keys(data);
+    const valuesKeyArray = new Array<string>(indexKeyArray.length);
 
     for (let i = 0; i < indexKeyArray.length; i++) {
-      const item = (data as Record<string, unknown>)[indexKeyArray[i]!];
+      const index = indexKeyArray[i];
+      if (index === undefined) continue;
+      const item = data[index];
       const primitive = item === null ||
         (typeof item !== "function" && typeof item !== "object");
       if (properties === undefined && primitive) {
         hasPrimitives = true;
         valuesKeyArray[i] = _inspect(item);
       } else {
-        const keys = properties ?? Object.keys(item as object);
+        const keys = properties ?? (isPropertyRecord(item) ? Object.keys(item) : []);
         for (const key of keys) {
-          map[key] ??= [];
-          if ((primitive && properties) || !Object.hasOwn(item as object, key)) {
-            map[key]![i] = "";
+          let column = columns.get(key);
+          if (column === undefined) {
+            column = new Array<string>(indexKeyArray.length);
+            columns.set(key, column);
+          }
+          if (!isPropertyRecord(item) || !Object.hasOwn(item, key)) {
+            column[i] = "";
           } else {
-            map[key]![i] = _inspect((item as Record<string, unknown>)[key]);
+            column[i] = _inspect(item[key]);
           }
         }
       }
     }
 
-    const keys = Object.keys(map);
-    const values = Object.values(map);
-    if (hasPrimitives) {
-      keys.push(valuesKey);
-      values.push(valuesKeyArray);
+    const resultLength = columns.size + (hasPrimitives ? 2 : 1);
+    const keys = new Array<string>(resultLength);
+    const values = new Array<string[]>(resultLength);
+    keys[0] = indexKey;
+    values[0] = indexKeyArray;
+    let resultIndex = 1;
+    for (const [key, column] of columns) {
+      keys[resultIndex] = key;
+      values[resultIndex] = column;
+      resultIndex++;
     }
-    keys.unshift(indexKey);
-    values.unshift(indexKeyArray);
+    if (hasPrimitives) {
+      keys[resultIndex] = valuesKey;
+      values[resultIndex] = valuesKeyArray;
+    }
 
     final(keys, values);
-  }
+  };
 
   // Timeline markers, so that code written for a browser runs unchanged.
   // Node's are no-ops too.
-  profile(): void {}
-  profileEnd(): void {}
-  timeStamp(): void {}
+  profile = noop;
+  profileEnd = noop;
+  timeStamp = noop;
 }
 
 const keyKey = "Key";
@@ -551,7 +612,20 @@ function isArrayLike(v: unknown): boolean {
   return Array.isArray(v) || isTypedArray(v);
 }
 
-declare function nts_process_emit_warning(message: string, name: string, code: string): void;
+function isWritableLike(
+  value: ConsoleConstructorOptions | WritableLike | null | undefined,
+): value is WritableLike {
+  return value !== null && value !== undefined && typeof value.write === "function";
+}
+
+/** A JavaScript value on which a string-key read is defined. */
+function isPropertyRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && (typeof value === "object" || typeof value === "function");
+}
+
+function isPair(value: unknown): value is [unknown, unknown] {
+  return Array.isArray(value) && value.length === 2;
+}
 
 /**
  * V8 reports a blown stack as a plain `RangeError` with this message. There is
@@ -559,7 +633,7 @@ declare function nts_process_emit_warning(message: string, name: string, code: s
  */
 function isStackOverflowError(err: unknown): boolean {
   return err instanceof RangeError &&
-    (err as Error).message === "Maximum call stack size exceeded";
+    err.message === "Maximum call stack size exceeded";
 }
 
 function createWriteErrorHandler(
@@ -580,96 +654,17 @@ function createWriteErrorHandler(
   };
 }
 
-const consolePropAttributes = {
-  writable: true,
-  enumerable: false,
-  configurable: true,
-};
-
-function definePrivate(
-  target: object,
-  key: string | symbol,
-  value: unknown,
-  writable = true,
-): void {
-  Object.defineProperty(target, key, {
-    __proto__: null,
-    ...consolePropAttributes,
-    writable,
-    value,
-  } as PropertyDescriptor);
-}
-
-/**
- * Copy the methods onto `target`, bound to it.
- *
- * Binding is what makes `const { log } = console` work. `bind` renames the
- * result to `bound log`, so the name is restored -- code that reports which
- * console method it was handed should see `log`.
- */
-function bindMethodsTo(target: object): void {
-  for (const key of Object.getOwnPropertyNames(Console.prototype)) {
-    if (key === "constructor") continue;
-    // Off the instance rather than off the prototype: a subclass that
-    // overrides `log` must get its own, and `class MyConsole extends Console`
-    // is documented to work.
-    const method = (target as Record<string, unknown>)[key];
-    if (typeof method !== "function") continue;
-    const bound = (method as (...a: unknown[]) => unknown).bind(target);
-    Object.defineProperty(bound, "name", { __proto__: null, value: key } as PropertyDescriptor);
-    (target as Record<string, unknown>)[key] = bound;
-  }
-}
-
-/**
- * `Console` is callable with and without `new`.
- *
- * `Console(out, err)` is documented and used; a class constructor throws when
- * called without `new`, so the exported binding is a function that constructs
- * either way. `new.target` is forwarded, so a subclass still gets its own
- * prototype.
- */
-export interface ConsoleConstructor {
-  new (options: ConsoleOptions): Console;
-  new (stdout: WritableLike, stderr?: WritableLike, ignoreErrors?: boolean): Console;
-  (options: ConsoleOptions): Console;
-  (stdout: WritableLike, stderr?: WritableLike, ignoreErrors?: boolean): Console;
-  readonly prototype: Console;
-}
-
-const ConsoleCtor = function (this: unknown, ...args: unknown[]): Console {
-  return Reflect.construct(Console, args, new.target ?? Console) as Console;
-} as unknown as ConsoleConstructor;
-
-Object.defineProperty(ConsoleCtor, "name", { __proto__: null, value: "Console" } as PropertyDescriptor);
-(ConsoleCtor as { prototype: Console }).prototype = Console.prototype;
-Object.setPrototypeOf(ConsoleCtor, Console);
-
-Object.defineProperty(ConsoleCtor, Symbol.hasInstance, {
-  __proto__: null,
-  value: (instance: unknown) => Boolean((instance as Record<symbol, unknown>)?.[kIsConsole]),
-} as PropertyDescriptor);
-
 /**
  * The global `console`.
  *
- * Node builds this by hand rather than with `new Console`, so that
- * `Console.prototype` is not in the global's prototype chain -- the WHATWG
- * console specification asks for a namespace object whose prototype is empty.
- * We use a real instance. The methods are own bound properties either way, so
- * `const { log } = console` and `Reflect.ownKeys(console)` agree; the only
- * difference is what `Object.getPrototypeOf(console)` returns, and nothing
- * observes that. In exchange the class keeps private fields instead of the
- * symbol-keyed properties a non-instance would force.
+ * Node builds a prototype-less namespace and customizes `instanceof`; both are
+ * §13 object-model operations. A real instance gives typed code the same
+ * methods, state, detached-call behavior and `instanceof Console` answer.
  */
 export const globalConsole: Console = new Console({
   stdout: stdio.stdout,
   stderr: stdio.stderr,
 });
 
-// Legacy: the constructor is reachable from the instance, which is how
-// `const { Console } = console` finds it.
-(globalConsole as unknown as { Console: ConsoleConstructor }).Console = ConsoleCtor;
-
-export { ConsoleCtor as Console_, formatTime };
+export { Console as Console_, formatTime };
 export default globalConsole;

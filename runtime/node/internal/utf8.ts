@@ -110,7 +110,8 @@ export function utf8Decode(bytes: Uint8Array, start: number, end: number): strin
 
   let i = start;
   while (i < end) {
-    const byte = bytes[i]!;
+    const byte = bytes[i];
+    if (byte === undefined) break;
 
     if (bytesNeeded === 0) {
       i++;

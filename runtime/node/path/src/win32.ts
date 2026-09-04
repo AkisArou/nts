@@ -77,7 +77,7 @@ function isWindowsDeviceRoot(code: number): boolean {
 function toBackslashes(path: string): string {
   let out = "";
   for (let i = 0; i < path.length; i++) {
-    out += path.charCodeAt(i) === CHAR_FORWARD_SLASH ? "\\" : path[i]!;
+    out += path.charCodeAt(i) === CHAR_FORWARD_SLASH ? "\\" : path.charAt(i);
   }
   return out;
 }
@@ -100,8 +100,9 @@ export function resolve(...args: string[]): string {
   for (let i = args.length - 1; i >= -1; i--) {
     let path: string;
     if (i >= 0) {
-      path = args[i]!;
-      validateString(path, `paths[${i}]`);
+      const argument = args[i];
+      validateString(argument, `paths[${i}]`);
+      path = argument;
 
       // Skip empty entries
       if (path.length === 0) {
@@ -412,9 +413,9 @@ export function join(...args: string[]): string {
   if (args.length === 0)
     return '.';
 
-  const path = [];
+  const path: string[] = [];
   for (let i = 0; i < args.length; ++i) {
-    const arg = args[i]!;
+    const arg = args[i];
     validateString(arg, 'path');
     if (arg.length > 0) {
       path.push(arg);
@@ -424,7 +425,8 @@ export function join(...args: string[]): string {
   if (path.length === 0)
     return '.';
 
-  const firstPart = path[0]!;
+  const firstPart = path[0];
+  if (firstPart === undefined) throw new Error("path join lost its first component");
   let joined = path.join('\\');
 
   // Make sure that the joined path doesn't start with two slashes, because
@@ -547,7 +549,12 @@ export function relative(from: string, to: string): string {
 
     let i = 0;
     for (; i < length; i++) {
-      if (fromSplit[i]!.toLowerCase() !== toSplit[i]!.toLowerCase()) {
+      const fromPart = fromSplit[i];
+      const toPart = toSplit[i];
+      if (fromPart === undefined || toPart === undefined) {
+        throw new Error(`path split lost component ${i}`);
+      }
+      if (fromPart.toLowerCase() !== toPart.toLowerCase()) {
         break;
       }
     }

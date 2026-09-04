@@ -13,11 +13,9 @@
 // awaiting, and the generator's next `yield` becomes a chunk on the readable
 // side.
 //
-// **The web-stream branches are absent.** Node accepts a `ReadableStream` or a
-// `WritableStream` here and adapts it; that needs the WHATWG streams, which
-// this profile does not have. Rather than a branch that fails obscurely, those
-// values fall through to the final `ERR_INVALID_ARG_TYPE`, whose list of
-// accepted types says what is actually accepted.
+// Web streams go through the same typed adapters as `Readable.fromWeb` and
+// `Writable.fromWeb`; keeping one bridge is important because promise-based
+// Web backpressure must not drift from those public methods.
 
 import {
   AbortError,
@@ -28,6 +26,7 @@ import { nextTick } from "../../internal/tick.ts";
 import { Duplex, setDuplexify } from "./duplex.ts";
 import type { DuplexOptions } from "./duplex.ts";
 import { Readable } from "./readable.ts";
+import { Writable } from "./writable.ts";
 import { from } from "./from.ts";
 import { destroyer } from "./destroy.ts";
 import { eos } from "./end-of-stream.ts";
@@ -37,16 +36,64 @@ import {
   isNodeStream,
   isReadable,
   isReadableNodeStream,
+  isReadableStream,
   isWritable,
   isWritableNodeStream,
+  isWritableStream,
 } from "./utils.ts";
+import { newReadableFromWeb, newWritableFromWeb } from "./web-adapters.ts";
 import type { AbortSignalLike } from "./end-of-stream.ts";
+import type { WritableNodeStreamLike } from "./utils.ts";
 
 declare const AbortController: {
   new (): { readonly signal: AbortSignalLike; abort(reason?: unknown): void };
 };
 
 type WriteCb = (error?: unknown) => void;
+type DuplexBody = (
+  source: AsyncGenerator<unknown>,
+  options: { signal: AbortSignalLike },
+) => unknown;
+
+interface DuplexPair {
+  readonly readable?: unknown;
+  readonly writable?: unknown;
+}
+
+interface PullReadable {
+  readonly readableObjectMode?: boolean;
+  read(): unknown;
+  on<Args extends unknown[]>(
+    event: string | symbol,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+}
+
+interface BlobLike {
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+interface BlobConstructor {
+  new (...args: never[]): BlobLike;
+}
+
+declare global {
+  var Blob: BlobConstructor | undefined;
+}
+
+function isDuplexBody(value: unknown): value is DuplexBody {
+  return typeof value === "function";
+}
+
+function isDuplexPair(value: unknown): value is DuplexPair {
+  if (value === null || typeof value !== "object") return false;
+  return ("writable" in value && typeof value.writable === "object") ||
+    ("readable" in value && typeof value.readable === "object");
+}
+
+function isPullReadable(value: unknown): value is PullReadable {
+  return isReadableNodeStream(value) && typeof value["read"] === "function";
+}
 
 /**
  * A `Duplex` whose sides can be switched off at construction.
@@ -75,49 +122,44 @@ class Duplexify extends Duplex {
   }
 }
 
-type AnyRecord = Record<string, unknown>;
-
 export function duplexify(body: unknown, name: string): Duplex {
-  if (isDuplexNodeStream(body)) return body as Duplex;
+  if (body instanceof Duplex) return body;
 
-  if (isReadableNodeStream(body)) return joinPair({ readable: body as Readable });
-  if (isWritableNodeStream(body)) return joinPair({ writable: body as AnyRecord });
+  if (isDuplexNodeStream(body)) return joinPair({ readable: body, writable: body });
+  if (isReadableNodeStream(body)) return joinPair({ readable: body });
+  if (isWritableNodeStream(body)) return joinPair({ writable: body });
 
   // A node stream that is neither readable nor writable: a duplex with both
   // sides already closed, which is what it is.
   if (isNodeStream(body)) return joinPair({ writable: false, readable: false });
 
-  if (typeof body === "function") {
-    const { value, write, final, destroy } = fromAsyncGen(
-      body as (source: AsyncGenerator<unknown>, opts: { signal: AbortSignalLike }) => unknown,
-    );
+  if (isDuplexBody(body)) {
+    const { value, write, final, destroy } = fromAsyncGen(body);
 
     // It may have been a constructor rather than a generator function.
-    if (isDuplexNodeStream(value)) return value as Duplex;
+    if (value instanceof Duplex) return value;
+    if (isDuplexNodeStream(value)) return joinPair({ readable: value, writable: value });
 
     if (isIterable(value)) {
-      return from(value, { objectMode: true, write, final, destroy } as DuplexOptions, Duplexify);
+      return from(value, { objectMode: true, write, final, destroy }, Duplexify);
     }
 
-    const then = (value as { then?: unknown })?.then;
-    if (typeof then === "function") {
+    if (value instanceof Promise) {
       let d: Duplexify;
 
-      const promise = (then as (ok: (v: unknown) => void, no: (e: unknown) => void) => unknown)
-        .call(
-          value,
-          (resolved: unknown) => {
-            // An async function used as a duplex body writes through the
-            // source it was given; returning a value as well is ambiguous
-            // about which was meant.
-            if (resolved != null) {
-              throw new ERR_INVALID_RETURN_VALUE("nully", "body", resolved);
-            }
-          },
-          (error: unknown) => {
-            destroyer(d, error);
-          },
-        ) as Promise<void>;
+      const promise = value.then(
+        (resolved: unknown) => {
+          // An async function used as a duplex body writes through the
+          // source it was given; returning a value as well is ambiguous
+          // about which was meant.
+          if (resolved != null) {
+            throw new ERR_INVALID_RETURN_VALUE("nully", "body", resolved);
+          }
+        },
+        (error: unknown) => {
+          destroyer(d, error);
+        },
+      );
 
       d = new Duplexify({
         objectMode: true,
@@ -134,7 +176,7 @@ export function duplexify(body: unknown, name: string): Duplex {
           });
         },
         destroy,
-      } as DuplexOptions);
+      });
       return d;
     }
 
@@ -142,31 +184,44 @@ export function duplexify(body: unknown, name: string): Duplex {
   }
 
   // A `Blob` is bytes with a promise in front of them.
-  const BlobCtor = (globalThis as { Blob?: new () => unknown }).Blob;
+  const BlobCtor = globalThis.Blob;
   if (BlobCtor && body instanceof BlobCtor) {
-    return duplexify((body as { arrayBuffer(): Promise<ArrayBuffer> }).arrayBuffer(), name);
+    return duplexify(body.arrayBuffer(), name);
+  }
+
+  if (isReadableStream(body)) {
+    return joinPair({ readable: newReadableFromWeb(Readable, body) });
+  }
+
+  if (isWritableStream(body)) {
+    return joinPair({ writable: newWritableFromWeb(Writable, body) });
   }
 
   if (isIterable(body)) {
-    return from(body, { objectMode: true, writable: false } as DuplexOptions, Duplexify);
+    return from(body, { objectMode: true, writable: false }, Duplexify);
   }
 
-  const pair = body as { readable?: unknown; writable?: unknown } | null | undefined;
-  if (typeof pair?.writable === "object" || typeof pair?.readable === "object") {
-    const readable = pair.readable
-      ? (isReadableNodeStream(pair.readable) ? pair.readable : duplexify(pair.readable, name))
+  if (isDuplexPair(body)) {
+    const readable = body.readable
+      ? (isReadableNodeStream(body.readable)
+        ? body.readable
+        : isReadableStream(body.readable)
+        ? newReadableFromWeb(Readable, body.readable)
+        : duplexify(body.readable, name))
       : undefined;
-    const writable = pair.writable
-      ? (isWritableNodeStream(pair.writable) ? pair.writable : duplexify(pair.writable, name))
+    const writable = body.writable
+      ? (isWritableNodeStream(body.writable)
+        ? body.writable
+        : isWritableStream(body.writable)
+        ? newWritableFromWeb(Writable, body.writable)
+        : duplexify(body.writable, name))
       : undefined;
-    return joinPair({ readable, writable } as { readable?: unknown; writable?: unknown });
+    return joinPair({ readable, writable });
   }
 
-  const then = (body as { then?: unknown })?.then;
-  if (typeof then === "function") {
+  if (body instanceof Promise) {
     let d: Duplexify;
-    (then as (ok: (v: unknown) => void, no: (e: unknown) => void) => void).call(
-      body,
+    body.then(
       (resolved: unknown) => {
         if (resolved != null) d.push(resolved);
         d.push(null);
@@ -175,7 +230,7 @@ export function duplexify(body: unknown, name: string): Duplex {
         destroyer(d, error);
       },
     );
-    d = new Duplexify({ objectMode: true, writable: false, read() {} } as DuplexOptions);
+    d = new Duplexify({ objectMode: true, writable: false, read() {} });
     return d;
   }
 
@@ -208,7 +263,7 @@ function fromAsyncGen(
   fn: (source: AsyncGenerator<unknown>, opts: { signal: AbortSignalLike }) => unknown,
 ): {
   value: unknown;
-  write: (chunk: unknown, encoding: string, callback: WriteCb) => void;
+  write: (chunk: unknown, encoding: string | undefined, callback: WriteCb) => void;
   final: (callback: WriteCb) => void;
   destroy: (error: unknown, callback: WriteCb) => void;
 } {
@@ -223,7 +278,10 @@ function fromAsyncGen(
   const value = fn(
     (async function* source(): AsyncGenerator<unknown> {
       for (;;) {
-        const waiting = promise as Promise<Handoff>;
+        if (promise === null) {
+          throw new Error("duplex async-generator handoff has no pending promise");
+        }
+        const waiting = promise;
         promise = null;
         const { chunk, done, cb } = await waiting;
         // On a tick, so the writable side's callback does not run inside the
@@ -244,13 +302,21 @@ function fromAsyncGen(
 
   return {
     value,
-    write(chunk: unknown, _encoding: string, callback: WriteCb): void {
-      const settle = resolve as (value: Handoff) => void;
+    write(chunk: unknown, _encoding: string | undefined, callback: WriteCb): void {
+      if (resolve === null) {
+        callback(new Error("duplex async-generator handoff is not writable"));
+        return;
+      }
+      const settle = resolve;
       resolve = null;
       settle({ chunk, done: false, cb: callback });
     },
     final(callback: WriteCb): void {
-      const settle = resolve as (value: Handoff) => void;
+      if (resolve === null) {
+        callback(new Error("duplex async-generator handoff is already finished"));
+        return;
+      }
+      const settle = resolve;
       resolve = null;
       settle({ done: true, cb: callback });
     },
@@ -260,7 +326,7 @@ function fromAsyncGen(
       // is what lets it observe the abort and finish tearing down; without
       // this, destroying a duplex mid-write hangs.
       if (resolve !== null) {
-        const settle = resolve as (value: Handoff) => void;
+        const settle = resolve;
         resolve = null;
         settle({ done: true, cb: () => {} });
       }
@@ -279,10 +345,19 @@ function fromAsyncGen(
  * being ordinary streams.
  */
 function joinPair(pair: { readable?: unknown; writable?: unknown }): Duplex {
-  const r = pair.readable && typeof (pair.readable as AnyRecord)["read"] !== "function"
-    ? from(pair.readable, { objectMode: true })
-    : (pair.readable as AnyRecord | undefined);
-  const w = pair.writable as AnyRecord | undefined;
+  let r: PullReadable | undefined;
+  if (pair.readable) {
+    if (isPullReadable(pair.readable)) {
+      r = pair.readable;
+    } else if (isReadableNodeStream(pair.readable)) {
+      r = Readable.wrap(pair.readable);
+    } else {
+      r = from(pair.readable, { objectMode: true }, Readable);
+    }
+  }
+  const w: WritableNodeStreamLike | undefined = isWritableNodeStream(pair.writable)
+    ? pair.writable
+    : undefined;
 
   let readable = Boolean(isReadable(r));
   let writable = Boolean(isWritable(w));
@@ -300,18 +375,14 @@ function joinPair(pair: { readable?: unknown; writable?: unknown }): Duplex {
   };
 
   const d: Duplexify = new Duplexify({
-    readableObjectMode: Boolean((r as AnyRecord | undefined)?.["readableObjectMode"]),
+    readableObjectMode: Boolean(r?.["readableObjectMode"]),
     writableObjectMode: Boolean(w?.["writableObjectMode"]),
     readable,
     writable,
-  } as DuplexOptions);
+  });
 
-  if (writable) {
-    const writableSide = w as AnyRecord & {
-      write(c: unknown, e: string): boolean;
-      end(): void;
-      on(e: string, l: () => void): void;
-    };
+  if (writable && w !== undefined) {
+    const writableSide = w;
 
     eos(writableSide, (error) => {
       writable = false;
@@ -320,12 +391,16 @@ function joinPair(pair: { readable?: unknown; writable?: unknown }): Duplex {
       finished(error);
     });
 
-    d._write = function (chunk: unknown, encoding: string, callback: WriteCb): void {
+    d._write = (
+      chunk: unknown,
+      encoding: string | undefined,
+      callback: WriteCb,
+    ): void => {
       if (writableSide.write(chunk, encoding)) callback();
       else onDrain = callback;
     };
 
-    d._final = function (callback: WriteCb): void {
+    d._final = (callback: WriteCb): void => {
       writableSide.end();
       onFinish = callback;
     };
@@ -347,11 +422,8 @@ function joinPair(pair: { readable?: unknown; writable?: unknown }): Duplex {
     });
   }
 
-  if (readable) {
-    const readableSide = r as AnyRecord & {
-      read(): unknown;
-      on(e: string, l: () => void): void;
-    };
+  if (readable && r !== undefined) {
+    const readableSide = r;
 
     eos(readableSide, (error) => {
       readable = false;
@@ -371,7 +443,7 @@ function joinPair(pair: { readable?: unknown; writable?: unknown }): Duplex {
       d.push(null);
     });
 
-    d._read = function (): void {
+    d._read = (): void => {
       for (;;) {
         const chunk = readableSide.read();
         // Nothing available: wait for `readable` and resume from here.
@@ -388,7 +460,7 @@ function joinPair(pair: { readable?: unknown; writable?: unknown }): Duplex {
     };
   }
 
-  d._destroy = function (error: unknown, callback: WriteCb): void {
+  d._destroy = (error: unknown, callback: WriteCb): void => {
     // Being destroyed without a reason, while a teardown is already in
     // flight, is an abort as far as the two halves are concerned.
     if (!error && onClose !== null) error = new AbortError();

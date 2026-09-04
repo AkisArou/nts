@@ -37,7 +37,6 @@ import {
 import type { AbortSignalLike } from "../../internal/abort.ts";
 import {
   validateAbortSignal,
-  validateFunction,
   validateString,
   validateUint32,
 } from "../../internal/validators.ts";
@@ -63,6 +62,13 @@ const MAX_UNDO_REDO_STACK = 2048;
 /** What continuation lines of a multiline entry are prefixed with. */
 const MULTILINE_PROMPT = "| ";
 
+/** Internal operations shared by the callback and promise public classes. */
+const kQuestion = Symbol("question");
+const kQuestionCancel = Symbol("questionCancel");
+
+/** Typed implementation behind the Node-only `util.promisify.custom` hook. */
+export const kQuestionPromise = Symbol("questionPromise");
+
 /**
  * `\r\n`, `\r`, `\n`, and the two Unicode line separators.
  *
@@ -79,28 +85,52 @@ export interface Completion {
   1: string;
 }
 
-export type Completer =
-  | ((line: string) => Completion | Promise<Completion>)
-  | ((line: string, callback: (err: unknown, result?: Completion) => void) => void);
+export type CompletionCallback = (err: unknown, result?: Completion) => void;
 
-interface InputStream {
+/**
+ * Both public completer spellings share one safe invocation signature.
+ *
+ * A synchronous or promise completer simply ignores the second argument and
+ * returns its result. A callback completer uses it and returns `void`.
+ * TypeScript permits a one-argument function where this two-argument function
+ * is expected, so no observable `Function.length` metadata is needed to tell
+ * the two apart at run time.
+ */
+export type Completer = (
+  line: string,
+  callback: CompletionCallback,
+) => Completion | Promise<Completion> | void;
+
+export interface InputStream {
   isRaw?: boolean;
   setRawMode?(mode: boolean): unknown;
-  on(event: string, listener: (...args: never[]) => void): unknown;
-  removeListener(event: string, listener: (...args: never[]) => void): unknown;
+  on<Args extends unknown[]>(
+    event: string,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+  removeListener<Args extends unknown[]>(
+    event: string,
+    listener: (...args: Args) => unknown,
+  ): unknown;
   listenerCount(event: string): number;
   emit(event: string, ...args: unknown[]): unknown;
   resume(): unknown;
   pause(): unknown;
 }
 
-interface OutputStream {
-  write(chunk: string): unknown;
+export interface OutputStream {
+  write(chunk: string, callback?: (err?: Error | null) => void): boolean;
   columns?: number;
   rows?: number;
   isTTY?: boolean;
-  on(event: string, listener: (...args: never[]) => void): unknown;
-  removeListener(event: string, listener: (...args: never[]) => void): unknown;
+  on<Args extends unknown[]>(
+    event: string,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+  removeListener<Args extends unknown[]>(
+    event: string,
+    listener: (...args: Args) => unknown,
+  ): unknown;
 }
 
 export interface InterfaceOptions {
@@ -118,8 +148,18 @@ export interface InterfaceOptions {
   signal?: AbortSignalLike | undefined;
 }
 
+function isInterfaceOptions(value: InterfaceOptions | InputStream): value is InterfaceOptions {
+  return "input" in value;
+}
+
 export interface QuestionOptions {
   signal?: AbortSignalLike | undefined;
+}
+
+type QuestionCallback = (answer: string) => void;
+
+function isQuestionCallback(value: unknown): value is QuestionCallback {
+  return typeof value === "function";
 }
 
 interface CursorPos {
@@ -132,7 +172,15 @@ interface UndoEntry {
   cursor: number;
 }
 
-export class Interface extends EventEmitter {
+/**
+ * The common line editor, without either public `question` call shape.
+ *
+ * Node likewise keeps the editor in an internal base and adds callback and
+ * promise methods in two separate public classes. Keeping that split here
+ * means neither class has to claim overloads or behavior belonging to the
+ * other one.
+ */
+export class InterfaceBase extends EventEmitter {
   line = "";
   cursor = 0;
   terminal: boolean;
@@ -155,13 +203,16 @@ export class Interface extends EventEmitter {
    */
   isCompletionEnabled = true;
 
+  /** Promise readline deliberately observes even immediate answers next turn. */
+  protected deferCompletions = false;
+
   /** Set by the keypress decoder when the chunk was a single character. */
   declare [kSawKeyPress]: boolean;
 
   #historyManager: History;
   #prompt = "> ";
   #oldPrompt = "";
-  #questionCallback: ((answer: string) => void) | null = null;
+  #questionCallback: QuestionCallback | null = null;
   #questionReject: ((reason: unknown) => void) | null = null;
   #decoder: StringDecoder | undefined;
   #lineBuffer = "";
@@ -190,7 +241,19 @@ export class Interface extends EventEmitter {
 
   #lineObjectStream: AsyncIterableIterator<string> | undefined;
 
-  constructor(options: InterfaceOptions | InputStream, ...rest: unknown[]) {
+  constructor(options: InterfaceOptions);
+  constructor(
+    input: InputStream,
+    output?: OutputStream | null,
+    completer?: Completer,
+    terminal?: boolean,
+  );
+  constructor(
+    options: InterfaceOptions | InputStream,
+    positionalOutput?: OutputStream | null,
+    positionalCompleter?: Completer,
+    positionalTerminal?: boolean,
+  ) {
     super();
 
     let input: InputStream;
@@ -202,8 +265,8 @@ export class Interface extends EventEmitter {
     let prompt = "> ";
     let historyOptions: HistoryOptions = {};
 
-    if ((options as InterfaceOptions).input) {
-      const o = options as InterfaceOptions;
+    if (isInterfaceOptions(options)) {
+      const o = options;
       input = o.input;
       output = o.output;
       completer = o.completer;
@@ -231,13 +294,15 @@ export class Interface extends EventEmitter {
     } else {
       // The positional form, `createInterface(input, output, completer,
       // terminal)`, which predates the options object and is still used.
-      input = options as InputStream;
-      output = rest[0] as OutputStream | undefined;
-      completer = rest[1] as Completer | undefined;
-      terminal = rest[2] as boolean | undefined;
+      input = options;
+      output = positionalOutput;
+      completer = positionalCompleter;
+      terminal = positionalTerminal;
     }
 
-    if (completer !== undefined) validateFunction(completer, "completer");
+    if (completer !== undefined && typeof completer !== "function") {
+      throw new ERR_INVALID_ARG_VALUE("completer", completer);
+    }
 
     // Whether this is a terminal is the output's business, not the input's:
     // the editor draws, and a program piping its output to a file wants the
@@ -250,10 +315,7 @@ export class Interface extends EventEmitter {
     this.output = output;
     this.completer = completer;
     this.crlfDelay = crlfDelay ? Math.max(MIN_CRLF_DELAY, crlfDelay) : MIN_CRLF_DELAY;
-    this.#historyManager = new History(
-      this as unknown as { line: string; emit(e: string, ...a: unknown[]): unknown },
-      historyOptions,
-    );
+    this.#historyManager = new History(this, historyOptions);
     this.setPrompt(prompt);
     this.terminal = !!terminal;
 
@@ -276,39 +338,39 @@ export class Interface extends EventEmitter {
       if (key?.sequence) {
         // Half of a surrogate pair on its own draws as nothing until its other
         // half arrives, so the line is redrawn rather than appended to.
-        const ch = key.sequence.codePointAt(0) as number;
+        const ch = key.sequence.codePointAt(0) ?? 0;
         if (ch >= 0xd800 && ch <= 0xdfff) this.#refreshLine();
       }
     };
 
     const onResize = (): void => { this.#refreshLine(); };
 
-    input.on("error", onError as never);
+    input.on("error", onError);
 
     if (!this.terminal) {
-      input.on("data", onData as never);
-      input.on("end", onEnd as never);
-      this.once("close", (() => {
-        input.removeListener("data", onData as never);
-        input.removeListener("error", onError as never);
-        input.removeListener("end", onEnd as never);
-      }) as never);
+      input.on("data", onData);
+      input.on("end", onEnd);
+      this.once("close", () => {
+        input.removeListener("data", onData);
+        input.removeListener("error", onError);
+        input.removeListener("end", onEnd);
+      });
       this.#decoder = new StringDecoder("utf8");
     } else {
-      emitKeypressEvents(input as never, this as never);
-      input.on("keypress", onKeypress as never);
-      input.on("end", onTermEnd as never);
+      emitKeypressEvents(input, this);
+      input.on("keypress", onKeypress);
+      input.on("end", onTermEnd);
       this.#setRawMode(true);
       this.cursor = 0;
-      if (output !== null && output !== undefined) output.on("resize", onResize as never);
-      this.once("close", (() => {
-        input.removeListener("keypress", onKeypress as never);
-        input.removeListener("error", onError as never);
-        input.removeListener("end", onTermEnd as never);
+      if (output !== null && output !== undefined) output.on("resize", onResize);
+      this.once("close", () => {
+        input.removeListener("keypress", onKeypress);
+        input.removeListener("error", onError);
+        input.removeListener("end", onTermEnd);
         if (output !== null && output !== undefined) {
-          output.removeListener("resize", onResize as never);
+          output.removeListener("resize", onResize);
         }
-      }) as never);
+      });
     }
 
     if (signal) {
@@ -317,7 +379,7 @@ export class Interface extends EventEmitter {
         nextTick(onAborted);
       } else {
         signal.addEventListener("abort", onAborted, { once: true });
-        this.once("close", (() => signal.removeEventListener("abort", onAborted)) as never);
+        this.once("close", () => signal.removeEventListener("abort", onAborted));
       }
     }
 
@@ -369,41 +431,7 @@ export class Interface extends EventEmitter {
     }
   }
 
-  /**
-   * Ask a question and call back with the answer.
-   *
-   * The prompt is swapped for the query and swapped back when the answer
-   * arrives, which is why a second question while one is outstanding does not
-   * stack: there is one prompt and one callback.
-   */
-  question(query: string, callback: (answer: string) => void): void;
-  question(query: string, options: QuestionOptions, callback: (answer: string) => void): void;
-  question(
-    query: string,
-    optionsOrCallback: QuestionOptions | ((answer: string) => void),
-    maybeCallback?: (answer: string) => void,
-  ): void {
-    const callback = typeof optionsOrCallback === "function"
-      ? optionsOrCallback
-      : (maybeCallback as (answer: string) => void);
-    const options = typeof optionsOrCallback === "function" ? undefined : optionsOrCallback;
-    validateFunction(callback, "callback");
-
-    if (options?.signal) {
-      validateAbortSignal(options.signal, "options.signal");
-      if (options.signal.aborted) return;
-      const onAbort = (): void => { this.#questionCancel(); };
-      options.signal.addEventListener("abort", onAbort, { once: true });
-      const cleanup = (): void => options.signal?.removeEventListener("abort", onAbort);
-      const wrapped = (answer: string): void => { cleanup(); callback(answer); };
-      this.#question(query, wrapped);
-      return;
-    }
-
-    this.#question(query, callback);
-  }
-
-  #question(query: string, callback: (answer: string) => void): void {
+  protected [kQuestion](query: string, callback: QuestionCallback): void {
     if (this.closed) throw new ERR_USE_AFTER_CLOSE("readline");
     if (this.#questionCallback) {
       // Already asking. Re-showing the prompt is all node does, because the
@@ -417,11 +445,63 @@ export class Interface extends EventEmitter {
     this.prompt();
   }
 
-  #questionCancel(): void {
+  protected [kQuestionCancel](): void {
     if (!this.#questionCallback) return;
     this.#questionCallback = null;
     this.setPrompt(this.#oldPrompt);
     this.clearLine();
+  }
+
+  /**
+   * Promise form shared by `readline/promises` and the legacy constructor's
+   * `util.promisify` facade. The symbol keeps this implementation off the
+   * public string-keyed API without relying on function-object metadata.
+   */
+  [kQuestionPromise](query: string, options?: QuestionOptions): Promise<string> {
+    const signal = options?.signal;
+    if (signal !== undefined) {
+      validateAbortSignal(signal, "options.signal");
+      if (signal.aborted) {
+        return Promise.reject(new AbortError(undefined, { cause: signal.reason }));
+      }
+    }
+
+    return new Promise<string>((resolve, reject) => {
+      let settled = false;
+      const cleanup = (): void => {
+        if (settled) return;
+        settled = true;
+        if (signal !== undefined) {
+          signal.removeEventListener("abort", onAbort);
+        }
+        this.#questionReject = null;
+      };
+      const rejectQuestion = (reason: unknown): void => {
+        cleanup();
+        reject(reason);
+      };
+      const onAbort = (): void => {
+        if (settled) return;
+        this[kQuestionCancel]();
+        rejectQuestion(new AbortError(undefined, { cause: signal?.reason }));
+      };
+      const answered = (answer: string): void => {
+        if (settled) return;
+        cleanup();
+        resolve(answer);
+      };
+
+      if (signal !== undefined) {
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+      this.#questionReject = rejectQuestion;
+      try {
+        this[kQuestion](query, answered);
+      } catch (error) {
+        cleanup();
+        reject(error);
+      }
+    });
   }
 
   #setLine(line = ""): void {
@@ -475,10 +555,10 @@ export class Interface extends EventEmitter {
     // Up to the first row of the line before erasing, or the erase would start
     // in the middle of it.
     const prevRows = this.prevRows || 0;
-    if (prevRows > 0) moveCursor(this.output as never, 0, -prevRows);
+    if (prevRows > 0) moveCursor(this.output, 0, -prevRows);
 
-    cursorTo(this.output as never, 0);
-    clearScreenDown(this.output as never);
+    cursorTo(this.output, 0);
+    clearScreenDown(this.output);
 
     if (this.#isMultiline) {
       const lines = this.line.split("\n");
@@ -495,10 +575,10 @@ export class Interface extends EventEmitter {
     // does not exist. A space forces it.
     if (lineCols === 0) this.#writeToOutput(" ");
 
-    cursorTo(this.output as never, cursorPos.cols);
+    cursorTo(this.output, cursorPos.cols);
 
     const diff = lineRows - cursorPos.rows;
-    if (diff > 0) moveCursor(this.output as never, 0, -diff);
+    if (diff > 0) moveCursor(this.output, 0, -diff);
 
     this.prevRows = cursorPos.rows;
   }
@@ -534,7 +614,7 @@ export class Interface extends EventEmitter {
     if (this.closed) throw new ERR_USE_AFTER_CLOSE("readline");
     if (this.paused) this.resume();
     if (this.terminal) {
-      this.#ttyWrite(d as string | undefined, key);
+      this.#ttyWrite(d, key);
     } else {
       this.#normalWrite(d);
     }
@@ -550,7 +630,11 @@ export class Interface extends EventEmitter {
    */
   #normalWrite(b: string | Buffer | undefined): void {
     if (b === undefined) return;
-    let string = (this.#decoder as StringDecoder).write(b as never);
+    const decoder = this.#decoder;
+    if (decoder === undefined) {
+      throw new Error("readline non-terminal decoder invariant violated");
+    }
+    let string = decoder.write(b);
 
     if (this.#sawReturnAt && Date.now() - this.#sawReturnAt <= this.crlfDelay) {
       if (string.codePointAt(0) === 10) string = string.slice(1);
@@ -575,13 +659,16 @@ export class Interface extends EventEmitter {
 
     this.#sawReturnAt = string.endsWith("\r") ? Date.now() : 0;
 
-    let first = lines[0] as string;
+    let first = lines[0] ?? "";
     if (this.#lineBuffer) first = this.#lineBuffer + first;
     // Either empty, or the beginning of a line whose end has not arrived.
-    this.#lineBuffer = lines[lastIndex] as string;
+    this.#lineBuffer = lines[lastIndex] ?? "";
 
     this.#onLine(first);
-    for (let i = 1; i < lastIndex; i++) this.#onLine(lines[i] as string);
+    for (let i = 1; i < lastIndex; i++) {
+      const line = lines[i];
+      if (line !== undefined) this.#onLine(line);
+    }
   }
 
   /**
@@ -635,15 +722,15 @@ export class Interface extends EventEmitter {
     // is quadratic, and a long line pays it on every Ctrl+Left.
     const leading = this.line.slice(0, this.cursor);
     const reversed = Array.from(leading).reverse().join("");
-    const match = /^\s*(?:[^\w\s]+|\w+)?/.exec(reversed) as RegExpExecArray;
-    this.#moveCursor(-(match[0] as string).length);
+    const match = /^\s*(?:[^\w\s]+|\w+)?/.exec(reversed);
+    this.#moveCursor(-(match?.[0].length ?? 0));
   }
 
   #wordRight(): void {
     if (this.cursor >= this.line.length) return;
     const trailing = this.line.slice(this.cursor);
-    const match = /^(?:\s+|[^\w\s]+|\w+)\s*/.exec(trailing) as RegExpExecArray;
-    this.#moveCursor(match[0].length);
+    const match = /^(?:\s+|[^\w\s]+|\w+)\s*/.exec(trailing);
+    this.#moveCursor(match?.[0].length ?? 0);
   }
 
   #deleteLeft(): void {
@@ -670,8 +757,8 @@ export class Interface extends EventEmitter {
     this.#beforeEdit(this.line, this.cursor);
     let leading = this.line.slice(0, this.cursor);
     const reversed = Array.from(leading).reverse().join("");
-    const match = /^\s*(?:[^\w\s]+|\w+)?/.exec(reversed) as RegExpExecArray;
-    leading = leading.slice(0, leading.length - match[0].length);
+    const match = /^\s*(?:[^\w\s]+|\w+)?/.exec(reversed);
+    leading = leading.slice(0, leading.length - (match?.[0].length ?? 0));
     this.line = leading + this.line.slice(this.cursor);
     this.cursor = leading.length;
     this.#refreshLine();
@@ -681,8 +768,8 @@ export class Interface extends EventEmitter {
     if (this.cursor >= this.line.length) return;
     this.#beforeEdit(this.line, this.cursor);
     const trailing = this.line.slice(this.cursor);
-    const match = /^(?:\s+|\W+|\w+)\s*/.exec(trailing) as RegExpExecArray;
-    this.line = this.line.slice(0, this.cursor) + trailing.slice(match[0].length);
+    const match = /^(?:\s+|\W+|\w+)\s*/.exec(trailing);
+    this.line = this.line.slice(0, this.cursor) + trailing.slice(match?.[0].length ?? 0);
     this.#refreshLine();
   }
 
@@ -715,7 +802,9 @@ export class Interface extends EventEmitter {
   #yank(): void {
     if (this.#killRing.length > 0) {
       this.#yanking = true;
-      this.#insertString(this.#killRing[this.#killRingCursor] as string);
+      const killed = this.#killRing[this.#killRingCursor];
+      if (killed === undefined) return;
+      this.#insertString(killed);
     }
   }
 
@@ -724,10 +813,12 @@ export class Interface extends EventEmitter {
     if (!this.#yanking) return;
     if (this.#killRing.length <= 1) return;
 
-    const lastYank = this.#killRing[this.#killRingCursor] as string;
+    const lastYank = this.#killRing[this.#killRingCursor];
+    if (lastYank === undefined) return;
     this.#killRingCursor++;
     if (this.#killRingCursor >= this.#killRing.length) this.#killRingCursor = 0;
-    const currentYank = this.#killRing[this.#killRingCursor] as string;
+    const currentYank = this.#killRing[this.#killRingCursor];
+    if (currentYank === undefined) return;
 
     const head = this.line.slice(0, this.cursor - lastYank.length);
     const tail = this.line.slice(this.cursor);
@@ -747,7 +838,8 @@ export class Interface extends EventEmitter {
   #undo(): void {
     if (this.#undoStack.length <= 0) return;
     this.#redoStack.push({ text: this.line, cursor: this.cursor });
-    const entry = this.#undoStack.pop() as UndoEntry;
+    const entry = this.#undoStack.pop();
+    if (entry === undefined) return;
     this.#setLine(entry.text);
     this.cursor = entry.cursor;
     this.#refreshLine();
@@ -756,7 +848,8 @@ export class Interface extends EventEmitter {
   #redo(): void {
     if (this.#redoStack.length <= 0) return;
     this.#undoStack.push({ text: this.line, cursor: this.cursor });
-    const entry = this.#redoStack.pop() as UndoEntry;
+    const entry = this.#redoStack.pop();
+    if (entry === undefined) return;
     this.#setLine(entry.text);
     this.cursor = entry.cursor;
     this.#refreshLine();
@@ -789,9 +882,10 @@ export class Interface extends EventEmitter {
    * there is text to move to, and only then leave it.
    */
   #multilineMove(direction: number, splitLines: string[], pos: CursorPos): void {
-    const curr = splitLines[pos.rows] as string;
+    const curr = splitLines[pos.rows];
     const down = direction === 1;
-    const adj = splitLines[pos.rows + direction] as string;
+    const adj = splitLines[pos.rows + direction];
+    if (curr === undefined || adj === undefined) return;
     const promptLen = MULTILINE_PROMPT.length;
 
     // Clamped to the end of the adjacent line when it is shorter, and the
@@ -835,7 +929,9 @@ export class Interface extends EventEmitter {
   #historyNext(): void {
     if (!this.#historyManager.canNavigateToNext()) return;
     this.#beforeEdit(this.line, this.cursor);
-    this.#setLine(this.#historyManager.navigateToNext(this.#substringSearch ?? undefined) as string);
+    const line = this.#historyManager.navigateToNext(this.#substringSearch ?? undefined);
+    if (line === null) return;
+    this.#setLine(line);
     this.cursor = this.line.length;
     this.#refreshLine();
   }
@@ -853,7 +949,9 @@ export class Interface extends EventEmitter {
   #historyPrev(): void {
     if (!this.#historyManager.canNavigateToPrevious()) return;
     this.#beforeEdit(this.line, this.cursor);
-    this.#setLine(this.#historyManager.navigateToPrevious(this.#substringSearch ?? "") as string);
+    const line = this.#historyManager.navigateToPrevious(this.#substringSearch ?? "");
+    if (line === null) return;
+    this.#setLine(line);
     this.cursor = this.line.length;
     this.#refreshLine();
   }
@@ -916,7 +1014,7 @@ export class Interface extends EventEmitter {
 
     const newPos = this.getCursorPos();
     if (oldPos.rows === newPos.rows) {
-      moveCursor(this.output as never, newPos.cols - oldPos.cols, 0);
+      moveCursor(this.output, newPos.cols - oldPos.cols, 0);
     } else {
       this.#refreshLine();
     }
@@ -925,48 +1023,58 @@ export class Interface extends EventEmitter {
   // -- completion -----------------------------------------------------------
 
   /**
-   * Run the completer and apply what it returns.
+   * Run either completer convention without inspecting the function object.
    *
-   * Two conventions, and the difference between them is *timing* rather than
-   * spelling. A two-argument completer is given a callback and is not deferred
-   * at all, so one that answers immediately completes the line immediately --
-   * node's tests emit a keystroke and assert on the output on the very next
-   * line, with no turn of the loop between them. Anything else is awaited.
-   *
-   * That is why `node:readline` normalises a one-argument completer into the
-   * callback form before it ever gets here, and `node:readline/promises` does
-   * not: the promise interface is allowed to take a turn, and the callback one
-   * is not. Node splits this across two `Interface` classes; here it is one
-   * class and one normalisation at the module boundary, which puts the choice
-   * in the same place -- with whoever handed the completer over.
+   * The callback is always supplied. A synchronous completer ignores it and
+   * returns a tuple, a promise completer returns a promise, and a callback
+   * completer returns `void`. Immediate answers remain immediate, which is
+   * observable in the callback API, while promise answers retain their normal
+   * microtask boundary.
    */
-  async #tabComplete(lastKeypressWasTab: boolean): Promise<void> {
+  #tabComplete(lastKeypressWasTab: boolean): void {
     this.pause();
     const string = this.line.slice(0, this.cursor);
-    const completer = this.completer as (
-      line: string,
-      callback?: (err: unknown, result?: Completion) => void,
-    ) => Completion | Promise<Completion> | void;
-
-    if (completer.length === 2) {
-      completer(string, (err, value) => {
-        this.resume();
-        if (err) this.#writeToOutput(`Tab completion error: ${String(err)}`);
-        else this.#tabCompleter(lastKeypressWasTab, value as Completion);
-      });
-      return;
-    }
-
-    let value: Completion;
-    try {
-      value = (await completer(string)) as Completion;
-    } catch (err) {
-      this.#writeToOutput(`Tab completion error: ${String(err)}`);
-      return;
-    } finally {
+    const completer = this.completer;
+    if (completer === undefined) {
       this.resume();
+      return;
     }
-    this.#tabCompleter(lastKeypressWasTab, value);
+
+    let settled = false;
+    const settle = (err: unknown, value?: Completion): void => {
+      if (settled) return;
+      settled = true;
+      this.resume();
+      if (err) {
+        this.#writeToOutput(`Tab completion error: ${String(err)}`);
+      } else if (value !== undefined) {
+        this.#tabCompleter(lastKeypressWasTab, value);
+      }
+    };
+    const receive = (err: unknown, value?: Completion): void => {
+      if (this.deferCompletions) {
+        Promise.resolve().then(() => settle(err, value));
+      } else {
+        settle(err, value);
+      }
+    };
+
+    let result: Completion | Promise<Completion> | void;
+    try {
+      result = completer(string, receive);
+    } catch (err) {
+      receive(err);
+      return;
+    }
+
+    if (result instanceof Promise) {
+      result.then(
+        (value) => settle(null, value),
+        (err) => settle(err),
+      );
+    } else if (result !== undefined) {
+      receive(null, result);
+    }
   }
 
   /**
@@ -1021,7 +1129,8 @@ export class Interface extends EventEmitter {
     let lineIndex = 0;
     let whitespace = 0;
     for (let i = 0; i < completions.length; i++) {
-      const completion = completions[i] as string;
+      const completion = completions[i];
+      if (completion === undefined) continue;
       if (completion === "" || lineIndex === maxColumns) {
         output += "\r\n";
         lineIndex = 0;
@@ -1033,7 +1142,7 @@ export class Interface extends EventEmitter {
       }
       if (completion !== "") {
         output += completion;
-        whitespace = width - (widths[i] as number);
+        whitespace = width - (widths[i] ?? 0);
         lineIndex++;
       } else {
         // An empty string is the completer asking for a break in the list.
@@ -1056,7 +1165,7 @@ export class Interface extends EventEmitter {
    * Nothing here is clever; the interesting decisions are in the methods it
    * calls.
    */
-  #ttyWrite(s: string | undefined, key: Key | undefined): void {
+  #ttyWrite(s: string | Buffer | undefined, key: Key | undefined): void {
     const previousKey = this.#previousKey;
     const k: Key = key ?? {
       sequence: undefined, name: undefined, ctrl: false, meta: false, shift: false,
@@ -1126,8 +1235,8 @@ export class Interface extends EventEmitter {
         case "b": this.#moveCursor(-charLengthLeft(this.line, this.cursor)); break;
         case "f": this.#moveCursor(charLengthAt(this.line, this.cursor)); break;
         case "l":
-          cursorTo(this.output as never, 0, 0);
-          clearScreenDown(this.output as never);
+          cursorTo(this.output, 0, 0);
+          clearScreenDown(this.output);
           this.#refreshLine();
           break;
         case "n": this.#historyNext(); break;
@@ -1205,7 +1314,7 @@ export class Interface extends EventEmitter {
    * Pasted text arrives here as one chunk that may contain newlines, and each
    * one has to finish a line exactly as pressing Enter would.
    */
-  #writeCharacters(s: string | undefined): void {
+  #writeCharacters(s: unknown): void {
     if (typeof s !== "string" || !s) return;
     LINE_ENDING.lastIndex = 0;
     let nextMatch: RegExpExecArray | null;
@@ -1235,15 +1344,61 @@ export class Interface extends EventEmitter {
    */
   [Symbol.asyncIterator](): AsyncIterableIterator<string> {
     if (this.#lineObjectStream === undefined) {
-      this.#lineObjectStream = onEvent(this as never, "line", {
+      this.#lineObjectStream = onEvent<string>(this, "line", {
+        close: ["close"],
         highWaterMark: 1024,
         [kFirstEventParam]: true,
-      }) as AsyncIterableIterator<string>;
+      });
     }
     return this.#lineObjectStream;
   }
 
   [Symbol.dispose](): void {
     this.close();
+  }
+}
+
+/** The callback-oriented `node:readline` public interface. */
+export class Interface extends InterfaceBase {
+  /**
+   * Ask a question and call back with the answer.
+   *
+   * The prompt is swapped for the query and swapped back when the answer
+   * arrives, which is why a second question while one is outstanding does not
+   * stack: there is one prompt and one callback.
+   */
+  question(query: string, callback: QuestionCallback): void;
+  question(query: string, options: QuestionOptions, callback: QuestionCallback): void;
+  question(
+    query: string,
+    optionsOrCallback: QuestionOptions | QuestionCallback | null,
+    maybeCallback?: unknown,
+  ): void {
+    let callback: unknown;
+    let options: QuestionOptions | undefined;
+    if (isQuestionCallback(optionsOrCallback)) {
+      callback = optionsOrCallback;
+    } else if (optionsOrCallback !== null && typeof optionsOrCallback === "object") {
+      options = optionsOrCallback;
+      callback = maybeCallback;
+    } else {
+      callback = maybeCallback;
+    }
+
+    if (options?.signal) {
+      validateAbortSignal(options.signal, "options.signal");
+      if (options.signal.aborted) return;
+      const onAbort = (): void => { this[kQuestionCancel](); };
+      options.signal.addEventListener("abort", onAbort, { once: true });
+      const cleanup = (): void => options.signal?.removeEventListener("abort", onAbort);
+      if (isQuestionCallback(callback)) {
+        const originalCallback = callback;
+        callback = (answer: string): void => { cleanup(); originalCallback(answer); };
+      } else {
+        callback = cleanup;
+      }
+    }
+
+    if (isQuestionCallback(callback)) this[kQuestion](query, callback);
   }
 }

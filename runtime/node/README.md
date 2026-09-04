@@ -19,6 +19,7 @@ runtime/node/
     shape.mjs         the object node's tests see as `require('<module>')`
     test-pattern      a regex, when node does not name the tests `test-<module>-*`
     not-applicable    `file: reason`, for tests that assert on node's binary
+    test/*.js         focused coverage for supported parts of mixed upstream tests
 ```
 
 ## Four rules, and what each is for
@@ -69,3 +70,17 @@ compiler bug.
 Anything a test needs that we do not have goes in `not-applicable` **with a
 reason**, or stays a failure. A conformance number nobody can audit is not
 worth reporting.
+
+`not-applicable` describes the **test**, not an unfinished implementation. Use
+it only when the assertion fundamentally depends on a language non-goal from
+`docs/conformance/typescript.md` §13, or on instrumentation owned by a Node
+module outside the supported profile, or when it launches a fresh Node process
+that cannot contain our substituted module. Prefix the reason with `language
+non-goal`, `cross-module integration`, or `host-binary subprocess` so the
+distinction is visible. A temporary implementation gap remains a failure. If
+one file mixes an excluded assertion with supported behavior, its reason must
+name the independent test that keeps the supported behavior covered.
+
+Focused files under `test/` are reported as `local/<name>` and must cite the
+pinned upstream test whose applicable behavior they preserve. They are a last
+resort for mixed files, not a replacement for an upstream failure.

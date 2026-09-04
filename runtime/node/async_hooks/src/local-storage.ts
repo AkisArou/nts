@@ -14,12 +14,15 @@
 // the values live exactly as long as the asynchronous work they belong to.
 
 import { validateObject } from "../../internal/validators.ts";
-import { AsyncContextFrame } from "../../internal/async-context.ts";
+import {
+  AsyncContextFrame,
+  type AsyncContextEntry,
+} from "../../internal/async-context.ts";
 import { AsyncResource } from "./resource.ts";
 
-export interface AsyncLocalStorageOptions {
+export interface AsyncLocalStorageOptions<T = unknown> {
   /** What `getStore()` answers outside any `run`. */
-  defaultValue?: unknown;
+  defaultValue?: T | undefined;
   /** A label, for a program holding several. */
   name?: string | undefined;
 }
@@ -32,15 +35,12 @@ export interface AsyncLocalStorageOptions {
  * because `run(store, () => { ... })` forces the body into a function, and a
  * function body cannot `await` on behalf of its caller or `return` from it.
  */
-export class RunScope<T> {
-  #storage: AsyncLocalStorage<T>;
-  #previous: T | undefined;
+export class RunScope {
+  #restore: () => void;
   #disposed = false;
 
-  constructor(storage: AsyncLocalStorage<T>, store: T) {
-    this.#storage = storage;
-    this.#previous = storage.getStore();
-    storage.enterWith(store);
+  constructor(restore: () => void) {
+    this.#restore = restore;
   }
 
   dispose(): void {
@@ -48,21 +48,62 @@ export class RunScope<T> {
     // legitimate, and the automatic one will still come afterwards.
     if (this.#disposed) return;
     this.#disposed = true;
-    this.#storage.enterWith(this.#previous as T);
+    this.#restore();
+  }
+}
+
+interface StoredContext<T> {
+  value: T | undefined;
+}
+
+let nextStorageId = 1;
+
+/**
+ * One type-preserving entry in an `AsyncContextFrame` snapshot.
+ *
+ * The frame deliberately cannot inspect `StoredContext<T>`. This object keeps
+ * that type paired with the storage's own weak map all the way through a
+ * clone, so no `unknown` value or type assertion is needed.
+ */
+class StorageContextEntry<T> implements AsyncContextEntry {
+  #storageId: number;
+  #contexts: WeakMap<AsyncContextFrame, StoredContext<T>>;
+  #stored: StoredContext<T>;
+
+  constructor(
+    storageId: number,
+    contexts: WeakMap<AsyncContextFrame, StoredContext<T>>,
+    stored: StoredContext<T>,
+  ) {
+    this.#storageId = storageId;
+    this.#contexts = contexts;
+    this.#stored = stored;
   }
 
-  [Symbol.dispose](): void {
-    this.dispose();
+  storageId(): number {
+    return this.#storageId;
+  }
+
+  install(frame: AsyncContextFrame): void {
+    this.#contexts.set(frame, this.#stored);
+  }
+
+  remove(frame: AsyncContextFrame): void {
+    this.#contexts.delete(frame);
   }
 }
 
 export class AsyncLocalStorage<T = unknown> {
   #defaultValue: T | undefined;
   #name: string | undefined;
+  #storageId: number;
+  #contexts = new WeakMap<AsyncContextFrame, StoredContext<T>>();
 
-  constructor(options: AsyncLocalStorageOptions = {}) {
+  constructor(options: AsyncLocalStorageOptions<T> = {}) {
     validateObject(options, "options");
-    this.#defaultValue = options.defaultValue as T | undefined;
+    this.#storageId = nextStorageId;
+    nextStorageId += 1;
+    this.#defaultValue = options.defaultValue;
     if (options.name !== undefined) this.#name = `${options.name}`;
   }
 
@@ -90,14 +131,12 @@ export class AsyncLocalStorage<T = unknown> {
   }
 
   /**
-   * Stop this storage answering anywhere.
-   *
-   * Reaches into contexts already derived, unlike everything else here: it
-   * means "this storage is finished", not "this scope is finished". A `run`
-   * that is still on the stack will find the value gone.
+   * Remove this storage from the current continuation's shared snapshot.
+   * Existing asynchronous work carrying that same snapshot sees the removal;
+   * independent snapshots retain their own state, matching Node's map model.
    */
   disable(): void {
-    AsyncContextFrame.disable(this);
+    AsyncContextFrame.current()?.removeEntry(this.#storageId);
   }
 
   /**
@@ -109,13 +148,28 @@ export class AsyncLocalStorage<T = unknown> {
    * a request parser, say. `run` is the safer form and should be preferred.
    */
   enterWith(store: T): void {
-    AsyncContextFrame.setCurrent(new AsyncContextFrame(this, store));
+    this.#enterStore(store);
+  }
+
+  #enterStore(store: T | undefined): void {
+    const frame = new AsyncContextFrame();
+    const stored: StoredContext<T> = { value: store };
+    frame.setEntry(new StorageContextEntry(this.#storageId, this.#contexts, stored));
+    AsyncContextFrame.setCurrent(frame);
   }
 
   /**
    * Run `fn` with `store` in place, and restore what was there afterwards.
    */
   run<A extends unknown[], R>(store: T, fn: (...args: A) => R, ...args: A): R {
+    return this.#runStore(store, fn, args);
+  }
+
+  #runStore<A extends unknown[], R>(
+    store: T | undefined,
+    fn: (...args: A) => R,
+    args: A,
+  ): R {
     const prior = this.getStore();
     // Setting the same value would allocate a frame that changes nothing, and
     // `run` nested inside `run` with one store is common enough to be worth
@@ -123,7 +177,7 @@ export class AsyncLocalStorage<T = unknown> {
     // no-op and re-entering with `-0` over `0` is not.
     if (Object.is(prior, store)) return fn(...args);
 
-    this.enterWith(store);
+    this.#enterStore(store);
     try {
       return fn(...args);
     } finally {
@@ -131,25 +185,25 @@ export class AsyncLocalStorage<T = unknown> {
       // differ when `fn` changed some *other* storage with `enterWith`: those
       // changes are meant to outlive this call, and reinstating the old frame
       // would undo them.
-      this.enterWith(prior as T);
+      this.#enterStore(prior);
     }
   }
 
   /** Run `fn` with this storage unset, whatever it was. */
   exit<A extends unknown[], R>(fn: (...args: A) => R, ...args: A): R {
-    return this.run(undefined as T, fn, ...args);
+    return this.#runStore(undefined, fn, args);
   }
 
   getStore(): T | undefined {
-    const frame = AsyncContextFrame.current();
-    // `has` rather than a truthiness test on the value: a store explicitly set
-    // to `undefined` is a value, and answering the default there would make
-    // `run(undefined, ...)` indistinguishable from never having run at all.
-    if (!frame?.has(this)) return this.#defaultValue;
-    return frame.get(this) as T;
+    const current = AsyncContextFrame.current();
+    if (current === undefined) return this.#defaultValue;
+    const stored = this.#contexts.get(current);
+    return stored === undefined ? this.#defaultValue : stored.value;
   }
 
-  withScope(store: T): RunScope<T> {
-    return new RunScope(this, store);
+  withScope(store: T): RunScope {
+    const previous = this.getStore();
+    this.#enterStore(store);
+    return new RunScope(() => this.#enterStore(previous));
   }
 }

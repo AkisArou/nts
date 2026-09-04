@@ -82,7 +82,13 @@ export function getStringWidth(str: string, removeControlChars = true): number {
   }
   str = str.normalize("NFC");
   for (const char of str) {
-    const code = char.codePointAt(0)!;
+    // A `for ... of` string element is never empty. Keep the standard
+    // library's wider `number | undefined` result explicit instead of
+    // asserting that invariant away.
+    const code = char.codePointAt(0);
+    if (code === undefined) {
+      continue;
+    }
     if (isFullWidthCodePoint(code)) {
       width += 2;
     } else if (!isZeroWidthCodePoint(code)) {

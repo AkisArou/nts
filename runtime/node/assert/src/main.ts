@@ -19,32 +19,19 @@ import {
 import { isPromise, isRegExp } from "../../util/src/types.ts";
 import {
   ERR_AMBIGUOUS_ARGUMENT,
-  ERR_CONSTRUCT_CALL_REQUIRED,
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
   ERR_INVALID_RETURN_VALUE,
   ERR_MISSING_ARGS,
 } from "../../internal/errors.ts";
 import { validateFunction, validateOneOf } from "../../internal/validators.ts";
+import { emitWarning } from "../../internal/process-warning.ts";
 import { AssertionError, type DiffMode } from "./error.ts";
 import { CallTracker } from "./calltracker.ts";
 
 export { AssertionError, CallTracker };
 // Re-exported for the tests that reach for node's internal spelling of them.
 export { myersDiff, printMyersDiff, printSimpleMyersDiff } from "../../internal/assert/myers-diff.ts";
-
-declare function nts_process_emit_warning(message: string, name: string, code: string): void;
-
-/**
- * How an `Assert` instance was configured.
- *
- * A symbol rather than a private field, and read with optional chaining
- * everywhere below, because these methods are routinely destructured off an
- * instance -- `const { strictEqual } = myAssert` -- and lose their receiver. A
- * private field would throw on the way out; a missing symbol just means the
- * defaults apply, which is what a destructured method should do.
- */
-const kOptions: unique symbol = Symbol("options") as never;
 
 export interface AssertOptions {
   /** `'full'` prints the whole diff rather than collapsing unchanged runs. */
@@ -55,32 +42,285 @@ export interface AssertOptions {
   skipPrototype?: boolean;
 }
 
-/** `diff` stays optional: undefined means the `AssertionError` default. */
-type ResolvedOptions = AssertOptions & { strict: boolean; skipPrototype: boolean };
-
-interface Configured {
-  [kOptions]?: ResolvedOptions;
+/** Fully resolved construction state; `diff` stays absent to select the default. */
+interface ResolvedOptions {
+  readonly diff?: DiffMode;
+  readonly strict: boolean;
+  readonly skipPrototype: boolean;
 }
+
+type Comparison = (
+  this: Assert | void,
+  actual: unknown,
+  expected: unknown,
+  message?: string | Error,
+) => void;
 
 /** Distinguishes "the function returned" from "the function threw undefined". */
 const NO_EXCEPTION_SENTINEL: object = {};
 
-type AnyFn = (...args: never[]) => unknown;
+type AnyFn = () => unknown;
+
+type Awaitable = PromiseLike<unknown>;
+
+type ExceptionArguments = [
+  error?: Expectation | string,
+  message?: string,
+];
+
+type ComparisonArguments = [
+  actual: unknown,
+  expected: unknown,
+  message?: string | Error,
+];
+
+type FailArguments = [
+  actual?: unknown,
+  expected?: unknown,
+  message?: string | Error,
+  operator?: string,
+  stackStartFn?: CallableFunction,
+];
 
 /** What `throws` and friends accept as a description of the expected error. */
+export type SupportedErrorConstructor =
+  | ErrorConstructor
+  | TypeErrorConstructor
+  | RangeErrorConstructor
+  | ReferenceErrorConstructor
+  | SyntaxErrorConstructor
+  | URIErrorConstructor
+  | EvalErrorConstructor
+  | AggregateErrorConstructor
+  | typeof AssertionError;
+
+/**
+ * The statically known fields accepted by an object expectation.
+ *
+ * Node's JavaScript implementation accepts an arbitrary property bag and
+ * discovers its keys at run time. NTS objects have a closed layout instead,
+ * so the compiled API names the error fields applications can portably ask
+ * about. Values remain structural: strings may be matched by a RegExp and all
+ * other values use strict deep equality.
+ */
+export interface ErrorExpectation {
+  readonly name?: string | RegExp;
+  readonly message?: string | RegExp;
+  readonly code?: string | number | RegExp;
+  readonly cause?: unknown;
+  readonly errno?: string | number;
+  readonly syscall?: string | RegExp;
+  readonly path?: string | RegExp;
+  readonly dest?: string | RegExp;
+  readonly address?: string | RegExp;
+  readonly port?: number;
+  readonly host?: string | RegExp;
+  readonly hostname?: string | RegExp;
+  readonly status?: number;
+  readonly statusCode?: number;
+  readonly signal?: string | RegExp;
+  readonly errors?: readonly unknown[];
+  readonly actual?: unknown;
+  readonly expected?: unknown;
+  readonly operator?: string | RegExp;
+  readonly generatedMessage?: boolean;
+  readonly diff?: DiffMode;
+  readonly details?: readonly unknown[];
+  readonly stack?: string | RegExp;
+}
+
 export type Expectation =
   | RegExp
   | ((err: unknown) => boolean)
-  | (new (...args: never[]) => Error)
-  | Record<string, unknown>
+  | SupportedErrorConstructor
+  | ErrorExpectation
   | Error;
+
+interface ErrorField {
+  readonly present: boolean;
+  readonly value?: unknown;
+}
+
+const MISSING_ERROR_FIELD: ErrorField = { present: false };
+
+function readErrorField(value: object, key: string): ErrorField {
+  switch (key) {
+    case "name":
+      return "name" in value
+        ? { present: true, value: value.name }
+        : MISSING_ERROR_FIELD;
+    case "message":
+      return "message" in value
+        ? { present: true, value: value.message }
+        : MISSING_ERROR_FIELD;
+    case "code":
+      return "code" in value
+        ? { present: true, value: value.code }
+        : MISSING_ERROR_FIELD;
+    case "cause":
+      return "cause" in value
+        ? { present: true, value: value.cause }
+        : MISSING_ERROR_FIELD;
+    case "errno":
+      return "errno" in value
+        ? { present: true, value: value.errno }
+        : MISSING_ERROR_FIELD;
+    case "syscall":
+      return "syscall" in value
+        ? { present: true, value: value.syscall }
+        : MISSING_ERROR_FIELD;
+    case "path":
+      return "path" in value
+        ? { present: true, value: value.path }
+        : MISSING_ERROR_FIELD;
+    case "dest":
+      return "dest" in value
+        ? { present: true, value: value.dest }
+        : MISSING_ERROR_FIELD;
+    case "address":
+      return "address" in value
+        ? { present: true, value: value.address }
+        : MISSING_ERROR_FIELD;
+    case "port":
+      return "port" in value
+        ? { present: true, value: value.port }
+        : MISSING_ERROR_FIELD;
+    case "host":
+      return "host" in value
+        ? { present: true, value: value.host }
+        : MISSING_ERROR_FIELD;
+    case "hostname":
+      return "hostname" in value
+        ? { present: true, value: value.hostname }
+        : MISSING_ERROR_FIELD;
+    case "status":
+      return "status" in value
+        ? { present: true, value: value.status }
+        : MISSING_ERROR_FIELD;
+    case "statusCode":
+      return "statusCode" in value
+        ? { present: true, value: value.statusCode }
+        : MISSING_ERROR_FIELD;
+    case "signal":
+      return "signal" in value
+        ? { present: true, value: value.signal }
+        : MISSING_ERROR_FIELD;
+    case "errors":
+      return "errors" in value
+        ? { present: true, value: value.errors }
+        : MISSING_ERROR_FIELD;
+    case "actual":
+      return "actual" in value
+        ? { present: true, value: value.actual }
+        : MISSING_ERROR_FIELD;
+    case "expected":
+      return "expected" in value
+        ? { present: true, value: value.expected }
+        : MISSING_ERROR_FIELD;
+    case "operator":
+      return "operator" in value
+        ? { present: true, value: value.operator }
+        : MISSING_ERROR_FIELD;
+    case "generatedMessage":
+      return "generatedMessage" in value
+        ? { present: true, value: value.generatedMessage }
+        : MISSING_ERROR_FIELD;
+    case "diff":
+      return "diff" in value
+        ? { present: true, value: value.diff }
+        : MISSING_ERROR_FIELD;
+    case "details":
+      return "details" in value
+        ? { present: true, value: value.details }
+        : MISSING_ERROR_FIELD;
+    case "stack":
+      return "stack" in value
+        ? { present: true, value: value.stack }
+        : MISSING_ERROR_FIELD;
+    default:
+      return MISSING_ERROR_FIELD;
+  }
+}
+
+interface MessageLike {
+  readonly message: string;
+}
+
+function hasStringMessage(value: unknown): value is MessageLike {
+  return value !== null && typeof value === "object" &&
+    "message" in value && typeof value.message === "string";
+}
+
+interface StackLike {
+  readonly stack: string;
+}
+
+function hasStringStack(value: unknown): value is StackLike {
+  return value !== null && typeof value === "object" &&
+    "stack" in value && typeof value.stack === "string";
+}
+
+function failureMessage(value: unknown): string | Error {
+  if (value instanceof Error) return value;
+  switch (typeof value) {
+    case "string":
+      return value;
+    case "number":
+    case "bigint":
+    case "boolean":
+    case "symbol":
+    case "undefined":
+      return String(value);
+    default:
+      return inspect(value);
+  }
+}
+
+function isSupportedErrorConstructor(value: unknown): value is SupportedErrorConstructor {
+  return value === Error ||
+    value === TypeError ||
+    value === RangeError ||
+    value === ReferenceError ||
+    value === SyntaxError ||
+    value === URIError ||
+    value === EvalError ||
+    value === AggregateError ||
+    value === AssertionError;
+}
+
+function supportedErrorName(expected: SupportedErrorConstructor): string {
+  if (expected === TypeError) return "TypeError";
+  if (expected === RangeError) return "RangeError";
+  if (expected === ReferenceError) return "ReferenceError";
+  if (expected === SyntaxError) return "SyntaxError";
+  if (expected === URIError) return "URIError";
+  if (expected === EvalError) return "EvalError";
+  if (expected === AggregateError) return "AggregateError";
+  if (expected === AssertionError) return "AssertionError";
+  return "Error";
+}
+
+function isInstanceOfSupportedError(
+  actual: unknown,
+  expected: SupportedErrorConstructor,
+): boolean {
+  if (expected === TypeError) return actual instanceof TypeError;
+  if (expected === RangeError) return actual instanceof RangeError;
+  if (expected === ReferenceError) return actual instanceof ReferenceError;
+  if (expected === SyntaxError) return actual instanceof SyntaxError;
+  if (expected === URIError) return actual instanceof URIError;
+  if (expected === EvalError) return actual instanceof EvalError;
+  if (expected === AggregateError) return actual instanceof AggregateError;
+  if (expected === AssertionError) return actual instanceof AssertionError;
+  return actual instanceof Error;
+}
 
 interface FailArgs {
   actual?: unknown;
   expected?: unknown;
   message?: string | Error | undefined;
   operator: string;
-  stackStartFn: CallableFunction;
+  stackStartFn?: CallableFunction;
   diff?: DiffMode | undefined;
 }
 
@@ -97,7 +337,6 @@ function innerFail(obj: FailArgs): never {
  * `assert.ok(x)` and `myAssert.ok(x)` -- the reader wants the line they wrote.
  */
 function innerOk(
-  fn: CallableFunction,
   argLen: number,
   value?: unknown,
   message?: string | Error,
@@ -125,7 +364,6 @@ function innerOk(
       expected: true,
       message,
       operator: "==",
-      stackStartFn: fn,
     });
     err.generatedMessage = generatedMessage;
     throw err;
@@ -141,39 +379,36 @@ let failWarned = false;
  * it by name -- which is how both the module object and `assert.strict` are
  * assembled below, and how node does it.
  */
-class AssertImpl {
+export class Assert {
   declare AssertionError: typeof AssertionError;
-  declare [kOptions]: ResolvedOptions;
+  readonly #options: ResolvedOptions;
+  readonly equal: Comparison;
+  readonly notEqual: Comparison;
+  readonly deepEqual: Comparison;
+  readonly notDeepEqual: Comparison;
 
   constructor(options?: AssertOptions) {
-    const resolved: ResolvedOptions = Object.assign(
-      { __proto__: null, strict: true, skipPrototype: false } as ResolvedOptions,
-      options,
-    );
+    const resolved: ResolvedOptions = {
+      diff: options?.diff,
+      strict: options?.strict ?? true,
+      skipPrototype: options?.skipPrototype ?? false,
+    };
 
     if (resolved.diff !== undefined) {
       validateOneOf(resolved.diff, "options.diff", ["simple", "full"]);
     }
 
     this.AssertionError = AssertionError;
-    Object.defineProperty(this, kOptions, {
-      __proto__: null,
-      value: resolved,
-      enumerable: false,
-      configurable: false,
-      writable: false,
-    } as PropertyDescriptor);
-
-    // An instance defaults to strict: the loose comparisons exist for code
-    // that predates the strict ones, and new code asking for an instance is
-    // not that code.
-    if (resolved.strict) {
-      const self = this as unknown as Record<string, unknown>;
-      self["equal"] = this.strictEqual;
-      self["deepEqual"] = this.deepStrictEqual;
-      self["notEqual"] = this.notStrictEqual;
-      self["notDeepEqual"] = this.notDeepStrictEqual;
-    }
+    this.#options = resolved;
+    // Node's strict mode aliases the four legacy loose comparisons to their
+    // strict counterparts. Store typed function references once: destructuring
+    // preserves the selection without a Proxy, rebinding, or a closure.
+    this.equal = resolved.strict ? this.strictEqual : this.looseEqual;
+    this.notEqual = resolved.strict ? this.notStrictEqual : this.looseNotEqual;
+    this.deepEqual = resolved.strict ? this.deepStrictEqual : this.looseDeepEqual;
+    this.notDeepEqual = resolved.strict
+      ? this.notDeepStrictEqual
+      : this.looseNotDeepEqual;
   }
 
   /**
@@ -184,26 +419,27 @@ class AssertImpl {
    * an expected.
    */
   fail(
-    this: Configured | void,
-    actual?: unknown,
-    expected?: unknown,
-    message?: string | Error,
-    operator?: string,
-    stackStartFn?: CallableFunction,
+    this: Assert | void,
+    ...args: FailArguments
   ): never {
-    const argsLen = arguments.length;
+    const argsLen = args.length;
+    let actual = args[0];
+    const expected = args[1];
+    let message = args[2];
+    let operator = args[3];
+    const stackStartFn = args[4];
 
     let internalMessage = false;
     if (actual == null && argsLen <= 1) {
       internalMessage = true;
       message = "Failed";
     } else if (argsLen === 1) {
-      message = actual as string | Error;
+      message = failureMessage(actual);
       actual = undefined;
     } else {
       if (failWarned === false) {
         failWarned = true;
-        nts_process_emit_warning(
+        emitWarning(
           "assert.fail() with more than one argument is deprecated. " +
             "Please use assert.strictEqual() instead or only pass a message.",
           "DeprecationWarning",
@@ -221,9 +457,9 @@ class AssertImpl {
       actual,
       expected,
       operator: operator === undefined ? "fail" : operator,
-      stackStartFn: stackStartFn || AssertImpl.prototype.fail,
+      stackStartFn,
       message,
-      diff: this?.[kOptions]?.diff,
+      diff: this instanceof Assert ? this.#options.diff : undefined,
     });
     if (internalMessage) {
       err.generatedMessage = true;
@@ -232,173 +468,226 @@ class AssertImpl {
   }
 
   /** Truthiness, as `!!value` decides it. */
-  ok(this: Configured | void, ...args: unknown[]): void {
-    innerOk(AssertImpl.prototype.ok, args.length, args[0], args[1] as string | Error);
+  ok(this: Assert | void, ...args: unknown[]): void {
+    const message = args[1];
+    innerOk(
+      args.length,
+      args[0],
+      typeof message === "string" || message instanceof Error ? message : undefined,
+    );
   }
 
   /** Shallow coercive equality, `==`, with `NaN` equal to itself. */
-  equal(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
-    if (arguments.length < 2) {
-      throw new ERR_MISSING_ARGS("actual", "expected");
-    }
+  private looseEqual(
+    this: Assert | void,
+    ...args: ComparisonArguments
+  ): void {
+    if (args.length < 2) throw new ERR_MISSING_ARGS("actual", "expected");
+    const actual = args[0];
+    const expected = args[1];
+    const message = args[2];
     // eslint-disable-next-line eqeqeq
     if (actual != expected && (!Number.isNaN(actual) || !Number.isNaN(expected))) {
       innerFail({
         actual, expected, message,
         operator: "==",
-        stackStartFn: AssertImpl.prototype.equal,
-        diff: this?.[kOptions]?.diff,
+        diff: this instanceof Assert ? this.#options.diff : undefined,
       });
     }
   }
 
-  notEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
-    if (arguments.length < 2) {
-      throw new ERR_MISSING_ARGS("actual", "expected");
-    }
+  private looseNotEqual(
+    this: Assert | void,
+    ...args: ComparisonArguments
+  ): void {
+    if (args.length < 2) throw new ERR_MISSING_ARGS("actual", "expected");
+    const actual = args[0];
+    const expected = args[1];
+    const message = args[2];
     // eslint-disable-next-line eqeqeq
     if (actual == expected || (Number.isNaN(actual) && Number.isNaN(expected))) {
       innerFail({
         actual, expected, message,
         operator: "!=",
-        stackStartFn: AssertImpl.prototype.notEqual,
-        diff: this?.[kOptions]?.diff,
+        diff: this instanceof Assert ? this.#options.diff : undefined,
       });
     }
   }
 
-  deepEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
-    if (arguments.length < 2) {
-      throw new ERR_MISSING_ARGS("actual", "expected");
-    }
+  private looseDeepEqual(
+    this: Assert | void,
+    ...args: ComparisonArguments
+  ): void {
+    if (args.length < 2) throw new ERR_MISSING_ARGS("actual", "expected");
+    const actual = args[0];
+    const expected = args[1];
+    const message = args[2];
     if (!isDeepEqual(actual, expected)) {
       innerFail({
         actual, expected, message,
         operator: "deepEqual",
-        stackStartFn: AssertImpl.prototype.deepEqual,
-        diff: this?.[kOptions]?.diff,
+        diff: this instanceof Assert ? this.#options.diff : undefined,
       });
     }
   }
 
-  notDeepEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
-    if (arguments.length < 2) {
-      throw new ERR_MISSING_ARGS("actual", "expected");
-    }
+  private looseNotDeepEqual(
+    this: Assert | void,
+    ...args: ComparisonArguments
+  ): void {
+    if (args.length < 2) throw new ERR_MISSING_ARGS("actual", "expected");
+    const actual = args[0];
+    const expected = args[1];
+    const message = args[2];
     if (isDeepEqual(actual, expected)) {
       innerFail({
         actual, expected, message,
         operator: "notDeepEqual",
-        stackStartFn: AssertImpl.prototype.notDeepEqual,
-        diff: this?.[kOptions]?.diff,
+        diff: this instanceof Assert ? this.#options.diff : undefined,
       });
     }
   }
 
-  deepStrictEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
-    if (arguments.length < 2) {
-      throw new ERR_MISSING_ARGS("actual", "expected");
-    }
-    if (!isDeepStrictEqual(actual, expected, this?.[kOptions]?.skipPrototype)) {
+  deepStrictEqual(
+    this: Assert | void,
+    ...args: ComparisonArguments
+  ): void {
+    if (args.length < 2) throw new ERR_MISSING_ARGS("actual", "expected");
+    const actual = args[0];
+    const expected = args[1];
+    const message = args[2];
+    const options = this instanceof Assert ? this.#options : undefined;
+    if (!isDeepStrictEqual(actual, expected, options?.skipPrototype)) {
       innerFail({
         actual, expected, message,
         operator: "deepStrictEqual",
-        stackStartFn: AssertImpl.prototype.deepStrictEqual,
-        diff: this?.[kOptions]?.diff,
+        diff: options?.diff,
       });
     }
   }
 
-  notDeepStrictEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
-    if (arguments.length < 2) {
-      throw new ERR_MISSING_ARGS("actual", "expected");
-    }
-    if (isDeepStrictEqual(actual, expected, this?.[kOptions]?.skipPrototype)) {
+  notDeepStrictEqual(
+    this: Assert | void,
+    ...args: ComparisonArguments
+  ): void {
+    if (args.length < 2) throw new ERR_MISSING_ARGS("actual", "expected");
+    const actual = args[0];
+    const expected = args[1];
+    const message = args[2];
+    const options = this instanceof Assert ? this.#options : undefined;
+    if (isDeepStrictEqual(actual, expected, options?.skipPrototype)) {
       innerFail({
         actual, expected, message,
         operator: "notDeepStrictEqual",
-        stackStartFn: AssertImpl.prototype.notDeepStrictEqual,
-        diff: this?.[kOptions]?.diff,
+        diff: options?.diff,
       });
     }
   }
 
   /** `Object.is`, so `NaN` equals itself and `0` does not equal `-0`. */
-  strictEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
-    if (arguments.length < 2) {
-      throw new ERR_MISSING_ARGS("actual", "expected");
-    }
+  strictEqual(
+    this: Assert | void,
+    ...args: ComparisonArguments
+  ): void {
+    if (args.length < 2) throw new ERR_MISSING_ARGS("actual", "expected");
+    const actual = args[0];
+    const expected = args[1];
+    const message = args[2];
     if (!Object.is(actual, expected)) {
       innerFail({
         actual, expected, message,
         operator: "strictEqual",
-        stackStartFn: AssertImpl.prototype.strictEqual,
-        diff: this?.[kOptions]?.diff,
+        diff: this instanceof Assert ? this.#options.diff : undefined,
       });
     }
   }
 
-  notStrictEqual(this: Configured | void, actual: unknown, expected: unknown, message?: string | Error): void {
-    if (arguments.length < 2) {
-      throw new ERR_MISSING_ARGS("actual", "expected");
-    }
+  notStrictEqual(
+    this: Assert | void,
+    ...args: ComparisonArguments
+  ): void {
+    if (args.length < 2) throw new ERR_MISSING_ARGS("actual", "expected");
+    const actual = args[0];
+    const expected = args[1];
+    const message = args[2];
     if (Object.is(actual, expected)) {
       innerFail({
         actual, expected, message,
         operator: "notStrictEqual",
-        stackStartFn: AssertImpl.prototype.notStrictEqual,
-        diff: this?.[kOptions]?.diff,
+        diff: this instanceof Assert ? this.#options.diff : undefined,
       });
     }
   }
 
   /** Every key in `expected` matches; keys `actual` has beyond them are ignored. */
   partialDeepStrictEqual(
-    this: Configured | void,
-    actual: unknown,
-    expected: unknown,
-    message?: string | Error,
+    this: Assert | void,
+    ...args: ComparisonArguments
   ): void {
-    if (arguments.length < 2) {
-      throw new ERR_MISSING_ARGS("actual", "expected");
-    }
+    if (args.length < 2) throw new ERR_MISSING_ARGS("actual", "expected");
+    const actual = args[0];
+    const expected = args[1];
+    const message = args[2];
     if (!isPartialStrictEqual(actual, expected)) {
       innerFail({
         actual, expected, message,
         operator: "partialDeepStrictEqual",
-        stackStartFn: AssertImpl.prototype.partialDeepStrictEqual,
-        diff: this?.[kOptions]?.diff,
+        diff: this instanceof Assert ? this.#options.diff : undefined,
       });
     }
   }
 
-  throws(this: Configured | void, promiseFn: AnyFn, ...args: unknown[]): void {
-    expectsError.call(
-      this, AssertImpl.prototype.throws, getActual(promiseFn),
-      args[0] as Expectation | string | undefined, args[1] as string | undefined,
+  throws(this: Assert | void, promiseFn: AnyFn, ...args: ExceptionArguments): void {
+    expectsError(
+      this instanceof Assert ? this.#options : undefined,
+      "throws",
+      "exception",
+      getActual(promiseFn),
+      args[0],
+      args[1],
       args.length,
     );
   }
 
-  async rejects(this: Configured | void, promiseFn: AnyFn | Promise<unknown>, ...args: unknown[]): Promise<void> {
-    expectsError.call(
-      this, AssertImpl.prototype.rejects, await waitForActual(promiseFn),
-      args[0] as Expectation | string | undefined, args[1] as string | undefined,
+  async rejects(
+    this: Assert | void,
+    promiseFn: AnyFn | Awaitable,
+    ...args: ExceptionArguments
+  ): Promise<void> {
+    expectsError(
+      this instanceof Assert ? this.#options : undefined,
+      "rejects",
+      "rejection",
+      await waitForActual(promiseFn),
+      args[0],
+      args[1],
       args.length,
     );
   }
 
-  doesNotThrow(this: Configured | void, fn: AnyFn, ...args: unknown[]): void {
-    expectsNoError.call(
-      this, AssertImpl.prototype.doesNotThrow, getActual(fn),
-      args[0] as Expectation | string | undefined, args[1] as string | undefined,
+  doesNotThrow(this: Assert | void, fn: AnyFn, ...args: ExceptionArguments): void {
+    expectsNoError(
+      this instanceof Assert ? this.#options : undefined,
+      "doesNotThrow",
+      "exception",
+      getActual(fn),
+      args[0],
+      args[1],
     );
   }
 
-  async doesNotReject(this: Configured | void, fn: AnyFn | Promise<unknown>, ...args: unknown[]): Promise<void> {
-    expectsNoError.call(
-      this, AssertImpl.prototype.doesNotReject, await waitForActual(fn),
-      args[0] as Expectation | string | undefined, args[1] as string | undefined,
+  async doesNotReject(
+    this: Assert | void,
+    fn: AnyFn | Awaitable,
+    ...args: ExceptionArguments
+  ): Promise<void> {
+    expectsNoError(
+      this instanceof Assert ? this.#options : undefined,
+      "doesNotReject",
+      "rejection",
+      await waitForActual(fn),
+      args[0],
+      args[1],
     );
   }
 
@@ -409,14 +698,14 @@ class AssertImpl {
    * original error's, so the reader is pointed at where the error came from
    * rather than at the line that checked for it.
    */
-  ifError(this: Configured | void, err: unknown): void {
+  ifError(this: Assert | void, err: unknown): void {
     if (err !== null && err !== undefined) {
       let message = "ifError got unwanted exception: ";
-      if (typeof err === "object" && typeof (err as Error).message === "string") {
-        if ((err as Error).message.length === 0 && (err as object).constructor) {
-          message += (err as object).constructor.name;
+      if (hasStringMessage(err)) {
+        if (err.message.length === 0 && err instanceof Error) {
+          message += err.name;
         } else {
-          message += (err as Error).message;
+          message += err.message;
         }
       } else {
         message += inspect(err);
@@ -427,11 +716,10 @@ class AssertImpl {
         expected: null,
         operator: "ifError",
         message,
-        stackStartFn: AssertImpl.prototype.ifError,
-        diff: this?.[kOptions]?.diff,
+        diff: this instanceof Assert ? this.#options.diff : undefined,
       });
 
-      const origStack = (err as Error).stack;
+      const origStack = hasStringStack(err) ? err.stack : undefined;
 
       if (typeof origStack === "string") {
         const origStackStart = origStack.indexOf("\n    at");
@@ -455,77 +743,61 @@ class AssertImpl {
     }
   }
 
-  match(this: Configured | void, string: string, regexp: RegExp, message?: string | Error): void {
-    internalMatch.call(this, string, regexp, message, AssertImpl.prototype.match, true);
+  match(this: Assert | void, string: string, regexp: RegExp, message?: string | Error): void {
+    internalMatch(
+      this instanceof Assert ? this.#options : undefined,
+      string,
+      regexp,
+      message,
+      "match",
+      true,
+    );
   }
 
-  doesNotMatch(this: Configured | void, string: string, regexp: RegExp, message?: string | Error): void {
-    internalMatch.call(this, string, regexp, message, AssertImpl.prototype.doesNotMatch, false);
+  doesNotMatch(this: Assert | void, string: string, regexp: RegExp, message?: string | Error): void {
+    internalMatch(
+      this instanceof Assert ? this.#options : undefined,
+      string,
+      regexp,
+      message,
+      "doesNotMatch",
+      false,
+    );
   }
 }
 
-/**
- * A stand-in built from the keys a failed comparison looked at.
- *
- * Comparing two errors by a handful of properties would otherwise print both
- * errors in full, stacks included. These carry only the keys under
- * examination, so the diff shows what was compared and nothing else.
- */
-function comparisonOf(
-  obj: Record<PropertyKey, unknown>,
-  keys: readonly string[],
-  actual?: Record<PropertyKey, unknown>,
-): object {
-  const out: Record<string, unknown> = {};
-  for (const key of keys) {
-    if (key in obj) {
-      // A regular expression that matched is shown as the string it matched:
-      // printing the pattern beside the value it accepted reads as a mismatch.
-      if (
-        actual !== undefined &&
-        typeof actual[key] === "string" &&
-        isRegExp(obj[key]) &&
-        (obj[key] as RegExp).exec(actual[key] as string) !== null
-      ) {
-        out[key] = actual[key];
-      } else {
-        out[key] = obj[key];
-      }
-    }
+function exceptionValuesMatch(actual: unknown, expected: unknown): boolean {
+  if (typeof actual === "string" && isRegExp(expected)) {
+    return expected.exec(actual) !== null;
   }
-  return out;
+  return isDeepStrictEqual(actual, expected);
 }
 
-function compareExceptionKey(
-  this: Configured | void,
-  actual: Record<PropertyKey, unknown>,
-  expected: Record<PropertyKey, unknown>,
+function compareExceptionField(
+  options: ResolvedOptions | undefined,
+  actual: object,
+  expected: object,
   key: string,
+  expectedValue: unknown,
   message: string | Error | undefined,
-  keys: readonly string[],
-  fn: CallableFunction,
+  operation: string,
 ): void {
-  if (!(key in actual) || !isDeepStrictEqual(actual[key], expected[key])) {
+  const actualField = readErrorField(actual, key);
+  if (!actualField.present || !exceptionValuesMatch(actualField.value, expectedValue)) {
     if (!message) {
       const err = new AssertionError({
-        actual: comparisonOf(actual, keys),
-        expected: comparisonOf(expected, keys, actual),
+        actual,
+        expected,
         operator: "deepStrictEqual",
-        stackStartFn: fn,
-        diff: this?.[kOptions]?.diff,
+        diff: options?.diff,
       });
-      // The diff was built from the stand-ins; the properties report the real
-      // values, because that is what a caller inspecting the error wants.
-      err.actual = actual;
-      err.expected = expected;
-      err.operator = fn.name;
+      err.operator = operation;
       throw err;
     }
     innerFail({
       actual, expected, message,
-      operator: fn.name,
-      stackStartFn: fn,
-      diff: this?.[kOptions]?.diff,
+      operator: operation,
+      diff: options?.diff,
     });
   }
 }
@@ -538,11 +810,11 @@ function compareExceptionKey(
  * compare -- and each of the four fails with its own wording.
  */
 function expectedException(
-  this: Configured | void,
+  options: ResolvedOptions | undefined,
   actual: unknown,
   expected: Expectation,
   message: string | Error | undefined,
-  fn: CallableFunction,
+  operation: string,
 ): void {
   let generatedMessage = false;
   let throwError = false;
@@ -550,7 +822,7 @@ function expectedException(
   if (typeof expected !== "function") {
     if (isRegExp(expected)) {
       const str = String(actual);
-      if ((expected as RegExp).exec(str) !== null) {
+      if (expected.exec(str) !== null) {
         return;
       }
 
@@ -566,54 +838,64 @@ function expectedException(
       const err = new AssertionError({
         actual, expected, message,
         operator: "deepStrictEqual",
-        stackStartFn: fn,
-        diff: this?.[kOptions]?.diff,
+        diff: options?.diff,
       });
-      err.operator = fn.name;
+      err.operator = operation;
       throw err;
     } else {
-      const keys = Object.keys(expected as object);
-      // `name` and `message` are not enumerable on an error, and they are the
-      // two a caller most means to compare.
+      // `name` and `message` are not enumerable on an Error, but are the two
+      // fields an Error expectation always means to compare.
       if (expected instanceof Error) {
-        keys.push("name", "message");
-      } else if (keys.length === 0) {
+        compareExceptionField(
+          options, actual, expected, "name", expected.name, message, operation,
+        );
+        compareExceptionField(
+          options, actual, expected, "message", expected.message, message, operation,
+        );
+      }
+
+      const keys = Object.keys(expected);
+      if (!(expected instanceof Error) && keys.length === 0) {
         throw new ERR_INVALID_ARG_VALUE("error", expected, "may not be an empty object");
       }
+
       for (const key of keys) {
-        const actualValue = (actual as Record<string, unknown>)[key];
-        const expectedValue = (expected as Record<string, unknown>)[key];
-        if (
-          typeof actualValue === "string" &&
-          isRegExp(expectedValue) &&
-          (expectedValue as RegExp).exec(actualValue) !== null
-        ) {
+        // Already compared above even if a subclass chose to make either
+        // property enumerable.
+        if (expected instanceof Error && (key === "name" || key === "message")) {
           continue;
         }
-        compareExceptionKey.call(
-          this,
-          actual as Record<PropertyKey, unknown>,
-          expected as Record<PropertyKey, unknown>,
-          key, message, keys, fn,
+        const expectedField = readErrorField(expected, key);
+        if (!expectedField.present) {
+          throw new ERR_INVALID_ARG_VALUE(
+            "error",
+            expected,
+            `contains unsupported property ${inspect(key)}`,
+          );
+        }
+        compareExceptionField(
+          options,
+          actual,
+          expected,
+          key,
+          expectedField.value,
+          message,
+          operation,
         );
       }
       return;
     }
     // An arrow function has no prototype, so `instanceof` would throw: guard
     // before asking.
-  } else if (
-    (expected as { prototype?: unknown }).prototype !== undefined &&
-    actual instanceof (expected as new () => unknown)
-  ) {
-    return;
-  } else if (Object.prototype.isPrototypeOf.call(Error, expected)) {
+  } else if (isSupportedErrorConstructor(expected)) {
+    if (isInstanceOfSupportedError(actual, expected)) return;
     if (!message) {
       generatedMessage = true;
       message = "The error is expected to be an instance of " +
-        `"${(expected as { name: string }).name}". Received `;
+        `"${supportedErrorName(expected)}". Received `;
       if (actual instanceof Error) {
-        const name = actual.constructor?.name || actual.name;
-        if ((expected as { name: string }).name === name) {
+        const name = actual.name;
+        if (supportedErrorName(expected) === name) {
           message += "an error with identical name but a different prototype.";
         } else {
           message += `"${name}"`;
@@ -629,14 +911,11 @@ function expectedException(
   } else {
     // A validation function: anything but `true` is a failure, so that a
     // function which forgets to return does not silently pass.
-    const res = (expected as (err: unknown) => unknown).call({}, actual);
+    const res = expected(actual);
     if (res !== true) {
       if (!message) {
         generatedMessage = true;
-        const name = (expected as { name?: string }).name
-          ? `"${(expected as { name: string }).name}" `
-          : "";
-        message = `The ${name}validation function is expected to return` +
+        message = "The validation function is expected to return" +
           ` "true". Received ${inspect(res)}`;
 
         if (actual instanceof Error) {
@@ -650,9 +929,8 @@ function expectedException(
   if (throwError) {
     const err = new AssertionError({
       actual, expected, message,
-      operator: fn.name,
-      stackStartFn: fn,
-      diff: this?.[kOptions]?.diff,
+      operator: operation,
+      diff: options?.diff,
     });
     err.generatedMessage = generatedMessage;
     throw err;
@@ -662,7 +940,7 @@ function expectedException(
 function getActual(fn: AnyFn): unknown {
   validateFunction(fn, "fn");
   try {
-    (fn as () => unknown)();
+    fn();
   } catch (e) {
     return e;
   }
@@ -676,20 +954,21 @@ function getActual(fn: AnyFn): unknown {
  * to code that never gives it back, and the assertion would hang rather than
  * fail.
  */
-function checkIsPromise(obj: unknown): boolean {
+function checkIsPromise(obj: unknown): obj is Awaitable {
   return isPromise(obj) ||
     (obj !== null && typeof obj === "object" &&
-      typeof (obj as { then?: unknown }).then === "function" &&
-      typeof (obj as { catch?: unknown }).catch === "function");
+      "then" in obj && typeof obj.then === "function" &&
+      "catch" in obj && typeof obj.catch === "function");
 }
 
-async function waitForActual(promiseFn: AnyFn | Promise<unknown>): Promise<unknown> {
-  let resultPromise: unknown;
+async function waitForActual(promiseFn: AnyFn | Awaitable): Promise<unknown> {
+  let resultPromise: Awaitable;
   if (typeof promiseFn === "function") {
-    resultPromise = (promiseFn as () => unknown)();
-    if (!checkIsPromise(resultPromise)) {
-      throw new ERR_INVALID_RETURN_VALUE("instance of Promise", "promiseFn", resultPromise);
+    const result = promiseFn();
+    if (!checkIsPromise(result)) {
+      throw new ERR_INVALID_RETURN_VALUE("instance of Promise", "promiseFn", result);
     }
+    resultPromise = result;
   } else if (checkIsPromise(promiseFn)) {
     resultPromise = promiseFn;
   } else {
@@ -704,9 +983,21 @@ async function waitForActual(promiseFn: AnyFn | Promise<unknown>): Promise<unkno
   return NO_EXCEPTION_SENTINEL;
 }
 
+function expectationName(expected: Expectation | string | undefined): string | undefined {
+  if (expected === undefined || typeof expected === "string") return undefined;
+  if (isSupportedErrorConstructor(expected)) return supportedErrorName(expected);
+  if (expected instanceof Error) return expected.name;
+  if (typeof expected !== "object" || expected === null) return undefined;
+  const field = readErrorField(expected, "name");
+  return field.present && typeof field.value === "string"
+    ? field.value
+    : undefined;
+}
+
 function expectsError(
-  this: Configured | void,
-  stackStartFn: CallableFunction,
+  options: ResolvedOptions | undefined,
+  operation: string,
+  kind: "exception" | "rejection",
   actual: unknown,
   error?: Expectation | string,
   message?: string,
@@ -719,11 +1010,11 @@ function expectsError(
     // A message that happens to equal the error's own message is almost
     // certainly a caller who meant it as the expectation, and the assertion
     // would then pass without checking anything.
-    if (typeof actual === "object" && actual !== null) {
-      if ((actual as Error).message === error) {
+    if (hasStringMessage(actual)) {
+      if (actual.message === error) {
         throw new ERR_AMBIGUOUS_ARGUMENT(
           "error/message",
-          `The error message "${(actual as Error).message}" is identical to the message.`,
+          `The error message "${actual.message}" is identical to the message.`,
         );
       }
     } else if (actual === error) {
@@ -740,50 +1031,42 @@ function expectsError(
 
   if (actual === NO_EXCEPTION_SENTINEL) {
     let details = "";
-    if ((error as { name?: string })?.name) {
-      details += ` (${(error as { name: string }).name})`;
+    const name = expectationName(error);
+    if (name !== undefined && name.length > 0) {
+      details += ` (${name})`;
     }
     details += message ? `: ${message}` : ".";
-    const fnType = stackStartFn === AssertImpl.prototype.rejects ? "rejection" : "exception";
     innerFail({
       actual: undefined,
       expected: error,
-      operator: stackStartFn.name,
-      message: `Missing expected ${fnType}${details}`,
-      stackStartFn,
-      diff: this?.[kOptions]?.diff,
+      operator: operation,
+      message: `Missing expected ${kind}${details}`,
+      diff: options?.diff,
     });
   }
 
   if (!error) return;
 
-  expectedException.call(this, actual, error, message, stackStartFn);
+  expectedException(options, actual, error, message, operation);
 }
 
 function hasMatchingError(actual: unknown, expected: Expectation): boolean {
   if (typeof expected !== "function") {
     if (isRegExp(expected)) {
-      return (expected as RegExp).exec(String(actual)) !== null;
+      return expected.exec(String(actual)) !== null;
     }
     throw new ERR_INVALID_ARG_TYPE("expected", ["Function", "RegExp"], expected);
   }
-  if (
-    (expected as { prototype?: unknown }).prototype !== undefined &&
-    actual instanceof (expected as new () => unknown)
-  ) {
-    return true;
+  if (isSupportedErrorConstructor(expected)) {
+    return isInstanceOfSupportedError(actual, expected);
   }
-  // An error *class* that did not match above is simply not the one thrown;
-  // calling it as a validation function would construct an error instead.
-  if (Object.prototype.isPrototypeOf.call(Error, expected)) {
-    return false;
-  }
-  return (expected as (err: unknown) => unknown).call({}, actual) === true;
+  return expected(actual) === true;
 }
 
 function expectsNoError(
-  this: Configured | void,
-  stackStartFn: CallableFunction,
+  options: ResolvedOptions | undefined,
+  operation: string,
+  kind: "exception" | "rejection",
   actual: unknown,
   error?: Expectation | string,
   message?: string,
@@ -797,15 +1080,14 @@ function expectsNoError(
 
   if (!error || hasMatchingError(actual, error)) {
     const details = message ? `: ${message}` : ".";
-    const fnType = stackStartFn === AssertImpl.prototype.doesNotReject ? "rejection" : "exception";
+    const actualMessage = hasStringMessage(actual) ? actual.message : undefined;
     innerFail({
       actual,
       expected: error,
-      operator: stackStartFn.name,
-      message: `Got unwanted ${fnType}${details}\n` +
-        `Actual message: "${(actual as Error)?.message}"`,
-      stackStartFn,
-      diff: this?.[kOptions]?.diff,
+      operator: operation,
+      message: `Got unwanted ${kind}${details}\n` +
+        `Actual message: "${actualMessage}"`,
+      diff: options?.diff,
     });
   }
   // An error that was thrown and was not the unwanted one still happened, and
@@ -814,11 +1096,11 @@ function expectsNoError(
 }
 
 function internalMatch(
-  this: Configured | void,
+  options: ResolvedOptions | undefined,
   string: string,
   regexp: RegExp,
   message: string | Error | undefined,
-  fn: CallableFunction,
+  operation: "match" | "doesNotMatch",
   shouldMatch: boolean,
 ): void {
   if (!isRegExp(regexp)) {
@@ -842,57 +1124,34 @@ function internalMatch(
       actual: string,
       expected: regexp,
       message,
-      operator: fn.name,
-      stackStartFn: fn,
-      diff: this?.[kOptions]?.diff,
+      operator: operation,
+      diff: options?.diff,
     });
     err.generatedMessage = generatedMessage;
     throw err;
   }
 }
 
-/**
- * `Assert` throws when called without `new`, so it cannot be the class itself:
- * a class constructor called as a function throws a `TypeError` with no code,
- * and the code is what a caller branches on.
- */
-export interface AssertConstructor {
-  new (options?: AssertOptions): AssertImpl;
-  readonly prototype: AssertImpl;
-}
+// The module surface is the loose configuration's unbound method set. Reading
+// a declared method as a value is a static method-table operation in NTS; it
+// does not inspect or mutate a JavaScript prototype.
+const looseAssertions = new Assert({ strict: false });
 
-const Assert = function Assert(this: unknown, options?: AssertOptions): AssertImpl {
-  if (new.target === undefined) {
-    throw new ERR_CONSTRUCT_CALL_REQUIRED("Assert");
-  }
-  return Reflect.construct(AssertImpl, [options], new.target) as AssertImpl;
-} as unknown as AssertConstructor;
-
-Object.defineProperty(Assert, "name", { __proto__: null, value: "Assert" } as PropertyDescriptor);
-(Assert as { prototype: AssertImpl }).prototype = AssertImpl.prototype;
-Object.setPrototypeOf(Assert, AssertImpl);
-
-export { Assert };
-
-// The module surface. Each is `Assert.prototype`'s method, unbound, exactly as
-// node exports it: `const { strictEqual } = require('assert')` has to keep
-// working, and these read their configuration through optional chaining so a
-// missing receiver means the defaults.
-export const fail = AssertImpl.prototype.fail;
-export const ok = AssertImpl.prototype.ok;
-export const equal = AssertImpl.prototype.equal;
-export const notEqual = AssertImpl.prototype.notEqual;
-export const deepEqual = AssertImpl.prototype.deepEqual;
-export const notDeepEqual = AssertImpl.prototype.notDeepEqual;
-export const deepStrictEqual = AssertImpl.prototype.deepStrictEqual;
-export const notDeepStrictEqual = AssertImpl.prototype.notDeepStrictEqual;
-export const strictEqual = AssertImpl.prototype.strictEqual;
-export const notStrictEqual = AssertImpl.prototype.notStrictEqual;
-export const partialDeepStrictEqual = AssertImpl.prototype.partialDeepStrictEqual;
-export const match = AssertImpl.prototype.match;
-export const doesNotMatch = AssertImpl.prototype.doesNotMatch;
-export const throws = AssertImpl.prototype.throws;
-export const rejects = AssertImpl.prototype.rejects;
-export const doesNotThrow = AssertImpl.prototype.doesNotThrow;
-export const doesNotReject = AssertImpl.prototype.doesNotReject;
-export const ifError = AssertImpl.prototype.ifError;
+export const fail = looseAssertions.fail;
+export const ok = looseAssertions.ok;
+export const equal = looseAssertions.equal;
+export const notEqual = looseAssertions.notEqual;
+export const deepEqual = looseAssertions.deepEqual;
+export const notDeepEqual = looseAssertions.notDeepEqual;
+export const deepStrictEqual = looseAssertions.deepStrictEqual;
+export const notDeepStrictEqual = looseAssertions.notDeepStrictEqual;
+export const strictEqual = looseAssertions.strictEqual;
+export const notStrictEqual = looseAssertions.notStrictEqual;
+export const partialDeepStrictEqual = looseAssertions.partialDeepStrictEqual;
+export const match = looseAssertions.match;
+export const doesNotMatch = looseAssertions.doesNotMatch;
+export const throws = looseAssertions.throws;
+export const rejects = looseAssertions.rejects;
+export const doesNotThrow = looseAssertions.doesNotThrow;
+export const doesNotReject = looseAssertions.doesNotReject;
+export const ifError = looseAssertions.ifError;

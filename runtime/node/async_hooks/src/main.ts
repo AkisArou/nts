@@ -18,9 +18,10 @@ import {
   ERR_ASYNC_CALLBACK,
   ERR_INVALID_ARG_VALUE,
 } from "../../internal/errors.ts";
-import { validateBoolean } from "../../internal/validators.ts";
+import { validateBoolean, validateFunction } from "../../internal/validators.ts";
 import {
   addHook,
+  enabledHooksExist,
   executionAsyncId,
   executionAsyncResource,
   removeHook,
@@ -28,6 +29,7 @@ import {
   type HookCallbacks,
   type RegisteredHook,
 } from "../../internal/async-hooks.ts";
+import { AsyncContextFrame } from "../../internal/async-context.ts";
 import { AsyncResource } from "./resource.ts";
 import { AsyncLocalStorage, RunScope } from "./local-storage.ts";
 
@@ -36,6 +38,41 @@ export { executionAsyncId, triggerAsyncId, executionAsyncResource };
 export type { AsyncLocalStorageOptions } from "./local-storage.ts";
 export type { AsyncResourceOptions } from "./resource.ts";
 export type { HookCallbacks };
+
+/** Enqueue a raw VM microtask without creating a promise. */
+declare function nts_enqueue_microtask(callback: () => void): void;
+
+const microtaskResourceOptions: Readonly<{ requireManualDestroy: true }> = {
+  requireManualDestroy: true,
+};
+
+/**
+ * The Node-global `queueMicrotask`, kept here because it participates in this
+ * module's resource graph even though it is not a named export.
+ *
+ * The no-context/no-hook path stays allocation-free. Once either facility is
+ * active, an explicit resource carries both the async id and context frame
+ * across the VM queue boundary and reports its finite lifetime.
+ */
+export function queueMicrotaskForRuntime(callback: () => void): void {
+  validateFunction(callback, "callback");
+
+  if (AsyncContextFrame.current() === undefined && !enabledHooksExist()) {
+    nts_enqueue_microtask(callback);
+    return;
+  }
+
+  const resource = new AsyncResource("Microtask", microtaskResourceOptions);
+  nts_enqueue_microtask(() => {
+    resource.runInAsyncScope(() => {
+      try {
+        callback();
+      } finally {
+        resource.emitDestroy();
+      }
+    });
+  });
+}
 
 /**
  * A registration, with `enable`/`disable` on it.
@@ -102,15 +139,14 @@ export function createHook(callbacks: HookCallbacks): AsyncHook {
 /**
  * The names and numbers of the resource types the runtime reports.
  *
- * Frozen and null-prototyped because programs use it as a lookup table and a
- * `PROMISE` key colliding with something on `Object.prototype` would be a
- * confusing way to fail. Generated from node's `NODE_ASYNC_PROVIDER_TYPES`, in
- * its order: the numbers are part of the interface, not an implementation
- * detail, because a hook may receive either the name or the number depending
- * on where the resource came from.
+ * A closed, readonly table rather than node's frozen null-prototype object.
+ * NTS objects have a static layout and no prototype chain, so neither piece of
+ * engine machinery changes a lookup here. Generated from node's
+ * `NODE_ASYNC_PROVIDER_TYPES`, in its order: the numbers are part of the
+ * interface, not an implementation detail, because a hook may receive either
+ * the name or the number depending on where the resource came from.
  */
-export const asyncWrapProviders: Readonly<Record<string, number>> = Object.freeze({
-  __proto__: null,
+export const asyncWrapProviders: Readonly<Record<string, number>> = {
   NONE: 0,
   DIRHANDLE: 1,
   DNSCHANNEL: 2,
@@ -179,4 +215,4 @@ export const asyncWrapProviders: Readonly<Record<string, number>> = Object.freez
   SIGNREQUEST: 65,
   TLSWRAP: 66,
   VERIFYREQUEST: 67,
-} as unknown as Record<string, number>);
+};

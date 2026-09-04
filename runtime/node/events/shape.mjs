@@ -12,7 +12,7 @@ export function shape(exports) {
   // module-level helpers. `setMaxListeners` is *not* copied: the class already
   // has a static of that name, and the module-level wrapper calls it — copying
   // the wrapper over the static makes it call itself.
-  for (const name of ["getEventListeners", "getMaxListeners", "listenerCount", "once", "on"]) {
+  for (const name of ["addAbortListener", "getEventListeners", "getMaxListeners", "listenerCount", "once", "on"]) {
     if (exports[name]) EventEmitter[name] = exports[name];
   }
   return EventEmitter;

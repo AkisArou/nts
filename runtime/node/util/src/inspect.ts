@@ -11,8 +11,11 @@
 // `reduceToSingleString`, and matching it is most of matching node's output.
 
 import {
-  isAnyArrayBuffer, isArrayBufferView, isBoxedPrimitive, isDate, isMap,
-  isRegExp, isSet, isTypedArray,
+  isAnyArrayBuffer, isArrayBufferView, isBigInt64Array, isBigUint64Array,
+  isBoxedPrimitive, isDate, isFloat16Array, isFloat32Array, isFloat64Array,
+  isInt16Array, isInt32Array, isInt8Array, isMap, isRegExp, isSet,
+  isTypedArray, isUint16Array, isUint32Array, isUint8Array,
+  isUint8ClampedArray, type TypedArray,
 } from "./types.ts";
 
 /**
@@ -23,7 +26,7 @@ import {
  * values, which is the difference between a readable log line and forty
  * numbers.
  */
-export const customInspectSymbol: unique symbol = Symbol.for("nodejs.util.inspect.custom") as never;
+export const customInspectSymbol = Symbol.for("nodejs.util.inspect.custom");
 
 /**
  * The style names `inspect` asks for, and the colour each maps to.
@@ -38,7 +41,6 @@ export type StyleType =
   | "string" | "symbol" | "date" | "regexp" | "module" | "name";
 
 export const inspectStyles: Record<string, string | undefined> = {
-  __proto__: null,
   special: "cyan",
   number: "yellow",
   bigint: "yellow",
@@ -51,7 +53,7 @@ export const inspectStyles: Record<string, string | undefined> = {
   // `name` is deliberately unstyled: a key is not a value.
   regexp: "red",
   module: "underline",
-} as never;
+};
 
 /**
  * ANSI codes by name. Each is the pair that turns the style on and off --
@@ -59,7 +61,6 @@ export const inspectStyles: Record<string, string | undefined> = {
  * rather than reset everything.
  */
 export const inspectColors: Record<string, [number, number] | undefined> = {
-  __proto__: null,
   reset: [0, 0], bold: [1, 22], dim: [2, 22], italic: [3, 23], underline: [4, 24],
   blink: [5, 25], inverse: [7, 27], hidden: [8, 28], strikethrough: [9, 29],
   doubleunderline: [21, 24],
@@ -68,52 +69,19 @@ export const inspectColors: Record<string, [number, number] | undefined> = {
   bgBlack: [40, 49], bgRed: [41, 49], bgGreen: [42, 49], bgYellow: [43, 49],
   bgBlue: [44, 49], bgMagenta: [45, 49], bgCyan: [46, 49], bgWhite: [47, 49],
   framed: [51, 54], overlined: [53, 55],
-  gray: [90, 39], grey: [90, 39],
+  gray: [90, 39], grey: [90, 39], blackBright: [90, 39],
   redBright: [91, 39], greenBright: [92, 39], yellowBright: [93, 39],
   blueBright: [94, 39], magentaBright: [95, 39], cyanBright: [96, 39],
   whiteBright: [97, 39],
-  bgGray: [100, 49], bgGrey: [100, 49],
+  bgGray: [100, 49], bgGrey: [100, 49], bgBlackBright: [100, 49],
   bgRedBright: [101, 49], bgGreenBright: [102, 49], bgYellowBright: [103, 49],
   bgBlueBright: [104, 49], bgMagentaBright: [105, 49], bgCyanBright: [106, 49],
   bgWhiteBright: [107, 49],
-} as never;
-
-/**
- * The names node accepts as spellings of an existing colour.
- *
- * Getters rather than copies, so that a program changing `colors.gray` changes
- * `colors.grey` with it, and non-enumerable so that listing the colours does
- * not list each one three times. `styleText` validates against
- * `getOwnPropertyNames`, which sees them regardless.
- */
-function defineColorAlias(target: string, alias: string): void {
-  Object.defineProperty(inspectColors, alias, {
-    __proto__: null,
-    get(this: Record<string, [number, number] | undefined>) { return this[target]; },
-    set(this: Record<string, [number, number] | undefined>, value: [number, number]) {
-      this[target] = value;
-    },
-    configurable: true,
-    enumerable: false,
-  } as PropertyDescriptor);
-}
-
-// A function and twelve calls, which is node's own shape here. This was a
-// `for...of` over a table of pairs -- shorter to read and a departure from the
-// source being transcribed, which is the only reason it was ever written that
-// way.
-defineColorAlias("gray", "grey");
-defineColorAlias("gray", "blackBright");
-defineColorAlias("bgGray", "bgGrey");
-defineColorAlias("bgGray", "bgBlackBright");
-defineColorAlias("dim", "faint");
-defineColorAlias("strikethrough", "crossedout");
-defineColorAlias("strikethrough", "strikeThrough");
-defineColorAlias("strikethrough", "crossedOut");
-defineColorAlias("hidden", "conceal");
-defineColorAlias("inverse", "swapColors");
-defineColorAlias("inverse", "swapcolors");
-defineColorAlias("doubleunderline", "doubleUnderline");
+  faint: [2, 22],
+  crossedout: [9, 29], strikeThrough: [9, 29], crossedOut: [9, 29],
+  conceal: [8, 28], swapColors: [7, 27], swapcolors: [7, 27],
+  doubleUnderline: [21, 24],
+};
 
 /** What every piece of output goes through. The colourless one is the default. */
 export type Stylize = (str: string, styleType: StyleType) => string;
@@ -147,10 +115,15 @@ export interface InspectOptions {
   customInspect?: boolean;
 }
 
-interface Context extends Required<Omit<InspectOptions, "depth" | "maxArrayLength" | "maxStringLength">> {
+interface ResolvedInspectOptions extends Required<
+  Omit<InspectOptions, "depth" | "maxArrayLength" | "maxStringLength">
+> {
   depth: number | null;
   maxArrayLength: number | null;
   maxStringLength: number | null;
+}
+
+interface Context extends ResolvedInspectOptions {
   indentationLvl: number;
   seen: object[];
   circular: Map<object, number>;
@@ -160,6 +133,14 @@ interface Context extends Required<Omit<InspectOptions, "depth" | "maxArrayLengt
   stylize: Stylize;
 }
 
+interface InspectableObject {
+  readonly [key: string]: unknown;
+}
+
+function isInspectableObject(value: unknown): value is InspectableObject {
+  return value !== null && (typeof value === "object" || typeof value === "function");
+}
+
 /**
  * The module's defaults, and *mutable*: node exposes this as
  * `util.inspect.defaultOptions` and programs change it to set a depth or turn
@@ -167,7 +148,7 @@ interface Context extends Required<Omit<InspectOptions, "depth" | "maxArrayLengt
  * change takes effect on the next call rather than needing every caller to
  * pass an option through.
  */
-export const inspectDefaultOptions: InspectOptions = {
+export const inspectDefaultOptions: ResolvedInspectOptions = {
   depth: 2,
   colors: false,
   showHidden: false,
@@ -185,7 +166,7 @@ export function inspect(value: unknown, options?: InspectOptions | boolean): str
   const settings: InspectOptions =
     typeof options === "boolean" ? { showHidden: options } : (options ?? {});
   const ctx: Context = {
-    ...(inspectDefaultOptions as Required<InspectOptions>),
+    ...inspectDefaultOptions,
     ...settings,
     indentationLvl: 0,
     seen: [],
@@ -194,8 +175,8 @@ export function inspect(value: unknown, options?: InspectOptions | boolean): str
     // Chosen once, so that every piece of output goes through the same
     // function and a nested value cannot end up coloured differently from the
     // one containing it.
-    stylize: stylizeNoColor as Stylize,
-  } as Context;
+    stylize: stylizeNoColor,
+  };
   if (ctx.colors) {
     ctx.stylize = stylizeWithColor;
   }
@@ -296,13 +277,10 @@ function formatPrimitive(
   }
 }
 
-function functionLabel(value: (...args: never[]) => unknown): string {
-  const isClass = /^\s*class[\s{]/.test(Function.prototype.toString.call(value));
-  const name = value.name;
-  if (isClass) {
-    return name ? `[class ${name}]` : "[class (anonymous)]";
-  }
-  return name ? `[Function: ${name}]` : "[Function (anonymous)]";
+function functionLabel(): string {
+  // A compiled function is a C function pointer, not an object carrying its
+  // source spelling, `.name`, or class syntax. Those observations are §13.
+  return "[Function]";
 }
 
 function formatValue(ctx: Context, value: unknown, recurseTimes: number): string {
@@ -311,57 +289,15 @@ function formatValue(ctx: Context, value: unknown, recurseTimes: number): string
     return primitive;
   }
   if (typeof value === "function") {
-    const label = ctx.stylize(functionLabel(value as never), "special");
-    return formatWithKeys(ctx, value as object, recurseTimes, label, ["{", "}"], []);
+    const label = ctx.stylize(functionLabel(), "special");
+    return isInspectableObject(value)
+      ? formatWithKeys(ctx, value, recurseTimes, label, ["{", "}"], [])
+      : label;
   }
-  return formatObject(ctx, value as object, recurseTimes);
+  return isInspectableObject(value) ? formatObject(ctx, value, recurseTimes) : "";
 }
 
-function constructorName(value: object): string | undefined {
-  const proto = Object.getPrototypeOf(value);
-  if (proto === null) {
-    return "[Object: null prototype]";
-  }
-  const name = proto.constructor?.name;
-  return name === "Object" ? undefined : name;
-}
-
-/**
- * A revoked proxy answers no internal method: reading a property, taking its
- * prototype, listing its keys all throw. There is nothing to print and no way
- * to look, so node prints a placeholder.
- *
- * Node asks the engine (`getProxyDetails`) whether it really is one. We cannot,
- * so the test is behavioural: an object that throws on `isExtensible` is
- * treated as revoked. A live proxy whose handler throws for every trap is
- * indistinguishable from a revoked one at the language level, and would be
- * reported the same way.
- */
-function isRevokedProxy(value: object): boolean {
-  try {
-    Object.isExtensible(value);
-    return false;
-  } catch {
-    return true;
-  }
-}
-
-function formatObject(ctx: Context, value: object, recurseTimes: number): string {
-  if (isRevokedProxy(value)) {
-    return ctx.stylize("<Revoked Proxy>", "special");
-  }
-
-  // An object that knows how to render itself is asked first, before any of
-  // the shape detection below.
-  if (ctx.customInspect) {
-    const custom = (value as Record<symbol, unknown>)[customInspectSymbol];
-    if (typeof custom === "function" && custom !== inspect) {
-      const rendered = (custom as (d: number, o: InspectOptions, i: typeof inspect) => unknown)
-        .call(value, ctx.depth === null ? null as never : ctx.depth - recurseTimes, ctx, inspect);
-      return typeof rendered === "string" ? rendered : formatValue(ctx, rendered, recurseTimes);
-    }
-  }
-
+function formatObject(ctx: Context, value: InspectableObject, recurseTimes: number): string {
   // A cycle: mark it and stop. Node numbers the reference so a reader can see
   // which object it points back to.
   if (ctx.seen.includes(value)) {
@@ -386,7 +322,7 @@ function formatObject(ctx: Context, value: object, recurseTimes: number): string
     return formatError(value);
   }
   if (isBoxedPrimitive(value)) {
-    const wrapped = (value as { valueOf(): unknown }).valueOf();
+    const wrapped = value.valueOf();
     return `[${typeof wrapped === "string" ? "String" : typeof wrapped === "number" ? "Number"
       : typeof wrapped === "boolean" ? "Boolean" : typeof wrapped === "bigint" ? "BigInt" : "Symbol"}: ${
       formatPrimitive(ctx.stylize, wrapped)}]`;
@@ -395,11 +331,7 @@ function formatObject(ctx: Context, value: object, recurseTimes: number): string
   const depthReached = ctx.depth !== null && recurseTimes > ctx.depth;
   if (depthReached) {
     if (Array.isArray(value)) return ctx.stylize("[Array]", "special");
-    const name = constructorName(value);
-    return ctx.stylize(
-      name && name !== "[Object: null prototype]" ? `[${name}]` : "[Object]",
-      "special",
-    );
+    return ctx.stylize("[Object]", "special");
   }
 
   ctx.seen.push(value);
@@ -414,21 +346,41 @@ function formatObject(ctx: Context, value: object, recurseTimes: number): string
   }
 }
 
-function formatByShape(ctx: Context, value: object, recurseTimes: number): string {
+function typedArrayName(value: TypedArray): string {
+  if (isUint8Array(value)) return "Uint8Array";
+  if (isUint8ClampedArray(value)) return "Uint8ClampedArray";
+  if (isUint16Array(value)) return "Uint16Array";
+  if (isUint32Array(value)) return "Uint32Array";
+  if (isInt8Array(value)) return "Int8Array";
+  if (isInt16Array(value)) return "Int16Array";
+  if (isInt32Array(value)) return "Int32Array";
+  if (isFloat16Array(value)) return "Float16Array";
+  if (isFloat32Array(value)) return "Float32Array";
+  if (isFloat64Array(value)) return "Float64Array";
+  if (isBigInt64Array(value)) return "BigInt64Array";
+  if (isBigUint64Array(value)) return "BigUint64Array";
+  return "TypedArray";
+}
+
+function formatByShape(ctx: Context, value: InspectableObject, recurseTimes: number): string {
   if (Array.isArray(value)) {
     return formatWithKeys(ctx, value, recurseTimes, "", ["[", "]"], indented(ctx, () =>
       formatArrayEntries(ctx, value, recurseTimes)));
   }
   if (isTypedArray(value)) {
-    const array = value as unknown as ArrayLike<number>;
-    const label = `${value.constructor.name}(${array.length})`;
+    const label = `${typedArrayName(value)}(${value.length})`;
     const entries: string[] = [];
-    const limit = ctx.maxArrayLength ?? array.length;
-    for (let i = 0; i < Math.min(array.length, limit); i++) {
-      entries.push(ctx.stylize(formatNumber(array[i]!, ctx.numericSeparator), "number"));
+    const limit = ctx.maxArrayLength ?? value.length;
+    for (let i = 0; i < Math.min(value.length, limit); i++) {
+      const item = value[i];
+      if (typeof item === "bigint") {
+        entries.push(ctx.stylize(formatBigInt(item, ctx.numericSeparator), "bigint"));
+      } else if (typeof item === "number") {
+        entries.push(ctx.stylize(formatNumber(item, ctx.numericSeparator), "number"));
+      }
     }
-    if (array.length > limit) {
-      entries.push(`... ${array.length - limit} more item${array.length - limit > 1 ? "s" : ""}`);
+    if (value.length > limit) {
+      entries.push(`... ${value.length - limit} more item${value.length - limit > 1 ? "s" : ""}`);
     }
     return formatWithKeys(ctx, value, recurseTimes, label, ["[", "]"], entries);
   }
@@ -444,17 +396,15 @@ function formatByShape(ctx: Context, value: object, recurseTimes: number): strin
     return formatWithKeys(ctx, value, recurseTimes, `Set(${value.size})`, ["{", "}"], entries);
   }
   if (isAnyArrayBuffer(value)) {
-    const bytes = new Uint8Array(value as ArrayBuffer);
+    const bytes = new Uint8Array(value);
     const shown = [...bytes.subarray(0, 50)].map((b) => b.toString(16).padStart(2, "0")).join(" ");
     return `ArrayBuffer { [Uint8Contents]: <${shown}${bytes.length > 50 ? " ..." : ""}>, byteLength: ${bytes.length} }`;
   }
   if (isArrayBufferView(value)) {
-    return formatWithKeys(ctx, value, recurseTimes, value.constructor.name, ["{", "}"], []);
+    return formatWithKeys(ctx, value, recurseTimes, "DataView", ["{", "}"], []);
   }
 
-  const name = constructorName(value);
-  const prefix = name === undefined ? "" : name;
-  return formatWithKeys(ctx, value, recurseTimes, prefix, ["{", "}"], []);
+  return formatWithKeys(ctx, value, recurseTimes, "", ["{", "}"], []);
 }
 
 /** Run `body` one indentation level deeper, and put the level back after. */
@@ -473,9 +423,9 @@ function formatArrayEntries(ctx: Context, value: unknown[], recurseTimes: number
   const shown = Math.min(value.length, limit);
   for (let i = 0; i < shown; i++) {
     // A hole is not `undefined`; node reports the run of them.
-    if (!Object.prototype.hasOwnProperty.call(value, i)) {
+    if (!Object.hasOwn(value, i)) {
       let end = i;
-      while (end < shown && !Object.prototype.hasOwnProperty.call(value, end)) end++;
+      while (end < shown && !Object.hasOwn(value, end)) end++;
       entries.push(ctx.stylize(`<${end - i} empty item${end - i > 1 ? "s" : ""}>`, "undefined"));
       i = end - 1;
       continue;
@@ -500,12 +450,13 @@ function formatError(err: Error): string {
  * `braces` with `base` in front.
  *
  * Array indices are skipped because they were already formatted as entries;
- * everything else — including symbol keys and, when asked, non-enumerable ones
- * — is printed as `key: value`.
+ * every other enumerable string field is printed as `key: value`.
+ * Descriptor state, hidden fields, and dynamically discovered symbol fields
+ * are §13 host-object observations and are not part of compiled inspection.
  */
 function formatWithKeys(
   ctx: Context,
-  value: object,
+  value: InspectableObject,
   recurseTimes: number,
   base: string,
   braces: [string, string],
@@ -514,21 +465,9 @@ function formatWithKeys(
   const output = [...entries];
   const isArrayLike = Array.isArray(value) || isTypedArray(value);
 
-  let keys: PropertyKey[] = ctx.showHidden
-    ? Reflect.ownKeys(value)
-    : Object.keys(value);
-  if (!ctx.showHidden) {
-    for (const symbol of Object.getOwnPropertySymbols(value)) {
-      if (Object.prototype.propertyIsEnumerable.call(value, symbol)) {
-        keys.push(symbol);
-      }
-    }
-  }
+  let keys = Object.keys(value);
   if (isArrayLike) {
-    keys = keys.filter((k) => typeof k !== "string" || !/^\d+$/.test(k));
-  }
-  if (typeof value === "function") {
-    keys = keys.filter((k) => k !== "length" && k !== "name" && k !== "prototype");
+    keys = keys.filter((k) => !/^\d+$/.test(k));
   }
   if (ctx.sorted) {
     keys.sort((a, b) => String(a).localeCompare(String(b)));
@@ -562,57 +501,22 @@ function formatWithKeys(
 /**
  * How a key is spelled, upstream `formatProperty`.
  *
- * A symbol prints as `Symbol(x)` with no brackets, an identifier bare, and
- * anything else quoted. `__proto__` is bracketed and quoted even though it is
- * an identifier, because `{ __proto__: ... }` in the printed output would mean
- * something else if it were pasted back in. Brackets around the whole name
- * mark a non-enumerable property, which is only ever reached under
- * `showHidden`.
+ * An identifier prints bare and any other field name is quoted.
  */
-function formatKey(ctx: Context, key: PropertyKey, enumerable: boolean): string {
-  let name: string;
-  if (typeof key === "symbol") {
-    name = ctx.stylize(key.toString(), "symbol");
-  } else if (/^[a-zA-Z_][a-zA-Z_0-9]*$/.test(String(key))) {
-    name = key === "__proto__" ? "['__proto__']" : ctx.stylize(String(key), "name");
-  } else {
-    name = ctx.stylize(quoteString(String(key)), "string");
-  }
-  return enumerable ? name : `[${name}]`;
+function formatKey(ctx: Context, key: string): string {
+  return /^[a-zA-Z_][a-zA-Z_0-9]*$/.test(key)
+    ? ctx.stylize(key, "name")
+    : ctx.stylize(quoteString(key), "string");
 }
 
 /** `key: value` for one own property, with the key spelled as node spells it. */
-function formatProperty(ctx: Context, value: object, key: PropertyKey, recurseTimes: number): string {
-  const descriptor = Object.getOwnPropertyDescriptor(value, key);
-  const name = formatKey(ctx, key, descriptor?.enumerable !== false);
-  return `${name}: ${formatPropertyValue(ctx, value, descriptor, recurseTimes)}`;
-}
-
-function formatPropertyValue(
+function formatProperty(
   ctx: Context,
-  value: object,
-  descriptor: PropertyDescriptor | undefined,
+  value: InspectableObject,
+  key: string,
   recurseTimes: number,
 ): string {
-  if (descriptor === undefined) {
-    return ctx.stylize("undefined", "undefined");
-  }
-  if (descriptor.get !== undefined) {
-    // Calling a getter to print it would run arbitrary code as a side effect
-    // of logging, so node names it instead unless asked.
-    if (ctx.getters === true || ctx.getters === "get") {
-      try {
-        return formatValue(ctx, descriptor.get.call(value), recurseTimes + 1);
-      } catch {
-        return ctx.stylize("[Getter: <Inspection threw>]", "special");
-      }
-    }
-    return ctx.stylize(descriptor.set === undefined ? "[Getter]" : "[Getter/Setter]", "special");
-  }
-  if (descriptor.set !== undefined) {
-    return ctx.stylize("[Setter]", "special");
-  }
-  return formatValue(ctx, descriptor.value, recurseTimes + 1);
+  return `${formatKey(ctx, key)}: ${formatValue(ctx, value[key], recurseTimes + 1)}`;
 }
 
 /**
@@ -629,7 +533,7 @@ function reduceToSingleString(
   braces: [string, string],
   isArrayLike: boolean,
   recurseTimes: number,
-  value: object,
+  value: InspectableObject,
 ): string {
   if (ctx.compact !== false) {
     const limit = typeof ctx.compact === "number" ? ctx.compact : 3;
@@ -672,18 +576,19 @@ function reduceToSingleString(
  * The column arithmetic is upstream's, constants included. It is a fitted
  * heuristic rather than a derivation, and changing it changes the output.
  */
-function groupArrayElements(ctx: Context, output: string[], value: object): string[] {
+function groupArrayElements(ctx: Context, output: string[], value: InspectableObject): string[] {
   let totalLength = 0;
   let maxLength = 0;
   let i = 0;
   // A trailing "... n more items" is not part of the grid.
-  const hasMore = output.length > 0 && output[output.length - 1]!.startsWith("... ");
+  const lastOutput = output.at(-1);
+  const hasMore = lastOutput !== undefined && lastOutput.startsWith("... ");
   const outputLength = hasMore ? output.length - 1 : output.length;
   const separatorSpace = 2; // ", "
   const dataLen = new Array<number>(outputLength);
 
   for (; i < outputLength; i++) {
-    const len = output[i]!.length;
+    const len = output[i]?.length ?? 0;
     dataLen[i] = len;
     totalLength += len + separatorSpace;
     if (maxLength < len) maxLength = len;
@@ -711,16 +616,16 @@ function groupArrayElements(ctx: Context, output: string[], value: object): stri
     for (let c = 0; c < columns; c++) {
       let lineLength = 0;
       for (let j = c; j < outputLength; j += columns) {
-        if (dataLen[j]! > lineLength) lineLength = dataLen[j]!;
+        const length = dataLen[j] ?? 0;
+        if (length > lineLength) lineLength = length;
       }
       maxLineLength.push(lineLength + separatorSpace);
     }
 
     // Right-align a column of numbers, left-align anything else.
     let padStart = true;
-    const items = value as unknown as ArrayLike<unknown>;
     for (let j = 0; j < outputLength; j++) {
-      const item = items[j];
+      const item = value[String(j)];
       if (typeof item !== "number" && typeof item !== "bigint") {
         padStart = false;
         break;
@@ -733,20 +638,23 @@ function groupArrayElements(ctx: Context, output: string[], value: object): stri
       let line = "";
       let j = start;
       for (; j < max - 1; j++) {
-        const padding = maxLineLength[j - start]! + output[j]!.length - dataLen[j]!;
-        const cell = `${output[j]}, `;
+        const entry = output[j] ?? "";
+        const padding = (maxLineLength[j - start] ?? 0) + entry.length - (dataLen[j] ?? 0);
+        const cell = `${entry}, `;
         line += padStart ? cell.padStart(padding, " ") : cell.padEnd(padding, " ");
       }
+      const entry = output[j] ?? "";
       if (padStart) {
-        const padding = maxLineLength[j - start]! + output[j]!.length - dataLen[j]! - separatorSpace;
-        line += output[j]!.padStart(padding, " ");
+        const padding = (maxLineLength[j - start] ?? 0) + entry.length -
+          (dataLen[j] ?? 0) - separatorSpace;
+        line += entry.padStart(padding, " ");
       } else {
-        line += output[j];
+        line += entry;
       }
       grouped.push(line);
     }
-    if (hasMore) {
-      grouped.push(output[output.length - 1]!);
+    if (hasMore && lastOutput !== undefined) {
+      grouped.push(lastOutput);
     }
     return grouped;
   }

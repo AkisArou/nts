@@ -4,87 +4,46 @@
 // in the first argument, then append whatever is left over.
 
 import { formatBigInt, formatNumber, inspect, inspectDefaultOptions, type InspectOptions } from "./inspect.ts";
+import {
+  isArrayBufferView,
+  isBoxedPrimitive,
+  isDate,
+  isNativeError,
+} from "./types.ts";
 
 /**
- * The global constructors, by name. Node `lib/internal/util/inspect.js`.
+ * `%s` uses a value's typed string conversion when it says something useful,
+ * and inspection for containers whose built-in conversion loses structure.
  *
- * Read off `globalThis` rather than listed, so that it stays correct as the
- * language grows one.
+ * Node discovers the owner of `toString` and `Symbol.toPrimitive` by walking
+ * the prototype chain. NTS deliberately has neither that chain nor the symbol
+ * hook. Converting once and recognizing the uninformative `[object Kind]`
+ * result preserves the useful behavior without a runtime metaobject model.
  */
-const builtInObjects = new Set(
-  Object.getOwnPropertyNames(globalThis).filter((name) => /^[A-Z][a-zA-Z0-9]+$/.test(name)),
-);
-
-function returnFalse(): boolean {
-  return false;
-}
-
-/**
- * Whether `%s` should inspect `value` rather than call `String` on it, upstream
- * `hasBuiltInToString`.
- *
- * An object that defines its own way of becoming a string -- `toString` or
- * `Symbol.toPrimitive`, its own or inherited from a class of its own -- is
- * asking to be printed that way. One still relying on a built-in's is not:
- * `[object Object]` tells a reader nothing, and `inspect` tells them
- * everything.
- *
- * The two `hasOwn` variables are how node decides *which* of the two
- * properties the prototype walk is looking for. If `value` has no callable
- * `toString` at all, only `Symbol.toPrimitive` counts; if it has no
- * `Symbol.toPrimitive`, only `toString` does. Swapping the unwanted one for a
- * function that always says no is neater than a flag in the loop.
- */
-function hasBuiltInToString(value: object): boolean {
-  type HasOwn = (target: object, key: PropertyKey) => boolean;
-  const hasOwnProperty: HasOwn = (target, key) => Object.hasOwn(target, key);
-  let hasOwnToString: HasOwn = hasOwnProperty;
-  let hasOwnToPrimitive: HasOwn = hasOwnProperty;
-
-  const holder = value as Record<PropertyKey, unknown>;
-  if (typeof holder["toString"] !== "function") {
-    if (typeof holder[Symbol.toPrimitive] !== "function") {
-      // Neither: there is nothing to call, so `String(value)` would throw.
-      return true;
-    } else if (Object.hasOwn(value, Symbol.toPrimitive)) {
-      return false;
-    }
-    hasOwnToString = returnFalse;
-  } else if (Object.hasOwn(value, "toString")) {
-    return false;
-  } else if (typeof holder[Symbol.toPrimitive] !== "function") {
-    hasOwnToPrimitive = returnFalse;
-  } else if (Object.hasOwn(value, Symbol.toPrimitive)) {
-    return false;
+function formatStringValue(value: object, options: InspectOptions): string {
+  if (
+    Array.isArray(value) || isArrayBufferView(value) || isBoxedPrimitive(value) ||
+    isDate(value) || isNativeError(value)
+  ) {
+    return inspect(value, { ...options, depth: 0, colors: false, compact: 3 });
   }
 
-  // Whoever owns the property first in the chain decides. The walk terminates
-  // because `Object.prototype` has `toString`, and a chain that does not reach
-  // it was answered above.
-  let pointer: object = value;
-  do {
-    pointer = Object.getPrototypeOf(pointer) as object;
-  } while (
-    pointer !== null &&
-    !hasOwnToString(pointer, "toString") &&
-    !hasOwnToPrimitive(pointer, Symbol.toPrimitive)
-  );
-
-  if (pointer === null) {
-    return true;
+  try {
+    const converted = String(value);
+    return converted.startsWith("[object ") && converted.endsWith("]")
+      ? inspect(value, { ...options, depth: 0, colors: false, compact: 3 })
+      : converted;
+  } catch {
+    return inspect(value, { ...options, depth: 0, colors: false, compact: 3 });
   }
-  const descriptor = Object.getOwnPropertyDescriptor(pointer, "constructor");
-  return descriptor !== undefined &&
-    typeof descriptor.value === "function" &&
-    builtInObjects.has((descriptor.value as { name: string }).name);
 }
 
 /** `%j`, which has to survive a cycle rather than throwing. */
 function safeJson(value: unknown): string {
   try {
     return JSON.stringify(value) ?? "undefined";
-  } catch (err) {
-    return (err as Error)?.message?.includes("circular") ? "[Circular]" : "[Circular]";
+  } catch {
+    return "[Circular]";
   }
 }
 
@@ -126,21 +85,23 @@ export function formatWithOptions(options: InspectOptions, ...args: unknown[]): 
           // An object that defines its own `toString` is asking to be printed
           // that way; only one still using `Object.prototype`'s gets inspected,
           // since `[object Object]` tells a reader nothing.
-          else if (typeof value === "object" && value !== null && hasBuiltInToString(value))
-            replacement = inspect(value, { ...options, depth: 0, colors: false, compact: 3 });
+          else if (typeof value === "object" && value !== null)
+            replacement = formatStringValue(value, options);
           // A number goes through `formatNumber` so that `-0` keeps its sign
           // and `numericSeparator` applies, which `String` does neither of.
           else if (typeof value === "number") replacement = formatNumber(value, options.numericSeparator ?? false);
           else replacement = String(value);
           break;
         }
-        case 100: // d
+        case 100: { // d
           // `formatNumber`, not `String`: `%d` of `-0` is `-0`, and `String`
           // loses the sign.
-          replacement = typeof args[a] === "bigint" ? formatBigInt(args[a] as bigint, options.numericSeparator ?? false)
-            : typeof args[a] === "symbol" ? "NaN"
-            : formatNumber(Number(args[a]), options.numericSeparator ?? false);
+          const value = args[a];
+          replacement = typeof value === "bigint" ? formatBigInt(value, options.numericSeparator ?? false)
+            : typeof value === "symbol" ? "NaN"
+            : formatNumber(Number(value), options.numericSeparator ?? false);
           break;
+        }
         case 105: { // i
           const value = args[a];
           replacement = typeof value === "bigint" ? formatBigInt(value, options.numericSeparator ?? false)
@@ -158,7 +119,7 @@ export function formatWithOptions(options: InspectOptions, ...args: unknown[]): 
           replacement = safeJson(args[a]);
           break;
         case 111: // o
-          replacement = inspect(args[a], { ...options, showHidden: true, showProxy: true, depth: 4 } as InspectOptions);
+          replacement = inspect(args[a], { ...options, showHidden: true, depth: 4 });
           break;
         case 79: // O
           replacement = inspect(args[a], options);

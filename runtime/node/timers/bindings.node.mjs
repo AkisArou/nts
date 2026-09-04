@@ -60,6 +60,7 @@ globalThis.nts_timers_cancel = () => {
 globalThis.nts_timers_schedule_immediate = () => {
   armedImmediate = hostSetImmediate(() => {
     armedImmediate = null;
+    globalThis.nts_drain_unreferenced_immediates();
     onImmediates();
   });
   if (!immediatesHoldProcess) armedImmediate.unref();

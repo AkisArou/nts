@@ -3,35 +3,35 @@
 // Also what `assert.deepStrictEqual` compares with, which is why it is its own
 // file: two callers, one algorithm.
 //
-// The rules that make it more than a recursive `===`:
+// The supported rules that make it more than a recursive `===`:
 //
 //   - primitives compare with `Object.is`, so `NaN` equals `NaN` and `0` does
 //     not equal `-0`;
-//   - prototypes must match, so a class instance never equals a plain object
-//     with the same fields;
-//   - own *symbol* keys count as well as string ones;
+//   - built-in values are compared by an explicit nominal kind and their
+//     hidden state; ordinary objects are compared by declared string fields;
 //   - `Map` and `Set` compare without regard to order, which needs a matching
 //     rather than a walk;
 //   - a cycle on both sides is equal rather than infinite.
+//
+// Prototype identity, realms, descriptors, and dynamically discovered symbol
+// fields are intentionally absent. They require the §13 metaobject model that
+// a flat statically typed NTS object does not carry.
 
 import {
-  isAnyArrayBuffer, isArrayBufferView, isBoxedPrimitive, isDate, isMap,
-  isNativeError, isPromise, isRegExp, isSet, isWeakMap, isWeakSet,
+  isAnyArrayBuffer, isArrayBufferView, isBigInt64Array, isBigUint64Array,
+  isBoxedPrimitive, isDataView, isDate, isFloat16Array,
+  isFloat32Array, isFloat64Array, isInt16Array, isInt32Array, isInt8Array,
+  isMap, isNativeError, isPromise, isRegExp, isSet, isUint16Array,
+  isUint32Array, isUint8Array,
+  isUint8ClampedArray, isWeakMap, isWeakSet,
 } from "./types.ts";
 
 /**
  * One comparison in progress: the pairs already on the stack, so a cycle
- * terminates, and whether prototypes count.
+ * terminates, and which equality relation is running.
  */
 interface Context {
   seen: Map<object, Set<object>>;
-  /**
-   * When set, two objects with the same fields are equal even if one is a
-   * class instance and the other a literal. Node added it for the case where
-   * the shape is what matters and the constructor is an implementation
-   * detail -- comparing a `Buffer` with the `Uint8Array` it wraps, say.
-   */
-  skipPrototype: boolean;
   /**
    * Which relation is running.
    *
@@ -45,13 +45,161 @@ interface Context {
   loose: boolean;
 }
 
+/**
+ * The JavaScript boundary accepts `unknown`, so property values remain
+ * `unknown` until the recursive comparison narrows them. This index signature
+ * describes reads from an ordinary object; it does not claim a concrete field
+ * type and therefore cannot smuggle `any` into the comparison.
+ */
+interface IndexableObject {
+  readonly [key: PropertyKey]: unknown;
+}
+
+function isIndexableObject(value: unknown): value is IndexableObject {
+  return value !== null && typeof value === "object";
+}
+
 /** The comparison this context is for. */
 function compare(a: unknown, b: unknown, ctx: Context): boolean {
   return ctx.loose ? looseEqual(a, b, ctx) : equal(a, b, ctx);
 }
 
-export function isDeepStrictEqual(a: unknown, b: unknown, skipPrototype = false): boolean {
-  return equal(a, b, { seen: new Map(), skipPrototype: Boolean(skipPrototype), loose: false });
+function aggregateMembers(error: AggregateError): unknown {
+  return error.errors;
+}
+
+/** Error state that is not exposed through enumerable own keys. */
+function errorsEqual(a: Error, b: Error, ctx: Context): boolean {
+  if (a.message !== b.message || a.name !== b.name) {
+    return false;
+  }
+
+  const aHasCause = Object.hasOwn(a, "cause");
+  const bHasCause = Object.hasOwn(b, "cause");
+  if (aHasCause !== bHasCause) {
+    return false;
+  }
+  if (aHasCause && !compare(a.cause, b.cause, ctx)) {
+    return false;
+  }
+
+  const aIsAggregate = a instanceof AggregateError;
+  const bIsAggregate = b instanceof AggregateError;
+  if (aIsAggregate !== bIsAggregate) {
+    return false;
+  }
+  return !aIsAggregate || !bIsAggregate ||
+    compare(aggregateMembers(a), aggregateMembers(b), ctx);
+}
+
+function arrayBufferViewsShareKind(a: ArrayBufferView, b: ArrayBufferView): boolean {
+  return (isDataView(a) && isDataView(b)) ||
+    (isUint8Array(a) && isUint8Array(b)) ||
+    (isUint8ClampedArray(a) && isUint8ClampedArray(b)) ||
+    (isUint16Array(a) && isUint16Array(b)) ||
+    (isUint32Array(a) && isUint32Array(b)) ||
+    (isInt8Array(a) && isInt8Array(b)) ||
+    (isInt16Array(a) && isInt16Array(b)) ||
+    (isInt32Array(a) && isInt32Array(b)) ||
+    (isFloat16Array(a) && isFloat16Array(b)) ||
+    (isFloat32Array(a) && isFloat32Array(b)) ||
+    (isFloat64Array(a) && isFloat64Array(b)) ||
+    (isBigInt64Array(a) && isBigInt64Array(b)) ||
+    (isBigUint64Array(a) && isBigUint64Array(b));
+}
+
+function isFloatArray(
+  value: ArrayBufferView,
+): value is Float16Array | Float32Array | Float64Array {
+  return isFloat16Array(value) || isFloat32Array(value) || isFloat64Array(value);
+}
+
+function arrayBufferViewContentsEqual(
+  a: ArrayBufferView,
+  b: ArrayBufferView,
+  loose: boolean,
+): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  if (loose && isFloatArray(a) && isFloatArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+
+  const left = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+  const right = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
+
+function arrayBuffersShareKind(
+  a: ArrayBuffer | SharedArrayBuffer,
+  b: ArrayBuffer | SharedArrayBuffer,
+): boolean {
+  return (a instanceof ArrayBuffer && b instanceof ArrayBuffer) ||
+    (a instanceof SharedArrayBuffer && b instanceof SharedArrayBuffer);
+}
+
+function arrayBufferContentsEqual(
+  a: ArrayBuffer | SharedArrayBuffer,
+  b: ArrayBuffer | SharedArrayBuffer,
+): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  const left = new Uint8Array(a);
+  const right = new Uint8Array(b);
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Runtime kinds whose state does not live in enumerable object fields.
+ *
+ * NTS has no prototype chain to compare. These nominal checks are the static
+ * replacement: if one side is a supported built-in kind, the other side must
+ * be that same kind. User classes are compared by their declared fields.
+ */
+function supportedObjectKindsMatch(a: IndexableObject, b: IndexableObject): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b);
+  }
+  if (isArrayBufferView(a) || isArrayBufferView(b)) {
+    return isArrayBufferView(a) && isArrayBufferView(b) &&
+      arrayBufferViewsShareKind(a, b);
+  }
+  if (isAnyArrayBuffer(a) || isAnyArrayBuffer(b)) {
+    return isAnyArrayBuffer(a) && isAnyArrayBuffer(b) &&
+      arrayBuffersShareKind(a, b);
+  }
+  if (isDate(a) || isDate(b)) return isDate(a) && isDate(b);
+  if (isRegExp(a) || isRegExp(b)) return isRegExp(a) && isRegExp(b);
+  if (isMap(a) || isMap(b)) return isMap(a) && isMap(b);
+  if (isSet(a) || isSet(b)) return isSet(a) && isSet(b);
+  if (isWeakMap(a) || isWeakMap(b)) return isWeakMap(a) && isWeakMap(b);
+  if (isWeakSet(a) || isWeakSet(b)) return isWeakSet(a) && isWeakSet(b);
+  if (isPromise(a) || isPromise(b)) return isPromise(a) && isPromise(b);
+  if (isBoxedPrimitive(a) || isBoxedPrimitive(b)) {
+    return isBoxedPrimitive(a) && isBoxedPrimitive(b) &&
+      typeof a.valueOf() === typeof b.valueOf();
+  }
+  if (isNativeError(a) || isNativeError(b)) {
+    if (!isNativeError(a) || !isNativeError(b)) return false;
+    return (a instanceof AggregateError) === (b instanceof AggregateError);
+  }
+  if (isURL(a) || isURL(b)) return isURL(a) && isURL(b);
+  return true;
+}
+
+export function isDeepStrictEqual(a: unknown, b: unknown, _skipPrototype = false): boolean {
+  // NTS objects have one static layout and no prototype pointer. Keep the
+  // Node option in the public signature, but there is no runtime prototype
+  // comparison for it to disable in the compiled representation.
+  return equal(a, b, { seen: new Map(), loose: false });
 }
 
 function equal(a: unknown, b: unknown, ctx: Context): boolean {
@@ -60,10 +208,10 @@ function equal(a: unknown, b: unknown, ctx: Context): boolean {
   if (Object.is(a, b)) {
     return true;
   }
-  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) {
+  if (!isIndexableObject(a) || !isIndexableObject(b)) {
     return false;
   }
-  if (!ctx.skipPrototype && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) {
+  if (!supportedObjectKindsMatch(a, b)) {
     return false;
   }
 
@@ -84,7 +232,7 @@ function equal(a: unknown, b: unknown, ctx: Context): boolean {
   return result;
 }
 
-function compareByKind(a: object, b: object, ctx: Context): boolean {
+function compareByKind(a: IndexableObject, b: IndexableObject, ctx: Context): boolean {
   // Before every other kind, because these are the ones with nothing to
   // compare. A `WeakMap` will not say what it holds, a `Promise` has not
   // necessarily settled, and neither has own enumerable properties -- so the
@@ -96,84 +244,77 @@ function compareByKind(a: object, b: object, ctx: Context): boolean {
   // (node agrees two distinct ones are deep-equal, for exactly this reason)
   // and the wrong one here. Nothing at the point of the fall-through
   // distinguishes them.
-  if (isWeakMap(a) || isWeakSet(a) || isPromise(a)) {
+  if (
+    isWeakMap(a) || isWeakSet(a) || isPromise(a) ||
+    isWeakMap(b) || isWeakSet(b) || isPromise(b)
+  ) {
     return false;
   }
-  if (isDate(a)) {
-    return isDate(b) && Object.is(a.getTime(), (b as Date).getTime());
-  }
-  if (isRegExp(a)) {
-    const other = b as RegExp;
-    return isRegExp(b) && a.source === other.source && a.flags === other.flags;
-  }
-  if (isNativeError(a) || a instanceof Error) {
-    const other = b as Error;
-    // Node compares the message and the name, then the own properties below.
-    if (a.message !== other.message || a.name !== other.name) {
+  if (isDate(a) || isDate(b)) {
+    if (!isDate(a) || !isDate(b) || !Object.is(a.getTime(), b.getTime())) {
       return false;
     }
   }
-  if (isArrayBufferView(a)) {
-    if (!isArrayBufferView(b) || a.byteLength !== b.byteLength) {
+  if (isRegExp(a) || isRegExp(b)) {
+    if (!isRegExp(a) || !isRegExp(b) || a.source !== b.source || a.flags !== b.flags) {
       return false;
     }
-    const x = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
-    const y = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-    for (let i = 0; i < x.length; i++) {
-      if (x[i] !== y[i]) return false;
+  }
+  if (isURL(a) || isURL(b)) {
+    if (!isURL(a) || !isURL(b) || a.href !== b.href) {
+      return false;
     }
+  }
+  const aIsError = isNativeError(a);
+  const bIsError = isNativeError(b);
+  if (aIsError || bIsError) {
+    if (!aIsError || !bIsError || !errorsEqual(a, b, ctx)) {
+      return false;
+    }
+  }
+  if (isArrayBufferView(a) || isArrayBufferView(b)) {
+    if (!isArrayBufferView(a) || !isArrayBufferView(b) || !arrayBufferViewsShareKind(a, b)) {
+      return false;
+    }
+    if (!arrayBufferViewContentsEqual(a, b, false)) return false;
     // The elements are done; anything else hung on the view still counts.
     // Indices are skipped because they *are* the elements -- a typed array
     // cannot have an own index property that is not one.
     return ownPropertiesEqual(a, b, ctx, true);
   }
-  if (isAnyArrayBuffer(a)) {
-    const x = new Uint8Array(a as ArrayBuffer);
-    const y = new Uint8Array(b as ArrayBuffer);
-    if (x.length !== y.length) return false;
-    for (let i = 0; i < x.length; i++) {
-      if (x[i] !== y[i]) return false;
-    }
-    return true;
+  if (isAnyArrayBuffer(a) || isAnyArrayBuffer(b)) {
+    return isAnyArrayBuffer(a) && isAnyArrayBuffer(b) &&
+      arrayBuffersShareKind(a, b) && arrayBufferContentsEqual(a, b);
   }
-  if (isBoxedPrimitive(a)) {
+  if (isBoxedPrimitive(a) || isBoxedPrimitive(b)) {
     // Compare what they wrap, then fall through to their own properties.
-    // `valueOf` is brand-checked: `String.prototype.valueOf` throws on anything
-    // that is not a boxed string, and a comparison must answer `false` rather
-    // than raise.
+    // The nominal guards above prove that both receivers are supported boxed
+    // values, so `valueOf` is typed and cannot be called on a forged receiver.
     if (!isBoxedPrimitive(b)) {
       return false;
     }
-    let wrappedA: unknown;
-    let wrappedB: unknown;
-    try {
-      wrappedA = (a as { valueOf(): unknown }).valueOf();
-      wrappedB = (b as { valueOf(): unknown }).valueOf();
-    } catch {
-      return false;
-    }
-    if (!Object.is(wrappedA, wrappedB)) {
+    if (!Object.is(a.valueOf(), b.valueOf())) {
       return false;
     }
   }
-  if (Array.isArray(a)) {
-    if (!Array.isArray(b) || a.length !== b.length) {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
       return false;
     }
   }
-  if (isMap(a)) {
-    if (!isMap(b) || a.size !== (b as Map<unknown, unknown>).size) {
+  if (isMap(a) || isMap(b)) {
+    if (!isMap(a) || !isMap(b) || a.size !== b.size) {
       return false;
     }
-    if (!mapsEqual(a, b as Map<unknown, unknown>, ctx)) {
+    if (!mapsEqual(a, b, ctx)) {
       return false;
     }
   }
-  if (isSet(a)) {
-    if (!isSet(b) || a.size !== (b as Set<unknown>).size) {
+  if (isSet(a) || isSet(b)) {
+    if (!isSet(a) || !isSet(b) || a.size !== b.size) {
       return false;
     }
-    if (!setsEqual(a, b as Set<unknown>, ctx)) {
+    if (!setsEqual(a, b, ctx)) {
       return false;
     }
   }
@@ -181,34 +322,33 @@ function compareByKind(a: object, b: object, ctx: Context): boolean {
   return ownPropertiesEqual(a, b, ctx);
 }
 
-function ownPropertiesEqual(a: object, b: object, ctx: Context, skipIndices = false): boolean {
+function ownPropertiesEqual(
+  a: IndexableObject,
+  b: IndexableObject,
+  ctx: Context,
+  skipIndices = false,
+): boolean {
   const aKeys = ownEnumerableKeys(a, skipIndices);
   const bKeys = ownEnumerableKeys(b, skipIndices);
   if (aKeys.length !== bKeys.length) {
     return false;
   }
   for (const key of aKeys) {
-    if (!Object.prototype.propertyIsEnumerable.call(b, key)) {
+    if (!Object.hasOwn(b, key)) {
       return false;
     }
-    if (!equal((a as Record<PropertyKey, unknown>)[key], (b as Record<PropertyKey, unknown>)[key], ctx)) {
+    if (!equal(a[key], b[key], ctx)) {
       return false;
     }
   }
   return true;
 }
 
-/** Own enumerable keys, strings and symbols alike. */
-function ownEnumerableKeys(value: object, skipIndices = false): PropertyKey[] {
-  const keys: PropertyKey[] = skipIndices
+/** Own enumerable string keys from the object's static field layout. */
+function ownEnumerableKeys(value: IndexableObject, skipIndices = false): string[] {
+  return skipIndices
     ? Object.keys(value).filter((k) => !/^(?:0|[1-9][0-9]*)$/.test(k))
     : Object.keys(value);
-  for (const symbol of Object.getOwnPropertySymbols(value)) {
-    if (Object.prototype.propertyIsEnumerable.call(value, symbol)) {
-      keys.push(symbol);
-    }
-  }
-  return keys;
 }
 
 /**
@@ -256,9 +396,12 @@ function setsEqual(a: Set<unknown>, b: Set<unknown>, ctx: Context): boolean {
   if (unmatched.length === 0) {
     return true;
   }
-  const candidates = [...b].filter((v) => v !== null && typeof v === "object").map(
-    (v) => [v, undefined] as [unknown, unknown],
-  );
+  const candidates: Array<[unknown, unknown]> = [];
+  for (const value of b) {
+    if (value !== null && typeof value === "object") {
+      candidates.push([value, undefined]);
+    }
+  }
   return matchPairs(unmatched, candidates, ctx);
 }
 
@@ -284,10 +427,16 @@ function matchPairs(
     if (i === left.length) {
       return true;
     }
-    const [key, value] = left[i]!;
+    const current = left[i];
+    if (current === undefined) {
+      return false;
+    }
+    const [key, value] = current;
     for (let j = 0; j < right.length; j++) {
       if (used[j]) continue;
-      const [otherKey, otherValue] = right[j]!;
+      const candidate = right[j];
+      if (candidate === undefined) continue;
+      const [otherKey, otherValue] = candidate;
       if (!compare(key, otherKey, ctx)) continue;
       if (value !== undefined || otherValue !== undefined) {
         if (!compare(value, otherValue, ctx)) continue;
@@ -326,14 +475,20 @@ function looseEqual(a: unknown, b: unknown, ctx: Context): boolean {
   // against an object with it would make `'a'` loosely deep-equal to `['a']`,
   // because `['a'] == 'a'` coerces through `toString` -- and node says those
   // are not deep-equal, whatever `==` says about them.
-  const aPrimitive = a === null || typeof a !== "object";
-  const bPrimitive = b === null || typeof b !== "object";
+  const aPrimitive = !isIndexableObject(a);
+  const bPrimitive = !isIndexableObject(b);
   if (aPrimitive || bPrimitive) {
     if (aPrimitive && bPrimitive) {
       // eslint-disable-next-line eqeqeq
       return a == b ||
         (typeof a === "number" && typeof b === "number" && Number.isNaN(a) && Number.isNaN(b));
     }
+    return false;
+  }
+  if (!isIndexableObject(a) || !isIndexableObject(b)) {
+    return false;
+  }
+  if (!supportedObjectKindsMatch(a, b)) {
     return false;
   }
   const known = ctx.seen.get(a);
@@ -358,38 +513,56 @@ function looseEqual(a: unknown, b: unknown, ctx: Context): boolean {
   // their own properties, and the key walk below is what sees that. Returning
   // early here made `/test/` equal to a `MyRegExp` carrying an extra field.
   if (isDate(a) || isDate(b)) {
-    if (!isDate(a) || !isDate(b) || (a as Date).getTime() !== (b as Date).getTime()) {
+    if (!isDate(a) || !isDate(b) || a.getTime() !== b.getTime()) {
       return false;
     }
   }
   if (isRegExp(a) || isRegExp(b)) {
     if (
       !isRegExp(a) || !isRegExp(b) ||
-      (a as RegExp).source !== (b as RegExp).source ||
-      (a as RegExp).flags !== (b as RegExp).flags
+      a.source !== b.source || a.flags !== b.flags
     ) {
       return false;
     }
   }
+  if (isURL(a) || isURL(b)) {
+    if (!isURL(a) || !isURL(b) || a.href !== b.href) {
+      return false;
+    }
+  }
   if (isMap(a) || isMap(b)) {
-    if (!isMap(a) || !isMap(b) || (a as Map<unknown, unknown>).size !== (b as Map<unknown, unknown>).size) {
+    if (!isMap(a) || !isMap(b) || a.size !== b.size) {
       return false;
     }
   }
   if (isSet(a) || isSet(b)) {
-    if (!isSet(a) || !isSet(b) || (a as Set<unknown>).size !== (b as Set<unknown>).size) {
+    if (!isSet(a) || !isSet(b) || a.size !== b.size) {
       return false;
     }
   }
   if (isArrayBufferView(a) || isArrayBufferView(b)) {
-    if (!isArrayBufferView(a) || !isArrayBufferView(b)) {
+    if (
+      !isArrayBufferView(a) || !isArrayBufferView(b) ||
+      !arrayBufferViewsShareKind(a, b)
+    ) {
       return false;
     }
-    const x = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
-    const y = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-    if (x.length !== y.length) return false;
-    for (let i = 0; i < x.length; i++) {
-      if (x[i] !== y[i]) return false;
+    if (!arrayBufferViewContentsEqual(a, b, true)) return false;
+  }
+  if (isAnyArrayBuffer(a) || isAnyArrayBuffer(b)) {
+    if (
+      !isAnyArrayBuffer(a) || !isAnyArrayBuffer(b) ||
+      !arrayBuffersShareKind(a, b) ||
+      !arrayBufferContentsEqual(a, b)
+    ) {
+      return false;
+    }
+  }
+  const aIsError = isNativeError(a);
+  const bIsError = isNativeError(b);
+  if (aIsError || bIsError) {
+    if (!aIsError || !bIsError || !errorsEqual(a, b, ctx)) {
+      return false;
     }
   }
   // A boxed primitive has own index properties, so the key walk below matches
@@ -398,27 +571,15 @@ function looseEqual(a: unknown, b: unknown, ctx: Context): boolean {
     if (!isBoxedPrimitive(a) || !isBoxedPrimitive(b)) {
       return false;
     }
-    try {
-      if (!Object.is(
-        (a as { valueOf(): unknown }).valueOf(),
-        (b as { valueOf(): unknown }).valueOf(),
-      )) {
-        return false;
-      }
-    } catch {
-      // `String.prototype.valueOf` throws on anything that is not a boxed
-      // string, and a comparison must answer rather than raise.
+    if (!Object.is(a.valueOf(), b.valueOf())) {
       return false;
     }
   }
-  if (Array.isArray(a) !== Array.isArray(b)) {
-    return false;
-  }
-  if (Array.isArray(a)) {
-    if (a.length !== (b as unknown[]).length) {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
       return false;
     }
-    if (!looseArrayElementsEqual(a, b as unknown[], ctx)) {
+    if (!looseArrayElementsEqual(a, b, ctx)) {
       return false;
     }
   }
@@ -426,11 +587,15 @@ function looseEqual(a: unknown, b: unknown, ctx: Context): boolean {
   // identity, and two structurally equal objects are not the same object -- so
   // a set of errors compared against an equal set of errors reported as
   // different, for every member that was not a primitive.
-  if (isMap(a) && !mapsEqual(a as Map<unknown, unknown>, b as Map<unknown, unknown>, ctx)) {
-    return false;
+  if (isMap(a) || isMap(b)) {
+    if (!isMap(a) || !isMap(b) || !mapsEqual(a, b, ctx)) {
+      return false;
+    }
   }
-  if (isSet(a) && !setsEqual(a as Set<unknown>, b as Set<unknown>, ctx)) {
-    return false;
+  if (isSet(a) || isSet(b)) {
+    if (!isSet(a) || !isSet(b) || !setsEqual(a, b, ctx)) {
+      return false;
+    }
   }
 
   const aKeys = Object.keys(a);
@@ -439,14 +604,14 @@ function looseEqual(a: unknown, b: unknown, ctx: Context): boolean {
     return false;
   }
   for (const key of aKeys) {
-    if (!Object.prototype.hasOwnProperty.call(b, key)) {
+    if (!Object.hasOwn(b, key)) {
       return false;
     }
     // Index keys were compared above, with the rule the array path has.
     if (Array.isArray(a) && indexKey.test(key)) {
       continue;
     }
-    if (!looseEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], ctx)) {
+    if (!looseEqual(a[key], b[key], ctx)) {
       return false;
     }
   }
@@ -467,15 +632,15 @@ function looseEqual(a: unknown, b: unknown, ctx: Context): boolean {
 function looseArrayElementsEqual(a: unknown[], b: unknown[], ctx: Context): boolean {
   for (let i = 0; i < a.length; i++) {
     if (b[i] === undefined) {
-      if (!Object.prototype.hasOwnProperty.call(b, i)) {
+      if (!Object.hasOwn(b, i)) {
         // A hole on the expected side, which matches a hole or `undefined`.
-        if (Object.prototype.hasOwnProperty.call(a, i) && a[i] !== undefined && a[i] !== null) {
+        if (Object.hasOwn(a, i) && a[i] !== undefined && a[i] !== null) {
           return false;
         }
         continue;
       }
       if (
-        (a[i] !== undefined || !Object.prototype.hasOwnProperty.call(a, i)) &&
+        (a[i] !== undefined || !Object.hasOwn(a, i)) &&
         a[i] !== null
       ) {
         return false;
@@ -495,7 +660,42 @@ function looseArrayElementsEqual(a: unknown[], b: unknown[], ctx: Context): bool
  * prototype check.
  */
 export function isDeepEqual(a: unknown, b: unknown): boolean {
-  return looseEqual(a, b, { seen: new Map(), skipPrototype: true, loose: true });
+  return looseEqual(a, b, { seen: new Map(), loose: true });
+}
+
+function partialErrorsEqual(actual: Error, expected: Error, seen: Cycles): boolean {
+  if (expected.message !== "" && !partialEqual(actual.message, expected.message, seen)) {
+    return false;
+  }
+  if (!partialEqual(actual.name, expected.name, seen)) {
+    return false;
+  }
+
+  if (Object.hasOwn(expected, "cause")) {
+    if (!Object.hasOwn(actual, "cause")) {
+      return false;
+    }
+    // Node treats an explicitly present `undefined` as a presence constraint,
+    // but it does not constrain the actual cause value.
+    if (expected.cause !== undefined &&
+        !partialEqual(actual.cause, expected.cause, seen)) {
+      return false;
+    }
+  }
+
+  if (expected instanceof AggregateError) {
+    if (!(actual instanceof AggregateError)) {
+      return false;
+    }
+    if (!partialEqual(
+      aggregateMembers(actual),
+      aggregateMembers(expected),
+      seen,
+    )) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -520,13 +720,10 @@ function partialEqual(actual: unknown, expected: unknown, seen: Cycles): boolean
   if (Object.is(actual, expected)) {
     return true;
   }
-  if (typeof expected !== "object" || expected === null ||
-      typeof actual !== "object" || actual === null) {
+  if (!isIndexableObject(expected) || !isIndexableObject(actual)) {
     return false;
   }
-  // A tag is part of what a value claims to be, and two values that disagree
-  // about it are not the same kind whatever their contents.
-  if (tagOf(actual) !== tagOf(expected)) {
+  if (!supportedObjectKindsMatch(actual, expected)) {
     return false;
   }
   // Nothing enumerable to look at, and identity was ruled out above.
@@ -542,8 +739,7 @@ function partialEqual(actual: unknown, expected: unknown, seen: Cycles): boolean
   seen.set(actual, (known ?? new Set()).add(expected));
 
   if (isURL(expected)) {
-    return isURL(actual) &&
-      (actual as { href: string }).href === (expected as { href: string }).href;
+    return isURL(actual) && actual.href === expected.href;
   }
 
   if (Array.isArray(expected)) {
@@ -587,7 +783,7 @@ function partialEqual(actual: unknown, expected: unknown, seen: Cycles): boolean
   }
 
   if (isArrayBufferView(expected)) {
-    if (!isArrayBufferView(actual)) {
+    if (!isArrayBufferView(actual) || !arrayBufferViewsShareKind(actual, expected)) {
       return false;
     }
     const wanted = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
@@ -596,12 +792,12 @@ function partialEqual(actual: unknown, expected: unknown, seen: Cycles): boolean
   }
 
   if (isAnyArrayBuffer(expected)) {
-    if (!isAnyArrayBuffer(actual)) {
+    if (!isAnyArrayBuffer(actual) || !arrayBuffersShareKind(actual, expected)) {
       return false;
     }
     return isSubsequence(
-      [...new Uint8Array(actual as ArrayBuffer)],
-      [...new Uint8Array(expected as ArrayBuffer)],
+      [...new Uint8Array(actual)],
+      [...new Uint8Array(expected)],
       seen,
     );
   }
@@ -610,49 +806,23 @@ function partialEqual(actual: unknown, expected: unknown, seen: Cycles): boolean
     if (!isBoxedPrimitive(actual)) {
       return false;
     }
-    try {
-      if (!Object.is(
-        (actual as { valueOf(): unknown }).valueOf(),
-        (expected as { valueOf(): unknown }).valueOf(),
-      )) {
-        return false;
-      }
-    } catch {
+    if (!Object.is(actual.valueOf(), expected.valueOf())) {
       return false;
     }
   }
 
-  if (expected instanceof Error) {
+  if (isNativeError(expected)) {
     // The stack is left out: two errors raised from different lines are still
     // the same error as far as a comparison is concerned.
-    if (!(actual instanceof Error)) {
+    if (!isNativeError(actual)) {
       return false;
     }
-    for (const key of ["message", "name", "cause", "errors"] as const) {
-      const want = (expected as unknown as Record<string, unknown>)[key];
-      // An expectation of `undefined` asks nothing, and neither does the empty
-      // message a bare `new Error()` carries -- both are what an error has
-      // when nobody set them, so requiring them would make `new Error()` match
-      // nothing rather than anything.
-      if (want === undefined || (key === "message" && want === "")) {
-        continue;
-      }
-      if (!partialEqual((actual as unknown as Record<string, unknown>)[key], want, seen)) {
-        return false;
-      }
-    }
-    // Set explicitly, even to `undefined`, it is part of the expectation.
-    if (Object.hasOwn(expected, "cause") && !Object.hasOwn(actual, "cause")) {
+    if (!partialErrorsEqual(actual, expected, seen)) {
       return false;
     }
   }
 
   return partialOwnKeys(actual, expected, seen);
-}
-
-/** `Object.prototype.toString`'s answer, which a `Symbol.toStringTag` changes. */
-function tagOf(value: object): string {
-  return Object.prototype.toString.call(value);
 }
 
 const indexKey = /^(?:0|[1-9][0-9]*)$/;
@@ -669,7 +839,7 @@ function presentValues(array: readonly unknown[]): unknown[] {
   const out: unknown[] = [];
   for (const key of Object.keys(array)) {
     if (indexKey.test(key)) {
-      out.push((array as unknown as Record<string, unknown>)[key]);
+      out.push(array[Number(key)]);
     }
   }
   return out;
@@ -681,34 +851,41 @@ type Cycles = Map<object, Set<object>>;
 /**
  * A `URL` compares by its serialisation; its internals are derived from it.
  *
- * By tag rather than by `instanceof`, so that a `URL` from another realm is
- * still one -- and so that this file does not have to name a global the
- * language does not define.
+ * Structural recognition matches TypeScript's own type model and works for
+ * both this runtime's URL and the host URL used by the TypeScript test path.
  */
-function isURL(value: unknown): boolean {
-  return Object.prototype.toString.call(value) === "[object URL]";
+interface URLValue extends IndexableObject {
+  readonly href: string;
+  readonly origin: string;
+  toJSON(): string;
+}
+
+function isURL(value: unknown): value is URLValue {
+  return isIndexableObject(value) &&
+    "href" in value && typeof value.href === "string" &&
+    "origin" in value && typeof value.origin === "string" &&
+    "toJSON" in value && typeof value.toJSON === "function";
 }
 
 /**
- * Every own enumerable key of `expected` -- strings and symbols -- present on
- * `actual` and partially equal. `skip` drops keys compared some other way.
+ * Every own enumerable string key of `expected`, present on `actual` and
+ * partially equal. `skip` drops keys compared some other way. Symbol-keyed
+ * discovery is a §13 metaobject operation and is intentionally absent.
  */
-function partialOwnKeys(actual: object, expected: object, seen: Cycles, skip?: RegExp): boolean {
-  for (const key of Reflect.ownKeys(expected)) {
-    if (!Object.prototype.propertyIsEnumerable.call(expected, key)) {
+function partialOwnKeys(
+  actual: IndexableObject,
+  expected: IndexableObject,
+  seen: Cycles,
+  skip?: RegExp,
+): boolean {
+  for (const key of Object.keys(expected)) {
+    if (skip !== undefined && skip.test(key)) {
       continue;
     }
-    if (skip !== undefined && typeof key === "string" && skip.test(key)) {
-      continue;
-    }
-    if (!Object.prototype.propertyIsEnumerable.call(actual, key)) {
+    if (!Object.hasOwn(actual, key)) {
       return false;
     }
-    if (!partialEqual(
-      (actual as Record<PropertyKey, unknown>)[key],
-      (expected as Record<PropertyKey, unknown>)[key],
-      seen,
-    )) {
+    if (!partialEqual(actual[key], expected[key], seen)) {
       return false;
     }
   }
@@ -754,7 +931,8 @@ function everyMatched<T>(
   for (const item of wanted) {
     let matched = false;
     for (let i = 0; i < found.length; i++) {
-      if (!used[i] && matches(item, found[i]!)) {
+      const candidate = found[i];
+      if (candidate !== undefined && !used[i] && matches(item, candidate)) {
         used[i] = true;
         matched = true;
         break;

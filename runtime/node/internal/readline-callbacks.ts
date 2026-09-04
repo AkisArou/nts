@@ -21,35 +21,27 @@ const ESCAPE = "\u001b";
  * the bracket appear once here rather than in every caller, and what is left
  * at each call site is the part that differs.
  *
- * The named constants below hang off it because node hangs them off it, and
- * because a program that has the function usually wants the common ones too.
+ * Node hangs constants off the function object. NTS has no function-object
+ * property map, so typed code exports them as ordinary constants; the
+ * Node-only readline shape restores the legacy facade for JavaScript tests.
  */
-interface CSITag {
-  (strings: TemplateStringsArray | readonly string[], ...args: unknown[]): string;
-  kEscape: string;
-  kClearToLineBeginning: string;
-  kClearToLineEnd: string;
-  kClearLine: string;
-  kClearScreenDown: string;
-}
-
-export const CSI = ((
+export function csi(
   strings: TemplateStringsArray | readonly string[],
   ...args: unknown[]
-): string => {
+): string {
   let ret = `${ESCAPE}[`;
   for (let n = 0; n < strings.length; n++) {
     ret += strings[n];
     if (n < args.length) ret += String(args[n]);
   }
   return ret;
-}) as CSITag;
+}
 
-CSI.kEscape = ESCAPE;
-CSI.kClearToLineBeginning = CSI`1K`;
-CSI.kClearToLineEnd = CSI`0K`;
-CSI.kClearLine = CSI`2K`;
-CSI.kClearScreenDown = CSI`0J`;
+export const kEscape = ESCAPE;
+export const kClearToLineBeginning = `${ESCAPE}[1K`;
+export const kClearToLineEnd = `${ESCAPE}[0K`;
+export const kClearLine = `${ESCAPE}[2K`;
+export const kClearScreenDown = `${ESCAPE}[0J`;
 
 type Callback = (err?: Error | null) => void;
 
@@ -141,10 +133,10 @@ export function clearLine(
   }
 
   const type = dir < 0
-    ? CSI.kClearToLineBeginning
+    ? kClearToLineBeginning
     : dir > 0
-      ? CSI.kClearToLineEnd
-      : CSI.kClearLine;
+      ? kClearToLineEnd
+      : kClearLine;
   return stream.write(type, callback);
 }
 
@@ -161,5 +153,5 @@ export function clearScreenDown(
     return true;
   }
 
-  return stream.write(CSI.kClearScreenDown, callback);
+  return stream.write(kClearScreenDown, callback);
 }

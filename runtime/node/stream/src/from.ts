@@ -21,17 +21,46 @@ import {
   ERR_STREAM_NULL_VALUES,
 } from "../../internal/errors.ts";
 import { nextTick } from "../../internal/tick.ts";
-import { Readable } from "./readable.ts";
-import type { ReadableOptions } from "./readable.ts";
+import type { Readable } from "./readable.ts";
+import type { DuplexOptions } from "./duplex.ts";
 
-type AnyIterator = {
-  next(): { value: unknown; done?: boolean } | Promise<{ value: unknown; done?: boolean }>;
-  return?(): { value: unknown; done?: boolean } | Promise<{ value: unknown; done?: boolean }>;
-  throw?(error: unknown): { value: unknown; done?: boolean } | Promise<{ value: unknown; done?: boolean }>;
-};
+interface IteratorResultLike {
+  readonly value: unknown;
+  readonly done?: boolean;
+}
 
-const isThenable = (value: unknown): boolean =>
-  Boolean(value) && typeof (value as { then?: unknown }).then === "function";
+interface AnyIterator {
+  next(): IteratorResultLike | Promise<IteratorResultLike>;
+  return?(): IteratorResultLike | Promise<IteratorResultLike>;
+  throw?(error: unknown): IteratorResultLike | Promise<IteratorResultLike>;
+}
+
+interface SyncIterator extends AnyIterator {
+  next(): IteratorResultLike;
+}
+
+interface AsyncIterableLike {
+  [Symbol.asyncIterator](): AnyIterator;
+}
+
+interface IterableLike {
+  [Symbol.iterator](): SyncIterator;
+}
+
+function isAsyncIterableLike(value: unknown): value is AsyncIterableLike {
+  return value !== null && typeof value === "object" &&
+    Symbol.asyncIterator in value && typeof value[Symbol.asyncIterator] === "function";
+}
+
+function isIterableLike(value: unknown): value is IterableLike {
+  return value !== null && typeof value === "object" &&
+    Symbol.iterator in value && typeof value[Symbol.iterator] === "function";
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return value !== null && typeof value === "object" &&
+    "then" in value && typeof value.then === "function";
+}
 
 /**
  * `Readable.from`, and the machinery behind `Duplex.from`.
@@ -43,8 +72,8 @@ const isThenable = (value: unknown): boolean =>
  */
 export function from<T extends Readable>(
   iterable: unknown,
-  opts?: ReadableOptions,
-  Ctor: new (options?: ReadableOptions) => T = Readable as unknown as new (o?: ReadableOptions) => T,
+  opts: DuplexOptions | undefined,
+  Ctor: new (options?: DuplexOptions) => T,
 ): T {
   // A string or a buffer is iterable, but iterating it would produce one
   // stream chunk per character or per byte, which is never what the caller
@@ -61,18 +90,21 @@ export function from<T extends Readable>(
   }
 
   let iterator: AnyIterator;
+  let syncIterator: SyncIterator | undefined;
   let isAsync: boolean;
 
-  const source = iterable as Record<symbol, (() => AnyIterator) | undefined>;
-  if (source?.[Symbol.asyncIterator]) {
+  if (isAsyncIterableLike(iterable)) {
     isAsync = true;
-    iterator = (source[Symbol.asyncIterator] as () => AnyIterator)();
-  } else if (source?.[Symbol.iterator]) {
+    iterator = iterable[Symbol.asyncIterator]();
+  } else if (isIterableLike(iterable)) {
     isAsync = false;
-    iterator = (source[Symbol.iterator] as () => AnyIterator)();
+    syncIterator = iterable[Symbol.iterator]();
+    iterator = syncIterator;
   } else {
     throw new ERR_INVALID_ARG_TYPE("iterable", ["Iterable"], iterable);
   }
+
+  const sourceDestroy = opts?.destroy;
 
   const readable = new Ctor({
     objectMode: true,
@@ -81,33 +113,32 @@ export function from<T extends Readable>(
     // with side effects is a behaviour change rather than a cache.
     highWaterMark: 1,
     ...opts,
-  });
+    destroy(error: unknown, callback: (error?: unknown) => void): void {
+      const afterSourceDestroy = (destroyError?: unknown): void => {
+        const combined = destroyError || error;
+        // The iterator gets to clean up too -- a generator with a `finally`
+        // has not run it yet -- and its own failure is kept alongside ours.
+        closeIterator(combined).then(
+          () => nextTick(callback, combined),
+          (closeError: unknown) => nextTick(callback, aggregateTwoErrors(combined, closeError)),
+        );
+      };
 
-  const originalDestroy = readable._destroy.bind(readable);
+      if (sourceDestroy === undefined) afterSourceDestroy(error);
+      else sourceDestroy(error, afterSourceDestroy);
+    },
+  });
 
   // Guards against `_read` being called again while a loop is still running.
   let reading = false;
   let valuesAreAsync = false;
 
-  readable._read = function (): void {
+  readable._read = (): void => {
     if (reading) return;
     reading = true;
     if (isAsync) void nextAsync();
     else if (valuesAreAsync) void nextSyncWithAsyncValues();
     else nextSyncWithSyncValues();
-  };
-
-  readable._destroy = function (error: unknown, callback: (error?: unknown) => void): void {
-    originalDestroy(error, (destroyError?: unknown) => {
-      const combined = destroyError || error;
-      // The iterator gets to clean up too -- a generator with a `finally` has
-      // not run it yet -- and its own failure is kept alongside ours rather
-      // than replacing it.
-      closeIterator(combined).then(
-        () => nextTick(callback, combined),
-        (closeError: unknown) => nextTick(callback, aggregateTwoErrors(combined, closeError)),
-      );
-    });
   };
 
   /**
@@ -134,7 +165,10 @@ export function from<T extends Readable>(
   function nextSyncWithSyncValues(): void {
     for (;;) {
       try {
-        const { value, done } = iterator.next() as { value: unknown; done?: boolean };
+        if (syncIterator === undefined) {
+          throw new Error("synchronous iterable has no synchronous iterator");
+        }
+        const { value, done } = syncIterator.next();
 
         if (done) {
           readable.push(null);
@@ -184,7 +218,10 @@ export function from<T extends Readable>(
   async function nextSyncWithAsyncValues(): Promise<void> {
     for (;;) {
       try {
-        const { value, done } = iterator.next() as { value: unknown; done?: boolean };
+        if (syncIterator === undefined) {
+          throw new Error("synchronous iterable has no synchronous iterator");
+        }
+        const { value, done } = syncIterator.next();
 
         if (done) {
           readable.push(null);

@@ -30,6 +30,15 @@ function defaultTransform(data: unknown): unknown {
   return data;
 }
 
+/** Invoke a callback with the receiver and argument tuple supplied by the caller. */
+function apply<A extends unknown[], T>(
+  fn: (...args: A) => T,
+  thisArg: unknown,
+  args: A,
+): T {
+  return fn.apply(thisArg, args);
+}
+
 /**
  * A named channel.
  *
@@ -62,6 +71,7 @@ export class Channel {
     // A fresh array rather than a push, so that a subscriber added or removed
     // during a `publish` does not change the list that publish is walking.
     this.#subscribers = [...this.#subscribers, subscription];
+    channels.incRef(this.name);
   }
 
   unsubscribe(subscription: Subscriber): boolean {
@@ -71,15 +81,21 @@ export class Channel {
       ...this.#subscribers.slice(0, index),
       ...this.#subscribers.slice(index + 1),
     ];
+    channels.decRef(this.name);
     return true;
   }
 
   bindStore(store: Store, transform?: Transform): void {
+    if (!this.#stores.has(store)) {
+      channels.incRef(this.name);
+    }
     this.#stores.set(store, transform ?? defaultTransform);
   }
 
   unbindStore(store: Store): boolean {
-    return this.#stores.delete(store);
+    if (!this.#stores.delete(store)) return false;
+    channels.decRef(this.name);
+    return true;
   }
 
   /**
@@ -92,8 +108,10 @@ export class Channel {
   publish(message?: unknown): void {
     const subscribers = this.#subscribers;
     for (let i = 0; i < subscribers.length; i++) {
+      const subscriber = subscribers[i];
+      if (subscriber === undefined) continue;
       try {
-        subscribers[i]!(message, this.name);
+        subscriber(message, this.name);
       } catch (err) {
         triggerUncaughtException(err);
       }
@@ -103,13 +121,18 @@ export class Channel {
   /**
    * Publish, then run `fn` inside every bound store's context.
    *
-   * The stores are entered from the inside out, so the first bound store is
-   * the outermost -- which is what makes nesting two of them predictable.
+   * Each bound store wraps the chain built so far, so the most recently bound
+   * store is outermost and the first bound store is nearest the callback.
    */
-  runStores<T>(message: unknown, fn: (...args: never[]) => T, thisArg?: unknown, ...args: unknown[]): T {
+  runStores<A extends unknown[], T>(
+    message: unknown,
+    fn: (...args: A) => T,
+    thisArg?: unknown,
+    ...args: A
+  ): T {
     let run = (): T => {
       this.publish(message);
-      return Reflect.apply(fn, thisArg, args) as T;
+      return fn.apply(thisArg, args);
     };
 
     for (const [store, transform] of this.#stores.entries()) {
@@ -142,6 +165,11 @@ export class Channel {
  */
 class WeakRefMap {
   #map = new Map<string | symbol, WeakRef<Channel>>();
+  // Node's internal WeakReference has incRef/decRef. Ordinary WeakRef does
+  // not, so active channels are retained explicitly until their last
+  // subscriber or store is removed.
+  #active = new Map<string | symbol, Channel>();
+  #refs = new Map<string | symbol, number>();
   #finalizers = new FinalizationRegistry<string | symbol>((key) => {
     if (this.#map.get(key)?.deref() === undefined) {
       this.#map.delete(key);
@@ -159,6 +187,27 @@ class WeakRefMap {
 
   has(key: string | symbol): boolean {
     return this.get(key) !== undefined;
+  }
+
+  incRef(key: string | symbol): void {
+    const value = this.get(key);
+    if (!value) return;
+
+    const refs = this.#refs.get(key) ?? 0;
+    if (refs === 0) this.#active.set(key, value);
+    this.#refs.set(key, refs + 1);
+  }
+
+  decRef(key: string | symbol): void {
+    const refs = this.#refs.get(key);
+    if (refs === undefined) return;
+
+    if (refs === 1) {
+      this.#refs.delete(key);
+      this.#active.delete(key);
+    } else {
+      this.#refs.set(key, refs - 1);
+    }
   }
 }
 
@@ -192,13 +241,25 @@ export function hasSubscribers(name: string | symbol): boolean {
 // ------------------------------------------------------------ tracing
 
 /** The five moments a traced call passes through. */
-const traceEvents = ["start", "end", "asyncStart", "asyncEnd", "error"] as const;
-type TraceEvent = (typeof traceEvents)[number];
+type TraceEvent = "start" | "end" | "asyncStart" | "asyncEnd" | "error";
+const traceEvents: readonly TraceEvent[] = [
+  "start",
+  "end",
+  "asyncStart",
+  "asyncEnd",
+  "error",
+];
 
 export type TracingChannelSubscribers = Partial<Record<TraceEvent, Subscriber>>;
 export type TracingChannels = Record<TraceEvent, Channel>;
 
 function assertChannel(value: unknown, name: string): asserts value is Channel {
+  // Node's excluded Symbol.hasInstance hook calls Object.getPrototypeOf first,
+  // and that operation supplies this observable error for a missing value.
+  // Preserve the API result with an ordinary static check.
+  if (value === undefined || value === null) {
+    throw new TypeError("Cannot convert undefined or null to object");
+  }
   if (!(value instanceof Channel)) {
     throw new ERR_INVALID_ARG_TYPE(name, ["Channel"], value);
   }
@@ -220,7 +281,7 @@ function tracingChannelFrom(
 
   throw new ERR_INVALID_ARG_TYPE(
     "nameOrChannels",
-    ["string", "object", "TracingChannel"],
+    ["string", "TracingChannel", "Object"],
     nameOrChannels,
   );
 }
@@ -237,20 +298,21 @@ export class TracingChannel {
   declare readonly error: Channel;
 
   constructor(nameOrChannels: string | Partial<TracingChannels>) {
-    for (const eventName of traceEvents) {
-      Object.defineProperty(this, eventName, {
-        __proto__: null,
-        value: tracingChannelFrom(nameOrChannels, eventName),
-      } as PropertyDescriptor);
-    }
+    this.start = tracingChannelFrom(nameOrChannels, "start");
+    this.end = tracingChannelFrom(nameOrChannels, "end");
+    this.asyncStart = tracingChannelFrom(nameOrChannels, "asyncStart");
+    this.asyncEnd = tracingChannelFrom(nameOrChannels, "asyncEnd");
+    this.error = tracingChannelFrom(nameOrChannels, "error");
   }
 
   get hasSubscribers(): boolean {
-    return this.start.hasSubscribers ||
+    return (
+      this.start.hasSubscribers ||
       this.end.hasSubscribers ||
       this.asyncStart.hasSubscribers ||
       this.asyncEnd.hasSubscribers ||
-      this.error.hasSubscribers;
+      this.error.hasSubscribers
+    );
   }
 
   subscribe(handlers: TracingChannelSubscribers): void {
@@ -274,21 +336,21 @@ export class TracingChannel {
   }
 
   /** A synchronous call, traced. `context` accumulates the result or error. */
-  traceSync<T>(
-    fn: (...args: never[]) => T,
+  traceSync<A extends unknown[], T>(
+    fn: (...args: A) => T,
     context: Record<string, unknown> = {},
     thisArg?: unknown,
-    ...args: unknown[]
+    ...args: A
   ): T {
     if (!this.hasSubscribers) {
-      return Reflect.apply(fn, thisArg, args) as T;
+      return apply(fn, thisArg, args);
     }
 
     const { start, end, error } = this;
 
     return start.runStores(context, () => {
       try {
-        const result = Reflect.apply(fn, thisArg, args) as T;
+        const result = apply(fn, thisArg, args);
         context["result"] = result;
         return result;
       } catch (err) {
@@ -307,14 +369,14 @@ export class TracingChannel {
    * `end` fires when the function returns, `asyncStart`/`asyncEnd` when the
    * promise settles -- which is the distinction the two pairs exist to draw.
    */
-  tracePromise<T>(
-    fn: (...args: never[]) => Promise<T>,
+  tracePromise<A extends unknown[], T>(
+    fn: (...args: A) => Promise<T>,
     context: Record<string, unknown> = {},
     thisArg?: unknown,
-    ...args: unknown[]
+    ...args: A
   ): Promise<T> {
     if (!this.hasSubscribers) {
-      return Reflect.apply(fn, thisArg, args) as Promise<T>;
+      return apply(fn, thisArg, args);
     }
 
     const { start, end, asyncStart, asyncEnd, error } = this;
@@ -336,7 +398,7 @@ export class TracingChannel {
 
     return start.runStores(context, () => {
       try {
-        let promise = Reflect.apply(fn, thisArg, args) as Promise<T>;
+        let promise = apply(fn, thisArg, args);
         // A thenable is not a promise, and `then` on it is not ours to trust.
         if (!(promise instanceof Promise)) {
           promise = Promise.resolve(promise);
@@ -356,21 +418,31 @@ export class TracingChannel {
    * A callback-taking call, traced. `position` is where the callback sits in
    * the argument list; `-1`, the default, means last.
    */
-  traceCallback<T>(
-    fn: (...args: never[]) => T,
+  traceCallback<A extends unknown[], T>(
+    fn: (...args: A) => T,
+    position?: number,
+    context?: Record<string, unknown>,
+    thisArg?: unknown,
+    ...args: A
+  ): T;
+  traceCallback(
+    fn: Function,
     position = -1,
     context: Record<string, unknown> = {},
     thisArg?: unknown,
     ...args: unknown[]
-  ): T {
+  ): unknown {
     if (!this.hasSubscribers) {
-      return Reflect.apply(fn, thisArg, args) as T;
+      return fn.apply(thisArg, args);
     }
 
     const { start, end, asyncStart, asyncEnd, error } = this;
 
     const callback = args.at(position);
-    validateFunction(callback, "callback");
+    if (typeof callback !== "function") {
+      throw new ERR_INVALID_ARG_TYPE("callback", "Function", callback);
+    }
+    const checkedCallback = callback;
 
     function wrappedCallback(this: unknown, ...callbackArgs: unknown[]): unknown {
       const err = callbackArgs[0];
@@ -386,18 +458,19 @@ export class TracingChannel {
       const self = this;
       return asyncStart.runStores(context, () => {
         try {
-          return Reflect.apply(callback as (...a: never[]) => unknown, self, callbackArgs);
+          return checkedCallback.apply(self, callbackArgs);
         } finally {
           asyncEnd.publish(context);
         }
       });
     }
 
-    args.splice(position, 1, wrappedCallback);
+    const callArgs: unknown[] = [...args];
+    callArgs.splice(position, 1, wrappedCallback);
 
     return start.runStores(context, () => {
       try {
-        return Reflect.apply(fn, thisArg, args) as T;
+        return fn.apply(thisArg, callArgs);
       } catch (err) {
         context["error"] = err;
         error.publish(context);
@@ -409,8 +482,6 @@ export class TracingChannel {
   }
 }
 
-export function tracingChannel(
-  nameOrChannels: string | Partial<TracingChannels>,
-): TracingChannel {
+export function tracingChannel(nameOrChannels: string | Partial<TracingChannels>): TracingChannel {
   return new TracingChannel(nameOrChannels);
 }

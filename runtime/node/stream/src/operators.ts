@@ -17,6 +17,7 @@
 
 import {
   AbortError,
+  ERR_INVALID_ARG_TYPE,
   ERR_MISSING_ARGS,
   ERR_OUT_OF_RANGE,
 } from "../../internal/errors.ts";
@@ -28,6 +29,7 @@ import {
 } from "../../internal/validators.ts";
 import type { AbortSignalLike } from "./end-of-stream.ts";
 import { finished } from "./end-of-stream.ts";
+import { isIterable } from "./utils.ts";
 
 declare const AbortSignal: {
   any(signals: AbortSignalLike[]): AbortSignalLike;
@@ -54,11 +56,34 @@ export interface OperatorOptions {
 const kEmpty = Symbol("kEmpty");
 const kEof = Symbol("kEof");
 
+/** A one-waiter handoff used for producer and consumer backpressure. */
+class WakeSlot {
+  #callback: (() => void) | null = null;
+
+  wait(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.#callback = resolve;
+    });
+  }
+
+  wake(): void {
+    if (this.#callback === null) return;
+    const callback = this.#callback;
+    this.#callback = null;
+    callback();
+  }
+}
+
 type Source = AsyncIterable<unknown>;
-type MapFn = (value: unknown, options: { signal: AbortSignalLike }) => unknown;
+export type MapFn = (value: unknown, options: { signal: AbortSignalLike }) => unknown;
+export type ReduceFn = (
+  accumulator: unknown,
+  value: unknown,
+  options: { signal: AbortSignalLike },
+) => unknown;
 
 export function map(
-  this: Source,
+  source: Source,
   fn: MapFn,
   options?: OperatorOptions,
 ): AsyncGenerator<unknown, void, void> {
@@ -77,15 +102,16 @@ export function map(
 
   highWaterMark += concurrency;
 
-  const stream = this;
+  const stream = source;
 
   return (async function* mapped(): AsyncGenerator<unknown, void, void> {
-    const signal = AbortSignal.any([options?.signal].filter(Boolean) as AbortSignalLike[]);
-    const queue: unknown[] = [];
+    const configuredSignal = options?.signal;
+    const signal = AbortSignal.any(configuredSignal === undefined ? [] : [configuredSignal]);
+    const queue: (Promise<unknown> | typeof kEof)[] = [];
     const signalOpt = { signal };
 
-    let next: (() => void) | null = null;
-    let resume: (() => void) | null = null;
+    const consumerWake = new WakeSlot();
+    const producerWake = new WakeSlot();
     let done = false;
     let inFlight = 0;
 
@@ -100,45 +126,40 @@ export function map(
     }
 
     function maybeResume(): void {
-      if (resume && !done && inFlight < concurrency && queue.length < highWaterMark) {
-        resume();
-        resume = null;
+      if (!done && inFlight < concurrency && queue.length < highWaterMark) {
+        producerWake.wake();
       }
     }
 
     async function pump(): Promise<void> {
       try {
-        for await (let value of stream) {
+        for await (const value of stream) {
           if (done) return;
           if (signal.aborted) throw new AbortError();
 
+          let pending: Promise<unknown>;
           try {
-            value = fn(value, signalOpt);
-            if (value === kEmpty) continue;
-            value = Promise.resolve(value);
+            const mapped = fn(value, signalOpt);
+            if (mapped === kEmpty) continue;
+            pending = Promise.resolve(mapped);
           } catch (error) {
             // A synchronous throw becomes a rejected promise, so that the
             // consumer sees failures in the same order as successes rather
             // than jumping the queue.
-            value = Promise.reject(error);
+            pending = Promise.reject(error);
           }
 
           inFlight += 1;
-          (value as Promise<unknown>).then(afterItemProcessed, onCatch);
+          pending.then(afterItemProcessed, onCatch);
 
-          queue.push(value);
-          if (next) {
-            next();
-            next = null;
-          }
+          queue.push(pending);
+          consumerWake.wake();
 
           // Park the producer once enough is in flight or queued. This is the
           // backpressure: without it, `concurrency` would bound nothing,
           // because the loop would keep starting calls.
           if (!done && (queue.length >= highWaterMark || inFlight >= concurrency)) {
-            await new Promise<void>((r) => {
-              resume = r;
-            });
+            await producerWake.wait();
           }
         }
         queue.push(kEof);
@@ -148,10 +169,7 @@ export function map(
         queue.push(rejected);
       } finally {
         done = true;
-        if (next) {
-          next();
-          next = null;
-        }
+        consumerWake.wake();
       }
     }
 
@@ -162,9 +180,11 @@ export function map(
         while (queue.length > 0) {
           // The *head*, so output order is input order even though the
           // promises settle out of order.
-          const value = await queue[0];
+          const head = queue[0];
+          if (head === undefined) break;
+          if (head === kEof) return;
+          const value = await head;
 
-          if (value === kEof) return;
           if (signal.aborted) throw new AbortError();
           if (value !== kEmpty) yield value;
 
@@ -172,30 +192,20 @@ export function map(
           maybeResume();
         }
 
-        await new Promise<void>((r) => {
-          next = r;
-        });
+        await consumerWake.wait();
       }
     } finally {
       // A consumer that stopped early has to release the producer, or `pump`
       // waits on a `resume` that will never come and the stream is never
       // closed.
       done = true;
-      // Cast, because `resume` is only ever assigned inside `pump` -- a
-      // nested function -- and the checker's flow analysis does not carry
-      // assignments across that boundary. It still believes the variable
-      // holds its initial `null` here, which would narrow the call away.
-      const pending = resume as (() => void) | null;
-      if (pending) {
-        pending();
-        resume = null;
-      }
+      producerWake.wake();
     }
   })();
 }
 
 export function filter(
-  this: Source,
+  source: Source,
   fn: MapFn,
   options?: OperatorOptions,
 ): AsyncGenerator<unknown, void, void> {
@@ -204,17 +214,17 @@ export function filter(
     if (await fn(value, opts)) return value;
     return kEmpty;
   }
-  return map.call(this, filterFn, options);
+  return map(source, filterFn, options);
 }
 
 export async function some(
-  this: Source,
+  source: Source,
   fn: MapFn,
   options?: OperatorOptions,
 ): Promise<boolean> {
   // Short-circuits: the `return` abandons the iterator, which closes the
   // stream, so a `some` over an infinite stream terminates.
-  for await (const _ of filter.call(this, fn, options)) {
+  for await (const _ of filter(source, fn, options)) {
     void _;
     return true;
   }
@@ -222,30 +232,33 @@ export async function some(
 }
 
 export async function every(
-  this: Source,
+  source: Source,
   fn: MapFn,
   options?: OperatorOptions,
 ): Promise<boolean> {
   validateFunction(fn, "fn");
   // De Morgan: everything satisfies `fn` exactly when nothing satisfies its
   // negation. Written this way to inherit `some`'s short-circuiting.
-  return !(await some.call(this, async (...args: [unknown, { signal: AbortSignalLike }]) =>
-    !(await fn(...args)), options));
+  return !(await some(
+    source,
+    async (value, opts) => !(await fn(value, opts)),
+    options,
+  ));
 }
 
 export async function find(
-  this: Source,
+  source: Source,
   fn: MapFn,
   options?: OperatorOptions,
 ): Promise<unknown> {
-  for await (const result of filter.call(this, fn, options)) {
+  for await (const result of filter(source, fn, options)) {
     return result;
   }
   return undefined;
 }
 
 export async function forEach(
-  this: Source,
+  source: Source,
   fn: MapFn,
   options?: OperatorOptions,
 ): Promise<void> {
@@ -256,7 +269,7 @@ export async function forEach(
   }
   // Every value is dropped, so the loop body is empty; the work happens in
   // the mapper, which gets `concurrency` for free.
-  for await (const _ of map.call(this, forEachFn, options)) void _;
+  for await (const _ of map(source, forEachFn, options)) void _;
 }
 
 /**
@@ -274,23 +287,22 @@ class ReduceOfEmptyStream extends ERR_MISSING_ARGS {
 }
 
 export async function reduce(
-  this: Source & { once(e: string, l: () => void): unknown; destroy(e?: unknown): unknown },
-  reducer: (accumulator: unknown, value: unknown, opts: { signal: AbortSignalLike }) => unknown,
+  source: Source & { once(e: string, l: () => void): unknown; destroy(e?: unknown): unknown },
+  reducer: ReduceFn,
   initialValue?: unknown,
   options?: OperatorOptions,
+  hasInitialValue = false,
 ): Promise<unknown> {
   validateFunction(reducer, "reducer");
   if (options != null) validateObject(options, "options");
   if (options?.signal != null) validateAbortSignal(options.signal, "options.signal");
 
-  let hasInitialValue = arguments.length > 1;
-
   if (options?.signal?.aborted) {
     const error = new AbortError(undefined, { cause: options.signal.reason });
     // The rejection below is the report; this stops the destroy from also
     // raising an unhandled `error` event.
-    this.once("error", () => {});
-    await finished(this.destroy(error));
+    source.once("error", () => {});
+    await finished(source.destroy(error));
     throw error;
   }
 
@@ -302,7 +314,7 @@ export async function reduce(
 
   let sawAnything = false;
   try {
-    for await (const value of this) {
+    for await (const value of source) {
       sawAnything = true;
       if (options?.signal?.aborted) throw new AbortError();
       if (!hasInitialValue) {
@@ -322,12 +334,12 @@ export async function reduce(
   return initialValue;
 }
 
-export async function toArray(this: Source, options?: OperatorOptions): Promise<unknown[]> {
+export async function toArray(source: Source, options?: OperatorOptions): Promise<unknown[]> {
   if (options != null) validateObject(options, "options");
   if (options?.signal != null) validateAbortSignal(options.signal, "options.signal");
 
   const result: unknown[] = [];
-  for await (const value of this) {
+  for await (const value of source) {
     if (options?.signal?.aborted) {
       throw new AbortError(undefined, { cause: options.signal.reason });
     }
@@ -337,14 +349,17 @@ export async function toArray(this: Source, options?: OperatorOptions): Promise<
 }
 
 export function flatMap(
-  this: Source,
+  source: Source,
   fn: MapFn,
   options?: OperatorOptions,
 ): AsyncGenerator<unknown, void, void> {
-  const values = map.call(this, fn, options);
+  const values = map(source, fn, options);
   return (async function* flattened(): AsyncGenerator<unknown, void, void> {
     for await (const value of values) {
-      yield* value as Iterable<unknown>;
+      if (!isIterable(value)) {
+        throw new ERR_INVALID_ARG_TYPE("value", ["Iterable", "AsyncIterable"], value);
+      }
+      yield* value;
     }
   })();
 }
@@ -364,7 +379,7 @@ function toIntegerOrInfinity(value: unknown): number {
 }
 
 export function drop(
-  this: Source,
+  source: Source,
   count: unknown,
   options?: OperatorOptions,
 ): AsyncGenerator<unknown, void, void> {
@@ -372,7 +387,7 @@ export function drop(
   if (options?.signal != null) validateAbortSignal(options.signal, "options.signal");
 
   let remaining = toIntegerOrInfinity(count);
-  const stream = this;
+  const stream = source;
 
   return (async function* dropped(): AsyncGenerator<unknown, void, void> {
     if (options?.signal?.aborted) throw new AbortError();
@@ -384,7 +399,7 @@ export function drop(
 }
 
 export function take(
-  this: Source,
+  source: Source,
   count: unknown,
   options?: OperatorOptions,
 ): AsyncGenerator<unknown, void, void> {
@@ -392,7 +407,7 @@ export function take(
   if (options?.signal != null) validateAbortSignal(options.signal, "options.signal");
 
   let remaining = toIntegerOrInfinity(count);
-  const stream = this;
+  const stream = source;
 
   return (async function* taken(): AsyncGenerator<unknown, void, void> {
     if (options?.signal?.aborted) throw new AbortError();
@@ -406,6 +421,3 @@ export function take(
     }
   })();
 }
-
-export const streamReturningOperators = { drop, filter, flatMap, map, take };
-export const promiseReturningOperators = { every, forEach, reduce, toArray, some, find };

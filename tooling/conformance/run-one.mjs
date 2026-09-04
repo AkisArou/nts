@@ -10,10 +10,15 @@
 // prose.
 
 import { readFileSync, existsSync } from "node:fs";
-import { join, dirname, resolve as resolvePath } from "node:path";
+import { join, dirname, isAbsolute, relative, resolve as resolvePath } from "node:path";
 import { createRequire } from "node:module";
 import assert from "node:assert";
 import process from "node:process";
+import {
+  getSystemErrorMap,
+  getSystemErrorMessage,
+  getSystemErrorName,
+} from "node:util";
 import { makeCommon, checkPending, peekPending, Skip } from "./common.mjs";
 import tmpdir from "./tmpdir.mjs";
 import fixtures from "./fixtures.mjs";
@@ -71,7 +76,17 @@ function report(result) {
   reported = true;
   // Bound at load: node's console tests replace `process.stdout.write`, and
   // the report must reach the parent whatever the test did to the stream.
-  reportTo(`${JSON.stringify(result)}\n`);
+  const line = `${JSON.stringify(result)}\n`;
+  if (sabotaged && result.kind === "fail") {
+    // A sabotaged test has served its only purpose as soon as it proves that
+    // the empty module fails. It may have opened a child process or interval
+    // before reaching our missing API; waiting for that unrelated handle made
+    // the sabotage sweep sit on its per-file timeout. Flush the verdict, then
+    // end this disposable child without running any more test callbacks.
+    reportTo(line, () => hostProcess.reallyExit(0));
+    return;
+  }
+  reportTo(line);
 }
 
 /**
@@ -96,7 +111,10 @@ hostProcess.on("exit", () => {
     report({
       kind: "fail",
       why: `${m.name} was called ${m.actual} times, expected ${m.expected}`,
-      detail: "the loop ended with the expectation unmet",
+      detail: missed.map((pendingCall) =>
+        `${pendingCall.name}: ${pendingCall.actual}/${pendingCall.expected}` +
+        (pendingCall.registeredAt === undefined ? "" : ` ${pendingCall.registeredAt.trim()}`),
+      ).join("\n"),
     });
   } else {
     report({ kind: "pass" });
@@ -107,7 +125,12 @@ hostProcess.on("exit", () => {
  * A cap on waiting for the loop to drain, for a test that leaves something
  * running on purpose. Long enough for any delay these tests use.
  */
-const SETTLE_CAP_MS = 2000;
+// Several upstream networking tests intentionally wait four or five seconds
+// to prove a timeout boundary. A two-second cap judged those files while
+// their asserted callback was still legitimately pending. This remains well
+// below the parent's per-file 60-second kill switch, but long enough for the
+// longest ordinary timers in the supported suites.
+const SETTLE_CAP_MS = 30_000;
 
 /**
  * How many `beforeExit` rounds to wait through.
@@ -159,27 +182,15 @@ function judgeWhenQuiet() {
     finished = true;
     hostClearTimeout(cap);
     hostProcess.off("beforeExit", onBeforeExit);
-    // Let ticks and microtasks finish, because `process.emitWarning` delivers
-    // on a tick. Ticks and microtasks only -- deliberately not `setImmediate`
-    // or a zero timer. Those turn the loop, and a turn after the loop has gone
-    // quiet runs exactly the work that was supposed to have been abandoned:
-    // `setImmediate(common.mustNotCall()).unref()` called its callback.
-    drain(3, judge);
+    // `beforeExit` is emitted only after Node has already drained ticks and
+    // microtasks. Scheduling our own ticks here changes what a test observing
+    // async_hooks sees: the stream same-callback regression expects its one
+    // implementation TickObject, while the old settle loop added three more.
+    // Judge synchronously. If another beforeExit listener schedules work, an
+    // eventual throw or non-zero exit still overrides an already printed pass
+    // in the parent runner.
+    judge();
   }
-}
-
-/** `times` rounds of "every tick, then every microtask", then `then`. */
-function drain(times, then) {
-  if (times === 0) {
-    then();
-    return;
-  }
-  hostProcess.nextTick(() => {
-    // `queueMicrotask`, not `Promise.resolve().then` -- both are one microtask,
-    // but the second allocates a promise, and a test watching promises counts
-    // the harness's as its own.
-    queueMicrotask(() => drain(times - 1, then));
-  });
 }
 
 function judge() {
@@ -187,7 +198,10 @@ function judge() {
     const missed = checkPending();
     if (missed.length > 0) {
       const m = missed[0];
-      throw new Error(`${m.name} was called ${m.actual} times, expected ${m.expected}`);
+      throw new Error(
+        `${m.name} was called ${m.actual} times, expected ${m.expected}` +
+        (m.registeredAt === undefined ? "" : ` (${m.registeredAt.trim()})`),
+      );
     }
     if (testCases.registered > 0 && testCases.skipped === testCases.registered) {
       report({ kind: "skip", why: `all ${testCases.registered} node:test case(s) skipped` });
@@ -259,6 +273,13 @@ try {
   const shapePath = join(moduleDir, "shape.mjs");
   const shapeModule = existsSync(shapePath) ? await import(shapePath) : null;
   underTest = shapeModule ? shapeModule.shape({ ...exports }) : { ...exports };
+  const declaredSubpaths = shapeModule?.subpaths?.({ ...exports }) ?? null;
+  if (declaredSubpaths !== null) {
+    for (const [id, implementation] of Object.entries(declaredSubpaths)) {
+      siblings.set(id, sabotaged ? {} : implementation);
+    }
+  }
+  const declaredInternals = shapeModule?.internals?.({ ...exports }) ?? null;
   // A module that is also a global -- `console` -- has to be installed as one,
   // or a test comparing `require('console')` with `globalThis.console` sees
   // node's on one side and ours on the other. Declared per module rather than
@@ -270,30 +291,68 @@ try {
   if (sabotaged) {
     underTest = {};
   }
-  shapeModule?.installGlobals?.(underTest);
-  internals = sabotaged ? {} : (shapeModule?.internals?.({ ...exports }) ?? null);
+  shapeModule?.installGlobals?.(underTest, sabotaged ? {} : exports);
+  if (sabotaged && declaredInternals !== null) {
+    // Keep the ids resolvable but blank their exports. Dropping the ids makes
+    // a test report "needs internal/..." and skip before it reaches the API
+    // under test; an empty module instead makes the same access fail, which is
+    // the evidence sabotage is meant to collect.
+    internals = {};
+    for (const id of Object.keys(declaredInternals)) internals[id] = {};
+  } else {
+    internals = declaredInternals;
+  }
   uncaughtHandler = sabotaged ? null : (shapeModule?.dispatchUncaught ?? null);
 
   const usesPath = join(moduleDir, "uses");
   if (existsSync(usesPath)) {
-    for (const name of readFileSync(usesPath, "utf8").split("\n").map((l) => l.trim())) {
-      if (!name || name.startsWith("#")) continue;
+    for (const requestedName of readFileSync(usesPath, "utf8").split("\n").map((l) => l.trim())) {
+      if (!requestedName || requestedName.startsWith("#")) continue;
+      // A dependency may name one exported subpath. That keeps the bare module
+      // available as an independent Node oracle in tests such as
+      // `zlib/iter` versus `zlib`, instead of replacing both sides with ours.
+      const slash = requestedName.indexOf("/");
+      const name = slash === -1 ? requestedName : requestedName.slice(0, slash);
+      const requestedSubpath = slash === -1 ? null : requestedName;
       const dir = join(ROOT, "runtime/node", name);
       const siblingShims = join(dir, "bindings.node.mjs");
       if (existsSync(siblingShims)) await import(siblingShims);
       const siblingExports = { ...(await import(join(dir, "src/main.ts"))) };
       const siblingShape = join(dir, "shape.mjs");
       const siblingShapeModule = existsSync(siblingShape) ? await import(siblingShape) : null;
-      const shaped = sabotaged
-        ? {}
-        : (siblingShapeModule ? siblingShapeModule.shape(siblingExports) : siblingExports);
-      siblings.set(name, shaped);
+      // Sabotage is specific to the subject module. Its declared dependencies
+      // remain intact, otherwise a mixed test can fail while loading a helper
+      // or sibling API before it ever observes the empty subject. Such a
+      // failure is not evidence that the test measures this module.
+      const shaped = siblingShapeModule
+        ? siblingShapeModule.shape(siblingExports)
+        : siblingExports;
+      if (requestedSubpath === null) siblings.set(name, shaped);
+      const siblingSubpaths = siblingShapeModule?.subpaths?.(siblingExports) ?? null;
+      if (siblingSubpaths !== null) {
+        for (const [id, implementation] of Object.entries(siblingSubpaths)) {
+          if (requestedSubpath === null || id === requestedSubpath) {
+            siblings.set(id, implementation);
+          }
+        }
+      }
+      const siblingInternals = requestedSubpath === null
+        ? (siblingShapeModule?.internals?.(siblingExports) ?? null)
+        : null;
+      if (siblingInternals !== null) {
+        if (internals === null) internals = {};
+        for (const [id, implementation] of Object.entries(siblingInternals)) {
+          if (!(id in internals)) internals[id] = implementation;
+        }
+      }
       // A sibling that owns globals has to install them, or the test reaches
       // node's. An `async_hooks` test calling `setImmediate` is the case that
       // found this: it was measuring node's timers and reporting the result as
-      // ours, which is a hollow pass the sabotage run cannot catch -- sabotage
-      // blanks our module, and node's globals were never ours to blank.
-      if (!sabotaged) siblingShapeModule?.installGlobals?.(shaped);
+      // ours, which is a hollow pass the sabotage run cannot catch. Dependency
+      // globals are test prerequisites; only the subject's globals are blanked.
+      if (requestedSubpath === null) {
+        siblingShapeModule?.installGlobals?.(shaped, siblingExports);
+      }
     }
   }
 } catch (e) {
@@ -303,8 +362,157 @@ try {
   hostProcess.exit(0);
 }
 
-const common = makeCommon();
+// Unix-domain socket paths have a small fixed kernel limit (108 bytes on
+// Linux). Node's own common helper therefore makes PIPE relative to cwd; an
+// absolute workspace path can exceed the limit before the test adds its own
+// suffix.
+const common = makeCommon(
+  relative(hostProcess.cwd(), tmpdir.resolve(`node-test.${hostProcess.pid}.sock`)),
+);
 const realRequire = createRequire(import.meta.url);
+const nodeTestRoot = join(ROOT, "third_party/node/test");
+const testModuleCache = new Map();
+
+/** Node's `test/common/countdown`, attached to this runner's call tally. */
+class Countdown {
+  #remaining;
+  #callback;
+
+  constructor(limit, callback) {
+    assert.strictEqual(typeof limit, "number");
+    assert.strictEqual(typeof callback, "function");
+    this.#remaining = limit;
+    this.#callback = common.mustCall(callback);
+  }
+
+  dec() {
+    assert(this.#remaining > 0, "Countdown expired");
+    this.#remaining--;
+    if (this.#remaining === 0) this.#callback();
+    return this.#remaining;
+  }
+
+  get remaining() {
+    return this.#remaining;
+  }
+}
+
+// Node's `test/common/gc.onGC`, using the substituted async_hooks export and
+// this runner's assertion tally. The weak-map ephemeron is the behavior the
+// helper exists to provide: once `target` dies, the AsyncResource becomes
+// collectible and its destroy hook calls the listener.
+const gcTrackerMap = new WeakMap();
+const GC_TRACKER_TAG = "NODE_TEST_COMMON_GC_TRACKER";
+function onGC(target, listener) {
+  let trackedId;
+  let destroyed = false;
+  // In the async_hooks lane this helper must use the implementation under
+  // test. In every other lane async hooks are test infrastructure: using the
+  // subject module here made a net test call `net.createHook()`.
+  const asyncHooks = moduleName === "async_hooks"
+    ? underTest
+    : realRequire("node:async_hooks");
+  const gcHook = asyncHooks.createHook({
+    init(id, type) {
+      if (trackedId === undefined) {
+        assert.strictEqual(type, GC_TRACKER_TAG);
+        trackedId = id;
+      }
+    },
+    destroy(id) {
+      if (id === trackedId) {
+        destroyed = true;
+        listener.ongc();
+        gcHook.disable();
+      }
+    },
+  }).enable();
+
+  gcTrackerMap.set(target, new asyncHooks.AsyncResource(GC_TRACKER_TAG));
+
+  // A finalizer is queued after collection; forcing one collection and then
+  // letting the process exit is not enough to give that queue a turn. Node's
+  // own helper documents the same requirement. Keep a bounded number of host
+  // immediate turns alive and collect again between them. A retained target
+  // still fails: only the resource's destroy hook can set `destroyed` and
+  // satisfy the test's mustCall expectation.
+  let attempts = 0;
+  function collectUntilDestroyed() {
+    if (destroyed || attempts === 16) return;
+    attempts++;
+    globalThis.gc();
+    hostSetImmediate(collectUntilDestroyed);
+  }
+  hostSetImmediate(collectUntilDestroyed);
+}
+
+// Node's `test/common/gc.checkIfCollectableByCounting`. Unlike `onGC`, this
+// helper does not depend on the async-hooks implementation under test: V8
+// counts live instances after collecting, and the test's factory reports how
+// many it created. Keep the helper here so requiring `common/gc` never falls
+// through to Node's copy and silently changes which module its other helpers
+// observe.
+async function checkIfCollectableByCounting(factory, constructor, count, waitTime = 20) {
+  const { queryObjects } = realRequire("node:v8");
+  const initialCount = queryObjects(constructor, { format: "count" });
+  let totalCreated = 0;
+
+  for (let i = 0; i < count; i++) {
+    totalCreated += await factory(i);
+    await new Promise((resolve) => hostSetTimeout(resolve, waitTime));
+    const currentCount = queryObjects(constructor, { format: "count" });
+    if (totalCreated > currentCount - initialCount) return;
+  }
+
+  await new Promise((resolve) => hostSetTimeout(resolve, waitTime));
+  const currentCount = queryObjects(constructor, { format: "count" });
+  if (totalCreated > currentCount - initialCount) return;
+  throw new Error(`${constructor.name} cannot be collected`);
+}
+
+const commonGc = { onGC, checkIfCollectableByCounting };
+
+/** Node's `test/common/crypto` fact used by metadata/CLI consistency tests. */
+const commonCrypto = {
+  hasOpenSSL3: Number.parseInt(hostProcess.versions.openssl ?? "0", 10) >= 3,
+};
+
+/**
+ * Let mixed tests import Node's private binding helper without claiming that
+ * those bindings exist. The uv table is test input rather than the subject:
+ * it supplies the running platform's exact errno constants for expected-error
+ * objects. Any other attempted private lookup remains an explicit skip.
+ */
+const systemErrors = getSystemErrorMap();
+const hostUvBinding = {
+  errname(code) {
+    try {
+      return getSystemErrorName(code);
+    } catch {
+      return `Unknown system error ${code}`;
+    }
+  },
+  getErrorMessage(code) {
+    try {
+      return getSystemErrorMessage(code);
+    } catch {
+      return `Unknown system error ${code}`;
+    }
+  },
+  getErrorMap() {
+    return new Map(systemErrors);
+  },
+};
+for (const [code, [name]] of systemErrors) {
+  hostUvBinding[`UV_${name}`] = code;
+}
+Object.freeze(hostUvBinding);
+const internalTestBinding = {
+  internalBinding(name) {
+    if (name === "uv") return hostUvBinding;
+    throw new Skip(`needs internalBinding(${name})`);
+  },
+};
 
 /**
  * How many of the file's `node:test` cases were registered, and how many were
@@ -320,12 +528,26 @@ let wrappedTestRunner;
 function countingTestRunner() {
   if (wrappedTestRunner !== undefined) return wrappedTestRunner;
   const real = realRequire("node:test");
-  const count = (fn) => (...args) => {
+  const invoke = (fn, args, forcedSkip = false) => {
     testCases.registered++;
     // `test(name, options, fn)` and `test(options, fn)` both carry `skip`.
     const options = args.find((a) => a !== null && typeof a === "object" && !Array.isArray(a));
-    if (options?.skip || options?.todo) testCases.skipped++;
+    if (forcedSkip || options?.skip || options?.todo) testCases.skipped++;
     return fn(...args);
+  };
+  const count = (fn) => {
+    const counted = (...args) => invoke(fn, args);
+    Object.assign(counted, fn);
+    if (typeof fn.skip === "function") {
+      counted.skip = (...args) => invoke(fn.skip, args, true);
+    }
+    if (typeof fn.todo === "function") {
+      counted.todo = (...args) => invoke(fn.todo, args, true);
+    }
+    if (typeof fn.only === "function") {
+      counted.only = (...args) => invoke(fn.only, args);
+    }
+    return counted;
   };
   wrappedTestRunner = Object.assign(count(real), real, {
     test: count(real.test ?? real),
@@ -360,7 +582,23 @@ const internalUtilStandIn = new Proxy(
   },
 );
 
-function shimmedRequire(id) {
+// The same common helper can be required with several equivalent spellings.
+// Tests usually say `../common`, while helpers beside it say `./index.js`;
+// suffix matching catches only the first spelling and lets the second load
+// Node's real common harness, including its process-wide leak checker. Resolve
+// first and substitute by identity so recursively loaded helpers stay attached
+// to this runner's assertions and infrastructure too.
+const testInfrastructure = new Map([
+  [join(nodeTestRoot, "common/index.js"), common],
+  [join(nodeTestRoot, "common/countdown.js"), Countdown],
+  [join(nodeTestRoot, "common/gc.js"), commonGc],
+  [join(nodeTestRoot, "common/crypto.js"), commonCrypto],
+  [join(nodeTestRoot, "common/tmpdir.js"), tmpdir],
+  [join(nodeTestRoot, "common/fixtures.js"), fixtures],
+  [join(nodeTestRoot, "common/hijackstdio.js"), hijackstdio],
+]);
+
+function shimmedRequire(id, fromFile) {
   const bare = id.replace(/^node:/, "");
   if (bare === moduleName) {
     for (const args of loadTimeWarnings.splice(0)) {
@@ -369,6 +607,7 @@ function shimmedRequire(id) {
     return underTest;
   }
   if (bare.startsWith(`${moduleName}/`)) {
+    if (siblings.has(bare)) return siblings.get(bare);
     const half = bare.slice(moduleName.length + 1);
     if (half in underTest && underTest[half]) return underTest[half];
     throw new Skip(`needs ${id}`);
@@ -401,39 +640,96 @@ function shimmedRequire(id) {
   // which would let a test run against a missing dependency and report
   // whatever came of that.
   if (bare === "internal/util") return internalUtilStandIn;
+  if (bare === "internal/test/binding") return internalTestBinding;
   if (id.endsWith("../common")) return common;
+  if (id.endsWith("common/countdown")) return Countdown;
+  if (id.endsWith("common/gc")) return commonGc;
+  if (id.endsWith("common/crypto")) return commonCrypto;
   if (id.endsWith("common/tmpdir")) return tmpdir;
   if (id.endsWith("common/fixtures")) return fixtures;
   if (id.endsWith("common/hijackstdio")) return hijackstdio;
+  // Dedicated subsystem suites keep shared helpers beside their tests. Load
+  // those helpers through this same CommonJS shim so a helper's
+  // `require('async_hooks')` reaches the implementation under test rather than
+  // silently switching back to Node's builtin module.
+  if (id.startsWith("./") || id.startsWith("../") || isAbsolute(id)) {
+    const localRequire = createRequire(fromFile);
+    let resolved = null;
+    try {
+      resolved = localRequire.resolve(id);
+    } catch {
+      // Let the ordinary infrastructure fallback below try its own spelling.
+    }
+    if (resolved !== null) {
+      const infrastructure = testInfrastructure.get(resolved);
+      if (infrastructure !== undefined) return infrastructure;
+      if (resolved.startsWith(`${nodeTestRoot}/`) && resolved.endsWith(".js")) {
+        return executeTestModule(resolved);
+      }
+      // Resolution succeeded, so any error here came from evaluating the
+      // module and must reach the test rather than be mistaken for a miss.
+      return localRequire(id);
+    }
+  }
   // Anything else is infrastructure rather than the subject: `node:test` is a
   // test runner, `child_process` spawns, `util` formats. Node's own is the
   // right answer for those -- substituting ours would test ours. A module we
   // do not have is a skip, and the reason names it.
   for (const candidate of [id, bare]) {
+    let resolved = false;
     try {
-      return realRequire(candidate);
+      realRequire.resolve(candidate);
+      resolved = true;
     } catch {
-      // try the next spelling
+      // Try the next spelling only when this spelling cannot be resolved.
+    }
+    if (resolved) {
+      // Evaluation is deliberately outside the resolution catch. An
+      // infrastructure module that throws while loading has failed the test;
+      // it is not a missing module and must not be loaded a second time.
+      return realRequire(candidate);
     }
   }
   throw new Skip(`needs ${id}`);
 }
 
-const src = readFileSync(file, "utf8");
-const module = { exports: {} };
+/** Execute one Node test/helper as CommonJS with recursive module substitution. */
+function executeTestModule(modulePath) {
+  const cached = testModuleCache.get(modulePath);
+  if (cached !== undefined) return cached.exports;
+
+  const loaded = { exports: {} };
+  testModuleCache.set(modulePath, loaded);
+  try {
+    const run = new Function(
+      // Globals are deliberately absent from the parameter list. Node's real
+      // CommonJS wrapper receives only these five values; `process`, `global`,
+      // `globalThis`, and `console` are ordinary global lookups. Besides being
+      // faithful, this lets a test declare a local binding such as
+      // `const process = require('node:process')` without a false duplicate-
+      // declaration syntax error.
+      "require", "module", "exports", "__filename", "__dirname",
+      readFileSync(modulePath, "utf8"),
+    );
+    const localRequire = createRequire(modulePath);
+    const requireFromHere = (id) => shimmedRequire(id, modulePath);
+    requireFromHere.resolve = localRequire.resolve.bind(localRequire);
+    run.call(
+      loaded.exports,
+      requireFromHere,
+      loaded,
+      loaded.exports,
+      modulePath,
+      dirname(modulePath),
+    );
+    return loaded.exports;
+  } catch (error) {
+    testModuleCache.delete(modulePath);
+    throw error;
+  }
+}
+
 try {
-  // Node's tests are CommonJS. Running the source in a function with a
-  // substituted `require` is the whole mechanism: no rewriting, so what runs is
-  // what node's maintainers wrote.
-  const run = new Function(
-    // `console` is deliberately absent: node's tests reassign
-    // `globalThis.console` and expect the next unqualified `console` to see
-    // the new value, which a parameter binding would not. Some of them also
-    // declare a local `const console`, which a parameter would collide with.
-    "require", "module", "exports", "__filename", "__dirname",
-    "process", "global", "globalThis",
-    src,
-  );
   // From a fresh macrotask, not from here.
   //
   // Everything above this point is `await`ed, so calling `run` directly would
@@ -460,8 +756,11 @@ try {
       // `globalThis.process`, not the captured one: node hands the CJS wrapper
       // the real global, so when `node:process` has installed itself the test
       // must see the installed object under both names.
-      run(shimmedRequire, module, module.exports, file, dirname(file),
-          globalThis.process, globalThis, globalThis);
+      // Node's CommonJS loader invokes the wrapper with `module.exports` as
+      // its receiver. That is observable from a top-level arrow function,
+      // which captures `this`; calling the wrapper as a plain function made
+      // those arrows capture `undefined` instead of the exports object.
+      executeTestModule(file);
     } catch (e) {
       // A module that owns uncaught-exception dispatch gets first refusal.
       //
@@ -504,4 +803,3 @@ function reportFailure(e) {
     ].join("\n"),
   });
 }
-

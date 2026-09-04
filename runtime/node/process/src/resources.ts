@@ -15,13 +15,36 @@ declare function nts_hrtime_ns(): bigint;
 /** Seconds since the process started, fractional. */
 declare function nts_process_uptime(): number;
 /** `[user, system]`, microseconds of CPU time. */
-declare function nts_process_cpu_usage(): number[];
-declare function nts_process_thread_cpu_usage(): number[];
+declare function nts_process_cpu_usage(): [user: number, system: number];
+declare function nts_process_thread_cpu_usage(): [user: number, system: number];
 /** `[rss, heapTotal, heapUsed, external, arrayBuffers]`, bytes. */
-declare function nts_process_memory_usage(): number[];
+declare function nts_process_memory_usage(): [
+  rss: number,
+  heapTotal: number,
+  heapUsed: number,
+  external: number,
+  arrayBuffers: number,
+];
 declare function nts_process_rss(): number;
 /** The sixteen columns of `uv_getrusage`, in the order below. */
-declare function nts_process_resource_usage(): number[];
+declare function nts_process_resource_usage(): [
+  userCPUTime: number,
+  systemCPUTime: number,
+  maxRSS: number,
+  sharedMemorySize: number,
+  unsharedDataSize: number,
+  unsharedStackSize: number,
+  minorPageFault: number,
+  majorPageFault: number,
+  swappedOut: number,
+  fsRead: number,
+  fsWrite: number,
+  ipcSent: number,
+  ipcReceived: number,
+  signalsCount: number,
+  voluntaryContextSwitches: number,
+  involuntaryContextSwitches: number,
+];
 declare function nts_process_available_memory(): number;
 declare function nts_process_constrained_memory(): number;
 
@@ -32,6 +55,8 @@ export interface CpuUsage {
   system: number;
 }
 
+const usageFields: readonly (keyof CpuUsage)[] = ["user", "system"];
+
 /**
  * A previous reading has to be a pair of non-negative safe integers.
  *
@@ -40,7 +65,7 @@ export interface CpuUsage {
  * milliseconds looks like a bug in the thing being measured.
  */
 function requirePreviousReading(previous: CpuUsage): void {
-  for (const field of ["user", "system"] as const) {
+  for (const field of usageFields) {
     const value = previous[field];
     if (
       typeof value !== "number" ||
@@ -54,14 +79,17 @@ function requirePreviousReading(previous: CpuUsage): void {
   }
 }
 
-function usageSince(current: number[], previous?: CpuUsage): CpuUsage {
+function usageSince(
+  current: readonly [user: number, system: number],
+  previous?: CpuUsage,
+): CpuUsage {
   if (previous === undefined) {
-    return { user: current[0] as number, system: current[1] as number };
+    return { user: current[0], system: current[1] };
   }
   requirePreviousReading(previous);
   return {
-    user: (current[0] as number) - previous.user,
-    system: (current[1] as number) - previous.system,
+    user: current[0] - previous.user,
+    system: current[1] - previous.system,
   };
 }
 
@@ -97,8 +125,8 @@ export function hrtime(time?: HrTime): HrTime {
     throw new ERR_OUT_OF_RANGE("time", "2", time.length);
   }
 
-  const deltaSeconds = seconds - (time[0] as number);
-  const deltaNanoseconds = nanoseconds - (time[1] as number);
+  const deltaSeconds = seconds - time[0];
+  const deltaNanoseconds = nanoseconds - time[1];
   // Borrow, exactly as a two-column subtraction does on paper. Without it a
   // reading taken 1.999s after a mark comes back as `[2, -1000000]`.
   return deltaNanoseconds < 0
@@ -106,9 +134,8 @@ export function hrtime(time?: HrTime): HrTime {
     : [deltaSeconds, deltaNanoseconds];
 }
 
-hrtime.bigint = function bigint(): bigint {
-  return nts_hrtime_ns();
-};
+/** The same monotonic clock without the legacy two-number representation. */
+export const hrtimeBigInt = nts_hrtime_ns;
 
 export interface MemoryUsage {
   rss: number;
@@ -121,11 +148,11 @@ export interface MemoryUsage {
 export function memoryUsage(): MemoryUsage {
   const values = nts_process_memory_usage();
   return {
-    rss: values[0] as number,
-    heapTotal: values[1] as number,
-    heapUsed: values[2] as number,
-    external: values[3] as number,
-    arrayBuffers: values[4] as number,
+    rss: values[0],
+    heapTotal: values[1],
+    heapUsed: values[2],
+    external: values[3],
+    arrayBuffers: values[4],
   };
 }
 
@@ -136,23 +163,16 @@ export function memoryUsage(): MemoryUsage {
  * can be read without asking the collector anything -- which matters when it
  * is being sampled on a timer.
  */
-memoryUsage.rss = function rss(): number {
-  return nts_process_rss();
-};
+/** Resident memory without allocating the full usage record. */
+export const memoryUsageRss = nts_process_rss;
 
-export function uptime(): number {
-  return nts_process_uptime();
-}
+export const uptime = nts_process_uptime;
 
 /** Memory the process could still allocate, or 0 where the host cannot say. */
-export function availableMemory(): number {
-  return nts_process_available_memory();
-}
+export const availableMemory = nts_process_available_memory;
 
 /** The cgroup or container limit, or 0 when the process is not constrained. */
-export function constrainedMemory(): number {
-  return nts_process_constrained_memory();
-}
+export const constrainedMemory = nts_process_constrained_memory;
 
 export interface ResourceUsage {
   userCPUTime: number;
@@ -176,21 +196,21 @@ export interface ResourceUsage {
 export function resourceUsage(): ResourceUsage {
   const v = nts_process_resource_usage();
   return {
-    userCPUTime: v[0] as number,
-    systemCPUTime: v[1] as number,
-    maxRSS: v[2] as number,
-    sharedMemorySize: v[3] as number,
-    unsharedDataSize: v[4] as number,
-    unsharedStackSize: v[5] as number,
-    minorPageFault: v[6] as number,
-    majorPageFault: v[7] as number,
-    swappedOut: v[8] as number,
-    fsRead: v[9] as number,
-    fsWrite: v[10] as number,
-    ipcSent: v[11] as number,
-    ipcReceived: v[12] as number,
-    signalsCount: v[13] as number,
-    voluntaryContextSwitches: v[14] as number,
-    involuntaryContextSwitches: v[15] as number,
+    userCPUTime: v[0],
+    systemCPUTime: v[1],
+    maxRSS: v[2],
+    sharedMemorySize: v[3],
+    unsharedDataSize: v[4],
+    unsharedStackSize: v[5],
+    minorPageFault: v[6],
+    majorPageFault: v[7],
+    swappedOut: v[8],
+    fsRead: v[9],
+    fsWrite: v[10],
+    ipcSent: v[11],
+    ipcReceived: v[12],
+    signalsCount: v[13],
+    voluntaryContextSwitches: v[14],
+    involuntaryContextSwitches: v[15],
   };
 }

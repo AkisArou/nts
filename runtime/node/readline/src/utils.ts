@@ -19,10 +19,6 @@
 // An escape written as itself is the same string to the language and an
 // invisible one to every tool that will ever show you this file.
 
-import { CSI } from "../../internal/readline-callbacks.ts";
-
-export { CSI };
-
 /** Above this, a code point needs two UTF-16 units. */
 const SURROGATE_THRESHOLD = 0x10000;
 
@@ -45,8 +41,8 @@ export const kSubstringSearch = Symbol("kSubstringSearch");
 export function charLengthLeft(str: string, i: number): number {
   if (i <= 0) return 0;
   if (
-    (i > 1 && (str.codePointAt(i - 2) as number) >= SURROGATE_THRESHOLD) ||
-    (str.codePointAt(i - 1) as number) >= SURROGATE_THRESHOLD
+    (i > 1 && (str.codePointAt(i - 2) ?? 0) >= SURROGATE_THRESHOLD) ||
+    (str.codePointAt(i - 1) ?? 0) >= SURROGATE_THRESHOLD
   ) {
     return 2;
   }
@@ -61,7 +57,7 @@ export function charLengthAt(str: string, i: number): number {
     // is there.
     return 1;
   }
-  return (str.codePointAt(i) as number) >= SURROGATE_THRESHOLD ? 2 : 1;
+  return (str.codePointAt(i) ?? 0) >= SURROGATE_THRESHOLD ? 2 : 1;
 }
 
 /**
@@ -72,11 +68,13 @@ export function charLengthAt(str: string, i: number): number {
  * those two answers for all of them.
  */
 export function commonPrefix(strings: string[]): string {
-  if (strings.length === 0) return "";
-  if (strings.length === 1) return strings[0] as string;
+  const first = strings[0];
+  if (first === undefined) return "";
+  if (strings.length === 1) return first;
   const sorted = strings.toSorted();
-  const min = sorted[0] as string;
-  const max = sorted[sorted.length - 1] as string;
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  if (min === undefined || max === undefined) return "";
   for (let i = 0; i < min.length; i++) {
     if (min[i] !== max[i]) return min.slice(0, i);
   }
@@ -256,11 +254,11 @@ export function* emitKeys(stream: KeypressTarget): Generator<void, void, string>
           if (match[4]) {
             code += match[4];
           } else {
-            code += (match[1] as string) + (match[3] as string);
+            code += (match[1] ?? "") + (match[3] ?? "");
             modifier = Number(match[2] || 1) - 1;
           }
         } else if ((match = /^((\d;)?(\d))?([A-Za-z])$/.exec(cmd))) {
-          code += match[4] as string;
+          code += match[4] ?? "";
           modifier = Number(match[3] || 1) - 1;
         } else {
           code += cmd;

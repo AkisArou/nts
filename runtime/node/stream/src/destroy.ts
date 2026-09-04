@@ -55,9 +55,27 @@ export interface DestroyableStream {
   _destroy(error: unknown, callback: (error?: unknown) => void): void;
   _construct?(callback: (error?: unknown) => void): void;
   emit(event: string | symbol, ...args: unknown[]): boolean;
-  once(event: string | symbol, listener: (...args: never[]) => void): unknown;
+  once<Args extends unknown[]>(
+    event: string | symbol,
+    listener: (...args: Args) => unknown,
+  ): unknown;
   listenerCount(event: string | symbol): number;
   destroy(error?: unknown): unknown;
+}
+
+/** Minimal surface needed when an already-existing stream reports an error. */
+export interface ErrorState {
+  autoDestroy?: boolean;
+  destroyed?: boolean;
+  errored?: unknown;
+  errorEmitted?: boolean;
+}
+
+export interface ErrorOrDestroyStream {
+  _readableState?: ErrorState;
+  _writableState?: ErrorState;
+  emit(event: string | symbol, ...args: unknown[]): boolean;
+  destroy?(error?: unknown): unknown;
 }
 
 /** Deferred teardown, for a stream destroyed while still constructing. */
@@ -75,20 +93,24 @@ export const kConstruct = Symbol("kConstruct");
  */
 function recordError(error: unknown, w?: DestroyState, r?: DestroyState): void {
   if (!error) return;
-  void (error as Error).stack;
+  if (error instanceof Error) void error.stack;
   if (w && !w.errored) w.errored = error;
   if (r && !r.errored) r.errored = error;
 }
 
-export function destroy(this: DestroyableStream, error?: unknown, callback?: (error?: unknown) => void): DestroyableStream {
-  const r = this._readableState;
-  const w = this._writableState;
+export function destroy(
+  stream: DestroyableStream,
+  error?: unknown,
+  callback?: (error?: unknown) => void,
+): DestroyableStream {
+  const r = stream._readableState;
+  const w = stream._writableState;
   // A duplex keeps the shared answer on its writable side.
   const state = w ?? r;
 
   if (w?.destroyed || r?.destroyed) {
     if (typeof callback === "function") callback();
-    return this;
+    return stream;
   }
 
   // Marked destroyed before any callback runs, so that a `destroy` from inside
@@ -102,14 +124,15 @@ export function destroy(this: DestroyableStream, error?: unknown, callback?: (er
     // finished, or it would be dismantling something half-built; both errors
     // are kept, since the construction failure explains the state the
     // teardown found.
-    this.once(kDestroy, function (this: DestroyableStream, constructionError: unknown) {
-      runDestroy(this, aggregateTwoErrors(constructionError, error), callback);
-    } as never);
+    const onConstructed = (constructionError: unknown): void => {
+      runDestroy(stream, aggregateTwoErrors(constructionError, error), callback);
+    };
+    stream.once(kDestroy, onConstructed);
   } else {
-    runDestroy(this, error, callback);
+    runDestroy(stream, error, callback);
   }
 
-  return this;
+  return stream;
 }
 
 function runDestroy(
@@ -166,7 +189,7 @@ function emitClose(self: DestroyableStream): void {
   if (w?.emitClose || r?.emitClose) self.emit("close");
 }
 
-function emitError(self: DestroyableStream, error: unknown): void {
+function emitError(self: ErrorOrDestroyStream, error: unknown): void {
   const r = self._readableState;
   const w = self._writableState;
 
@@ -188,9 +211,9 @@ function emitError(self: DestroyableStream, error: unknown): void {
  * does not undo the *data*, only the flags, so it is only correct for a stream
  * whose underlying resource is genuinely fresh again.
  */
-export function undestroy(this: DestroyableStream): void {
-  const r = this._readableState;
-  const w = this._writableState;
+export function undestroy(stream: DestroyableStream): void {
+  const r = stream._readableState;
+  const w = stream._writableState;
 
   if (r) {
     r.constructed = true;
@@ -231,7 +254,7 @@ export function undestroy(this: DestroyableStream): void {
  * default is a breaking change it has not made.
  */
 export function errorOrDestroy(
-  stream: DestroyableStream,
+  stream: ErrorOrDestroyStream,
   error?: unknown,
   sync = false,
 ): void {
@@ -240,10 +263,10 @@ export function errorOrDestroy(
 
   if (w?.destroyed || r?.destroyed) return;
 
-  if (r?.autoDestroy || w?.autoDestroy) {
+  if ((r?.autoDestroy || w?.autoDestroy) && stream.destroy !== undefined) {
     stream.destroy(error);
   } else if (error) {
-    void (error as Error).stack;
+    if (error instanceof Error) void error.stack;
 
     if (w && !w.errored) w.errored = error;
     if (r && !r.errored) r.errored = error;
@@ -272,7 +295,7 @@ export function construct(stream: DestroyableStream, callback: () => void): void
   if (r) r.constructed = false;
   if (w) w.constructed = false;
 
-  stream.once(kConstruct, callback as never);
+  stream.once(kConstruct, callback);
 
   // A duplex arrives here twice, once from each half, and must construct once.
   // The second caller has already added its listener above, so it can leave.
@@ -310,7 +333,11 @@ function runConstruct(stream: DestroyableStream): void {
   };
 
   try {
-    (stream._construct as (cb: (error?: unknown) => void) => void)((error) => {
+    if (stream._construct === undefined) {
+      onConstruct();
+      return;
+    }
+    stream._construct((error) => {
       nextTick(onConstruct, error);
     });
   } catch (thrown) {
@@ -318,10 +345,31 @@ function runConstruct(stream: DestroyableStream): void {
   }
 }
 
+interface AbortableRequest {
+  abort(): void;
+}
+
 /** An `http.ClientRequest`, which predates `destroy` and has `abort`. */
-function isRequest(stream: unknown): boolean {
-  const s = stream as { setHeader?: unknown; abort?: unknown } | null | undefined;
-  return Boolean(s?.setHeader && typeof s.abort === "function");
+function isRequest(stream: unknown): stream is AbortableRequest {
+  return stream !== null && typeof stream === "object" &&
+    "setHeader" in stream && Boolean(stream.setHeader) &&
+    "abort" in stream && typeof stream.abort === "function";
+}
+
+interface LegacyDestroyable {
+  socket?: unknown;
+  req?: unknown;
+  destroy?(error?: unknown): void;
+  close?(): void;
+  abort?(): void;
+  destroyed?: boolean;
+  emit(event: string | symbol, ...args: unknown[]): boolean;
+  [kIsDestroyed]?: unknown;
+}
+
+function isLegacyDestroyable(stream: unknown): stream is LegacyDestroyable {
+  return stream !== null && typeof stream === "object" &&
+    "emit" in stream && typeof stream.emit === "function";
 }
 
 function emitCloseLegacy(stream: { emit(event: string, ...args: unknown[]): boolean }): void {
@@ -346,7 +394,7 @@ function emitErrorCloseLegacy(
  * forever.
  */
 export function destroyer(stream: unknown, error?: unknown): void {
-  if (!stream || isDestroyed(stream)) return;
+  if (!isLegacyDestroyable(stream) || isDestroyed(stream)) return;
 
   // Destroying a stream that had not finished is an abort, and saying so is
   // better than a `close` the caller cannot explain.
@@ -354,24 +402,15 @@ export function destroyer(stream: unknown, error?: unknown): void {
     error = new AbortError();
   }
 
-  const s = stream as {
-    socket?: unknown;
-    req?: unknown;
-    destroy?: (error?: unknown) => void;
-    close?: () => void;
-    abort?: () => void;
-    destroyed?: boolean;
-    emit(event: string, ...args: unknown[]): boolean;
-    [key: symbol]: unknown;
-  };
+  const s = stream;
 
   if (isServerRequest(s)) {
     s.socket = null;
     s.destroy?.(error);
   } else if (isRequest(s)) {
-    (s as { abort: () => void }).abort();
+    s.abort();
   } else if (isRequest(s.req)) {
-    (s.req as { abort: () => void }).abort();
+    s.req.abort();
   } else if (typeof s.destroy === "function") {
     s.destroy(error);
   } else if (typeof s.close === "function") {

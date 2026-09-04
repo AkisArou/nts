@@ -37,23 +37,37 @@ export class URL implements SearchParamsOwner {
     }
     const baseString = base === undefined ? undefined
       : base instanceof URL ? base.href
-      : String(base);
-    this.#record = parseUrl(String(input), baseString);
+      : toUSVString(base);
+    this.#record = parseUrl(toUSVString(input), baseString);
     this.#searchParams = new URLSearchParams();
     this.#searchParams.bindToOwner(this);
   }
 
   /** `URL.parse`: the constructor, without the throw. */
   static parse(input: string, base?: string | URL): URL | null {
+    if (arguments.length === 0) {
+      throw new ERR_MISSING_ARGS("url");
+    }
+    const text = toUSVString(input);
+    const baseString = base === undefined ? undefined
+      : base instanceof URL ? base.href
+      : toUSVString(base);
     try {
-      return new URL(input, base);
+      return new URL(text, baseString);
     } catch {
       return null;
     }
   }
 
   static canParse(input: string, base?: string | URL): boolean {
-    return URL.parse(input, base) !== null;
+    if (arguments.length === 0) {
+      throw new ERR_MISSING_ARGS("url");
+    }
+    const text = toUSVString(input);
+    const baseString = base === undefined ? undefined
+      : base instanceof URL ? base.href
+      : toUSVString(base);
+    return URL.parse(text, baseString) !== null;
   }
 
   // ---------------------------------------------- the SearchParamsOwner side
@@ -69,13 +83,15 @@ export class URL implements SearchParamsOwner {
   // --------------------------------------------------------------- the URL
 
   get href(): string {
+    URL.#brandCheck(this);
     return serializeUrl(this.#record);
   }
 
   set href(value: string) {
     // A whole new URL, so the parse is unconditional and a failure throws --
     // unlike every other setter, because there is nothing left to keep.
-    this.#record = parseUrl(String(value));
+    URL.#mutationBrandCheck(this);
+    this.#record = parseUrl(toUSVString(value));
     this.#searchParams.refreshFromOwner();
   }
 
@@ -83,10 +99,12 @@ export class URL implements SearchParamsOwner {
   // receiver fails on the private field -- `Receiver must be an instance of
   // class URL` -- rather than quietly returning `undefined`.
   toString(): string {
+    URL.#brandCheck(this);
     return serializeUrl(this.#record);
   }
 
   toJSON(): string {
+    URL.#brandCheck(this);
     return serializeUrl(this.#record);
   }
 
@@ -99,7 +117,7 @@ export class URL implements SearchParamsOwner {
   }
 
   set protocol(value: string) {
-    basicUrlParse(`${String(value)}:`, null, this.#record, "scheme");
+    basicUrlParse(`${toUSVString(value)}:`, null, this.#record, "scheme");
   }
 
   get username(): string {
@@ -109,7 +127,7 @@ export class URL implements SearchParamsOwner {
   set username(value: string) {
     // A URL with no host has nowhere to put credentials.
     if (cannotHaveCredentialsOrPort(this.#record)) return;
-    this.#record.username = percentEncodeUserinfo(String(value));
+    this.#record.username = percentEncodeUserinfo(toUSVString(value));
   }
 
   get password(): string {
@@ -118,7 +136,7 @@ export class URL implements SearchParamsOwner {
 
   set password(value: string) {
     if (cannotHaveCredentialsOrPort(this.#record)) return;
-    this.#record.password = percentEncodeUserinfo(String(value));
+    this.#record.password = percentEncodeUserinfo(toUSVString(value));
   }
 
   get host(): string {
@@ -127,7 +145,7 @@ export class URL implements SearchParamsOwner {
 
   set host(value: string) {
     if (hasOpaquePath(this.#record)) return;
-    basicUrlParse(String(value), null, this.#record, "host");
+    basicUrlParse(toUSVString(value), null, this.#record, "host");
   }
 
   get hostname(): string {
@@ -136,7 +154,7 @@ export class URL implements SearchParamsOwner {
 
   set hostname(value: string) {
     if (hasOpaquePath(this.#record)) return;
-    basicUrlParse(String(value), null, this.#record, "hostname");
+    basicUrlParse(toUSVString(value), null, this.#record, "hostname");
   }
 
   get port(): string {
@@ -145,7 +163,7 @@ export class URL implements SearchParamsOwner {
 
   set port(value: string) {
     if (cannotHaveCredentialsOrPort(this.#record)) return;
-    const text = String(value);
+    const text = toUSVString(value);
     if (text === "") {
       this.#record.port = null;
       return;
@@ -160,16 +178,17 @@ export class URL implements SearchParamsOwner {
   set pathname(value: string) {
     if (hasOpaquePath(this.#record)) return;
     this.#record.path = [];
-    basicUrlParse(String(value), null, this.#record, "pathname");
+    basicUrlParse(toUSVString(value), null, this.#record, "pathname");
   }
 
   get search(): string {
+    URL.#brandCheck(this);
     const query = this.#record.query;
     return query === null || query === "" ? "" : `?${query}`;
   }
 
   set search(value: string) {
-    let text = String(value);
+    let text = toUSVString(value);
     if (text === "") {
       this.#record.query = null;
     } else {
@@ -192,7 +211,7 @@ export class URL implements SearchParamsOwner {
   }
 
   set hash(value: string) {
-    let text = String(value);
+    let text = toUSVString(value);
     if (text === "") {
       this.#record.fragment = null;
       return;
@@ -212,27 +231,45 @@ export class URL implements SearchParamsOwner {
    * reader looking at a URL in a log is usually trying to see which part of it
    * is wrong.
    */
-  [customInspectSymbol](depth: number, options: InspectOptions): string {
+  [customInspectSymbol](depth: number, options: InspectOptions): string | URL {
     if (depth < 0) {
-      return this.constructor.name;
+      return this;
     }
-    const constructor = Object.getPrototypeOf(this).constructor as { name: string };
-    const object: Record<string, unknown> = {
-      href: this.href,
-      origin: this.origin,
-      protocol: this.protocol,
-      username: this.username,
-      password: this.password,
-      host: this.host,
-      hostname: this.hostname,
-      port: this.port,
-      pathname: this.pathname,
-      search: this.search,
-      searchParams: this.searchParams,
-      hash: this.hash,
-    };
-    return `${constructor.name} ${inspect(object, { ...options, depth: (options.depth ?? 2) - 1 })}`;
+    const params = this.#searchParams[customInspectSymbol](depth - 1, options);
+    return `URL {\n` +
+      `  href: ${inspect(this.href, options)},\n` +
+      `  origin: ${inspect(this.origin, options)},\n` +
+      `  protocol: ${inspect(this.protocol, options)},\n` +
+      `  username: ${inspect(this.username, options)},\n` +
+      `  password: ${inspect(this.password, options)},\n` +
+      `  host: ${inspect(this.host, options)},\n` +
+      `  hostname: ${inspect(this.hostname, options)},\n` +
+      `  port: ${inspect(this.port, options)},\n` +
+      `  pathname: ${inspect(this.pathname, options)},\n` +
+      `  search: ${inspect(this.search, options)},\n` +
+      `  searchParams: ${params},\n` +
+      `  hash: ${inspect(this.hash, options)}\n` +
+      `}`;
   }
+
+  static #brandCheck(value: unknown): asserts value is URL {
+    if (value === null || typeof value !== "object" || !(#record in value)) {
+      throw new TypeError("Receiver must be an instance of class URL");
+    }
+  }
+
+  static #mutationBrandCheck(value: unknown): asserts value is URL {
+    if (value === null || typeof value !== "object" || !(#record in value)) {
+      throw new TypeError(
+        "Cannot read private member #record from an object whose class did not declare it",
+      );
+    }
+  }
+}
+
+/** Web IDL's `USVString`: stringify, then replace every lone surrogate. */
+function toUSVString(value: unknown): string {
+  return `${value}`.toWellFormed();
 }
 
 /**
@@ -243,12 +280,9 @@ function cannotHaveCredentialsOrPort(url: UrlRecord): boolean {
   return url.host === null || url.host === "" || url.scheme === "file";
 }
 
-Object.defineProperty(URL.prototype, Symbol.toStringTag, {
-  __proto__: null,
-  value: "URL",
-  writable: false,
-  enumerable: false,
-  configurable: true,
-} as PropertyDescriptor);
+/** Node's internal URL brand predicate for statically typed URL objects. */
+export function isURL(value: unknown): value is URL {
+  return value instanceof URL;
+}
 
 export { isSpecialScheme };

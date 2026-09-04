@@ -26,9 +26,28 @@ function requireAbortSignal(signal: unknown, name: string): void {
   }
 }
 
+interface DestroyableNodeStream {
+  destroy(error?: unknown): unknown;
+}
+
+interface WebErrorTarget {
+  [kControllerErrorFunction](error: unknown): void;
+}
+
+function isDestroyableNodeStream(value: unknown): value is DestroyableNodeStream {
+  return isNodeStream(value) &&
+    "destroy" in value && typeof value.destroy === "function";
+}
+
+function isWebErrorTarget(value: unknown): value is WebErrorTarget {
+  return isWebStream(value) &&
+    kControllerErrorFunction in value &&
+    typeof value[kControllerErrorFunction] === "function";
+}
+
 export function addAbortSignal<T>(signal: AbortSignalLike, stream: T): T {
   requireAbortSignal(signal, "signal");
-  if (!isNodeStream(stream) && !isWebStream(stream)) {
+  if (!isDestroyableNodeStream(stream) && !isWebErrorTarget(stream)) {
     throw new ERR_INVALID_ARG_TYPE(
       "stream",
       ["ReadableStream", "WritableStream", "Stream"],
@@ -49,22 +68,19 @@ export function addAbortSignalNoValidate<T>(signal: AbortSignalLike, stream: T):
     return stream;
   }
 
-  const target = stream as unknown as {
-    destroy(error: unknown): void;
-    [key: symbol]: unknown;
-  };
-
-  const onAbort = isNodeStream(stream)
+  const onAbort = isDestroyableNodeStream(stream)
     ? (): void => {
-      target.destroy(new AbortError(undefined, { cause: signal.reason }));
+      stream.destroy(new AbortError(undefined, { cause: signal.reason }));
     }
     : (): void => {
       // A web stream has no `destroy`; erroring its controller is the
       // equivalent, and the function to do it is left on the stream by
       // whoever built it.
-      (target[kControllerErrorFunction] as (error: unknown) => void)(
-        new AbortError(undefined, { cause: signal.reason }),
-      );
+      if (isWebErrorTarget(stream)) {
+        stream[kControllerErrorFunction](
+          new AbortError(undefined, { cause: signal.reason }),
+        );
+      }
     };
 
   if (signal.aborted) {

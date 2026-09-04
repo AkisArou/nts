@@ -15,7 +15,6 @@
 /* os */
 NtsString *nts_os_hostname(void);
 NtsString *nts_os_type(void);
-NtsString *nts_os_release(void);
 NtsString *nts_os_version(void);
 NtsString *nts_os_machine(void);
 NtsString *nts_os_arch(void);

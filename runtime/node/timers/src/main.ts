@@ -36,10 +36,10 @@ export function setTimeout<A extends unknown[]>(
   callback: (...args: A) => void,
   after?: number,
   ...args: A
-): Timeout {
+): Timeout<A> {
   validateFunction(callback, "callback");
   const timeout = new Timeout(
-    callback as never,
+    callback,
     after,
     args.length ? args : undefined,
     false,
@@ -54,10 +54,10 @@ export function setInterval<A extends unknown[]>(
   callback: (...args: A) => void,
   repeat?: number,
   ...args: A
-): Timeout {
+): Timeout<A> {
   validateFunction(callback, "callback");
   const timeout = new Timeout(
-    callback as never,
+    callback,
     repeat,
     args.length ? args : undefined,
     true,
@@ -86,9 +86,9 @@ export { clearTimeout, clearTimeout as clearInterval };
 export function setImmediate<A extends unknown[]>(
   callback: (...args: A) => void,
   ...args: A
-): Immediate {
+): Immediate<A> {
   validateFunction(callback, "callback");
-  return new Immediate(callback as never, args.length ? args : undefined);
+  return new Immediate(callback, args.length ? args : undefined);
 }
 
 export { clearImmediate };
@@ -111,24 +111,3 @@ export { promises };
  * classes themselves imports them from `./timeout.ts` and `./immediate.ts`.
  */
 export type { Timeout, Immediate };
-
-/**
- * `util.promisify(setTimeout)` gives the `timers/promises` version.
- *
- * A caller who promisifies the callback form is asking for the awaitable one,
- * and the awaitable one is not what `promisify` would produce: it resolves
- * with the value rather than with the timer handle, and takes a signal. The
- * well-known symbol is how a function says "the promise form of me already
- * exists, use it".
- */
-const kCustomPromisify = Symbol.for("nodejs.util.promisify.custom");
-
-Object.defineProperty(setTimeout, kCustomPromisify, {
-  enumerable: true,
-  value: promises.setTimeout,
-});
-
-Object.defineProperty(setImmediate, kCustomPromisify, {
-  enumerable: true,
-  value: promises.setImmediate,
-});

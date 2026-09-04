@@ -16,10 +16,11 @@ export type Encoding =
   | "ucs2" | "ucs-2" | "utf16le" | "utf-16le";
 
 /** Node accepts several spellings for one encoding. */
-export function normalizeEncoding(encoding: string | undefined | null): Encoding | undefined {
+export function normalizeEncoding(encoding: unknown): Encoding | undefined {
   if (encoding === undefined || encoding === null) {
     return "utf8";
   }
+  if (typeof encoding !== "string") return undefined;
   switch (encoding.toLowerCase()) {
     case "utf8": case "utf-8": return "utf8";
     case "hex": return "hex";
@@ -32,8 +33,8 @@ export function normalizeEncoding(encoding: string | undefined | null): Encoding
   }
 }
 
-export function isEncoding(encoding: string): boolean {
-  return normalizeEncoding(encoding) !== undefined;
+export function isEncoding(encoding: unknown): encoding is Encoding {
+  return typeof encoding === "string" && normalizeEncoding(encoding) !== undefined;
 }
 
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -77,7 +78,8 @@ export function byteLengthIn(str: string, encoding: Encoding): number {
       // Padding and any character outside the alphabet contribute nothing.
       let n = 0;
       for (let i = 0; i < str.length; i++) {
-        if (BASE64_VALUES[str.charCodeAt(i)]! >= 0) n++;
+        const value = BASE64_VALUES[str.charCodeAt(i)];
+        if (value !== undefined && value >= 0) n++;
       }
       return (n * 3) >>> 2;
     }
@@ -97,10 +99,10 @@ export function writeIn(
       return utf8Write(out, str, offset, max);
 
     case "ascii": {
-      // Node masks to seven bits rather than refusing: `ascii` is lossy by
-      // definition and the mask is what its C++ does.
+      // Node stores the low byte. Its ASCII *decoder* applies the seven-bit
+      // mask, but writes deliberately retain all eight bits.
       const n = Math.min(str.length, max);
-      for (let i = 0; i < n; i++) out[offset + i] = str.charCodeAt(i) & 0x7f;
+      for (let i = 0; i < n; i++) out[offset + i] = str.charCodeAt(i) & 0xff;
       return n;
     }
 
@@ -123,11 +125,11 @@ export function writeIn(
 
     case "hex": {
       let written = 0;
-      for (let i = 0; i + 1 < str.length + 1 && written < max; i += 2) {
-        const hi = HEX_VALUES[str.charCodeAt(i)]!;
-        const lo = HEX_VALUES[str.charCodeAt(i + 1)]!;
+      for (let i = 0; i + 1 < str.length && written < max; i += 2) {
+        const hi = HEX_VALUES[str.charCodeAt(i)];
+        const lo = HEX_VALUES[str.charCodeAt(i + 1)];
         // A non-hex character ends the write; node stops rather than skipping.
-        if (hi < 0 || lo < 0) break;
+        if (hi === undefined || lo === undefined || hi < 0 || lo < 0) break;
         out[offset + written] = (hi << 4) | lo;
         written++;
       }
@@ -139,8 +141,12 @@ export function writeIn(
       let acc = 0;
       let bits = 0;
       for (let i = 0; i < str.length; i++) {
-        const value = BASE64_VALUES[str.charCodeAt(i)]!;
-        if (value < 0) continue;
+        const code = str.charCodeAt(i);
+        // Padding terminates the encoded payload. Other non-alphabet bytes,
+        // including ASCII whitespace, are ignored by Node's forgiving path.
+        if (code === 0x3d) break;
+        const value = BASE64_VALUES[code];
+        if (value === undefined || value < 0) continue;
         acc = (acc << 6) | value;
         bits += 6;
         if (bits >= 8) {
@@ -168,13 +174,21 @@ export function decodeIn(
 
     case "ascii": {
       let out = "";
-      for (let i = start; i < end; i++) out += String.fromCharCode(bytes[i]! & 0x7f);
+      for (let i = start; i < end; i++) {
+        const byte = bytes[i];
+        if (byte === undefined) break;
+        out += String.fromCharCode(byte & 0x7f);
+      }
       return out;
     }
 
     case "latin1": case "binary": {
       let out = "";
-      for (let i = start; i < end; i++) out += String.fromCharCode(bytes[i]!);
+      for (let i = start; i < end; i++) {
+        const byte = bytes[i];
+        if (byte === undefined) break;
+        out += String.fromCharCode(byte);
+      }
       return out;
     }
 
@@ -182,7 +196,10 @@ export function decodeIn(
       let out = "";
       // A trailing odd byte is not half a character; node drops it.
       for (let i = start; i + 1 < end; i += 2) {
-        out += String.fromCharCode(bytes[i]! | (bytes[i + 1]! << 8));
+        const low = bytes[i];
+        const high = bytes[i + 1];
+        if (low === undefined || high === undefined) break;
+        out += String.fromCharCode(low | (high << 8));
       }
       return out;
     }
@@ -190,7 +207,9 @@ export function decodeIn(
     case "hex": {
       let out = "";
       for (let i = start; i < end; i++) {
-        out += bytes[i]!.toString(16).padStart(2, "0");
+        const byte = bytes[i];
+        if (byte === undefined) break;
+        out += byte.toString(16).padStart(2, "0");
       }
       return out;
     }
@@ -200,19 +219,29 @@ export function decodeIn(
       let out = "";
       let i = start;
       for (; i + 2 < end; i += 3) {
-        const n = (bytes[i]! << 16) | (bytes[i + 1]! << 8) | bytes[i + 2]!;
-        out += alphabet[(n >> 18) & 63]! + alphabet[(n >> 12) & 63]! +
-               alphabet[(n >> 6) & 63]! + alphabet[n & 63]!;
+        const first = bytes[i];
+        const second = bytes[i + 1];
+        const third = bytes[i + 2];
+        if (first === undefined || second === undefined || third === undefined) break;
+        const n = (first << 16) | (second << 8) | third;
+        out += alphabet.charAt((n >> 18) & 63) + alphabet.charAt((n >> 12) & 63) +
+               alphabet.charAt((n >> 6) & 63) + alphabet.charAt(n & 63);
       }
       const left = end - i;
       if (left === 1) {
-        const n = bytes[i]! << 16;
-        out += alphabet[(n >> 18) & 63]! + alphabet[(n >> 12) & 63]!;
+        const first = bytes[i];
+        if (first === undefined) return out;
+        const n = first << 16;
+        out += alphabet.charAt((n >> 18) & 63) + alphabet.charAt((n >> 12) & 63);
         // base64url omits padding; base64 keeps it.
         if (encoding === "base64") out += "==";
       } else if (left === 2) {
-        const n = (bytes[i]! << 16) | (bytes[i + 1]! << 8);
-        out += alphabet[(n >> 18) & 63]! + alphabet[(n >> 12) & 63]! + alphabet[(n >> 6) & 63]!;
+        const first = bytes[i];
+        const second = bytes[i + 1];
+        if (first === undefined || second === undefined) return out;
+        const n = (first << 16) | (second << 8);
+        out += alphabet.charAt((n >> 18) & 63) + alphabet.charAt((n >> 12) & 63) +
+               alphabet.charAt((n >> 6) & 63);
         if (encoding === "base64") out += "=";
       }
       return out;

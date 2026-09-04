@@ -1,5 +1,8 @@
 # Each of these spawns a real `node` and asserts on what it prints. The child
 # is node running node's own `url`, so the assertion is about node's binary and
 # there is no way to inject our module into a process we did not start.
-test-url-parse-deprecation.js: spawns node to see when the DEP0169 warning is printed
-test-url-parse-invalid-input.js: spawns node to check the error printed for a bad URL
+test-url-parse-deprecation.js: host-binary subprocess: spawns node to see when the DEP0169 warning is printed
+test-url-parse-invalid-input.js: host-binary subprocess: spawns node to check the error printed for a bad URL
+test-whatwg-url-custom-searchparams-constructor.js: language non-goal: two assertions enumerate arbitrary own Symbol keys, which requires the §13 property map/metaobject protocol; local/searchparams-constructor-static.js retains the applicable constructor behavior
+test-url-parse-query.js: language non-goal: every query assertion first requires a null-prototype property record; local/parse-query-static.js retains the applicable parsed fields and query values
+test-whatwg-url-custom-inspect.js: language non-goal: showHidden observes Node's private Ada URLContext offsets and the test also observes subclass constructor.name function metadata; local/url-inspect-static.js retains the public URL component inspection and depth behavior

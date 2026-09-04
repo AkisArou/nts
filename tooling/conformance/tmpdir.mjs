@@ -29,7 +29,13 @@ export function resolve(...paths) {
 }
 
 export function fileURL(...paths) {
-  return pathToFileURL(resolve(...paths));
+  // The helper itself is loaded before module substitution, so
+  // `pathToFileURL()` creates the host's URL instance. In Node's own harness
+  // that constructor and the public global are identical; in this harness the
+  // active `node:url` profile is installed later. Reconstruct through the
+  // active global to preserve the identity Node's test observes.
+  const href = pathToFileURL(resolve(...paths)).href;
+  return new globalThis.URL(href);
 }
 
 /** Node checks free space before a large-file test; we do not run those. */

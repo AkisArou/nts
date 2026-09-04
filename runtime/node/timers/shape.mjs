@@ -58,9 +58,7 @@ export function internals() {
       timerListMap: timeout.timerListMap,
       timerListQueue: timeout.timerListQueue,
       immediateQueue: immediate.immediateQueue,
-      knownTimersById: timeout.knownTimersById,
       kRefed: timeout.kRefed,
-      kHasPrimitive: timeout.kHasPrimitive,
       decRefCount: timeout.decRefCount,
     },
   };

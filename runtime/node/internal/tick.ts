@@ -13,13 +13,14 @@ import {
   emitInit,
   getDefaultTriggerAsyncId,
   initHooksExist,
-  kAsyncId,
-  kTriggerAsyncId,
   newAsyncId,
 } from "./async-hooks.ts";
 
 /** Queue `callback` to run once the current stack unwinds. */
-declare function nts_next_tick(callback: (...args: never) => void, args: unknown[]): void;
+declare function nts_next_tick<Args extends unknown[]>(
+  callback: (...args: Args) => void,
+  args: Args,
+): void;
 
 /**
  * Queue `callback`, carrying the current context to it.
@@ -43,21 +44,20 @@ export function nextTick<A extends unknown[]>(
   const frame = AsyncContextFrame.current();
 
   // Node calls this a TickObject and hands it to hooks as the resource. It
-  // carries the ids and the work, which is all a hook is shown of it.
+  // carries the work. Its identity remains in this statically typed closure;
+  // Node's private Symbol slots are an internal observation, not public API.
   const resource = {
-    [kAsyncId]: asyncId,
-    [kTriggerAsyncId]: trigger,
     callback,
     args,
   };
   if (initHooksExist()) emitInit(asyncId, "TickObject", trigger, resource);
 
   nts_next_tick(
-    ((...received: never) => {
+    (...received: A) => {
       const prior = AsyncContextFrame.exchange(frame);
       emitBefore(asyncId, trigger, resource);
       try {
-        (callback as (...a: unknown[]) => void)(...(received as unknown as unknown[]));
+        callback(...received);
       } finally {
         // In this order: `after` closes the scope the callback ran in, and
         // `destroy` says the tick is finished. Reversing them would report a
@@ -66,7 +66,7 @@ export function nextTick<A extends unknown[]>(
         emitDestroy(asyncId);
         AsyncContextFrame.setCurrent(prior);
       }
-    }) as (...a: never) => void,
+    },
     args,
   );
 }

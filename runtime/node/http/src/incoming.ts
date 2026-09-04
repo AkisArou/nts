@@ -48,8 +48,7 @@ const firstWins = new Set([
 export interface IncomingSocket {
   remoteAddress?: string | undefined;
   remotePort?: number | undefined;
-  destroy(error?: unknown): void;
-  [key: string]: unknown;
+  destroy(error?: unknown, callback?: (error?: unknown) => void): unknown;
 }
 
 export class IncomingMessage extends Readable {
@@ -83,6 +82,11 @@ export class IncomingMessage extends Readable {
    */
   aborted = false;
 
+  /** Whether the readable side has ever asked the parser for bytes. */
+  _consuming = false;
+  /** The server has decided that user code will not consume this body. */
+  _dumped = false;
+
   /** Whether the sender said it wanted the connection kept open. */
   #keepAlive = true;
   #inTrailers = false;
@@ -109,9 +113,28 @@ export class IncomingMessage extends Readable {
    * message's buffer drains.
    */
   override _read(): void {
+    if (!this._consuming) {
+      this._readableState.readingMore = false;
+      this._consuming = true;
+    }
     if (!this.complete) {
       this.#resumeSource?.();
     }
+  }
+
+  /**
+   * Drain a request body that its handler ignored.
+   *
+   * Node does this when the response finishes before user code starts reading
+   * the request.  Resuming is important even when the parser has already
+   * reached EOF: it advances the readable through `end`, auto-destroy, and
+   * finally `close`.
+   */
+  _dump(): void {
+    if (this._dumped) return;
+    this._dumped = true;
+    this.removeAllListeners("data");
+    this.resume();
   }
 
   #resumeSource: (() => void) | null = null;

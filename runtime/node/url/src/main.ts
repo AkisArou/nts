@@ -20,7 +20,7 @@ import { domainToASCII, domainToUnicode } from "./idna.ts";
 // an ICU-backed implementation could replace it without the parser changing.
 setDomainToAscii(domainToASCII);
 
-export { URL } from "./url.ts";
+export { URL, isURL } from "./url.ts";
 export { URLSearchParams } from "./searchparams.ts";
 export { fileURLToPath, pathToFileURL, urlToHttpOptions } from "./fileurl.ts";
 export { domainToASCII, domainToUnicode };

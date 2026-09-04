@@ -82,8 +82,11 @@ export function append(list: ListNode, item: ListNode): void {
   item._idlePrev = list;
 
   // Non-null because a list is always `init`ed before anything is appended,
-  // which leaves it pointing at itself.
-  (list._idleNext as ListNode)._idlePrev = item;
+  // which leaves it pointing at itself. Keep the check here so a broken
+  // caller fails at the invariant instead of corrupting a neighbouring list.
+  const next = list._idleNext;
+  if (next === null) throw new Error("cannot append to an uninitialised list");
+  next._idlePrev = item;
   list._idleNext = item;
 }
 

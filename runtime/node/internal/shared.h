@@ -11,8 +11,20 @@
 /** UTF-16 code units to a NUL-terminated UTF-8 buffer. Returns the byte count. */
 size_t nts_node_to_utf8(const NtsString *s, char *buf, size_t cap);
 
+/** Allocate an exact-capacity NUL-terminated UTF-8 buffer. The caller frees it. */
+char *nts_node_to_utf8_alloc(const NtsString *s, size_t *length);
+
 /** libuv returns -errno; the TypeScript above maps the number to a code. */
 void nts_node_set_errno(int uv_result);
+
+/** The process-global errno slot used by result-plus-errno bindings. */
+double nts_errno(void);
+
+/** libuv's platform error table and its two direct lookup operations. */
+NtsString *nts_uv_err_name(double code);
+NtsString *nts_uv_err_message(double code);
+NtsArray *nts_uv_error_codes(void);
+NtsArray *nts_uv_error_names(void);
 
 /* An array of doubles.
  *

@@ -16,39 +16,54 @@
 // The choice is what makes it useful, so it is made here rather than left to
 // whoever reads the output.
 
-import { inspect, customInspectSymbol, type InspectOptions } from "../../util/src/inspect.ts";
+import { inspect } from "../../util/src/inspect.ts";
 import { colors, refresh } from "../../internal/colors.ts";
 import { validateObject } from "../../internal/validators.ts";
 import { captureStackTrace } from "../../internal/errors.ts";
 import { myersDiff, printMyersDiff, printSimpleMyersDiff } from "../../internal/assert/myers-diff.ts";
 import { stderr } from "../../internal/stdio.ts";
 
-/** How each operator words its failure. */
-const kReadableOperator: Record<string, string> = {
-  deepStrictEqual: "Expected values to be strictly deep-equal:",
-  partialDeepStrictEqual: "Expected values to be partially and strictly deep-equal:",
-  strictEqual: "Expected values to be strictly equal:",
-  strictEqualObject: 'Expected "actual" to be reference-equal to "expected":',
-  deepEqual: "Expected values to be loosely deep-equal:",
-  notDeepStrictEqual: 'Expected "actual" not to be strictly deep-equal to:',
-  notStrictEqual: 'Expected "actual" to be strictly unequal to:',
-  notStrictEqualObject: 'Expected "actual" not to be reference-equal to "expected":',
-  notDeepEqual: 'Expected "actual" not to be loosely deep-equal to:',
-  notIdentical: "Values have same structure but are not reference-equal:",
-  notDeepEqualUnequal: "Expected values not to be loosely deep-equal:",
-};
+/** How each statically known operator words its failure. */
+function readableOperator(operator: string): string | undefined {
+  switch (operator) {
+    case "deepStrictEqual":
+      return "Expected values to be strictly deep-equal:";
+    case "partialDeepStrictEqual":
+      return "Expected values to be partially and strictly deep-equal:";
+    case "strictEqual":
+      return "Expected values to be strictly equal:";
+    case "strictEqualObject":
+      return 'Expected "actual" to be reference-equal to "expected":';
+    case "deepEqual":
+      return "Expected values to be loosely deep-equal:";
+    case "notDeepStrictEqual":
+      return 'Expected "actual" not to be strictly deep-equal to:';
+    case "notStrictEqual":
+      return 'Expected "actual" to be strictly unequal to:';
+    case "notStrictEqualObject":
+      return 'Expected "actual" not to be reference-equal to "expected":';
+    case "notDeepEqual":
+      return 'Expected "actual" not to be loosely deep-equal to:';
+    case "notIdentical":
+      return "Values have same structure but are not reference-equal:";
+    case "notDeepEqualUnequal":
+      return "Expected values not to be loosely deep-equal:";
+    default:
+      return undefined;
+  }
+}
 
 /** Short enough that `a !== b` on one line beats a two-line diff. */
 const kMaxShortStringLength = 12;
-/** Beyond this a value is truncated in the message rather than printed whole. */
+/** Beyond this a generated comparison message is shortened. */
 const kMaxLongStringLength = 512;
 
 /** The operators whose message embeds a diff even when a custom one is given. */
-const kMethodsWithCustomMessageDiff = new Set([
-  "deepStrictEqual",
-  "strictEqual",
-  "partialDeepStrictEqual",
-]);
+function customMessageIncludesDiff(operator: string): boolean {
+  return operator === "deepStrictEqual" ||
+    operator === "strictEqual" ||
+    operator === "partialDeepStrictEqual";
+}
 
 export type DiffMode = "simple" | "full";
 
@@ -73,26 +88,22 @@ export interface AssertionErrorOptions {
 }
 
 /**
- * A shallow copy of an error, with its prototype and `message`.
+ * The statically observable part of an error used in a comparison message.
  *
  * Two errors that fail a comparison are inspected into the message, and an
  * error inspects as its stack -- which would put two irrelevant stacks in the
  * output. A copy carries everything the comparison was about and no stack.
  */
-function copyError(source: Error): object {
-  const target = Object.assign(
-    { __proto__: Object.getPrototypeOf(source) },
-    source,
-  ) as object;
-  Object.defineProperty(target, "message", { __proto__: null, value: source.message } as PropertyDescriptor);
-  if (Object.hasOwn(source, "cause")) {
-    let cause = (source as Error & { cause?: unknown }).cause;
-    if (cause instanceof Error) {
-      cause = copyError(cause);
-    }
-    Object.defineProperty(target, "cause", { __proto__: null, value: cause } as PropertyDescriptor);
-  }
-  return target;
+interface ErrorSnapshot {
+  readonly name: string;
+  readonly message: string;
+  readonly cause?: unknown;
+}
+
+function copyError(source: Error): ErrorSnapshot {
+  const cause = source.cause instanceof Error ? copyError(source.cause) : source.cause;
+  if (cause === undefined) return { name: source.name, message: source.message };
+  return { name: source.name, message: source.message, cause };
 }
 
 /**
@@ -115,11 +126,11 @@ function inspectValue(value: unknown): string {
     // Inspected because they are compared: a getter's value is part of the
     // comparison, so it has to be part of the message.
     getters: true,
-  } as InspectOptions);
+  });
 }
 
 function getErrorMessage(operator: string, message: string | undefined): string {
-  return message || kReadableOperator[operator] || "";
+  return message || readableOperator(operator) || "";
 }
 
 /**
@@ -165,7 +176,7 @@ function getStackedDiff(actual: string, expected: string, isStringComparison: bo
 } {
   let message = `\n${colors.green}+${colors.white} ${actual}\n${colors.red}- ${colors.white}${expected}`;
   const stringsLen = actual.length + expected.length;
-  const maxTerminalLength = stderr.isTTY ? (stderr as { columns?: number }).columns ?? 80 : 80;
+  const maxTerminalLength = stderr.isTTY ? stderr.columns ?? 80 : 80;
   const showIndicator = isStringComparison && stringsLen <= maxTerminalLength;
 
   if (showIndicator) {
@@ -249,8 +260,10 @@ export function createErrDiff(
   let header = `${colors.green}+ actual${colors.white} ${colors.red}- expected${colors.white}`;
 
   if (showSimpleDiff) {
+    const firstActual = inspectedSplitActual[0] ?? "";
+    const firstExpected = inspectedSplitExpected[0] ?? "";
     const simpleDiff = getSimpleDiff(
-      actual, inspectedSplitActual[0]!, expected, inspectedSplitExpected[0]!,
+      actual, firstActual, expected, firstExpected,
     );
     message = simpleDiff.message;
     if (simpleDiff.header !== undefined) {
@@ -295,18 +308,6 @@ export function createErrDiff(
   return `${headerMessage}${skippedMessage}\n${message}\n`;
 }
 
-/** Ten lines or 512 characters, whichever comes first. */
-function addEllipsis(str: string): string {
-  const lines = str.split("\n", 11);
-  if (lines.length > 10) {
-    lines.length = 10;
-    return `${lines.join("\n")}\n...`;
-  } else if (str.length > kMaxLongStringLength) {
-    return `${str.slice(kMaxLongStringLength)}...`;
-  }
-  return str;
-}
-
 export class AssertionError extends Error {
   generatedMessage: boolean;
   code = "ERR_ASSERTION";
@@ -314,6 +315,7 @@ export class AssertionError extends Error {
   expected: unknown;
   operator: string | undefined;
   diff: DiffMode;
+  readonly details: readonly AssertionErrorDetail[] | undefined;
 
   constructor(options: AssertionErrorOptions) {
     validateObject(options, "options");
@@ -332,7 +334,7 @@ export class AssertionError extends Error {
     if (message != null) {
       // A custom message replaces the heading, not the diff: the reader still
       // needs to see what differed.
-      built = kMethodsWithCustomMessageDiff.has(operator)
+      built = customMessageIncludesDiff(operator)
         ? createErrDiff(actual, expected, operator, String(message), diff)
         : String(message);
     } else {
@@ -353,19 +355,19 @@ export class AssertionError extends Error {
         expected = copyError(expected);
       }
 
-      if (kMethodsWithCustomMessageDiff.has(operator)) {
+      if (customMessageIncludesDiff(operator)) {
         built = createErrDiff(actual, expected, operator, undefined, diff);
       } else if (operator === "notDeepStrictEqual" || operator === "notStrictEqual") {
         // The two are equal and were required not to be, so there is nothing
         // to diff: one value, and what was wrong with it.
-        let base = kReadableOperator[operator]!;
+        let base = readableOperator(operator) ?? "";
         const res = inspectValue(actual).split("\n");
 
         if (
           operator === "notStrictEqual" &&
           ((typeof actual === "object" && actual !== null) || typeof actual === "function")
         ) {
-          base = kReadableOperator["notStrictEqualObject"]!;
+          base = readableOperator("notStrictEqualObject") ?? "";
         }
 
         if (res.length > 50 && diff !== "full") {
@@ -375,13 +377,14 @@ export class AssertionError extends Error {
           }
         }
 
+        const first = res[0] ?? "";
         built = res.length === 1
-          ? `${base}${res[0]!.length > 5 ? "\n\n" : " "}${res[0]}`
+          ? `${base}${first.length > 5 ? "\n\n" : " "}${first}`
           : `${base}\n\n${res.join("\n")}\n`;
       } else {
         let res = inspectValue(actual);
         let other = inspectValue(expected);
-        const knownOperator = kReadableOperator[operator];
+        const knownOperator = readableOperator(operator);
         if (operator === "notDeepEqual" && res === other) {
           res = `${knownOperator}\n\n${res}`;
           if (res.length > 1024 && diff !== "full") {
@@ -398,7 +401,9 @@ export class AssertionError extends Error {
           if (operator === "deepEqual") {
             res = `${knownOperator}\n\n${res}\n\nshould loosely deep-equal\n\n`;
           } else {
-            const newOp = kReadableOperator[`${operator}Unequal`];
+            const newOp = operator === "notDeepEqual"
+              ? readableOperator("notDeepEqualUnequal")
+              : undefined;
             if (newOp) {
               res = `${newOp}\n\n${res}\n\nshould not loosely deep-equal\n\n`;
             } else {
@@ -415,29 +420,18 @@ export class AssertionError extends Error {
     this.generatedMessage = !message;
     // The code is in the name while the stack is captured, so the first line
     // of a printed stack carries it, and taken back out afterwards so that
-    // `err.name` is the plain one.
-    Object.defineProperty(this, "name", {
-      __proto__: null,
-      value: "AssertionError [ERR_ASSERTION]",
-      enumerable: false,
-      writable: true,
-      configurable: true,
-    } as PropertyDescriptor);
+    // `err.name` is the plain one. Property-descriptor flags are deliberately
+    // not modelled by the compiled object representation.
+    this.name = "AssertionError [ERR_ASSERTION]";
     this.code = "ERR_ASSERTION";
+    this.details = details;
     if (details) {
-      // `assert.ifError` and the `throws` family report several comparisons at
-      // once; a single `actual`/`expected` pair could not hold them.
+      // Node also materialises dynamically named properties such as
+      // `"actual 0"`. A flat typed object has no property map, so the same
+      // information is retained as a statically typed list.
       this.actual = undefined;
       this.expected = undefined;
       this.operator = undefined;
-      for (let i = 0; i < details.length; i++) {
-        const detail = details[i]!;
-        (this as unknown as Record<string, unknown>)[`message ${i}`] = detail.message;
-        (this as unknown as Record<string, unknown>)[`actual ${i}`] = detail.actual;
-        (this as unknown as Record<string, unknown>)[`expected ${i}`] = detail.expected;
-        (this as unknown as Record<string, unknown>)[`operator ${i}`] = detail.operator;
-        (this as unknown as Record<string, unknown>)[`stack trace ${i}`] = detail.stack;
-      }
     } else {
       this.actual = actual;
       this.expected = expected;
@@ -454,30 +448,5 @@ export class AssertionError extends Error {
 
   override toString(): string {
     return `${this.name} [${this.code}]: ${this.message}`;
-  }
-
-  /**
-   * Inspected shallowly, with long strings cut short.
-   *
-   * The message already contains a combined view of `actual` and `expected`;
-   * printing them again in full would triple the output and say nothing new.
-   */
-  [customInspectSymbol](_recurseTimes: number, ctx: InspectOptions): string {
-    const tmpActual = this.actual;
-    const tmpExpected = this.expected;
-
-    if (typeof this.actual === "string") {
-      this.actual = addEllipsis(this.actual);
-    }
-    if (typeof this.expected === "string") {
-      this.expected = addEllipsis(this.expected);
-    }
-
-    const result = inspect(this, { ...ctx, customInspect: false, depth: 0 });
-
-    this.actual = tmpActual;
-    this.expected = tmpExpected;
-
-    return result;
   }
 }

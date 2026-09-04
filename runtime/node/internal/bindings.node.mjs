@@ -10,16 +10,22 @@
 // Each module's own `bindings.node.mjs` imports this and adds what is its own.
 import process from "node:process";
 import { createRequire } from "node:module";
+import os from "node:os";
 import v8 from "node:v8";
 import { AsyncLocalStorage } from "node:async_hooks";
 
+const hostQueueMicrotask = globalThis.queueMicrotask;
+const hostSetImmediate = globalThis.setImmediate;
+const hostClearImmediate = globalThis.clearImmediate;
+
 const require = createRequire(import.meta.url);
+const hostSystemErrors = require("node:util").getSystemErrorMap();
 
 // Read at call time, not captured: node's tests replace `process.stdout.write`
 // to see what was printed, and a captured reference would miss the
 // replacement.
-globalThis.nts_write_stdout = (text) => { process.stdout.write(text); };
-globalThis.nts_write_stderr = (text) => { process.stderr.write(text); };
+globalThis.nts_write_stdout = (text) => { process.stdout.write(text); return 0; };
+globalThis.nts_write_stderr = (text) => { process.stderr.write(text); return 0; };
 
 // Ending the process, for the paths that cannot return to their caller: a
 // hook that threw, a fatal error inside the runtime. Here rather than in
@@ -29,29 +35,24 @@ globalThis.nts_write_stderr = (text) => { process.stderr.write(text); };
 globalThis.nts_process_really_exit = (code) => process.reallyExit(code);
 globalThis.nts_stdout_is_tty = () => Boolean(process.stdout.isTTY);
 globalThis.nts_stderr_is_tty = () => Boolean(process.stderr.isTTY);
-globalThis.nts_stdio_color_depth = () =>
-  (typeof process.stdout.getColorDepth === "function" ? process.stdout.getColorDepth() : 1);
 
 globalThis.nts_process_env = (name) => process.env[name] ?? "";
 globalThis.nts_process_env_has = (name) => process.env[name] !== undefined;
 globalThis.nts_process_pid = () => process.pid;
-globalThis.nts_process_emit_warning = (message, name, code) => {
-  process.emitWarning(message, name, code || undefined);
+globalThis.nts_process_emit_warning_object = (_message, _name, warning) => {
+  // Preserve identity: EventEmitter warnings carry `emitter`, `type`, and
+  // `count`, and callers observe those fields on the process warning event.
+  process.emitWarning(warning);
 };
 
 globalThis.nts_hrtime_ns = () => process.hrtime.bigint();
 globalThis.nts_process_is_exiting = () => Boolean(process._exiting);
 globalThis.nts_next_tick = (callback, args) => { process.nextTick(callback, ...(args ?? [])); };
 
-globalThis.nts_debug_write = (text) => { process.stderr.write(text); };
+globalThis.nts_debug_write = (text) => { process.stderr.write(text); return 0; };
 globalThis.nts_platform = () => process.platform;
 globalThis.nts_process_cwd = () => process.cwd();
-
-// Node suppresses a deprecation warning raised from inside a dependency, on
-// the grounds that the application cannot act on it. A compiled program has no
-// `node_modules` to be inside, so the compiled answer is always false; on node
-// the stack is what says.
-globalThis.nts_is_inside_node_modules = () => false;
+globalThis.nts_os_release = () => os.release();
 
 // libuv's error table, for `internal/uv.ts`.
 //
@@ -61,24 +62,13 @@ globalThis.nts_is_inside_node_modules = () => false;
 // error". A rule with two implementations has two behaviours, and which one a
 // module got depended on which bindings file it happened to load.
 globalThis.nts_uv_err_name = (code) => {
-  try {
-    return require("node:util").getSystemErrorName(code);
-  } catch {
-    return "UNKNOWN";
-  }
+  const entry = hostSystemErrors.get(code);
+  return entry === undefined ? `Unknown system error ${code}` : entry[0];
 };
 
 globalThis.nts_uv_err_message = (code) => {
-  const util = require("node:util");
-  if (typeof util.getSystemErrorMessage === "function") {
-    try {
-      return util.getSystemErrorMessage(code);
-    } catch {
-      // Fall through to the map.
-    }
-  }
-  const entry = util.getSystemErrorMap().get(code);
-  return entry ? entry[1] : "unknown error";
+  const entry = hostSystemErrors.get(code);
+  return entry === undefined ? `Unknown system error ${code}` : entry[1];
 };
 
 // -- asynchronous context ---------------------------------------------------
@@ -141,4 +131,33 @@ globalThis.nts_on_collected = (resource, onCollected) => {
   collected.register(resource, onCollected);
 };
 
-globalThis.nts_enqueue_microtask = (callback) => { queueMicrotask(callback); };
+globalThis.nts_enqueue_microtask = (callback) => { hostQueueMicrotask(callback); };
+
+let unreferencedImmediateCallbacks = [];
+let unreferencedImmediateHandle = null;
+
+function drainUnreferencedImmediates() {
+  if (unreferencedImmediateCallbacks.length === 0) return;
+  if (unreferencedImmediateHandle !== null) {
+    hostClearImmediate(unreferencedImmediateHandle);
+    unreferencedImmediateHandle = null;
+  }
+  process.removeListener("beforeExit", drainUnreferencedImmediates);
+
+  const callbacks = unreferencedImmediateCallbacks;
+  unreferencedImmediateCallbacks = [];
+  for (const callback of callbacks) callback();
+}
+
+globalThis.nts_schedule_unreferenced_immediate = (callback) => {
+  unreferencedImmediateCallbacks.push(callback);
+  if (unreferencedImmediateHandle !== null) return;
+  unreferencedImmediateHandle = hostSetImmediate(drainUnreferencedImmediates);
+  unreferencedImmediateHandle.unref();
+  process.once("beforeExit", drainUnreferencedImmediates);
+};
+
+// Node runs native immediate callbacks before the JavaScript ImmediateList in
+// the same check phase. The timers stand-in calls this just before its user
+// queue so both adapters preserve that priority while sharing one host loop.
+globalThis.nts_drain_unreferenced_immediates = drainUnreferencedImmediates;

@@ -3,3 +3,5 @@ process
 fs
 net
 http
+dgram
+buffer

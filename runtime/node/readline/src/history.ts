@@ -11,6 +11,7 @@
 // format has the same order for the same reason.
 
 import { reverseString } from "./utils.ts";
+import { validateArray, validateNumberRange } from "../../internal/validators.ts";
 
 /** Node's default, and small enough that it is worth saying out loud. */
 const DEFAULT_HISTORY_SIZE = 30;
@@ -34,6 +35,12 @@ export class History {
   #removeDuplicates: boolean;
 
   constructor(context: HistoryContext, options: HistoryOptions = {}) {
+    if (options.history !== undefined) {
+      validateArray(options.history, "history");
+    }
+    if (options.size !== undefined) {
+      validateNumberRange(options.size, "size", 0);
+    }
     this.#context = context;
     this.#removeDuplicates = options.removeHistoryDuplicates || false;
     // Node also falls back to `context.historySize`, which only the REPL sets
@@ -89,7 +96,8 @@ export class History {
     }
 
     this.#index = -1;
-    const first = this.#history[0] as string;
+    const first = this.#history[0];
+    if (first === undefined) return line;
     const finalLine = isMultiline ? reverseString(first) : first;
 
     // Emitted so a listener can edit the array -- dropping an entry that turned
@@ -116,11 +124,15 @@ export class History {
     const search = substringSearch || "";
     let index = this.#index - 1;
 
-    while (
-      index >= 0 &&
-      (!(this.#history[index] as string).startsWith(search) ||
-        this.#context.line === this.#history[index])
-    ) {
+    while (index >= 0) {
+      const candidate = this.#history[index];
+      if (
+        candidate !== undefined &&
+        candidate.startsWith(search) &&
+        this.#context.line !== candidate
+      ) {
+        break;
+      }
       index--;
     }
 
@@ -128,7 +140,8 @@ export class History {
     // Past the newest entry is the search text itself, which is what the user
     // had typed before they started walking backwards.
     if (index === -1) return search;
-    return reverseString(this.#history[index] as string, "\r", "\n");
+    const next = this.#history[index];
+    return next === undefined ? search : reverseString(next, "\r", "\n");
   }
 
   canNavigateToPrevious(): boolean {
@@ -141,16 +154,21 @@ export class History {
     const search = substringSearch || "";
     let index = this.#index + 1;
 
-    while (
-      index < this.#history.length &&
-      (!(this.#history[index] as string).startsWith(search) ||
-        this.#context.line === this.#history[index])
-    ) {
+    while (index < this.#history.length) {
+      const candidate = this.#history[index];
+      if (
+        candidate !== undefined &&
+        candidate.startsWith(search) &&
+        this.#context.line !== candidate
+      ) {
+        break;
+      }
       index++;
     }
 
     this.#index = index;
     if (index === this.#history.length) return search;
-    return reverseString(this.#history[index] as string, "\r", "\n");
+    const previous = this.#history[index];
+    return previous === undefined ? search : reverseString(previous, "\r", "\n");
   }
 }

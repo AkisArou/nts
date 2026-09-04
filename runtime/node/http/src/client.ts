@@ -19,7 +19,6 @@ import { ERR_INVALID_ARG_TYPE } from "../../internal/errors.ts";
 import { HTTPParser, RESPONSE } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { OutgoingMessage } from "./outgoing.ts";
-import type { OutgoingSocket } from "./outgoing.ts";
 import { Agent, globalAgent } from "./agent.ts";
 
 export interface RequestOptions {
@@ -55,7 +54,6 @@ export class ClientRequest extends OutgoingMessage {
   /** The response, once its head has arrived. */
   res: IncomingMessage | null = null;
 
-  #parser: HTTPParser | null = null;
   #options: RequestOptions;
   #timeoutMs: number | undefined;
 
@@ -73,7 +71,7 @@ export class ClientRequest extends OutgoingMessage {
     this.port = Number(opts.port ?? 80);
     this.#timeoutMs = opts.timeout;
 
-    if (callback) this.once("response", callback as never);
+    if (callback) this.once("response", callback);
 
     // A client's request is chunked only if it says so; a GET with no body
     // must not carry a framing header at all, or a server will wait for one.
@@ -117,16 +115,59 @@ export class ClientRequest extends OutgoingMessage {
 
   /** Given a connection by the agent, or made one. Everything starts here. */
   onSocket(socket: Socket): void {
-    this.socket = socket as unknown as OutgoingSocket;
+    this.socket = socket;
 
     const parser = new HTTPParser();
     parser.initialize(RESPONSE, this.#options.maxHeaderSize);
-    this.#parser = parser;
 
     let response: IncomingMessage | null = null;
 
+    const onData = (chunk: Buffer): void => {
+      const consumed = parser.execute(chunk);
+      if (consumed < 0) {
+        const error = parser.error;
+        cleanupSocketListeners();
+        this.#fail(Object.assign(new Error(error?.reason ?? "Parse Error"), {
+          code: error?.code,
+          bytesParsed: error?.bytesParsed,
+        }));
+      }
+    };
+
+    const onEnd = (): void => {
+      // A response with no framing ends when the connection does, so the end
+      // of the socket is what completes the message.
+      if (parser.finish() < 0 && !response) {
+        cleanupSocketListeners();
+        this.#fail(new Error("socket hang up"));
+      }
+    };
+
+    const onError = (error: unknown): void => {
+      cleanupSocketListeners();
+      this.#fail(error);
+    };
+
+    const onClose = (): void => {
+      cleanupSocketListeners();
+      // The response parser is finished with the connection.
+      parser.free();
+      if (!this.res && !this.aborted) {
+        // The connection went before any response arrived, which is the one
+        // case a client cannot recover from on its own.
+        this.#fail(Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }));
+      }
+    };
+
+    const cleanupSocketListeners = (): void => {
+      socket.removeListener("data", onData);
+      socket.removeListener("end", onEnd);
+      socket.removeListener("error", onError);
+      socket.removeListener("close", onClose);
+    };
+
     parser.onHeadersComplete = (info) => {
-      const message = new IncomingMessage(socket as unknown as never);
+      const message = new IncomingMessage(socket);
       message.httpVersionMajor = info.versionMajor;
       message.httpVersionMinor = info.versionMinor;
       message.httpVersion = `${info.versionMajor}.${info.versionMinor}`;
@@ -170,39 +211,18 @@ export class ClientRequest extends OutgoingMessage {
       if (!response) return;
       response.complete = true;
       response.push(null);
+      // A client parser belongs to this request, not to a pooled socket. The
+      // socket may survive for another request, but this parser's async
+      // resource is finished as soon as the response is complete.
+      parser.free();
+      cleanupSocketListeners();
       this.#finishResponse(socket, response);
     };
 
-    socket.on("data", ((chunk: Buffer) => {
-      const consumed = parser.execute(chunk);
-      if (consumed < 0) {
-        const error = parser.error;
-        this.#fail(Object.assign(new Error(error?.reason ?? "Parse Error"), {
-          code: error?.code,
-          bytesParsed: error?.bytesParsed,
-        }));
-      }
-    }) as never);
-
-    socket.on("end", (() => {
-      // A response with no framing ends when the connection does, so the end
-      // of the socket is what completes the message.
-      if (parser.finish() < 0 && !response) {
-        this.#fail(new Error("socket hang up"));
-      }
-    }) as never);
-
-    socket.on("error", ((error: unknown) => this.#fail(error)) as never);
-
-    socket.on("close", (() => {
-      // The response parser is finished with the connection.
-      parser.free();
-      if (!this.res && !this.aborted) {
-        // The connection went before any response arrived, which is the one
-        // case a client cannot recover from on its own.
-        this.#fail(Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }));
-      }
-    }) as never);
+    socket.on("data", onData);
+    socket.on("end", onEnd);
+    socket.on("error", onError);
+    socket.on("close", onClose);
 
     if (this.#timeoutMs !== undefined) {
       socket.setTimeout(this.#timeoutMs, () => this.emit("timeout"));
@@ -245,21 +265,18 @@ export class ClientRequest extends OutgoingMessage {
 
   override setTimeout(msecs: number, callback?: () => void): this {
     this.#timeoutMs = msecs;
-    if (callback) this.once("timeout", callback as never);
-    const socket = this.socket as unknown as Socket | null;
-    socket?.setTimeout?.(msecs, () => this.emit("timeout"));
+    if (callback) this.once("timeout", callback);
+    this.socket?.setTimeout(msecs, () => this.emit("timeout"));
     return this;
   }
 
   /** Disable Nagle on the underlying socket once there is one. */
   setNoDelay(enable = true): void {
-    const socket = this.socket as unknown as Socket | null;
-    socket?.setNoDelay?.(enable);
+    this.socket?.setNoDelay(enable);
   }
 
   setSocketKeepAlive(enable = true, initialDelay = 0): void {
-    const socket = this.socket as unknown as Socket | null;
-    socket?.setKeepAlive?.(enable, initialDelay);
+    this.socket?.setKeepAlive(enable, initialDelay);
   }
 }
 

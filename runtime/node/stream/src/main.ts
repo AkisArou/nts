@@ -15,14 +15,13 @@ import { PassThrough } from "./passthrough.ts";
 // same name lives in `stream/promises`, and exporting that here instead --
 // which this did -- makes `finished(stream, cb)` silently ignore the callback
 // and hand back a promise nobody awaits.
-import { eos as finished } from "./end-of-stream.ts";
-import { addAbortSignal } from "./add-abort-signal.ts";
-import { destroyer } from "./destroy.ts";
-import { from } from "./from.ts";
-import { ERR_ILLEGAL_CONSTRUCTOR } from "../../internal/errors.ts";
-import { promiseReturningOperators, streamReturningOperators } from "./operators.ts";
+import { eos as finished, kSynchronousCallback } from "./end-of-stream.ts";
+import { addAbortSignal, addAbortSignalNoValidate } from "./add-abort-signal.ts";
+import { destroyer as destroy } from "./destroy.ts";
 import { pipeline, pipelineImpl } from "./pipeline.ts";
 import * as promises from "./promises.ts";
+import * as consumers from "./consumers.ts";
+import * as iter from "./iter/main.ts";
 // Imported for its side effect: it fills the hole `Duplex.from` calls
 // through, which it cannot do by being imported *by* `duplex.ts` without a
 // cycle.
@@ -30,10 +29,30 @@ import "./duplexify.ts";
 import { compose } from "./compose.ts";
 import { duplexPair } from "./duplexpair.ts";
 import { setCompose } from "./readable.ts";
+import { newDuplexFromWeb, newDuplexToWeb } from "./web-adapters.ts";
+import type {
+  DuplexFromWebOptions,
+  DuplexToWebOptions,
+  WebDuplexPair,
+} from "./web-adapters.ts";
 
 // `Readable.prototype.compose` calls through this, which `readable.ts` cannot
 // import directly: `compose` builds a `Duplex`, which extends `Readable`.
 setCompose(compose);
+
+export function duplexFromWeb(
+  pair: unknown,
+  options?: DuplexFromWebOptions,
+): Duplex {
+  return newDuplexFromWeb(Duplex, pair, options);
+}
+
+export function duplexToWeb(
+  duplex: unknown,
+  options?: DuplexToWebOptions,
+): WebDuplexPair {
+  return newDuplexToWeb(duplex, options);
+}
 import { getDefaultHighWaterMark, setDefaultHighWaterMark } from "./state.ts";
 import {
   isDestroyed,
@@ -42,55 +61,6 @@ import {
   isReadable,
   isWritable,
 } from "./utils.ts";
-
-// `Readable.from` lives on the class, but building it needs `Readable`, so it
-// is attached here rather than inside the class body.
-(Readable as unknown as { from: typeof from }).from = from;
-
-/**
- * The iterator helpers, installed on `Readable.prototype`.
- *
- * Here rather than in the class body because the two families are wrapped
- * differently and the wrapping needs `Readable.from`, which needs `Readable`.
- * A stream-returning operator produces an async generator, which is turned
- * back into a stream so that `.map(...).filter(...)` composes; a
- * promise-returning one is passed straight through.
- *
- * Each refuses `new`. They are methods, and `new stream.map(...)` is a mistake
- * with a confusing failure otherwise -- the generator would be constructed and
- * silently discarded.
- */
-for (const [name, op] of Object.entries(streamReturningOperators)) {
-  function wrapped(this: Readable, ...args: unknown[]): unknown {
-    if (new.target) throw new ERR_ILLEGAL_CONSTRUCTOR();
-    return (Readable as unknown as { from: typeof from }).from(
-      Reflect.apply(op, this, args) as never,
-    );
-  }
-  Object.defineProperty(wrapped, "name", { value: op.name });
-  Object.defineProperty(wrapped, "length", { value: op.length });
-  Object.defineProperty(Readable.prototype, name, {
-    value: wrapped,
-    enumerable: false,
-    configurable: true,
-    writable: true,
-  });
-}
-
-for (const [name, op] of Object.entries(promiseReturningOperators)) {
-  function wrapped(this: Readable, ...args: unknown[]): unknown {
-    if (new.target) throw new ERR_ILLEGAL_CONSTRUCTOR();
-    return Reflect.apply(op, this, args);
-  }
-  Object.defineProperty(wrapped, "name", { value: op.name });
-  Object.defineProperty(wrapped, "length", { value: op.length });
-  Object.defineProperty(Readable.prototype, name, {
-    value: wrapped,
-    enumerable: false,
-    configurable: true,
-    writable: true,
-  });
-}
 
 export {
   Stream,
@@ -103,10 +73,12 @@ export {
   pipeline,
   pipelineImpl,
   promises,
+  consumers,
+  iter,
   compose,
   duplexPair,
   addAbortSignal,
-  destroyer,
+  destroy,
   getDefaultHighWaterMark,
   setDefaultHighWaterMark,
   isDestroyed,
@@ -114,6 +86,8 @@ export {
   isErrored,
   isReadable,
   isWritable,
+  kSynchronousCallback,
+  addAbortSignalNoValidate,
 };
 
 export default Stream;

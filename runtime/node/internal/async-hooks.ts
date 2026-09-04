@@ -26,22 +26,10 @@
  * the right layer: this is the fatal path, and it should not depend on any
  * machinery that could itself be the thing that failed.
  */
-declare function nts_write_stderr(text: string): void;
+declare function nts_write_stderr(text: string): number;
 
 /** Stop the process. A hook that throws is not a recoverable condition. */
 declare function nts_process_really_exit(code: number): void;
-
-/**
- * Queue `callback` to run once the current stack unwinds.
- *
- * The binding directly rather than `internal/tick.ts`, for two reasons. The
- * layering one is that `nextTick` reports itself to the hooks here, so
- * depending on it would be circular. The semantic one is the same fact from
- * the other side: the destroy queue must not be an observable tick, or every
- * batch of `destroy` callbacks would announce itself as one more resource and
- * schedule another batch.
- */
-declare function nts_next_tick(callback: (...args: never) => void, args: unknown[]): void;
 
 /**
  * Watch promises being created, entered, left and settled.
@@ -71,27 +59,28 @@ declare function nts_promise_hook_uninstall(): void;
  */
 declare function nts_enqueue_microtask(callback: () => void): void;
 
+/** Schedule work in the host's check phase without keeping its loop alive. */
+declare function nts_schedule_unreferenced_immediate(callback: () => void): void;
+
 /** Report `resource` as collected, so a `destroy` hook can fire for it. */
 declare function nts_on_collected(resource: object, onCollected: () => void): void;
 
-// The ids a resource carries. Symbols rather than fields because they go onto
-// objects this module does not own -- promises, most of all.
-export const kAsyncId = Symbol("asyncId");
-export const kTriggerAsyncId = Symbol("triggerAsyncId");
+/** Identity retained for a VM-owned resource such as a promise. */
+interface ExternalAsyncIdentity {
+  asyncId: number;
+  triggerAsyncId: number;
+}
+
 /**
- * The asynchronous context a resource was created in.
+ * Metadata for objects this module does not own.
  *
- * Beside the ids because it is captured at the same moment and for the same
- * reason: what a resource must remember about where it came from.
+ * Node writes private Symbol properties onto promises and native handles. NTS
+ * objects have fixed fields and no dynamic property map, so the same lifetime
+ * relationship is represented directly: a weak association from the host
+ * object to a statically typed record. The association cannot keep a promise
+ * alive, which is the property the original Symbol slots relied on.
  */
-export const kContextFrame = Symbol("contextFrame");
-/**
- * The public face of an internal resource.
- *
- * A hook should be handed the `Socket`, not the handle inside it. Node calls
- * this `owner_symbol` and uses it for the same reason.
- */
-export const kResourceOwner = Symbol("owner");
+const externalAsyncIdentities = new WeakMap<object, ExternalAsyncIdentity>();
 
 export interface HookCallbacks {
   init?: ((asyncId: number, type: string, triggerAsyncId: number, resource: object) => void) | undefined;
@@ -140,14 +129,17 @@ export function getDefaultTriggerAsyncId(): number {
   return defaultTriggerAsyncId < 0 ? currentExecutionAsyncId : defaultTriggerAsyncId;
 }
 
-/** Give `object` an id, or return the one it already has. */
-export function getOrSetAsyncId(object: Record<symbol, unknown>): number {
-  if (Object.prototype.hasOwnProperty.call(object, kAsyncId)) {
-    return object[kAsyncId] as number;
-  }
-  const id = newAsyncId();
-  object[kAsyncId] = id;
-  return id;
+/** Give a VM-owned `object` an id, or return the one it already has. */
+export function getOrSetAsyncId(object: object): number {
+  const existing = externalAsyncIdentities.get(object);
+  if (existing !== undefined) return existing.asyncId;
+
+  const identity: ExternalAsyncIdentity = {
+    asyncId: newAsyncId(),
+    triggerAsyncId: getDefaultTriggerAsyncId(),
+  };
+  externalAsyncIdentities.set(object, identity);
+  return identity.asyncId;
 }
 
 /**
@@ -174,10 +166,31 @@ export function defaultTriggerAsyncIdScope<A extends unknown[], R>(
 
 // -- the execution stack ----------------------------------------------------
 
-/** The ids to restore when the current callback returns, innermost last. */
-const executionStack: { asyncId: number; triggerAsyncId: number }[] = [];
-/** The resource for each frame, so `executionAsyncResource()` can answer. */
-const executionResources: object[] = [];
+/**
+ * The execution stack, kept in fixed-capacity storage.
+ *
+ * This is entered for every asynchronous callback. Parallel primitive arrays
+ * avoid allocating a frame object on that hot path, while explicit doubling
+ * keeps ordinary arrays fixed-size for NTS instead of selecting the growable
+ * array representation for the whole program.
+ */
+let executionAsyncIds = new Float64Array(16);
+let executionTriggerIds = new Float64Array(16);
+let executionResources = new Array<object | undefined>(16);
+let executionDepth = 0;
+
+function growExecutionStack(): void {
+  const capacity = executionAsyncIds.length * 2;
+  const asyncIds = new Float64Array(capacity);
+  const triggerIds = new Float64Array(capacity);
+  const resources = new Array<object | undefined>(capacity);
+  asyncIds.set(executionAsyncIds);
+  triggerIds.set(executionTriggerIds);
+  for (let i = 0; i < executionDepth; i++) resources[i] = executionResources[i];
+  executionAsyncIds = asyncIds;
+  executionTriggerIds = triggerIds;
+  executionResources = resources;
+}
 
 /**
  * What `executionAsyncResource()` returns before anything asynchronous has
@@ -186,18 +199,21 @@ const executionResources: object[] = [];
 const topLevelResource: object = {};
 
 export function hasAsyncIdStack(): boolean {
-  return executionStack.length > 0;
+  return executionDepth > 0;
 }
 
 export function pushAsyncContext(asyncId: number, trigger: number, resource: object): void {
-  executionStack.push({ asyncId: currentExecutionAsyncId, triggerAsyncId: currentTriggerAsyncId });
-  executionResources.push(resource);
+  if (executionDepth === executionAsyncIds.length) growExecutionStack();
+  executionAsyncIds[executionDepth] = currentExecutionAsyncId;
+  executionTriggerIds[executionDepth] = currentTriggerAsyncId;
+  executionResources[executionDepth] = resource;
+  executionDepth += 1;
   currentExecutionAsyncId = asyncId;
   currentTriggerAsyncId = trigger;
 }
 
 export function popAsyncContext(asyncId: number): boolean {
-  if (executionStack.length === 0) return false;
+  if (executionDepth === 0) return false;
   // Node crashes the process when the id being popped is not the one on top,
   // because it means a `before` and an `after` have been paired wrongly and
   // every id from here on would be attributed to the wrong resource. Nothing
@@ -205,25 +221,22 @@ export function popAsyncContext(asyncId: number): boolean {
   // an `after` whose `before` it missed -- so the frame is left alone and the
   // caller is told nothing was popped.
   if (checkDepth > 0 && currentExecutionAsyncId !== asyncId) return false;
-  const frame = executionStack.pop() as { asyncId: number; triggerAsyncId: number };
-  executionResources.pop();
-  currentExecutionAsyncId = frame.asyncId;
-  currentTriggerAsyncId = frame.triggerAsyncId;
-  return executionStack.length > 0;
+  const index = executionDepth - 1;
+  const priorAsyncId = executionAsyncIds[index];
+  const priorTriggerAsyncId = executionTriggerIds[index];
+  if (priorAsyncId === undefined || priorTriggerAsyncId === undefined) return false;
+  executionResources[index] = undefined;
+  executionDepth = index;
+  currentExecutionAsyncId = priorAsyncId;
+  currentTriggerAsyncId = priorTriggerAsyncId;
+  return executionDepth > 0;
 }
 
 /** The resource whose callback is running, or the top-level stand-in. */
 export function executionAsyncResource(): object {
-  const index = executionResources.length - 1;
-  if (index === -1) return topLevelResource;
-  return publicResource(executionResources[index] as object);
-}
-
-/** An internal handle's public wrapper, if it has one. */
-function publicResource(resource: object): object {
-  if (typeof resource !== "object" || resource === null) return resource;
-  const owner = (resource as Record<symbol, unknown>)[kResourceOwner];
-  return owner === undefined ? resource : (owner as object);
+  if (executionDepth === 0) return topLevelResource;
+  const resource = executionResources[executionDepth - 1];
+  return resource === undefined ? topLevelResource : resource;
 }
 
 // -- the registry -----------------------------------------------------------
@@ -231,7 +244,7 @@ function publicResource(resource: object): object {
 const counts = { init: 0, before: 0, after: 0, destroy: 0, promiseResolve: 0 };
 type CountKey = keyof typeof counts;
 
-let hooks: RegisteredHook[] = [];
+let hooks = new Map<RegisteredHook, RegisteredHook>();
 
 /**
  * How deep we are inside hook callbacks.
@@ -243,15 +256,11 @@ let hooks: RegisteredHook[] = [];
  * during an emit are staged and applied when the outermost one returns.
  */
 let callDepth = 0;
-let stagedHooks: RegisteredHook[] | null = null;
+let stagedHooks: Map<RegisteredHook, RegisteredHook> | null = null;
 let stagedCounts: typeof counts | null = null;
 
 /** Non-zero while any hook is enabled; gates the `popAsyncContext` check. */
 let checkDepth = 0;
-
-function totalCount(): number {
-  return counts.init + counts.before + counts.after + counts.destroy + counts.promiseResolve;
-}
 
 function hasHooks(key: CountKey): boolean {
   return counts[key] > 0;
@@ -261,30 +270,38 @@ export function initHooksExist(): boolean { return hasHooks("init"); }
 export function afterHooksExist(): boolean { return hasHooks("after"); }
 export function destroyHooksExist(): boolean { return hasHooks("destroy"); }
 export function promiseResolveHooksExist(): boolean { return hasHooks("promiseResolve"); }
-export function enabledHooksExist(): boolean { return hooks.length > 0; }
+export function enabledHooksExist(): boolean { return hooks.size > 0; }
 
-/** The arrays a mutation should touch: the live ones, or the staged copies. */
-function mutableRegistry(): [RegisteredHook[], typeof counts] {
+/** The registry a mutation should touch: the live one, or the staged copy. */
+function mutableRegistry(): [Map<RegisteredHook, RegisteredHook>, typeof counts] {
   if (callDepth === 0) return [hooks, counts];
   if (stagedHooks === null) {
-    stagedHooks = hooks.slice();
+    stagedHooks = new Map(hooks);
     stagedCounts = { ...counts };
   }
-  return [stagedHooks, stagedCounts as typeof counts];
+  const fields = stagedCounts;
+  if (fields === null) return [hooks, counts];
+  return [stagedHooks, fields];
 }
 
 function applyStagedRegistry(): void {
   if (callDepth !== 0 || stagedHooks === null) return;
+  const fields = stagedCounts;
+  if (fields === null) return;
   hooks = stagedHooks;
-  Object.assign(counts, stagedCounts);
+  counts.init = fields.init;
+  counts.before = fields.before;
+  counts.after = fields.after;
+  counts.destroy = fields.destroy;
+  counts.promiseResolve = fields.promiseResolve;
   stagedHooks = null;
   stagedCounts = null;
 }
 
 /** Register `hook`. Adding one twice is not an error and not a second entry. */
 export function addHook(hook: RegisteredHook): boolean {
-  const [array, fields] = mutableRegistry();
-  if (array.includes(hook)) return false;
+  const [registry, fields] = mutableRegistry();
+  if (registry.has(hook)) return false;
 
   const before = fields.init + fields.before + fields.after + fields.destroy + fields.promiseResolve;
   if (hook.init) fields.init++;
@@ -292,7 +309,7 @@ export function addHook(hook: RegisteredHook): boolean {
   if (hook.after) fields.after++;
   if (hook.destroy) fields.destroy++;
   if (hook.promiseResolve) fields.promiseResolve++;
-  array.push(hook);
+  registry.set(hook, hook);
 
   const after = fields.init + fields.before + fields.after + fields.destroy + fields.promiseResolve;
   if (before === 0 && after > 0) checkDepth += 1;
@@ -301,9 +318,8 @@ export function addHook(hook: RegisteredHook): boolean {
 }
 
 export function removeHook(hook: RegisteredHook): boolean {
-  const [array, fields] = mutableRegistry();
-  const index = array.indexOf(hook);
-  if (index === -1) return false;
+  const [registry, fields] = mutableRegistry();
+  if (!registry.has(hook)) return false;
 
   const before = fields.init + fields.before + fields.after + fields.destroy + fields.promiseResolve;
   if (hook.init) fields.init--;
@@ -311,7 +327,7 @@ export function removeHook(hook: RegisteredHook): boolean {
   if (hook.after) fields.after--;
   if (hook.destroy) fields.destroy--;
   if (hook.promiseResolve) fields.promiseResolve--;
-  array.splice(index, 1);
+  registry.delete(hook);
 
   const after = fields.init + fields.before + fields.after + fields.destroy + fields.promiseResolve;
   if (before > 0 && after === 0) {
@@ -334,8 +350,21 @@ export function removeHook(hook: RegisteredHook): boolean {
  * and exits, and so does this.
  */
 function fatalError(error: unknown): void {
-  const stack = (error as { stack?: unknown } | null | undefined)?.stack;
-  nts_write_stderr(`${typeof stack === "string" ? stack : String(error)}\n`);
+  let stack: string | undefined;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "stack" in error &&
+    typeof error.stack === "string"
+  ) {
+    stack = error.stack;
+  }
+  // Node wraps a non-Error throw in an Error-shaped diagnostic.  In
+  // particular, hooks that throw `null` or a symbol print `Error: null` and
+  // `Error: Symbol(...)`, rather than printing the bare value as an ordinary
+  // uncaught throw would.
+  const diagnostic = typeof stack === "string" ? stack : `Error: ${String(error)}`;
+  nts_write_stderr(`${diagnostic}\n`);
   nts_process_really_exit(1);
 }
 
@@ -343,8 +372,7 @@ function fatalError(error: unknown): void {
 function emit(kind: Exclude<CountKey, "init">, asyncId: number, fromPromise: boolean): void {
   callDepth += 1;
   try {
-    for (let i = 0; i < hooks.length; i++) {
-      const hook = hooks[i] as RegisteredHook;
+    for (const hook of hooks.values()) {
       const fn = hook[kind];
       if (typeof fn !== "function") continue;
       if (fromPromise && hook.noPromiseHook) continue;
@@ -369,13 +397,11 @@ export function emitInit(
   const triggerId = trigger === null ? getDefaultTriggerAsyncId() : trigger;
 
   callDepth += 1;
-  const shown = publicResource(resource);
   try {
-    for (let i = 0; i < hooks.length; i++) {
-      const hook = hooks[i] as RegisteredHook;
+    for (const hook of hooks.values()) {
       if (typeof hook.init !== "function") continue;
       if (fromPromise && hook.noPromiseHook) continue;
-      hook.init(asyncId, type, triggerId, shown);
+      hook.init(asyncId, type, triggerId, resource);
     }
   } catch (error) {
     fatalError(error);
@@ -422,15 +448,33 @@ export function emitPromiseResolve(asyncId: number): void {
  * Node drains them from its own phase; this drains them from a tick, which is
  * the same guarantee: after the current operation, before any I/O.
  */
-const destroyQueue: number[] = [];
+let destroyQueue = new Float64Array(16);
+let destroyQueueLength = 0;
 let destroyScheduled = false;
+const destroyMicrotaskThreshold = 16_384;
+
+function growDestroyQueue(): void {
+  const next = new Float64Array(destroyQueue.length * 2);
+  next.set(destroyQueue);
+  destroyQueue = next;
+}
 
 export function emitDestroy(asyncId: number): void {
   if (!hasHooks("destroy") || !(asyncId > 0)) return;
-  destroyQueue.push(asyncId);
-  if (destroyScheduled) return;
-  destroyScheduled = true;
-  nts_next_tick(drainDestroyQueue as (...a: never) => void, []);
+  if (!destroyScheduled) {
+    destroyScheduled = true;
+    nts_schedule_unreferenced_immediate(drainDestroyQueue);
+  }
+  // Node asks the VM for an interrupt at this threshold so a producer cannot
+  // grow the queue without bound before the check phase. We are already on
+  // the owner thread, so directly enqueueing the resulting microtask has the
+  // same ordering and avoids an interrupt round trip.
+  if (destroyQueueLength === destroyMicrotaskThreshold) {
+    nts_enqueue_microtask(drainDestroyQueue);
+  }
+  if (destroyQueueLength === destroyQueue.length) growDestroyQueue();
+  destroyQueue[destroyQueueLength] = asyncId;
+  destroyQueueLength += 1;
 }
 
 function drainDestroyQueue(): void {
@@ -438,10 +482,11 @@ function drainDestroyQueue(): void {
   // Length read each time round rather than cached: a `destroy` hook that
   // destroys something else adds to this queue, and node runs those in the
   // same drain rather than deferring them to another tick.
-  for (let i = 0; i < destroyQueue.length; i++) {
-    emit("destroy", destroyQueue[i] as number, false);
+  for (let i = 0; i < destroyQueueLength; i++) {
+    const asyncId = destroyQueue[i];
+    if (asyncId !== undefined) emit("destroy", asyncId, false);
   }
-  destroyQueue.length = 0;
+  destroyQueueLength = 0;
 }
 
 /**
@@ -471,48 +516,49 @@ let wantPromiseHook = false;
 let promiseHookInstalled = false;
 
 /** Give a promise its ids, if it has not been seen before. */
-function trackPromise(promise: object, parent?: object): void {
-  const carrier = promise as Record<symbol, unknown>;
-  if (carrier[kAsyncId]) return;
+function trackPromise(promise: object, parent?: object): ExternalAsyncIdentity {
+  const existing = externalAsyncIdentities.get(promise);
+  if (existing !== undefined) return existing;
   // The parent's id is taken first so that, if it too is new, it gets the
   // lower number. A child that appeared to predate its parent would make any
   // ordering a hook derives from the ids wrong.
-  const trigger = parent
-    ? getOrSetAsyncId(parent as Record<symbol, unknown>)
+  const trigger = parent !== undefined
+    ? getOrSetAsyncId(parent)
     : getDefaultTriggerAsyncId();
-  carrier[kAsyncId] = newAsyncId();
-  carrier[kTriggerAsyncId] = trigger;
+  const identity: ExternalAsyncIdentity = {
+    asyncId: newAsyncId(),
+    triggerAsyncId: trigger,
+  };
+  externalAsyncIdentities.set(promise, identity);
+  return identity;
 }
 
 function promiseInit(promise: object, parent: object | undefined): void {
-  trackPromise(promise, parent);
-  const carrier = promise as Record<symbol, unknown>;
+  const identity = trackPromise(promise, parent);
   emitInit(
-    carrier[kAsyncId] as number,
+    identity.asyncId,
     "PROMISE",
-    carrier[kTriggerAsyncId] as number,
+    identity.triggerAsyncId,
     promise,
     true,
   );
   if (destroyHooksExist()) {
-    registerDestroyHook(promise, carrier[kAsyncId] as number);
+    registerDestroyHook(promise, identity.asyncId);
   }
 }
 
 function promiseDestroyTracking(promise: object, parent: object | undefined): void {
-  trackPromise(promise, parent);
-  registerDestroyHook(promise, (promise as Record<symbol, unknown>)[kAsyncId] as number);
+  const identity = trackPromise(promise, parent);
+  registerDestroyHook(promise, identity.asyncId);
 }
 
 function promiseBefore(promise: object): void {
-  trackPromise(promise);
-  const carrier = promise as Record<symbol, unknown>;
-  emitBefore(carrier[kAsyncId] as number, carrier[kTriggerAsyncId] as number, promise, true);
+  const identity = trackPromise(promise);
+  emitBefore(identity.asyncId, identity.triggerAsyncId, promise, true);
 }
 
 function promiseAfter(promise: object): void {
-  trackPromise(promise);
-  const asyncId = (promise as Record<symbol, unknown>)[kAsyncId] as number;
+  const asyncId = trackPromise(promise).asyncId;
   if (hasHooks("after")) emit("after", asyncId, true);
   // Only pop what we pushed. Hooks enabled *during* a promise's callback see
   // this `after` without having seen the matching `before`, and popping then
@@ -521,8 +567,7 @@ function promiseAfter(promise: object): void {
 }
 
 function promiseSettled(promise: object): void {
-  trackPromise(promise);
-  emitPromiseResolve((promise as Record<symbol, unknown>)[kAsyncId] as number);
+  emitPromiseResolve(trackPromise(promise).asyncId);
 }
 
 /**

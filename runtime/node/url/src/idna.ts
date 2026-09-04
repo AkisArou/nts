@@ -22,7 +22,7 @@
 // the Web Platform Tests corpus, which this passes in full -- 891 of 891 --
 // so the gap is real but unmeasured rather than known to be empty.
 
-import { toASCII as punycodeToASCII, toUnicode as punycodeToUnicode } from "../../punycode/src/main.ts";
+import { toASCII as punycodeToASCII, toUnicode as punycodeToUnicode } from "../../punycode/src/codec.ts";
 
 /**
  * Characters UTS-46 removes rather than maps.
@@ -65,7 +65,7 @@ function isDisallowed(c: number): boolean {
 function map(domain: string): string | null {
   let out = "";
   for (const ch of domain) {
-    const c = ch.codePointAt(0)!;
+    const c = ch.codePointAt(0) ?? 0;
     if (IGNORED.has(c)) continue;
     if (isDisallowed(c)) return null;
     out += ch;

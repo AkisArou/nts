@@ -17,7 +17,10 @@ import type { ServerOptions as NetServerOptions } from "../../net/src/main.ts";
 import { HTTPParser, REQUEST, methods } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { ServerResponse } from "./outgoing.ts";
-import type { OutgoingSocket } from "./outgoing.ts";
+import { clearInterval, setInterval } from "../../timers/src/main.ts";
+import type { Timeout } from "../../timers/src/main.ts";
+import { validateInteger, validateObject } from "../../internal/validators.ts";
+import { ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
 
 export interface HttpServerOptions extends NetServerOptions {
   /** How long a connection may sit idle between requests. */
@@ -25,6 +28,7 @@ export interface HttpServerOptions extends NetServerOptions {
   /** How long the head of a request may take to arrive. */
   headersTimeout?: number | undefined;
   requestTimeout?: number | undefined;
+  connectionsCheckingInterval?: number | undefined;
   maxHeaderSize?: number | undefined;
   IncomingMessage?: typeof IncomingMessage | undefined;
   ServerResponse?: typeof ServerResponse | undefined;
@@ -34,6 +38,23 @@ export type RequestListener = (
   request: IncomingMessage,
   response: ServerResponse,
 ) => void;
+
+interface ConnectionDeadline {
+  socket: Socket;
+  headersStartedAt: number;
+  requestStartedAt: number;
+  headersComplete: boolean;
+  requestComplete: boolean;
+}
+
+class HTTPRequestTimeoutError extends Error {
+  code = "ERR_HTTP_REQUEST_TIMEOUT";
+
+  constructor() {
+    super("Request timeout");
+    this.name = "Error";
+  }
+}
 
 export class Server extends NetServer {
   /**
@@ -46,6 +67,7 @@ export class Server extends NetServer {
   keepAliveTimeout = 5000;
   headersTimeout = 60000;
   requestTimeout = 300000;
+  connectionsCheckingInterval = 30000;
   maxHeadersCount: number | null = null;
   maxRequestsPerSocket = 0;
 
@@ -69,48 +91,124 @@ export class Server extends NetServer {
    * again, which is the state a graceful shutdown is allowed to end.
    */
   #idle = new Set<Socket>();
+  #deadlines = new Map<Socket, ConnectionDeadline>();
 
   #maxHeaderSize: number;
   #IncomingMessage: typeof IncomingMessage;
   #ServerResponse: typeof ServerResponse;
+  #connectionsChecker: Timeout | undefined;
 
   constructor(options?: HttpServerOptions | RequestListener, listener?: RequestListener) {
     let opts: HttpServerOptions = {};
     let handler = listener;
     if (typeof options === "function") {
       handler = options;
-    } else if (options) {
+    } else if (options != null) {
+      validateObject(options, "options");
       opts = options;
     }
 
     super(opts);
 
-    this.#maxHeaderSize = opts.maxHeaderSize ?? 80 * 1024;
+    const requestTimeout = opts.requestTimeout ?? 300000;
+    const headersTimeout = opts.headersTimeout ?? Math.min(60000, requestTimeout);
+    const keepAliveTimeout = opts.keepAliveTimeout ?? 5000;
+    const connectionsCheckingInterval = opts.connectionsCheckingInterval ?? 30000;
+    const maxHeaderSize = opts.maxHeaderSize ?? 80 * 1024;
+    validateInteger(requestTimeout, "requestTimeout", 0);
+    validateInteger(headersTimeout, "headersTimeout", 0);
+    validateInteger(keepAliveTimeout, "keepAliveTimeout", 0);
+    validateInteger(connectionsCheckingInterval, "connectionsCheckingInterval", 0);
+    validateInteger(maxHeaderSize, "maxHeaderSize", 0);
+    if (requestTimeout > 0 && headersTimeout > requestTimeout) {
+      throw new ERR_OUT_OF_RANGE("headersTimeout", "<= requestTimeout", headersTimeout);
+    }
+
+    this.#maxHeaderSize = maxHeaderSize;
     this.#IncomingMessage = opts.IncomingMessage ?? IncomingMessage;
     this.#ServerResponse = opts.ServerResponse ?? ServerResponse;
-    if (opts.keepAliveTimeout !== undefined) this.keepAliveTimeout = opts.keepAliveTimeout;
-    if (opts.headersTimeout !== undefined) this.headersTimeout = opts.headersTimeout;
-    if (opts.requestTimeout !== undefined) this.requestTimeout = opts.requestTimeout;
+    this.keepAliveTimeout = keepAliveTimeout;
+    this.headersTimeout = headersTimeout;
+    this.requestTimeout = requestTimeout;
+    this.connectionsCheckingInterval = connectionsCheckingInterval;
 
-    if (handler) this.on("request", handler as never);
-    this.on("connection", ((socket: Socket) => this.#serve(socket)) as never);
+    if (handler) this.on("request", handler);
+    this.on("connection", (socket: Socket) => this.#serve(socket));
+    this.on("listening", () => this.#startConnectionsChecker());
+  }
+
+  #startConnectionsChecker(): void {
+    if (this.#connectionsChecker !== undefined) {
+      clearInterval(this.#connectionsChecker);
+    }
+    this.#connectionsChecker = setInterval(
+      () => this.#checkConnections(),
+      this.connectionsCheckingInterval,
+    );
+    this.#connectionsChecker.unref();
+  }
+
+  #checkConnections(): void {
+    const headersTimeout = Number.isFinite(this.headersTimeout) && this.headersTimeout >= 0
+      ? this.headersTimeout
+      : 0;
+    const requestTimeout = Number.isFinite(this.requestTimeout) && this.requestTimeout >= 0
+      ? this.requestTimeout
+      : 0;
+    if (headersTimeout === 0 && requestTimeout === 0) return;
+
+    const now = Date.now();
+    for (const deadline of this.#deadlines.values()) {
+      const headersExpired = !deadline.headersComplete && headersTimeout > 0 &&
+        now - deadline.headersStartedAt >= headersTimeout;
+      const requestExpired = !deadline.requestComplete && requestTimeout > 0 &&
+        now - deadline.requestStartedAt >= requestTimeout;
+      if (!headersExpired && !requestExpired) continue;
+
+      const error = new HTTPRequestTimeoutError();
+      if (!this.emit("clientError", error, deadline.socket)) {
+        deadline.socket.end("HTTP/1.1 408 Request Timeout\r\nConnection: close\r\n\r\n");
+      }
+      this.#deadlines.delete(deadline.socket);
+    }
+  }
+
+  #beginRequest(deadline: ConnectionDeadline): void {
+    const now = Date.now();
+    deadline.headersStartedAt = now;
+    deadline.requestStartedAt = now;
+    deadline.headersComplete = false;
+    deadline.requestComplete = false;
   }
 
   #serve(socket: Socket): void {
     this.#connections.add(socket);
 
+    const now = Date.now();
+    const deadline: ConnectionDeadline = {
+      socket,
+      headersStartedAt: now,
+      requestStartedAt: now,
+      headersComplete: false,
+      requestComplete: false,
+    };
+    this.#deadlines.set(socket, deadline);
 
     const parser = new HTTPParser();
-    parser.initialize(REQUEST, this.#maxHeaderSize);
+    // The parser is work performed by this accepted connection, not by the
+    // listener that happened to accept it. Node passes the socket resource to
+    // its native parser for exactly this trigger relationship.
+    parser.initialize(REQUEST, this.#maxHeaderSize, socket.asyncId());
 
-    socket.once("close", (() => {
+    socket.once("close", () => {
       this.#connections.delete(socket);
       this.#idle.delete(socket);
+      this.#deadlines.delete(socket);
       // The parser belongs to the connection, not to a message: on a
       // keep-alive socket it survives between requests, so the connection
       // ending is the only moment it is finished.
       parser.free();
-    }) as never);
+    });
 
     let incoming: IncomingMessage | null = null;
     let response: ServerResponse | null = null;
@@ -136,6 +234,7 @@ export class Server extends NetServer {
           view = view.subarray(consumed);
           if (incoming?.complete) {
             parser.continueAfterMessage();
+            this.#beginRequest(deadline);
             continue;
           }
           pending = Buffer.from(view);
@@ -145,7 +244,8 @@ export class Server extends NetServer {
     };
 
     parser.onHeadersComplete = (info) => {
-      const message = new this.#IncomingMessage(socket as unknown as never);
+      deadline.headersComplete = true;
+      const message = new this.#IncomingMessage(socket);
       message.httpVersionMajor = info.versionMajor;
       message.httpVersionMinor = info.versionMinor;
       message.httpVersion = `${info.versionMajor}.${info.versionMinor}`;
@@ -158,7 +258,7 @@ export class Server extends NetServer {
 
       incoming = message;
       response = new this.#ServerResponse(message);
-      response.socket = socket as unknown as OutgoingSocket;
+      response.socket = socket;
       response.shouldKeepAlive = info.shouldKeepAlive;
 
       // A request has arrived, so this connection matters again until it is
@@ -167,7 +267,10 @@ export class Server extends NetServer {
       this.#idle.delete(socket);
 
       const finished = response;
-      finished.once("finish", (() => this.#afterResponse(socket, parser, message, finished)) as never);
+      finished.once(
+        "finish",
+        () => this.#afterResponse(socket, parser, deadline, message, finished),
+      );
 
       // A client that said `Expect: 100-continue` is waiting for permission
       // before it sends the body. Node emits an event if anyone is listening
@@ -193,21 +296,22 @@ export class Server extends NetServer {
 
     parser.onMessageComplete = () => {
       if (!incoming) return;
+      deadline.requestComplete = true;
       incoming.complete = true;
       incoming.push(null);
     };
 
-    socket.on("data", ((chunk: Buffer) => feed(chunk)) as never);
+    socket.on("data", (chunk: Buffer) => feed(chunk));
 
-    socket.on("end", (() => {
+    socket.on("end", () => {
       if (parser.finish() < 0) socket.destroy();
-    }) as never);
+    });
 
-    socket.on("error", ((error: unknown) => {
+    socket.on("error", (error: unknown) => {
       // A socket error with no request in flight is a client that went away,
       // which is ordinary and not the program's business.
       if (incoming) incoming.destroy(error);
-    }) as never);
+    });
 
     void pending;
   }
@@ -223,23 +327,35 @@ export class Server extends NetServer {
   #afterResponse(
     socket: Socket,
     parser: HTTPParser,
+    deadline: ConnectionDeadline,
     message: IncomingMessage,
     response: ServerResponse,
   ): void {
+    // Node's `resOnFinish`: a handler that never read its request has handed
+    // ownership of the body back to the server.  Drain it so an ignored body
+    // cannot become the next request on this connection, and so an already
+    // complete empty body still advances through `end` and `close`.
+    if (!message._consuming && !message._readableState.resumeScheduled) {
+      message._dump();
+    }
+
     if (!response.shouldKeepAlive || !message.keepAlive) {
       socket.end();
       return;
     }
 
     if (!message.complete) {
-      // The request body was not read to the end. There is no safe way to
-      // reuse the connection, because what is left of it is indistinguishable
-      // from the next request.
-      socket.destroy();
+      // `_dump()` resumed the source, but the parser has not reached the end
+      // yet.  Reuse is safe only after the readable has drained that body.
+      message.once(
+        "end",
+        () => this.#afterResponse(socket, parser, deadline, message, response),
+      );
       return;
     }
 
     parser.continueAfterMessage();
+    this.#beginRequest(deadline);
     socket.resume();
 
     // Idle now: usable if the client sends another request, but not a reason
@@ -280,6 +396,7 @@ export class Server extends NetServer {
     for (const socket of this.#connections) socket.destroy();
     this.#connections.clear();
     this.#idle.clear();
+    this.#deadlines.clear();
   }
 
   /**
@@ -291,6 +408,10 @@ export class Server extends NetServer {
    * servers that keep-alive is for, never finish.
    */
   override close(callback?: (error?: unknown) => void): this {
+    if (this.#connectionsChecker !== undefined) {
+      clearInterval(this.#connectionsChecker);
+      this.#connectionsChecker = undefined;
+    }
     super.close(callback);
     this.closeIdleConnections();
     return this;

@@ -13,9 +13,12 @@
 
 import {
   ERR_BUFFER_OUT_OF_BOUNDS,
+  ERR_INVALID_BUFFER_SIZE,
   ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_ARG_VALUE,
   ERR_INVALID_STATE,
   ERR_OUT_OF_RANGE,
+  ERR_UNKNOWN_ENCODING,
 } from "../../internal/errors.ts";
 import {
   byteLengthIn,
@@ -25,6 +28,8 @@ import {
   writeIn,
   type Encoding,
 } from "./encodings.ts";
+import { validateInteger } from "../../internal/validators.ts";
+import { emitWarning } from "../../internal/process-warning.ts";
 
 export { isEncodingName as isEncoding };
 
@@ -40,20 +45,39 @@ export { isEncodingName as isEncoding };
 export const kMaxLength = 2 ** 53 - 1;
 export const kStringMaxLength = 536870888;
 export const constants = { MAX_LENGTH: kMaxLength, MAX_STRING_LENGTH: kStringMaxLength };
+/** How many bytes `inspect` shows before it says how many are left. */
+export const INSPECT_MAX_BYTES = 50;
 
-function checkEncoding(encoding: string | undefined): Encoding {
-  const normalized = normalizeEncoding(encoding);
-  if (normalized === undefined) {
+function checkEncoding(encoding: unknown): Encoding {
+  if (encoding === undefined) {
+    return "utf8";
+  }
+  if (typeof encoding !== "string") {
     throw new ERR_INVALID_ARG_TYPE("encoding", "string", encoding);
   }
+  const normalized = normalizeEncoding(encoding);
+  if (normalized === undefined) {
+    throw new ERR_UNKNOWN_ENCODING(encoding);
+  }
   return normalized;
+}
+
+/** `Buffer.byteLength` alone treats an unknown spelling as UTF-8. */
+function byteLengthEncoding(encoding: unknown): Encoding {
+  if (encoding === undefined || encoding === "") return "utf8";
+  if (typeof encoding !== "string") {
+    throw new ERR_INVALID_ARG_TYPE("encoding", "string", encoding);
+  }
+  return normalizeEncoding(encoding) ?? "utf8";
 }
 
 function checkSize(size: unknown): number {
   if (typeof size !== "number") {
     throw new ERR_INVALID_ARG_TYPE("size", "number", size);
   }
-  if (!Number.isInteger(size) || size < 0 || size > kMaxLength) {
+  // Typed-array construction performs ToLength, so finite fractional sizes
+  // are truncated (for example 3.3 becomes 3), matching Node.
+  if (Number.isNaN(size) || size < 0 || size > kMaxLength) {
     throw new ERR_OUT_OF_RANGE("size", `>= 0 && <= ${kMaxLength}`, size);
   }
   return size;
@@ -66,14 +90,64 @@ function checkSize(size: unknown): number {
  * than a documented convention.
  */
 /** An index into a buffer of `length` bytes, inclusive of the end. */
-function checkRange(value: number, name: string, length: number): number {
-  if (typeof value !== "number") {
-    throw new ERR_INVALID_ARG_TYPE(name, "number", value);
-  }
-  if (value < 0 || value > length) {
-    throw new ERR_OUT_OF_RANGE(name, `>= 0 && <= ${length}`, value);
-  }
+function checkOffset(value: unknown, name: string, max = kMaxLength): number {
+  validateInteger(value, name, 0, max);
   return value;
+}
+
+/** Node's numeric normalization for the optional indices accepted by copy. */
+function copyInteger(value: number, fallback: number): number {
+  if (Number.isInteger(value)) return value;
+  if (Number.isFinite(value) && Number.isSafeInteger(Math.floor(value))) {
+    return Math.floor(value);
+  }
+  return fallback;
+}
+
+/** Primitive-only numeric conversion; intentionally never invokes object hooks. */
+function primitiveNumber(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" || typeof value === "boolean") return Number(value);
+  if (value === null) return 0;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return 0;
+    if (
+      value.length === 1 &&
+      (typeof value[0] === "number" || typeof value[0] === "string")
+    ) {
+      return Number(value[0]);
+    }
+  }
+  return Number.NaN;
+}
+
+function stringSliceIndex(value: unknown, fallback: number, length: number): number {
+  if (value === undefined) return fallback;
+  const numeric = primitiveNumber(value);
+  if (Number.isNaN(numeric)) return 0;
+  if (numeric <= 0) return 0;
+  if (numeric >= length) return length;
+  return Math.trunc(numeric);
+}
+
+function rawStringWrite(
+  target: Uint8Array,
+  value: unknown,
+  offset: unknown,
+  length: unknown,
+  encoding: Encoding,
+): number {
+  if (typeof value !== "string") {
+    throw new ERR_INVALID_ARG_TYPE("string", "string", value);
+  }
+  if (
+    typeof offset !== "number" || typeof length !== "number" ||
+    !Number.isInteger(offset) || !Number.isInteger(length) ||
+    offset < 0 || length < 0 || offset + length > target.length
+  ) {
+    throw new ERR_BUFFER_OUT_OF_BOUNDS();
+  }
+  return writeIn(target, value, offset, length, encoding);
 }
 
 /** A `Buffer` or a plain `Uint8Array`; the methods do not distinguish them. */
@@ -91,30 +165,56 @@ function checkRange(value: number, name: string, length: number): number {
  * The second is `{ type: "Buffer", data: [...] }`, which is what `toJSON`
  * produces, so a buffer survives `JSON.parse(JSON.stringify(buf))`.
  */
+interface UnknownArrayLike {
+  readonly length: unknown;
+  readonly [index: number]: unknown;
+}
+
+/** The byte-addressable common shape of typed arrays, excluding DataView. */
+interface TypedArrayView extends ArrayBufferView<ArrayBuffer> {
+  readonly length: number;
+  readonly BYTES_PER_ELEMENT: number;
+}
+
+function isTypedArrayView(value: unknown): value is TypedArrayView {
+  return ArrayBuffer.isView(value) &&
+    !(value instanceof DataView) &&
+    value.buffer instanceof ArrayBuffer &&
+    "length" in value && typeof value.length === "number" &&
+    "BYTES_PER_ELEMENT" in value && typeof value.BYTES_PER_ELEMENT === "number";
+}
+
+function hasArrayLikeShape(value: object): value is UnknownArrayLike {
+  return "length" in value;
+}
+
 function objectToBuffer(value: object): Buffer | undefined {
-  const candidate = value as { length?: unknown; buffer?: unknown; type?: unknown; data?: unknown };
-  if (candidate.length !== undefined || isAnyArrayBufferValue(candidate.buffer)) {
-    if (typeof candidate.length !== "number") {
-      return new Buffer(0);
-    }
-    return fromArrayLike(value as ArrayLike<number>);
+  if (ArrayBuffer.isView(value)) {
+    if (value instanceof DataView) return new Buffer(0);
+    if (!hasArrayLikeShape(value)) return new Buffer(0);
+    return fromArrayLike(value);
   }
-  if (candidate.type === "Buffer" && Array.isArray(candidate.data)) {
-    return fromArrayLike(candidate.data as ArrayLike<number>);
+  if (hasArrayLikeShape(value)) {
+    return fromArrayLike(value);
+  }
+  if (
+    "type" in value && value.type === "Buffer" &&
+    "data" in value && Array.isArray(value.data)
+  ) {
+    return fromArrayLike(value.data);
   }
   return undefined;
 }
 
-function isAnyArrayBufferValue(value: unknown): boolean {
-  return value instanceof ArrayBuffer || value instanceof SharedArrayBuffer;
-}
-
 /** One byte per element, truncating each. Not the memory a view sits on. */
-function fromArrayLike(source: ArrayLike<number>): Buffer {
+function fromArrayLike(source: UnknownArrayLike): Buffer {
+  if (typeof source.length !== "number") return new Buffer(0);
   const size = source.length;
   const buf = new Buffer(size >= 0 ? size : 0);
   for (let i = 0; i < buf.length; i++) {
-    buf[i] = source[i]! & 0xff;
+    // The compiled language has no Symbol.toPrimitive/valueOf hook. Keep the
+    // JavaScript boundary on the same primitive-only conversion path as fill.
+    buf[i] = primitiveNumber(source[i]) & 0xff;
   }
   return buf;
 }
@@ -122,6 +222,16 @@ function fromArrayLike(source: ArrayLike<number>): Buffer {
 function checkBytes(value: unknown, name: string): asserts value is Uint8Array {
   if (!(value instanceof Uint8Array)) {
     throw new ERR_INVALID_ARG_TYPE(name, ["Buffer", "Uint8Array"], value);
+  }
+}
+
+function checkBufferList(value: unknown): asserts value is readonly Uint8Array[] {
+  if (!Array.isArray(value)) {
+    throw new ERR_INVALID_ARG_TYPE("list", "Array", value);
+  }
+  for (let i = 0; i < value.length; i++) {
+    const item: unknown = value[i];
+    checkBytes(item, `list[${i}]`);
   }
 }
 
@@ -139,17 +249,75 @@ function checkBytes(value: unknown, name: string): asserts value is Uint8Array {
  * `type` names the argument; without one it is an offset, whose range starts
  * at 0 where a `byteLength`'s starts at 1.
  */
-function boundsError(value: number, length: number, type?: string): never {
+function boundsError(value: unknown, length: number, type?: string): never {
+  if (typeof value !== "number") {
+    throw new ERR_INVALID_ARG_TYPE(type ?? "offset", "number", value);
+  }
   if (Math.floor(value) !== value) {
-    if (typeof value !== "number") {
-      throw new ERR_INVALID_ARG_TYPE(type ?? "offset", "number", value);
-    }
     throw new ERR_OUT_OF_RANGE(type ?? "offset", "an integer", value);
   }
   if (length < 0) {
     throw new ERR_BUFFER_OUT_OF_BOUNDS();
   }
   throw new ERR_OUT_OF_RANGE(type ?? "offset", `>= ${type ? 1 : 0} and <= ${length}`, value);
+}
+
+/** Check that `size` bytes are readable at `offset`, and return the offset. */
+function checkedOffset(bytes: Uint8Array, offset: unknown, size: number): number {
+  const last = bytes.length - size;
+  if (
+    typeof offset === "number" &&
+    offset >= 0 && offset <= last && Number.isInteger(offset)
+  ) {
+    return offset;
+  }
+  boundsError(offset, last);
+}
+
+/** Validate a fixed-width integer write and return its checked offset. */
+function checkedIntegerWrite(
+  bytes: Uint8Array,
+  value: unknown,
+  min: number,
+  max: number,
+  offset: unknown,
+  size: number,
+): number {
+  if (typeof value !== "number") {
+    throw new ERR_INVALID_ARG_TYPE("value", "number", value);
+  }
+  if (value > max || value < min) {
+    let range: string;
+    if (size > 4) {
+      range = min === 0
+        ? `>= 0 and < 2 ** ${size * 8}`
+        : `>= -(2 ** ${size * 8 - 1}) and < 2 ** ${size * 8 - 1}`;
+    } else {
+      range = `>= ${min} and <= ${max}`;
+    }
+    throw new ERR_OUT_OF_RANGE("value", range, value);
+  }
+  return checkedOffset(bytes, offset, size);
+}
+
+/** Validate a 64-bit integer write and return its checked offset. */
+function checkedBigIntWrite(
+  bytes: Uint8Array,
+  value: unknown,
+  min: bigint,
+  max: bigint,
+  offset: unknown,
+): number {
+  if (typeof value !== "bigint") {
+    throw new ERR_INVALID_ARG_TYPE("value", "bigint", value);
+  }
+  if (value > max || value < min) {
+    const range = min === 0n
+      ? ">= 0n and < 2n ** 64n"
+      : ">= -(2n ** 63n) and < 2n ** 63n";
+    throw new ERR_OUT_OF_RANGE("value", range, value);
+  }
+  return checkedOffset(bytes, offset, 8);
 }
 
 function checkByteLength(byteLength: number): number {
@@ -160,13 +328,27 @@ function checkByteLength(byteLength: number): number {
 }
 
 export class Buffer extends Uint8Array {
+  static poolSize = 8192;
+
+  /** Legacy spelling retained by Node as an alias for `buffer`. */
+  get parent(): ArrayBufferLike | undefined {
+    if (!(this instanceof Buffer)) return undefined;
+    return this.buffer;
+  }
+
+  /** Legacy spelling retained by Node as an alias for `byteOffset`. */
+  get offset(): number | undefined {
+    if (!(this instanceof Buffer)) return undefined;
+    return this.byteOffset;
+  }
+
   // ------------------------------------------------------------- allocation
 
   /** Zero-filled. Upstream `lib/buffer.js`. */
-  static alloc(size: number, fill?: string | number | Buffer, encoding?: string): Buffer {
+  static alloc(size: number, fill?: string | number | Uint8Array, encoding?: string): Buffer {
     const buf = new Buffer(checkSize(size));
     if (fill !== undefined && size > 0) {
-      buf.fill(fill as never, 0, size, encoding);
+      buf.fill(fill, 0, size, encoding);
     }
     return buf;
   }
@@ -188,17 +370,16 @@ export class Buffer extends Uint8Array {
   }
 
   /**
-   * Upstream `lib/buffer.js`.
+   * Static-side compatibility required by `extends Uint8Array`.
    *
-   * The mapping overload is `Uint8Array.from`'s rather than node's, and it is
-   * kept because a subclass whose static `from` refuses what the base accepts
-   * is a subclass in name only. Node's own `Buffer.from` does not implement it;
-   * ours does, at the cost of three lines.
+   * Node ignores the extra arguments for array-like inputs; unlike
+   * `Uint8Array.from`, `Buffer.from` does not run a mapping callback. The
+   * parameters are therefore `unknown`, not a falsely advertised callback.
    */
   static override from<T>(
-    arrayLike: ArrayLike<T> | Iterable<T>,
-    mapfn: (v: T, k: number) => number,
-    thisArg?: unknown,
+    value: ArrayLike<T> | Iterable<T>,
+    ignoredForStaticCompatibility?: unknown,
+    ignoredThirdArgument?: unknown,
   ): Buffer;
   static override from(
     value: string | ArrayBuffer | ArrayLike<number> | Iterable<number> | Buffer,
@@ -210,59 +391,45 @@ export class Buffer extends Uint8Array {
     encodingOrOffset?: unknown,
     length?: unknown,
   ): Buffer {
-    if (typeof encodingOrOffset === "function") {
-      const mapfn = encodingOrOffset as (v: unknown, k: number) => number;
-      const items = Array.from(value as Iterable<unknown>);
-      const out = new Buffer(items.length);
-      for (let i = 0; i < items.length; i++) {
-        out[i] = mapfn.call(length, items[i], i) & 0xff;
-      }
-      return out;
-    }
     if (typeof value === "string") {
-      const encoding = checkEncoding(encodingOrOffset as string | undefined);
+      if (encodingOrOffset !== undefined && typeof encodingOrOffset !== "string") {
+        throw new ERR_INVALID_ARG_TYPE("encoding", "string", encodingOrOffset);
+      }
+      const encoding = checkEncoding(encodingOrOffset);
       const size = byteLengthIn(value, encoding);
       const buf = new Buffer(size);
-      writeIn(buf, value, 0, size, encoding);
-      return buf;
+      const written = writeIn(buf, value, 0, size, encoding);
+      // Hex and base64 accept forgiving input. Their length calculation is an
+      // allocation bound; invalid characters or early padding may make the
+      // decoded value shorter than that bound.
+      return written === size ? buf : buf.subarray(0, written);
     }
 
     if (value !== null && typeof value === "object") {
-      if (value instanceof ArrayBuffer || value instanceof SharedArrayBuffer) {
+      if (value instanceof ArrayBuffer) {
         // A view onto the same memory, not a copy: upstream shares the buffer
-        // so that a `Buffer` over one sees later writes to it. Shared memory
-        // is where that matters most, and the reason this takes a
-        // `SharedArrayBuffer` rather than copying it.
-        const backing = value as ArrayBuffer;
-        const offset = typeof encodingOrOffset === "number" ? encodingOrOffset : 0;
-        const count = (length as number | undefined) ?? backing.byteLength - offset;
+        // so that a `Buffer` over one sees later writes to it.
+        const backing = value;
+        if (encodingOrOffset !== undefined && typeof encodingOrOffset !== "number") {
+          throw new ERR_INVALID_ARG_TYPE("offset", "number", encodingOrOffset);
+        }
+        if (length !== undefined && typeof length !== "number") {
+          throw new ERR_INVALID_ARG_TYPE("length", "number", length);
+        }
+        const offset = encodingOrOffset ?? 0;
+        const count = length ?? backing.byteLength - offset;
+        if (offset > backing.byteLength) {
+          throw new ERR_BUFFER_OUT_OF_BOUNDS("offset");
+        }
+        if (count > backing.byteLength - offset) {
+          throw new ERR_BUFFER_OUT_OF_BOUNDS("length");
+        }
         return new Buffer(backing, offset, count);
-      }
-
-      // An object that can turn into something already handled -- a boxed
-      // string, a `{ valueOf }` -- is converted and retried. Before the
-      // array-like path, so `new String("ab")` is its two characters rather
-      // than its two indices.
-      const valueOf = (value as { valueOf?: () => unknown }).valueOf?.();
-      if (
-        valueOf != null && valueOf !== value &&
-        (typeof valueOf === "string" || typeof valueOf === "object")
-      ) {
-        return Buffer.from(valueOf as never, encodingOrOffset as never, length as never);
       }
 
       const fromObject = objectToBuffer(value);
       if (fromObject !== undefined) {
         return fromObject;
-      }
-
-      // Last resort: an object that says how to become a string.
-      const toPrimitive = (value as Record<symbol, unknown>)[Symbol.toPrimitive];
-      if (typeof toPrimitive === "function") {
-        const primitive = (toPrimitive as (hint: string) => unknown).call(value, "string");
-        if (typeof primitive === "string") {
-          return Buffer.from(primitive, encodingOrOffset as string | undefined);
-        }
       }
     }
 
@@ -277,17 +444,41 @@ export class Buffer extends Uint8Array {
     return Buffer.from(items);
   }
 
-  static concat(list: readonly Uint8Array[], totalLength?: number): Buffer {
-    if (!Array.isArray(list)) {
-      throw new ERR_INVALID_ARG_TYPE("list", ["Array", "Buffer", "Uint8Array"], list);
+  /** Copy the raw bytes occupied by a typed-array element range. */
+  static copyBytesFrom(view: TypedArrayView, offset?: number, length?: number): Buffer;
+  static copyBytesFrom(view: unknown, offset?: unknown, length?: unknown): Buffer {
+    if (!isTypedArrayView(view)) {
+      throw new ERR_INVALID_ARG_TYPE("view", "TypedArray", view);
     }
+    if (view.length === 0) return new Buffer(0);
+
+    let start = 0;
+    if (offset !== undefined) {
+      validateInteger(offset, "offset", 0);
+      if (offset >= view.length) return new Buffer(0);
+      start = offset;
+    }
+
+    let end = view.length;
+    if (length !== undefined) {
+      validateInteger(length, "length", 0);
+      end = Math.min(start + length, view.length);
+    }
+    if (end <= start) return new Buffer(0);
+
+    const byteOffset = view.byteOffset + start * view.BYTES_PER_ELEMENT;
+    const byteLength = (end - start) * view.BYTES_PER_ELEMENT;
+    return fromArrayLike(new Uint8Array(view.buffer, byteOffset, byteLength));
+  }
+
+  static concat(list: readonly Uint8Array[], totalLength?: number): Buffer;
+  static concat(list: unknown, totalLength?: unknown): Buffer {
+    checkBufferList(list);
     if (totalLength !== undefined) {
-      if (typeof totalLength !== "number") {
-        throw new ERR_INVALID_ARG_TYPE("totalLength", "number", totalLength);
-      }
-      if (!Number.isInteger(totalLength) || totalLength < 0 || totalLength > kMaxLength) {
-        throw new ERR_OUT_OF_RANGE("length", `>= 0 && <= ${kMaxLength}`, totalLength);
-      }
+      validateInteger(totalLength, "length", 0, kMaxLength);
+    }
+    if (list.length === 0) {
+      return new Buffer(0);
     }
     let total = totalLength;
     if (total === undefined) {
@@ -311,7 +502,7 @@ export class Buffer extends Uint8Array {
   }
 
   /** Whether `toString` and `write` would accept this name. */
-  static isEncoding(encoding: string): boolean {
+  static isEncoding(encoding: unknown): boolean {
     return isEncodingName(encoding);
   }
 
@@ -321,13 +512,16 @@ export class Buffer extends Uint8Array {
 
   static byteLength(value: unknown, encoding?: string): number {
     if (typeof value === "string") {
-      return byteLengthIn(value, checkEncoding(encoding));
+      return byteLengthIn(value, byteLengthEncoding(encoding));
     }
     if (ArrayBuffer.isView(value)) {
+      if (!(value.buffer instanceof ArrayBuffer)) {
+        throw new ERR_INVALID_ARG_TYPE("string", ["string", "Buffer", "ArrayBuffer"], value);
+      }
       return value.byteLength;
     }
-    if (value instanceof ArrayBuffer || value instanceof SharedArrayBuffer) {
-      return (value as ArrayBuffer).byteLength;
+    if (value instanceof ArrayBuffer) {
+      return value.byteLength;
     }
     // Node names the parameter `string` even when the value is a buffer,
     // because that is the argument's name in the signature.
@@ -345,26 +539,112 @@ export class Buffer extends Uint8Array {
   /** Upstream `lib/buffer.js`. */
   override toString(encoding?: string, start = 0, end = this.length): string {
     const codec = checkEncoding(encoding);
-    const from = Math.max(0, Math.min(start, this.length));
-    const to = Math.max(from, Math.min(end, this.length));
+    const from = stringSliceIndex(start, 0, this.length);
+    const to = stringSliceIndex(end, this.length, this.length);
+    if (to <= from) return "";
     return decodeIn(this, from, to, codec);
+  }
+
+  asciiSlice(start = 0, end = this.length): string {
+    return decodeIn(this, start, end, "ascii");
+  }
+
+  base64Slice(start = 0, end = this.length): string {
+    return decodeIn(this, start, end, "base64");
+  }
+
+  base64urlSlice(start = 0, end = this.length): string {
+    return decodeIn(this, start, end, "base64url");
+  }
+
+  latin1Slice(start = 0, end = this.length): string {
+    return decodeIn(this, start, end, "latin1");
+  }
+
+  hexSlice(start = 0, end = this.length): string {
+    return decodeIn(this, start, end, "hex");
+  }
+
+  ucs2Slice(start = 0, end = this.length): string {
+    return decodeIn(this, start, end, "ucs2");
+  }
+
+  utf8Slice(start = 0, end = this.length): string {
+    return decodeIn(this, start, end, "utf8");
+  }
+
+  asciiWrite(value: string, offset = 0, length = this.length - offset): number {
+    return rawStringWrite(this, value, offset, length, "ascii");
+  }
+
+  base64Write(value: string, offset = 0, length = this.length - offset): number {
+    return rawStringWrite(this, value, offset, length, "base64");
+  }
+
+  base64urlWrite(value: string, offset = 0, length = this.length - offset): number {
+    return rawStringWrite(this, value, offset, length, "base64url");
+  }
+
+  latin1Write(value: string, offset = 0, length = this.length - offset): number {
+    return rawStringWrite(this, value, offset, length, "latin1");
+  }
+
+  hexWrite(value: string, offset = 0, length = this.length - offset): number {
+    return rawStringWrite(this, value, offset, length, "hex");
+  }
+
+  ucs2Write(value: string, offset = 0, length = this.length - offset): number {
+    return rawStringWrite(this, value, offset, length, "ucs2");
+  }
+
+  utf8Write(value: string, offset = 0, length = this.length - offset): number {
+    return rawStringWrite(this, value, offset, length, "utf8");
   }
 
   toJSON(): { type: "Buffer"; data: number[] } {
     return { type: "Buffer", data: Array.from(this) };
   }
 
+  /** `<Buffer 78 79 7a>`, consumed directly and by `util.inspect`. */
+  inspect(): string {
+    const shown = Math.min(INSPECT_MAX_BYTES, this.length);
+    const remaining = this.length - shown;
+    let hex = "";
+    for (let i = 0; i < shown; i++) {
+      const byte = this[i];
+      if (byte === undefined) break;
+      hex += `${i > 0 ? " " : ""}${byte.toString(16).padStart(2, "0")}`;
+    }
+    if (remaining > 0) {
+      hex += ` ... ${remaining} more byte${remaining > 1 ? "s" : ""}`;
+    }
+    return `<Buffer ${hex}>`;
+  }
+
   /** Upstream `lib/buffer.js`. Bytes in, at `offset`, at most `length`. */
-  write(str: string, offset?: number, length?: number, encoding?: string): number {
+  write(str: string, encoding?: string): number;
+  write(str: string, offset: number, length?: number, encoding?: string): number;
+  write(
+    str: unknown,
+    offset?: number | string,
+    length?: number | string,
+    encoding?: string,
+  ): number {
+    if (typeof str !== "string") {
+      throw new ERR_INVALID_ARG_TYPE("string", "string", str);
+    }
     let at = 0;
     let max = this.length;
     let codec: string | undefined;
 
     // `write(str, encoding)`, `write(str, offset, encoding)` and the full form
     // all reach here; node distinguishes them by type rather than by arity.
-    if (typeof offset === "string") {
+    if (typeof offset === "string" && length === undefined) {
       codec = offset;
     } else if (offset !== undefined) {
+      if (typeof offset !== "number") {
+        throw new ERR_INVALID_ARG_TYPE("offset", "number", offset);
+      }
       at = offset;
       if (typeof length === "string") {
         codec = length;
@@ -402,13 +682,16 @@ export class Buffer extends Uint8Array {
     // Checked before the defaults are read, because `target.length` is one of
     // them and reading it off a string would answer rather than throw.
     checkBytes(target, "target");
-    const ts = checkRange(targetStart ?? 0, "targetStart", target.length);
-    const te = checkRange(targetEnd ?? target.length, "targetEnd", target.length);
-    const ss = checkRange(sourceStart ?? 0, "sourceStart", this.length);
-    const se = checkRange(sourceEnd ?? this.length, "sourceEnd", this.length);
-    if (ts > te || ss > se) {
-      throw new ERR_OUT_OF_RANGE("targetStart", "<= targetEnd", ts);
-    }
+    const ts = targetStart === undefined ? 0 : checkOffset(targetStart, "targetStart");
+    const te = targetEnd === undefined
+      ? target.length
+      : checkOffset(targetEnd, "targetEnd", target.length);
+    const ss = sourceStart === undefined ? 0 : checkOffset(sourceStart, "sourceStart");
+    const se = sourceEnd === undefined
+      ? this.length
+      : checkOffset(sourceEnd, "sourceEnd", this.length);
+    if (ss >= se) return ts >= te ? 0 : -1;
+    if (ts >= te) return 1;
     return compareBytes(this, ss, se, target, ts, te);
   }
 
@@ -416,11 +699,28 @@ export class Buffer extends Uint8Array {
 
   copy(target: Uint8Array, targetStart = 0, sourceStart = 0, sourceEnd = this.length): number {
     checkBytes(target, "target");
-    const from = Math.max(0, Math.min(sourceStart, this.length));
-    const to = Math.max(from, Math.min(sourceEnd, this.length));
-    const room = target.length - targetStart;
+    const targetAt = copyInteger(targetStart, 0);
+    if (targetAt < 0) {
+      throw new ERR_OUT_OF_RANGE("targetStart", ">= 0", targetAt);
+    }
+    const from = copyInteger(sourceStart, 0);
+    if (from < 0 || from > this.length) {
+      throw new ERR_OUT_OF_RANGE("sourceStart", `>= 0 && <= ${this.length}`, from);
+    }
+    const requestedEnd = copyInteger(sourceEnd, 0);
+    if (requestedEnd < 0) {
+      throw new ERR_OUT_OF_RANGE("sourceEnd", ">= 0", requestedEnd);
+    }
+    if (targetAt >= target.length || from >= requestedEnd) {
+      return 0;
+    }
+    const to = Math.min(requestedEnd, this.length);
+    const room = target.length - targetAt;
     const n = Math.max(0, Math.min(to - from, room));
-    target.set(this.subarray(from, from + n), targetStart);
+    if (n === 0) {
+      return 0;
+    }
+    target.set(this.subarray(from, from + n), targetAt);
     return n;
   }
 
@@ -432,32 +732,86 @@ export class Buffer extends Uint8Array {
   }
 
   override slice(start?: number, end?: number): Buffer {
-    return this.subarray(start, end);
+    const view = super.subarray(start, end);
+    return new Buffer(view.buffer, view.byteOffset, view.byteLength);
   }
 
   override fill(
     value: string | number | Uint8Array,
-    offset = 0,
-    end = this.length,
+    offset?: number,
+    end?: number,
     encoding?: string,
+  ): this;
+  override fill(
+    value: string | number | Uint8Array,
+    offset: number,
+    encoding: string,
+  ): this;
+  override fill(value: string | number | Uint8Array, encoding: string): this;
+  override fill(
+    value: unknown = 0,
+    offsetOrEncoding?: unknown,
+    endOrEncoding?: unknown,
+    explicitEncoding?: unknown,
   ): this {
-    const from = Math.max(0, Math.min(offset, this.length));
-    const to = Math.max(from, Math.min(end, this.length));
+    let offsetValue = offsetOrEncoding;
+    let endValue = endOrEncoding;
+    let encodingValue = explicitEncoding;
+    let pattern: Uint8Array | undefined;
+    let numericValue = 0;
 
-    if (typeof value === "number") {
-      super.fill(value & 0xff, from, to);
+    if (typeof value === "string") {
+      if (offsetValue === undefined || typeof offsetValue === "string") {
+        encodingValue = offsetValue;
+        offsetValue = 0;
+        endValue = this.length;
+      } else if (typeof endValue === "string") {
+        encodingValue = endValue;
+        endValue = this.length;
+      }
+
+      const encoding = checkEncoding(encodingValue);
+      if (value.length === 0) {
+        numericValue = 0;
+      } else {
+        pattern = Buffer.from(value, encoding);
+        // A non-empty string that decodes to no bytes is invalid (for example
+        // `"zz"` in hex), while the empty string itself means a zero fill.
+        if (pattern.length === 0) {
+          throw new ERR_INVALID_ARG_VALUE("value", value);
+        }
+      }
+    } else if (value instanceof Uint8Array) {
+      pattern = value;
+      if (pattern.length === 0) {
+        throw new ERR_INVALID_ARG_VALUE("value", value);
+      }
+    } else {
+      // The public typed surface accepts numbers. The small primitive-only
+      // conversion preserves Node's JavaScript boundary behavior for null,
+      // booleans and ordinary values without invoking user conversion hooks.
+      numericValue = primitiveNumber(value);
+    }
+
+    let from: number;
+    let to: number;
+    if (offsetValue === undefined) {
+      from = 0;
+      to = this.length;
+    } else {
+      from = checkOffset(offsetValue, "offset");
+      to = endValue === undefined
+        ? this.length
+        : checkOffset(endValue, "end", this.length);
+      if (from >= to) return this;
+    }
+
+    if (pattern === undefined) {
+      super.fill(numericValue, from, to);
       return this;
     }
 
-    const pattern =
-      typeof value === "string"
-        ? Buffer.from(value, encoding ?? "utf8")
-        : value;
-    if (pattern.length === 0) {
-      super.fill(0, from, to);
-      return this;
-    }
-    // Repeat the pattern, truncating the last copy: `fill('ab', 0, 5)` gives
+    // Repeat the pattern, truncating the last copy: `fill("ab", 0, 5)` gives
     // `ababa`.
     for (let i = from; i < to; i++) {
       this[i] = pattern[(i - from) % pattern.length]!;
@@ -467,16 +821,31 @@ export class Buffer extends Uint8Array {
 
   // ---------------------------------------------------------------- finding
 
-  override indexOf(value: string | number | Uint8Array, byteOffset = 0, encoding?: string): number {
-    return search(this, value, byteOffset, encoding, true);
+  override indexOf(
+    value: string | number | Uint8Array,
+    byteOffset: number | string = 0,
+    endOrEncoding?: number | string,
+    encoding?: string,
+  ): number {
+    return search(this, value, byteOffset, endOrEncoding, encoding, true);
   }
 
-  override lastIndexOf(value: string | number | Uint8Array, byteOffset?: number, encoding?: string): number {
-    return search(this, value, byteOffset ?? this.length, encoding, false);
+  override lastIndexOf(
+    value: string | number | Uint8Array,
+    byteOffset?: number | string,
+    endOrEncoding?: number | string,
+    encoding?: string,
+  ): number {
+    return search(this, value, byteOffset, endOrEncoding, encoding, false);
   }
 
-  override includes(value: string | number | Uint8Array, byteOffset = 0, encoding?: string): boolean {
-    return this.indexOf(value, byteOffset, encoding) !== -1;
+  override includes(
+    value: string | number | Uint8Array,
+    byteOffset: number | string = 0,
+    endOrEncoding?: number | string,
+    encoding?: string,
+  ): boolean {
+    return search(this, value, byteOffset, endOrEncoding, encoding, true) !== -1;
   }
 
   // ------------------------------------------------------------- byte order
@@ -489,7 +858,7 @@ export class Buffer extends Uint8Array {
   // than a documented convention.
 
   readUIntBE(offset: number, byteLength: number): number {
-    const at = this.at8(offset, checkByteLength(byteLength));
+    const at = checkedOffset(this, offset, checkByteLength(byteLength));
     let value = 0;
     for (let i = 0; i < byteLength; i++) {
       value = value * 256 + this[at + i]!;
@@ -498,7 +867,7 @@ export class Buffer extends Uint8Array {
   }
 
   readUIntLE(offset: number, byteLength: number): number {
-    const at = this.at8(offset, checkByteLength(byteLength));
+    const at = checkedOffset(this, offset, checkByteLength(byteLength));
     let value = 0;
     for (let i = byteLength - 1; i >= 0; i--) {
       value = value * 256 + this[at + i]!;
@@ -507,23 +876,33 @@ export class Buffer extends Uint8Array {
   }
 
   readIntBE(offset: number, byteLength: number): number {
-    const value = this.readUIntBE(offset, byteLength);
+    const size = checkByteLength(byteLength);
+    const at = checkedOffset(this, offset, size);
+    let value = 0;
+    for (let i = 0; i < size; i++) {
+      value = value * 256 + this[at + i]!;
+    }
     // Sign-extend from the width actually read, by subtracting the modulus
     // when the top bit is set. Arithmetic rather than a shift, because a
     // six-byte value does not fit the 32-bit shift operators.
-    const limit = 2 ** (byteLength * 8 - 1);
+    const limit = 2 ** (size * 8 - 1);
     return value >= limit ? value - limit * 2 : value;
   }
 
   readIntLE(offset: number, byteLength: number): number {
-    const value = this.readUIntLE(offset, byteLength);
-    const limit = 2 ** (byteLength * 8 - 1);
+    const size = checkByteLength(byteLength);
+    const at = checkedOffset(this, offset, size);
+    let value = 0;
+    for (let i = size - 1; i >= 0; i--) {
+      value = value * 256 + this[at + i]!;
+    }
+    const limit = 2 ** (size * 8 - 1);
     return value >= limit ? value - limit * 2 : value;
   }
 
   writeUIntBE(value: number, offset: number, byteLength: number): number {
     const size = checkByteLength(byteLength);
-    const at = this.checkInt(value, 0, 2 ** (size * 8) - 1, offset, size);
+    const at = checkedIntegerWrite(this, value, 0, 2 ** (size * 8) - 1, offset, size);
     let rest = value;
     for (let i = size - 1; i >= 0; i--) {
       this[at + i] = rest & 0xff;
@@ -534,7 +913,7 @@ export class Buffer extends Uint8Array {
 
   writeUIntLE(value: number, offset: number, byteLength: number): number {
     const size = checkByteLength(byteLength);
-    const at = this.checkInt(value, 0, 2 ** (size * 8) - 1, offset, size);
+    const at = checkedIntegerWrite(this, value, 0, 2 ** (size * 8) - 1, offset, size);
     let rest = value;
     for (let i = 0; i < size; i++) {
       this[at + i] = rest & 0xff;
@@ -546,15 +925,25 @@ export class Buffer extends Uint8Array {
   writeIntBE(value: number, offset: number, byteLength: number): number {
     const size = checkByteLength(byteLength);
     const limit = 2 ** (size * 8 - 1);
-    const at = this.checkInt(value, -limit, limit - 1, offset, size);
-    return this.writeUIntBE(value < 0 ? value + limit * 2 : value, at, size);
+    const at = checkedIntegerWrite(this, value, -limit, limit - 1, offset, size);
+    let rest = value < 0 ? value + limit * 2 : value;
+    for (let i = size - 1; i >= 0; i--) {
+      this[at + i] = rest & 0xff;
+      rest = Math.floor(rest / 256);
+    }
+    return at + size;
   }
 
   writeIntLE(value: number, offset: number, byteLength: number): number {
     const size = checkByteLength(byteLength);
     const limit = 2 ** (size * 8 - 1);
-    const at = this.checkInt(value, -limit, limit - 1, offset, size);
-    return this.writeUIntLE(value < 0 ? value + limit * 2 : value, at, size);
+    const at = checkedIntegerWrite(this, value, -limit, limit - 1, offset, size);
+    let rest = value < 0 ? value + limit * 2 : value;
+    for (let i = 0; i < size; i++) {
+      this[at + i] = rest & 0xff;
+      rest = Math.floor(rest / 256);
+    }
+    return at + size;
   }
 
   // ------------------------------------------------------ the 64-bit family
@@ -564,29 +953,35 @@ export class Buffer extends Uint8Array {
   // half its range. That is the whole reason these methods exist.
 
   readBigUInt64BE(offset = 0): bigint {
-    const at = this.at8(offset, 8);
+    const at = checkedOffset(this, offset, 8);
     const hi = this[at]! * 2 ** 24 + this[at + 1]! * 2 ** 16 + this[at + 2]! * 2 ** 8 + this[at + 3]!;
     const lo = this[at + 4]! * 2 ** 24 + this[at + 5]! * 2 ** 16 + this[at + 6]! * 2 ** 8 + this[at + 7]!;
     return (BigInt(hi) << 32n) + BigInt(lo);
   }
 
   readBigUInt64LE(offset = 0): bigint {
-    const at = this.at8(offset, 8);
+    const at = checkedOffset(this, offset, 8);
     const lo = this[at]! + this[at + 1]! * 2 ** 8 + this[at + 2]! * 2 ** 16 + this[at + 3]! * 2 ** 24;
     const hi = this[at + 4]! + this[at + 5]! * 2 ** 8 + this[at + 6]! * 2 ** 16 + this[at + 7]! * 2 ** 24;
     return (BigInt(hi) << 32n) + BigInt(lo);
   }
 
   readBigInt64BE(offset = 0): bigint {
-    return BigInt.asIntN(64, this.readBigUInt64BE(offset));
+    const at = checkedOffset(this, offset, 8);
+    const hi = this[at]! * 2 ** 24 + this[at + 1]! * 2 ** 16 + this[at + 2]! * 2 ** 8 + this[at + 3]!;
+    const lo = this[at + 4]! * 2 ** 24 + this[at + 5]! * 2 ** 16 + this[at + 6]! * 2 ** 8 + this[at + 7]!;
+    return BigInt.asIntN(64, (BigInt(hi) << 32n) + BigInt(lo));
   }
 
   readBigInt64LE(offset = 0): bigint {
-    return BigInt.asIntN(64, this.readBigUInt64LE(offset));
+    const at = checkedOffset(this, offset, 8);
+    const lo = this[at]! + this[at + 1]! * 2 ** 8 + this[at + 2]! * 2 ** 16 + this[at + 3]! * 2 ** 24;
+    const hi = this[at + 4]! + this[at + 5]! * 2 ** 8 + this[at + 6]! * 2 ** 16 + this[at + 7]! * 2 ** 24;
+    return BigInt.asIntN(64, (BigInt(hi) << 32n) + BigInt(lo));
   }
 
   writeBigUInt64BE(value: bigint, offset = 0): number {
-    const at = this.checkBigInt(value, 0n, 0xffffffffffffffffn, offset);
+    const at = checkedBigIntWrite(this, value, 0n, 0xffffffffffffffffn, offset);
     let rest = value;
     for (let i = 7; i >= 0; i--) {
       this[at + i] = Number(rest & 0xffn);
@@ -596,7 +991,7 @@ export class Buffer extends Uint8Array {
   }
 
   writeBigUInt64LE(value: bigint, offset = 0): number {
-    const at = this.checkBigInt(value, 0n, 0xffffffffffffffffn, offset);
+    const at = checkedBigIntWrite(this, value, 0n, 0xffffffffffffffffn, offset);
     let rest = value;
     for (let i = 0; i < 8; i++) {
       this[at + i] = Number(rest & 0xffn);
@@ -606,18 +1001,28 @@ export class Buffer extends Uint8Array {
   }
 
   writeBigInt64BE(value: bigint, offset = 0): number {
-    this.checkBigInt(value, -(2n ** 63n), 2n ** 63n - 1n, offset);
-    return this.writeBigUInt64BE(BigInt.asUintN(64, value), offset);
+    const at = checkedBigIntWrite(this, value, -(2n ** 63n), 2n ** 63n - 1n, offset);
+    let rest = BigInt.asUintN(64, value);
+    for (let i = 7; i >= 0; i--) {
+      this[at + i] = Number(rest & 0xffn);
+      rest >>= 8n;
+    }
+    return at + 8;
   }
 
   writeBigInt64LE(value: bigint, offset = 0): number {
-    this.checkBigInt(value, -(2n ** 63n), 2n ** 63n - 1n, offset);
-    return this.writeBigUInt64LE(BigInt.asUintN(64, value), offset);
+    const at = checkedBigIntWrite(this, value, -(2n ** 63n), 2n ** 63n - 1n, offset);
+    let rest = BigInt.asUintN(64, value);
+    for (let i = 0; i < 8; i++) {
+      this[at + i] = Number(rest & 0xffn);
+      rest >>= 8n;
+    }
+    return at + 8;
   }
 
   swap16(): this {
     if (this.length % 2 !== 0) {
-      throw new ERR_OUT_OF_RANGE("buffer.length", "a multiple of 2", this.length);
+      throw new ERR_INVALID_BUFFER_SIZE("16-bits");
     }
     for (let i = 0; i < this.length; i += 2) {
       const t = this[i]!;
@@ -629,7 +1034,7 @@ export class Buffer extends Uint8Array {
 
   swap32(): this {
     if (this.length % 4 !== 0) {
-      throw new ERR_OUT_OF_RANGE("buffer.length", "a multiple of 4", this.length);
+      throw new ERR_INVALID_BUFFER_SIZE("32-bits");
     }
     for (let i = 0; i < this.length; i += 4) {
       let t = this[i]!;
@@ -644,7 +1049,7 @@ export class Buffer extends Uint8Array {
 
   swap64(): this {
     if (this.length % 8 !== 0) {
-      throw new ERR_OUT_OF_RANGE("buffer.length", "a multiple of 8", this.length);
+      throw new ERR_INVALID_BUFFER_SIZE("64-bits");
     }
     for (let i = 0; i < this.length; i += 8) {
       for (let k = 0; k < 4; k++) {
@@ -658,153 +1063,100 @@ export class Buffer extends Uint8Array {
 
   // ------------------------------------------------------------- numerics
 
-  /**
-   * Check that `size` bytes are readable at `offset`, and return it.
-   *
-   * Upstream `checkBounds`/`boundsError`. Three different errors come out of
-   * one check, and the distinctions are node's: a non-integer offset is a
-   * mistake about the argument, an offset past the end is a mistake about the
-   * range, and a *buffer too short for the access at all* is neither -- there
-   * is no legal offset to suggest, so it reports the buffer rather than the
-   * argument.
-   */
-  private at8(offset: number, size: number): number {
-    const last = this.length - size;
-    if (offset >= 0 && offset <= last && Number.isInteger(offset)) {
-      return offset;
-    }
-    boundsError(offset, last);
-  }
-
-  /**
-   * The value fits the width being written, upstream `checkInt`.
-   *
-   * Past three bytes the range is written as a power of two rather than as a
-   * literal, because `< 2 ** 48` reads and `<= 281474976710655` does not.
-   */
-  private checkInt(value: number, min: number, max: number, offset: number, size: number): number {
-    if (value > max || value < min) {
-      let range: string;
-      // Node's own check takes the *last byte index* rather than the width, so
-      // its threshold of 3 is a width of 4. A four-byte range is still short
-      // enough to write out; past that `< 2 ** 48` reads and
-      // `<= 281474976710655` does not.
-      if (size > 4) {
-        range = min === 0
-          ? `>= 0 and < 2 ** ${size * 8}`
-          : `>= -(2 ** ${size * 8 - 1}) and < 2 ** ${size * 8 - 1}`;
-      } else {
-        range = `>= ${min} and <= ${max}`;
-      }
-      throw new ERR_OUT_OF_RANGE("value", range, value);
-    }
-    return this.at8(offset, size);
-  }
-
-  /** The same, for the 64-bit family, where the bounds are bigints. */
-  private checkBigInt(value: bigint, min: bigint, max: bigint, offset: number): number {
-    if (value > max || value < min) {
-      const range = min === 0n
-        ? ">= 0n and < 2n ** 64n"
-        : ">= -(2n ** 63n) and < 2n ** 63n";
-      throw new ERR_OUT_OF_RANGE("value", range, value);
-    }
-    return this.at8(offset, 8);
-  }
-
   readUInt8(offset = 0): number {
-    return this[this.at8(offset, 1)]!;
+    return this[checkedOffset(this, offset, 1)]!;
   }
 
   readInt8(offset = 0): number {
-    const v = this[this.at8(offset, 1)]!;
+    const v = this[checkedOffset(this, offset, 1)]!;
     return v & 0x80 ? v - 0x100 : v;
   }
 
   readUInt16LE(offset = 0): number {
-    const at = this.at8(offset, 2);
+    const at = checkedOffset(this, offset, 2);
     return this[at]! | (this[at + 1]! << 8);
   }
 
   readUInt16BE(offset = 0): number {
-    const at = this.at8(offset, 2);
+    const at = checkedOffset(this, offset, 2);
     return (this[at]! << 8) | this[at + 1]!;
   }
 
   readInt16LE(offset = 0): number {
-    const v = this.readUInt16LE(offset);
+    const at = checkedOffset(this, offset, 2);
+    const v = this[at]! | (this[at + 1]! << 8);
     return v & 0x8000 ? v - 0x10000 : v;
   }
 
   readInt16BE(offset = 0): number {
-    const v = this.readUInt16BE(offset);
+    const at = checkedOffset(this, offset, 2);
+    const v = (this[at]! << 8) | this[at + 1]!;
     return v & 0x8000 ? v - 0x10000 : v;
   }
 
   readUInt32LE(offset = 0): number {
-    const at = this.at8(offset, 4);
+    const at = checkedOffset(this, offset, 4);
     // `>>> 0` because the shift makes it signed and this value is not.
     return ((this[at]! | (this[at + 1]! << 8) | (this[at + 2]! << 16)) + this[at + 3]! * 0x1000000) >>> 0;
   }
 
   readUInt32BE(offset = 0): number {
-    const at = this.at8(offset, 4);
+    const at = checkedOffset(this, offset, 4);
     return (this[at]! * 0x1000000 + ((this[at + 1]! << 16) | (this[at + 2]! << 8) | this[at + 3]!)) >>> 0;
   }
 
   readInt32LE(offset = 0): number {
-    const at = this.at8(offset, 4);
+    const at = checkedOffset(this, offset, 4);
     return this[at]! | (this[at + 1]! << 8) | (this[at + 2]! << 16) | (this[at + 3]! << 24);
   }
 
   readInt32BE(offset = 0): number {
-    const at = this.at8(offset, 4);
+    const at = checkedOffset(this, offset, 4);
     return (this[at]! << 24) | (this[at + 1]! << 16) | (this[at + 2]! << 8) | this[at + 3]!;
   }
 
   writeUInt8(value: number, offset = 0): number {
-    const at = this.checkInt(value, 0, 0xff, offset, 1);
+    const at = checkedIntegerWrite(this, value, 0, 0xff, offset, 1);
     this[at] = value & 0xff;
     return at + 1;
   }
 
   writeInt8(value: number, offset = 0): number {
-    this.checkInt(value, -0x80, 0x7f, offset, 1);
-    // Two's complement before delegating: the unsigned write checks its
-    // own range, and a negative would fail a check it was never meant for.
-    return this.writeUInt8(value < 0 ? value + 0x100 : value, offset);
+    const at = checkedIntegerWrite(this, value, -0x80, 0x7f, offset, 1);
+    this[at] = value & 0xff;
+    return at + 1;
   }
 
   writeUInt16LE(value: number, offset = 0): number {
-    const at = this.checkInt(value, 0, 0xffff, offset, 2);
+    const at = checkedIntegerWrite(this, value, 0, 0xffff, offset, 2);
     this[at] = value & 0xff;
     this[at + 1] = (value >>> 8) & 0xff;
     return at + 2;
   }
 
   writeUInt16BE(value: number, offset = 0): number {
-    const at = this.checkInt(value, 0, 0xffff, offset, 2);
+    const at = checkedIntegerWrite(this, value, 0, 0xffff, offset, 2);
     this[at] = (value >>> 8) & 0xff;
     this[at + 1] = value & 0xff;
     return at + 2;
   }
 
   writeInt16LE(value: number, offset = 0): number {
-    this.checkInt(value, -0x8000, 0x7fff, offset, 2);
-    // Two's complement before delegating: the unsigned write checks its
-    // own range, and a negative would fail a check it was never meant for.
-    return this.writeUInt16LE(value < 0 ? value + 0x10000 : value, offset);
+    const at = checkedIntegerWrite(this, value, -0x8000, 0x7fff, offset, 2);
+    this[at] = value & 0xff;
+    this[at + 1] = (value >>> 8) & 0xff;
+    return at + 2;
   }
 
   writeInt16BE(value: number, offset = 0): number {
-    this.checkInt(value, -0x8000, 0x7fff, offset, 2);
-    // Two's complement before delegating: the unsigned write checks its
-    // own range, and a negative would fail a check it was never meant for.
-    return this.writeUInt16BE(value < 0 ? value + 0x10000 : value, offset);
+    const at = checkedIntegerWrite(this, value, -0x8000, 0x7fff, offset, 2);
+    this[at] = (value >>> 8) & 0xff;
+    this[at + 1] = value & 0xff;
+    return at + 2;
   }
 
   writeUInt32LE(value: number, offset = 0): number {
-    const at = this.checkInt(value, 0, 0xffffffff, offset, 4);
+    const at = checkedIntegerWrite(this, value, 0, 0xffffffff, offset, 4);
     this[at] = value & 0xff;
     this[at + 1] = (value >>> 8) & 0xff;
     this[at + 2] = (value >>> 16) & 0xff;
@@ -813,7 +1165,7 @@ export class Buffer extends Uint8Array {
   }
 
   writeUInt32BE(value: number, offset = 0): number {
-    const at = this.checkInt(value, 0, 0xffffffff, offset, 4);
+    const at = checkedIntegerWrite(this, value, 0, 0xffffffff, offset, 4);
     this[at] = (value >>> 24) & 0xff;
     this[at + 1] = (value >>> 16) & 0xff;
     this[at + 2] = (value >>> 8) & 0xff;
@@ -822,69 +1174,214 @@ export class Buffer extends Uint8Array {
   }
 
   writeInt32LE(value: number, offset = 0): number {
-    this.checkInt(value, -0x80000000, 0x7fffffff, offset, 4);
-    // Two's complement before delegating: the unsigned write checks its
-    // own range, and a negative would fail a check it was never meant for.
-    return this.writeUInt32LE(value < 0 ? value + 0x100000000 : value, offset);
+    const at = checkedIntegerWrite(this, value, -0x80000000, 0x7fffffff, offset, 4);
+    this[at] = value & 0xff;
+    this[at + 1] = (value >>> 8) & 0xff;
+    this[at + 2] = (value >>> 16) & 0xff;
+    this[at + 3] = (value >>> 24) & 0xff;
+    return at + 4;
   }
 
   writeInt32BE(value: number, offset = 0): number {
-    this.checkInt(value, -0x80000000, 0x7fffffff, offset, 4);
-    // Two's complement before delegating: the unsigned write checks its
-    // own range, and a negative would fail a check it was never meant for.
-    return this.writeUInt32BE(value < 0 ? value + 0x100000000 : value, offset);
+    const at = checkedIntegerWrite(this, value, -0x80000000, 0x7fffffff, offset, 4);
+    this[at] = (value >>> 24) & 0xff;
+    this[at + 1] = (value >>> 16) & 0xff;
+    this[at + 2] = (value >>> 8) & 0xff;
+    this[at + 3] = value & 0xff;
+    return at + 4;
   }
 
   // Floats go through a one-element typed array, because reproducing IEEE-754
   // rounding by hand is a way to be subtly wrong.
   readFloatLE(offset = 0): number {
-    scratchBytes.set(this.subarray(this.at8(offset, 4), offset + 4));
+    scratchBytes.set(this.subarray(checkedOffset(this, offset, 4), offset + 4));
     return scratchFloat[0]!;
   }
 
   readFloatBE(offset = 0): number {
-    const at = this.at8(offset, 4);
+    const at = checkedOffset(this, offset, 4);
     for (let i = 0; i < 4; i++) scratchBytes[i] = this[at + 3 - i]!;
     return scratchFloat[0]!;
   }
 
   writeFloatLE(value: number, offset = 0): number {
-    const at = this.at8(offset, 4);
+    const at = checkedOffset(this, offset, 4);
     scratchFloat[0] = value;
     for (let i = 0; i < 4; i++) this[at + i] = scratchBytes[i]!;
     return at + 4;
   }
 
   writeFloatBE(value: number, offset = 0): number {
-    const at = this.at8(offset, 4);
+    const at = checkedOffset(this, offset, 4);
     scratchFloat[0] = value;
     for (let i = 0; i < 4; i++) this[at + i] = scratchBytes[3 - i]!;
     return at + 4;
   }
 
   readDoubleLE(offset = 0): number {
-    const at = this.at8(offset, 8);
+    const at = checkedOffset(this, offset, 8);
     for (let i = 0; i < 8; i++) scratchBytes8[i] = this[at + i]!;
     return scratchDouble[0]!;
   }
 
   readDoubleBE(offset = 0): number {
-    const at = this.at8(offset, 8);
+    const at = checkedOffset(this, offset, 8);
     for (let i = 0; i < 8; i++) scratchBytes8[i] = this[at + 7 - i]!;
     return scratchDouble[0]!;
   }
 
   writeDoubleLE(value: number, offset = 0): number {
-    const at = this.at8(offset, 8);
+    const at = checkedOffset(this, offset, 8);
     scratchDouble[0] = value;
     for (let i = 0; i < 8; i++) this[at + i] = scratchBytes8[i]!;
     return at + 8;
   }
 
   writeDoubleBE(value: number, offset = 0): number {
-    const at = this.at8(offset, 8);
+    const at = checkedOffset(this, offset, 8);
     scratchDouble[0] = value;
     for (let i = 0; i < 8; i++) this[at + i] = scratchBytes8[7 - i]!;
+    return at + 8;
+  }
+
+  // Node exposes both UInt and Uint spellings. NTS needs both names in the
+  // static class layout, so these hot bodies are deliberately duplicated:
+  // forwarding aliases would add another call and runtime prototype aliasing
+  // is a §13 non-goal. `shape.mjs` restores Node's function identity when this
+  // source is exercised by the upstream JavaScript suite.
+  readUint8(offset = 0): number {
+    return this[checkedOffset(this, offset, 1)]!;
+  }
+
+  readUint16BE(offset = 0): number {
+    const at = checkedOffset(this, offset, 2);
+    return (this[at]! << 8) | this[at + 1]!;
+  }
+
+  readUint16LE(offset = 0): number {
+    const at = checkedOffset(this, offset, 2);
+    return this[at]! | (this[at + 1]! << 8);
+  }
+
+  readUint32BE(offset = 0): number {
+    const at = checkedOffset(this, offset, 4);
+    return (this[at]! * 0x1000000 + ((this[at + 1]! << 16) | (this[at + 2]! << 8) | this[at + 3]!)) >>> 0;
+  }
+
+  readUint32LE(offset = 0): number {
+    const at = checkedOffset(this, offset, 4);
+    return ((this[at]! | (this[at + 1]! << 8) | (this[at + 2]! << 16)) + this[at + 3]! * 0x1000000) >>> 0;
+  }
+
+  readUintBE(offset: number, byteLength: number): number {
+    const at = checkedOffset(this, offset, checkByteLength(byteLength));
+    let value = 0;
+    for (let i = 0; i < byteLength; i++) {
+      value = value * 256 + this[at + i]!;
+    }
+    return value;
+  }
+
+  readUintLE(offset: number, byteLength: number): number {
+    const at = checkedOffset(this, offset, checkByteLength(byteLength));
+    let value = 0;
+    for (let i = byteLength - 1; i >= 0; i--) {
+      value = value * 256 + this[at + i]!;
+    }
+    return value;
+  }
+
+  readBigUint64BE(offset = 0): bigint {
+    const at = checkedOffset(this, offset, 8);
+    const hi = this[at]! * 2 ** 24 + this[at + 1]! * 2 ** 16 + this[at + 2]! * 2 ** 8 + this[at + 3]!;
+    const lo = this[at + 4]! * 2 ** 24 + this[at + 5]! * 2 ** 16 + this[at + 6]! * 2 ** 8 + this[at + 7]!;
+    return (BigInt(hi) << 32n) + BigInt(lo);
+  }
+
+  readBigUint64LE(offset = 0): bigint {
+    const at = checkedOffset(this, offset, 8);
+    const lo = this[at]! + this[at + 1]! * 2 ** 8 + this[at + 2]! * 2 ** 16 + this[at + 3]! * 2 ** 24;
+    const hi = this[at + 4]! + this[at + 5]! * 2 ** 8 + this[at + 6]! * 2 ** 16 + this[at + 7]! * 2 ** 24;
+    return (BigInt(hi) << 32n) + BigInt(lo);
+  }
+
+  writeUint8(value: number, offset = 0): number {
+    const at = checkedIntegerWrite(this, value, 0, 0xff, offset, 1);
+    this[at] = value & 0xff;
+    return at + 1;
+  }
+
+  writeUint16BE(value: number, offset = 0): number {
+    const at = checkedIntegerWrite(this, value, 0, 0xffff, offset, 2);
+    this[at] = (value >>> 8) & 0xff;
+    this[at + 1] = value & 0xff;
+    return at + 2;
+  }
+
+  writeUint16LE(value: number, offset = 0): number {
+    const at = checkedIntegerWrite(this, value, 0, 0xffff, offset, 2);
+    this[at] = value & 0xff;
+    this[at + 1] = (value >>> 8) & 0xff;
+    return at + 2;
+  }
+
+  writeUint32BE(value: number, offset = 0): number {
+    const at = checkedIntegerWrite(this, value, 0, 0xffffffff, offset, 4);
+    this[at] = (value >>> 24) & 0xff;
+    this[at + 1] = (value >>> 16) & 0xff;
+    this[at + 2] = (value >>> 8) & 0xff;
+    this[at + 3] = value & 0xff;
+    return at + 4;
+  }
+
+  writeUint32LE(value: number, offset = 0): number {
+    const at = checkedIntegerWrite(this, value, 0, 0xffffffff, offset, 4);
+    this[at] = value & 0xff;
+    this[at + 1] = (value >>> 8) & 0xff;
+    this[at + 2] = (value >>> 16) & 0xff;
+    this[at + 3] = (value >>> 24) & 0xff;
+    return at + 4;
+  }
+
+  writeUintBE(value: number, offset: number, byteLength: number): number {
+    const size = checkByteLength(byteLength);
+    const at = checkedIntegerWrite(this, value, 0, 2 ** (size * 8) - 1, offset, size);
+    let rest = value;
+    for (let i = size - 1; i >= 0; i--) {
+      this[at + i] = rest & 0xff;
+      rest = Math.floor(rest / 256);
+    }
+    return at + size;
+  }
+
+  writeUintLE(value: number, offset: number, byteLength: number): number {
+    const size = checkByteLength(byteLength);
+    const at = checkedIntegerWrite(this, value, 0, 2 ** (size * 8) - 1, offset, size);
+    let rest = value;
+    for (let i = 0; i < size; i++) {
+      this[at + i] = rest & 0xff;
+      rest = Math.floor(rest / 256);
+    }
+    return at + size;
+  }
+
+  writeBigUint64BE(value: bigint, offset = 0): number {
+    const at = checkedBigIntWrite(this, value, 0n, 0xffffffffffffffffn, offset);
+    let rest = value;
+    for (let i = 7; i >= 0; i--) {
+      this[at + i] = Number(rest & 0xffn);
+      rest >>= 8n;
+    }
+    return at + 8;
+  }
+
+  writeBigUint64LE(value: bigint, offset = 0): number {
+    const at = checkedBigIntWrite(this, value, 0n, 0xffffffffffffffffn, offset);
+    let rest = value;
+    for (let i = 0; i < 8; i++) {
+      this[at + i] = Number(rest & 0xffn);
+      rest >>= 8n;
+    }
     return at + 8;
   }
 }
@@ -917,8 +1414,9 @@ function compareBytes(
 function search(
   haystack: Buffer,
   value: string | number | Uint8Array,
-  byteOffset: number,
-  encoding: string | undefined,
+  byteOffset: number | string | undefined,
+  endOrEncoding: number | string | undefined,
+  explicitEncoding: string | undefined,
   forward: boolean,
 ): number {
   if (
@@ -928,14 +1426,28 @@ function search(
   ) {
     throw new ERR_INVALID_ARG_TYPE("value", ["number", "string", "Buffer", "Uint8Array"], value);
   }
+  let encoding = explicitEncoding;
+  let end = haystack.length;
+  if (typeof endOrEncoding === "string") {
+    encoding = endOrEncoding;
+  } else if (endOrEncoding !== undefined) {
+    end = normalizeSearchEnd(endOrEncoding, haystack.length);
+  }
+
+  if (typeof byteOffset === "string") {
+    encoding = byteOffset;
+    byteOffset = undefined;
+  }
+  const fromOffset = normalizeSearchOffset(byteOffset, haystack.length, forward);
+
   if (typeof value === "number") {
     const needle = value & 0xff;
     if (forward) {
-      for (let i = Math.max(0, byteOffset); i < haystack.length; i++) {
+      for (let i = fromOffset; i < end; i++) {
         if (haystack[i] === needle) return i;
       }
     } else {
-      for (let i = Math.min(byteOffset, haystack.length - 1); i >= 0; i--) {
+      for (let i = Math.min(fromOffset, end - 1); i >= 0; i--) {
         if (haystack[i] === needle) return i;
       }
     }
@@ -943,17 +1455,22 @@ function search(
   }
 
   const needle =
-    typeof value === "string" ? Buffer.from(value, encoding ?? "utf8") : value;
+    typeof value === "string" ? Buffer.from(value, checkEncoding(encoding)) : value;
   if (needle.length === 0) {
-    return forward ? Math.min(Math.max(0, byteOffset), haystack.length) : haystack.length;
+    return Math.min(Math.max(0, fromOffset), end);
   }
-  if (needle.length > haystack.length) {
+  if (needle.length > end) {
     return -1;
   }
 
-  const last = haystack.length - needle.length;
-  const from = forward ? Math.max(0, byteOffset) : Math.min(byteOffset, last);
-  const step = forward ? 1 : -1;
+  const last = end - needle.length;
+  const unit = isUcs2Search(encoding) ? 2 : 1;
+  if (unit === 2 && needle.length < 2) return -1;
+  let from = forward ? fromOffset : Math.min(fromOffset, last);
+  if (unit === 2) {
+    from -= from % 2;
+  }
+  const step = forward ? unit : -unit;
   for (let i = from; forward ? i <= last : i >= 0; i += step) {
     let match = true;
     for (let k = 0; k < needle.length; k++) {
@@ -967,6 +1484,56 @@ function search(
   return -1;
 }
 
+function normalizeSearchOffset(
+  value: unknown,
+  length: number,
+  forward: boolean,
+): number {
+  let offset: number;
+  if (typeof value === "number") {
+    offset = value;
+  } else if (value === null) {
+    offset = 0;
+  } else if (Array.isArray(value)) {
+    if (value.length === 0) {
+      offset = 0;
+    } else if (
+      value.length === 1 &&
+      (typeof value[0] === "number" || typeof value[0] === "string")
+    ) {
+      offset = Number(value[0]);
+    } else {
+      offset = Number.NaN;
+    }
+  } else {
+    // Ordinary objects become NaN in Node's coercing boundary. Deliberately
+    // do not invoke valueOf or Symbol.toPrimitive: those hooks are §13
+    // metaobject behavior.
+    offset = Number.NaN;
+  }
+  if (Number.isNaN(offset)) {
+    return forward ? 0 : length;
+  }
+  if (offset === Infinity) return length;
+  if (offset === -Infinity) return forward ? 0 : -1;
+  offset = Math.trunc(offset);
+  if (offset < 0) return Math.max(length + offset, forward ? 0 : -1);
+  return Math.min(offset, length);
+}
+
+function normalizeSearchEnd(value: number, length: number): number {
+  if (Number.isNaN(value)) return 0;
+  if (value === Infinity) return length;
+  if (value === -Infinity) return 0;
+  return Math.min(Math.max(Math.trunc(value), 0), length);
+}
+
+function isUcs2Search(encoding: string | undefined): boolean {
+  const normalized = normalizeEncoding(encoding);
+  return normalized === "ucs2" || normalized === "ucs-2" ||
+    normalized === "utf16le" || normalized === "utf-16le";
+}
+
 /**
  * `SlowBuffer`, upstream `lib/buffer.js`. Deprecated since v4 and still
  * exported, so still part of the surface.
@@ -975,8 +1542,18 @@ function search(
  * every use of it in the wild predates `class`.
  */
 export function SlowBuffer(length: number): Buffer {
+  if (!slowBufferWarningEmitted) {
+    slowBufferWarningEmitted = true;
+    emitWarning(
+      "SlowBuffer() is deprecated. Please use Buffer.allocUnsafeSlow()",
+      "DeprecationWarning",
+      "DEP0030",
+    );
+  }
   return Buffer.allocUnsafeSlow(length);
 }
+
+let slowBufferWarningEmitted = false;
 
 /**
  * Whether every byte is valid UTF-8, upstream `lib/buffer.js`.
@@ -1027,16 +1604,19 @@ export function isUtf8(input: Uint8Array | ArrayBuffer): boolean {
 
 /** The bytes of a buffer or an `ArrayBuffer`, or an error naming both. */
 function asBytes(input: unknown, name: string): Uint8Array {
-  if (input instanceof ArrayBuffer || input instanceof SharedArrayBuffer) {
+  if (input instanceof ArrayBuffer) {
     // A transferred buffer still answers `instanceof` and has no bytes behind
     // it; reading one is a mistake about lifetime rather than about type, and
     // node says so with a different code.
-    if (input instanceof ArrayBuffer && input.detached) {
+    if (input.detached) {
       throw new ERR_INVALID_STATE("Cannot validate on a detached ArrayBuffer");
     }
     return new Uint8Array(input);
   }
   if (ArrayBuffer.isView(input)) {
+    if (!(input.buffer instanceof ArrayBuffer)) {
+      throw new ERR_INVALID_ARG_TYPE(name, ["ArrayBuffer", "Buffer", "TypedArray"], input);
+    }
     return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
   }
   throw new ERR_INVALID_ARG_TYPE(name, ["ArrayBuffer", "Buffer", "TypedArray"], input);
@@ -1062,53 +1642,4 @@ export function btoa(data: string): string {
   return Buffer.from(data, "latin1").toString("base64");
 }
 
-/** How many bytes `inspect` shows before it says how many are left. */
-export const INSPECT_MAX_BYTES = 50;
-
-/**
- * `<Buffer 78 79 7a>` rather than a list of byte values, upstream
- * `lib/buffer.js`.
- *
- * Defined on the prototype through the symbol `util.inspect` looks for, which
- * is how a value gets to render itself without `inspect` knowing what it is.
- */
-Object.defineProperty(Buffer.prototype, Symbol.for("nodejs.util.inspect.custom"), {
-  value: function inspectBuffer(this: Buffer): string {
-    const shown = Math.min(INSPECT_MAX_BYTES, this.length);
-    const remaining = this.length - shown;
-    let hex = "";
-    for (let i = 0; i < shown; i++) {
-      hex += `${i > 0 ? " " : ""}${this[i]!.toString(16).padStart(2, "0")}`;
-    }
-    if (remaining > 0) {
-      hex += ` ... ${remaining} more byte${remaining > 1 ? "s" : ""}`;
-    }
-    return `<${this.constructor.name} ${hex}>`;
-  },
-  writable: true,
-  configurable: true,
-  enumerable: false,
-});
-
 export default Buffer;
-
-/**
- * Node spells every unsigned accessor two ways -- `readUInt8` and `readUint8`.
- * The second is the newer form and a great deal of code uses each, so they are
- * the same function object rather than a wrapper.
- */
-for (const name of [
-  "readUInt8", "readUInt16BE", "readUInt16LE", "readUInt32BE", "readUInt32LE",
-  "readUIntBE", "readUIntLE", "readBigUInt64BE", "readBigUInt64LE",
-  "writeUInt8", "writeUInt16BE", "writeUInt16LE", "writeUInt32BE", "writeUInt32LE",
-  "writeUIntBE", "writeUIntLE", "writeBigUInt64BE", "writeBigUInt64LE",
-]) {
-  const alias = name.replace("UInt", "Uint");
-  Object.defineProperty(Buffer.prototype, alias, {
-    __proto__: null,
-    value: (Buffer.prototype as unknown as Record<string, unknown>)[name],
-    writable: true,
-    enumerable: false,
-    configurable: true,
-  } as PropertyDescriptor);
-}

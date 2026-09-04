@@ -22,17 +22,26 @@ import { EventEmitter } from "../../events/src/main.ts";
  * does not is optional, because the old one genuinely accepts objects that
  * lack it -- that permissiveness is the reason it still exists.
  */
-export interface PipeDestination {
+export interface PipeEventSource {
+  emit(event: string, ...args: unknown[]): boolean;
+  on<Args extends unknown[]>(event: string, listener: (...args: Args) => unknown): unknown;
+  once?<Args extends unknown[]>(event: string, listener: (...args: Args) => unknown): unknown;
+  removeListener<Args extends unknown[]>(
+    event: string,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+  prependListener?<Args extends unknown[]>(
+    event: string,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+  listenerCount?(event: string): number;
+}
+
+export interface PipeDestination extends PipeEventSource {
   writable?: boolean;
   write(chunk: unknown): boolean;
   end?(): void;
   destroy?(error?: unknown): void;
-  emit(event: string, ...args: unknown[]): boolean;
-  on(event: string, listener: (...args: never[]) => void): unknown;
-  once?(event: string, listener: (...args: never[]) => void): unknown;
-  removeListener(event: string, listener: (...args: never[]) => void): unknown;
-  prependListener?(event: string, listener: (...args: never[]) => void): unknown;
-  listenerCount?(event: string): number;
   writableNeedDrain?: boolean;
   _writableState?: { needDrain?: boolean; errorEmitted?: boolean };
   _readableState?: { errorEmitted?: boolean };
@@ -50,53 +59,48 @@ export interface PipeOptions {
  *
  * `pipe` needs its error handler to run before any the program installed,
  * because the handler's job is to tear the pipe down and a program's handler
- * is allowed to rethrow. Node keeps a fallback for emitters that predate
- * `prependListener` and reaches into `_events` directly; that is preserved
- * because `pipe` accepts any object, including an event emitter from some
- * other library that bundled its own.
+ * is allowed to rethrow. Node's fallback for emitters that predate
+ * `prependListener` reaches into their dynamic `_events` property table.
+ * NTS has no such table, so a foreign legacy emitter receives an ordinary
+ * listener; every NTS EventEmitter takes the normal prepend path.
  */
 export function prependListener(
-  emitter: PipeDestination,
+  emitter: PipeEventSource,
   event: string,
-  listener: (...args: never[]) => void,
+  listener: (...args: unknown[]) => unknown,
 ): void {
   if (typeof emitter.prependListener === "function") {
     emitter.prependListener(event, listener);
     return;
   }
 
-  const events = (emitter as unknown as { _events?: Record<string, unknown> })._events;
-  if (!events || !events[event]) {
-    emitter.on(event, listener);
-  } else if (Array.isArray(events[event])) {
-    (events[event] as unknown[]).unshift(listener);
-  } else {
-    events[event] = [listener, events[event]];
-  }
+  emitter.on(event, listener);
 }
 
 export class Stream extends EventEmitter {
-  pipe<T extends PipeDestination>(destination: T, options?: PipeOptions): T {
-    const source = this as unknown as {
-      readable?: boolean;
-      pause?(): void;
-      resume?(): void;
-      on(event: string, listener: (...args: never[]) => void): unknown;
-      removeListener(event: string, listener: (...args: never[]) => void): unknown;
-    };
+  pipe<T extends PipeDestination>(destination: T, options?: PipeOptions): T | undefined {
+    const source = this;
 
     const onData = (chunk: unknown): void => {
       // The pause is the entire backpressure story in the old design: `write`
       // returning false means the destination has buffered enough, and the
       // source stops until `drain`.
-      if (destination.writable && destination.write(chunk) === false && source.pause) {
+      if (
+        destination.writable && destination.write(chunk) === false &&
+        "pause" in source && typeof source.pause === "function"
+      ) {
         source.pause();
       }
     };
-    source.on("data", onData as (...args: never[]) => void);
+    source.on("data", onData);
 
     const onDrain = (): void => {
-      if (source.readable && source.resume) source.resume();
+      if (
+        "readable" in source && source.readable &&
+        "resume" in source && typeof source.resume === "function"
+      ) {
+        source.resume();
+      }
     };
     destination.on("drain", onDrain);
 
@@ -125,25 +129,27 @@ export class Stream extends EventEmitter {
     // error does is take it apart. Re-emitting when nothing is left listening
     // turns a silently dropped error into the unhandled `error` event it
     // should have been.
-    function onError(this: PipeDestination, error: unknown): void {
+    const onError = (emitter: PipeEventSource, error: unknown): void => {
       cleanup();
-      if (this.listenerCount?.("error") === 0) {
-        this.emit("error", error);
+      if (emitter.listenerCount?.("error") === 0) {
+        emitter.emit("error", error);
       }
-    }
+    };
+    const onSourceError = (error: unknown): void => onError(source, error);
+    const onDestinationError = (error: unknown): void => onError(destination, error);
 
-    prependListener(source as unknown as PipeDestination, "error", onError as never);
-    prependListener(destination, "error", onError as never);
+    prependListener(source, "error", onSourceError);
+    prependListener(destination, "error", onDestinationError);
 
     function cleanup(): void {
-      source.removeListener("data", onData as (...args: never[]) => void);
+      source.removeListener("data", onData);
       destination.removeListener("drain", onDrain);
 
       source.removeListener("end", onEnd);
       source.removeListener("close", onClose);
 
-      source.removeListener("error", onError as never);
-      destination.removeListener("error", onError as never);
+      source.removeListener("error", onSourceError);
+      destination.removeListener("error", onDestinationError);
 
       source.removeListener("end", cleanup);
       source.removeListener("close", cleanup);
@@ -162,25 +168,8 @@ export class Stream extends EventEmitter {
     return destination;
   }
 
-  /**
-   * The events this stream currently has listeners for.
-   *
-   * Overridden because the inherited one reports a name whose listener array
-   * has been emptied, and a stream is asked this to decide whether anyone is
-   * still watching.
-   */
+  /** The events this stream currently has listeners for. */
   override eventNames(): (string | symbol)[] {
-    const events = (this as unknown as { _events: Record<string | symbol, unknown> })._events;
-    const names: (string | symbol)[] = [];
-    for (const key of Reflect.ownKeys(events)) {
-      const registered = events[key];
-      if (
-        typeof registered === "function" ||
-        (Array.isArray(registered) && registered.length > 0)
-      ) {
-        names.push(key);
-      }
-    }
-    return names;
+    return super.eventNames();
   }
 }

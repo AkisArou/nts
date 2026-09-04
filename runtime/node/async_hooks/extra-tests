@@ -1,0 +1,1 @@
+test-asyncresource-bind.js: AsyncResource.bind belongs to node:async_hooks despite its filename

@@ -1,63 +1,36 @@
 // `util.types`, node `lib/internal/util/types.js`.
 //
-// Node answers these from V8's own object model through
-// `internalBinding('types')`, which can tell a `Date` from an object that has
-// been given a `Date` prototype. Here each is a brand check: call the method
-// the type owns and see whether it throws. That is what every runtime without
-// engine introspection does, and it is exactly as accurate for real values --
-// it differs only for a deliberately forged one.
-
-function brand(value: unknown, probe: (v: never) => unknown): boolean {
-  if (value === null || typeof value !== "object") {
-    return false;
-  }
-  try {
-    probe(value as never);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const dateGetTime = Date.prototype.getTime;
-const mapSize = Object.getOwnPropertyDescriptor(Map.prototype, "size")!.get!;
-const setSize = Object.getOwnPropertyDescriptor(Set.prototype, "size")!.get!;
-const regexpSource = Object.getOwnPropertyDescriptor(RegExp.prototype, "source")!.get!;
-const weakMapHas = WeakMap.prototype.has;
-const weakSetHas = WeakSet.prototype.has;
-const promiseThen = Promise.prototype.then;
+// Node answers these through V8's internal type tags. NTS has one statically
+// known class for each supported kind, so ordinary nominal checks are the
+// matching operation. Cross-realm and forged-prototype recognition belongs to
+// the engine metaobject model and is intentionally not approximated here.
 
 export function isDate(value: unknown): value is Date {
-  return brand(value, (v) => dateGetTime.call(v));
+  return value instanceof Date;
 }
 
 export function isMap(value: unknown): value is Map<unknown, unknown> {
-  return brand(value, (v) => mapSize.call(v));
+  return value instanceof Map;
 }
 
 export function isSet(value: unknown): value is Set<unknown> {
-  return brand(value, (v) => setSize.call(v));
+  return value instanceof Set;
 }
 
 export function isWeakMap(value: unknown): value is WeakMap<object, unknown> {
-  return brand(value, (v) => weakMapHas.call(v, weakMapHas));
+  return value instanceof WeakMap;
 }
 
 export function isWeakSet(value: unknown): value is WeakSet<object> {
-  return brand(value, (v) => weakSetHas.call(v, weakSetHas));
+  return value instanceof WeakSet;
 }
 
 export function isRegExp(value: unknown): value is RegExp {
-  return brand(value, (v) => regexpSource.call(v));
+  return value instanceof RegExp;
 }
 
 export function isPromise(value: unknown): value is Promise<unknown> {
-  // `then` on a non-promise throws; on a promise it returns one, which is
-  // discarded. Attaching handlers that do nothing avoids turning a rejection
-  // into an unhandled one just by asking what type this is.
-  return brand(value, (v) => {
-    promiseThen.call(v, () => {}, () => {});
-  });
+  return value instanceof Promise;
 }
 
 export function isNativeError(value: unknown): value is Error {
@@ -68,11 +41,11 @@ export function isArrayBuffer(value: unknown): value is ArrayBuffer {
   return value instanceof ArrayBuffer;
 }
 
-export function isSharedArrayBuffer(value: unknown): boolean {
+export function isSharedArrayBuffer(value: unknown): value is SharedArrayBuffer {
   return typeof SharedArrayBuffer === "function" && value instanceof SharedArrayBuffer;
 }
 
-export function isAnyArrayBuffer(value: unknown): boolean {
+export function isAnyArrayBuffer(value: unknown): value is ArrayBuffer | SharedArrayBuffer {
   return isArrayBuffer(value) || isSharedArrayBuffer(value);
 }
 
@@ -84,90 +57,98 @@ export function isDataView(value: unknown): value is DataView {
   return value instanceof DataView;
 }
 
-export function isTypedArray(value: unknown): boolean {
+export type TypedArray =
+  | Uint8Array | Uint8ClampedArray | Uint16Array | Uint32Array
+  | Int8Array | Int16Array | Int32Array
+  | Float16Array | Float32Array | Float64Array
+  | BigInt64Array | BigUint64Array;
+
+export function isTypedArray(value: unknown): value is TypedArray {
   return ArrayBuffer.isView(value) && !(value instanceof DataView);
 }
 
-/** One predicate per typed-array kind, from its constructor name. */
-function isKind(name: string) {
-  return (value: unknown): boolean =>
-    isTypedArray(value) && (value as object).constructor?.name === name;
+export function isUint8Array(value: unknown): value is Uint8Array { return value instanceof Uint8Array; }
+export function isUint8ClampedArray(value: unknown): value is Uint8ClampedArray { return value instanceof Uint8ClampedArray; }
+export function isUint16Array(value: unknown): value is Uint16Array { return value instanceof Uint16Array; }
+export function isUint32Array(value: unknown): value is Uint32Array { return value instanceof Uint32Array; }
+export function isInt8Array(value: unknown): value is Int8Array { return value instanceof Int8Array; }
+export function isInt16Array(value: unknown): value is Int16Array { return value instanceof Int16Array; }
+export function isInt32Array(value: unknown): value is Int32Array { return value instanceof Int32Array; }
+export function isFloat16Array(value: unknown): value is Float16Array { return value instanceof Float16Array; }
+export function isFloat32Array(value: unknown): value is Float32Array { return value instanceof Float32Array; }
+export function isFloat64Array(value: unknown): value is Float64Array { return value instanceof Float64Array; }
+export function isBigInt64Array(value: unknown): value is BigInt64Array { return value instanceof BigInt64Array; }
+export function isBigUint64Array(value: unknown): value is BigUint64Array { return value instanceof BigUint64Array; }
+
+/** Primitive wrappers supported by the ordinary same-realm class model. */
+export function isStringObject(value: unknown): value is String {
+  return value instanceof String;
 }
 
-export const isUint8Array = isKind("Uint8Array");
-export const isUint8ClampedArray = isKind("Uint8ClampedArray");
-export const isUint16Array = isKind("Uint16Array");
-export const isUint32Array = isKind("Uint32Array");
-export const isInt8Array = isKind("Int8Array");
-export const isInt16Array = isKind("Int16Array");
-export const isInt32Array = isKind("Int32Array");
-export const isFloat32Array = isKind("Float32Array");
-export const isFloat64Array = isKind("Float64Array");
-export const isBigInt64Array = isKind("BigInt64Array");
-export const isBigUint64Array = isKind("BigUint64Array");
-
-/** A primitive in an object wrapper: `new String('x')`, not `'x'`. */
-function isBoxed(value: unknown, probe: (v: never) => unknown): boolean {
-  return brand(value, probe);
+export function isNumberObject(value: unknown): value is Number {
+  return value instanceof Number;
 }
 
-export function isStringObject(value: unknown): boolean {
-  return isBoxed(value, (v) => String.prototype.valueOf.call(v));
+export function isBooleanObject(value: unknown): value is Boolean {
+  return value instanceof Boolean;
 }
 
-export function isNumberObject(value: unknown): boolean {
-  return isBoxed(value, (v) => Number.prototype.valueOf.call(v));
+export function isSymbolObject(_value: unknown): boolean {
+  return false;
 }
 
-export function isBooleanObject(value: unknown): boolean {
-  return isBoxed(value, (v) => Boolean.prototype.valueOf.call(v));
+export function isBigIntObject(_value: unknown): boolean {
+  return false;
 }
 
-export function isSymbolObject(value: unknown): boolean {
-  return isBoxed(value, (v) => Symbol.prototype.valueOf.call(v));
-}
+export type BoxedPrimitive = String | Number | Boolean;
 
-export function isBigIntObject(value: unknown): boolean {
-  return isBoxed(value, (v) => BigInt.prototype.valueOf.call(v));
-}
-
-export function isBoxedPrimitive(value: unknown): boolean {
+export function isBoxedPrimitive(value: unknown): value is BoxedPrimitive {
   return (
     isStringObject(value) || isNumberObject(value) || isBooleanObject(value) ||
     isSymbolObject(value) || isBigIntObject(value)
   );
 }
 
-export function isGeneratorFunction(value: unknown): boolean {
-  return typeof value === "function" && value.constructor?.name === "GeneratorFunction";
+export function isGeneratorFunction(_value: unknown): boolean {
+  // Generator functions are an intentionally unsupported source-language
+  // kind, and function-name/constructor inspection is a metaobject operation.
+  return false;
 }
 
-export function isAsyncFunction(value: unknown): boolean {
-  return typeof value === "function" && value.constructor?.name === "AsyncFunction";
+export function isAsyncFunction(_value: unknown): boolean {
+  // An async function is callable; observing that it was declared `async`
+  // requires function-object metadata the compiled representation omits.
+  return false;
 }
 
-export function isGeneratorObject(value: unknown): boolean {
+interface GeneratorLike {
+  next: CallableFunction;
+  throw: CallableFunction;
+}
+
+export function isGeneratorObject(value: unknown): value is GeneratorLike {
   return (
     value !== null && typeof value === "object" &&
-    typeof (value as { next?: unknown }).next === "function" &&
-    typeof (value as { throw?: unknown }).throw === "function"
+    "next" in value && typeof value.next === "function" &&
+    "throw" in value && typeof value.throw === "function"
   );
 }
 
-export function isArgumentsObject(value: unknown): boolean {
-  return Object.prototype.toString.call(value) === "[object Arguments]";
+export function isArgumentsObject(_value: unknown): boolean {
+  return false;
 }
 
-export function isMapIterator(value: unknown): boolean {
-  return Object.prototype.toString.call(value) === "[object Map Iterator]";
+export function isMapIterator(_value: unknown): _value is Iterable<unknown> {
+  return false;
 }
 
-export function isSetIterator(value: unknown): boolean {
-  return Object.prototype.toString.call(value) === "[object Set Iterator]";
+export function isSetIterator(_value: unknown): _value is Iterable<unknown> {
+  return false;
 }
 
-export function isModuleNamespaceObject(value: unknown): boolean {
-  return Object.prototype.toString.call(value) === "[object Module]";
+export function isModuleNamespaceObject(_value: unknown): boolean {
+  return false;
 }
 
 // These need V8's own view of the heap and have no observable brand: a `Proxy`

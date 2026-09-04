@@ -1,0 +1,9 @@
+parallel/test-global-console-exists.js
+parallel/test-inspector-console-top-frame.js
+parallel/test-inspector-console.js
+parallel/test-snapshot-console.js
+parallel/test-trace-events-console.js
+parallel/test-worker-console-listeners.js
+pseudo-tty/console-dumb-tty.js
+pseudo-tty/console_colors.js
+wpt/test-console.js

@@ -3,9 +3,8 @@
 # so the assertion is about node's binary; there is no way to install our
 # module into a process we did not start.
 #
-# `test-process-env.js` and `test-process-kill-null.js` also spawn, but only
-# after testing in-process behaviour that is ours, so they are left in and fail
-# on the spawned half rather than being excluded whole.
+# `test-process-kill-null.js` also spawns, but the child is only a signal target;
+# every assertion calls our in-process `process.kill`, so it remains applicable.
 test-process-argv-0.js: spawns node to see what argv[0] the child reports
 test-process-exec-argv.js: spawns node with flags and reads back execArgv
 test-process-execpath.js: spawns node at its own execPath
@@ -20,7 +19,7 @@ test-process-exit-code.js: spawns node once per exit-code case
 test-process-exit-code-validation.js: spawns node once per invalid exit code
 test-process-external-stdio-close.js: spawns node with its stdio closed
 test-process-external-stdio-close-spawn.js: spawns node with its stdio closed
-test-process-getgroups.js: shells out to `id -G` and compares
+test-process-getgroups.js: treats an absent getgroups as success even on POSIX, so empty-module sabotage is hollow; the same `id -G` oracle runs without that optional guard in local/getgroups.js
 test-process-redirect-warnings.js: spawns node with --redirect-warnings
 test-process-redirect-warnings-env.js: spawns node with NODE_REDIRECT_WARNINGS
 
@@ -36,3 +35,70 @@ test-process-execve-socket.js: replaces the process image with an open socket
 test-process-execve-permission-fail.js: needs --permission to deny the call
 test-process-execve-permission-granted.js: needs --permission to allow the call
 test-process-execve-worker-threads.js: needs worker_threads to be the caller
+
+# NTS has no runtime property map or intrinsic graph (§13). These tests are
+# specifically about V8 exotic objects, property descriptors/prototypes, or
+# Node's private binding/addon loader, so their behavior cannot be represented
+# by the profile's flat statically typed objects.
+test-process-abort.js: checks observable function prototype/constructor metadata, a §13 non-goal
+test-process-binding.js: process.binding/internalBinding expose Node's private intrinsic native-module graph
+test-process-binding-internalbinding-allowlist.js: process.binding exposes Node's private intrinsic native-module graph
+test-process-binding-util.js: process.binding exposes Node's private intrinsic native-module graph
+test-process-config.js: asserts recursive Object.freeze behavior and writable property descriptors
+test-process-constants-noatime.js: tests node:fs.constants only and never observes process
+test-process-dlopen-error-message-crash.js: process.dlopen loads Node-ABI native addons through Node's private module loader
+test-process-dlopen-undefined-exports.js: process.dlopen loads Node-ABI native addons through Node's private module loader
+test-process-domain-segfault.js: V8 regression test only assigns legacy process.domain and has no observable process assertion
+test-process-prototype.js: inspects the process prototype chain and constructor property descriptor
+
+# `process.env` is a V8 interceptor: arbitrary property get/set/delete/define
+# operations call getenv/setenv and even change the engine timezone. NTS has no
+# exotic objects or Proxy (§13). The supported subset is a readonly snapshot;
+# direct snapshot/loadEnvFile coverage is kept in local/env-snapshot-load.js.
+test-process-env-delete.js: requires live exotic property writes and deletes
+test-process-env-deprecation.js: requires the exotic setter and its coercion warning
+test-process-env-ignore-getter-setter.js: tests Object.defineProperty descriptors on the exotic env object
+test-process-env-sideeffects.js: asks V8 Inspector to evaluate an exotic env property interceptor
+test-process-env-symbols.js: tests Symbol-key traps on the exotic env object
+test-process-env-tz.js: requires the exotic setter to call the JavaScript engine's timezone hook
+test-process-env-windows-error-reset.js: requires live exotic get/set/has interception even on the POSIX lane
+test-process-env.js: requires live exotic get/set/delete/has behavior and propagates it to a spawned host Node
+test-process-load-env-file.js: four cases spawn host Node and the remaining direct cases are isolated in local/env-snapshot-load.js
+
+# These upstream files mix a supported static subset with a §13 operation.
+# Focused local files preserve the supported assertions without claiming the
+# excluded metaobject behavior.
+test-process-env-allowed-flags.js: mixes flag membership/iteration with Object.freeze and direct Set.prototype mutation; see local/allowed-flags.js
+test-process-env-allowed-flags-are-documented.js: validates Node's generated CLI documentation, which is absent from the pinned source-only checkout; runtime membership is covered by local/allowed-flags.js
+test-process-ref-unref.js: mixes legacy ref()/unref() with runtime Symbol-based dispatch; see local/ref-unref-legacy.js
+test-process-hrtime.js: mixes public timing behavior with eval/V8 optimization intrinsics and internalBinding; see local/time-and-versions.js
+test-process-hrtime-bigint.js: requires a callable object property (`hrtime.bigint`) plus eval/V8 intrinsics; function objects and eval are §13 non-goals
+test-process-versions.js: asserts property descriptors for every version entry, a §13 non-goal; see local/time-and-versions.js
+
+# The CommonJS substitution runner cannot interpose on ESM dynamic import, and
+# dynamic import is itself outside the compiled language profile.
+test-process-default.js: dynamically imports host node:process rather than the substituted module
+
+# These calls deliberately terminate the conformance child before it can
+# report a verdict. The non-terminating exit state machine remains covered by
+# upstream tests and local/exit-recursion.js.
+test-process-exit-from-before-exit.js: process.exit terminates the runner from a beforeExit listener
+test-process-exit-recursive.js: process.exit terminates the runner from an exit listener
+
+# JavaScript source-map cache toggling belongs to Node/V8's code-generation
+# engine. NTS emits native debug information and has no eval/generated-JS source
+# map subsystem to toggle.
+test-process-setsourcemapsenabled.js: requires Node's V8 source-map cache subsystem
+
+# Workers execute this upstream file in fresh host Node isolates, outside the
+# CommonJS substitution. The main-thread CPU accounting behavior has its own
+# applicable upstream test.
+test-process-threadCpuUsage-worker-threads.js: worker copies use host node:process, not the module under test
+
+# These public process tests live outside the test-process-* naming family.
+# The applicable nextTick/resource tests are enumerated in extra-tests. These
+# four cannot provide a non-hollow verdict against the supported static API.
+test-memory-usage.js: requires the callable `memoryUsage.rss` function property and V8-specific external/ArrayBuffer heap accounting; the supported allocation record is isolated in local/resource-accounting.js
+test-memory-usage-emfile.js: exclusively calls the unsupported `memoryUsage.rss` function property after exhausting host file descriptors
+test-next-tick-domain.js: only proves that loading host node:domain does not replace a function; an absent nextTick passes unchanged under sabotage
+test-next-tick-when-exiting.js: calls process.exit, which terminates the conformance child before it can report a verdict

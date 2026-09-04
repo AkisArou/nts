@@ -23,7 +23,8 @@ import { StringDecoder } from "../../string_decoder/src/main.ts";
 import type { Buffer } from "../../buffer/src/main.ts";
 import { setTimeout, clearTimeout } from "../../timers/src/main.ts";
 import type { Timeout } from "../../timers/src/timeout.ts";
-import { charLengthAt, CSI, emitKeys } from "./utils.ts";
+import { kEscape } from "../../internal/readline-callbacks.ts";
+import { charLengthAt, emitKeys } from "./utils.ts";
 
 /** GNU readline's `keyseq-timeout` default. */
 const ESCAPE_CODE_TIMEOUT = 500;
@@ -42,8 +43,14 @@ export const kSawKeyPress = Symbol("saw-key-press");
 
 interface KeypressStream {
   emit(event: string, ...args: unknown[]): unknown;
-  on(event: string, listener: (...args: never[]) => void): unknown;
-  removeListener(event: string, listener: (...args: never[]) => void): unknown;
+  on<Args extends unknown[]>(
+    event: string,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+  removeListener<Args extends unknown[]>(
+    event: string,
+    listener: (...args: Args) => unknown,
+  ): unknown;
   listenerCount(event: string): number;
   [kKeypressDecoder]?: StringDecoder;
   [kEscapeDecoder]?: Generator<void, void, string>;
@@ -64,11 +71,13 @@ export function emitKeypressEvents(
   // bytes and every key would arrive twice.
   if (stream[kKeypressDecoder]) return;
 
-  stream[kKeypressDecoder] = new StringDecoder("utf8");
-  stream[kEscapeDecoder] = emitKeys(stream);
+  const keypressDecoder = new StringDecoder("utf8");
+  const escapeDecoder = emitKeys(stream);
+  stream[kKeypressDecoder] = keypressDecoder;
+  stream[kEscapeDecoder] = escapeDecoder;
   // Run to the first `yield`, so the generator is waiting for a character
   // rather than waiting to start.
-  stream[kEscapeDecoder].next();
+  escapeDecoder.next();
 
   const triggerEscape = (): void => {
     stream[kEscapeDecoder]?.next("");
@@ -81,12 +90,12 @@ export function emitKeypressEvents(
       // Nobody is listening, so stop decoding and wait to be needed again.
       // Decoding into an empty room costs a `StringDecoder` write per chunk on
       // a stream that may be carrying a file.
-      stream.removeListener("data", onData as never);
-      stream.on("newListener", onNewListener as never);
+      stream.removeListener("data", onData);
+      stream.on("newListener", onNewListener);
       return;
     }
 
-    const string = (stream[kKeypressDecoder] as StringDecoder).write(input as never);
+    const string = keypressDecoder.write(input);
     if (!string) return;
 
     clearTimeout(timer);
@@ -104,8 +113,12 @@ export function emitKeypressEvents(
       if (length === string.length) iface.isCompletionEnabled = true;
 
       try {
-        (stream[kEscapeDecoder] as Generator<void, void, string>).next(character);
-        if (length === string.length && character === CSI.kEscape) {
+        const activeDecoder = stream[kEscapeDecoder];
+        if (activeDecoder === undefined) {
+          throw new Error("readline escape decoder invariant violated");
+        }
+        activeDecoder.next(character);
+        if (length === string.length && character === kEscape) {
           // An escape with nothing after it, so far. Either more is coming in
           // the next chunk or this was the Escape key, and only time can say.
           timer = setTimeout(triggerEscape, escapeCodeTimeout);
@@ -123,13 +136,13 @@ export function emitKeypressEvents(
 
   function onNewListener(event: string): void {
     if (event !== "keypress") return;
-    stream.on("data", onData as never);
-    stream.removeListener("newListener", onNewListener as never);
+    stream.on("data", onData);
+    stream.removeListener("newListener", onNewListener);
   }
 
   if (stream.listenerCount("keypress") > 0) {
-    stream.on("data", onData as never);
+    stream.on("data", onData);
   } else {
-    stream.on("newListener", onNewListener as never);
+    stream.on("newListener", onNewListener);
   }
 }

@@ -29,16 +29,16 @@ const IPv6Regex = new RegExp(
     ")(?:%[0-9a-zA-Z-.:]{1,})?$",
 );
 
-export function isIPv4(value: unknown): boolean {
-  return typeof value === "string" && IPv4Regex.test(value);
+export function isIPv4(value: string): boolean {
+  return IPv4Regex.test(value);
 }
 
-export function isIPv6(value: unknown): boolean {
-  return typeof value === "string" && IPv6Regex.test(value);
+export function isIPv6(value: string): boolean {
+  return IPv6Regex.test(value);
 }
 
 /** `4`, `6`, or `0` for something that is not a literal address. */
-export function isIP(value: unknown): number {
+export function isIP(value: string): number {
   if (isIPv4(value)) return 4;
   if (isIPv6(value)) return 6;
   return 0;

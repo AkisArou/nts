@@ -9,6 +9,7 @@
 // tested as itself rather than as a plan.
 import "../internal/bindings.node.mjs";
 import dgram from "node:dgram";
+import dns from "node:dns";
 
 /** Open handles, by the index the module holds. */
 const sockets = new Map();
@@ -29,8 +30,8 @@ const errnoOf = (fn) => {
   }
 };
 
-globalThis.nts_udp_new = (type, reuseAddr, ipv6Only) => {
-  const socket = dgram.createSocket({ type, reuseAddr, ipv6Only });
+globalThis.nts_udp_new = (type, reuseAddr, reusePort, ipv6Only) => {
+  const socket = dgram.createSocket({ type, reuseAddr, reusePort, ipv6Only });
   // Node's socket binds itself on first send; ours drives that explicitly, so
   // the errors it would emit on its own would be duplicates of the ones the
   // module raises. Swallowed here rather than left to become uncaught.
@@ -40,27 +41,10 @@ globalThis.nts_udp_new = (type, reuseAddr, ipv6Only) => {
   return handle;
 };
 
-globalThis.nts_udp_bind = (handle, address, port, onBound) => {
+globalThis.nts_udp_bind_sync = (handle, address, port) => {
   const entry = at(handle);
   if (!entry) return -1;
-  // Reported when node says `listening`, not when `bind` returns. The two are
-  // not the same moment and `address()` is only answerable after the second.
-  const onError = (error) => {
-    entry.socket.removeListener("listening", onListening);
-    onBound(typeof error?.errno === "number" ? error.errno : -1);
-  };
-  const onListening = () => {
-    entry.socket.removeListener("error", onError);
-    onBound(0);
-  };
-  entry.socket.once("listening", onListening);
-  entry.socket.once("error", onError);
-  const err = errnoOf(() => entry.socket.bind(port, address));
-  if (err !== 0) {
-    entry.socket.removeListener("listening", onListening);
-    entry.socket.removeListener("error", onError);
-  }
-  return err;
+  return errnoOf(() => entry.socket.bindSync({ address, port }));
 };
 
 globalThis.nts_udp_close = (handle) => {
@@ -93,18 +77,20 @@ globalThis.nts_udp_address = (handle, remote) => {
   }
 };
 
-globalThis.nts_udp_send = (handle, bytes, port, address, callback) => {
+globalThis.nts_udp_send = (handle, chunks, port, address, callback) => {
   const entry = at(handle);
   if (!entry) return -1;
-  const buffer = Buffer.from(bytes);
+  let byteLength = 0;
+  for (const chunk of chunks) byteLength += chunk.byteLength;
   const done = (error, sent) => {
-    callback(error ? (typeof error.errno === "number" ? error.errno : -1) : 0, sent ?? buffer.length);
+    const errno = error ? (typeof error.errno === "number" ? error.errno : -1) : 0;
+    callback(errno, error ? 0 : sent ?? byteLength);
   };
   return errnoOf(() => {
     // Port zero is how the module says "connected, no destination" -- the two
     // call shapes node's `send` has, chosen by the same fact.
-    if (port) entry.socket.send(buffer, port, address, done);
-    else entry.socket.send(buffer, done);
+    if (port) entry.socket.send(chunks, port, address, done);
+    else entry.socket.send(chunks, done);
   });
 };
 
@@ -112,7 +98,7 @@ globalThis.nts_udp_recv_start = (handle, onMessage, onError) => {
   const entry = at(handle);
   if (!entry) return -1;
   entry.onMessage = (message, rinfo) => {
-    onMessage(Array.from(message), rinfo.address, rinfo.family, rinfo.port);
+    onMessage(message, rinfo.address, rinfo.family, rinfo.port);
   };
   entry.onError = (error) => onError(typeof error?.errno === "number" ? error.errno : -1);
   entry.socket.on("message", entry.onMessage);
@@ -130,10 +116,20 @@ globalThis.nts_udp_recv_stop = (handle) => {
   return 0;
 };
 
-globalThis.nts_udp_connect = (handle, address, port, onConnected) => {
+globalThis.nts_udp_connect_sync = (handle, address, port) => {
   const entry = at(handle);
   if (!entry) return -1;
-  return errnoOf(() => entry.socket.connect(port, address, () => onConnected(0)));
+  return errnoOf(() => entry.socket.connectSync(port, address));
+};
+
+globalThis.nts_udp_lookup = (hostname, family, callback) => {
+  dns.lookup(hostname, family, (error, address, resolvedFamily) => {
+    callback(
+      error ? (typeof error.errno === "number" ? error.errno : -1) : 0,
+      address ?? "",
+      resolvedFamily ?? family,
+    );
+  });
 };
 
 globalThis.nts_udp_disconnect = (handle) => {
@@ -162,6 +158,13 @@ globalThis.nts_udp_membership = (handle, address, iface, join) =>
     else socket.dropMembership(address, iface || undefined);
   });
 
+globalThis.nts_udp_source_membership = (handle, source, group, iface, join) =>
+  errnoOf(() => {
+    const socket = at(handle).socket;
+    if (join) socket.addSourceSpecificMembership(source, group, iface || undefined);
+    else socket.dropSourceSpecificMembership(source, group, iface || undefined);
+  });
+
 globalThis.nts_udp_buffer_size = (handle, size, receive) => {
   const entry = at(handle);
   if (!entry) return -1;
@@ -177,6 +180,16 @@ globalThis.nts_udp_buffer_size = (handle, size, receive) => {
   } catch (error) {
     return typeof error?.errno === "number" ? error.errno : -1;
   }
+};
+
+globalThis.nts_udp_send_queue_size = (handle) => {
+  const entry = at(handle);
+  return entry ? entry.socket.getSendQueueSize() : 0;
+};
+
+globalThis.nts_udp_send_queue_count = (handle) => {
+  const entry = at(handle);
+  return entry ? entry.socket.getSendQueueCount() : 0;
 };
 
 globalThis.nts_udp_ref = (handle, keepProcessAlive) => {

@@ -2,11 +2,51 @@
 //
 // Node's module exports `Buffer` alongside `kMaxLength`, `constants`, `atob`,
 // `btoa` and the rest; the class itself is one property, not the module.
+import { Blob as HostBlob } from "node:buffer";
+
 export function shape(exports) {
   const mod = { ...exports };
   delete mod.default;
+  installIdentityAliases(exports.Buffer);
   mod.Buffer = callableBuffer(exports.Buffer);
+  // Blob is a Web-platform value used as an input fixture by other module
+  // suites. Buffer owns no Blob algorithm; Node supplies the platform class.
+  mod.Blob = HostBlob;
   return mod;
+}
+
+/**
+ * Node exposes both `UInt` and `Uint` spellings as the same function object.
+ * The compiled class implements both statically; this Node-only shape makes
+ * their observable JavaScript identity match without adding another call to
+ * either implementation.
+ */
+function installIdentityAliases(Buffer) {
+  const aliases = [
+    ["readUint8", "readUInt8"],
+    ["readUint16BE", "readUInt16BE"],
+    ["readUint16LE", "readUInt16LE"],
+    ["readUint32BE", "readUInt32BE"],
+    ["readUint32LE", "readUInt32LE"],
+    ["readUintBE", "readUIntBE"],
+    ["readUintLE", "readUIntLE"],
+    ["readBigUint64BE", "readBigUInt64BE"],
+    ["readBigUint64LE", "readBigUInt64LE"],
+    ["writeUint8", "writeUInt8"],
+    ["writeUint16BE", "writeUInt16BE"],
+    ["writeUint16LE", "writeUInt16LE"],
+    ["writeUint32BE", "writeUInt32BE"],
+    ["writeUint32LE", "writeUInt32LE"],
+    ["writeUintBE", "writeUIntBE"],
+    ["writeUintLE", "writeUIntLE"],
+    ["writeBigUint64BE", "writeBigUInt64BE"],
+    ["writeBigUint64LE", "writeBigUInt64LE"],
+  ];
+  for (const [alias, canonical] of aliases) {
+    Buffer.prototype[alias] = Buffer.prototype[canonical];
+  }
+  Buffer.prototype.toLocaleString = Buffer.prototype.toString;
+  Buffer.prototype[Symbol.for("nodejs.util.inspect.custom")] = Buffer.prototype.inspect;
 }
 
 /**
@@ -23,9 +63,17 @@ export function shape(exports) {
  */
 function callableBuffer(Buffer) {
   const legacy = function Buffer_(value, encodingOrOffset, length) {
-    return typeof value === "number"
-      ? Buffer.alloc(value)
-      : Buffer.from(value, encodingOrOffset, length);
+    if (typeof value === "number") {
+      if (typeof encodingOrOffset === "string") {
+        const error = new TypeError(
+          `The "string" argument must be of type string. Received type number (${value})`,
+        );
+        error.code = "ERR_INVALID_ARG_TYPE";
+        throw error;
+      }
+      return Buffer.alloc(value);
+    }
+    return Buffer.from(value, encodingOrOffset, length);
   };
   Object.setPrototypeOf(legacy, Buffer);
   legacy.prototype = Buffer.prototype;

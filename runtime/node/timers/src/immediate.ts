@@ -23,28 +23,39 @@ import {
   emitInit,
   getDefaultTriggerAsyncId,
   initHooksExist,
-  kAsyncId,
-  kContextFrame,
-  kTriggerAsyncId,
   newAsyncId,
 } from "../../internal/async-hooks.ts";
 
 export const kRefed = Symbol("refed");
 
-export type ImmediateCallback = (...args: never[]) => void;
+export type ImmediateCallback<Args extends unknown[] = []> = (...args: Args) => void;
 
-export class Immediate {
-  _idleNext: Immediate | null;
-  _idlePrev: Immediate | null;
-  _onImmediate: ImmediateCallback | null | undefined;
+/** The non-generic view retained by the heterogeneous immediate queue. */
+export interface ImmediateHandle {
+  _idleNext: ImmediateHandle | null;
+  _idlePrev: ImmediateHandle | null;
+  _onImmediate: CallableFunction | null | undefined;
   _argv: unknown[] | undefined;
   _destroyed: boolean;
   [kRefed]: boolean | null;
-  [kAsyncId]: number;
-  [kTriggerAsyncId]: number;
-  [kContextFrame]: AsyncContextFrame | undefined;
+  _asyncId: number;
+  _triggerAsyncId: number;
+  _contextFrame: AsyncContextFrame | undefined;
+  invoke(): void;
+}
 
-  constructor(callback: ImmediateCallback, args: unknown[] | undefined) {
+export class Immediate<Args extends unknown[] = []> implements ImmediateHandle {
+  _idleNext: ImmediateHandle | null;
+  _idlePrev: ImmediateHandle | null;
+  _onImmediate: ImmediateCallback<Args> | null | undefined;
+  _argv: Args | undefined;
+  _destroyed: boolean;
+  [kRefed]: boolean | null;
+  _asyncId: number;
+  _triggerAsyncId: number;
+  _contextFrame: AsyncContextFrame | undefined;
+
+  constructor(callback: ImmediateCallback<Args>, args: Args | undefined) {
     this._idleNext = null;
     this._idlePrev = null;
     this._onImmediate = callback;
@@ -57,15 +68,25 @@ export class Immediate {
     // stack. By the time it runs, the loop has moved on.
     const asyncId = newAsyncId();
     const trigger = getDefaultTriggerAsyncId();
-    this[kAsyncId] = asyncId;
-    this[kTriggerAsyncId] = trigger;
-    this[kContextFrame] = AsyncContextFrame.current();
+    this._asyncId = asyncId;
+    this._triggerAsyncId = trigger;
+    this._contextFrame = AsyncContextFrame.current();
     if (initHooksExist()) emitInit(asyncId, "Immediate", trigger, this);
 
     this.ref();
     count++;
     immediateQueue.append(this);
     arm();
+  }
+
+  /** Invoke the callback with the tuple checked at construction. */
+  invoke(): void {
+    const callback = this._onImmediate;
+    if (callback === null || callback === undefined) return;
+    const args = this._argv;
+    const erasedCallback: Function = callback;
+    if (args === undefined) erasedCallback.call(this);
+    else erasedCallback.apply(this, args);
   }
 
   ref(): this {
@@ -94,10 +115,10 @@ export class Immediate {
 }
 
 class ImmediateList {
-  head: Immediate | null = null;
-  tail: Immediate | null = null;
+  head: ImmediateHandle | null = null;
+  tail: ImmediateHandle | null = null;
 
-  append(item: Immediate): void {
+  append(item: ImmediateHandle): void {
     if (this.tail !== null) {
       this.tail._idleNext = item;
       item._idlePrev = this.tail;
@@ -107,7 +128,7 @@ class ImmediateList {
     this.tail = item;
   }
 
-  remove(item: Immediate): void {
+  remove(item: ImmediateHandle): void {
     if (item._idleNext) {
       item._idleNext._idlePrev = item._idlePrev;
     }
@@ -142,9 +163,14 @@ let refCount = 0;
 
 /** Whether a drain is already arranged, so that arming is idempotent. */
 let armed = false;
+/** Whether the arranged drain is currently running. */
+let draining = false;
 
 function arm(): void {
-  if (armed) return;
+  // An immediate created by an immediate callback belongs to the next pass.
+  // Re-arm once the current snapshot is finished, after that callback's
+  // destroy report has had a chance to schedule its native immediate.
+  if (armed || draining) return;
   armed = true;
   host.scheduleImmediate();
 }
@@ -157,12 +183,12 @@ export function getRefCount(): number {
   return refCount;
 }
 
-export function clearImmediate(immediate: Immediate | null | undefined): void {
+export function clearImmediate(immediate: ImmediateHandle | null | undefined): void {
   if (!immediate?._onImmediate || immediate._destroyed) return;
 
   count--;
   immediate._destroyed = true;
-  emitDestroy(immediate[kAsyncId]);
+  emitDestroy(immediate._asyncId);
 
   if (immediate[kRefed] && --refCount === 0) {
     host.toggleImmediateRef(false);
@@ -179,7 +205,7 @@ export function clearImmediate(immediate: Immediate | null | undefined): void {
  * The same reason as for timers: an immediate that has run must not be the
  * reason a request's worth of objects stays reachable.
  */
-export function cleanImmediate(immediate: Immediate): void {
+export function cleanImmediate(immediate: ImmediateHandle): void {
   immediate._onImmediate = undefined;
   immediate._argv = undefined;
 }
@@ -194,6 +220,7 @@ export function cleanImmediate(immediate: Immediate): void {
  */
 export function processImmediate(): void {
   armed = false;
+  draining = true;
 
   const resuming = outstandingQueue.head !== null;
   const queue = resuming ? outstandingQueue : immediateQueue;
@@ -203,7 +230,7 @@ export function processImmediate(): void {
     queue.head = queue.tail = null;
   }
 
-  let previous: Immediate | null = null;
+  let previous: ImmediateHandle | null = null;
   let ranAtLeastOne = false;
   try {
     while (immediate !== null) {
@@ -216,7 +243,10 @@ export function processImmediate(): void {
       // was nulled by the removal, so the walk has to resume from the previous
       // entry, whose link is still intact.
       if (immediate._destroyed) {
-        outstandingQueue.head = immediate = (previous as Immediate)._idleNext;
+        if (previous === null) {
+          throw new Error("destroyed immediate has no preceding queue node");
+        }
+        outstandingQueue.head = immediate = previous._idleNext;
         continue;
       }
 
@@ -227,15 +257,13 @@ export function processImmediate(): void {
 
       previous = immediate;
 
-      const asyncId = immediate[kAsyncId];
-      const priorFrame = AsyncContextFrame.exchange(immediate[kContextFrame]);
-      emitBefore(asyncId, immediate[kTriggerAsyncId], immediate);
+      const asyncId = immediate._asyncId;
+      const priorFrame = AsyncContextFrame.exchange(immediate._contextFrame);
+      emitBefore(asyncId, immediate._triggerAsyncId, immediate);
 
       try {
         try {
-          const argv = immediate._argv;
-          if (!argv) (immediate._onImmediate as ImmediateCallback)();
-          else (immediate._onImmediate as (...a: unknown[]) => void)(...argv);
+          immediate.invoke();
         } finally {
           // An immediate runs once, so it is finished the moment its callback
           // returns -- there is no re-arming case as there is for a timer.
@@ -252,6 +280,7 @@ export function processImmediate(): void {
     }
     if (resuming) outstandingQueue.head = null;
   } finally {
+    draining = false;
     // Anything still queued needs another pass: either what a callback added
     // while this one ran, or what a callback that threw left behind.
     if (outstandingQueue.head !== null || immediateQueue.head !== null) arm();

@@ -14,7 +14,11 @@ export class PassThrough extends Transform {
     super(options);
   }
 
-  override _transform(chunk: unknown, _encoding: string, callback: TransformCallback): void {
+  override _transform(
+    chunk: unknown,
+    _encoding: string | undefined,
+    callback: TransformCallback,
+  ): void {
     callback(null, chunk);
   }
 }

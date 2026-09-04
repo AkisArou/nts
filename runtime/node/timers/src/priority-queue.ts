@@ -17,7 +17,7 @@
 /** Storage is 1-indexed: a node at `i` has children at `2i` and `2i + 1`. */
 const ROOT = 1;
 
-export class PriorityQueue<T> {
+export class PriorityQueue<T extends object> {
   readonly #compare: (a: T, b: T) => number;
   readonly #setPosition: ((node: T, position: number) => void) | undefined;
   // Index 0 is never used, so that the child-index arithmetic above needs no
@@ -36,6 +36,15 @@ export class PriorityQueue<T> {
 
   get size(): number {
     return this.#size;
+  }
+
+  /** Read a populated heap slot and fail at the invariant if it is absent. */
+  #itemAt(position: number): T {
+    const item = this.#heap[position];
+    if (item === undefined) {
+      throw new Error(`priority queue slot ${position} is empty`);
+    }
+    return item;
   }
 
   insert(value: T): void {
@@ -67,18 +76,18 @@ export class PriorityQueue<T> {
     const heap = this.#heap;
     const size = this.#size;
     const lastParent = size >> 1;
-    const item = heap[position] as T;
+    const item = this.#itemAt(position);
 
     while (position <= lastParent) {
       let child = position << 1;
       const nextChild = child + 1;
-      let childItem = heap[child] as T;
+      let childItem = this.#itemAt(child);
 
       // Descend towards the smaller of the two children, or the heap property
       // would be restored against one child and broken against the other.
-      if (nextChild <= size && compare(heap[nextChild] as T, childItem) < 0) {
+      if (nextChild <= size && compare(this.#itemAt(nextChild), childItem) < 0) {
         child = nextChild;
-        childItem = heap[nextChild] as T;
+        childItem = this.#itemAt(nextChild);
       }
 
       if (compare(item, childItem) <= 0) break;
@@ -97,11 +106,11 @@ export class PriorityQueue<T> {
     const heap = this.#heap;
     const compare = this.#compare;
     const setPosition = this.#setPosition;
-    const item = heap[position] as T;
+    const item = this.#itemAt(position);
 
     while (position > ROOT) {
       const parent = position >> 1;
-      const parentItem = heap[parent] as T;
+      const parentItem = this.#itemAt(parent);
       if (compare(parentItem, item) <= 0) break;
       heap[position] = parentItem;
       if (setPosition !== undefined) setPosition(parentItem, position);
@@ -127,7 +136,10 @@ export class PriorityQueue<T> {
     const size = --this.#size;
 
     if (size > 0 && position <= size) {
-      if (position > ROOT && this.#compare(heap[position >> 1] as T, heap[position] as T) > 0) {
+      if (
+        position > ROOT &&
+        this.#compare(this.#itemAt(position >> 1), this.#itemAt(position)) > 0
+      ) {
         this.percolateUp(position);
       } else {
         this.percolateDown(position);

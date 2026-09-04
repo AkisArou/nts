@@ -15,9 +15,8 @@
 
 import { EventEmitter } from "../../events/src/main.ts";
 import { stderr, stdout } from "../../internal/stdio.ts";
-import { env } from "./env.ts";
+import { env, refreshEnvironment } from "./env.ts";
 import { emitWarningFor, onWarningFor } from "./warning.ts";
-import type { WarningTarget } from "./warning.ts";
 import {
   availableMemory,
   constrainedMemory,
@@ -55,8 +54,9 @@ import {
   ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET,
 } from "../../internal/errors.ts";
 import { validateArray, validateObject, validateString } from "../../internal/validators.ts";
-import { uvException } from "../../internal/uv.ts";
+import { exceptionWithHostPort, uvException } from "../../internal/uv.ts";
 import { nextTick } from "../../internal/tick.ts";
+import { setProcessWarningHandler } from "../../internal/process-warning.ts";
 
 declare function nts_process_pid(): number;
 declare function nts_process_ppid(): number;
@@ -91,9 +91,9 @@ declare function nts_process_active_resources(): string[];
 declare function nts_process_active_handles(): unknown[];
 declare function nts_process_active_requests(): unknown[];
 /** Tell the host whether an uncaught exception should abort rather than exit. */
-declare function nts_process_set_abort_on_uncaught(abortOnUncaught: boolean): void;
 declare function nts_process_execve(path: string, args: string[], env: string[]): void;
-declare function nts_process_load_env_file(path: string): void;
+/** Zero on success, otherwise a negative libuv filesystem error. */
+declare function nts_process_load_env_file(path: string): number;
 declare function nts_process_raw_debug(text: string): void;
 
 /**
@@ -120,26 +120,14 @@ declare function nts_process_on_exit(callback: (code: number) => void): void;
  * to the option parser, so they are the same flag here.
  */
 class NodeEnvironmentFlagsSet extends Set<string> {
-  // The flags live here, and the inherited `Set` storage is left empty on
-  // purpose. It reads like a mistake and is the only design that holds.
-  //
-  // Filling the real set works until someone writes
-  // `Set.prototype.add.call(flags, "foo")`, which goes straight past the
-  // overridden `add` and into the superclass storage -- and then a `has` that
-  // consulted that storage would report a flag this build does not accept.
-  // Node's own test does exactly that, because the whole point of the object
-  // is that its answer cannot be changed from outside: it describes what the
-  // binary will accept, and no amount of adding to a set makes that true.
-  //
-  // Everything that would otherwise read the empty storage is overridden.
-  readonly #flags: readonly string[];
-  readonly #canonical: Set<string>;
   readonly #bare: Set<string>;
 
   constructor(flags: string[]) {
     super();
-    this.#flags = flags;
-    this.#canonical = new Set(flags);
+    // `super(flags)` consults the subclass's overridden `add`, whose public
+    // behavior must be a no-op. Populate the inherited storage explicitly
+    // through the statically named base method instead.
+    for (const flag of flags) super.add(flag);
     this.#bare = new Set(flags.map((flag) => flag.replace(/^--?/, "")));
   }
 
@@ -168,39 +156,16 @@ class NodeEnvironmentFlagsSet extends Set<string> {
     if (typeof key !== "string") return false;
     const normalized = key.replace(/_/g, "-");
     if (/^--?/.test(normalized)) {
-      return this.#canonical.has(normalized.replace(/=.*$/, ""));
+      return super.has(normalized.replace(/=.*$/, ""));
     }
     return this.#bare.has(normalized);
   }
+}
 
-  override get size(): number {
-    return this.#flags.length;
-  }
-
-  override values(): SetIterator<string> {
-    return this.#canonical.values();
-  }
-
-  override keys(): SetIterator<string> {
-    return this.#canonical.values();
-  }
-
-  override entries(): SetIterator<[string, string]> {
-    return this.#canonical.entries();
-  }
-
-  override forEach<T>(
-    callback: (value: string, key: string, set: Set<string>) => void,
-    thisArg?: T,
-  ): void {
-    for (const flag of this.#flags) {
-      callback.call(thisArg as T, flag, flag, this);
-    }
-  }
-
-  override [Symbol.iterator](): SetIterator<string> {
-    return this.#canonical.values();
-  }
+/** The statically expressible half of Node's refable protocol. */
+interface LegacyRefable {
+  ref?: () => unknown;
+  unref?: () => unknown;
 }
 
 /**
@@ -243,16 +208,13 @@ class Process extends EventEmitter {
   // `Object.hasOwn(process, 'config')`, and a getter on the prototype is not
   // that. Parsed eagerly for the same reason -- an own property that appears
   // on first read is a different object shape before and after.
-  readonly release: Record<string, string> = metadata("release");
+  readonly release = releaseMetadata();
   readonly features: Record<string, unknown> = metadata("features");
-  // Frozen, all the way down. It describes how this binary was built, so an
-  // assignment to it is always a mistake -- and a silent one without the
-  // freeze, since the writer would go on believing the build had changed.
-  readonly config: Record<string, unknown> = deepFreeze(metadata("config"));
-  // Frozen: the answer is a property of the binary, and a program that could
-  // change it would only be lying to itself.
-  readonly allowedNodeEnvironmentFlags = Object.freeze(
-    new NodeEnvironmentFlagsSet(nts_process_allowed_env_flags()),
+  // Readonly in the static API. Node additionally freezes these objects at
+  // runtime, but per-property mutability/extensibility is a §13 non-goal.
+  readonly config: Record<string, unknown> = metadata("config");
+  readonly allowedNodeEnvironmentFlags = new NodeEnvironmentFlagsSet(
+    nts_process_allowed_env_flags(),
   );
 
   get title(): string {
@@ -329,8 +291,8 @@ class Process extends EventEmitter {
     if (pid != (pid | 0)) {
       throw new ERR_INVALID_ARG_TYPE("pid", "number", pid);
     }
-    const err = this._kill(pid, signalNumber(signal as string | number));
-    if (err) throw uvException(err, "kill");
+    const err = this._kill(pid, signalNumber(signal));
+    if (err) throw exceptionWithHostPort(err, "kill");
     return true;
   }
 
@@ -347,7 +309,7 @@ class Process extends EventEmitter {
    * and flushing can fail and call `exit` with a different code.
    */
   exit(code?: number): void {
-    if (code !== undefined) this.exitCode = code as number;
+    if (code !== undefined) this.exitCode = code;
 
     if (!this._exiting) {
       this._exiting = true;
@@ -390,7 +352,7 @@ class Process extends EventEmitter {
     initgroups(user, extraGroup);
   }
 
-  emitWarning!: ReturnType<typeof emitWarningFor>;
+  emitWarning = emitWarningFor(this);
 
   /**
    * What is currently keeping the loop from exiting, by name.
@@ -412,6 +374,16 @@ class Process extends EventEmitter {
     return nts_process_active_requests();
   }
 
+  /** Keep a legacy refable resource alive, when it exposes `ref()`. */
+  ref(resource: LegacyRefable | null | undefined): void {
+    if (typeof resource?.ref === "function") resource.ref();
+  }
+
+  /** Stop a legacy refable resource keeping the loop alive. */
+  unref(resource: LegacyRefable | null | undefined): void {
+    if (typeof resource?.unref === "function") resource.unref();
+  }
+
   /**
    * Divert uncaught exceptions to `fn` instead of ending the process.
    *
@@ -424,7 +396,6 @@ class Process extends EventEmitter {
   setUncaughtExceptionCaptureCallback(fn: ((error: unknown) => void) | null): void {
     if (fn === null) {
       this.#captureCallback = null;
-      nts_process_set_abort_on_uncaught(true);
       return;
     }
     if (typeof fn !== "function") {
@@ -434,7 +405,6 @@ class Process extends EventEmitter {
       throw new ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET();
     }
     this.#captureCallback = fn;
-    nts_process_set_abort_on_uncaught(false);
   }
 
   hasUncaughtExceptionCaptureCallback(): boolean {
@@ -447,22 +417,25 @@ class Process extends EventEmitter {
    * An exception that escaped everything. Returns whether anyone took it.
    *
    * The order is the whole of the policy. A capture callback wins, because a
-   * program that installed one asked to be the last word -- that is what
-   * `--abort-on-uncaught-exception` is turned off for. Otherwise the
-   * `uncaughtException` event is emitted, and `emit` returning false means
-   * nothing was listening, which is the one case where the process really is
-   * finished.
+   * program that installed one asked to be the last word. Node additionally
+   * toggles V8's `--abort-on-uncaught-exception` state here; NTS has no engine
+   * flag of that kind, so there is no native flag-shaped binding to imitate.
+   * Otherwise the `uncaughtException` event is emitted, and `emit` returning
+   * false means nothing was listening, which is the one case where the process
+   * really is finished.
    *
    * Node calls this `_fatalException` and calls it from C++ at the point the
    * stack has unwound completely. The name is kept because node's own tests
    * replace it.
    */
   _fatalException(error: unknown, fromPromise = false): boolean {
+    const origin = fromPromise ? "unhandledRejection" : "uncaughtException";
+    this.emit("uncaughtExceptionMonitor", error, origin);
     if (this.#captureCallback !== null) {
       this.#captureCallback(error);
       return true;
     }
-    return this.emit("uncaughtException", error, fromPromise ? "unhandledRejection" : "uncaughtException");
+    return this.emit("uncaughtException", error, origin);
   }
 
   /**
@@ -472,7 +445,11 @@ class Process extends EventEmitter {
    * this process was holding is gone. That is the point -- a supervisor that
    * `execve`s its real payload keeps the pid its own supervisor is watching.
    */
-  execve(execPath: string, args: string[] = [], environment: Record<string, string> = this.env as Record<string, string>): void {
+  execve(
+    execPath: string,
+    args: string[] = [],
+    environment: Readonly<Record<string, string | undefined>> = this.env,
+  ): void {
     this.emitWarning(
       "process.execve is an experimental feature and might change at any time",
       "ExperimentalWarning",
@@ -490,8 +467,11 @@ class Process extends EventEmitter {
     }
 
     validateObject(environment, "env");
-    const pairs: string[] = [];
-    for (const key of Object.keys(environment)) {
+    const keys = Object.keys(environment);
+    const pairs = new Array<string>(keys.length);
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      if (key === undefined) throw new Error(`missing environment key at index ${i}`);
       const value = environment[key];
       // A null byte would truncate the variable at the C boundary, so a name
       // or value containing one is refused rather than silently cut in half.
@@ -502,14 +482,17 @@ class Process extends EventEmitter {
           "must be an object with string keys and values without null bytes",
         );
       }
-      pairs.push(`${key}=${value}`);
+      pairs[i] = `${key}=${value}`;
     }
 
     nts_process_execve(execPath, args, pairs);
   }
 
   loadEnvFile(path = ".env"): void {
-    nts_process_load_env_file(path);
+    validateString(path, "path");
+    const result = nts_process_load_env_file(path);
+    if (result !== 0) throw uvException(result, "open", path);
+    refreshEnvironment();
   }
 
   /** Write past every stream and every hook, for debugging the streams. */
@@ -518,20 +501,27 @@ class Process extends EventEmitter {
   }
 }
 
-/** Freeze an object and everything reachable from it. */
-function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === "object") {
-    for (const key of Object.keys(value)) {
-      deepFreeze((value as Record<string, unknown>)[key]);
-    }
-    Object.freeze(value);
+/** One metadata table, parsed. */
+function metadata(name: string): Record<string, unknown> {
+  const value: unknown = JSON.parse(nts_process_metadata(name));
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`invalid process ${name} metadata`);
   }
-  return value;
+  return Object.fromEntries(Object.entries(value));
 }
 
-/** One metadata table, parsed. */
-function metadata(name: string): Record<string, never> {
-  return JSON.parse(nts_process_metadata(name)) as Record<string, never>;
+function releaseMetadata(): Record<string, string> & { name: string } {
+  const raw = metadata("release");
+  const release: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value !== "string") {
+      throw new Error(`invalid process release metadata field ${key}`);
+    }
+    release[key] = value;
+  }
+  const name = release["name"];
+  if (name === undefined) throw new Error("process release metadata has no name");
+  return { ...release, name };
 }
 
 function buildVersions(): Record<string, string> {
@@ -539,18 +529,20 @@ function buildVersions(): Record<string, string> {
   const values = nts_process_version_values();
   const versions: Record<string, string> = {};
   for (let i = 0; i < names.length; i++) {
-    versions[names[i] as string] = values[i] as string;
+    const name = names[i];
+    const value = values[i];
+    if (name === undefined || value === undefined) {
+      throw new Error(`incomplete process version record at index ${i}`);
+    }
+    versions[name] = value;
   }
   return versions;
 }
 
 const process = new Process();
 
-// Bound after construction because both read the finished object: the warning
-// path needs the tick queue, the emitter and the deprecation switches, and
-// none of those exist while the fields are still being initialised.
-process.emitWarning = emitWarningFor(process as unknown as WarningTarget);
-process.on("warning", onWarningFor(process as unknown as WarningTarget));
+setProcessWarningHandler(process.emitWarning);
+process.on("warning", onWarningFor(process));
 
 nts_process_on_before_exit((code) => {
   process.emit("beforeExit", process.exitCode ?? code);

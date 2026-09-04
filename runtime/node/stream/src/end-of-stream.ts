@@ -59,6 +59,8 @@ export interface EndOfStreamOptions {
   signal?: AbortSignalLike | undefined;
   /** Remove the listeners once the callback has run. */
   cleanup?: boolean | undefined;
+  /** Internal: report an already-settled stream before returning. */
+  [kSynchronousCallback]?: boolean | undefined;
 }
 
 /** As much of an `AbortSignal` as this file uses. See `process/src/promises`. */
@@ -69,7 +71,7 @@ export interface AbortSignalLike {
   removeEventListener(type: "abort", listener: () => void): void;
 }
 
-export type EndOfStreamCallback = (this: unknown, error?: unknown) => void;
+export type EndOfStreamCallback = (error?: unknown) => void;
 
 /**
  * Call `settle` when the callback would settle synchronously, rather than on a
@@ -82,19 +84,54 @@ export type EndOfStreamCallback = (this: unknown, error?: unknown) => void;
 export const kSynchronousCallback = Symbol("kEosNodeSynchronousCallback");
 
 /** Wrap so that only the first call gets through. */
-function once<A extends unknown[]>(fn: (this: unknown, ...args: A) => void) {
+function once<A extends unknown[]>(fn: (...args: A) => void) {
   let called = false;
-  return function (this: unknown, ...args: A): void {
+  return (...args: A): void => {
     if (called) return;
     called = true;
-    fn.apply(this, args);
+    fn(...args);
   };
+}
+
+/** Preserve Node's zero-argument success and one-argument failure calls. */
+function complete(callback: EndOfStreamCallback, result: unknown): void {
+  if (result === null || result === undefined) callback();
+  else callback(result);
 }
 
 /** Add an abort listener and give back something that removes it. */
 function addAbortListener(signal: AbortSignalLike, listener: () => void): () => void {
   signal.addEventListener("abort", listener, { once: true });
   return () => signal.removeEventListener("abort", listener);
+}
+
+interface EventSource {
+  on<Args extends unknown[]>(event: string, listener: (...args: Args) => unknown): unknown;
+  removeListener<Args extends unknown[]>(
+    event: string,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+}
+
+function isEventSource(value: unknown): value is EventSource {
+  return value !== null && typeof value === "object" &&
+    "on" in value && typeof value.on === "function" &&
+    "removeListener" in value && typeof value.removeListener === "function";
+}
+
+function webClosedPromise(stream: StreamLike): Promise<unknown> {
+  const closed = stream[kIsClosedPromise];
+  if (
+    closed !== null && typeof closed === "object" &&
+    "promise" in closed && closed.promise instanceof Promise
+  ) {
+    return closed.promise;
+  }
+  throw new ERR_INVALID_ARG_TYPE(
+    "stream",
+    ["ReadableStream", "WritableStream"],
+    stream,
+  );
 }
 
 /** An `http.ClientRequest`, which finishes differently from everything else. */
@@ -141,27 +178,36 @@ function errorOnClose(
  * a stream around after watching it must use it, or each `eos` leaves a dozen
  * listeners behind.
  */
+export function eos(stream: unknown, callback: EndOfStreamCallback): () => void;
 export function eos(
   stream: unknown,
-  options: EndOfStreamOptions | EndOfStreamCallback | null | undefined,
-  callback?: EndOfStreamCallback,
+  options: EndOfStreamOptions | null | undefined,
+  callback: EndOfStreamCallback,
+): () => void;
+export function eos(
+  stream: unknown,
+  options: unknown,
+  callback?: unknown,
 ): () => void {
   let opts: EndOfStreamOptions;
-  if (typeof options === "function") {
-    callback = options;
+  let callbackValue: unknown;
+  if (callback === undefined) {
+    callbackValue = options;
     opts = {};
   } else if (options == null) {
+    callbackValue = callback;
     opts = {};
   } else {
     validateObject(options, "options");
     opts = options;
+    callbackValue = callback;
   }
-  validateFunction(callback, "callback");
+  validateFunction(callbackValue, "callback");
   validateAbortSignal(opts.signal, "options.signal");
-  let done = callback as EndOfStreamCallback;
+  let done: EndOfStreamCallback = callbackValue;
 
   if (isReadableStream(stream) || isWritableStream(stream)) {
-    return eosWeb(stream as StreamLike, opts, done);
+    return eosWeb(stream, opts, done);
   }
 
   if (!isNodeStream(stream)) {
@@ -172,10 +218,7 @@ export function eos(
     );
   }
 
-  const s = stream as StreamLike & {
-    on(event: string, listener: (...args: never[]) => void): unknown;
-    removeListener(event: string, listener: (...args: never[]) => void): unknown;
-  };
+  const s = stream;
 
   const readable = opts.readable ?? isReadableNodeStream(s);
   const writable = opts.writable ?? isWritableNodeStream(s);
@@ -236,8 +279,8 @@ export function eos(
     immediate = new AbortError(undefined, { cause: opts.signal.reason });
   }
 
-  if (immediate !== undefined && (opts as Record<symbol, unknown>)[kSynchronousCallback]) {
-    Reflect.apply(done, s, immediate === null ? [] : [immediate]);
+  if (immediate !== undefined && opts[kSynchronousCallback]) {
+    complete(done, immediate);
     return cleanup;
   }
 
@@ -245,7 +288,7 @@ export function eos(
     // On a tick even though the answer is known, so that `eos` never calls
     // back before it has returned its cleanup function.
     const settled = immediate;
-    nextTick(() => Reflect.apply(done, s, settled === null ? [] : [settled]));
+    nextTick(() => complete(done, settled));
     return cleanup;
   }
 
@@ -263,28 +306,28 @@ export function eos(
     // `close` can no longer be relied on to arrive.
     if (s["destroyed"]) willEmitClose = false;
     if (willEmitClose && (!s["readable"] || readable)) return;
-    if (!readable || readableFinished) done.call(s);
+    if (!readable || readableFinished) done();
   };
 
   const onEnd = (): void => {
     readableFinished = true;
     if (s["destroyed"]) willEmitClose = false;
     if (willEmitClose && (!s["writable"] || writable)) return;
-    if (!writable || writableFinished) done.call(s);
+    if (!writable || writableFinished) done();
   };
 
   const onError = (error: unknown): void => {
-    done.call(s, error);
+    done(error);
   };
 
   const onClose = (): void => {
     const error = errorOnClose(s, readable, readableFinished, writable, writableFinished);
-    if (error === null) done.call(s);
-    else done.call(s, error);
+    complete(done, error);
   };
 
   const onRequest = (): void => {
-    (s["req"] as StreamLike & { on(e: string, l: () => void): void }).on("finish", onFinish);
+    const request = s["req"];
+    if (isEventSource(request)) request.on("finish", onFinish);
   };
 
   if (isRequest(s)) {
@@ -314,10 +357,8 @@ export function eos(
     s.removeListener("complete", onFinish);
     s.removeListener("abort", onClose);
     s.removeListener("request", onRequest);
-    if (s["req"]) {
-      (s["req"] as StreamLike & { removeListener(e: string, l: () => void): void })
-        .removeListener("finish", onFinish);
-    }
+    const request = s["req"];
+    if (isEventSource(request)) request.removeListener("finish", onFinish);
     s.removeListener("end", onLegacyFinish);
     s.removeListener("close", onLegacyFinish);
     s.removeListener("finish", onFinish);
@@ -332,13 +373,13 @@ export function eos(
       // Held before `cleanup`, which replaces `done` with a no-op.
       const settle = done;
       cleanup();
-      settle.call(s, new AbortError(undefined, { cause: signal.reason }));
+      settle(new AbortError(undefined, { cause: signal.reason }));
     };
     const remove = addAbortListener(signal, abort);
     const inner = done;
-    done = once(function (this: unknown, error?: unknown) {
+    done = once((error?: unknown) => {
       remove();
-      Reflect.apply(inner, this, error === undefined ? [] : [error]);
+      complete(inner, error);
     });
   }
 
@@ -364,26 +405,25 @@ function eosWeb(
     const signal = options.signal;
     const abort = (): void => {
       aborted = true;
-      settle.call(stream, new AbortError(undefined, { cause: signal.reason }));
+      settle(new AbortError(undefined, { cause: signal.reason }));
     };
     if (signal.aborted) {
       nextTick(abort);
     } else {
       const remove = addAbortListener(signal, abort);
       const inner = settle;
-      settle = once(function (this: unknown, error?: unknown) {
+      settle = once((error?: unknown) => {
         remove();
-        Reflect.apply(inner, this, error === undefined ? [] : [error]);
+        complete(inner, error);
       });
     }
   }
 
-  const resolved = (...args: unknown[]): void => {
-    if (!aborted) nextTick(() => Reflect.apply(settle, stream, args));
+  const resolved = (result: unknown): void => {
+    if (!aborted) nextTick(() => complete(settle, result));
   };
 
-  const closed = stream[kIsClosedPromise] as { promise: Promise<unknown> };
-  closed.promise.then(resolved, resolved);
+  webClosedPromise(stream).then(resolved, resolved);
 
   return nop;
 }

@@ -24,6 +24,53 @@ export interface StreamLike {
   _writableState?: StreamState;
 }
 
+/** Event surface shared by every Node-style stream accepted at a boundary. */
+export interface NodeStreamLike extends StreamLike {
+  on<Args extends unknown[]>(
+    event: string | symbol,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+  once<Args extends unknown[]>(
+    event: string | symbol,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+  removeListener<Args extends unknown[]>(
+    event: string | symbol,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+}
+
+export interface ReadableNodeStreamLike extends NodeStreamLike {
+  pipe(destination: unknown, options?: { end?: boolean }): unknown;
+  readonly readableObjectMode?: boolean;
+  readonly objectMode?: boolean;
+  pause?(): unknown;
+  resume?(): unknown;
+  destroy?(error?: unknown): unknown;
+}
+
+export interface WritableNodeStreamLike extends NodeStreamLike {
+  readonly writableObjectMode?: boolean;
+  write(chunk: unknown, encoding?: string): boolean;
+  end(): unknown;
+}
+
+export interface ReadableWebStreamLike extends StreamLike {
+  pipeThrough(transform: unknown): unknown;
+  getReader(): unknown;
+  cancel(reason?: unknown): unknown;
+}
+
+export interface WritableWebStreamLike extends StreamLike {
+  getWriter(): unknown;
+  abort(reason?: unknown): unknown;
+}
+
+export interface TransformWebStreamLike extends StreamLike {
+  readonly readable: unknown;
+  readonly writable: unknown;
+}
+
 export interface StreamState {
   [key: string]: unknown;
   objectMode?: boolean;
@@ -76,6 +123,10 @@ export const kConstructed = 1 << 8;
 
 const fn = (value: unknown): boolean => typeof value === "function";
 
+function isStreamLike(value: unknown): value is StreamLike {
+  return value !== null && typeof value === "object";
+}
+
 /**
  * A readable stream of node's kind.
  *
@@ -87,8 +138,12 @@ const fn = (value: unknown): boolean => typeof value === "function";
  * duplex whose readable side has been shut down is not readable even though it
  * still has the methods.
  */
-export function isReadableNodeStream(obj: unknown, strict = false): boolean {
-  const s = obj as StreamLike | null | undefined;
+export function isReadableNodeStream(
+  obj: unknown,
+  strict = false,
+): obj is ReadableNodeStreamLike {
+  if (!isStreamLike(obj)) return false;
+  const s = obj;
   return !!(
     s &&
     fn(s["pipe"]) &&
@@ -99,8 +154,9 @@ export function isReadableNodeStream(obj: unknown, strict = false): boolean {
   );
 }
 
-export function isWritableNodeStream(obj: unknown): boolean {
-  const s = obj as StreamLike | null | undefined;
+export function isWritableNodeStream(obj: unknown): obj is WritableNodeStreamLike {
+  if (!isStreamLike(obj)) return false;
+  const s = obj;
   return !!(
     s &&
     fn(s["write"]) &&
@@ -109,13 +165,17 @@ export function isWritableNodeStream(obj: unknown): boolean {
   );
 }
 
-export function isDuplexNodeStream(obj: unknown): boolean {
-  const s = obj as StreamLike | null | undefined;
+export function isDuplexNodeStream(
+  obj: unknown,
+): obj is ReadableNodeStreamLike & WritableNodeStreamLike {
+  if (!isStreamLike(obj)) return false;
+  const s = obj;
   return !!(s && fn(s["pipe"]) && s._readableState && fn(s["on"]) && fn(s["write"]));
 }
 
-export function isNodeStream(obj: unknown): boolean {
-  const s = obj as StreamLike | null | undefined;
+export function isNodeStream(obj: unknown): obj is NodeStreamLike {
+  if (!isStreamLike(obj)) return false;
+  const s = obj;
   return !!(
     s &&
     (s._readableState ||
@@ -128,26 +188,31 @@ export function isNodeStream(obj: unknown): boolean {
 // The web streams, which are a different design with a different vocabulary.
 // Recognised so that `pipeline` and `Readable.from` can accept them, and
 // excluded from the node predicates so that neither is mistaken for the other.
-export function isReadableStream(obj: unknown): boolean {
-  const s = obj as StreamLike | null | undefined;
+export function isReadableStream(obj: unknown): obj is ReadableWebStreamLike {
+  if (!isStreamLike(obj)) return false;
+  const s = obj;
   return !!(
     s && !isNodeStream(s) && fn(s["pipeThrough"]) && fn(s["getReader"]) && fn(s["cancel"])
   );
 }
 
-export function isWritableStream(obj: unknown): boolean {
-  const s = obj as StreamLike | null | undefined;
+export function isWritableStream(obj: unknown): obj is WritableWebStreamLike {
+  if (!isStreamLike(obj)) return false;
+  const s = obj;
   return !!(s && !isNodeStream(s) && fn(s["getWriter"]) && fn(s["abort"]));
 }
 
-export function isTransformStream(obj: unknown): boolean {
-  const s = obj as StreamLike | null | undefined;
+export function isTransformStream(obj: unknown): obj is TransformWebStreamLike {
+  if (!isStreamLike(obj)) return false;
+  const s = obj;
   return !!(
     s && !isNodeStream(s) && typeof s["readable"] === "object" && typeof s["writable"] === "object"
   );
 }
 
-export function isWebStream(obj: unknown): boolean {
+export function isWebStream(
+  obj: unknown,
+): obj is ReadableWebStreamLike | WritableWebStreamLike | TransformWebStreamLike {
   return isReadableStream(obj) || isWritableStream(obj) || isTransformStream(obj);
 }
 
@@ -158,9 +223,17 @@ export function isWebStream(obj: unknown): boolean {
  * where the caller is going to `await` or not: a sync iterable driven as an
  * async one yields promises as values instead of resolving them.
  */
+export function isIterable(obj: unknown, isAsync: true): obj is AsyncIterable<unknown>;
+export function isIterable(obj: unknown, isAsync: false): obj is Iterable<unknown>;
+export function isIterable(
+  obj: unknown,
+  isAsync?: undefined,
+): obj is AsyncIterable<unknown> | Iterable<unknown>;
 export function isIterable(obj: unknown, isAsync?: boolean): boolean {
   if (obj === null || obj === undefined) return false;
-  const s = obj as StreamLike;
+  if (typeof obj === "string") return isAsync !== true;
+  if (!isStreamLike(obj)) return false;
+  const s = obj;
   if (isAsync === true) return fn(s[Symbol.asyncIterator]);
   if (isAsync === false) return fn(s[Symbol.iterator]);
   return fn(s[Symbol.asyncIterator]) || fn(s[Symbol.iterator]);
@@ -168,7 +241,7 @@ export function isIterable(obj: unknown, isAsync?: boolean): boolean {
 
 export function isDestroyed(stream: unknown): boolean | null {
   if (!isNodeStream(stream)) return null;
-  const s = stream as StreamLike;
+  const s = stream;
   const state = s._writableState || s._readableState;
   return !!(s["destroyed"] || s[kIsDestroyed] || state?.destroyed);
 }
@@ -176,7 +249,7 @@ export function isDestroyed(stream: unknown): boolean | null {
 /** `end()` has been called. Not the same as having finished writing. */
 export function isWritableEnded(stream: unknown): boolean | null {
   if (!isWritableNodeStream(stream)) return null;
-  const s = stream as StreamLike;
+  const s = stream;
   if (s["writableEnded"] === true) return true;
   const state = s._writableState;
   if (state?.errored) return false;
@@ -194,7 +267,7 @@ export function isWritableEnded(stream: unknown): boolean | null {
  */
 export function isWritableFinished(stream: unknown, strict?: boolean): boolean | null {
   if (!isWritableNodeStream(stream)) return null;
-  const s = stream as StreamLike;
+  const s = stream;
   if (s["writableFinished"] === true) return true;
   const state = s._writableState;
   if (state?.errored) return false;
@@ -205,7 +278,7 @@ export function isWritableFinished(stream: unknown, strict?: boolean): boolean |
 /** `push(null)` has happened. */
 export function isReadableEnded(stream: unknown): boolean | null {
   if (!isReadableNodeStream(stream)) return null;
-  const s = stream as StreamLike;
+  const s = stream;
   if (s["readableEnded"] === true) return true;
   const state = s._readableState;
   if (!state || state.errored) return false;
@@ -216,26 +289,30 @@ export function isReadableEnded(stream: unknown): boolean | null {
 /** `end` has been emitted. */
 export function isReadableFinished(stream: unknown, strict?: boolean): boolean | null {
   if (!isReadableNodeStream(stream)) return null;
-  const state = (stream as StreamLike)._readableState;
+  const state = stream._readableState;
   if (state?.errored) return false;
   if (typeof state?.endEmitted !== "boolean") return null;
   return !!(state.endEmitted || (strict === false && state.ended === true && state.length === 0));
 }
 
 export function isReadable(stream: unknown): boolean | null {
-  const s = stream as StreamLike | null | undefined;
-  if (s && s[kIsReadable] != null) return s[kIsReadable] as boolean;
-  if (typeof s?.["readable"] !== "boolean") return null;
+  if (!isStreamLike(stream)) return null;
+  const s = stream;
+  const branded = s[kIsReadable];
+  if (typeof branded === "boolean") return branded;
+  if (typeof s["readable"] !== "boolean") return null;
   if (isDestroyed(s)) return false;
-  return isReadableNodeStream(s) && (s["readable"] as boolean) && !isReadableFinished(s);
+  return isReadableNodeStream(s) && s["readable"] && !isReadableFinished(s);
 }
 
 export function isWritable(stream: unknown): boolean | null {
-  const s = stream as StreamLike | null | undefined;
-  if (s && s[kIsWritable] != null) return s[kIsWritable] as boolean;
-  if (typeof s?.["writable"] !== "boolean") return null;
+  if (!isStreamLike(stream)) return null;
+  const s = stream;
+  const branded = s[kIsWritable];
+  if (typeof branded === "boolean") return branded;
+  if (typeof s["writable"] !== "boolean") return null;
   if (isDestroyed(s)) return false;
-  return isWritableNodeStream(s) && (s["writable"] as boolean) && !isWritableEnded(s);
+  return isWritableNodeStream(s) && s["writable"] && !isWritableEnded(s);
 }
 
 export interface FinishedOptions {
@@ -261,21 +338,21 @@ export function isFinished(stream: unknown, opts?: FinishedOptions): boolean | n
 
 export function isWritableErrored(stream: unknown): unknown {
   if (!isNodeStream(stream)) return null;
-  const s = stream as StreamLike;
+  const s = stream;
   if (s["writableErrored"]) return s["writableErrored"];
   return s._writableState?.errored ?? null;
 }
 
 export function isReadableErrored(stream: unknown): unknown {
   if (!isNodeStream(stream)) return null;
-  const s = stream as StreamLike;
+  const s = stream;
   if (s["readableErrored"]) return s["readableErrored"];
   return s._readableState?.errored ?? null;
 }
 
 export function isClosed(stream: unknown): boolean | null {
   if (!isNodeStream(stream)) return null;
-  const s = stream as StreamLike;
+  const s = stream;
   if (typeof s["closed"] === "boolean") return s["closed"];
 
   const w = s._writableState;
@@ -288,14 +365,15 @@ export function isClosed(stream: unknown): boolean | null {
   // itself. Recognised by shape rather than imported, because `node:http`
   // depends on this file and not the other way round.
   if (typeof s["_closed"] === "boolean" && isOutgoingMessage(s)) {
-    return s["_closed"] as boolean;
+    return s["_closed"];
   }
 
   return null;
 }
 
 export function isOutgoingMessage(stream: unknown): boolean {
-  const s = stream as StreamLike;
+  if (!isStreamLike(stream)) return false;
+  const s = stream;
   return (
     typeof s?.["_closed"] === "boolean" &&
     typeof s["_defaultKeepAlive"] === "boolean" &&
@@ -305,15 +383,18 @@ export function isOutgoingMessage(stream: unknown): boolean {
 }
 
 export function isServerResponse(stream: unknown): boolean {
-  return typeof (stream as StreamLike)?.["_sent100"] === "boolean" && isOutgoingMessage(stream);
+  return isStreamLike(stream) &&
+    typeof stream["_sent100"] === "boolean" && isOutgoingMessage(stream);
 }
 
 export function isServerRequest(stream: unknown): boolean {
-  const s = stream as StreamLike;
+  if (!isStreamLike(stream)) return false;
+  const s = stream;
+  const request = s["req"];
   return (
-    typeof s?.["_consuming"] === "boolean" &&
+    typeof s["_consuming"] === "boolean" &&
     typeof s["_dumped"] === "boolean" &&
-    (s["req"] as StreamLike | undefined)?.["upgradeOrConnect"] === undefined
+    (!isStreamLike(request) || request["upgradeOrConnect"] === undefined)
   );
 }
 
@@ -325,7 +406,7 @@ export function isServerRequest(stream: unknown): boolean {
  */
 export function willEmitClose(stream: unknown): boolean | null {
   if (!isNodeStream(stream)) return null;
-  const s = stream as StreamLike;
+  const s = stream;
   const state = s._writableState || s._readableState;
   return (
     (!state && isServerResponse(s)) ||
@@ -342,20 +423,22 @@ export function willEmitClose(stream: unknown): boolean | null {
  * a single read the answer is no.
  */
 export function isDisturbed(stream: unknown): boolean {
-  const s = stream as StreamLike | null | undefined;
-  return !!(s && ((s[kIsDisturbed] as boolean) ?? (s["readableDidRead"] || s["readableAborted"])));
+  if (!isStreamLike(stream)) return false;
+  const branded = stream[kIsDisturbed];
+  if (typeof branded === "boolean") return branded;
+  return Boolean(stream["readableDidRead"] || stream["readableAborted"]);
 }
 
 export function isErrored(stream: unknown): boolean {
-  const s = stream as StreamLike | null | undefined;
-  return !!(
-    s &&
-    ((s[kIsErrored] as boolean) ??
-      s["readableErrored"] ??
-      s["writableErrored"] ??
-      s._readableState?.errorEmitted ??
-      s._writableState?.errorEmitted ??
-      s._readableState?.errored ??
-      s._writableState?.errored)
+  if (!isStreamLike(stream)) return false;
+  const branded = stream[kIsErrored];
+  if (typeof branded === "boolean") return branded;
+  return Boolean(
+    stream["readableErrored"] ??
+    stream["writableErrored"] ??
+    stream._readableState?.errorEmitted ??
+    stream._writableState?.errorEmitted ??
+    stream._readableState?.errored ??
+    stream._writableState?.errored
   );
 }

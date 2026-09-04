@@ -20,18 +20,20 @@
 // this rejects the message.
 
 import {
+  emitAfter,
+  emitBefore,
   emitDestroy,
   emitInit,
   getDefaultTriggerAsyncId,
   initHooksExist,
   newAsyncId,
 } from "../../internal/async-hooks.ts";
+import { AsyncContextFrame } from "../../internal/async-context.ts";
 
 const CR = 13;
 const LF = 10;
 const SP = 32;
 const HTAB = 9;
-const COLON = 58;
 
 /**
  * What the parser is reading.
@@ -143,17 +145,22 @@ function isValidFieldValue(value: string): boolean {
 
 const HTTP_PARSER_TYPES = ["HTTPINCOMINGMESSAGE", "HTTPCLIENTREQUEST"] as const;
 
+interface ParserCallbackScope {
+  asyncId: number;
+  priorFrame: AsyncContextFrame | undefined;
+}
+
 export class HTTPParser {
   static readonly REQUEST = REQUEST;
   static readonly RESPONSE = RESPONSE;
   static readonly methods = methods;
 
   /** The five callbacks, assigned by the caller. */
-  onMessageBegin: (() => void) | null = null;
-  onHeaders: ((headers: string[], url: string) => void) | null = null;
-  onHeadersComplete: ((info: HeadersComplete) => number | void) | null = null;
-  onBody: ((chunk: Uint8Array) => void) | null = null;
-  onMessageComplete: (() => void) | null = null;
+  onMessageBegin: ((this: HTTPParser) => void) | null = null;
+  onHeaders: ((this: HTTPParser, headers: string[], url: string) => void) | null = null;
+  onHeadersComplete: ((this: HTTPParser, info: HeadersComplete) => number | void) | null = null;
+  onBody: ((this: HTTPParser, chunk: Uint8Array) => void) | null = null;
+  onMessageComplete: ((this: HTTPParser) => void) | null = null;
 
   #type: number = REQUEST;
   #state: State = State.StartLine;
@@ -184,8 +191,10 @@ export class HTTPParser {
   #error: ParserError | null = null;
   #bytesParsed = 0;
   #asyncId = 0;
+  #triggerAsyncId = 0;
+  #contextFrame: AsyncContextFrame | undefined;
 
-  initialize(type: number, maxHeaderSize?: number): void {
+  initialize(type: number, maxHeaderSize?: number, triggerAsyncId?: number): void {
     this.#type = type;
     this.#maxHeaderSize = maxHeaderSize ?? 80 * 1024;
 
@@ -199,10 +208,13 @@ export class HTTPParser {
     // identity with the old one reported finished.
     if (this.#asyncId > 0) emitDestroy(this.#asyncId);
     const asyncId = newAsyncId();
-    const trigger = getDefaultTriggerAsyncId();
+    const trigger = triggerAsyncId ?? getDefaultTriggerAsyncId();
     this.#asyncId = asyncId;
+    this.#triggerAsyncId = trigger;
+    this.#contextFrame = AsyncContextFrame.current();
     if (initHooksExist()) {
-      emitInit(asyncId, HTTP_PARSER_TYPES[type === REQUEST ? 0 : 1] as string, trigger, this);
+      const resourceType = type === REQUEST ? HTTP_PARSER_TYPES[0] : HTTP_PARSER_TYPES[1];
+      emitInit(asyncId, resourceType, trigger, this);
     }
 
     this.reset();
@@ -219,6 +231,73 @@ export class HTTPParser {
     if (this.#asyncId <= 0) return;
     emitDestroy(this.#asyncId);
     this.#asyncId = 0;
+    this.#triggerAsyncId = 0;
+    this.#contextFrame = undefined;
+  }
+
+  /** Node's native parser names the same terminal operation `close`. */
+  close(): void {
+    this.free();
+  }
+
+  /** Enter one native-parser callback with this parser as the current work. */
+  #enterCallback(): ParserCallbackScope {
+    const asyncId = this.#asyncId;
+    const priorFrame = AsyncContextFrame.exchange(this.#contextFrame);
+    emitBefore(asyncId, this.#triggerAsyncId, this);
+    return { asyncId, priorFrame };
+  }
+
+  #leaveCallback(scope: ParserCallbackScope): void {
+    // A message-complete callback is allowed to free its parser. Use the id
+    // captured on entry so clearing the parser cannot turn the matching
+    // `after` into an event for async id zero.
+    emitAfter(scope.asyncId);
+    AsyncContextFrame.setCurrent(scope.priorFrame);
+  }
+
+  #callMessageBegin(): void {
+    const callback = this.onMessageBegin;
+    if (callback === null) return;
+    const scope = this.#enterCallback();
+    try {
+      callback.call(this);
+    } finally {
+      this.#leaveCallback(scope);
+    }
+  }
+
+  #callHeadersComplete(info: HeadersComplete): number | void {
+    const callback = this.onHeadersComplete;
+    if (callback === null) return undefined;
+    const scope = this.#enterCallback();
+    try {
+      return callback.call(this, info);
+    } finally {
+      this.#leaveCallback(scope);
+    }
+  }
+
+  #callBody(chunk: Uint8Array): void {
+    const callback = this.onBody;
+    if (callback === null) return;
+    const scope = this.#enterCallback();
+    try {
+      callback.call(this, chunk);
+    } finally {
+      this.#leaveCallback(scope);
+    }
+  }
+
+  #callMessageComplete(): void {
+    const callback = this.onMessageComplete;
+    if (callback === null) return;
+    const scope = this.#enterCallback();
+    try {
+      callback.call(this);
+    } finally {
+      this.#leaveCallback(scope);
+    }
   }
 
   /** Back to the start of a message, keeping the callbacks. */
@@ -374,7 +453,7 @@ export class HTTPParser {
   }
 
   #readStartLine(line: string): number {
-    this.onMessageBegin?.();
+    this.#callMessageBegin();
 
     if (this.#type === RESPONSE) {
       // HTTP-version SP status-code SP [ reason-phrase ]
@@ -546,12 +625,12 @@ export class HTTPParser {
 
     // The callback may say "no body" -- that is how a client tells the parser
     // this is the response to a HEAD.
-    const answer = this.onHeadersComplete?.(info);
+    const answer = this.#callHeadersComplete(info);
     const skip = this.#skipBody || answer === 1 || answer === 2;
 
     if (this.#upgrade) {
       this.#state = State.Upgraded;
-      this.onMessageComplete?.();
+      this.#callMessageComplete();
       return 0;
     }
 
@@ -572,7 +651,7 @@ export class HTTPParser {
       : Math.min(available, this.#remaining);
 
     if (take > 0) {
-      this.onBody?.(data.subarray(offset, offset + take));
+      this.#callBody(data.subarray(offset, offset + take));
       if (this.#framing === Framing.ContentLength) this.#remaining -= take;
     }
 
@@ -606,7 +685,7 @@ export class HTTPParser {
   #readChunkData(data: Uint8Array, offset: number): number {
     const take = Math.min(data.length - offset, this.#chunkRemaining);
     if (take > 0) {
-      this.onBody?.(data.subarray(offset, offset + take));
+      this.#callBody(data.subarray(offset, offset + take));
       this.#chunkRemaining -= take;
     }
     if (this.#chunkRemaining === 0) {
@@ -618,7 +697,7 @@ export class HTTPParser {
 
   #complete(): void {
     this.#state = State.Complete;
-    this.onMessageComplete?.();
+    this.#callMessageComplete();
   }
 
   /** Ready for the next message on the same connection. */

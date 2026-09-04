@@ -1,5 +1,3 @@
-import { inspect } from "../util/src/inspect.ts";
-
 // Node's error codes, and the messages its own tests assert on.
 //
 // The message text is not decoration. `test-path.js` compares against a string
@@ -31,42 +29,38 @@ export function determineSpecificType(value: unknown): string {
     return "undefined";
   }
 
-  const type = typeof value;
-
-  switch (type) {
+  switch (typeof value) {
     case "bigint":
       return `type bigint (${value}n)`;
     case "number": {
-      const n = value as number;
-      if (n === 0) {
-        return 1 / n === -Infinity ? "type number (-0)" : "type number (0)";
+      if (value === 0) {
+        return 1 / value === -Infinity ? "type number (-0)" : "type number (0)";
       }
-      if (n !== n) {
+      if (value !== value) {
         return "type number (NaN)";
       }
-      if (n === Infinity) {
+      if (value === Infinity) {
         return "type number (Infinity)";
       }
-      if (n === -Infinity) {
+      if (value === -Infinity) {
         return "type number (-Infinity)";
       }
-      return `type number (${n})`;
+      return `type number (${value})`;
     }
     case "boolean":
       return value ? "type boolean (true)" : "type boolean (false)";
     case "symbol":
       return `type symbol (${String(value)})`;
     case "function":
-      return `function ${(value as { name: string }).name}`;
-    case "object": {
-      const ctor = (value as { constructor?: { name?: string } }).constructor;
-      if (ctor && "name" in ctor) {
-        return `an instance of ${ctor.name}`;
-      }
-      return inspectShallow(value);
-    }
+      // A compiled function is a function pointer, not an object with an
+      // observable `.name`; discovering it is a §13 non-goal. Keep Node's
+      // separator after the unavailable name so an anonymous function has the
+      // same spelling as Node (`function `).
+      return "function ";
+    case "object":
+      return `an instance of ${staticObjectName(value)}`;
     case "string": {
-      let s = value as string;
+      let s = value;
       if (s.length > 28) {
         s = `${s.slice(0, 25)}...`;
       }
@@ -75,18 +69,31 @@ export function determineSpecificType(value: unknown): string {
       }
       return `type string (${JSON.stringify(s)})`;
     }
-    default: {
-      let s = inspectShallow(value);
-      if (s.length > 28) {
-        s = `${s.slice(0, 25)}...`;
-      }
-      return `type ${type} (${s})`;
-    }
   }
+  // Defensive for a future JavaScript `typeof` category. Every current one is
+  // handled above.
+  return `type ${typeof value}`;
 }
 
-function inspectShallow(value: unknown): string {
-  return inspect(value, { depth: -1 });
+/**
+ * A closed object-kind description that never consults `constructor.name`.
+ *
+ * The checks name runtime kinds NTS represents statically. Custom class names
+ * would require walking a prototype chain and reading function metadata, both
+ * explicitly outside the language profile.
+ */
+function staticObjectName(value: object): string {
+  if (Array.isArray(value)) return "Array";
+  if (value instanceof Uint8Array) return "Uint8Array";
+  if (value instanceof ArrayBuffer) return "ArrayBuffer";
+  if (value instanceof DataView) return "DataView";
+  if (value instanceof Map) return "Map";
+  if (value instanceof Set) return "Set";
+  if (value instanceof WeakMap) return "WeakMap";
+  if (value instanceof WeakSet) return "WeakSet";
+  if (value instanceof Promise) return "Promise";
+  if (value instanceof Error) return value.name || "Error";
+  return "Object";
 }
 
 /**
@@ -137,49 +144,158 @@ abstract class NodeURIError extends URIError {
   }
 }
 
-/**
- * The type names that format as `of type x` rather than `an instance of X`.
- * Node `lib/internal/errors.js:73`, and it accepts `Object` and `Function` as
- * alternatives to the lower-cased spellings -- which is why
- * `validateObject` passes `"Object"` and the message reads `of type object`.
- */
-const kTypes = [
-  "string",
-  "function",
-  "number",
-  "object",
-  "Function",
-  "Object",
-  "boolean",
-  "bigint",
-  "symbol",
-];
+/** `Directory handle was closed`. */
+export class ERR_DIR_CLOSED extends NodeError {
+  override readonly code = "ERR_DIR_CLOSED";
+
+  constructor() {
+    super("Directory handle was closed");
+    this.name = "Error";
+  }
+}
+
+/** A synchronous directory operation cannot overtake an async one. */
+export class ERR_DIR_CONCURRENT_OPERATION extends NodeError {
+  override readonly code = "ERR_DIR_CONCURRENT_OPERATION";
+
+  constructor() {
+    super(
+      "Cannot do synchronous work on directory handle with concurrent asynchronous operations",
+    );
+    this.name = "Error";
+  }
+}
+
+/** The SystemError returned when `rm` is asked to remove a directory. */
+export class ERR_FS_EISDIR extends NodeError {
+  override readonly code = "ERR_FS_EISDIR";
+  readonly info: {
+    errno: number;
+    code: string;
+    message: string;
+    syscall: "rm";
+    path: string;
+  };
+  errno: number;
+  syscall: "rm";
+  path: string;
+
+  constructor(errno: number, systemCode: string, description: string, path: string) {
+    super(
+      `Path is a directory: rm returned ${systemCode} (${description}) ${path}`,
+    );
+    this.name = "SystemError";
+    this.errno = errno;
+    this.syscall = "rm";
+    this.path = path;
+    this.info = {
+      errno,
+      code: systemCode,
+      message: description,
+      syscall: "rm",
+      path,
+    };
+  }
+}
 
 /**
- * V8's `Error.captureStackTrace`: fill in `stack` on `target`, omitting the
- * frames at and above `below`.
- *
- * Not in TypeScript's library, so the cast is here rather than as a global
- * declaration that would claim every engine has it. Node uses it to keep its
- * own machinery out of a user's stack trace, and its tests check that the
- * frames are gone.
+ * V8's optional `Error.captureStackTrace` host seam. A compiled NTS program
+ * keeps no JavaScript frames, while the Node conformance host does. Modelling
+ * the optional member explicitly keeps both cases typed without asserting a
+ * different type for the global constructor.
  */
-export const { captureStackTrace } = Error as unknown as {
-  captureStackTrace(target: object, below?: unknown): void;
-};
+interface StackCapturingErrorConstructor extends ErrorConstructor {
+  captureStackTrace?(target: object, below?: CallableFunction): void;
+}
+
+const stackCapturingError: StackCapturingErrorConstructor = Error;
+
+export function captureStackTrace(target: object, below?: CallableFunction): void {
+  stackCapturingError.captureStackTrace?.(target, below);
+}
 
 /** A class rather than a `typeof` result: `Buffer`, `TracingChannel`. */
-const classNamePattern = /^[A-Z][a-zA-Z0-9]*$/;
+function isClassName(value: string): boolean {
+  if (value.length === 0) return false;
+  const first = value.charCodeAt(0);
+  if (first < 65 || first > 90) return false;
+  for (let i = 1; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    const alphaNumeric =
+      (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122);
+    if (!alphaNumeric) return false;
+  }
+  return true;
+}
 
 /**
- * `a`, `a or b`, `a, b, or c`. Node `lib/internal/errors.js`'s `formatList`
- * with the conjunction fixed to "or", which is the only one these errors use.
+ * Type names that format as `of type x` rather than `an instance of X`.
  */
-function formatList(items: string[]): string {
-  if (items.length <= 2) {
-    return items.join(" or ");
+function isTypeName(value: string): boolean {
+  switch (value) {
+    case "string":
+    case "function":
+    case "number":
+    case "object":
+    case "Function":
+    case "Object":
+    case "boolean":
+    case "bigint":
+    case "symbol":
+      return true;
+    default:
+      return false;
   }
-  return `${items.slice(0, -1).join(", ")}, or ${items[items.length - 1]}`;
+}
+
+type ExpectedCategory = "type" | "instance" | "other";
+
+function expectedCategory(
+  value: string,
+  objectIsInstance: boolean,
+): ExpectedCategory {
+  if (isTypeName(value)) {
+    return objectIsInstance && value.toLowerCase() === "object"
+      ? "instance"
+      : "type";
+  }
+  return isClassName(value) ? "instance" : "other";
+}
+
+function countExpected(
+  values: readonly string[],
+  category: ExpectedCategory,
+  objectIsInstance: boolean,
+): number {
+  let count = 0;
+  for (const value of values) {
+    if (expectedCategory(value, objectIsInstance) === category) count++;
+  }
+  return count;
+}
+
+/** `a`, `a or b`, `a, b, or c`, selecting one category without arrays. */
+function formatExpected(
+  values: readonly string[],
+  category: ExpectedCategory,
+  objectIsInstance: boolean,
+  count: number,
+): string {
+  let result = "";
+  let written = 0;
+  for (const value of values) {
+    if (expectedCategory(value, objectIsInstance) !== category) continue;
+    if (written > 0) {
+      result += written === count - 1
+        ? (count === 2 ? " or " : ", or ")
+        : ", ";
+    }
+    result += category === "type" ? value.toLowerCase() : value;
+    written++;
+  }
+  return result;
 }
 
 /** `The "path" argument must be of type string. Received type number (42)`. */
@@ -194,51 +310,38 @@ export class ERR_INVALID_ARG_TYPE extends NodeTypeError {
     const kind = name.includes(".") ? "property" : "argument";
     const subject = name.endsWith(" argument") ? `${name} ` : `"${name}" ${kind} `;
 
-    const wanted = Array.isArray(expected) ? expected : [expected];
-    const types: string[] = [];
-    const instances: string[] = [];
-    const other: string[] = [];
-    for (const one of wanted) {
-      if (kTypes.includes(one)) {
-        types.push(one.toLowerCase());
-      } else if (classNamePattern.test(one)) {
-        instances.push(one);
-      } else {
-        // Neither a `typeof` result nor a class name: a phrase such as
-        // `"a valid port"`, which reads on its own.
-        other.push(one);
-      }
+    const wanted: readonly string[] = Array.isArray(expected) ? expected : [expected];
+    let namedClassCount = 0;
+    for (const value of wanted) {
+      if (!isTypeName(value) && isClassName(value)) namedClassCount++;
     }
 
     // With a class in the list, a bare `object` is the odd one out and reads
     // better beside the classes: "an instance of TracingChannel or Object",
     // not "of type object or an instance of TracingChannel".
-    if (instances.length > 0) {
-      const at = types.indexOf("object");
-      if (at !== -1) {
-        types.splice(at, 1);
-        instances.push("Object");
-      }
-    }
+    const objectIsInstance = namedClassCount > 0;
+    const typeCount = countExpected(wanted, "type", objectIsInstance);
+    const instanceCount = countExpected(wanted, "instance", objectIsInstance);
+    const otherCount = countExpected(wanted, "other", objectIsInstance);
 
     let described = "";
-    if (types.length > 0) {
-      described += `${types.length > 1 ? "one of type" : "of type"} ${formatList(types)}`;
-      if (instances.length > 0 || other.length > 0) {
+    if (typeCount > 0) {
+      described += `${typeCount > 1 ? "one of type" : "of type"} ${formatExpected(wanted, "type", objectIsInstance, typeCount)}`;
+      if (instanceCount > 0 || otherCount > 0) {
         described += " or ";
       }
     }
-    if (instances.length > 0) {
-      described += `an instance of ${formatList(instances)}`;
-      if (other.length > 0) {
+    if (instanceCount > 0) {
+      described += `an instance of ${formatExpected(wanted, "instance", objectIsInstance, instanceCount)}`;
+      if (otherCount > 0) {
         described += " or ";
       }
     }
-    if (other.length > 0) {
-      if (other.length > 1) {
-        described += `one of ${formatList(other)}`;
+    if (otherCount > 0) {
+      if (otherCount > 1) {
+        described += `one of ${formatExpected(wanted, "other", objectIsInstance, otherCount)}`;
       } else {
-        const only = other[0]!;
+        const only = formatExpected(wanted, "other", objectIsInstance, otherCount);
         described += only.toLowerCase() !== only ? `an ${only}` : only;
       }
     }
@@ -297,7 +400,11 @@ export class ERR_OUT_OF_RANGE extends NodeRangeError {
  */
 export function inspectValue(value: unknown): string {
   if (typeof value === "string") {
-    return JSON.stringify(value).replace(/^"|"$/g, "'");
+    const encoded = JSON.stringify(value)
+      .slice(1, -1)
+      .replaceAll("\\u0000", "\\x00")
+      .replaceAll("'", "\\'");
+    return `'${encoded}'`;
   }
   if (typeof value === "bigint") {
     return `${value}n`;
@@ -315,8 +422,18 @@ export function inspectValue(value: unknown): string {
     return `[ ${value.map(inspectValue).join(", ")} ]`;
   }
   if (typeof value === "function") {
-    const named = (value as { name?: string }).name;
-    return named ? `[Function: ${named}]` : "[Function (anonymous)]";
+    return "[Function]";
+  }
+  if (typeof value === "symbol") {
+    return String(value);
+  }
+  if (value instanceof Uint8Array) {
+    return value.length === 0
+      ? "Uint8Array(0) []"
+      : `Uint8Array(${value.length}) [ ${value.join(", ")} ]`;
+  }
+  if (value instanceof Error) {
+    return `${value.name}: ${value.message}`;
   }
   return "[Object]";
 }
@@ -329,7 +446,7 @@ export class ERR_INVALID_ARG_VALUE extends NodeTypeError {
   constructor(name: string, value: unknown, reason = "is invalid") {
     // The value itself, not a description of its type: this error is about
     // *which* value was wrong, and `'auto'` is more use than `type string`.
-    let inspected = inspect(value);
+    let inspected = inspectValue(value);
     if (inspected.length > 128) {
       inspected = `${inspected.slice(0, 128)}...`;
     }
@@ -375,8 +492,12 @@ export class ERR_UNKNOWN_ENCODING extends NodeTypeError {
   override get ["constructor"](): unknown { return TypeError; }
   override readonly code = "ERR_UNKNOWN_ENCODING";
 
-  constructor(encoding: string) {
-    super(`Unknown encoding: ${encoding}`);
+  constructor(encoding: unknown) {
+    // Node formats this `%s` through util.inspect. The typed API admits a
+    // string without quotes; other inputs retain the small, closed structural
+    // inspection used by the rest of this error module.
+    const displayed = typeof encoding === "string" ? encoding : inspectValue(encoding);
+    super(`Unknown encoding: ${displayed}`);
     this.name = "TypeError";
   }
 }
@@ -386,13 +507,26 @@ export class ERR_MISSING_ARGS extends NodeTypeError {
   override get ["constructor"](): unknown { return TypeError; }
   override readonly code = "ERR_MISSING_ARGS";
 
-  constructor(...names: string[]) {
-    const quoted = names.map((n) => `"${n}"`);
+  constructor(...names: (string | readonly string[])[]) {
+    const quoted = names.map((name) => Array.isArray(name)
+      ? name.map((part) => `"${part}"`).join(" or ")
+      : `"${name}"`);
     const list =
       quoted.length === 1 ? quoted[0]
       : quoted.length === 2 ? `${quoted[0]} and ${quoted[1]}`
       : `${quoted.slice(0, -1).join(", ")}, and ${quoted[quoted.length - 1]}`;
     super(`The ${list} argument${names.length > 1 ? "s" : ""} must be specified`);
+    this.name = "TypeError";
+  }
+}
+
+/** `Query pairs must be iterable`. */
+export class ERR_ARG_NOT_ITERABLE extends NodeTypeError {
+  override get ["constructor"](): unknown { return TypeError; }
+  override readonly code = "ERR_ARG_NOT_ITERABLE";
+
+  constructor(name: string) {
+    super(`${name} must be iterable`);
     this.name = "TypeError";
   }
 }
@@ -483,13 +617,10 @@ export class ERR_INVALID_RETURN_VALUE extends NodeTypeError {
   override readonly code = "ERR_INVALID_RETURN_VALUE";
 
   constructor(input: string, name: string, value: unknown) {
-    let type: string;
-    if (value != null && (value as object).constructor?.name) {
-      type = `instance of ${(value as object).constructor.name}`;
-    } else {
-      type = `type ${typeof value}`;
-    }
-    super(`Expected ${input} to be returned from the "${name}" function but got ${type}.`);
+    super(
+      `Expected ${input} to be returned from the "${name}" function but got ` +
+      `${determineSpecificType(value)}.`,
+    );
     this.name = "TypeError";
   }
 }
@@ -516,6 +647,28 @@ export class ERR_INVALID_STATE extends NodeError {
   }
 }
 
+/** The TypeError-flavoured form of `ERR_INVALID_STATE`. */
+export class ERR_INVALID_STATE_TYPE extends NodeTypeError {
+  override get ["constructor"](): unknown { return TypeError; }
+  override readonly code = "ERR_INVALID_STATE";
+
+  constructor(reason: string) {
+    super(`Invalid state: ${reason}`);
+    this.name = "TypeError";
+  }
+}
+
+/** The RangeError-flavoured form of `ERR_INVALID_STATE`. */
+export class ERR_INVALID_STATE_RANGE extends NodeRangeError {
+  override get ["constructor"](): unknown { return RangeError; }
+  override readonly code = "ERR_INVALID_STATE";
+
+  constructor(reason: string) {
+    super(`Invalid state: ${reason}`);
+    this.name = "RangeError";
+  }
+}
+
 /** `Invalid URL` — the input could not be parsed as one. */
 export class ERR_INVALID_URL extends NodeTypeError {
   override get ["constructor"](): unknown { return TypeError; }
@@ -528,6 +681,10 @@ export class ERR_INVALID_URL extends NodeTypeError {
     // The offending text is a property rather than part of the message: node
     // keeps messages free of user data so that they group when logged.
     this.input = input;
+  }
+
+  override toString(): string {
+    return `${this.name}: ${this.message}`;
   }
 }
 
@@ -636,7 +793,18 @@ export class ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET extends NodeError {
   override readonly code = "ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET";
 
   constructor() {
-    super("`process.setUncaughtExceptionCaptureCallback()` was called while a capture callback was already active");
+    super("`process.setupUncaughtExceptionCapture()` was called while a capture callback was already active");
+    this.name = "Error";
+  }
+}
+
+/** A user or group name/id that the operating system cannot resolve. */
+export class ERR_UNKNOWN_CREDENTIAL extends NodeError {
+  override get ["constructor"](): unknown { return Error; }
+  override readonly code = "ERR_UNKNOWN_CREDENTIAL";
+
+  constructor(kind: "User" | "Group", value: number | string) {
+    super(`${kind} identifier does not exist: ${value}`);
     this.name = "Error";
   }
 }
@@ -670,6 +838,17 @@ export class ERR_INVALID_ARG_VALUE_RANGE extends NodeRangeError {
   }
 }
 
+/** A whole-file read cannot be represented by libuv's signed I/O length. */
+export class ERR_FS_FILE_TOO_LARGE extends NodeRangeError {
+  override get ["constructor"](): unknown { return RangeError; }
+  override readonly code = "ERR_FS_FILE_TOO_LARGE";
+
+  constructor(size: number) {
+    super(`File size (${size}) is greater than 2 GiB`);
+    this.name = "RangeError";
+  }
+}
+
 /** A callback that was already called, called again. */
 export class ERR_MULTIPLE_CALLBACK extends NodeError {
   override get ["constructor"](): unknown { return Error; }
@@ -677,6 +856,17 @@ export class ERR_MULTIPLE_CALLBACK extends NodeError {
 
   constructor() {
     super("Callback called multiple times");
+    this.name = "Error";
+  }
+}
+
+/** A caught non-Error value promoted to Node's ordinary operation failure. */
+export class ERR_OPERATION_FAILED extends NodeError {
+  override get ["constructor"](): unknown { return Error; }
+  override readonly code = "ERR_OPERATION_FAILED";
+
+  constructor(reason: string) {
+    super(`Operation failed: ${reason}`);
     this.name = "Error";
   }
 }
@@ -695,19 +885,44 @@ export class ERR_MULTIPLE_CALLBACK extends NodeError {
  */
 export function aggregateTwoErrors(inner: unknown, outer: unknown): unknown {
   if (inner && outer && inner !== outer) {
-    const outerError = outer as { errors?: unknown[]; message?: string; code?: string };
-    if (Array.isArray(outerError.errors)) {
-      outerError.errors.push(inner);
+    if (outer instanceof AggregateError) {
+      const errors: unknown = outer.errors;
+      if (Array.isArray(errors)) errors.push(inner);
       return outer;
     }
-    const aggregate = new AggregateError([outer, inner], outerError.message) as Error & {
-      code?: string;
-    };
-    aggregate.code = outerError.code;
+    const message = outer instanceof Error ? outer.message : undefined;
+    const aggregate = new NodeAggregateError(
+      [outer, inner],
+      message,
+      knownErrorCode(outer),
+    );
     captureStackTrace(aggregate, aggregateTwoErrors);
     return aggregate;
   }
   return inner || outer;
+}
+
+/** An AggregateError whose Node error code remains visible to callers. */
+class NodeAggregateError extends AggregateError {
+  readonly code: string | undefined;
+
+  constructor(errors: readonly unknown[], message: string | undefined, code: string | undefined) {
+    super(errors, message);
+    this.code = code;
+  }
+}
+
+function knownErrorCode(value: unknown): string | undefined {
+  if (
+    value instanceof NodeError ||
+    value instanceof NodeTypeError ||
+    value instanceof NodeRangeError ||
+    value instanceof NodeURIError ||
+    value instanceof NodeAggregateError
+  ) {
+    return value.code;
+  }
+  return undefined;
 }
 
 // The stream errors. Node keeps these in one table with a printf-style
@@ -835,6 +1050,17 @@ export class ERR_BROTLI_INVALID_PARAM extends NodeRangeError {
   }
 }
 
+/** A zstd parameter key the library does not have. */
+export class ERR_ZSTD_INVALID_PARAM extends NodeRangeError {
+  override get ["constructor"](): unknown { return RangeError; }
+  override readonly code = "ERR_ZSTD_INVALID_PARAM";
+
+  constructor(parameter: unknown) {
+    super(`${parameter} is not a valid zstd parameter`);
+    this.name = "RangeError";
+  }
+}
+
 /** An operation on a socket that has already been closed. */
 export class ERR_SOCKET_CLOSED extends NodeError {
   override get ["constructor"](): unknown { return Error; }
@@ -842,6 +1068,50 @@ export class ERR_SOCKET_CLOSED extends NodeError {
 
   constructor() {
     super("Socket is closed");
+    this.name = "Error";
+  }
+}
+
+/** A socket was destroyed while its connection request was still pending. */
+export class ERR_SOCKET_CLOSED_BEFORE_CONNECTION extends NodeError {
+  override get ["constructor"](): unknown { return Error; }
+  override readonly code = "ERR_SOCKET_CLOSED_BEFORE_CONNECTION";
+
+  constructor() {
+    super("Socket closed before the connection was established");
+    this.name = "Error";
+  }
+}
+
+/** A role-neutral bound handle transfers to exactly one server or socket. */
+export class ERR_SOCKET_HANDLE_ADOPTED extends NodeError {
+  override get ["constructor"](): unknown { return Error; }
+  override readonly code = "ERR_SOCKET_HANDLE_ADOPTED";
+
+  constructor() {
+    super("The bound socket has already been adopted by a server or socket");
+    this.name = "Error";
+  }
+}
+
+/** A reset was requested for a non-TCP transport. */
+export class ERR_INVALID_HANDLE_TYPE extends NodeTypeError {
+  override get ["constructor"](): unknown { return TypeError; }
+  override readonly code = "ERR_INVALID_HANDLE_TYPE";
+
+  constructor() {
+    super("This handle type cannot be sent");
+    this.name = "TypeError";
+  }
+}
+
+/** A destination address was rejected by a net.BlockList. */
+export class ERR_IP_BLOCKED extends NodeError {
+  override get ["constructor"](): unknown { return Error; }
+  override readonly code = "ERR_IP_BLOCKED";
+
+  constructor(address: string) {
+    super(`IP(${address}) is blocked by net.BlockList`);
     this.name = "Error";
   }
 }
@@ -905,6 +1175,39 @@ export class ERR_BUFFER_OUT_OF_BOUNDS extends NodeRangeError {
       ? "Attempt to access memory outside buffer bounds"
       : `"${name}" is outside of buffer bounds`);
     this.name = "RangeError";
+  }
+}
+
+/** `Buffer size must be a multiple of 16-bits`. */
+export class ERR_INVALID_BUFFER_SIZE extends NodeRangeError {
+  override get ["constructor"](): unknown { return RangeError; }
+  override readonly code = "ERR_INVALID_BUFFER_SIZE";
+
+  constructor(unit: string) {
+    super(`Buffer size must be a multiple of ${unit}`);
+    this.name = "RangeError";
+  }
+}
+
+/** `Cannot create a Buffer larger than 64 bytes`. */
+export class ERR_BUFFER_TOO_LARGE extends NodeRangeError {
+  override get ["constructor"](): unknown { return RangeError; }
+  override readonly code = "ERR_BUFFER_TOO_LARGE";
+
+  constructor(maximum: number) {
+    super(`Cannot create a Buffer larger than ${maximum} bytes`);
+    this.name = "RangeError";
+  }
+}
+
+/** `Trailing junk found after the end of the compressed stream`. */
+export class ERR_TRAILING_JUNK_AFTER_STREAM_END extends NodeTypeError {
+  override get ["constructor"](): unknown { return TypeError; }
+  override readonly code = "ERR_TRAILING_JUNK_AFTER_STREAM_END";
+
+  constructor() {
+    super("Trailing junk found after the end of the compressed stream");
+    this.name = "TypeError";
   }
 }
 
@@ -989,6 +1292,17 @@ export class ERR_SOCKET_ALREADY_BOUND extends NodeError {
   }
 }
 
+/** `Buffer size must be a positive integer`. */
+export class ERR_SOCKET_BAD_BUFFER_SIZE extends NodeTypeError {
+  override readonly code = "ERR_SOCKET_BAD_BUFFER_SIZE";
+  override get ["constructor"](): unknown { return TypeError; }
+
+  constructor() {
+    super("Buffer size must be a positive integer");
+    this.name = "TypeError";
+  }
+}
+
 /** `Already connected` — a second `connect` on a connected datagram socket. */
 export class ERR_SOCKET_DGRAM_IS_CONNECTED extends NodeError {
   override readonly code = "ERR_SOCKET_DGRAM_IS_CONNECTED";
@@ -1047,8 +1361,34 @@ export class ERR_SOCKET_BAD_PORT extends NodeRangeError {
   constructor(name: string, port: unknown, allowZero = true) {
     super(
       `${name} should be ${allowZero ? ">=" : ">"} 0 and < 65536. ` +
-        `Received ${inspect(port)}.`,
+        `Received ${inspectValue(port)}.`,
     );
     this.name = "RangeError";
+  }
+}
+
+/** `Invalid IP address: value` returned by a socket lookup callback. */
+export class ERR_INVALID_IP_ADDRESS extends NodeTypeError {
+  override readonly code = "ERR_INVALID_IP_ADDRESS";
+  override get ["constructor"](): unknown { return TypeError; }
+
+  constructor(address: unknown) {
+    super(`Invalid IP address: ${String(address)}`);
+    this.name = "TypeError";
+  }
+}
+
+/** `Invalid address family: family host:port` from a socket lookup result. */
+export class ERR_INVALID_ADDRESS_FAMILY extends NodeRangeError {
+  override readonly code = "ERR_INVALID_ADDRESS_FAMILY";
+  override get ["constructor"](): unknown { return RangeError; }
+  readonly host: string;
+  readonly port: number;
+
+  constructor(addressFamily: unknown, host: string, port: number) {
+    super(`Invalid address family: ${String(addressFamily)} ${host}:${port}`);
+    this.name = "RangeError";
+    this.host = host;
+    this.port = port;
   }
 }

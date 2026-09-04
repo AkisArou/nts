@@ -11,12 +11,13 @@
 // that survives, because it is what `console` was written against.
 
 import { EventEmitter, type Listener } from "../events/src/main.ts";
+import { getColorDepth } from "./color-depth.ts";
+import { uvException } from "./uv.ts";
 
-declare function nts_write_stdout(text: string): void;
-declare function nts_write_stderr(text: string): void;
+declare function nts_write_stdout(text: string): number;
+declare function nts_write_stderr(text: string): number;
 declare function nts_stdout_is_tty(): boolean;
 declare function nts_stderr_is_tty(): boolean;
-declare function nts_stdio_color_depth(): number;
 
 /**
  * What `console` needs of a stream.
@@ -29,6 +30,7 @@ declare function nts_stdio_color_depth(): number;
 export interface WritableLike {
   write(chunk: string, callback?: (err?: Error | null) => void): boolean;
   isTTY?: boolean | undefined;
+  columns?: number | undefined;
   getColorDepth?: (() => number) | undefined;
   listenerCount?: ((event: string) => number) | undefined;
   once?: ((event: string, listener: Listener) => unknown) | undefined;
@@ -37,10 +39,10 @@ export interface WritableLike {
 }
 
 class StandardStream extends EventEmitter implements WritableLike {
-  readonly #sink: (text: string) => void;
+  readonly #sink: (text: string) => number;
   readonly #tty: () => boolean;
 
-  constructor(sink: (text: string) => void, tty: () => boolean) {
+  constructor(sink: (text: string) => number, tty: () => boolean) {
     super();
     this.#sink = sink;
     this.#tty = tty;
@@ -48,17 +50,24 @@ class StandardStream extends EventEmitter implements WritableLike {
 
   /**
    * Node's `Writable.write` returns false when the caller should wait for
-   * `drain`. These bindings are synchronous, so there is never anything to
-   * wait for and the answer is always true.
+   * `drain`. These bindings are synchronous and have no buffered backpressure,
+   * so a successful write returns true; a failed syscall is reported through
+   * the callback and `error` event and returns false.
    */
   write(chunk: string, callback?: (err?: Error | null) => void): boolean {
+    let error: Error | undefined;
     try {
-      this.#sink(chunk);
+      const errno = this.#sink(chunk);
+      if (errno < 0) error = uvException(errno, "write");
     } catch (err) {
       // A stream reports a write failure by calling back and emitting, not by
       // throwing at the caller: `console.log` to a closed pipe must not take
       // the program down.
-      const error = err as Error;
+      error = err instanceof Error
+        ? err
+        : new Error("Failed to write to the standard stream");
+    }
+    if (error !== undefined) {
       if (callback) {
         callback(error);
       }
@@ -78,16 +87,16 @@ class StandardStream extends EventEmitter implements WritableLike {
   }
 
   getColorDepth(): number {
-    return this.#tty() ? nts_stdio_color_depth() : 1;
+    return this.#tty() ? getColorDepth() : 1;
   }
 }
 
 export const stdout: WritableLike = new StandardStream(
-  (text) => nts_write_stdout(text),
-  () => nts_stdout_is_tty(),
+  nts_write_stdout,
+  nts_stdout_is_tty,
 );
 
 export const stderr: WritableLike = new StandardStream(
-  (text) => nts_write_stderr(text),
-  () => nts_stderr_is_tty(),
+  nts_write_stderr,
+  nts_stderr_is_tty,
 );

@@ -1,5 +1,4 @@
-# Tests that spawn `process.execPath` and assert on the child. The child is
-# real node running real node modules; our implementation is not in it, so the
-# assertion is about node's binary. Each line is `file: reason`.
-test-os-homedir-no-envvar.js: spawns a node child and asserts on its exit status
-test-os-userinfo-handles-getter-errors.js: runs `node -e` and asserts on its stderr
+# Each line is `file: reason`; mixed files name their independent coverage.
+test-os.js: language non-goal (typescript.md section 13); after its public OS checks the file requires every exported function to be a mutable object with a Symbol.toPrimitive hook; local/core-static.js preserves the supported scalar, CPU, memory, network-interface, directory, user, EOL, and devNull behavior
+test-os-homedir-no-envvar.js: host-binary subprocess; spawns a fresh node process and asserts on its built-in os module
+test-os-userinfo-handles-getter-errors.js: host-binary subprocess; runs node -e and asserts on the built-in os module's stderr

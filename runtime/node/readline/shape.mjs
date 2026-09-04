@@ -13,8 +13,9 @@ import { inspect } from "../util/src/inspect.ts";
 import { stripVTControlCharacters } from "../util/src/main.ts";
 
 export function shape(exports) {
+  installQuestionPromisifier(exports.Interface, exports.kQuestionPromise);
   return {
-    Interface: exports.Interface,
+    Interface: callableInterface(exports.Interface),
     clearLine: exports.clearLine,
     clearScreenDown: exports.clearScreenDown,
     createInterface: exports.createInterface,
@@ -23,6 +24,32 @@ export function shape(exports) {
     moveCursor: exports.moveCursor,
     promises: exports.promises,
   };
+}
+
+/** The public subpath is the same namespace exposed by `readline.promises`. */
+export function subpaths(exports) {
+  return { "readline/promises": exports.promises };
+}
+
+/** Put Node's function-object hook at the untyped CommonJS boundary only. */
+function installQuestionPromisifier(InterfaceClass, questionPromise) {
+  const custom = Symbol.for("nodejs.util.promisify.custom");
+  InterfaceClass.prototype.question[custom] = function question(query, options) {
+    return this[questionPromise](query, options);
+  };
+}
+
+/**
+ * `readline.Interface` predates classes and remains callable without `new`.
+ * The implementation stays a typed class; this boundary function only
+ * preserves that historical CommonJS constructor shape.
+ */
+function callableInterface(InterfaceClass) {
+  function Interface(...args) {
+    return new InterfaceClass(...args);
+  }
+  Interface.prototype = InterfaceClass.prototype;
+  return Interface;
 }
 
 /**
@@ -37,7 +64,7 @@ export function shape(exports) {
 export function internals() {
   return {
     "internal/readline/utils": {
-      CSI: utils.CSI,
+      CSI: nodeCSI(),
       charLengthAt: utils.charLengthAt,
       charLengthLeft: utils.charLengthLeft,
       commonPrefix: utils.commonPrefix,
@@ -62,4 +89,15 @@ export function internals() {
       moveCursor: callbacks.moveCursor,
     },
   };
+}
+
+/** Node's callable CSI function with its observable function-object fields. */
+function nodeCSI() {
+  const CSI = (strings, ...args) => callbacks.csi(strings, ...args);
+  CSI.kEscape = callbacks.kEscape;
+  CSI.kClearToLineBeginning = callbacks.kClearToLineBeginning;
+  CSI.kClearToLineEnd = callbacks.kClearToLineEnd;
+  CSI.kClearLine = callbacks.kClearLine;
+  CSI.kClearScreenDown = callbacks.kClearScreenDown;
+  return CSI;
 }

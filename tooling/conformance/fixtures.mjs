@@ -19,7 +19,8 @@ export function path(...args) {
 }
 
 export function fileURL(...args) {
-  return pathToFileURL(path(...args)).href;
+  const href = pathToFileURL(path(...args)).href;
+  return new globalThis.URL(href);
 }
 
 export function readSync(args, enc) {
@@ -30,4 +31,20 @@ export function readKey(arg, enc) {
   return readFileSync(join(fixturesDir, "keys", arg), enc);
 }
 
-export default { fixturesDir, path, fileURL, readSync, readKey };
+export function readKeys(enc, ...names) {
+  return names.map((name) => readKey(name, enc));
+}
+
+export const utf8TestText = readFileSync(path("utf8_test_text.txt"), "utf8");
+export const utf8TestTextPath = path("utf8_test_text.txt");
+
+export default {
+  fixturesDir,
+  path,
+  fileURL,
+  readSync,
+  readKey,
+  readKeys,
+  utf8TestText,
+  utf8TestTextPath,
+};

@@ -19,18 +19,27 @@ export function shape(exports) {
   };
 }
 
+export function installGlobals(_underTest, rawExports) {
+  globalThis.queueMicrotask = rawExports.queueMicrotaskForRuntime;
+}
+
 /**
  * The node-internal module ids these files stand in for.
  *
  * Node's tests reach for `internal/async_hooks` in two ways: for
  * `enabledHooksExist`, to assert that a module they loaded did not quietly
- * turn hooks on, and for `symbols.async_id_symbol`, to read the id a core
- * object is carrying. Both are internal on purpose -- the first is a statement
- * about this module's own state, and the second names a slot on somebody
- * else's object.
+ * turn hooks on. Node also exposes private Symbol slots here; those require a
+ * dynamic property map and are outside the NTS object model, so this shape does
+ * not advertise them.
  */
 export function internals() {
   return {
+    // Node's GC regression test only asks which of its two implementations is
+    // active so it can perform the matching cleanup. This profile always uses
+    // continuation-preserved frames, so the truthful answer is fixed.
+    "internal/async_context_frame": {
+      enabled: true,
+    },
     "internal/async_hooks": {
       enabledHooksExist: hooks.enabledHooksExist,
       initHooksExist: hooks.initHooksExist,
@@ -51,11 +60,6 @@ export function internals() {
       executionAsyncId: hooks.executionAsyncId,
       triggerAsyncId: hooks.triggerAsyncId,
       registerDestroyHook: hooks.registerDestroyHook,
-      symbols: {
-        async_id_symbol: hooks.kAsyncId,
-        trigger_async_id_symbol: hooks.kTriggerAsyncId,
-        owner_symbol: hooks.kResourceOwner,
-      },
     },
   };
 }

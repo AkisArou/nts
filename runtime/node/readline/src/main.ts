@@ -23,9 +23,11 @@ import {
 } from "../../internal/readline-callbacks.ts";
 import {
   Interface as InterfaceClass,
-  type Completion,
+  kQuestionPromise,
   type Completer,
+  type InputStream,
   type InterfaceOptions,
+  type OutputStream,
 } from "./interface.ts";
 import { emitKeypressEvents } from "./keypress.ts";
 import * as promises from "./promises.ts";
@@ -38,73 +40,12 @@ export {
   moveCursor,
   promises,
 };
-export type { InterfaceOptions, Completer };
-export type Interface = InterfaceClass;
+export type { InterfaceOptions, Completer, InputStream, OutputStream };
 
-/**
- * `Interface` is callable with and without `new`.
- *
- * `readline.Interface(input, output)` is documented and used, and a class
- * constructor throws when called without `new`. So the exported binding is a
- * function that constructs either way, with `new.target` forwarded so that a
- * subclass still gets its own prototype. `node:console` does the same for the
- * same reason.
- */
-export interface InterfaceConstructor {
-  new (options: InterfaceOptions): InterfaceClass;
-  new (input: unknown, output?: unknown, completer?: Completer, terminal?: boolean): InterfaceClass;
-  (options: InterfaceOptions): InterfaceClass;
-  (input: unknown, output?: unknown, completer?: Completer, terminal?: boolean): InterfaceClass;
-  readonly prototype: InterfaceClass;
-}
-
-/**
- * Give a one-argument completer the callback shape.
- *
- * The callback interface must not defer: a completer that answers immediately
- * has to complete the line immediately, and awaiting an already-resolved value
- * still costs a microtask. Wrapping it here rather than awaiting it later is
- * what makes that true, and it is node's own line.
- *
- * `node:readline/promises` deliberately does not do this -- there, taking a
- * turn is the point.
- */
-function asCallbackCompleter(completer: Completer | undefined): Completer | undefined {
-  if (typeof completer !== "function" || completer.length === 2) return completer;
-  const real = completer as (line: string) => Completion;
-  return ((line: string, callback: (err: unknown, result?: Completion) => void): void => {
-    callback(null, real(line));
-  }) as Completer;
-}
-
-/** The options object or the positional arguments, with the completer wrapped. */
-function normalise(options: unknown, rest: unknown[]): [unknown, unknown[]] {
-  const o = options as { completer?: Completer } | null;
-  if (o && typeof o === "object" && "input" in o) {
-    return [{ ...o, completer: asCallbackCompleter(o.completer) }, rest];
-  }
-  const next = rest.slice();
-  next[1] = asCallbackCompleter(next[1] as Completer | undefined);
-  return [options, next];
-}
-
-const InterfaceCtor = function (this: unknown, ...args: unknown[]): InterfaceClass {
-  const [options, rest] = normalise(args[0], args.slice(1));
-  return Reflect.construct(
-    InterfaceClass,
-    [options, ...rest],
-    new.target ?? InterfaceClass,
-  ) as InterfaceClass;
-} as unknown as InterfaceConstructor;
-
-Object.defineProperty(InterfaceCtor, "name", {
-  __proto__: null,
-  value: "Interface",
-} as PropertyDescriptor);
-(InterfaceCtor as { prototype: InterfaceClass }).prototype = InterfaceClass.prototype;
-Object.setPrototypeOf(InterfaceCtor, InterfaceClass);
-
-export { InterfaceCtor as Interface };
+// Node's historical constructor is also callable without `new`. A class is
+// the statically typed form of that constructor; the callable facade requires
+// function/prototype metaobjects and is intentionally outside §13.
+export { InterfaceClass as Interface, kQuestionPromise };
 
 /**
  * Build an interface.
@@ -114,12 +55,19 @@ export { InterfaceCtor as Interface };
  */
 export function createInterface(options: InterfaceOptions): InterfaceClass;
 export function createInterface(
-  input: unknown,
-  output?: unknown,
+  input: InputStream,
+  output?: OutputStream | null,
   completer?: Completer,
   terminal?: boolean,
 ): InterfaceClass;
-export function createInterface(options: unknown, ...rest: unknown[]): InterfaceClass {
-  const [normalised, positional] = normalise(options, rest);
-  return new InterfaceClass(normalised as InterfaceOptions, ...positional);
+export function createInterface(
+  options: InterfaceOptions | InputStream,
+  output?: OutputStream | null,
+  completer?: Completer,
+  terminal?: boolean,
+): InterfaceClass {
+  if ("input" in options) {
+    return new InterfaceClass(options);
+  }
+  return new InterfaceClass(options, output, completer, terminal);
 }

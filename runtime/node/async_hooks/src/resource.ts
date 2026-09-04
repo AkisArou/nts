@@ -18,7 +18,6 @@ import {
   ERR_INVALID_ASYNC_ID,
 } from "../../internal/errors.ts";
 import { validateFunction, validateString } from "../../internal/validators.ts";
-import { deprecate } from "../../internal/deprecate.ts";
 import { AsyncContextFrame } from "../../internal/async-context.ts";
 import {
   destroyHooksExist,
@@ -29,14 +28,9 @@ import {
   getDefaultTriggerAsyncId,
   hasAsyncIdStack,
   initHooksExist,
-  kAsyncId,
-  kContextFrame,
-  kTriggerAsyncId,
   newAsyncId,
   registerDestroyHook,
 } from "../../internal/async-hooks.ts";
-
-const kDestroyed = Symbol("destroyed");
 
 export interface AsyncResourceOptions {
   triggerAsyncId?: number | undefined;
@@ -52,10 +46,10 @@ export interface AsyncResourceOptions {
 }
 
 export class AsyncResource {
-  declare [kAsyncId]: number;
-  declare [kTriggerAsyncId]: number;
-  declare [kContextFrame]: AsyncContextFrame | undefined;
-  declare [kDestroyed]: { destroyed: boolean } | undefined;
+  #asyncId: number;
+  #triggerAsyncId: number;
+  #contextFrame: AsyncContextFrame | undefined;
+  #destroyState: { destroyed: boolean } | undefined;
 
   constructor(type: string, options: AsyncResourceOptions | number = {}) {
     validateString(type, "type");
@@ -80,11 +74,12 @@ export class AsyncResource {
     // Captured at construction, not at first use. The point of the class is
     // that the context of the code that *set up* the work is the one restored,
     // and by the time anyone calls `runInAsyncScope` that code has returned.
-    this[kContextFrame] = AsyncContextFrame.current();
+    this.#contextFrame = AsyncContextFrame.current();
 
     const asyncId = newAsyncId();
-    this[kAsyncId] = asyncId;
-    this[kTriggerAsyncId] = trigger;
+    this.#asyncId = asyncId;
+    this.#triggerAsyncId = trigger;
+    this.#destroyState = undefined;
 
     if (initHooksExist()) {
       // Checked here rather than beside the `validateString` above, because an
@@ -96,7 +91,7 @@ export class AsyncResource {
 
     if (!requireManualDestroy && destroyHooksExist()) {
       const state = { destroyed: false };
-      this[kDestroyed] = state;
+      this.#destroyState = state;
       registerDestroyHook(this, asyncId, state);
     }
   }
@@ -109,17 +104,32 @@ export class AsyncResource {
    * confusing case where a hook and a store disagree about which request they
    * are in.
    */
+  runInAsyncScope<A extends unknown[], R>(
+    fn: (this: void, ...args: A) => R,
+    thisArg?: undefined,
+    ...args: A
+  ): R;
   runInAsyncScope<T, A extends unknown[], R>(
     fn: (this: T, ...args: A) => R,
-    thisArg?: T,
+    thisArg: T,
+    ...args: A
+  ): R;
+  runInAsyncScope<A extends unknown[], R>(
+    fn: (...args: A) => R,
+    thisArg?: unknown,
     ...args: A
   ): R {
-    const asyncId = this[kAsyncId];
-    emitBefore(asyncId, this[kTriggerAsyncId], this);
+    validateFunction(fn, "fn");
+    const asyncId = this.#asyncId;
+    emitBefore(asyncId, this.#triggerAsyncId, this);
 
-    const prior = AsyncContextFrame.exchange(this[kContextFrame]);
+    const prior = AsyncContextFrame.exchange(this.#contextFrame);
     try {
-      return Reflect.apply(fn, thisArg, args) as R;
+      // The overloads preserve the relationship between a callback's declared
+      // receiver and a present receiver. The implementation sees `unknown`
+      // because JavaScript also permits the receiver to be omitted, in which
+      // case Function#call supplies strict-mode `undefined` exactly.
+      return fn.call(thisArg, ...args);
     } finally {
       AsyncContextFrame.setCurrent(prior);
       // A hook disabled inside `fn` can empty the stack, and emitting an
@@ -131,85 +141,53 @@ export class AsyncResource {
 
   /** Report this resource finished. */
   emitDestroy(): this {
-    if (this[kDestroyed] !== undefined) {
+    if (this.#destroyState !== undefined) {
       // Marked so the collection hook, which may fire long afterwards, does
       // not report the same resource a second time.
-      this[kDestroyed].destroyed = true;
+      this.#destroyState.destroyed = true;
     }
-    emitDestroy(this[kAsyncId]);
+    emitDestroy(this.#asyncId);
     return this;
   }
 
   asyncId(): number {
-    return this[kAsyncId];
+    return this.#asyncId;
   }
 
   triggerAsyncId(): number {
-    return this[kTriggerAsyncId];
+    return this.#triggerAsyncId;
   }
 
   /**
    * A function that always runs in this resource's scope.
    *
-   * The wrapper takes `fn.length` so that code dispatching on arity -- which
-   * is most callback-vs-promise detection in the ecosystem -- sees the
-   * function that was passed rather than the wrapper.
+   * Node also exposes the deprecated `asyncResource` property and copies
+   * `fn.length` onto the wrapper. Functions are not property-bearing objects
+   * in NTS, so those §13 metadata operations are deliberately absent.
    */
-  bind<A extends unknown[], R>(
-    fn: (...args: A) => R,
-    thisArg?: unknown,
-  ): ((...args: A) => R) & { asyncResource: AsyncResource } {
+  bind<T, A extends unknown[], R>(
+    fn: (this: T, ...args: A) => R,
+    thisArg?: T,
+  ): (this: T, ...args: A) => R {
     validateFunction(fn, "fn");
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    let self: AsyncResource = this;
+    const self = this;
 
-    const bound = thisArg === undefined
-      ? function (this: unknown, ...args: A): R {
+    return thisArg === undefined
+      ? function (this: T, ...args: A): R {
           // `this` at the call site, not the one captured here: an unbound
           // method assigned onto an object must still see that object.
-          return self.runInAsyncScope(fn as (...a: A) => R, this as never, ...args);
+          return self.runInAsyncScope(fn, this, ...args);
         }
-      : (...args: A): R => self.runInAsyncScope(fn as (...a: A) => R, thisArg as never, ...args);
-
-    Object.defineProperties(bound, {
-      length: {
-        __proto__: null,
-        configurable: true,
-        enumerable: false,
-        value: fn.length,
-        writable: false,
-      },
-      asyncResource: {
-        __proto__: null,
-        configurable: true,
-        enumerable: true,
-        get: deprecate(
-          function (): unknown { return self; },
-          "The asyncResource property on bound functions is deprecated",
-          "DEP0172",
-        ),
-        set: deprecate(
-          function (value: never): void { self = value; },
-          "The asyncResource property on bound functions is deprecated",
-          "DEP0172",
-        ),
-      },
-    } as PropertyDescriptorMap);
-
-    return bound as ((...args: A) => R) & { asyncResource: AsyncResource };
+      : (...args: A): R => self.runInAsyncScope(fn, thisArg, ...args);
   }
 
   /** `fn`, wrapped in a resource of its own. */
-  static bind<A extends unknown[], R>(
-    fn: (...args: A) => R,
+  static bind<T, A extends unknown[], R>(
+    fn: (this: T, ...args: A) => R,
     type?: string,
-    thisArg?: unknown,
-  ): ((...args: A) => R) & { asyncResource: AsyncResource } {
+    thisArg?: T,
+  ): (this: T, ...args: A) => R {
     if (typeof fn !== "function") throw new ERR_INVALID_ARG_TYPE("fn", "function", fn);
-    // Named after the function when the caller did not say, because the type
-    // is what a hook has to identify the resource by and `bound-anonymous-fn`
-    // twenty times over tells nobody anything.
-    const name = type || fn.name;
-    return new AsyncResource(name || "bound-anonymous-fn").bind(fn, thisArg);
+    return new AsyncResource(type || "bound-anonymous-fn").bind(fn, thisArg);
   }
 }

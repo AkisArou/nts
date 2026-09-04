@@ -22,6 +22,7 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import {
+  AbortError,
   ERR_INVALID_ARG_TYPE,
   ERR_METHOD_NOT_IMPLEMENTED,
   ERR_MULTIPLE_CALLBACK,
@@ -38,16 +39,73 @@ import { getDefaultHighWaterMark, getHighWaterMark } from "./state.ts";
 import { construct, destroy, errorOrDestroy, undestroy } from "./destroy.ts";
 import type { DestroyableStream } from "./destroy.ts";
 import { addAbortSignalNoValidate } from "./add-abort-signal.ts";
+import { eos } from "./end-of-stream.ts";
 import type { AbortSignalLike } from "./end-of-stream.ts";
+import { captureRejectionSymbol } from "../../events/src/main.ts";
+import { newWritableFromWeb, newWritableToWeb } from "./web-adapters.ts";
+import type {
+  WebWritableStream,
+  WritableFromWebOptions,
+} from "./web-adapters.ts";
 
 const nop = (): void => {};
+const writableEventShape = ["close", "error", "prefinish", "finish", "drain"];
 
 export type WriteCallback = (error?: unknown) => void;
 
-interface BufferedWrite {
+export function isWriteCallback(value: unknown): value is WriteCallback {
+  return typeof value === "function";
+}
+
+export interface BufferedWrite {
   chunk: unknown;
-  encoding: string;
+  encoding: string | undefined;
   callback: WriteCallback;
+}
+
+function bufferedWriteAt(
+  entries: readonly BufferedWrite[],
+  index: number,
+): BufferedWrite {
+  const entry = entries[index];
+  if (entry === undefined) {
+    throw new Error("writable buffer index is outside the queued range");
+  }
+  return entry;
+}
+
+function callbackAt(
+  callbacks: readonly WriteCallback[],
+  index: number,
+): WriteCallback {
+  const callback = callbacks[index];
+  if (callback === undefined) {
+    throw new Error("writable finish-callback index is outside the queued range");
+  }
+  return callback;
+}
+
+function chunkLength(chunk: unknown): number {
+  if (typeof chunk === "string" || chunk instanceof Uint8Array) {
+    return chunk.length;
+  }
+  throw new Error("byte-mode writable received a chunk without a length");
+}
+
+/**
+ * The statically known writable half shared by `Writable` and `Duplex`.
+ *
+ * JavaScript's Node implementation copies prototype descriptors to fake
+ * multiple inheritance. NTS instead compiles both classes against this closed
+ * structural contract, so the algorithms below dispatch to `_write` and
+ * `_final` directly without a prototype walk or an adapter object.
+ */
+export interface WritableImplementation extends DestroyableStream {
+  _writableState: WritableState;
+  _writev?(chunks: BufferedWrite[], callback: WriteCallback): void;
+  _final?(callback: WriteCallback): void;
+  _write(chunk: unknown, encoding: string | undefined, callback: WriteCallback): void;
+  _writeAfterEndError(): Error;
 }
 
 export interface WritableOptions {
@@ -61,8 +119,9 @@ export interface WritableOptions {
   emitClose?: boolean | undefined;
   autoDestroy?: boolean | undefined;
   signal?: AbortSignalLike | undefined;
-  write?: (chunk: never, encoding: string, callback: WriteCallback) => void;
-  writev?: (chunks: never, callback: WriteCallback) => void;
+  captureRejections?: boolean | undefined;
+  write?: (chunk: unknown, encoding: string | undefined, callback: WriteCallback) => void;
+  writev?: (chunks: BufferedWrite[], callback: WriteCallback) => void;
   destroy?: (error: unknown, callback: WriteCallback) => void;
   final?: (callback: WriteCallback) => void;
   construct?: (callback: WriteCallback) => void;
@@ -91,8 +150,6 @@ export class WritableState {
   // per chunk is quadratic in the number buffered.
   buffered: BufferedWrite[] = [];
   bufferedIndex = 0;
-  /** Every buffered chunk is already a Buffer, so `_writev` can take them raw. */
-  allBuffers = true;
   /** No buffered chunk has a callback, so the drain need not track them. */
   allNoop = true;
 
@@ -126,7 +183,11 @@ export class WritableState {
 
   readonly onwrite: (error?: unknown) => void;
 
-  constructor(options: WritableOptions | undefined, stream: Writable, isDuplex: boolean) {
+  constructor(
+    options: WritableOptions | undefined,
+    stream: WritableImplementation,
+    isDuplex: boolean,
+  ) {
     this.objectMode = Boolean(options?.objectMode) ||
       (isDuplex && Boolean(options?.writableObjectMode));
 
@@ -156,7 +217,12 @@ export class WritableState {
 
   /** What is buffered, as an array. For inspection; not the live storage. */
   getBuffer(): BufferedWrite[] {
-    return this.buffered.slice(this.bufferedIndex);
+    const count = this.buffered.length - this.bufferedIndex;
+    const copy = new Array<BufferedWrite>(count);
+    for (let i = 0; i < count; i++) {
+      copy[i] = bufferedWriteAt(this.buffered, this.bufferedIndex + i);
+    }
+    return copy;
   }
 
   get bufferedRequestCount(): number {
@@ -173,7 +239,7 @@ export class WritableState {
  * surface instead -- `uncork` and `end` -- is not the same thing: `end` on an
  * already-ending stream raises `ERR_STREAM_ALREADY_FINISHED`.
  */
-export function onWritableConstructed(stream: Writable): void {
+export function onWritableConstructed(stream: WritableImplementation): void {
   const state = stream._writableState;
   if (!state.writing) clearBuffer(stream, state);
   if (state.ending) finishMaybe(stream, state);
@@ -182,34 +248,44 @@ export function onWritableConstructed(stream: Writable): void {
 function resetBuffer(state: WritableState): void {
   state.buffered = [];
   state.bufferedIndex = 0;
-  state.allBuffers = true;
   state.allNoop = true;
+}
+
+/** Optional vector hook installed by constructor options or a subclass. */
+export interface Writable {
+  _writev?(chunks: BufferedWrite[], callback: WriteCallback): void;
 }
 
 export class Writable extends Stream {
   _writableState: WritableState;
-  _writev: ((chunks: never, callback: WriteCallback) => void) | null = null;
-  _final?: (callback: WriteCallback) => void;
+  _final?(callback: WriteCallback): void;
   _construct?(callback: WriteCallback): void;
 
   constructor(options?: WritableOptions) {
     super();
+    this._initializeEventShape(writableEventShape);
+    this._configureCaptureRejections(options?.captureRejections);
+    if (options?.captureRejections === true) {
+      this[captureRejectionSymbol] = (error: unknown): void => {
+        this.destroy(error);
+      };
+    }
     this._writableState = new WritableState(options, this, false);
 
     // The options are shorthand for a subclass. A stream built this way is
     // indistinguishable from one built by extending, which is what makes
     // `new Writable({ write })` a real stream and not a lesser one.
     if (options) {
-      if (typeof options.write === "function") this._write = options.write as never;
+      if (typeof options.write === "function") this._write = options.write;
       if (typeof options.writev === "function") this._writev = options.writev;
-      if (typeof options.destroy === "function") this._destroy = options.destroy as never;
+      if (typeof options.destroy === "function") this._destroy = options.destroy;
       if (typeof options.final === "function") this._final = options.final;
       if (typeof options.construct === "function") this._construct = options.construct;
       if (options.signal) addAbortSignalNoValidate(options.signal, this);
     }
 
     if (this._construct != null) {
-      construct(this as unknown as DestroyableStream, () => onWritableConstructed(this));
+      construct(this, () => onWritableConstructed(this));
     }
   }
 
@@ -220,17 +296,22 @@ export class Writable extends Stream {
    * not have it, or `writable.pipe(x)` would be a `TypeError` about an
    * undefined function instead of a message saying what is wrong.
    */
-  override pipe(): never {
-    errorOrDestroy(this as unknown as DestroyableStream, new ERR_STREAM_CANNOT_PIPE());
-    return undefined as never;
+  override pipe(): undefined {
+    errorOrDestroy(this, new ERR_STREAM_CANNOT_PIPE());
+    return undefined;
   }
 
   write(chunk: unknown, encoding?: string | WriteCallback | null, callback?: WriteCallback): boolean {
-    if (encoding != null && typeof encoding === "function") {
+    if (isWriteCallback(encoding)) {
       callback = encoding;
       encoding = null;
     }
-    return writeInternal(this, chunk, encoding as string | null, callback) === true;
+    return writeToWritable(this, chunk, typeof encoding === "string" ? encoding : null, callback) === true;
+  }
+
+  /** Error used when a write arrives after this writable has ended. */
+  _writeAfterEndError(): Error {
+    return new ERR_STREAM_WRITE_AFTER_END();
   }
 
   /**
@@ -268,9 +349,9 @@ export class Writable extends Stream {
    * the batched form; a stream with neither is a stream that cannot write, and
    * says so rather than silently swallowing.
    */
-  _write(chunk: unknown, encoding: string, callback: WriteCallback): void {
-    if (this._writev) {
-      this._writev([{ chunk, encoding }] as never, callback);
+  _write(chunk: unknown, encoding: string | undefined, callback: WriteCallback): void {
+    if (this._writev !== undefined) {
+      this._writev([{ chunk, encoding, callback: nop }], callback);
     } else {
       throw new ERR_METHOD_NOT_IMPLEMENTED("_write()");
     }
@@ -287,11 +368,11 @@ export class Writable extends Stream {
   end(chunk?: unknown, encoding?: string | WriteCallback | null, callback?: WriteCallback): this {
     const state = this._writableState;
 
-    if (typeof chunk === "function") {
-      callback = chunk as WriteCallback;
+    if (isWriteCallback(chunk)) {
+      callback = chunk;
       chunk = null;
       encoding = null;
-    } else if (typeof encoding === "function") {
+    } else if (isWriteCallback(encoding)) {
       callback = encoding;
       encoding = null;
     }
@@ -299,7 +380,11 @@ export class Writable extends Stream {
     let error: unknown;
 
     if (chunk != null) {
-      const result = writeInternal(this, chunk, encoding as string | null);
+      const result = writeToWritable(
+        this,
+        chunk,
+        typeof encoding === "string" ? encoding : null,
+      );
       if (result instanceof Error) error = result;
     }
 
@@ -347,11 +432,13 @@ export class Writable extends Stream {
       nextTick(errorBuffer, state);
     }
 
-    destroy.call(this as unknown as DestroyableStream, error, callback);
+    destroy(this, error, callback);
     return this;
   }
 
-  _undestroy = undestroy;
+  _undestroy(): void {
+    undestroy(this);
+  }
 
   _destroy(_error: unknown, callback: WriteCallback): void {
     callback(_error);
@@ -432,6 +519,31 @@ export class Writable extends Stream {
       !state.finished
     );
   }
+
+  static fromWeb(stream: unknown, options?: WritableFromWebOptions): Writable {
+    return newWritableFromWeb(Writable, stream, options);
+  }
+
+  static toWeb(stream: unknown): WebWritableStream {
+    return newWritableToWeb(stream);
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (!this.destroyed) {
+      const error = this.writableFinished ? null : new AbortError();
+      this.destroy(error);
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      eos(this, (error) => {
+        if (error instanceof Error && error.name !== "AbortError") {
+          reject(error);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
 }
 
 /**
@@ -441,8 +553,8 @@ export class Writable extends Stream {
  * for `drain`, and the `Error` itself when the write was refused -- which
  * `end` uses to tell a refusal apart from backpressure.
  */
-function writeInternal(
-  stream: Writable,
+export function writeToWritable(
+  stream: WritableImplementation,
   chunk: unknown,
   encoding: string | null,
   callback?: WriteCallback,
@@ -475,10 +587,12 @@ function writeInternal(
       encoding = "buffer";
     } else if (ArrayBuffer.isView(chunk)) {
       // Wrapped rather than copied: a view already is the bytes, and writing
-      // one should not cost a duplicate of it. The cast is because the view's
-      // buffer may be a `SharedArrayBuffer`, which is legal input here and
-      // which this profile's `Buffer.from` signature does not yet name.
-      chunk = Buffer.from(chunk.buffer as ArrayBuffer, chunk.byteOffset, chunk.byteLength);
+      // one should not cost a duplicate of it. SharedArrayBuffer is outside
+      // this runtime's single-agent memory model.
+      if (!(chunk.buffer instanceof ArrayBuffer)) {
+        throw new ERR_INVALID_ARG_TYPE("chunk", ["Buffer", "TypedArray", "DataView"], chunk);
+      }
+      chunk = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
       encoding = "buffer";
     } else {
       throw new ERR_INVALID_ARG_TYPE(
@@ -491,7 +605,7 @@ function writeInternal(
 
   let error: Error | undefined;
   if (state.ending) {
-    error = new ERR_STREAM_WRITE_AFTER_END();
+    error = stream._writeAfterEndError();
   } else if (state.destroyed) {
     error = new ERR_STREAM_DESTROYED("write");
   }
@@ -501,22 +615,28 @@ function writeInternal(
     // that passed a callback learns about its own chunk before the stream
     // reports the condition to everyone.
     nextTick(callback, error);
-    errorOrDestroy(stream as unknown as DestroyableStream, error, true);
+    errorOrDestroy(stream, error, true);
     return error;
   }
 
   state.pendingcb++;
-  return writeOrBuffer(stream, state, chunk, encoding as string, callback);
+  return writeOrBuffer(
+    stream,
+    state,
+    chunk,
+    state.objectMode ? encoding ?? undefined : encoding ?? state.defaultEncoding,
+    callback,
+  );
 }
 
 function writeOrBuffer(
-  stream: Writable,
+  stream: WritableImplementation,
   state: WritableState,
   chunk: unknown,
-  encoding: string,
+  encoding: string | undefined,
   callback: WriteCallback,
 ): boolean {
-  const length = state.objectMode ? 1 : (chunk as { length: number }).length;
+  const length = state.objectMode ? 1 : chunkLength(chunk);
 
   state.length += length;
 
@@ -528,7 +648,6 @@ function writeOrBuffer(
 
   if (!canWriteNow) {
     state.buffered.push({ chunk, encoding, callback });
-    if (state.allBuffers && encoding !== "buffer") state.allBuffers = false;
     if (state.allNoop && callback !== nop) state.allNoop = false;
   } else {
     state.writelen = length;
@@ -552,12 +671,11 @@ function writeOrBuffer(
 }
 
 function doWrite(
-  stream: Writable,
+  stream: WritableImplementation,
   state: WritableState,
-  writev: boolean,
   length: number,
   chunk: unknown,
-  encoding: string,
+  encoding: string | undefined,
   callback: WriteCallback,
 ): void {
   state.writelen = length;
@@ -568,8 +686,6 @@ function doWrite(
 
   if (state.destroyed) {
     state.onwrite(new ERR_STREAM_DESTROYED("write"));
-  } else if (writev) {
-    (stream._writev as (chunks: never, cb: WriteCallback) => void)(chunk as never, state.onwrite);
   } else {
     stream._write(chunk, encoding, state.onwrite);
   }
@@ -577,8 +693,32 @@ function doWrite(
   state.sync = false;
 }
 
+function doWritev(
+  stream: WritableImplementation,
+  state: WritableState,
+  length: number,
+  chunks: BufferedWrite[],
+  callback: WriteCallback,
+): void {
+  state.writelen = length;
+  if (callback !== nop) state.writecb = callback;
+  state.writing = true;
+  state.sync = true;
+  state.expectWriteCb = true;
+
+  if (state.destroyed) {
+    state.onwrite(new ERR_STREAM_DESTROYED("write"));
+  } else if (stream._writev !== undefined) {
+    stream._writev(chunks, state.onwrite);
+  } else {
+    state.onwrite(new ERR_METHOD_NOT_IMPLEMENTED("_writev()"));
+  }
+
+  state.sync = false;
+}
+
 function onwriteError(
-  stream: Writable,
+  stream: WritableImplementation,
   state: WritableState,
   error: unknown,
   callback: WriteCallback,
@@ -590,15 +730,15 @@ function onwriteError(
   // told this chunk's error as though it were theirs.
   callback(error);
   errorBuffer(state);
-  errorOrDestroy(stream as unknown as DestroyableStream, error);
+  errorOrDestroy(stream, error);
 }
 
 /** The callback a stream's `_write` calls when it is done with a chunk. */
-function onwrite(stream: Writable, error?: unknown): void {
+function onwrite(stream: WritableImplementation, error?: unknown): void {
   const state = stream._writableState;
 
   if (!state.expectWriteCb) {
-    errorOrDestroy(stream as unknown as DestroyableStream, new ERR_MULTIPLE_CALLBACK());
+    errorOrDestroy(stream, new ERR_MULTIPLE_CALLBACK());
     return;
   }
 
@@ -612,13 +752,13 @@ function onwrite(stream: Writable, error?: unknown): void {
   state.writelen = 0;
 
   if (error) {
-    void (error as Error).stack;
+    if (error instanceof Error) void error.stack;
 
     if (!state.errored) state.errored = error;
 
     // A duplex's readable side has to learn about it too, or a consumer
     // reading from it waits for data that will never come.
-    const rState = (stream as unknown as { _readableState?: { errored: unknown } })._readableState;
+    const rState = stream._readableState;
     if (rState && !rState.errored) rState.errored = error;
 
     // Deferred when `_write` failed synchronously, so that the failure never
@@ -666,14 +806,14 @@ function onwrite(stream: Writable, error?: unknown): void {
   }
 }
 
-function afterWriteTick(stream: Writable, state: WritableState): void {
+function afterWriteTick(stream: WritableImplementation, state: WritableState): void {
   const info = state.afterWriteTickInfo;
   state.afterWriteTickInfo = null;
   if (info) afterWrite(stream, state, info.count, info.cb);
 }
 
 function afterWrite(
-  stream: Writable,
+  stream: WritableImplementation,
   state: WritableState,
   count: number,
   callback: WriteCallback,
@@ -706,12 +846,12 @@ function afterWrite(
  * stream that dropped them would leave those callers waiting forever, which is
  * the shape of hang that is hardest to find.
  */
-function errorBuffer(state: WritableState): void {
+export function errorBuffer(state: WritableState): void {
   if (state.writing) return;
 
   for (let n = state.bufferedIndex; n < state.buffered.length; ++n) {
-    const entry = state.buffered[n] as BufferedWrite;
-    const length = state.objectMode ? 1 : (entry.chunk as { length: number }).length;
+    const entry = bufferedWriteAt(state.buffered, n);
+    const length = state.objectMode ? 1 : chunkLength(entry.chunk);
     state.length -= length;
     entry.callback(state.errored ?? new ERR_STREAM_DESTROYED("write"));
   }
@@ -722,7 +862,10 @@ function errorBuffer(state: WritableState): void {
 }
 
 /** Hand the buffer to `_write`, in batches if the stream can take them. */
-function clearBuffer(stream: Writable, state: WritableState): void {
+export function clearBuffer(
+  stream: WritableImplementation,
+  state: WritableState,
+): void {
   if (
     state.destroyed ||
     state.bufferProcessing ||
@@ -740,7 +883,7 @@ function clearBuffer(stream: Writable, state: WritableState): void {
   let i = state.bufferedIndex;
   state.bufferProcessing = true;
 
-  if (bufferedLength > 1 && stream._writev) {
+  if (bufferedLength > 1 && stream._writev !== undefined) {
     // One `_writev` replaces N `_write`s and therefore N-1 callbacks.
     state.pendingcb -= bufferedLength - 1;
 
@@ -748,25 +891,23 @@ function clearBuffer(stream: Writable, state: WritableState): void {
       ? nop
       : (error) => {
         for (let n = i; n < buffered.length; ++n) {
-          (buffered[n] as BufferedWrite).callback(error);
+          bufferedWriteAt(buffered, n).callback(error);
         }
       };
 
     // Copied when the callback above will read it, because `doWrite` hands
     // the array to the stream and `resetBuffer` replaces it underneath.
     const chunks = state.allNoop && i === 0 ? buffered : buffered.slice(i);
-    (chunks as unknown as { allBuffers: boolean }).allBuffers = state.allBuffers;
 
-    doWrite(stream, state, true, state.length, chunks, "", callback);
+    doWritev(stream, state, state.length, chunks, callback);
     resetBuffer(state);
   } else {
     // One at a time, stopping as soon as a write does not complete
     // synchronously -- the rest wait for its callback.
     do {
-      const entry = buffered[i] as BufferedWrite;
-      buffered[i++] = null as unknown as BufferedWrite;
-      const length = state.objectMode ? 1 : (entry.chunk as { length: number }).length;
-      doWrite(stream, state, false, length, entry.chunk, entry.encoding, entry.callback);
+      const entry = bufferedWriteAt(buffered, i++);
+      const length = state.objectMode ? 1 : chunkLength(entry.chunk);
+      doWrite(stream, state, length, entry.chunk, entry.encoding, entry.callback);
     } while (i < buffered.length && !state.writing);
 
     if (i === buffered.length) {
@@ -800,12 +941,9 @@ function needFinish(state: WritableState): boolean {
   );
 }
 
-function onFinish(stream: Writable, state: WritableState, error?: unknown): void {
+function onFinish(stream: WritableImplementation, state: WritableState, error?: unknown): void {
   if (state.prefinished) {
-    errorOrDestroy(
-      stream as unknown as DestroyableStream,
-      error ?? new ERR_MULTIPLE_CALLBACK(),
-    );
+    errorOrDestroy(stream, error ?? new ERR_MULTIPLE_CALLBACK());
     return;
   }
 
@@ -813,7 +951,7 @@ function onFinish(stream: Writable, state: WritableState, error?: unknown): void
 
   if (error) {
     callFinishedCallbacks(state, error);
-    errorOrDestroy(stream as unknown as DestroyableStream, error, state.sync);
+    errorOrDestroy(stream, error, state.sync);
   } else if (needFinish(state)) {
     state.prefinished = true;
     stream.emit("prefinish");
@@ -831,7 +969,7 @@ function onFinish(stream: Writable, state: WritableState, error?: unknown): void
  * writes a footer -- work that has to happen after the last chunk and before
  * `finish`.
  */
-function prefinish(stream: Writable, state: WritableState): void {
+function prefinish(stream: WritableImplementation, state: WritableState): void {
   if (state.prefinished || state.finalCalled) return;
 
   if (typeof stream._final === "function" && !state.destroyed) {
@@ -851,7 +989,11 @@ function prefinish(stream: Writable, state: WritableState): void {
   }
 }
 
-function finishMaybe(stream: Writable, state: WritableState, sync?: boolean): void {
+export function finishMaybe(
+  stream: WritableImplementation,
+  state: WritableState,
+  sync?: boolean,
+): void {
   if (!needFinish(state)) return;
 
   prefinish(stream, state);
@@ -872,7 +1014,7 @@ function finishMaybe(stream: Writable, state: WritableState, sync?: boolean): vo
   }
 }
 
-function finish(stream: Writable, state: WritableState): void {
+function finish(stream: WritableImplementation, state: WritableState): void {
   state.pendingcb--;
   state.finished = true;
 
@@ -883,9 +1025,7 @@ function finish(stream: Writable, state: WritableState): void {
     // A duplex is only finished when its readable side is too. A readable
     // side explicitly disabled at construction will never emit `end`, and
     // waiting for it would leave the stream open forever.
-    const rState = (stream as unknown as {
-      _readableState?: { autoDestroy: boolean; endEmitted: boolean; readable?: boolean };
-    })._readableState;
+    const rState = stream._readableState;
     const bothDone =
       !rState || (rState.autoDestroy && (rState.endEmitted || rState.readable === false));
     if (bothDone) stream.destroy();
@@ -897,6 +1037,6 @@ function callFinishedCallbacks(state: WritableState, error: unknown): void {
   if (!callbacks) return;
   state.onfinishCallbacks = null;
   for (let i = 0; i < callbacks.length; i++) {
-    (callbacks[i] as WriteCallback)(error);
+    callbackAt(callbacks, i)(error);
   }
 }

@@ -18,7 +18,7 @@ import { validateString } from "../../internal/validators.ts";
 
 /** What `emitWarning` needs from the process it belongs to. */
 export interface WarningTarget {
-  nextTick(callback: (...args: never[]) => void, ...args: unknown[]): void;
+  nextTick<Args extends unknown[]>(callback: (...args: Args) => void, ...args: Args): void;
   emit(event: string, ...args: unknown[]): boolean;
   noDeprecation: boolean;
   throwDeprecation: boolean;
@@ -40,14 +40,26 @@ export interface WarningOptions {
   type?: string;
   code?: string;
   detail?: string;
-  ctor?: Function;
+  ctor?: CallableFunction;
+}
+
+/** An untyped JavaScript options object before each field is validated. */
+interface WarningOptionsInput {
+  type?: unknown;
+  code?: unknown;
+  detail?: unknown;
+  ctor?: unknown;
+}
+
+function isWarningOptionsInput(value: unknown): value is WarningOptionsInput {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function createWarning(
   message: string,
   type: string | undefined,
   code: string | undefined,
-  ctor: Function | undefined,
+  ctor: CallableFunction | undefined,
   detail: string | undefined,
 ): Warning {
   const warning: Warning = new Error(message);
@@ -76,46 +88,50 @@ export function emitWarningFor(target: WarningTarget) {
   // never uses.
   const emitWarning = (
     warning: string | Error,
-    type?: string | WarningOptions | Function,
-    code?: string | Function,
-    ctor?: Function,
+    type?: string | WarningOptions | CallableFunction,
+    code?: string | CallableFunction,
+    ctor?: CallableFunction,
   ): void => {
     // Before any allocation: a suppressed deprecation in a hot path should
     // cost a comparison, not an `Error`.
     if (target.noDeprecation && type === "DeprecationWarning") return;
 
     let detail: string | undefined;
-    let typeName: string | undefined;
+    let requestedType: unknown = type;
+    let requestedCode: unknown = code;
+    let selectedCtor = ctor;
 
-    if (type !== null && typeof type === "object" && !Array.isArray(type)) {
-      const options = type as WarningOptions;
-      ctor = options.ctor;
-      code = options.code;
-      if (typeof options.detail === "string") detail = options.detail;
-      typeName = options.type || "Warning";
+    if (isWarningOptionsInput(type)) {
+      const optionCtor = type.ctor;
+      selectedCtor = typeof optionCtor === "function" ? optionCtor : undefined;
+      requestedCode = type.code;
+      if (typeof type.detail === "string") detail = type.detail;
+      requestedType = type.type ? type.type : "Warning";
     } else if (typeof type === "function") {
-      ctor = type;
-      code = undefined;
-      typeName = "Warning";
-    } else {
-      // Including an array, which reaches `validateString` below and is
-      // refused there. Node arrives at the same place by the same route.
-      typeName = type as string | undefined;
+      selectedCtor = type;
+      requestedCode = undefined;
+      requestedType = "Warning";
     }
 
-    if (typeName !== undefined) validateString(typeName, "type");
-    if (typeof code === "function") {
-      ctor = code;
-      code = undefined;
-    } else if (code !== undefined) {
-      validateString(code, "code");
+    let typeName: string | undefined;
+    if (requestedType !== undefined) {
+      validateString(requestedType, "type");
+      typeName = requestedType;
+    }
+
+    let codeName: string | undefined;
+    if (typeof requestedCode === "function") {
+      selectedCtor = requestedCode;
+    } else if (requestedCode !== undefined) {
+      validateString(requestedCode, "code");
+      codeName = requestedCode;
     }
 
     let built: Warning;
     if (typeof warning === "string") {
-      built = createWarning(warning, typeName, code as string | undefined, ctor, detail);
+      built = createWarning(warning, typeName, codeName, selectedCtor, detail);
     } else if (warning instanceof Error) {
-      built = warning as Warning;
+      built = warning;
     } else {
       throw new ERR_INVALID_ARG_TYPE("warning", ["Error", "string"], warning);
     }
@@ -126,16 +142,16 @@ export function emitWarningFor(target: WarningTarget) {
         // Thrown on a later tick, not here, so that warnings raised before it
         // are still delivered. Throwing synchronously would make the failure
         // depend on which warning happened to come first.
-        target.nextTick((() => {
+        target.nextTick(() => {
           throw built;
-        }) as never);
+        });
         return;
       }
     }
 
-    target.nextTick(((w: Warning) => {
+    target.nextTick((w: Warning) => {
       target.emit("warning", w);
-    }) as never, built);
+    }, built);
   };
   return emitWarning;
 }
@@ -166,7 +182,11 @@ function describe(warning: Warning): string {
       // outside.
     }
   }
-  return Error.prototype.toString.call(warning);
+  const name = warning.name === undefined ? "Error" : String(warning.name);
+  const message = warning.message === undefined ? "" : String(warning.message);
+  if (name === "") return message;
+  if (message === "") return name;
+  return `${name}: ${message}`;
 }
 
 export function onWarningFor(target: WarningTarget) {
@@ -174,7 +194,7 @@ export function onWarningFor(target: WarningTarget) {
 
   const onWarning = (warning: unknown): void => {
     if (!(warning instanceof Error)) return;
-    const w = warning as Warning;
+    const w: Warning = warning;
 
     const isDeprecation = w.name === "DeprecationWarning";
     if (isDeprecation && target.noDeprecation) return;

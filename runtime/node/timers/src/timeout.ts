@@ -30,6 +30,7 @@ import * as host from "./host.ts";
 import { ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
 import { validateFunction, validateNumber } from "../../internal/validators.ts";
 import { AsyncContextFrame } from "../../internal/async-context.ts";
+import { emitWarning } from "../../internal/process-warning.ts";
 import {
   emitAfter,
   emitBefore,
@@ -37,13 +38,8 @@ import {
   emitInit,
   getDefaultTriggerAsyncId,
   initHooksExist,
-  kAsyncId,
-  kContextFrame,
-  kTriggerAsyncId,
   newAsyncId,
 } from "../../internal/async-hooks.ts";
-
-declare function nts_process_emit_warning(message: string, name: string, code: string): void;
 
 /** Above this a delay does not fit in the signed 32-bit field the loop uses. */
 export const TIMEOUT_MAX = 2 ** 31 - 1;
@@ -57,27 +53,30 @@ export const TIMEOUT_MAX = 2 ** 31 - 1;
  */
 export const kRefed = Symbol("refed");
 
-/** Whether this timer has been coerced to a number, and so is in the id map. */
-export const kHasPrimitive = Symbol("hasPrimitive");
-
-/** The number a timer coerces to, and the key `clearTimeout` accepts. */
-export const kTimerId = Symbol("timerId");
-
-export type TimerCallback = (...args: never[]) => void;
+export type TimerCallback<Args extends unknown[] = []> = (...args: Args) => void;
 
 /**
- * Ids for timers, handed out in creation order.
+ * The type-erased view held by the duration lists.
  *
- * Node reuses the async-hooks resource id here, which this profile has no
- * source of. The contract the id has to meet is only that it is a number, that
- * two live timers never share one, and that `clearTimeout` can find the timer
- * from it -- a counter meets all three. It starts away from zero so that a
- * falsy id cannot be mistaken for a missing one.
+ * Each `Timeout` constructor checks one callback against one argument tuple.
+ * A duration list is deliberately heterogeneous, so it retains only the
+ * operations the scheduler needs and asks the handle to invoke its own tuple.
+ * This avoids both an unsound bottom-type callback and a wrapper allocation
+ * for every timer.
  */
-let nextTimerId = 1;
-
-/** Timers that have been coerced to a number, so `clearTimeout(id)` works. */
-export const knownTimersById = new Map<number, Timeout>();
+export interface TimeoutHandle extends ListNode {
+  _idleTimeout: number;
+  _idleStart: number | null;
+  _onTimeout: CallableFunction | null | undefined;
+  _timerArgs: unknown[] | undefined;
+  _repeat: number | null;
+  _destroyed: boolean;
+  [kRefed]: boolean | null;
+  _asyncId: number;
+  _triggerAsyncId: number;
+  _contextFrame: AsyncContextFrame | undefined;
+  invoke(): void;
+}
 
 // A delay outside the representable range is clamped to 1ms, and the program
 // is told. The negative and not-a-number cases warn once per process because
@@ -95,35 +94,33 @@ let warnedNotNumber = false;
  * callback runs, the code that scheduled it has returned and the runtime is
  * midway through a completely unrelated part of the loop.
  */
-function initAsyncResource(timer: Timeout): void {
+function initAsyncResource(timer: TimeoutHandle): void {
   const asyncId = newAsyncId();
   const trigger = getDefaultTriggerAsyncId();
-  timer[kAsyncId] = asyncId;
-  timer[kTriggerAsyncId] = trigger;
-  timer[kContextFrame] = AsyncContextFrame.current();
+  timer._asyncId = asyncId;
+  timer._triggerAsyncId = trigger;
+  timer._contextFrame = AsyncContextFrame.current();
   if (initHooksExist()) emitInit(asyncId, "Timeout", trigger, timer);
 }
 
-export class Timeout implements ListNode {
+export class Timeout<Args extends unknown[] = []> implements TimeoutHandle {
   _idleTimeout: number;
   _idlePrev: ListNode | null;
   _idleNext: ListNode | null;
   _idleStart: number | null;
-  _onTimeout: TimerCallback | null | undefined;
-  _timerArgs: unknown[] | undefined;
+  _onTimeout: TimerCallback<Args> | null | undefined;
+  _timerArgs: Args | undefined;
   _repeat: number | null;
   _destroyed: boolean;
   [kRefed]: boolean | null;
-  [kHasPrimitive]: boolean;
-  [kTimerId]: number;
-  declare [kAsyncId]: number;
-  declare [kTriggerAsyncId]: number;
-  declare [kContextFrame]: AsyncContextFrame | undefined;
+  _asyncId = 0;
+  _triggerAsyncId = 0;
+  _contextFrame: AsyncContextFrame | undefined = undefined;
 
   constructor(
-    callback: TimerCallback,
+    callback: TimerCallback<Args>,
     after: number | undefined,
-    args: unknown[] | undefined,
+    args: Args | undefined,
     isRepeat: boolean,
     isRefed: boolean,
   ) {
@@ -134,26 +131,26 @@ export class Timeout implements ListNode {
       // is not a number, and only the second is worth warning about.
       delay = 1;
     } else {
-      delay = (after as number) * 1;
+      delay = after * 1;
     }
 
     if (!(delay >= 1 && delay <= TIMEOUT_MAX)) {
       if (delay > TIMEOUT_MAX) {
-        nts_process_emit_warning(
+        emitWarning(
           `${delay} does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.`,
           "TimeoutOverflowWarning",
           "",
         );
       } else if (delay < 0 && !warnedNegativeNumber) {
         warnedNegativeNumber = true;
-        nts_process_emit_warning(
+        emitWarning(
           `${delay} is a negative number.\nTimeout duration was set to 1.`,
           "TimeoutNegativeWarning",
           "",
         );
       } else if (Number.isNaN(delay) && !warnedNotNumber) {
         warnedNotNumber = true;
-        nts_process_emit_warning(
+        emitWarning(
           `${delay} is not a number.\nTimeout duration was set to 1.`,
           "TimeoutNaNWarning",
           "",
@@ -177,9 +174,17 @@ export class Timeout implements ListNode {
 
     if (isRefed) incRefCount();
     this[kRefed] = isRefed;
-    this[kHasPrimitive] = false;
-    this[kTimerId] = nextTimerId++;
     initAsyncResource(this);
+  }
+
+  /** Invoke the callback with the tuple checked when this handle was built. */
+  invoke(): void {
+    const callback = this._onTimeout;
+    if (callback === null || callback === undefined) return;
+    const args = this._timerArgs;
+    const erasedCallback: Function = callback;
+    if (args === undefined) erasedCallback.call(this);
+    else erasedCallback.apply(this, args);
   }
 
   /**
@@ -225,22 +230,6 @@ export class Timeout implements ListNode {
     clearTimeout(this);
   }
 
-  /**
-   * The number this timer coerces to, which `clearTimeout` also accepts.
-   *
-   * Browsers return an integer from `setTimeout`, and code written for both
-   * stores `+timer` or uses it as a key. Registering here rather than in the
-   * constructor means a program that never coerces its timers never populates
-   * the map, and the map never keeps a cleared timer alive.
-   */
-  [Symbol.toPrimitive](): number {
-    const id = this[kTimerId];
-    if (!this[kHasPrimitive]) {
-      this[kHasPrimitive] = true;
-      knownTimersById.set(id, this);
-    }
-    return id;
-  }
 }
 
 /**
@@ -254,23 +243,12 @@ export class Timeout implements ListNode {
  * cleanup paths call, and a cleanup path that has to know whether there is
  * anything to clean is one every caller gets wrong somewhere.
  */
-export function clearTimeout(timer: Timeout | number | string | null | undefined): void {
+export function clearTimeout(timer: TimeoutHandle | number | string | null | undefined): void {
   if (timer !== null && typeof timer === "object" && timer._onTimeout) {
     // Nulled rather than left alone, so that a batch already in flight sees
     // this timer as cancelled when it reaches it.
     timer._onTimeout = null;
     unenroll(timer);
-    return;
-  }
-  if (typeof timer === "number" || typeof timer === "string") {
-    // Through `Number` because node keys this map with an object, where `5`
-    // and `"5"` are the same property. A caller that stored `String(timer)`
-    // must be able to clear with it.
-    const found = knownTimersById.get(Number(timer));
-    if (found !== undefined) {
-      found._onTimeout = null;
-      unenroll(found);
-    }
   }
 }
 
@@ -349,7 +327,7 @@ export function getRefCount(): number {
  * an interval whose callback takes longer than the interval would otherwise
  * drift by the duration of every callback.
  */
-export function insert(item: Timeout, msecs: number, start: number = host.now()): void {
+export function insert(item: TimeoutHandle, msecs: number, start: number = host.now()): void {
   // Truncated so that the key and the host's resolution agree. A `1.5` list
   // and a `1` list would both wake at the same millisecond and the second
   // would find nothing due.
@@ -373,7 +351,7 @@ export function insert(item: Timeout, msecs: number, start: number = host.now())
 }
 
 /** Schedule or reschedule, keeping the timer's current refed state. */
-export function active(item: Timeout): void {
+export function active(item: TimeoutHandle): void {
   insertGuarded(item, true);
 }
 
@@ -383,11 +361,11 @@ export function active(item: Timeout): void {
  * What internal timers use: an idle-socket timeout should not be the reason a
  * program refuses to exit.
  */
-export function unrefActive(item: Timeout): void {
+export function unrefActive(item: TimeoutHandle): void {
   insertGuarded(item, false);
 }
 
-function insertGuarded(item: Timeout, refed: boolean): void {
+function insertGuarded(item: TimeoutHandle, refed: boolean): void {
   const msecs = item._idleTimeout;
   // `unenroll` sets this to -1, and a timer that was cleared must not come
   // back to life because something called `refresh` on it afterwards.
@@ -418,7 +396,7 @@ function insertGuarded(item: Timeout, refed: boolean): void {
  * the only thing that removes a list from the map and the heap, and those are
  * this file's. Node has it in `lib/timers.js` for reasons of module history.
  */
-export function unenroll(item: Timeout): void {
+export function unenroll(item: TimeoutHandle): void {
   if (item._destroyed) {
     cleanTimer(item);
     return;
@@ -428,9 +406,7 @@ export function unenroll(item: Timeout): void {
   item._destroyed = true;
   // A cancelled timer is finished, and nothing else will say so: it will never
   // reach the batch that reports the ones that fired.
-  emitDestroy(item[kAsyncId]);
-
-  if (item[kHasPrimitive]) knownTimersById.delete(item[kTimerId]);
+  emitDestroy(item._asyncId);
 
   L.remove(item);
 
@@ -442,7 +418,9 @@ export function unenroll(item: Timeout): void {
     const duration = Math.trunc(item._idleTimeout);
     const list = timerListMap.get(duration);
     if (list !== undefined && L.isEmpty(list)) {
-      timerListQueue.removeAt(list.priorityQueuePosition as number);
+      const position = list.priorityQueuePosition;
+      if (position === null) throw new Error("timer list has no heap position");
+      timerListQueue.removeAt(position);
       timerListMap.delete(list.msecs);
     }
     decRefCount();
@@ -462,7 +440,7 @@ export function unenroll(item: Timeout): void {
  * per request would hold every request's scope until the timer object itself
  * became unreachable.
  */
-export function cleanTimer(timer: Timeout): void {
+export function cleanTimer(timer: TimeoutHandle): void {
   timer._onTimeout = undefined;
   timer._timerArgs = undefined;
 }
@@ -478,13 +456,13 @@ export function cleanTimer(timer: Timeout): void {
  */
 export function getTimerDuration(msecs: unknown, name: string): number {
   validateNumber(msecs, name);
-  const value = msecs as number;
+  const value = msecs;
   if (value < 0 || !Number.isFinite(value)) {
     throw new ERR_OUT_OF_RANGE(name, "a non-negative finite number", value);
   }
 
   if (value > TIMEOUT_MAX) {
-    nts_process_emit_warning(
+    emitWarning(
       `${value} does not fit into a 32-bit signed integer.\nTimer duration was truncated to ${TIMEOUT_MAX}.`,
       "TimeoutOverflowWarning",
       "",
@@ -496,12 +474,16 @@ export function getTimerDuration(msecs: unknown, name: string): number {
 }
 
 /** A timeout that does not hold the process open, for internal use. */
-export function setUnrefTimeout(callback: TimerCallback, after?: number): Timeout {
+export function setUnrefTimeout<Args extends unknown[]>(
+  callback: TimerCallback<Args>,
+  after?: number,
+  ...args: Args
+): Timeout<Args> {
   // Checked even though the caller is internal: this is the entry point other
   // subsystems reach for, and a non-function stored now fails much later, in
   // the drain, where nothing points back at who scheduled it.
   validateFunction(callback, "callback");
-  const timer = new Timeout(callback, after, undefined, false, false);
+  const timer = new Timeout(callback, after, args.length === 0 ? undefined : args, false, false);
   insert(timer, timer._idleTimeout);
   return timer;
 }
@@ -568,10 +550,16 @@ function listOnTimeout(list: TimersList, now: number): void {
   let ranAtLeastOneTimer = false;
 
   for (;;) {
-    const timer = L.peek(list) as Timeout | null;
-    if (timer === null) break;
+    const node = L.peek(list);
+    if (node === null) break;
+    if (!(node instanceof Timeout)) {
+      throw new Error("timer list contains a non-timeout node");
+    }
+    const timer: TimeoutHandle = node;
 
-    const waited = now - (timer._idleStart as number);
+    const idleStart = timer._idleStart;
+    if (idleStart === null) throw new Error("enrolled timer has no start time");
+    const waited = now - idleStart;
     if (waited < msecs) {
       // The oldest timer in this list is not due, so none of them are. Push
       // the list back and let the heap find the next one.
@@ -579,7 +567,7 @@ function listOnTimeout(list: TimersList, now: number): void {
       // `now + 1` is a floor on the new expiry: without it, a list whose
       // computed expiry is still in the past would be picked again
       // immediately, and `processTimers` would spin.
-      list.expiry = Math.max((timer._idleStart as number) + msecs, now + 1);
+      list.expiry = Math.max(idleStart + msecs, now + 1);
       list.id = nextListId++;
       timerListQueue.percolateDown(1);
       return;
@@ -595,9 +583,8 @@ function listOnTimeout(list: TimersList, now: number): void {
       if (!timer._destroyed) {
         timer._destroyed = true;
         cleanTimer(timer);
-        if (timer[kHasPrimitive]) knownTimersById.delete(timer[kTimerId]);
         if (timer[kRefed]) decRefCount();
-        emitDestroy(timer[kAsyncId]);
+        emitDestroy(timer._asyncId);
       }
       continue;
     }
@@ -610,21 +597,13 @@ function listOnTimeout(list: TimersList, now: number): void {
     // The context of whoever scheduled this timer, restored for the duration
     // of its callback. Nothing in the engine carries it across the gap a timer
     // spans, so it is put back by hand here and taken away again below.
-    const asyncId = timer[kAsyncId];
-    const priorFrame = AsyncContextFrame.exchange(timer[kContextFrame]);
-    emitBefore(asyncId, timer[kTriggerAsyncId], timer);
+    const asyncId = timer._asyncId;
+    const priorFrame = AsyncContextFrame.exchange(timer._contextFrame);
+    emitBefore(asyncId, timer._triggerAsyncId, timer);
 
     try {
       try {
-        const args = timer._timerArgs;
-        if (args === undefined) timer._onTimeout();
-        // Through `Reflect.apply` rather than `callback.apply(...)`, because
-        // the callback is the caller's object and `apply` is one of its
-        // properties. A function with `fn.apply = "not a function"` is a
-        // strange thing to write and a real one to receive, and calling
-        // through it would throw inside the timer rather than in the caller's
-        // own code.
-        else Reflect.apply(timer._onTimeout as (...a: unknown[]) => void, timer, args);
+        timer.invoke();
       } finally {
         if (timer._repeat && timer._idleTimeout !== -1) {
           timer._idleTimeout = timer._repeat;
@@ -639,7 +618,6 @@ function listOnTimeout(list: TimersList, now: number): void {
             timer._timerArgs = undefined;
           } else {
             timer._destroyed = true;
-            if (timer[kHasPrimitive]) knownTimersById.delete(timer[kTimerId]);
             if (timer[kRefed]) decRefCount();
             emitDestroy(asyncId);
           }
