@@ -32,7 +32,43 @@ sites. The bug is silent on every input except `NaN`, and the differential's
 hostile pool carries one — which means it would have been found eventually, much
 later and much further from the cause.
 
-## The same thing one level up, in the harness
+## The same thing one level up, in the emitter
+
+`branch_float` removed the opportunity to pair `dcmpl` with `iflt` by hand. It
+did not remove the *class*, and the proof arrived four hours later from the
+differential's first run: `examples/conditionals` answered `sign(NaN)` as 1
+where node answers 0.
+
+`sign` is `x > 0 ? 1 : x < 0 ? -1 : 0`. The branch fell through to the true arm,
+so the emitter wanted the branch taken when `x > 0` is *false*, and got it by
+inverting the comparison to `x <= 0`. **That is not the complement.** Against
+`NaN` both are false, so the negation of the first is true and the second is
+not: the relational operators are not a total order, and negation and complement
+come apart exactly where an unordered value exists.
+
+Concretely, `a > b` is `dcmpl` then `ifgt`, and `NaN` makes `dcmpl` answer -1,
+which `ifgt` rejects. Its negation must be `dcmpl` then `ifle`, which -1
+accepts. Inverting the comparison picks `dcmpg` instead — a different `NaN`
+answer — and rejects it twice.
+
+So the comparison chooses the `dcmp` form and the negation chooses only the
+branch. `Compare::inverted()` is the helper that made the wrong pairing
+available again, one layer above the one that had just been closed.
+
+## And a third time, in the operand widths
+
+`binary` took its opcode and its stack effect from the operation's *result*
+type, while loading operands by their own kinds. Those agree in every prepared
+HIR — until `touint32 %2 : i64`, where an `i32` operand has an `i64` result
+because a coercion is a reduction to thirty-two bits *and then* a widening.
+Emitting the reduction alone left an `int` on the stack where the slot wanted a
+`long`.
+
+That one was not fixed. It was **asserted**: the operand kinds are now checked
+against the result kind and a disagreement is a refusal naming both. Which is
+this record's own conclusion, applied to the code that had just violated it.
+
+## And a fourth, in the harness that would have judged them
 
 The differential feeds every parameter from a pool of doubles, whatever the
 parameter's type is, so both lanes have to narrow. The C driver writes the
@@ -59,11 +95,25 @@ least visible.
 the value, rather than casting and hoping. If it never fires, an assumption has
 become a checked one for nothing.
 
-## What the two have in common
+## What they have in common
 
-Both are two places that must agree. The first was fixed by deleting one of
-them. The second cannot be — the C driver and the JVM harness are genuinely
-different programs — so the second place asserts instead of computing.
+Every one is two places that must agree.
+
+    the comparison and the branch that reads it   deleted one of them
+    the comparison and its negation               deleted one of them
+    an operation's result type and its operands   asserted
+    the C driver's cast and the JVM harness's     asserted
+
+The first two could be closed by making the wrong thing unspellable. The last
+two cannot: an operation's result type and its operands are separate facts the
+middle end decides, and the C driver and the JVM harness are genuinely different
+programs. Where deleting is unavailable, the second place should be a **check**
+rather than a copy.
+
+The four are not one mistake repeated. They are one class surfacing at four
+levels, each invisible from where the last was fixed — which is why a helper
+that makes the wrong thing unspellable at one level is not the same as an
+invariant.
 
 That is the general form, and it is worth stating because this repository keeps
 meeting it: `costs_nothing` and `counted_here` answering one question two ways;
@@ -73,11 +123,42 @@ another. The house rule is already "decide it once, in `codegen/common`". This
 record is the case where deciding once is not available, and the answer is that
 the second place should be a check rather than a copy.
 
+## Reading a comment is not applying it
+
+The third instance has a sharper version. `codegen/llvm`'s `coercion` carries a
+paragraph about *exactly* this bug, written after it cost a module that stopped
+verifying several instructions from the cause:
+
+> Producing `i32` and calling it the result's type made a value whose emitted
+> width disagreed with its recorded one. Nothing complained at the definition;
+> every later reader converted from the width the HIR claimed.
+
+That comment was read while writing the JVM backend, and the backend was written
+with the bug in it anyway. **A record prevents nothing by being read.** It
+prevents something by being turned into a check, which is what this one now is
+in `codegen/jvm`, and which is the difference between the two halves of every
+entry in the table above.
+
+The same gap has a companion at the archive level: nothing links a record
+forward to the one that overturned it. Record 0013 called `substrings` "the
+largest single gap in the project" at 6.64x; records 0059 and 0062 retired that
+and the row is 0.92x. The only reason it was caught is that somebody went to
+cite it and checked. A statement that was true when written, with nothing
+watching for the day it stopped being, is the same shape as everything above.
+
 ## Credit
 
-The second half is a diagnosis this session got right and a fix it got wrong.
+The fourth entry is a diagnosis this session got right and a fix it got wrong.
 The proposal was to make the two casts agree; the session working on language
 features pushed back with the argument above, and it is the better answer. The
 distinction between "make them agree" and "make the second one assert" is the
 whole content of this record, and it did not come from the person who found the
 asymmetry.
+
+That session also had the same class the same day, in a place neither of us
+would have connected: `??=` and `||=` are two predicates that agree on every
+value except the ones the operator exists to distinguish — which is
+`!(a > b)` versus `a <= b` with falsy standing in for `NaN`. Their test asserts
+on the *shape of the emitted test* rather than on an answer, for the same reason
+the operand-width check here asserts rather than computes. Two backends, one
+lowering, three sessions, one class.
