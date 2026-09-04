@@ -130,6 +130,45 @@ fn bounded(program: &str) -> std::process::Command {
     command
 }
 
+/// A working directory that removes itself.
+///
+/// # Why this is a guard rather than a call at the end
+///
+/// Every run of this harness writes a program, a runtime, a driver and a linked
+/// binary into a fresh directory, and `check` has a dozen early returns -- a
+/// program that does not typecheck, a backend that declines a function, clang
+/// rejecting a module. A `remove_dir_all` at the bottom is reached by none of
+/// them.
+///
+/// Left uncleaned, these accumulated to **twelve gigabytes** on a machine where
+/// `/tmp` is a 16G tmpfs. That is not disk: it is RAM taken away from whatever
+/// else is running, including a benchmark run's working set, and it varies over
+/// the run as directories come and go. `javac` failing with
+/// `Disk quota exceeded` is how it was found, which is a long way from the
+/// cause.
+///
+/// `NTS_KEEP_TEMP=1` keeps it, because the emitted program and the linked
+/// binary are exactly what somebody debugging a disagreement wants to look at.
+struct Scratch {
+    path: Utf8PathBuf,
+}
+
+impl Scratch {
+    fn holding(path: Utf8PathBuf) -> Self {
+        Self { path }
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        if std::env::var_os("NTS_KEEP_TEMP").is_some() {
+            eprintln!("  kept {} (NTS_KEEP_TEMP)", self.path);
+            return;
+        }
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
 /// A function this can drive, and the shape of its signature.
 ///
 /// The types are kept rather than assumed. Declaring everything as
@@ -357,6 +396,8 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
         .map_err(|path| anyhow::anyhow!("temp dir is not utf-8: {}", path.display()))?
         .join(format!("nts-check-{}", std::process::id()));
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {dir}"))?;
+    let dir = Scratch::holding(dir);
+    let dir = &dir.path;
 
     let mut refused = Vec::new();
     let mut aborts = Vec::new();
@@ -365,11 +406,11 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
     // `java` -- a different artifact *and* a different runner, where C and
     // LLVM differ only in what they hand the same linker.
     let native = if Backend::from_environment()? == Backend::Jvm {
-        run_jvm(&dir, &prepared.program, &testable, &mut refused, &mut aborts)?
+        run_jvm(dir, &prepared.program, &testable, &mut refused, &mut aborts)?
     } else {
-        run_native(&dir, &prepared.program, &testable, &mut refused, &mut aborts)?
+        run_native(dir, &prepared.program, &testable, &mut refused, &mut aborts)?
     };
-    let engine = run_node(&dir, &entry, &testable)?;
+    let engine = run_node(dir, &entry, &testable)?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
     let mut report = report(&native, &engine, &testable, &refused, &approximate);
     report.aborts = aborts;

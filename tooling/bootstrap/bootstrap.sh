@@ -143,6 +143,6 @@ fi
 # -- plus the reference C++ column.
 say "third_party/are-we-fast-yet"
 clone_sparse third_party/are-we-fast-yet https://github.com/smarr/are-we-fast-yet "" \
-  benchmarks/JavaScript 'benchmarks/C++' docs
+  benchmarks/JavaScript 'benchmarks/C++' benchmarks/Java docs
 
 say "done"
