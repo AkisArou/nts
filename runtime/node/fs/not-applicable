@@ -2,6 +2,7 @@
 # whether it is a permanent profile non-goal, a harness limitation, or a
 # temporary implementation/compiler gap. Ordinary filesystem behavior is never
 # silently reclassified as a non-goal merely because it is incomplete.
+test-blob-file-backed.js: temporary cross-module implementation gap; the public fs.openAsBlob API and node:buffer file-backed Blob are not implemented yet, including immutable-stat verification, slicing, repeated reads, and web-stream delivery; this supported Node surface must return to the applicable suite when those typed runtime pieces exist
 test-fs-read-empty-buffer.js: promise case requires FileHandle[Symbol.asyncDispose] through `await using`, an explicit §13 runtime Symbol-operation non-goal; sync and callback cases pass focused before exclusion
 test-fs-read-offset-null.js: promise cases require FileHandle[Symbol.asyncDispose] through `await using`, an explicit §13 runtime Symbol-operation non-goal; both callback offset-null cases pass focused before exclusion
 test-fs-read-promises-optional-params.js: requires util.promisify(fs.read) custom result names stored as observable Symbol metadata on the exported function, an explicit §13 non-goal

@@ -1,1 +1,2 @@
 sequential/test-fs-opendir-recursive.js
+parallel/test-blob-file-backed.js
