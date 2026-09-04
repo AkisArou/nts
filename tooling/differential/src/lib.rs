@@ -1359,27 +1359,40 @@ fn run_jvm(
         let Some(returns) = nts_codegen_jvm::types::descriptor(program, &one.returns) else {
             bail!("`{}` returns a type the JVM backend rendered but this harness cannot", one.name);
         };
-        let mut parameters = String::new();
+        let mut parameters = Vec::with_capacity(one.params.len());
         for (ty, _) in &one.params {
             let Some(descriptor) = nts_codegen_jvm::types::descriptor(program, ty) else {
                 bail!("`{}` takes a type the JVM backend rendered but this harness cannot", one.name);
             };
-            parameters.push_str(&descriptor);
+            parameters.push(descriptor);
         }
+        // Comma-separated, because a descriptor is not one character. Packing
+        // them as a string and indexing it per parameter was correct until the
+        // first `Ljava/lang/String;` and then reported "the pool offered 0.5 to
+        // a parameter the compiler proved is `j`" -- the `j` being the middle of
+        // the descriptor. Found by `representable`, which is a check about
+        // something else entirely refusing to believe a type it had never seen.
         let _ = write!(
             cases,
             "{} {at} {returns} {}",
             nts_codegen_jvm::body::method_name(&one.name),
-            if parameters.is_empty() { "-" } else { &parameters }
+            if parameters.is_empty() { "-".to_owned() } else { parameters.join(",") }
         );
-        // Bit patterns rather than decimal: the pool contains values whose
-        // shortest decimal is not their whole story, and a harness that lost a
-        // bit in transit would report a disagreement it caused itself.
         for (slot, value) in tuple.iter().enumerate() {
-            let descriptor = parameters.as_bytes().get(slot).copied().unwrap_or(b'D');
-            representable(*value, descriptor).with_context(|| {
-                format!("parameter {slot} of `{}`", one.name)
-            })?;
+            let descriptor = parameters.get(slot).map_or("D", String::as_str);
+            if descriptor == nts_codegen_jvm::types::STRING_DESCRIPTOR {
+                // The pool carries an *index* into `STRINGS` for a string slot,
+                // so the harness has to build the string. Sent as its code
+                // units rather than its text: no escaping rules, and a
+                // surrogate pair arrives as the two units `length` counts.
+                let text = string_at(*value);
+                let units: Vec<String> =
+                    text.encode_utf16().map(|unit| format!("{unit:x}")).collect();
+                let _ = write!(cases, " s:{}", units.join(","));
+                continue;
+            }
+            representable(*value, descriptor.as_bytes()[0])
+                .with_context(|| format!("parameter {slot} of `{}`", one.name))?;
             let _ = write!(cases, " {:016x}", value.to_bits());
         }
         cases.push('\n');
