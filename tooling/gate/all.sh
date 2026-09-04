@@ -383,21 +383,28 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  # Eighty-four of ninety-three, measured at `a682cc1` in a pinned worktree
-  # rather than in the shared tree.
+  # Eighty-five of ninety-four, measured at `44a400b` in a pinned worktree.
+  # The shared tree reads 86 of 95 at the same moment, because it carries an
+  # example this commit does not -- the same nine disagree either way, so the
+  # difference is the size of the corpus and not the state of the backend.
+  # Which is the third time the pinned run has said something the shared tree
+  # could not: twice it caught a floor measured against another session's
+  # uncommitted work, and this time it caught a floor measured against another
+  # session's uncommitted *example*.
   #
-  # What is left is nine programs and five causes, which is worth writing here
-  # because the count alone reads like a long tail and it is not: four want a
-  # closure's layout to name its function type's as a base, one wants the same
-  # for the provided error classes, one is a call *through* a closure, one is
-  # an absent value with no reference to carry it, and two want
-  # `nts_set_timeout`.
+  # What is left is nine programs and four causes, which is worth writing here
+  # because the count alone reads like a long tail and it is not. Six wait on a
+  # closure's layout naming its function type as a base and that type carrying
+  # an `abstract_declaration` to dispatch through -- the patch for which is
+  # `docs/handoff-closure-base.diff`, measured to fix three of them and to
+  # surface a `narrow_returns` interaction in a fourth. Two want
+  # `nts_set_timeout`. One wants the provided error classes to name `Error`.
   #
   # The floor is planted on *agreement* rather than on rendering, because
   # rendering is a property of the emitter and agreeing is a property of the
   # language, and a floor on the wrong one rewards emitting more while meaning
   # less.
-  backend_examples 84 "through the JVM backend" ); }
+  backend_examples 85 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
