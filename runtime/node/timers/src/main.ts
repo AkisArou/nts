@@ -41,7 +41,7 @@ export function setTimeout<A extends unknown[]>(
   const timeout = new Timeout(
     callback,
     after,
-    args.length ? args : undefined,
+    args,
     false,
     true,
   );
@@ -59,7 +59,7 @@ export function setInterval<A extends unknown[]>(
   const timeout = new Timeout(
     callback,
     repeat,
-    args.length ? args : undefined,
+    args,
     true,
     true,
   );
@@ -88,7 +88,7 @@ export function setImmediate<A extends unknown[]>(
   ...args: A
 ): Immediate<A> {
   validateFunction(callback, "callback");
-  return new Immediate(callback, args.length ? args : undefined);
+  return new Immediate(callback, args);
 }
 
 export { clearImmediate };

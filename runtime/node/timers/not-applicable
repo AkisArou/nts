@@ -1,7 +1,9 @@
 test-timers-to-primitive.js: language non-goal (§13); Symbol.toPrimitive is an excluded runtime operation hook
+test-timers-dispose.js: language non-goal (§13); Symbol.dispose is an excluded runtime operation hook
 test-timers-user-call.js: language non-goal (§13); monkey-patched function properties require the excluded dynamic property map
 test-timers-timeout-promisified.js: language non-goal (§13); util.promisify.custom is stored as a dynamic function property; supported direct promise behavior is covered by local/promises-direct.js
 test-timers-interval-promisified.js: language non-goal (§13); util.promisify.custom is stored as a dynamic function property; supported direct promise behavior is covered by local/promises-direct.js
 test-timers-immediate-promisified.js: language non-goal (§13); util.promisify.custom is stored as a dynamic function property; supported direct promise behavior is covered by local/promises-direct.js
+test-timers-async-store-leak.js: cross-module integration; spawns uninjected child processes and inspects async_hooks/AsyncLocalStorage internals; direct timer callback and argument release is covered by local/cleanup-direct.js
 test-timers-immediate-queue-throw.js: cross-module integration; node:domain captures one asynchronous throw; queue continuation after a throw is covered by test-timers-uncaught-exception.js
 test-timers-reset-process-domain-on-throw.js: cross-module integration; asserts node:domain state, which is outside the supported profile

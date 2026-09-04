@@ -55,7 +55,7 @@ export class Immediate<Args extends unknown[] = []> implements ImmediateHandle {
   _triggerAsyncId: number;
   _contextFrame: AsyncContextFrame | undefined;
 
-  constructor(callback: ImmediateCallback<Args>, args: Args | undefined) {
+  constructor(callback: ImmediateCallback<Args>, args: Args) {
     this._idleNext = null;
     this._idlePrev = null;
     this._onImmediate = callback;
@@ -82,11 +82,9 @@ export class Immediate<Args extends unknown[] = []> implements ImmediateHandle {
   /** Invoke the callback with the tuple checked at construction. */
   invoke(): void {
     const callback = this._onImmediate;
-    if (callback === null || callback === undefined) return;
     const args = this._argv;
-    const erasedCallback: Function = callback;
-    if (args === undefined) erasedCallback.call(this);
-    else erasedCallback.apply(this, args);
+    if (callback === null || callback === undefined || args === undefined) return;
+    callback.apply(this, args);
   }
 
   ref(): this {
@@ -107,10 +105,6 @@ export class Immediate<Args extends unknown[] = []> implements ImmediateHandle {
 
   hasRef(): boolean {
     return Boolean(this[kRefed]);
-  }
-
-  [Symbol.dispose](): void {
-    clearImmediate(this);
   }
 }
 

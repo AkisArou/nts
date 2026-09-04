@@ -41,7 +41,11 @@ const objectMetaOperations = new Set([
 ]);
 
 const symbolHooks = new Set([
+  "asyncDispose",
+  "asyncIterator",
+  "dispose",
   "hasInstance",
+  "iterator",
   "species",
   "toPrimitive",
   "unscopables",
@@ -51,7 +55,7 @@ function tsFiles(directory) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...tsFiles(path));
+    if (entry.isDirectory() && entry.name !== "node_modules") files.push(...tsFiles(path));
     else if (entry.isFile() && entry.name.endsWith(".ts")) files.push(path);
   }
   return files;

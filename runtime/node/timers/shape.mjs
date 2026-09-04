@@ -15,6 +15,11 @@ export function shape(exports) {
   return timers;
 }
 
+/** The promise-returning timer API is a public Node subpath. */
+export function subpaths(exports) {
+  return { "timers/promises": exports.promises };
+}
+
 /**
  * Replace the scheduling globals with ours.
  *

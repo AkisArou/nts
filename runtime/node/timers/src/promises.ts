@@ -208,7 +208,7 @@ export async function* setInterval<T>(
         }
       },
       after,
-      undefined,
+      [],
       true,
       ref,
     );

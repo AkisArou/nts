@@ -120,7 +120,7 @@ export class Timeout<Args extends unknown[] = []> implements TimeoutHandle {
   constructor(
     callback: TimerCallback<Args>,
     after: number | undefined,
-    args: Args | undefined,
+    args: Args,
     isRepeat: boolean,
     isRefed: boolean,
   ) {
@@ -180,11 +180,9 @@ export class Timeout<Args extends unknown[] = []> implements TimeoutHandle {
   /** Invoke the callback with the tuple checked when this handle was built. */
   invoke(): void {
     const callback = this._onTimeout;
-    if (callback === null || callback === undefined) return;
     const args = this._timerArgs;
-    const erasedCallback: Function = callback;
-    if (args === undefined) erasedCallback.call(this);
-    else erasedCallback.apply(this, args);
+    if (callback === null || callback === undefined || args === undefined) return;
+    callback.apply(this, args);
   }
 
   /**
@@ -225,11 +223,6 @@ export class Timeout<Args extends unknown[] = []> implements TimeoutHandle {
     clearTimeout(this);
     return this;
   }
-
-  [Symbol.dispose](): void {
-    clearTimeout(this);
-  }
-
 }
 
 /**
@@ -483,7 +476,7 @@ export function setUnrefTimeout<Args extends unknown[]>(
   // subsystems reach for, and a non-function stored now fails much later, in
   // the drain, where nothing points back at who scheduled it.
   validateFunction(callback, "callback");
-  const timer = new Timeout(callback, after, args.length === 0 ? undefined : args, false, false);
+  const timer = new Timeout(callback, after, args, false, false);
   insert(timer, timer._idleTimeout);
   return timer;
 }
