@@ -1331,12 +1331,30 @@ impl Emitter<'_> {
         if !checked {
             return self.subscript(code, index, origin);
         }
-        self.push_as(code, index, Kind::Double, origin)?;
-        // The length, which `bounds` needs and which is one instruction here.
-        self.load(code, array)?;
+        // An index the middle end already keeps in an integer cannot be
+        // fractional, so only the range is in question and the check is two
+        // `int` compares -- which is what the JVM's own bounds check does, so
+        // C2 folds them together in a counted loop.
+        //
+        // Routing this through the `double` form instead cost a widening, two
+        // floating compares, a `Math.floor` and a narrowing per element, in
+        // loops that previously emitted nothing at all.
+        let integral = self.kind_of(index)? == Kind::Int;
+        // The array is already on the stack, so `dup` it for the length rather
+        // than loading it again -- which is why `bounds` takes the length
+        // first. The reloaded version emitted `aload 11; aload 11; arraylength`
+        // per access.
+        code.dup(origin);
         code.array_length(origin);
-        code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
-        code.invoke_static(origin, pool, RUNTIME, "bounds", "(DD)I");
+        self.push_as(code, index, if integral { Kind::Int } else { Kind::Double }, origin)?;
+        // The length stays an `int` in both forms: widening it only to compare
+        // against a double costs an instruction per access and buys nothing --
+        // `index < length` promotes the `int` for free.
+        if integral {
+            code.invoke_static(origin, pool, RUNTIME, "bounds", "(II)I");
+        } else {
+            code.invoke_static(origin, pool, RUNTIME, "bounds", "(ID)I");
+        }
         Ok(())
     }
 
