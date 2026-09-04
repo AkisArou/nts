@@ -64,6 +64,28 @@ pub use body::{PROGRAM, RUNTIME};
 pub const RUNTIME_JAR: &[u8] = include_bytes!("../../../../runtime/jvm/nts-runtime.jar");
 pub const RUNTIME_JAR_NAME: &str = "nts-runtime.jar";
 
+/// The runtime to ship with an emitted program.
+///
+/// The embedded jar, unless `NTS_JVM_RUNTIME_JAR` names a file -- which lets a
+/// test swap in a deliberately broken runtime without rebuilding this crate.
+/// That is what `tooling/differential/tests/jvm_sabotage.rs` uses, and the
+/// override exists for it: a suite that has never been made to fail is a suite
+/// nobody has evidence about, and rebuilding Rust to find out is slow enough
+/// that the evidence would be gathered by hand and then decay.
+///
+/// A missing or unreadable file is the embedded jar rather than an error,
+/// because this is a debugging aid and a typo in it should not change what a
+/// production build emits.
+#[must_use]
+pub fn runtime_jar() -> std::borrow::Cow<'static, [u8]> {
+    if let Some(bytes) = std::env::var_os("NTS_JVM_RUNTIME_JAR")
+        .and_then(|path| std::fs::read(path).ok())
+    {
+        return std::borrow::Cow::Owned(bytes);
+    }
+    std::borrow::Cow::Borrowed(RUNTIME_JAR)
+}
+
 #[derive(Debug)]
 pub struct Emitted {
     pub classes: Vec<Class>,

@@ -198,16 +198,30 @@ impl Compare {
 }
 
 /// The `newarray` operand for a primitive element type. JVMS table 6.5.
+///
+/// Takes the **descriptor**, not a [`Kind`]. `Kind` is what a value looks like
+/// on the operand stack, where a `boolean`, a `byte`, a `char` and a `short`
+/// are all `int` -- so a `Kind` cannot tell `[Z` from `[I`, and asking it for
+/// one allocated the other. `boolean[]` came out as `int[]`, which verifies
+/// perfectly well on its own and fails at the first helper that declares `[Z`.
+///
+/// `array_load` and `array_store` already read the descriptor's first byte for
+/// exactly this reason. Allocation did not, so the two halves of one array
+/// disagreed about what it holds.
 #[must_use]
-pub const fn array_type(kind: Kind) -> u8 {
-    match kind {
-        Kind::Int => 10,
-        Kind::Long => 11,
-        Kind::Float => 6,
-        Kind::Double => 7,
-        // Not a primitive; `anewarray` takes a class instead. Returning the
-        // int code here would silently build the wrong array, so callers must
-        // branch on `Kind::Ref` before asking -- which `Code::new_array` does.
-        Kind::Ref => 0,
+pub const fn array_type(element: &str) -> u8 {
+    match element.as_bytes() {
+        [b'Z', ..] => 4,
+        [b'C', ..] => 5,
+        [b'F', ..] => 6,
+        [b'D', ..] => 7,
+        [b'B', ..] => 8,
+        [b'S', ..] => 9,
+        [b'I', ..] => 10,
+        [b'J', ..] => 11,
+        // Not a primitive; `anewarray` takes a class instead. Returning a
+        // primitive code here would silently build the wrong array, so callers
+        // must branch on `Kind::Ref` first -- which `Code::new_array` does.
+        _ => 0,
     }
 }

@@ -201,4 +201,97 @@ public final class NtsRuntime {
     public static Error unreachable() {
         return new NtsRefusal("control reached a block the compiler proved unreachable");
     }
+
+    /**
+     * The end of a program that threw and nothing caught it.
+     *
+     * <p>A transliteration of `nts_uncaught` in `runtime/c/nts_runtime.c`,
+     * including the two things about it that are observable rather than
+     * cosmetic. The line starts {@code "nts: "} because that prefix is how the
+     * differential harness classifies a run as *declined* rather than *wrong* --
+     * a lane that printed a Java stack trace instead would turn every case the
+     * C lane legitimately declines into a defect. And it exits with status 1,
+     * which is what node exits with on an uncaught throw, because the exit
+     * status is compared too.
+     *
+     * <p>{@code System.exit} rather than rethrowing, for the C version's second
+     * reason as well: the JVM would print its own trace and set status 1 by a
+     * different route, and anything already written to {@code System.out} is
+     * flushed here rather than left to a shutdown ordering.
+     */
+    public static void uncaught(NtsValue value, String detail) {
+        StringBuilder line = new StringBuilder("nts: uncaught ");
+        switch (value.tag) {
+            case NtsValue.STRING:
+                line.append((String) value.ref);
+                break;
+            case NtsValue.NUMBER:
+                line.append(numberText(value.num));
+                break;
+            case NtsValue.BOOLEAN:
+                line.append(value.num != 0.0 ? "true" : "false");
+                break;
+            case NtsValue.UNDEFINED:
+                line.append("undefined");
+                break;
+            case NtsValue.NULL:
+                line.append("null");
+                break;
+            default: {
+                // The class name comes from the object itself, exactly as C
+                // reads it from the descriptor: `Error`, `TypeError`, whatever
+                // a user subclass is called. Only `message` needs the compiler,
+                // being a field, and that is what `detail` carries.
+                Object object = value.ref;
+                line.append(object == null ? "[object]" : object.getClass().getSimpleName());
+                if (detail != null) {
+                    line.append(": ").append(detail);
+                }
+                break;
+            }
+        }
+        System.out.flush();
+        System.err.println(line);
+        System.err.flush();
+        System.exit(1);
+    }
+
+    /**
+     * `%g`, which is what the C runtime prints an uncaught number with.
+     *
+     * <p>Not `Double.toString`: that gives `1.0E21` where C gives `1e+21`, and
+     * this text is compared. Kept narrow deliberately -- it formats one number
+     * on the way out of a dying program, and the general question is
+     * `nts_grisu.h`, which is its own port.
+     */
+    private static String numberText(double value) {
+        if (value == (long) value && Math.abs(value) < 1e15) {
+            return Long.toString((long) value);
+        }
+        return String.format("%g", value);
+    }
+
+    /**
+     * `Array.prototype.fill`, one entry point per element width.
+     *
+     * <p>Separate entry points rather than one generic call taking a width, for
+     * the reason the C header gives: the compiler knows the element type, and a
+     * runtime that had to be told it would be told it wrongly one day. The
+     * reference form does no counting here -- the platform collector owns these
+     * objects, which is the whole of RFC 13 -- so it is the same loop.
+     */
+    public static double[] arrayFill(double[] array, double value) {
+        java.util.Arrays.fill(array, value);
+        return array;
+    }
+
+    public static boolean[] arrayFillBool(boolean[] array, boolean value) {
+        java.util.Arrays.fill(array, value);
+        return array;
+    }
+
+    public static Object[] arrayFillRef(Object[] array, Object value) {
+        java.util.Arrays.fill(array, value);
+        return array;
+    }
 }

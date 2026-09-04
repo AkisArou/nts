@@ -607,8 +607,8 @@ impl Code {
                 let index = pool.class(&descriptor::class_operand(element));
                 self.op_u2(origin, insn::ANEWARRAY, index, 1, 1);
             }
-            Some(kind) => {
-                self.emit(origin, &[insn::NEWARRAY, insn::array_type(kind)], 1, 1);
+            Some(_) => {
+                self.emit(origin, &[insn::NEWARRAY, insn::array_type(element)], 1, 1);
             }
             None => self.fail(Error::BadDescriptor(element.to_owned())),
         }

@@ -1368,7 +1368,7 @@ fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<(
         }
         std::fs::write(
             out.join(nts_codegen_jvm::RUNTIME_JAR_NAME),
-            nts_codegen_jvm::RUNTIME_JAR,
+            nts_codegen_jvm::runtime_jar().as_ref(),
         )?;
         println!(
             "wrote {} class(es) and the runtime to {out}",

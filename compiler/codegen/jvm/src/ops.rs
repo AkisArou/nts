@@ -19,6 +19,64 @@ use nts_jvm_emitter::{Compare, Kind, Pool, insn};
 use crate::body::{Emitter, PROGRAM, Placed, RUNTIME, comparison, refuse};
 use crate::types;
 
+/// The runtime helpers this backend can call, and how each is spelled on the JVM.
+///
+/// A table rather than a naming rule, because `hir::runtime` is the single
+/// answer about what a helper *takes* and this has to agree with it exactly. The
+/// C lane's trap is a `static inline` invisible to other backends; the inverse
+/// trap here is a name the middle end emits in one spelling and the runtime
+/// provides in another, so a missing entry is a refusal by name and never a
+/// call to something that does not exist.
+///
+/// The `fill` family is three entry points rather than one taking a width, for
+/// the reason `nts_runtime.h` gives about its own: the compiler knows the
+/// element type, and a runtime that had to be told it would be told it wrongly
+/// one day.
+/// The one conversion instruction between two computational kinds, or none when
+/// they are already the same. `None` means there is no such instruction --
+/// which is every case involving a reference.
+fn convert_kind(
+    code: &mut Code,
+    origin: &nts_semantic_schema::Origin,
+    from: Kind,
+    to: Kind,
+) -> Option<()> {
+    if from == to {
+        return Some(());
+    }
+    let opcode = match (from, to) {
+        (Kind::Int, Kind::Long) => insn::I2L,
+        (Kind::Int, Kind::Float) => insn::I2F,
+        (Kind::Int, Kind::Double) => insn::I2D,
+        (Kind::Long, Kind::Int) => insn::L2I,
+        (Kind::Long, Kind::Float) => insn::L2F,
+        (Kind::Long, Kind::Double) => insn::L2D,
+        (Kind::Float, Kind::Int) => insn::F2I,
+        (Kind::Float, Kind::Long) => insn::F2L,
+        (Kind::Float, Kind::Double) => insn::F2D,
+        (Kind::Double, Kind::Int) => insn::D2I,
+        (Kind::Double, Kind::Long) => insn::D2L,
+        (Kind::Double, Kind::Float) => insn::D2F,
+        _ => return None,
+    };
+    code.convert(origin, opcode, from, to);
+    Some(())
+}
+
+fn external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    Some(match name {
+        "nts_uncaught" => (RUNTIME, "uncaught", "(Lnts/rt/NtsValue;Ljava/lang/String;)V"),
+        "nts_array_fill" => (RUNTIME, "arrayFill", "([DD)[D"),
+        "nts_array_fill_bool" => (RUNTIME, "arrayFillBool", "([ZZ)[Z"),
+        "nts_array_fill_ref" => (
+            RUNTIME,
+            "arrayFillRef",
+            "([Ljava/lang/Object;Ljava/lang/Object;)[Ljava/lang/Object;",
+        ),
+        _ => return None,
+    })
+}
+
 impl Emitter<'_> {
     /// One block: its operations, then its terminator.
     pub(crate) fn block(
@@ -109,7 +167,7 @@ impl Emitter<'_> {
                 self.constant(code, pool, &op.kind, &op.ty, &origin)?
             }
             OpKind::ConstString(_) | OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
-                self.string_operation(code, pool, &op.kind, &origin)?
+                self.string_operation(code, pool, &op.kind, &op.ty, &origin)?
             }
             OpKind::ArrayNew { .. } | OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
                 self.array_operation(code, pool, &op.kind, &op.ty, &origin)?
@@ -281,11 +339,7 @@ impl Emitter<'_> {
             OpKind::TagOf { value } => {
                 self.load(code, *value)?;
                 code.get_field(origin, pool, types::VALUE, "tag", "I");
-                // The tag lands in whatever slot the middle end chose, which is
-                // not always an `int` one -- the same rule the coercions keep.
-                if types::kind(ty) == Some(Kind::Double) {
-                    code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
-                }
+                self.adapt(code, Kind::Int, ty, origin)?;
                 Ok(Placed::OnStack)
             }
             OpKind::Unerase { value } => {
@@ -452,23 +506,53 @@ impl Emitter<'_> {
         value: ValueId,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
+        self.push_as(code, value, Kind::Int, origin)
+    }
+
+    /// Load a value and put it in the representation the *instruction* wants.
+    ///
+    /// The counterpart of [`Self::adapt`], and the two exist because there are
+    /// two boundaries and this backend got both of them wrong by assuming. What
+    /// a JVM instruction takes and what the middle end chose to keep a value in
+    /// are separate facts, and neither is derivable from the other -- so every
+    /// crossing reads both ends rather than one.
+    fn push_as(
+        &mut self,
+        code: &mut Code,
+        value: ValueId,
+        wanted: Kind,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
         self.load(code, value)?;
-        match self.kind_of(value)? {
-            Kind::Int => Ok(()),
-            Kind::Double => {
-                code.convert(origin, insn::D2I, Kind::Double, Kind::Int);
-                Ok(())
-            }
-            Kind::Float => {
-                code.convert(origin, insn::F2I, Kind::Float, Kind::Int);
-                Ok(())
-            }
-            Kind::Long => {
-                code.convert(origin, insn::L2I, Kind::Long, Kind::Int);
-                Ok(())
-            }
-            Kind::Ref => Err(refuse(self.func, "an array index that is a reference")),
-        }
+        let have = self.kind_of(value)?;
+        convert_kind(code, origin, have, wanted)
+            .ok_or_else(|| refuse(self.func, &format!("a {have:?} where a {wanted:?} is needed")))
+    }
+
+    /// Adapt what an instruction *produced* to the representation the middle
+    /// end chose for the value it defines.
+    ///
+    /// `arraylength` is an `int`, `String.length()` is an `int`, `charAt` is a
+    /// `char`, and the tag field is an `int` -- and every one of those lands in
+    /// whatever slot the middle end picked, which specialization makes an
+    /// `i32`, an `i64` or an `f64` depending on the program. Three of these
+    /// sites widened to `double` unconditionally, because a JavaScript length
+    /// *is* a double until something narrows it, and something narrows it.
+    ///
+    /// The symptom is a `VerifyError` at the store, hundreds of bytes from the
+    /// operation, naming a frame with a hundred and seventy locals in it.
+    fn adapt(
+        &self,
+        code: &mut Code,
+        produced: Kind,
+        wanted: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        let want = types::kind(wanted)
+            .ok_or_else(|| refuse(self.func, "a result of unrepresentable type"))?;
+        convert_kind(code, origin, produced, want).ok_or_else(|| {
+            refuse(self.func, &format!("a {produced:?} result in a {want:?} slot"))
+        })
     }
 
     /// The descriptor of what an array holds.
@@ -491,6 +575,7 @@ impl Emitter<'_> {
         code: &mut Code,
         pool: &mut Pool,
         kind: &OpKind,
+        ty: &HirType,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         match kind {
@@ -511,13 +596,13 @@ impl Emitter<'_> {
             OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::String)) => {
                 self.load(code, *of)?;
                 code.invoke_virtual(origin, pool, types::STRING, "length", "()I");
-                code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
+                self.adapt(code, Kind::Int, ty, origin)?;
                 Ok(Placed::OnStack)
             }
             OpKind::Length(of) => {
                 self.load(code, *of)?;
                 code.array_length(origin);
-                code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
+                self.adapt(code, Kind::Int, ty, origin)?;
                 Ok(Placed::OnStack)
             }
             // Out of range JavaScript answers `NaN` where `charAt` throws, and a
@@ -526,13 +611,14 @@ impl Emitter<'_> {
             // is called directly and the helper is not in the program.
             OpKind::StringUnitAt { string, index, checked } => {
                 self.load(code, *string)?;
-                self.load(code, *index)?;
                 if *checked {
+                    self.push_as(code, *index, Kind::Double, origin)?;
                     code.invoke_static(origin, pool, RUNTIME, "charCodeAt", "(Ljava/lang/String;D)D");
+                    self.adapt(code, Kind::Double, ty, origin)?;
                 } else {
-                    code.convert(origin, insn::D2I, Kind::Double, Kind::Int);
+                    self.push_as(code, *index, Kind::Int, origin)?;
                     code.invoke_virtual(origin, pool, types::STRING, "charAt", "(I)C");
-                    code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
+                    self.adapt(code, Kind::Int, ty, origin)?;
                 }
                 Ok(Placed::OnStack)
             }
@@ -827,7 +913,24 @@ impl Emitter<'_> {
             Kind::Float | Kind::Double => {
                 code.branch_float_when(&origin, compare, negate, kind, target);
             }
-            Kind::Ref => return Err(refuse(self.func, "a comparison of references")),
+            // `===` between two objects *is* reference identity, so this is the
+            // one place `if_acmpeq` is right -- and the one place it must not
+            // be reached for a string, which compares by value and is diverted
+            // in `reference_binary` before it gets here.
+            //
+            // Ordering is refused rather than emitted: `a < b` on two objects
+            // is `valueOf` and a coercion in the language, not a pointer
+            // comparison, and answering it with one would be wrong quietly.
+            Kind::Ref => match test {
+                Compare::Eq => code.branch_ref(&origin, true, target),
+                Compare::Ne => code.branch_ref(&origin, false, target),
+                _ => {
+                    return Err(refuse(
+                        self.func,
+                        "an ordering comparison between two references",
+                    ));
+                }
+            },
         }
         Ok(())
     }
@@ -1096,10 +1199,32 @@ impl Emitter<'_> {
         let name = match callee {
             Callee::Direct(name) => name,
             Callee::External(name) => {
-                return Err(refuse(
-                    self.func,
-                    &format!("a call to `{name}`, which needs a runtime this slice has not built"),
-                ));
+                let Some((owner, member, descriptor)) = external(name) else {
+                    return Err(refuse(
+                        self.func,
+                        &format!("a call to `{name}`, which needs a runtime this slice has not built"),
+                    ));
+                };
+                for &arg in args {
+                    self.load(code, arg)?;
+                }
+                code.invoke_static(origin, pool, owner, member, descriptor);
+                if matches!(result, HirType::Void) {
+                    return Ok(Placed::Stored);
+                }
+                // A helper that takes an array of references has to declare
+                // `Object[]`, and Java arrays are covariant so passing a
+                // `Foo[]` to it verifies -- but the result comes back declared
+                // `Object[]` and the slot it is stored into is a `Foo[]`. The
+                // narrowing the middle end already proved has to be spelled for
+                // the verifier, which knows only what the descriptor said.
+                if let Some(want) = types::descriptor(self.program, result) {
+                    let returns = descriptor.rsplit(')').next().unwrap_or("");
+                    if want != returns && types::kind(result) == Some(Kind::Ref) {
+                        code.check_cast(origin, pool, &want);
+                    }
+                }
+                return Ok(Placed::OnStack);
             }
             // `invokevirtual` on the receiver's *static* class, by name. The
             // slot is unused: the JVM has its own vtable, and naming the method

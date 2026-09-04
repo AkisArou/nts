@@ -68,6 +68,25 @@ enum Generated {
     /// object: a different artifact *and* a different runner, which is the same
     /// split `run_native`/`run_jvm` already made in the differential.
     Jvm,
+    /// Are We Fast Yet's **own** Java, run under the same harness.
+    ///
+    /// The reference every other column lacks: an implementation in the target
+    /// language, so the ratio against it is about this compiler's codegen and
+    /// not about the runtime underneath it. A C++ reference cannot say that --
+    /// `nts (jvm)` against `C++` mixes a codegen difference with a
+    /// HotSpot-versus-clang difference and cannot separate them.
+    ///
+    /// Theirs rather than one written here, deliberately. A reference the
+    /// author of the thing being measured also wrote is not a reference. The
+    /// cost of that choice is stated rather than hidden: AWFY's Java is
+    /// constrained to the suite's cross-language core, so `benchmark()` returns
+    /// `Object` and boxes its result once per call -- against a body that is
+    /// hundreds of operations, which is why this is a footnote and not a
+    /// correction.
+    ///
+    /// Only the `awfy-*` cases have one, and every other case leaves the cell
+    /// blank on the same bargain the LLVM column keeps.
+    JavaReference,
 }
 
 /// What a variant is called and how it is built.
@@ -113,6 +132,27 @@ const VARIANTS: &[Variant] = &[
         source: "nts.cpp",
         generated: Generated::Jvm,
     },
+    Variant {
+        label: "Java",
+        source: "nts.cpp",
+        generated: Generated::JavaReference,
+    },
+];
+
+/// Which of Are We Fast Yet's Java classes a case is a port of.
+///
+/// Written out rather than derived from the case name, because `awfy-nbody` is
+/// `NBody` and a capitalisation rule that works for seven and not the eighth is
+/// worse than a list of eight.
+const JAVA_REFERENCES: &[(&str, &str)] = &[
+    ("awfy-bounce", "Bounce"),
+    ("awfy-list", "List"),
+    ("awfy-mandelbrot", "Mandelbrot"),
+    ("awfy-nbody", "NBody"),
+    ("awfy-permute", "Permute"),
+    ("awfy-queens", "Queens"),
+    ("awfy-sieve", "Sieve"),
+    ("awfy-towers", "Towers"),
 ];
 
 fn main() -> Result<()> {
@@ -467,6 +507,10 @@ fn variants(
                 results.push(jvm_case(root, case, out, name, tsconfig, entry, provider).ok());
                 continue;
             }
+            Generated::JavaReference => {
+                results.push(java_reference(root, case, out, name).ok().flatten());
+                continue;
+            }
             Generated::Specialized => c.push(specialized.to_owned()),
             Generated::Unspecialized => c.push(plain.to_owned()),
             Generated::Llvm if renderable => c.push(rendered.to_owned()),
@@ -684,7 +728,7 @@ fn jvm_case(
         std::fs::write(&path, &class.bytes)?;
     }
     let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
-    std::fs::write(&jar, nts_codegen_jvm::RUNTIME_JAR)?;
+    std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref())?;
 
     // The driver, from the workload the C shim already declares. Every input is
     // a `volatile` field for the reason the C shim makes them `volatile`: a
@@ -734,6 +778,115 @@ fn jvm_case(
             .arg(format!("{dir}:{jar}"))
             .arg("Case"),
     )
+}
+
+/// Are We Fast Yet's own Java, built and measured under the same harness.
+///
+/// `Ok(None)` for a case with no counterpart, which is every case that is not a
+/// port of one of theirs -- a blank cell rather than a failed row.
+///
+/// The driver mirrors `benches/cases/awfy-*/src/main.ts` exactly: construct the
+/// benchmark, call `innerBenchmarkLoop`, return 1 or 0. That is their driver
+/// unchanged, and it is what makes the checksum comparable across every column
+/// -- a variant that were fast because it computed something else would fail
+/// the runner's cross-variant check rather than win.
+fn java_reference(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+) -> Result<Option<Measured>> {
+    use std::fmt::Write as _;
+
+    let Some((_, class)) = JAVA_REFERENCES.iter().find(|(which, _)| *which == name) else {
+        return Ok(None);
+    };
+    let sources = root.join("third_party/are-we-fast-yet/benchmarks/Java/src");
+    if !sources.exists() {
+        // The suite is cloned, not vendored, exactly as the C++ column's is.
+        return Ok(None);
+    }
+
+    // One build of their tree for every case, since it is the same tree. Keyed
+    // on a marker file rather than on the directory existing, so a build that
+    // died halfway is rebuilt rather than reused.
+    let built = out.join("awfy-java");
+    if !built.join(".complete").exists() {
+        std::fs::create_dir_all(&built)?;
+        let mut listing = Vec::new();
+        collect_java(&sources, &mut listing)?;
+        let compiled = std::process::Command::new(java_tool("javac"))
+            .arg("-nowarn")
+            .arg("-d")
+            .arg(built.as_str())
+            .args(listing.iter().map(|path| path.as_str()))
+            .output()
+            .context("running javac over the Are We Fast Yet Java sources")?;
+        if !compiled.status.success() {
+            bail!("javac: {}", String::from_utf8_lossy(&compiled.stderr));
+        }
+        std::fs::write(built.join(".complete"), b"")?;
+    }
+
+    let (_, arguments) = workload(case)?;
+    let Some(iterations) = arguments.first() else {
+        bail!("{name} has no workload argument to drive their benchmark with");
+    };
+
+    let dir = out.join(format!("{name}.javaref"));
+    std::fs::create_dir_all(&dir)?;
+    let mut driver = String::from("public final class Case {\n");
+    // `volatile` for the reason the generated driver's inputs are: a
+    // loop-invariant argument lets the JIT hoist the whole call out of the
+    // timed loop and report an impressive zero.
+    let _ = writeln!(driver, "    private static volatile double in0 = {iterations};");
+    let _ = writeln!(driver, "    public static void main(String[] argv) {{");
+    let _ = writeln!(driver, "        Bench.measure(new Bench.Work() {{");
+    let _ = writeln!(driver, "            @Override public double run() {{");
+    let _ = writeln!(
+        driver,
+        "                return new {class}().innerBenchmarkLoop((int) in0) ? 1 : 0;"
+    );
+    let _ = writeln!(driver, "            }}\n        }});\n    }}\n}}");
+    let driver_path = dir.join("Case.java");
+    std::fs::write(&driver_path, driver)?;
+
+    let compiled = std::process::Command::new(java_tool("javac"))
+        .arg("-nowarn")
+        .arg("-cp")
+        .arg(built.as_str())
+        .arg("-d")
+        .arg(dir.as_str())
+        .arg(root.join("benches/common/Bench.java").as_str())
+        .arg(driver_path.as_str())
+        .output()
+        .context("running javac on the reference driver")?;
+    if !compiled.status.success() {
+        bail!("javac: {}", String::from_utf8_lossy(&compiled.stderr));
+    }
+
+    measure(
+        std::process::Command::new(java_tool("java"))
+            .args(["-XX:+UseG1GC", "-Xms512m", "-Xmx512m", "-XX:-UsePerfData"])
+            .arg("-cp")
+            .arg(format!("{dir}:{built}"))
+            .arg("Case"),
+    )
+    .map(Some)
+}
+
+/// Every `.java` under a directory, recursively.
+fn collect_java(dir: &Utf8Path, into: &mut Vec<Utf8PathBuf>) -> Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let path = Utf8PathBuf::from_path_buf(entry?.path())
+            .map_err(|path| anyhow::anyhow!("{} is not utf-8", path.display()))?;
+        if path.is_dir() {
+            collect_java(&path, into)?;
+        } else if path.extension() == Some("java") {
+            into.push(path);
+        }
+    }
+    Ok(())
 }
 
 /// `JAVA_HOME` if it has the tool, else the bare name for `PATH` to resolve.

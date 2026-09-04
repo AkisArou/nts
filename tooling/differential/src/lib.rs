@@ -1347,7 +1347,7 @@ fn run_jvm(
         std::fs::write(&path, &class.bytes)?;
     }
     let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
-    std::fs::write(&jar, nts_codegen_jvm::RUNTIME_JAR)?;
+    std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref())?;
 
     // The cases, as data. Generating and compiling a driver per case set would
     // put `javac` in this loop -- some 300ms against nine hundred cases -- to
@@ -1627,6 +1627,21 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
     std::fs::write(&hook, RESOLVE_TS)?;
 
     let run = bounded("node")
+        // Node strips types by default, which *refuses* the two TypeScript
+        // constructs that are not erasable: a parameter property and an `enum`.
+        // `constructor(private x: number)` is `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX
+        // ... not supported in strip-only mode`, and the oracle cannot run the
+        // program at all.
+        //
+        // Transform mode compiles them instead of refusing them, which is what
+        // `tsc` does and what the language says they mean. Without it, two
+        // features on the goal's list are unverifiable rather than unimplemented
+        // -- and "unmeasured is not done" would make them permanently not done
+        // for a reason that has nothing to do with this compiler.
+        //
+        // Everything already passing is unaffected: an erasable program is
+        // stripped identically either way, which the 89 examples check.
+        .arg("--experimental-transform-types")
         .arg("--import")
         .arg(format!("file://{hook}"))
         .arg(&path)

@@ -352,6 +352,56 @@ fn arrays_are_allocated_stored_and_measured() {
     assert_eq!(stdout, "6.0");
 }
 
+/// Every narrow primitive array, allocated and then round-tripped.
+///
+/// The one array test before this used `double`, which is the case a `Kind`
+/// gets right. `Kind` is what a value looks like on the **operand stack**,
+/// where a boolean, a byte, a char and a short are all `int` -- so `newarray`
+/// taking its operand from a `Kind` allocated an `int[]` for every one of them.
+/// That verifies on its own; it fails at the first thing that declares `[Z`,
+/// which was a runtime helper two crates away and reported as a type mismatch
+/// on an `invokestatic`.
+///
+/// `bastore` on an `int[]` is a verify error, so this test is the check: if the
+/// allocation and the element access disagree about width, the JVM says so
+/// here, in the crate that decides both.
+#[test]
+fn a_narrow_array_is_allocated_at_its_own_width() {
+    let locals = vec![
+        VType::Object(ARGS.into()),
+        VType::Object("[Z".into()),
+        VType::Object("[B".into()),
+        VType::Object("[C".into()),
+        VType::Object("[S".into()),
+    ];
+    let Some(stdout) = run_main("NarrowArrays", locals, |code, pool, o| {
+        // (slot, descriptor, the value stored at index 1)
+        let each = [(1u16, "Z", 1i32), (2, "B", 7), (3, "C", 65), (4, "S", 300)];
+        for (slot, descriptor, value) in each {
+            code.const_int(o, pool, 2);
+            code.new_array(o, pool, descriptor);
+            code.store(o, Kind::Ref, slot);
+            code.load(o, Kind::Ref, slot);
+            code.const_int(o, pool, 1);
+            code.const_int(o, pool, value);
+            code.array_store(o, descriptor);
+        }
+        out(code, pool, o);
+        code.const_int(o, pool, 0);
+        for (slot, descriptor, _) in each {
+            code.load(o, Kind::Ref, slot);
+            code.const_int(o, pool, 1);
+            code.array_load(o, descriptor);
+            code.arithmetic(o, insn::ADD, Kind::Int);
+        }
+        code.convert(o, insn::I2D, Kind::Int, Kind::Double);
+        println(code, pool, o, "D");
+    }) else {
+        return;
+    };
+    assert_eq!(stdout, "373.0");
+}
+
 #[test]
 fn a_generated_class_with_a_field() {
     let Some(java) = java_home_bin("java") else {
