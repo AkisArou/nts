@@ -3743,6 +3743,26 @@ impl<'a> FuncBuilder<'a> {
             .any(|child| self.mentions(child, kind))
     }
 
+    /// What a call through this closure *value* produces.
+    ///
+    /// From the callee's own function type rather than from the call
+    /// expression's type, and the difference is load-bearing for `f?.(x)`: the
+    /// expression is `T | undefined`, because the `?.` can skip the call, and
+    /// the call itself still returns `T`. Spelling the expression's type as the
+    /// call's result cast a `double`-returning implementation to one returning
+    /// `NtsValue`, and the answer came back as the bit pattern of a struct.
+    fn returned_by(&self, callee: ValueId) -> Option<HirType> {
+        let HirType::Managed(ManagedType::Object(ty)) = self.values[callee.0 as usize].ty else {
+            return None;
+        };
+        let record = self.snapshot.types.get(ty.0 as usize)?;
+        let nts_semantic_schema::TypeKind::Function(signature) = record.kind else {
+            return None;
+        };
+        let signature = self.snapshot.signatures.get(signature.0 as usize)?;
+        self.represent(signature.return_type)
+    }
+
     fn declared_return(&self, id: NodeId) -> Option<HirType> {
         if let Some(ty) = self.snapshot.node_types.get(&id)
             && let Some(record) = self.snapshot.types.get(ty.0 as usize)
@@ -10976,6 +10996,11 @@ impl<'a> FuncBuilder<'a> {
             .into_iter()
             .skip(1)
             .filter(|child| !syntax::is_type_node(self.kind_of(*child).unwrap_or(0)))
+            // `f?.(x)` puts the `?.` among the children the way `f<T>(x)` puts
+            // its type argument there. Both are punctuation and neither is an
+            // argument; lowering this one reported "a question dot token is not
+            // supported", which is true and says nothing.
+            .filter(|child| self.kind_of(*child) != Some(syntax::QUESTION_DOT_TOKEN))
             .collect()
     }
 
@@ -11377,6 +11402,14 @@ impl<'a> FuncBuilder<'a> {
 
     /// `xs[i]`, as a read. Writes are handled by the assignment lowering.
     fn lower_element_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        // `xs?.[i]`, which is three children because the `?.` is a token of its
+        // own between the receiver and the index -- the same shape `a?.b` has,
+        // and it reaches here before the two-child forms below can fail on it.
+        if let [object, dot, index] = self.children(id).as_slice()
+            && self.kind_of(*dot) == Some(syntax::QUESTION_DOT_TOKEN)
+        {
+            return self.lower_optional_element(id, *object, *index);
+        }
         if self.names_a_property(id) {
             return self.lower_property_access(id);
         }
@@ -11384,6 +11417,20 @@ impl<'a> FuncBuilder<'a> {
             return Ok(read);
         }
         let (array, index) = self.element_access_parts(id)?;
+        self.element_of(id, array, index)
+    }
+
+    /// `xs[i]` with both halves already lowered.
+    ///
+    /// Split out so that `xs?.[i]` can share it: the optional form lowers its
+    /// receiver first, to ask whether it is absent, and then wants exactly this
+    /// read in the arm where it is not.
+    fn element_of(
+        &mut self,
+        id: NodeId,
+        array: ValueId,
+        index: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
         // The element's representation comes from the *array*, not from the
         // access node's type. Under `noUncheckedIndexedAccess` — which is what
         // TypeScript actually knows — that type is `number | undefined`, and
@@ -11725,6 +11772,82 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// `xs?.[i]`.
+    ///
+    /// The same three steps as [`Self::lower_optional_access`], with an element
+    /// read where that one has a member read.
+    fn lower_optional_element(
+        &mut self,
+        id: NodeId,
+        object: NodeId,
+        index: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let receiver = self.lower_expression(object)?;
+        let Some(absent) = self.absence_of(object, receiver) else {
+            // A receiver with no room for an absence is never absent, so this
+            // is an ordinary read. TypeScript permits the shape and reports it
+            // as unnecessary.
+            let index = self.lower_expression(index)?;
+            return self.element_of(id, receiver, index);
+        };
+        let present = self.present_of(object, receiver);
+        self.lower_branching_value(
+            id,
+            absent,
+            Branch::Absent,
+            Branch::Element(receiver, index, present),
+        )
+    }
+
+    /// A call the frontend did not resolve, which is a missing pass rather than
+    /// an unsupported construct.
+    fn unresolved_call(&self, id: NodeId) -> Diagnostic {
+        Diagnostic::error(
+            "NTS1002",
+            "this call was not resolved to a target; the frontend's call \
+             resolution pass has to run before lowering",
+            self.location(id),
+        )
+    }
+
+    /// Whether a call is written `f?.(x)`.
+    ///
+    /// Asked before the target lookup in [`Self::lower_call`], because an
+    /// optional call is on a *value* and the frontend has no single target to
+    /// resolve it to.
+    fn is_optional_call(&self, id: NodeId) -> bool {
+        self.children(id)
+            .iter()
+            .any(|child| self.kind_of(*child) == Some(syntax::QUESTION_DOT_TOKEN))
+    }
+
+    /// `f?.(x)`.
+    ///
+    /// The same three steps as [`Self::lower_optional_access`], with the call
+    /// where that one has a member read. `f` is a *value* here, so the call in
+    /// the present arm is the indirect one through the closure -- the third way
+    /// [`Self::call_through_closure`] is come by.
+    fn lower_optional_call(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let Some(&callee_node) = self.children(id).first() else {
+            return Err(self.unsupported(id, "an optional call with no callee"));
+        };
+        let callee = self.lower_expression(callee_node)?;
+        let Some(absent) = self.absence_of(callee_node, callee) else {
+            // A callee with no room for an absence is always there, so this is
+            // an ordinary call. TypeScript permits the shape and reports it as
+            // unnecessary.
+            let arguments = self.arguments_of(id);
+            return self.call_through_closure(id, callee_node, callee, &arguments);
+        };
+        let present = self.present_of(callee_node, callee);
+        self.lower_branching_value(
+            id,
+            absent,
+            Branch::Absent,
+            Branch::Invoke(callee, callee_node, present),
+        )
+    }
+
     /// What an erased receiver is, in the arm a `?.` has established it is
     /// present.
     ///
@@ -12022,6 +12145,30 @@ impl<'a> FuncBuilder<'a> {
                     .ok_or_else(|| self.unrepresentable(id, "an optional access"))?;
                 let origin = self.origin(id);
                 Ok(self.push(OpKind::ConstUndefined, ty, origin))
+            }
+            Branch::Invoke(callee, callee_node, present) => {
+                // Here and not before the branch, for the reason above.
+                let callee = match present {
+                    Some(ty) => {
+                        let origin = self.origin(callee_node);
+                        self.push(OpKind::Unerase { value: callee }, ty, origin)
+                    }
+                    None => callee,
+                };
+                let arguments = self.arguments_of(id);
+                self.call_through_closure(id, callee_node, callee, &arguments)
+            }
+            Branch::Element(receiver, index, present) => {
+                // Here and not before the branch, for the reason above.
+                let receiver = match present {
+                    Some(ty) => {
+                        let origin = self.origin(index);
+                        self.push(OpKind::Unerase { value: receiver }, ty, origin)
+                    }
+                    None => receiver,
+                };
+                let index = self.lower_expression(index)?;
+                self.element_of(id, receiver, index)
             }
             Branch::Member(receiver, member, present) => {
                 let name = self
@@ -13010,13 +13157,11 @@ impl<'a> FuncBuilder<'a> {
         if let Some(settled) = self.lower_settler_call(id)? {
             return Ok(settled);
         }
+        if self.is_optional_call(id) {
+            return self.lower_optional_call(id);
+        }
         let Some(target) = self.snapshot.call_targets.get(&id) else {
-            return Err(Diagnostic::error(
-                "NTS1002",
-                "this call was not resolved to a target; the frontend's call \
-                 resolution pass has to run before lowering",
-                self.location(id),
-            ));
+            return Err(self.unresolved_call(id));
         };
 
         let children = self.children(id);
@@ -13307,8 +13452,11 @@ impl<'a> FuncBuilder<'a> {
 
         let mut args = vec![receiver];
         args.extend(self.lower_arguments(id, arguments)?);
+        // The callee's return where it has one. See `returned_by`: for `f?.(x)`
+        // the expression's type carries an `undefined` the call cannot produce.
         let ty = self
-            .type_of(id)
+            .returned_by(receiver)
+            .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
         let origin = self.origin(id);
         Ok(self.push(
@@ -16405,6 +16553,18 @@ enum Branch {
     /// before anything can ask for a member. See
     /// [`FuncBuilder::present_of`].
     Member(ValueId, NodeId, Option<HirType>),
+    /// `f?.(x)`'s call, in the arm where the callee is present.
+    ///
+    /// The arguments are lowered *here* rather than before the branch: `f?.(g())`
+    /// must not call `g` when `f` is absent, which is what the specification
+    /// says and what a branch taken earlier would get wrong.
+    Invoke(ValueId, NodeId, Option<HirType>),
+    /// `xs?.[i]`'s read, in the arm where the receiver is present.
+    ///
+    /// The index is lowered *here* rather than before the branch, for the same
+    /// reason [`Self::Member`]'s payload read is: `xs?.[next()]` must not call
+    /// `next` when `xs` is absent, and the specification says so.
+    Element(ValueId, NodeId, Option<HirType>),
     /// A value the branch has established is neither `null` nor `undefined`.
     ///
     /// Distinct from [`Self::Value`] because the distinction is a soundness

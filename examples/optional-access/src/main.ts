@@ -10,12 +10,15 @@
 // the way out, which is why `member_of` exists separately from
 // `lower_property_access`.
 //
-// One link. `a?.b.c` short-circuits the whole chain in JavaScript — when `a` is
-// absent, `.c` is not evaluated either — and that is a property of the chain
-// rather than of either access. It is refused in those words rather than
-// lowered as `(a?.b).c`, which would read a member of the absent value. Every
-// one of the twenty-six optional accesses in the node profile is a single link,
-// which is why this is where the line is drawn.
+// A link after an *optional* one is fine, and `twoOptionalLinks` below is two
+// of them: each tests its own receiver, so the second is skipped exactly when
+// the first produced `undefined`.
+//
+// A link after an optional one that is *not* itself optional is refused.
+// `a?.b.c` short-circuits the whole chain in JavaScript — when `a` is absent,
+// `.c` is not evaluated either — and that is a property of the chain rather
+// than of either access. Lowering it as `(a?.b).c` would read a member of the
+// absent value, so it is refused in those words instead.
 
 type Opts = { level: number; name: string };
 
@@ -51,4 +54,73 @@ export function neverAbsentReceiver(n: number): number {
 // tag test the union already had.
 export function comparedDirectly(n: number, o?: Opts): number {
   return o?.level === undefined ? -1 : o.level;
+}
+
+// `f?.(x)` and `xs?.[i]` — the other two links in the family, and the same
+// three steps as `a?.b`: lower the receiver once, test the absence it admits,
+// and do the work only in the arm where it is present.
+//
+// What the arm holds is the whole difference. For `a?.b` it is a member read;
+// for `xs?.[i]` an element read; for `f?.(x)` the indirect call through the
+// closure. The arguments and the index are lowered *inside* that arm, because
+// `f?.(g())` must not call `g` when `f` is absent — and a branch taken any
+// earlier would get that wrong.
+interface Held {
+  fn?: (x: number) => number;
+  items?: number[];
+}
+
+function held(n: number): Held {
+  if (n < 0) {
+    return {};
+  }
+  return { fn: (x) => x * 3, items: [10, 20, 30] };
+}
+
+export function optionalCall(n: number): number {
+  return held(n).fn?.(7) ?? -1;
+}
+
+export function optionalIndex(n: number): number {
+  return held(n).items?.[1] ?? -1;
+}
+
+// The short-circuit, made observable. When the receiver is absent neither the
+// argument nor the index is evaluated, so `bump` never runs and `effects` stays
+// zero — which is what the specification says and what the answer here counts.
+let effects = 0;
+
+function bump(): number {
+  effects = effects + 1;
+  return 1;
+}
+
+export function anAbsentCalleeEvaluatesNoArguments(n: number): number {
+  effects = 0;
+  const got = held(n).fn?.(bump()) ?? -1;
+  return got * 100 + effects;
+}
+
+export function anAbsentArrayEvaluatesNoIndex(n: number): number {
+  effects = 0;
+  const got = held(n).items?.[bump()] ?? -1;
+  return got * 100 + effects;
+}
+
+// Two links, each optional. This is a chain, and it works because each link
+// tests its own receiver: `inner?.fn?.(7)` skips the call when `inner` is
+// absent *and* when `fn` is.
+interface Nest {
+  inner?: Held;
+}
+
+function nest(n: number): Nest {
+  if (n < -5) {
+    return {};
+  }
+  return { inner: held(n) };
+}
+
+export function twoOptionalLinks(n: number): number {
+  return nest(n).inner?.fn?.(7) ?? -1;
 }

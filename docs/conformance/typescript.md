@@ -101,8 +101,8 @@ counter, not by reading the emitted C.
 | ✅ | `new` | user classes, `Array`, typed arrays |
 | ✅ | `??` | the absence test, not the truthiness one — `0 ?? 1` is `0` |
 | ✗ | `??=`, `\|\|=`, `&&=` | |
-| ✅ | `?.` | one link, through either absence or both; a chain after an optional access is refused and named |
-| ✗ | `?.()`, `?.[]` | optional call and optional index |
+| ✅ | `?.`, `?.()`, `?.[]` | member, call and index, through either absence or both. Two *optional* links chain — each tests its own receiver — and a **non**-optional link after an optional one is refused and named |
+| ✗ | a nested object literal assigned where an **optional** property is declared | it gets its own anonymous type, laid out with a pointer where the declared one has a tagged value, and reading it back **segfaults**. Pre-existing; see the anonymous-type row in §4 |
 | ◐ | spread | every shape of it in an **array literal** works — `[...a]` is a copy, and `[...a, x, ...b]` sums the lengths before allocating; `f(...a)` and `{...o}` do not |
 | ✗ | `delete`, `void`, comma | `in` is named above |
 | ✅ | `instanceof` | against a class this program declares, or one of the four provided error classes. The set of classes that satisfy it is closed when the program is built, so it is a comparison and not a walk |

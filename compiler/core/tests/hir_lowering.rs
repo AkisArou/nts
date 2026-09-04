@@ -848,3 +848,49 @@ fn instanceof_is_a_comparison_against_a_closed_set() {
         "`Error` admits the three classes that extend it as well as itself"
     );
 }
+
+#[test]
+fn an_optional_call_evaluates_its_arguments_only_in_the_present_arm() {
+    let Some(lowered) = lowered("optional-access") else {
+        return;
+    };
+    // `f?.(g())` must not call `g` when `f` is absent. The branch is taken
+    // first and the argument is lowered inside the arm, so the call to `bump`
+    // is dominated by the test rather than sitting above it.
+    let guarded = func(&lowered, "anAbsentCalleeEvaluatesNoArguments");
+    let entry = &guarded.blocks[0];
+    assert!(
+        !entry.ops.iter().any(|op| matches!(
+            &guarded.values[op.0 as usize].kind,
+            OpKind::Call { callee: Callee::Direct(name), .. } if name == "bump"
+        )),
+        "`bump` is not called before the branch that decides whether to call at all"
+    );
+}
+
+#[test]
+fn a_dispatched_call_keeps_the_return_its_declaration_promises() {
+    let Some(lowered) = lowered("optional-access") else {
+        return;
+    };
+    // A closure's implementation is emitted from its declared function type,
+    // which nothing narrows. So a call through the table has to keep that
+    // return: narrowing it spelled `int32_t (*)(...)` for a body returning
+    // `double`, and the answer came out of the wrong register.
+    //
+    // Raw lowering has no specialization in it, so what this pins is the other
+    // half -- that the call takes its type from the *callee* and not from the
+    // expression, which for `f?.(x)` carries an `undefined` the call cannot
+    // produce.
+    let optional = func(&lowered, "optionalCall");
+    let call = optional
+        .values
+        .iter()
+        .find(|op| matches!(op.kind, OpKind::Call { callee: Callee::Closure { .. }, .. }))
+        .expect("`f?.(x)` calls through the closure table");
+    assert_ne!(
+        call.ty,
+        HirType::Erased,
+        "the call returns what the closure returns, not `number | undefined`"
+    );
+}

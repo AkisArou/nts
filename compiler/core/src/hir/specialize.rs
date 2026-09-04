@@ -86,6 +86,30 @@ impl Classes {
 }
 
 /// Rewrite a function to use integers wherever that is provable.
+/// Whether this operation is a call whose single target the compilation cannot
+/// see, so its result keeps the representation its *declared* type promises.
+///
+/// `Callee::Closure` and `Callee::Virtual` both go through a table of untyped
+/// pointers, so the call spells the signature it is making -- and the
+/// implementation on the other side was emitted from the declared function
+/// type, which nothing narrowed. Narrowing the result spelled `int32_t (*)(...)`
+/// for a `Closure0__call` that returns `double`, and the answer was read out of
+/// the wrong register: `h.fn(21)` gave 7.3e8 where node gives 42.
+///
+/// The mirror of this rule was already here for *arguments*, in
+/// [`insert_conversions`]: a callee this compilation does not define takes a
+/// `number` as a double, because that is the ABI a declaration promises. The
+/// result had no such rule.
+fn dispatched(kind: &OpKind) -> bool {
+    matches!(
+        kind,
+        OpKind::Call {
+            callee: super::Callee::Closure { .. } | super::Callee::Virtual { .. },
+            ..
+        }
+    )
+}
+
 pub fn specialize(
     func: &mut Func,
     analysis: &Analysis,
@@ -199,6 +223,9 @@ pub fn specialize(
         // this width at all; it keeps the type it arrived with, signedness
         // included, because that type is the thing being agreed *with*.
         if let HirType::Int { .. } = func.values[index].ty {
+            continue;
+        }
+        if dispatched(&func.values[index].kind) {
             continue;
         }
         report.specialized += 1;
