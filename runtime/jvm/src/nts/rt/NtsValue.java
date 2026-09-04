@@ -68,6 +68,22 @@ public final class NtsValue {
     public static final NtsValue NULL_VALUE = new NtsValue(NULL, 0.0, null);
 
     /**
+     * `undefined` where a **number** was expected, with a NaN payload.
+     *
+     * <p>Not the shared `UNDEFINED_VALUE`, and the difference is observable.
+     * `xs.at(9)!` on a three-element array unerases the absence straight to a
+     * double -- the program said `!` and the compiler took it -- so what that
+     * read finds is the payload. JavaScript's answer is NaN, because
+     * `Number(undefined)` is NaN; a zero payload answers 0, which is a
+     * plausible number in the middle of an arithmetic expression.
+     *
+     * <p>This is `nts_absent_number()` in the C runtime, spelled the same way
+     * and for the same reason. `examples/arrays` disagreed with node on seven
+     * cases without it.
+     */
+    public static final NtsValue ABSENT_NUMBER = new NtsValue(UNDEFINED, Double.NaN, null);
+
+    /**
      * The two booleans, interned for the same reason and on a measurement.
      *
      * <p>A boolean has exactly two values, so two instances cover every erasure

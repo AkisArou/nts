@@ -104,7 +104,10 @@ public final class NtsArrayZ {
 
     /** `at`, where a negative index counts from the end. */
     public static boolean at(NtsArrayZ a, double index) {
-        double i = index < 0 ? index + a.length : index;
+                double i = toInteger(index);
+        if (i < 0) {
+            i += a.length;
+        }
         return i < 0 || i >= a.length ? false : a.items[(int) i];
     }
 
@@ -226,9 +229,28 @@ public final class NtsArrayZ {
     }
 
     public static NtsValue atValue(NtsArrayZ a, double index) {
-        double i = index < 0 ? index + a.length : index;
+                double i = toInteger(index);
+        if (i < 0) {
+            i += a.length;
+        }
         return i < 0 || i >= a.length
             ? NtsValue.UNDEFINED_VALUE
             : NtsValue.ofBoolean(a.items[(int) i]);
+    }
+
+    /**
+     * `ToInteger`: truncate toward zero, NaN is zero.
+     *
+     * <p>`at` applies this **before** turning a negative index into an offset
+     * from the end, and the order is observable: `at(-1.5)` truncates to `-1`
+     * and reads the last element, where adding the length first and truncating
+     * after reads the one before it. `examples/arrays` disagreed with node on
+     * ten cases for exactly that.
+     */
+    private static double toInteger(double x) {
+        if (Double.isNaN(x)) {
+            return 0.0;
+        }
+        return x < 0.0 ? Math.ceil(x) : Math.floor(x);
     }
 }

@@ -104,7 +104,10 @@ public final class NtsArrayD {
 
     /** `at`, where a negative index counts from the end. */
     public static double at(NtsArrayD a, double index) {
-        double i = index < 0 ? index + a.length : index;
+                double i = toInteger(index);
+        if (i < 0) {
+            i += a.length;
+        }
         return i < 0 || i >= a.length ? 0.0 : a.items[(int) i];
     }
 
@@ -218,17 +221,36 @@ public final class NtsArrayD {
     // and are reached only where the result was narrowed back to a number.
 
     public static NtsValue popValue(NtsArrayD a) {
-        return a.length == 0 ? NtsValue.UNDEFINED_VALUE : NtsValue.ofNumber(pop(a));
+        return a.length == 0 ? NtsValue.ABSENT_NUMBER : NtsValue.ofNumber(pop(a));
     }
 
     public static NtsValue shiftValue(NtsArrayD a) {
-        return a.length == 0 ? NtsValue.UNDEFINED_VALUE : NtsValue.ofNumber(shift(a));
+        return a.length == 0 ? NtsValue.ABSENT_NUMBER : NtsValue.ofNumber(shift(a));
     }
 
     public static NtsValue atValue(NtsArrayD a, double index) {
-        double i = index < 0 ? index + a.length : index;
+                double i = toInteger(index);
+        if (i < 0) {
+            i += a.length;
+        }
         return i < 0 || i >= a.length
-            ? NtsValue.UNDEFINED_VALUE
+            ? NtsValue.ABSENT_NUMBER
             : NtsValue.ofNumber(a.items[(int) i]);
+    }
+
+    /**
+     * `ToInteger`: truncate toward zero, NaN is zero.
+     *
+     * <p>`at` applies this **before** turning a negative index into an offset
+     * from the end, and the order is observable: `at(-1.5)` truncates to `-1`
+     * and reads the last element, where adding the length first and truncating
+     * after reads the one before it. `examples/arrays` disagreed with node on
+     * ten cases for exactly that.
+     */
+    private static double toInteger(double x) {
+        if (Double.isNaN(x)) {
+            return 0.0;
+        }
+        return x < 0.0 ? Math.ceil(x) : Math.floor(x);
     }
 }

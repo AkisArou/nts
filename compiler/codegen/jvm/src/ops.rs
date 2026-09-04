@@ -175,10 +175,14 @@ fn growable_external(name: &str, holds: &str) -> Option<(String, &'static str, S
 /// Java methods, and picking between them is reading the array's type rather
 /// than reading the call.
 fn array_external(name: &str, element: &str) -> Option<(&'static str, &'static str, String)> {
-    let (array, result) = match element {
-        "D" => ("[D", "[D"),
-        "Z" => ("[Z", "[Z"),
-        _ => ("[Ljava/lang/Object;", "[Ljava/lang/Object;"),
+    let (array, result, one) = match element {
+        "D" => ("[D", "[D", "D"),
+        "Z" => ("[Z", "[Z", "Z"),
+        _ => (
+            "[Ljava/lang/Object;",
+            "[Ljava/lang/Object;",
+            "Ljava/lang/Object;",
+        ),
     };
     Some(match name {
         // `Promise.all`'s *values* array is the one the compiler allocated, and
@@ -190,6 +194,27 @@ fn array_external(name: &str, element: &str) -> Option<(&'static str, &'static s
             "all",
             format!("([Lnts/rt/NtsPromise;{array})Lnts/rt/NtsPromise;"),
         ),
+        "nts_array_index_of" | "nts_array_index_of_ref" => {
+            (RUNTIME, "arrayIndexOf", format!("({array}{one})D"))
+        }
+        "nts_array_index_of_str" => (RUNTIME, "arrayIndexOfStr", format!("({array}{one})D")),
+        "nts_array_last_index_of" | "nts_array_last_index_of_ref" => {
+            (RUNTIME, "arrayLastIndexOf", format!("({array}{one})D"))
+        }
+        "nts_array_last_index_of_str" => {
+            (RUNTIME, "arrayLastIndexOfStr", format!("({array}{one})D"))
+        }
+        "nts_array_includes" | "nts_array_includes_ref" => {
+            (RUNTIME, "arrayIncludes", format!("({array}{one})Z"))
+        }
+        "nts_array_includes_str" => (RUNTIME, "arrayIncludesStr", format!("({array}{one})Z")),
+        "nts_array_at" => (RUNTIME, "arrayAt", format!("({array}D)D")),
+        "nts_array_at_value" => {
+            (RUNTIME, "arrayAtValue", format!("({array}D)Lnts/rt/NtsValue;"))
+        }
+        "nts_array_at_ref" => {
+            (RUNTIME, "arrayAtRef", format!("({array}D)Ljava/lang/Object;"))
+        }
         "nts_array_slice" => (RUNTIME, "arraySlice", format!("({array}DD){result}")),
         "nts_array_reverse" => (RUNTIME, "arrayReverse", format!("({array}){result}")),
         "nts_array_join_str" => (
@@ -1262,23 +1287,57 @@ impl Emitter<'_> {
                 code.new_array(origin, pool, &element);
                 Ok(Placed::OnStack)
             }
-            OpKind::ArrayGet { array, index, .. } => {
+            OpKind::ArrayGet { array, index, checked } => {
                 let element = self.element_descriptor(&self.ty(*array).clone())?;
                 self.load(code, *array)?;
-                self.subscript(code, *index, origin)?;
+                self.checked_subscript(code, pool, *array, *index, *checked, origin)?;
                 code.array_load(origin, &element);
                 Ok(Placed::OnStack)
             }
-            OpKind::ArraySet { array, index, value, .. } => {
+            OpKind::ArraySet { array, index, value, checked } => {
                 let element = self.element_descriptor(&self.ty(*array).clone())?;
                 self.load(code, *array)?;
-                self.subscript(code, *index, origin)?;
+                self.checked_subscript(code, pool, *array, *index, *checked, origin)?;
                 self.load(code, *value)?;
                 code.array_store(origin, &element);
                 Ok(Placed::Stored)
             }
             _ => Err(refuse(self.func, "an array operation this backend does not spell")),
         }
+    }
+
+    /// An index for a bare array, checked where the IR says it must be.
+    ///
+    /// `checked: false` means the middle end proved it in range, and the JVM's
+    /// own bounds check is then the only one -- mandatory, and eliminated in a
+    /// counted loop, which is where this lane is cheaper than the native one.
+    ///
+    /// `checked: true` means the program said `!` and the compiler did not
+    /// believe it. The JVM's check would raise an
+    /// `ArrayIndexOutOfBoundsException`, which is a *defect* to the harness
+    /// rather than a refusal, and it would not fire at all for a **fractional**
+    /// index -- `xs[0.5]` is `undefined` in JavaScript and `xs[0]` after a
+    /// `d2i`. So both tests go through the runtime, which refuses with the
+    /// prefix the harness reads.
+    fn checked_subscript(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        array: ValueId,
+        index: ValueId,
+        checked: bool,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        if !checked {
+            return self.subscript(code, index, origin);
+        }
+        self.push_as(code, index, Kind::Double, origin)?;
+        // The length, which `bounds` needs and which is one instruction here.
+        self.load(code, array)?;
+        code.array_length(origin);
+        code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
+        code.invoke_static(origin, pool, RUNTIME, "bounds", "(DD)I");
+        Ok(())
     }
 
     /// An index or a length, as the `int` the JVM's array instructions want.

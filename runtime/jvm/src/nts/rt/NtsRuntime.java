@@ -1137,4 +1137,148 @@ public final class NtsRuntime {
             default: return String.valueOf(value.ref);
         }
     }
+
+    /**
+     * An index the program's `!` promised was in range, checked.
+     *
+     * <p>`xs[i]!` asserts the index is there; where it is not, JavaScript
+     * answers `undefined` and a compiled program without exceptions stops. So
+     * this refuses, with the same `nts:` prefix and the same wording the C
+     * runtime's `nts_bounds` uses -- the differential reads that prefix to tell
+     * a program the compiler correctly declined from one that went wrong, and a
+     * Java `ArrayIndexOutOfBoundsException` would be counted as a defect on
+     * every case the C lane also declines.
+     *
+     * <p>The **integrality** test is the half a bounds check alone misses.
+     * `xs[0.5]` is `undefined` in JavaScript and `xs[0]` after a `d2i`, which
+     * is a wrong answer rather than a crash: `examples/arrays` returned 10
+     * where node returns NaN, on a fractional index the pool supplies and no
+     * hand-written case would.
+     */
+    public static int bounds(double index, double length) {
+        if (index >= 0.0 && index < length && index == Math.floor(index)) {
+            return (int) index;
+        }
+        throw new NtsRefusal(
+            "index " + numberText(index) + " is outside [0, " + (long) length + ")");
+    }
+
+    // ----- the bare-array searches ----------------------------------------
+    //
+    // A program that never grows an array keeps `double[]` and friends, so
+    // these are the same operations `NtsArrayD` and `NtsArrayL` provide, over
+    // storage with no length beside it. Overloaded rather than generic for the
+    // reason the rest of this family is: the compiler knows the element type.
+    //
+    // `indexOf` on references is **identity** and on strings is **value**, and
+    // they are different methods for that reason. Two equal strings need not be
+    // one object -- and will be one often enough for a suite to pass.
+
+    public static double arrayIndexOf(double[] a, double value) {
+        for (int i = 0; i < a.length; i++) {
+            if (a[i] == value) {
+                return i;
+            }
+        }
+        return -1.0;
+    }
+
+    public static double arrayLastIndexOf(double[] a, double value) {
+        for (int i = a.length - 1; i >= 0; i--) {
+            if (a[i] == value) {
+                return i;
+            }
+        }
+        return -1.0;
+    }
+
+    public static boolean arrayIncludes(double[] a, double value) {
+        return arrayIndexOf(a, value) >= 0.0;
+    }
+
+    public static double arrayIndexOf(Object[] a, Object value) {
+        for (int i = 0; i < a.length; i++) {
+            if (a[i] == value) {
+                return i;
+            }
+        }
+        return -1.0;
+    }
+
+    public static double arrayLastIndexOf(Object[] a, Object value) {
+        for (int i = a.length - 1; i >= 0; i--) {
+            if (a[i] == value) {
+                return i;
+            }
+        }
+        return -1.0;
+    }
+
+    public static boolean arrayIncludes(Object[] a, Object value) {
+        return arrayIndexOf(a, value) >= 0.0;
+    }
+
+    public static double arrayIndexOfStr(Object[] a, Object value) {
+        for (int i = 0; i < a.length; i++) {
+            if (java.util.Objects.equals(a[i], value)) {
+                return i;
+            }
+        }
+        return -1.0;
+    }
+
+    public static double arrayLastIndexOfStr(Object[] a, Object value) {
+        for (int i = a.length - 1; i >= 0; i--) {
+            if (java.util.Objects.equals(a[i], value)) {
+                return i;
+            }
+        }
+        return -1.0;
+    }
+
+    public static boolean arrayIncludesStr(Object[] a, Object value) {
+        return arrayIndexOfStr(a, value) >= 0.0;
+    }
+
+    /** `at` with the `undefined` the checker already gave it. */
+    public static NtsValue arrayAtValue(double[] a, double index) {
+        double i = toInteger(index);
+        if (i < 0) {
+            i += a.length;
+        }
+        // `ABSENT_NUMBER`, not the shared undefined: `xs.at(9)!` unerases this
+        // straight to a double, and `Number(undefined)` is NaN. A zero payload
+        // answers 0, which is a plausible number in the middle of an
+        // expression. `nts_absent_number()` in the C runtime, for the same
+        // reason and with the same NaN.
+        return i < 0 || i >= a.length ? NtsValue.ABSENT_NUMBER : NtsValue.ofNumber(a[(int) i]);
+    }
+
+    public static NtsValue arrayAtValue(Object[] a, double index) {
+        double i = toInteger(index);
+        if (i < 0) {
+            i += a.length;
+        }
+        if (i < 0 || i >= a.length) {
+            return NtsValue.UNDEFINED_VALUE;
+        }
+        Object element = a[(int) i];
+        return element instanceof NtsValue ? (NtsValue) element : NtsValue.ofObject(element);
+    }
+
+    public static Object arrayAtRef(Object[] a, double index) {
+        double i = toInteger(index);
+        if (i < 0) {
+            i += a.length;
+        }
+        return i < 0 || i >= a.length ? null : a[(int) i];
+    }
+
+    public static double arrayAt(double[] a, double index) {
+        double i = toInteger(index);
+        if (i < 0) {
+            i += a.length;
+        }
+        return i < 0 || i >= a.length ? Double.NaN : a[(int) i];
+    }
 }
