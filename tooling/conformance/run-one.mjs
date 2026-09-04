@@ -11,7 +11,8 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname, isAbsolute, relative, resolve as resolvePath } from "node:path";
-import { createRequire } from "node:module";
+import { createRequire, registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
 import assert from "node:assert";
 import process from "node:process";
 import {
@@ -590,6 +591,7 @@ const internalUtilStandIn = new Proxy(
 // to this runner's assertions and infrastructure too.
 const testInfrastructure = new Map([
   [join(nodeTestRoot, "common/index.js"), common],
+  [join(nodeTestRoot, "common/index.mjs"), common],
   [join(nodeTestRoot, "common/countdown.js"), Countdown],
   [join(nodeTestRoot, "common/gc.js"), commonGc],
   [join(nodeTestRoot, "common/crypto.js"), commonCrypto],
@@ -598,12 +600,99 @@ const testInfrastructure = new Map([
   [join(nodeTestRoot, "common/hijackstdio.js"), hijackstdio],
 ]);
 
+const esmRegistryName = "nts.conformance.esm-modules";
+const esmRegistry = new Map();
+globalThis[Symbol.for(esmRegistryName)] = esmRegistry;
+
+/** Build one live host-object bridge that both `import` and `require` can use. */
+function esmBridgeSource(key, value) {
+  const lines = [
+    `const value = globalThis[Symbol.for(${JSON.stringify(esmRegistryName)})].get(${JSON.stringify(key)});`,
+    "export default value;",
+  ];
+  let index = 0;
+  for (const name of Object.keys(value)) {
+    if (name === "default" || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) continue;
+    const local = `binding${index++}`;
+    lines.push(`const ${local} = value[${JSON.stringify(name)}];`);
+    lines.push(`export { ${local} as ${name} };`);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Install per-process ESM redirects for the subject and Node test helpers.
+ *
+ * The bridge modules contain no behavior: each exports the exact object the
+ * CommonJS shim already exposes. Module hooks are preferable to source
+ * rewriting here because `.mjs` ordering and top-level await remain Node's.
+ */
+function installEsmHooks() {
+  const sources = new Map();
+  const bareModules = new Map();
+  const files = new Map();
+  let nextKey = 0;
+
+  const bridge = (label, value) => {
+    const key = `${label}:${nextKey++}`;
+    const url = `nts-conformance:${encodeURIComponent(key)}`;
+    esmRegistry.set(key, value);
+    sources.set(url, esmBridgeSource(key, value));
+    return url;
+  };
+
+  bareModules.set(moduleName, bridge(`module:${moduleName}`, underTest));
+  for (const [name, implementation] of siblings) {
+    bareModules.set(name, bridge(`module:${name}`, implementation));
+  }
+  if (internals !== null) {
+    for (const [name, implementation] of Object.entries(internals)) {
+      bareModules.set(name, bridge(`internal:${name}`, implementation));
+    }
+  }
+  for (const [path, implementation] of testInfrastructure) {
+    files.set(pathToFileURL(path).href, bridge(`test:${path}`, implementation));
+  }
+
+  registerHooks({
+    resolve(specifier, context, nextResolve) {
+      const bare = specifier.replace(/^node:/, "");
+      const direct = bareModules.get(bare);
+      if (direct !== undefined) {
+        if (bare === moduleName || bare.startsWith(`${moduleName}/`)) {
+          revealLoadTimeWarnings();
+        }
+        return { url: direct, format: "module", shortCircuit: true };
+      }
+      const resolved = nextResolve(specifier, context);
+      const infrastructure = files.get(resolved.url);
+      return infrastructure === undefined
+        ? resolved
+        : { url: infrastructure, format: "module", shortCircuit: true };
+    },
+    load(url, context, nextLoad) {
+      const source = sources.get(url);
+      return source === undefined
+        ? nextLoad(url, context)
+        : { format: "module", source, shortCircuit: true };
+    },
+  });
+}
+
+/** Execute a real ESM test, including its top-level await. */
+async function executeEsmTest(modulePath) {
+  installEsmHooks();
+  await import(pathToFileURL(modulePath).href);
+}
+
+function revealLoadTimeWarnings() {
+  for (const args of loadTimeWarnings.splice(0)) realEmitWarning(...args);
+}
+
 function shimmedRequire(id, fromFile) {
   const bare = id.replace(/^node:/, "");
   if (bare === moduleName) {
-    for (const args of loadTimeWarnings.splice(0)) {
-      realEmitWarning(...args);
-    }
+    revealLoadTimeWarnings();
     return underTest;
   }
   if (bare.startsWith(`${moduleName}/`)) {
@@ -752,6 +841,21 @@ try {
   // the body therefore happens inside this callback, and the harness owns no
   // promise while the test is running.
   hostSetImmediate(() => {
+    if (file.endsWith(".mjs")) {
+      executeEsmTest(file).then(
+        () => judgeWhenQuiet(),
+        (error) => {
+          if (error instanceof Skip || error?.name === "Skip") {
+            reportFailure(error);
+          } else if (!uncaughtHandler?.(underTest, error)) {
+            reportFailure(error);
+          } else {
+            judgeWhenQuiet();
+          }
+        },
+      );
+      return;
+    }
     try {
       // `globalThis.process`, not the captured one: node hands the CJS wrapper
       // the real global, so when `node:process` has installed itself the test

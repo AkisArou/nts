@@ -56,6 +56,7 @@ import {
   validateBufferArray,
   vectorPosition,
 } from "./vector-io.ts";
+import { normalizeReadPosition } from "./read-position.ts";
 import {
   appendMkdtempSuffix,
   bytePathForBinding,
@@ -220,25 +221,17 @@ function checkErrno(syscall: string, path?: string, dest?: string): void {
   }
 }
 
-function validateIoPosition(position: number | null, length: number): number {
+function validateIoPosition(position: number | null): number {
   if (position === null) return -1;
-  validateInteger(position, "position", -1, Number.MAX_SAFE_INTEGER - length);
+  validateInteger(position, "position", -1);
   return position;
 }
 
-function readAt(
-  fd: number,
-  length: number,
-  position: number | bigint | null,
-): number[] {
+function readAt(fd: number, length: number, position: number | bigint): number[] {
   if (typeof position === "bigint") {
-    const maximum = 2n ** 63n - 1n - BigInt(length);
-    if (position < -1n || position > maximum) {
-      throw new ERR_OUT_OF_RANGE("position", `>= -1 && <= ${maximum}`, position);
-    }
     return nts_fs_read_bigint(fd, length, position);
   }
-  return nts_fs_read(fd, length, validateIoPosition(position, length));
+  return nts_fs_read(fd, length, position);
 }
 
 function validateReadBounds(offset: number, length: number, size: number): void {
@@ -283,7 +276,7 @@ export function readSync(
   buffer: Buffer,
   offsetOrOptions?: number | ReadOptions | null,
   suppliedLength?: number,
-  suppliedPosition?: number | bigint | null,
+  suppliedPosition?: unknown,
 ): number {
   if (!(buffer instanceof Uint8Array)) {
     throw new ERR_INVALID_ARG_TYPE("buffer", ["Buffer", "TypedArray", "DataView"], buffer);
@@ -291,7 +284,7 @@ export function readSync(
 
   let offset: number;
   let length: number;
-  let position: number | bigint | null;
+  let position: unknown;
   if (arguments.length <= 3 || typeof offsetOrOptions === "object") {
     if (offsetOrOptions !== undefined && offsetOrOptions !== null) {
       // Besides validating the JS boundary, this rejects arrays while still
@@ -318,13 +311,14 @@ export function readSync(
   // checking its bounds.
   length |= 0;
   if (length < 0) throw new ERR_OUT_OF_RANGE("length", ">= 0", length);
+  const normalizedPosition = normalizeReadPosition(position, length);
   if (length === 0) return 0;
   if (buffer.length === 0) {
     throw new ERR_INVALID_ARG_VALUE("buffer", buffer, "is empty and cannot be written");
   }
   validateReadBounds(offset, length, buffer.length);
   validateFileDescriptor(fd);
-  const bytes = readAt(fd, length, position);
+  const bytes = readAt(fd, length, normalizedPosition);
   checkErrno("read");
   let target = offset;
   for (const byte of bytes) {
@@ -411,7 +405,7 @@ export function writeSync(
   validateFileDescriptor(fd);
 
   const slice = Array.from(buffer.subarray(start, start + count));
-  const written = nts_fs_write(fd, slice, validateIoPosition(at, count));
+  const written = nts_fs_write(fd, slice, validateIoPosition(at));
   check(written, "write");
   return written;
 }

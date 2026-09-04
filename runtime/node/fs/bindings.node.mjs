@@ -53,6 +53,12 @@ function attemptNumber(fn) {
   }
 }
 
+// The TypeScript layer has already normalized every timestamp to UNIX
+// seconds. Passing a negative number through Node's public fs API would
+// normalize it a second time and replace it with `Date.now()`; a Date preserves
+// the negative instant and therefore matches the direct libuv C seam.
+const dateFromUnixSeconds = (seconds) => new Date(seconds * 1000);
+
 const statColumns = (s) => [
   s.dev, s.mode, s.nlink, s.uid, s.gid, s.rdev, s.blksize, s.ino, s.size,
   s.blocks, s.atimeMs, s.mtimeMs, s.ctimeMs, s.birthtimeMs,
@@ -225,7 +231,8 @@ globalThis.nts_fs_chown = (path, uid, gid) => status(() => fs.chownSync(path, ui
 globalThis.nts_fs_lchown = (path, uid, gid) => status(() => fs.lchownSync(path, uid, gid));
 globalThis.nts_fs_lchown_bytes = (path, uid, gid) =>
   status(() => fs.lchownSync(Buffer.from(path), uid, gid));
-globalThis.nts_fs_utimes = (path, atime, mtime) => status(() => fs.utimesSync(path, atime, mtime));
+globalThis.nts_fs_utimes = (path, atime, mtime) =>
+  status(() => fs.utimesSync(path, dateFromUnixSeconds(atime), dateFromUnixSeconds(mtime)));
 globalThis.nts_fs_link = (from, to) => status(() => fs.linkSync(from, to));
 globalThis.nts_fs_symlink = (target, at) => status(() => fs.symlinkSync(target, at));
 globalThis.nts_fs_symlink_bytes = (target, at, flags) =>
@@ -477,9 +484,9 @@ globalThis.nts_fs_lchown_bytes_async = (path, uid, gid, cb) =>
   fs.lchown(Buffer.from(path), uid, gid, relay(cb));
 globalThis.nts_fs_ftruncate_async = (fd, length, cb) => fs.ftruncate(fd, length, relay(cb));
 globalThis.nts_fs_utimes_async = (path, atime, mtime, cb) =>
-  fs.utimes(path, atime, mtime, relay(cb));
+  fs.utimes(path, dateFromUnixSeconds(atime), dateFromUnixSeconds(mtime), relay(cb));
 globalThis.nts_fs_lutimes_async = (path, atime, mtime, cb) =>
-  fs.lutimes(path, atime, mtime, relay(cb));
+  fs.lutimes(path, dateFromUnixSeconds(atime), dateFromUnixSeconds(mtime), relay(cb));
 globalThis.nts_fs_fsync_async = (fd, cb) => fs.fsync(fd, relay(cb));
 globalThis.nts_fs_fdatasync_async = (fd, cb) => fs.fdatasync(fd, relay(cb));
 globalThis.nts_fs_mkdtemp_async = (template, cb) =>
@@ -546,14 +553,14 @@ globalThis.nts_fs_ftruncate = (fd, length) => status(() => fs.ftruncateSync(fd, 
 globalThis.nts_fs_fchmod = (fd, mode) => status(() => fs.fchmodSync(fd, mode));
 globalThis.nts_fs_fchown = (fd, uid, gid) => status(() => fs.fchownSync(fd, uid, gid));
 globalThis.nts_fs_futimes = (fd, atime, mtime) =>
-  status(() => fs.futimesSync(fd, atime, mtime));
+  status(() => fs.futimesSync(fd, dateFromUnixSeconds(atime), dateFromUnixSeconds(mtime)));
 globalThis.nts_fs_lutimes = (path, atime, mtime) =>
-  status(() => fs.lutimesSync(path, atime, mtime));
+  status(() => fs.lutimesSync(path, dateFromUnixSeconds(atime), dateFromUnixSeconds(mtime)));
 
 globalThis.nts_fs_fchmod_async = (fd, mode, cb) => fs.fchmod(fd, mode, relay(cb));
 globalThis.nts_fs_fchown_async = (fd, uid, gid, cb) => fs.fchown(fd, uid, gid, relay(cb));
 globalThis.nts_fs_futimes_async = (fd, atime, mtime, cb) =>
-  fs.futimes(fd, atime, mtime, relay(cb));
+  fs.futimes(fd, dateFromUnixSeconds(atime), dateFromUnixSeconds(mtime), relay(cb));
 
 // The watchers. Node's own `fs.watch` and `fs.watchFile` are the loop's
 // file-watching handles here; the handle is a number across the seam because

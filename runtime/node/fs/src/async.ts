@@ -50,6 +50,7 @@ import {
   type ReaddirOptions,
   type ReaddirResult,
 } from "./readdir.ts";
+import { normalizeReadPosition } from "./read-position.ts";
 import {
   appendMkdtempSuffix,
   bytePathForBinding,
@@ -337,22 +338,6 @@ function requireReadCallback(value: unknown): ReadCallback {
   return value;
 }
 
-function readPosition(
-  position: number | bigint | null,
-  length: number,
-): number | bigint {
-  if (position === null) return -1;
-  if (typeof position === "bigint") {
-    const maximum = 2n ** 63n - 1n - BigInt(length);
-    if (position < -1n || position > maximum) {
-      throw new ERR_OUT_OF_RANGE("position", `>= -1 && <= ${maximum}`, position);
-    }
-    return position;
-  }
-  validateInteger(position, "position", -1, Number.MAX_SAFE_INTEGER - length);
-  return position;
-}
-
 export function read(fd: number, callback: ReadCallback): void;
 export function read(
   fd: number,
@@ -475,7 +460,7 @@ export function read(
   if (length < 0) {
     throw new ERR_OUT_OF_RANGE("length", ">= 0", length);
   }
-  const normalizedPosition = readPosition(readAt, length);
+  const normalizedPosition = normalizeReadPosition(readAt, length);
   if (length === 0) {
     nextTick(() => callback(null, 0, buffer));
     return;

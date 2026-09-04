@@ -133,12 +133,12 @@ if (existsSync(additionalSuitesPath)) {
     .filter((line) => line && !line.startsWith("#"))) {
     const suite = join(ROOT, "third_party/node/test", suiteName);
     if (!existsSync(suite)) continue;
-    if (suiteName.endsWith(".js")) {
+    if (suiteName.endsWith(".js") || suiteName.endsWith(".mjs")) {
       upstream.push({ name: suiteName, path: suite });
       continue;
     }
     for (const fileName of readdirSync(suite)) {
-      if (!/^test-.*\.js$/.test(fileName)) continue;
+      if (!/^test-.*\.(?:js|mjs)$/.test(fileName)) continue;
       upstream.push({ name: `${suiteName}/${fileName}`, path: join(suite, fileName) });
     }
   }
