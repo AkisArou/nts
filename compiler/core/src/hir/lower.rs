@@ -2461,6 +2461,23 @@ fn spell(kind: u16, fallback: &str) -> String {
     )
 }
 
+
+/// Whether a type declares a property, and whether the answer is usable.
+enum Declares {
+    /// Declared, and always present.
+    Always,
+    /// Not declared, so `in` is false for a value of this type.
+    Never,
+    /// Declared `x?: T`. The slot exists here whether or not the program wrote
+    /// it, and JavaScript can tell the difference -- `{}` and
+    /// `{ a: undefined }` disagree about `"a" in o` -- so this is refused
+    /// rather than answered by the slot.
+    Optionally,
+    /// Not an object type. `"a" in 5` is a `TypeError` in JavaScript, and a
+    /// union arm that is not an object makes the whole test one.
+    NotAnObject,
+}
+
 /// How an operator token is written, for a refusal that has to name it.
 ///
 /// By kind, because a token node carries no text. The number is the fallback
@@ -8721,6 +8738,142 @@ impl<'a> FuncBuilder<'a> {
         self.terminate(Terminator::Unreachable);
         Ok(())
     }
+
+    /// `"k" in value`.
+    ///
+    /// The same operation as `instanceof` with a different question in front of
+    /// it. `instanceof` asks whether the value's class is one of a set the
+    /// compiler computed from the hierarchy; this asks whether it is one of the
+    /// set that *declares a property* -- and the set is computed the same way,
+    /// from the static type, so it needs no new operation, no runtime helper,
+    /// and nothing added to a descriptor.
+    ///
+    /// That is the whole design, and the reason it is small. A property table
+    /// in the descriptor was the first plan: names in rodata beside the
+    /// reference map, and a `nts_has_property` that walks them. It would have
+    /// been an ABI change in three backends to answer a question the compiler
+    /// already knows the answer to.
+    ///
+    /// # What it declines
+    ///
+    /// A key the compiler cannot see -- `k in o` for a variable `k` -- because
+    /// the set cannot be computed without the name.
+    ///
+    /// An **optional** property, which is the decision `docs/conformance`
+    /// recorded as the blocker for this row. The slot exists here whether or
+    /// not the program ever wrote it, and JavaScript distinguishes `{}` from
+    /// `{ a: undefined }`: `"a" in` the first is false and in the second is
+    /// true. Nothing in this representation separates them, so the honest
+    /// answer is a refusal rather than a slot that is always there.
+    ///
+    /// A union arm that is not an object type, because `"a" in 5` throws.
+    fn lower_in(&mut self, id: NodeId, lhs: NodeId, rhs: NodeId) -> Result<ValueId, Diagnostic> {
+        let Some(key) = self.literal_key(lhs) else {
+            return Err(self.unsupported(
+                lhs,
+                "an `in` whose key is not a literal the compiler can see",
+            ));
+        };
+        let Some(ty) = self.snapshot.node_types.get(&rhs).copied() else {
+            return Err(self.unsupported(rhs, "an `in` on a value with no type"));
+        };
+        let members = match &self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
+            Some(TypeKind::Union(members)) => members.clone(),
+            Some(_) => vec![ty],
+            None => return Err(self.unsupported(rhs, "an `in` on a value with no type")),
+        };
+
+        // Which arms declare it. The set is what the test becomes.
+        let mut declaring: Vec<TypeId> = Vec::new();
+        for member in &members {
+            match self.declares(*member, &key) {
+                Declares::Always => declaring.push(*member),
+                Declares::Never => {}
+                Declares::Optionally => {
+                    return Err(self.unsupported(
+                        id,
+                        &format!(
+                            "an `in` naming `{key}`, which is optional -- its slot exists here \
+                             whether or not it was written, and `{{}}` and `{{ {key}: undefined }}` \
+                             disagree in JavaScript"
+                        ),
+                    ));
+                }
+                Declares::NotAnObject => {
+                    return Err(self.unsupported(
+                        rhs,
+                        "an `in` on something that is not an object, which JavaScript throws for",
+                    ));
+                }
+            }
+        }
+
+        let origin = self.origin(id);
+        // Every arm declares it, or none does. The operand is still evaluated:
+        // `in` has no short circuit and the left side of `&&` chains here often
+        // has an effect.
+        if declaring.len() == members.len() || declaring.is_empty() {
+            let answer = declaring.len() == members.len();
+            self.lower_expression(rhs)?;
+            return Ok(self.push(OpKind::ConstBool(answer), HirType::Bool, origin));
+        }
+
+        // Mixed, so the answer is the value's own class. Every arm needs a
+        // layout before the test can name it -- `layout_of` is what builds one,
+        // and a type that reaches here without one would be an `InstanceOf`
+        // against a class no backend has.
+        for member in &declaring {
+            self.layout_of(id, *member)?;
+        }
+        declaring.sort_unstable_by_key(|ty| ty.0);
+        declaring.dedup();
+
+        let value = self.lower_expression(rhs)?;
+        // Erased first, for the reason `lower_instanceof` gives: the operation
+        // asks an object for its class, and a value that might not be one has
+        // to say so.
+        let value = match self.values[value.0 as usize].ty {
+            HirType::Erased => value,
+            _ => self.push(OpKind::Erase { value }, HirType::Erased, origin.clone()),
+        };
+        Ok(self.push(
+            OpKind::InstanceOf {
+                value,
+                classes: declaring,
+            },
+            HirType::Bool,
+            origin,
+        ))
+    }
+
+    /// Whether a type declares a property under this name.
+    fn declares(&self, ty: TypeId, key: &str) -> Declares {
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return Declares::NotAnObject;
+        };
+        let TypeKind::Object { properties } = &record.kind else {
+            return Declares::NotAnObject;
+        };
+        match properties.iter().find(|property| property.name == key) {
+            Some(property) if property.optional => Declares::Optionally,
+            Some(_) => Declares::Always,
+            None => Declares::Never,
+        }
+    }
+
+    /// The text of a string literal used as a key, where it is one.
+    fn literal_key(&self, node: NodeId) -> Option<String> {
+        match &self
+            .snapshot
+            .types
+            .get(self.snapshot.node_types.get(&node)?.0 as usize)?
+            .kind
+        {
+            TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+            _ => None,
+        }
+    }
+
 
     /// `x instanceof C`.
     ///
@@ -16389,6 +16542,10 @@ impl<'a> FuncBuilder<'a> {
 
         if token == syntax::INSTANCEOF_KEYWORD {
             return self.lower_instanceof(id, *lhs_node, *rhs_node);
+        }
+
+        if token == syntax::IN_KEYWORD {
+            return self.lower_in(id, *lhs_node, *rhs_node);
         }
 
         // `&&` and `||` must not evaluate their right operand unless the left

@@ -56,7 +56,8 @@ a backlog.
 | ✅ | comparison, equality | `< > <= >= === !==`, and `==`/`!=` where nothing coerces |
 | ◐ | `==` that **coerces** | refused — see below |
 | ✅ | logical | `&& \|\| !` |
-| ✗ | `in` | needs a decision about an optional property, whose slot exists here and not in JavaScript |
+| ✅ | `in` with a literal key | the set of types declaring the property comes from the static type, so it is `instanceof` with a different question: a constant where every arm or no arm declares it, a class test where some do |
+| ✗ | `in` naming an **optional** property, or with a computed key | two reasons, both about the *key* rather than the operator. An optional property's slot exists here whether or not it was written, and JavaScript distinguishes `{}` from `{ x: undefined }` — a presence bit separate from the tag would answer it. A computed key leaves no set to test against, which needs the descriptor property table this design exists to avoid. Both refuse by name, so `"y" in o` on the same object is unaffected |
 | ✅ | unary | `+x -x`, `++ --` prefix and postfix |
 | ✅ | compound assignment | `+= -= *= /= %= **= &= \|= ^= <<= >>= >>>=` |
 | ✅ | conditional | `c ? a : b`, nested |

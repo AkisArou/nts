@@ -122,3 +122,42 @@ export function reassignedFunction(n: number): number {
   }
   return current(n);
 }
+
+// `in` naming an **optional** property.
+//
+// The slot exists here whether or not the program wrote it -- an optional
+// property holds `T | undefined` and a fresh allocation is zeroed, which is
+// already the `undefined` tag. That is the right representation for reading the
+// property and the wrong one for asking whether it is there, because JavaScript
+// distinguishes `{}` from `{ limit: undefined }` and this does not: `"limit" in`
+// the first is false and in the second is true, and both are the same object
+// here.
+//
+// A presence bit separate from the tag would answer it. That is a layout change
+// for a question no program in the profile asks, so the refusal names the
+// property rather than the feature -- `"label" in o` on the same object is
+// supported, and `examples/in-operator` has it.
+interface Limits {
+  limit?: number;
+  label: number;
+}
+
+export function inOnAnOptionalProperty(n: number): number {
+  const o: Limits = { limit: n, label: 1 };
+  return "limit" in o ? 1 : 0;
+}
+
+// `in` whose key is not a literal.
+//
+// The set of types declaring a property is computed from the name, so without
+// the name there is no set. Answering it would need the property table in the
+// descriptor that this design exists to avoid.
+interface Named {
+  a: number;
+}
+
+export function inWithAComputedKey(n: number): number {
+  const key = n > 0 ? "a" : "b";
+  const o: Named = { a: 1 };
+  return key in o ? 1 : 0;
+}
