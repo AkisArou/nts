@@ -1,50 +1,24 @@
 package nts.rt;
 
-/**
- * The event loop's two queues and the checkpoint that drains them.
- *
- * <p><b>Not `CompletableFuture`, and `docs/async.md` says why in one line:</b>
- * "handing that to a platform primitive with different ordering changes what
- * programs print". Promise semantics, microtasks and ticks are the runtime's,
- * per runtime family, and there are two families -- native and JVM. The
- * algorithm below is not reasoned-to; it is what node does, and the record of
- * verifying it is a program that queues a timer, an immediate, a tick, and a
- * microtask that enqueues a second tick.
- *
- * <p>Depth rather than a flag, because a capability may re-enter TypeScript
- * synchronously and only the outermost return is a checkpoint.
- *
- * <p>The two-queue shape is not a Node special case bolted on: a profile that
- * never enqueues a tick makes the inner loop a no-op and this *is* the
- * ECMAScript checkpoint. Adding `nextTick` later would have changed the
- * ordering of programs that already worked.
- */
+import java.util.ArrayDeque;
+import java.util.Arrays;
+
+/** Thread-confined tick/microtask queues and a cancellable virtual-time timer heap. */
 public final class NtsLoop {
     private NtsLoop() {}
-
-    private static final java.util.ArrayDeque<NtsResumable> MICROTASKS =
-        new java.util.ArrayDeque<>();
-    private static final java.util.ArrayDeque<NtsResumable> TICKS =
-        new java.util.ArrayDeque<>();
+    // ArrayDeque already stores references without allocating a node per enqueue.
+    private static final ArrayDeque<NtsResumable> MICROTASKS = new ArrayDeque<NtsResumable>();
+    private static final ArrayDeque<NtsResumable> TICKS = new ArrayDeque<NtsResumable>();
     private static int depth;
 
-    /**
-     * One pending timer.
-     *
-     * <p>`due` and `seq` together are the order: `docs/async.md` requires
-     * timers in delay order with equal deadlines in creation order, and the
-     * same document records the one time two hosts disagreed about exactly
-     * this. `seq` never resets, so two timers created in the same virtual
-     * millisecond keep the order they were written in.
-     */
     private static final class Timer {
-        final double due;
-        final long seq;
+        double due;
+        long seq;
         final double id;
         final NtsCallback callback;
         final boolean repeating;
         final double interval;
-
+        int heapIndex;
         Timer(double due, long seq, double id, NtsCallback callback, boolean repeating, double interval) {
             this.due = due;
             this.seq = seq;
@@ -54,177 +28,171 @@ public final class NtsLoop {
             this.interval = interval;
         }
     }
-
-    // A list rather than a PriorityQueue: `clearTimeout` removes by id, and a
-    // heap makes that a linear scan anyway. A program with enough pending
-    // timers for this to matter is not one this compiler has met.
-    private static final java.util.ArrayList<Timer> TIMERS = new java.util.ArrayList<>();
+    private static final Timer[] EMPTY_TIMERS = new Timer[0];
+    private static Timer[] heap = EMPTY_TIMERS;
+    // Open addressing by numeric timer id: no Double keys or HashMap nodes.
+    private static Timer[] byId = EMPTY_TIMERS;
+    private static int size;
+    private static int idThreshold;
     private static double now;
     private static long sequence;
     private static double nextId = 1.0;
 
-    /**
-     * Whole milliseconds, floored at zero and capped at 2^53-1.
-     *
-     * <p>A transliteration of `nts_delay`, and it is in the *runtime* rather
-     * than in the loop for the reason `docs/async.md` gives: each host
-     * converting the delay itself made "milliseconds" mean two things, and
-     * `setTimeout(a, 1.5); setTimeout(b, 1.0)` came out in opposite orders on
-     * two hosts of the same program. NaN floors to zero, because `!(x > 0)` is
-     * true of it -- which is what the C expression says and what node does.
-     */
     static double delay(double milliseconds) {
-        if (!(milliseconds > 0.0)) {
-            return 0.0;
-        }
-        if (milliseconds > 9007199254740991.0) {
-            return 9007199254740991.0;
-        }
-        return Math.floor(milliseconds);
+        if (!(milliseconds > 0.0)) { return 0.0; }
+        return milliseconds > 9007199254740991.0 ? 9007199254740991.0 : Math.floor(milliseconds);
     }
-
-    /** Queue a timer and return the id `clearTimeout` will name it by. */
     public static double postDelayed(NtsCallback callback, double milliseconds, boolean repeating) {
+        if (nextId > 9007199254740991.0) {
+            throw new NtsRefusal("timer id space exhausted");
+        }
+        if (size == heap.length) {
+            heap = Arrays.copyOf(heap, NtsArrays.growCapacity(heap.length, size + 1));
+        }
+        if (size >= idThreshold) { growIdIndex(); }
         double wait = delay(milliseconds);
-        double id = nextId;
-        nextId += 1.0;
-        TIMERS.add(new Timer(now + wait, sequence++, id, callback, repeating, wait));
+        double id = nextId++;
+        Timer timer = new Timer(now + wait, sequence++, id, callback, repeating, wait);
+        int bucket = idHash(id) & (byId.length - 1);
+        while (byId[bucket] != null) { bucket = (bucket + 1) & (byId.length - 1); }
+        byId[bucket] = timer;
+        siftUp(size++, timer);
         return id;
     }
-
-    /**
-     * Cancel a timer.
-     *
-     * <p>An id that already fired, or one from another turn, is a no-op --
-     * which is what `clearTimeout` specifies and what the ordering contract in
-     * `docs/async.md` names: "an id that was never issued disturbing nothing".
-     */
     public static void cancelDelayed(double id) {
-        for (int at = 0; at < TIMERS.size(); at++) {
-            if (TIMERS.get(at).id == id) {
-                TIMERS.remove(at);
-                return;
-            }
+        int bucket = findId(id);
+        if (bucket < 0) { return; }
+        Timer timer = byId[bucket];
+        removeId(bucket);
+        removeHeap(timer.heapIndex);
+    }
+    private static int idHash(double id) {
+        long x = (long) id;
+        int h = (int) (x ^ (x >>> 32));
+        h ^= h >>> 16;
+        h *= 0x7feb352d;
+        h ^= h >>> 15;
+        return h;
+    }
+    private static int findId(double id) {
+        if (size == 0 || !(id >= 1.0) || id > 9007199254740991.0 || id != (long) id) { return -1; }
+        int mask = byId.length - 1;
+        int p = idHash(id) & mask;
+        for (;;) {
+            Timer timer = byId[p];
+            if (timer == null) { return -1; }
+            if (timer.id == id) { return p; }
+            p = (p + 1) & mask;
         }
     }
-
-    /** The earliest pending timer, or `null`. */
-    private static Timer earliest() {
-        Timer best = null;
-        for (Timer timer : TIMERS) {
-            if (best == null || timer.due < best.due
-                    || (timer.due == best.due && timer.seq < best.seq)) {
-                best = timer;
-            }
+    private static void growIdIndex() {
+        if (byId.length >= (1 << 30)) { throw new OutOfMemoryError("timer index capacity exhausted"); }
+        int capacity = byId.length == 0 ? 16 : byId.length << 1;
+        Timer[] replacement = new Timer[capacity];
+        int mask = capacity - 1;
+        for (int i = 0; i < size; i++) {
+            Timer timer = heap[i];
+            int p = idHash(timer.id) & mask;
+            while (replacement[p] != null) { p = (p + 1) & mask; }
+            replacement[p] = timer;
         }
-        return best;
+        byId = replacement;
+        idThreshold = capacity - (capacity >>> 2);
     }
-
-    /**
-     * Advance virtual time to the earliest deadline and run that one timer.
-     *
-     * <p>The clock *advances*: `docs/async.md` is explicit that a fake clock
-     * which only ticks when told strands every `setTimeout`. One timer per
-     * call rather than every timer at that deadline, because a checkpoint runs
-     * between tasks and firing two before it would put a microtask queued by
-     * the first behind the second.
-     */
+    private static void removeId(int hole) {
+        int mask = byId.length - 1;
+        int scan = (hole + 1) & mask;
+        Timer timer;
+        while ((timer = byId[scan]) != null) {
+            int home = idHash(timer.id) & mask;
+            if (((scan - home) & mask) >= ((scan - hole) & mask)) {
+                byId[hole] = timer;
+                hole = scan;
+            }
+            scan = (scan + 1) & mask;
+        }
+        byId[hole] = null;
+    }
+    private static boolean before(Timer a, Timer b) {
+        return a.due < b.due || (a.due == b.due && a.seq < b.seq);
+    }
+    private static void siftUp(int at, Timer timer) {
+        while (at > 0) {
+            int parent = (at - 1) >>> 1;
+            Timer above = heap[parent];
+            if (!before(timer, above)) { break; }
+            heap[at] = above;
+            above.heapIndex = at;
+            at = parent;
+        }
+        heap[at] = timer;
+        timer.heapIndex = at;
+    }
+    private static void siftDown(int at, Timer timer) {
+        int half = size >>> 1;
+        while (at < half) {
+            int child = (at << 1) + 1;
+            if (child + 1 < size && before(heap[child + 1], heap[child])) { child++; }
+            Timer below = heap[child];
+            if (!before(below, timer)) { break; }
+            heap[at] = below;
+            below.heapIndex = at;
+            at = child;
+        }
+        heap[at] = timer;
+        timer.heapIndex = at;
+    }
+    private static void removeHeap(int at) {
+        Timer removed = heap[at];
+        int last = --size;
+        Timer moved = heap[last];
+        heap[last] = null;
+        removed.heapIndex = -1;
+        if (at < last) {
+            if (at > 0 && before(moved, heap[(at - 1) >>> 1])) { siftUp(at, moved); }
+            else { siftDown(at, moved); }
+        }
+    }
     private static boolean fireEarliest() {
-        Timer timer = earliest();
-        if (timer == null) {
-            return false;
-        }
-        TIMERS.remove(timer);
-        if (timer.due > now) {
-            now = timer.due;
-        }
+        if (size == 0) { return false; }
+        Timer timer = heap[0];
+        if (timer.due > now) { now = timer.due; }
         if (timer.repeating) {
-            TIMERS.add(new Timer(now + timer.interval, sequence++, timer.id, timer.callback, true,
-                timer.interval));
+            // Re-arm before the callback, so clearInterval inside it can cancel
+            // the next occurrence. Reuse the same Timer rather than allocate one.
+            timer.due = now + timer.interval;
+            timer.seq = sequence++;
+            siftDown(0, timer);
+        } else {
+            removeId(findId(timer.id));
+            removeHeap(0);
         }
         timer.callback.call();
         return true;
     }
-
-    public static void enter() {
-        depth++;
-    }
-
+    public static void enter() { depth++; }
     public static void leave() {
-        depth--;
-        if (depth == 0) {
-            checkpoint();
-        }
+        if (--depth == 0) { checkpoint(); }
     }
-
-    public static void microtask(NtsResumable task) {
-        MICROTASKS.addLast(task);
-    }
-
-    public static void tick(NtsResumable task) {
-        TICKS.addLast(task);
-    }
-
-    /**
-     * The checkpoint, verbatim from `docs/async.md` section 3.
-     *
-     * <p>The outer loop is what makes a tick enqueued *by a microtask* run in a
-     * second pass of the same checkpoint rather than in the next macrotask --
-     * one of the two details tests already depend on.
-     */
+    public static void microtask(NtsResumable task) { MICROTASKS.addLast(task); }
+    public static void tick(NtsResumable task) { TICKS.addLast(task); }
     private static void checkpoint() {
         do {
-            NtsResumable tick;
-            while ((tick = TICKS.pollFirst()) != null) {
-                tick.resume();
-            }
-            NtsResumable micro;
-            while ((micro = MICROTASKS.pollFirst()) != null) {
-                micro.resume();
-            }
+            NtsResumable task;
+            while ((task = TICKS.pollFirst()) != null) { task.resume(); }
+            while ((task = MICROTASKS.pollFirst()) != null) { task.resume(); }
         } while (!TICKS.isEmpty());
     }
-
-    /**
-     * Run one queued task, and say whether there was one.
-     *
-     * <p>Ticks before microtasks, which is the checkpoint's order and not an
-     * arbitrary choice. The harness needs this rather than {@link #drain()}
-     * because it runs the loop *until a particular promise settles*, not until
-     * the loop falls quiet -- `await` on node returns when its promise does,
-     * and the two differ as soon as timers exist: a program that left another
-     * timer pending would have it fire on this side and not on node's.
-     */
     public static boolean step() {
         NtsResumable next = TICKS.pollFirst();
-        if (next == null) {
-            next = MICROTASKS.pollFirst();
-        }
-        if (next == null) {
-            // Nothing runnable. A pending timer is still work, and the clock
-            // moves to reach it -- the harness runs the loop until a promise
-            // settles, and a promise settled by a timer would otherwise never
-            // be reached.
-            return fireEarliest();
-        }
+        if (next == null) { next = MICROTASKS.pollFirst(); }
+        if (next == null) { return fireEarliest(); }
         next.resume();
         return true;
     }
-
-    /**
-     * Run everything queued, for a program whose `main` has returned.
-     *
-     * <p>A compiled program's entry point is not inside an `enter`/`leave`
-     * pair, so nothing would drain the queues on the way out and an `async`
-     * function's continuation would never run. This is that drain, and it is
-     * the whole of what a host would otherwise provide.
-     */
     public static void drain() {
         depth = 1;
         leave();
-        // A complete checkpoint between every pair of timers, which is the
-        // ordering `docs/async.md` section 3 specifies and the reason this is
-        // a loop rather than a sweep of the queue.
         while (fireEarliest()) {
             depth = 1;
             leave();

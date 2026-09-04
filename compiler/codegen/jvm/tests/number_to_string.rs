@@ -78,6 +78,26 @@ fn every_double_prints_the_characters_node_prints() {
   public static void main(String[] a) {{
     java.util.Random rng = new java.util.Random({SEED}L);
     StringBuilder out = new StringBuilder();
+    // Every power of two first, and the reason is worth the four lines.
+    //
+    // A random bit pattern is a hostile double and it found the last-digit bug
+    // this file was written for. It is *blind* to a value with a short binary
+    // representation: 46 of 2,098 powers of two printed with one digit too many
+    // -- `2^-24` as `5.9604644775390625e-8` where node prints
+    // `5.960464477539063e-8` -- and the same build got 0 wrong in 299,827
+    // random patterns. Random sampling cannot reach them, and a program
+    // produces them constantly.
+    for (int e = -1074; e <= 1023; e++) {{
+      double p = Math.scalb(1.0, e);
+      if (p == 0 || Double.isInfinite(p)) continue;
+      out.append(Long.toHexString(Double.doubleToRawLongBits(p))).append(' ')
+         .append(nts.rt.NtsRuntime.numberToString(p)).append('\n');
+      double h = p * 3;
+      if (!Double.isInfinite(h) && h != 0) {{
+        out.append(Long.toHexString(Double.doubleToRawLongBits(h))).append(' ')
+           .append(nts.rt.NtsRuntime.numberToString(h)).append('\n');
+      }}
+    }}
     for (int i = 0; i < {HOW_MANY}; i++) {{
       long bits = rng.nextLong();
       double d = Double.longBitsToDouble(bits);

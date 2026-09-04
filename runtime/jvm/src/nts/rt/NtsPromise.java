@@ -1,236 +1,139 @@
 package nts.rt;
 
-/**
- * A promise: a settled-or-not value and the frames waiting on it.
- *
- * <p>The reactions are `NtsResumable` frames rather than callbacks, because
- * that is what `Suspend` produces -- a suspended function's locals, on the
- * heap, with a named function to resume it. A settled promise enqueues its
- * waiters as **microtasks** rather than running them: `await` after a promise
- * has already resolved still yields, which is observable and is the difference
- * between this and a synchronous callback.
- *
- * <p>The value is an `NtsValue` whatever the promise settles with, which is
- * what `ManagedType::Promise`'s payload type says it is for: the payload is in
- * the type for the *compiler*, to choose which `fulfill` to emit and how to
- * read the value back, and there is one runtime layout regardless. So this is
- * not a monomorphization.
- */
+/** Single-threaded promise state with FIFO, asynchronous resumptions. */
 public final class NtsPromise {
-    private static final int PENDING = 0;
-    private static final int FULFILLED = 1;
-    private static final int REJECTED = 2;
-
-    private int state = PENDING;
+    private static final int PENDING = 0, FULFILLED = 1, REJECTED = 2;
+    private int state;
     private NtsValue settled = NtsValue.UNDEFINED_VALUE;
-    private NtsResumable[] waiting = new NtsResumable[2];
+    // Zero or one waiter needs no backing array; the common await case is inline.
+    private NtsResumable first;
+    private NtsResumable[] more;
     private int waitingCount;
 
     private NtsPromise() {}
-
-    public static NtsPromise newPromise() {
-        return new NtsPromise();
-    }
-
-    // ----- settling -------------------------------------------------------
+    public static NtsPromise newPromise() { return new NtsPromise(); }
 
     private static void settle(NtsPromise promise, int state, NtsValue value) {
-        if (promise.state != PENDING) {
-            // Already settled. The language says the first settlement wins and
-            // the rest are ignored -- not an error, which is why a second
-            // `resolve` in a `new Promise` executor is silent.
-            return;
-        }
+        if (promise.state != PENDING) { return; }
         promise.state = state;
         promise.settled = value;
-        for (int at = 0; at < promise.waitingCount; at++) {
-            NtsLoop.microtask(promise.waiting[at]);
-            promise.waiting[at] = null;
-        }
+        int n = promise.waitingCount;
+        NtsResumable first = promise.first;
+        NtsResumable[] more = promise.more;
+        promise.first = null;
+        promise.more = null;
         promise.waitingCount = 0;
+        if (n != 0) {
+            NtsLoop.microtask(first);
+            for (int i = 0; i < n - 1; i++) {
+                NtsLoop.microtask(more[i]);
+                more[i] = null;
+            }
+        }
     }
 
     public static void fulfillVoid(NtsPromise promise) {
         settle(promise, FULFILLED, NtsValue.UNDEFINED_VALUE);
     }
-
     public static void fulfillNumber(NtsPromise promise, double value) {
-        settle(promise, FULFILLED, NtsValue.ofNumber(value));
+        if (promise.state == PENDING) { settle(promise, FULFILLED, NtsValue.ofNumber(value)); }
     }
-
     public static void fulfillReference(NtsPromise promise, Object value) {
-        settle(promise, FULFILLED, NtsValue.ofObject(value));
+        if (promise.state == PENDING) { settle(promise, FULFILLED, NtsValue.ofObject(value)); }
     }
-
-    /**
-     * Fulfil with a reference whose tag the *compiler* knows.
-     *
-     * <p>`fulfillReference` derives the tag by looking at the object; this one
-     * is told, because a string and an object are both references here and only
-     * the type says which.
-     */
     public static void fulfillTagged(NtsPromise promise, Object value, int tag) {
-        settle(promise, FULFILLED, NtsValue.ofTagged(tag, value));
+        if (promise.state == PENDING) { settle(promise, FULFILLED, NtsValue.ofTagged(tag, value)); }
     }
-
     public static void fulfillValue(NtsPromise promise, NtsValue value) {
         settle(promise, FULFILLED, value);
     }
-
     public static void reject(NtsPromise promise, Object reason) {
-        settle(promise, REJECTED, NtsValue.ofObject(reason));
+        if (promise.state == PENDING) { settle(promise, REJECTED, NtsValue.ofObject(reason)); }
     }
-
-    /** Reject `result` with whatever `source` was rejected with. */
     public static void rejectWith(NtsPromise result, NtsPromise source) {
         settle(result, REJECTED, source.settled);
     }
+    public static boolean isRejected(NtsPromise promise) { return promise.state == REJECTED; }
+    public static boolean isSettled(NtsPromise promise) { return promise.state != PENDING; }
+    public static double number(NtsPromise promise) { return promise.settled.num; }
+    public static Object reference(NtsPromise promise) { return promise.settled.ref; }
+    public static NtsValue value(NtsPromise promise) { return promise.settled; }
 
-    // ----- reading --------------------------------------------------------
-
-    public static boolean isRejected(NtsPromise promise) {
-        return promise.state == REJECTED;
-    }
-
-    public static boolean isSettled(NtsPromise promise) {
-        return promise.state != PENDING;
-    }
-
-    public static double number(NtsPromise promise) {
-        return promise.settled.num;
-    }
-
-    public static Object reference(NtsPromise promise) {
-        return promise.settled.ref;
-    }
-
-    public static NtsValue value(NtsPromise promise) {
-        return promise.settled;
-    }
-
-    // ----- waiting --------------------------------------------------------
-
-    /**
-     * Resume `frame` when this promise settles -- or on the next microtask if
-     * it already has.
-     *
-     * <p>The already-settled case is the one that has to be a microtask rather
-     * than a direct call. `await` on a resolved promise still yields, and a
-     * program that printed in the other order would be wrong in a way no type
-     * catches.
-     */
     public static void subscribe(NtsPromise promise, NtsResumable frame) {
+        if (frame == null) { throw new NullPointerException("resumable frame"); }
         if (promise.state != PENDING) {
             NtsLoop.microtask(frame);
             return;
         }
-        if (promise.waitingCount == promise.waiting.length) {
-            promise.waiting = java.util.Arrays.copyOf(promise.waiting, promise.waitingCount * 2);
+        int n = promise.waitingCount;
+        if (n == 0) {
+            promise.first = frame;
+        } else {
+            if (promise.more == null) {
+                promise.more = new NtsResumable[4];
+            } else if (n - 1 == promise.more.length) {
+                promise.more = java.util.Arrays.copyOf(promise.more,
+                    NtsArrays.growCapacity(promise.more.length, n));
+            }
+            promise.more[n - 1] = frame;
         }
-        promise.waiting[promise.waitingCount++] = frame;
+        promise.waitingCount = n + 1;
     }
 
-    // ----- combinators (docs/async.md 5b) ---------------------------------
-
-    /**
-     * `Promise.all`: fulfils with the values in **input order** once every
-     * element has fulfilled, and rejects with the first rejection.
-     *
-     * <p>Subscribes to every element *before* returning, so an element that
-     * settles during the call is not missed -- which is why the loop below
-     * cannot exit early on a rejection.
-     *
-     * <p>`values` is allocated by the compiler because only it knows whether a
-     * payload is a double or a reference, and it is written in place rather
-     * than returned: the caller already has the array and its element type.
-     *
-     * <p>A named class rather than a lambda. `LambdaMetafactory` spins a hidden
-     * class through `invokedynamic`, which this runtime forbids outright --
-     * `runtime_jar.rs` asserts zero of them, because `invokedynamic` needs
-     * Android API 26 and that assertion is what keeps the Android path open for
-     * free.
-     */
+    private abstract static class All {
+        int remaining;
+        All(int remaining) { this.remaining = remaining; }
+        abstract void store(int index, NtsValue value);
+    }
+    private static final class AllNumbers extends All {
+        private final double[] values;
+        AllNumbers(int count, double[] values) { super(count); this.values = values; }
+        @Override void store(int index, NtsValue value) { values[index] = value.num; }
+    }
+    private static final class AllReferences extends All {
+        private final Object[] values;
+        AllReferences(int count, Object[] values) { super(count); this.values = values; }
+        @Override void store(int index, NtsValue value) { values[index] = value.ref; }
+    }
     private static final class Waiting implements NtsResumable {
         private final NtsPromise element;
         private final NtsPromise result;
         private final All group;
-
-        Waiting(NtsPromise element, NtsPromise result, All group) {
+        private final int index;
+        Waiting(NtsPromise element, NtsPromise result, All group, int index) {
             this.element = element;
             this.result = result;
             this.group = group;
+            this.index = index;
         }
-
-        @Override
-        public void resume() {
+        @Override public void resume() {
             if (group == null) {
-                // `race`: the first settlement of either kind wins, and every
-                // later one finds the result already settled and is ignored.
-                if (isRejected(element)) {
-                    settle(result, REJECTED, element.settled);
-                } else {
-                    settle(result, FULFILLED, element.settled);
-                }
-                return;
-            }
-            if (isRejected(element)) {
+                settle(result, element.state == REJECTED ? REJECTED : FULFILLED, element.settled);
+            } else if (element.state == REJECTED) {
                 settle(result, REJECTED, element.settled);
-                return;
-            }
-            group.store(element.settled);
-            if (--group.remaining == 0) {
-                settle(result, FULFILLED, NtsValue.UNDEFINED_VALUE);
+            } else {
+                // Input position, not settlement order. Duplicated inputs get distinct indices.
+                group.store(index, element.settled);
+                if (--group.remaining == 0) { settle(result, FULFILLED, NtsValue.UNDEFINED_VALUE); }
             }
         }
     }
-
-    /** Where one element's value goes, and how many are still outstanding. */
-    private abstract static class All {
-        int remaining;
-        int at;
-
-        abstract void store(NtsValue value);
-    }
-
     private static NtsPromise combine(NtsPromise[] promises, All group) {
         NtsPromise result = new NtsPromise();
         if (promises.length == 0) {
-            // `all` of nothing is already fulfilled; `race` of nothing never
-            // settles, which is what the language says and what this does.
-            if (group != null) {
-                settle(result, FULFILLED, NtsValue.UNDEFINED_VALUE);
-            }
+            if (group != null) { settle(result, FULFILLED, NtsValue.UNDEFINED_VALUE); }
             return result;
         }
-        for (NtsPromise element : promises) {
-            subscribe(element, new Waiting(element, result, group));
+        for (int i = 0; i < promises.length; i++) {
+            subscribe(promises[i], new Waiting(promises[i], result, group, i));
         }
         return result;
     }
-
-    public static NtsPromise all(NtsPromise[] promises, final double[] values) {
-        All group = new All() {
-            @Override
-            void store(NtsValue value) {
-                values[at++] = value.num;
-            }
-        };
-        group.remaining = promises.length;
-        return combine(promises, group);
+    public static NtsPromise all(NtsPromise[] promises, double[] values) {
+        return combine(promises, new AllNumbers(promises.length, values));
     }
-
-    public static NtsPromise all(NtsPromise[] promises, final Object[] values) {
-        All group = new All() {
-            @Override
-            void store(NtsValue value) {
-                values[at++] = value.ref;
-            }
-        };
-        group.remaining = promises.length;
-        return combine(promises, group);
+    public static NtsPromise all(NtsPromise[] promises, Object[] values) {
+        return combine(promises, new AllReferences(promises.length, values));
     }
-
-    public static NtsPromise race(NtsPromise[] promises) {
-        return combine(promises, null);
-    }
+    public static NtsPromise race(NtsPromise[] promises) { return combine(promises, null); }
 }

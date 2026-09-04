@@ -1,287 +1,249 @@
 package nts.rt;
 
+import java.math.BigInteger;
+
 /**
- * A 128-bit signed integer, because the JVM has no primitive for one.
- *
- * <p><b>Not {@code BigInteger}, and that is a correctness decision before it is
- * a performance one.</b> This compiler's {@code bigint} is exactly 128 bits and
- * refuses a literal that does not fit -- record 0036 -- so the C lane wraps
- * where the language would grow. {@code BigInteger} would be *more* correct
- * than the C backend, which sounds like an improvement and is not: the two
- * lanes would then disagree on precisely the inputs that matter, and
- * `agrees_with_c` is the oracle here because node's `BigInt` is arbitrary
- * precision and is not.
- *
- * <p>So: two's complement in two {@code long}s, wrapping at 128 bits, matching
- * `__int128` operation for operation.
- *
- * <p>It is also the shape that should win. What a Java programmer writes for
- * this is {@code BigInteger}, which allocates per operation and carries an
- * arbitrary-precision magnitude; this is two words and, wherever it does not
- * escape, no allocation at all once C2 has looked at it -- which record 0083
- * measured at zero bytes per operation for the analogous erased value.
- *
- * <p>Division and {@code toString} go through {@code BigInteger} deliberately.
- * 128-bit division is a hundred lines of shift-and-subtract to save a call on
- * an operation that is rare in the programs this compiler sees, and even C
- * calls `__divti3` rather than emitting it inline. Correct first, and the
- * measurement decides whether it is ever worth more.
+ * Signed, wrapping 128-bit arithmetic, preserving the existing compiler ABI.
+ * This is the runtime's fixed-width bigint, NOT an arbitrary-precision JS BigInt.
+ * Arithmetic, width conversions, decimal formatting and numeric conversions do
+ * not allocate BigInteger temporaries. Public BigInteger adapters remain available.
  */
 public final class NtsBigInt {
-    /** The high and low 64 bits of a two's-complement 128-bit value. */
     public final long hi;
     public final long lo;
-
-    private NtsBigInt(long hi, long lo) {
-        this.hi = hi;
-        this.lo = lo;
-    }
-
+    private NtsBigInt(long hi, long lo) { this.hi = hi; this.lo = lo; }
     public static final NtsBigInt ZERO = new NtsBigInt(0L, 0L);
-
-    public static NtsBigInt of(long hi, long lo) {
-        return hi == 0L && lo == 0L ? ZERO : new NtsBigInt(hi, lo);
-    }
-
-    // ----- arithmetic -----------------------------------------------------
-
-    public static NtsBigInt add(NtsBigInt a, NtsBigInt b) {
-        long lo = a.lo + b.lo;
-        // The carry, without a wider type to detect it in: the sum wrapped
-        // exactly when it came out below an unsigned operand.
-        long carry = Long.compareUnsigned(lo, a.lo) < 0 ? 1L : 0L;
-        return of(a.hi + b.hi + carry, lo);
-    }
-
-    public static NtsBigInt sub(NtsBigInt a, NtsBigInt b) {
-        long lo = a.lo - b.lo;
-        long borrow = Long.compareUnsigned(a.lo, b.lo) < 0 ? 1L : 0L;
-        return of(a.hi - b.hi - borrow, lo);
-    }
-
-    public static NtsBigInt neg(NtsBigInt a) {
-        return sub(ZERO, a);
-    }
-
-    /**
-     * The full 128-bit product, keeping the low 128 bits.
-     *
-     * <p>{@code Math.multiplyHigh} would give the top half in one intrinsic and
-     * arrived in Java 9; this runtime targets 8, which is the floor that keeps
-     * the Android path open. So the high half is four 32-bit partial products,
-     * which is what the intrinsic compiles to anywhere it is not a single
-     * instruction.
-     */
-    public static NtsBigInt mul(NtsBigInt a, NtsBigInt b) {
-        long lo = a.lo * b.lo;
-        long high = unsignedMultiplyHigh(a.lo, b.lo) + a.hi * b.lo + a.lo * b.hi;
-        return of(high, lo);
-    }
-
-    private static long unsignedMultiplyHigh(long x, long y) {
-        long x0 = x & 0xFFFFFFFFL, x1 = x >>> 32;
-        long y0 = y & 0xFFFFFFFFL, y1 = y >>> 32;
-        long p00 = x0 * y0;
-        long p01 = x0 * y1;
-        long p10 = x1 * y0;
-        long p11 = x1 * y1;
-        long middle = p10 + (p00 >>> 32) + (p01 & 0xFFFFFFFFL);
-        return p11 + (middle >>> 32) + (p01 >>> 32);
-    }
-
-    public static NtsBigInt div(NtsBigInt a, NtsBigInt b) {
-        return fromBigInteger(toBigInteger(a).divide(toBigInteger(b)));
-    }
-
-    public static NtsBigInt rem(NtsBigInt a, NtsBigInt b) {
-        return fromBigInteger(toBigInteger(a).remainder(toBigInteger(b)));
-    }
-
-    // ----- bits -----------------------------------------------------------
-
-    public static NtsBigInt and(NtsBigInt a, NtsBigInt b) {
-        return of(a.hi & b.hi, a.lo & b.lo);
-    }
-
-    public static NtsBigInt or(NtsBigInt a, NtsBigInt b) {
-        return of(a.hi | b.hi, a.lo | b.lo);
-    }
-
-    public static NtsBigInt xor(NtsBigInt a, NtsBigInt b) {
-        return of(a.hi ^ b.hi, a.lo ^ b.lo);
-    }
-
-    /**
-     * A shift, by a count that is itself a bigint.
-     *
-     * <p>A **negative count reverses the direction** -- `x << -3n` is `x >> 3n`
-     * -- which is the language's rule and is the whole reason these are runtime
-     * calls rather than instructions. A transliteration of `nts_bigint_shl` and
-     * `nts_bigint_shr`, including that shifting a negative value all the way
-     * out leaves -1 rather than 0.
-     *
-     * <p>The count is itself 128 bits, so "is it at least 128" is a 128-bit
-     * comparison and not a look at the low half: `1n << (2n ** 64n)` must
-     * saturate rather than shift by zero.
-     */
-    public static NtsBigInt shl(NtsBigInt a, NtsBigInt count) {
-        if (count.hi < 0L) {
-            return compare(count, MINUS_128) <= 0
-                ? (a.hi < 0L ? MINUS_ONE : ZERO)
-                : down(a, (int) -count.lo);
-        }
-        return compare(count, ONE_TWENTY_EIGHT) >= 0 ? ZERO : up(a, (int) count.lo);
-    }
-
-    public static NtsBigInt shr(NtsBigInt a, NtsBigInt count) {
-        if (count.hi < 0L) {
-            return compare(count, MINUS_128) <= 0 ? ZERO : up(a, (int) -count.lo);
-        }
-        return compare(count, ONE_TWENTY_EIGHT) >= 0
-            ? (a.hi < 0L ? MINUS_ONE : ZERO)
-            : down(a, (int) count.lo);
-    }
-
     private static final NtsBigInt MINUS_ONE = new NtsBigInt(-1L, -1L);
     private static final NtsBigInt MINUS_128 = new NtsBigInt(-1L, -128L);
     private static final NtsBigInt ONE_TWENTY_EIGHT = new NtsBigInt(0L, 128L);
 
-    /**
-     * Left by `n`, where `0 <= n < 128`.
-     *
-     * <p>The JVM masks a shift count to 6 bits for a `long`, which is right for
-     * a 64-bit shift and wrong for a 128-bit one: shifting by exactly 64 must
-     * move the low half into the high half rather than doing nothing. So the
-     * cases are spelled out instead of relying on the mask.
-     */
+    public static NtsBigInt of(long hi, long lo) {
+        return hi == 0L && lo == 0L ? ZERO : new NtsBigInt(hi, lo);
+    }
+    public static NtsBigInt fromLong(long value) { return of(value >> 63, value); }
+    public static NtsBigInt add(NtsBigInt a, NtsBigInt b) {
+        long low = a.lo + b.lo;
+        return of(a.hi + b.hi + (Long.compareUnsigned(low, a.lo) < 0 ? 1L : 0L), low);
+    }
+    public static NtsBigInt sub(NtsBigInt a, NtsBigInt b) {
+        return of(a.hi - b.hi - (Long.compareUnsigned(a.lo, b.lo) < 0 ? 1L : 0L), a.lo - b.lo);
+    }
+    public static NtsBigInt neg(NtsBigInt a) {
+        long low = -a.lo;
+        return of(~a.hi + (low == 0 ? 1L : 0L), low);
+    }
+    public static NtsBigInt mul(NtsBigInt a, NtsBigInt b) {
+        return of(unsignedMultiplyHigh(a.lo, b.lo) + a.hi * b.lo + a.lo * b.hi, a.lo * b.lo);
+    }
+    private static long unsignedMultiplyHigh(long x, long y) {
+        long x0 = x & 0xffffffffL, x1 = x >>> 32;
+        long y0 = y & 0xffffffffL, y1 = y >>> 32;
+        long p00 = x0 * y0, p01 = x0 * y1, p10 = x1 * y0, p11 = x1 * y1;
+        long middle = p10 + (p00 >>> 32) + (p01 & 0xffffffffL);
+        return p11 + (middle >>> 32) + (p01 >>> 32);
+    }
+    public static NtsBigInt div(NtsBigInt a, NtsBigInt b) { return divide(a, b, false); }
+    public static NtsBigInt rem(NtsBigInt a, NtsBigInt b) { return divide(a, b, true); }
+
+    /** Unsigned magnitude division followed by the signed quotient/remainder rule. */
+    private static NtsBigInt divide(NtsBigInt a, NtsBigInt b, boolean remainder) {
+        if ((b.hi | b.lo) == 0L) { throw new ArithmeticException("BigInteger divide by zero"); }
+        if (a.hi == (a.lo >> 63) && b.hi == (b.lo >> 63)) {
+            if (a.lo == Long.MIN_VALUE && b.lo == -1L) {
+                return remainder ? ZERO : of(0L, Long.MIN_VALUE);
+            }
+            return fromLong(remainder ? a.lo % b.lo : a.lo / b.lo);
+        }
+        long ah = a.hi, al = a.lo, bh = b.hi, bl = b.lo;
+        boolean aneg = ah < 0, bneg = bh < 0;
+        if (aneg) { al = -al; ah = ~ah + (al == 0 ? 1L : 0L); }
+        if (bneg) { bl = -bl; bh = ~bh + (bl == 0 ? 1L : 0L); }
+        int cmp = unsignedCompare(ah, al, bh, bl);
+        if (cmp < 0) { return remainder ? a : ZERO; }
+        long qh = 0, ql = 0;
+        if (ah == 0L && bh == 0L) {
+            ql = Long.divideUnsigned(al, bl);
+            al = Long.remainderUnsigned(al, bl);
+        } else if (bh == 0L && bl > 0L && bl <= 0x7fffffffL) {
+            // Four base-2^32 limbs. Intermediate dividends stay below 2^63.
+            long carry = ah >>> 32;
+            long q3 = carry / bl;
+            carry = ((carry % bl) << 32) | (ah & 0xffffffffL);
+            long q2 = carry / bl;
+            carry = ((carry % bl) << 32) | (al >>> 32);
+            long q1 = carry / bl;
+            carry = ((carry % bl) << 32) | (al & 0xffffffffL);
+            long q0 = carry / bl;
+            qh = (q3 << 32) | q2; ql = (q1 << 32) | q0;
+            ah = 0; al = carry % bl;
+        } else {
+            int shift = bitLength(ah, al) - bitLength(bh, bl);
+            long dh, dl;
+            if (shift == 0) { dh = bh; dl = bl; }
+            else if (shift >= 64) { dh = bl << (shift - 64); dl = 0; }
+            else { dh = (bh << shift) | (bl >>> (64 - shift)); dl = bl << shift; }
+            // At most 128 steps. This favors low allocation; benchmark wide division separately.
+            for (int i = shift; i >= 0; --i) {
+                if (unsignedCompare(ah, al, dh, dl) >= 0) {
+                    long old = al;
+                    al -= dl;
+                    ah = ah - dh - (Long.compareUnsigned(old, dl) < 0 ? 1L : 0L);
+                    if (i >= 64) { qh |= 1L << (i - 64); }
+                    else { ql |= 1L << i; }
+                }
+                dl = (dl >>> 1) | (dh << 63);
+                dh >>>= 1;
+            }
+        }
+        long rh = remainder ? ah : qh, rl = remainder ? al : ql;
+        if (remainder ? aneg : aneg != bneg) {
+            rl = -rl; rh = ~rh + (rl == 0 ? 1L : 0L);
+        }
+        return of(rh, rl);
+    }
+    private static int unsignedCompare(long ah, long al, long bh, long bl) {
+        int c = Long.compareUnsigned(ah, bh);
+        return c == 0 ? Long.compareUnsigned(al, bl) : c;
+    }
+    private static int bitLength(long hi, long lo) {
+        return hi != 0 ? 128 - Long.numberOfLeadingZeros(hi) : 64 - Long.numberOfLeadingZeros(lo);
+    }
+
+    public static NtsBigInt and(NtsBigInt a, NtsBigInt b) { return of(a.hi & b.hi, a.lo & b.lo); }
+    public static NtsBigInt or(NtsBigInt a, NtsBigInt b) { return of(a.hi | b.hi, a.lo | b.lo); }
+    public static NtsBigInt xor(NtsBigInt a, NtsBigInt b) { return of(a.hi ^ b.hi, a.lo ^ b.lo); }
+    public static NtsBigInt shl(NtsBigInt a, NtsBigInt count) {
+        if (count.hi < 0L) {
+            return compare(count, MINUS_128) <= 0 ? (a.hi < 0 ? MINUS_ONE : ZERO) : down(a, (int) -count.lo);
+        }
+        return compare(count, ONE_TWENTY_EIGHT) >= 0 ? ZERO : up(a, (int) count.lo);
+    }
+    public static NtsBigInt shr(NtsBigInt a, NtsBigInt count) {
+        if (count.hi < 0L) {
+            return compare(count, MINUS_128) <= 0 ? ZERO : up(a, (int) -count.lo);
+        }
+        return compare(count, ONE_TWENTY_EIGHT) >= 0 ? (a.hi < 0 ? MINUS_ONE : ZERO) : down(a, (int) count.lo);
+    }
     private static NtsBigInt up(NtsBigInt a, int n) {
-        if (n == 0) {
-            return a;
-        }
-        if (n >= 64) {
-            return of(a.lo << (n - 64), 0L);
-        }
+        if (n == 0) { return a; }
+        if (n >= 64) { return of(a.lo << (n - 64), 0L); }
         return of((a.hi << n) | (a.lo >>> (64 - n)), a.lo << n);
     }
-
-    /** Arithmetic right by `n`, where `0 <= n < 128`: the sign extends. */
     private static NtsBigInt down(NtsBigInt a, int n) {
-        long sign = a.hi < 0L ? -1L : 0L;
-        if (n == 0) {
-            return a;
-        }
-        if (n >= 64) {
-            return of(sign, a.hi >> (n - 64));
-        }
+        if (n == 0) { return a; }
+        if (n >= 64) { return of(a.hi >> 63, a.hi >> (n - 64)); }
         return of(a.hi >> n, (a.lo >>> n) | (a.hi << (64 - n)));
     }
-
-    // ----- comparison -----------------------------------------------------
-
-    /**
-     * Signed 128-bit comparison, as -1, 0 or 1.
-     *
-     * <p>The high half is signed and the low half is not, which is the one
-     * thing that makes this different from comparing two pairs of longs.
-     */
     public static int compare(NtsBigInt a, NtsBigInt b) {
-        if (a.hi != b.hi) {
-            return a.hi < b.hi ? -1 : 1;
+        if (a.hi != b.hi) { return a.hi < b.hi ? -1 : 1; }
+        return Long.compareUnsigned(a.lo, b.lo);
+    }
+    public static boolean eq(NtsBigInt a, NtsBigInt b) { return a.hi == b.hi && a.lo == b.lo; }
+
+    public static BigInteger toBigInteger(NtsBigInt a) {
+        if (a.hi == (a.lo >> 63)) { return BigInteger.valueOf(a.lo); }
+        byte[] bytes = new byte[16];
+        for (int i = 0; i < 8; ++i) {
+            int shift = (7 - i) << 3;
+            bytes[i] = (byte) (a.hi >>> shift);
+            bytes[8 + i] = (byte) (a.lo >>> shift);
         }
-        return Long.compareUnsigned(a.lo, b.lo) < 0 ? -1 : (a.lo == b.lo ? 0 : 1);
+        return new BigInteger(bytes);
+    }
+    public static NtsBigInt fromBigInteger(BigInteger value) {
+        if (value.bitLength() <= 63) { return fromLong(value.longValue()); }
+        return of(value.shiftRight(64).longValue(), value.longValue());
     }
 
-    public static boolean eq(NtsBigInt a, NtsBigInt b) {
-        return a.hi == b.hi && a.lo == b.lo;
-    }
-
-    // ----- conversion -----------------------------------------------------
-
-    public static java.math.BigInteger toBigInteger(NtsBigInt a) {
-        return java.math.BigInteger.valueOf(a.hi).shiftLeft(64)
-            .or(java.math.BigInteger.valueOf(a.lo).and(UNSIGNED_64));
-    }
-
-    private static final java.math.BigInteger UNSIGNED_64 =
-        java.math.BigInteger.ONE.shiftLeft(64).subtract(java.math.BigInteger.ONE);
-
-    public static NtsBigInt fromBigInteger(java.math.BigInteger value) {
-        java.math.BigInteger low = value.and(UNSIGNED_64);
-        java.math.BigInteger high = value.shiftRight(64).and(UNSIGNED_64);
-        return of(high.longValue(), low.longValue());
-    }
-
-    /**
-     * A 64-bit integer widened to 128 bits, sign-extended.
-     *
-     * <p>What `BigInt(true)` reaches, and what any narrower integer reaches:
-     * the language says a boolean converts to `1n` or `0n`, and on this backend
-     * a boolean is already an `int`. Sign-extending rather than zero-extending
-     * because that is what `(__int128)x` does for a signed `x`, and the C lane
-     * is the oracle for this type.
-     */
-    public static NtsBigInt fromLong(long value) {
-        return of(value < 0L ? -1L : 0L, value);
-    }
-
-    /** `Number(x)` on a bigint: the nearest double, as `(double)__int128` is. */
+    /** Round the 128-bit magnitude once, to 53 bits, with ties to even. */
     public static double toNumber(NtsBigInt a) {
-        return toBigInteger(a).doubleValue();
+        if (a.hi == (a.lo >> 63)) { return (double) a.lo; }
+        long hi = a.hi, lo = a.lo;
+        boolean negative = hi < 0;
+        if (negative) { lo = -lo; hi = ~hi + (lo == 0 ? 1L : 0L); }
+        int shift = bitLength(hi, lo) - 53;
+        if (shift <= 0) { return negative ? -(double) lo : (double) lo; }
+        long top;
+        boolean half, sticky;
+        if (shift > 64) {
+            int hs = shift - 64;
+            top = hi >>> hs;
+            half = ((hi >>> (hs - 1)) & 1L) != 0;
+            sticky = lo != 0 || (hi & ((1L << (hs - 1)) - 1)) != 0;
+        } else if (shift == 64) {
+            top = hi;
+            half = lo < 0;
+            sticky = (lo & Long.MAX_VALUE) != 0;
+        } else {
+            top = (lo >>> shift) | (hi << (64 - shift));
+            half = ((lo >>> (shift - 1)) & 1L) != 0;
+            sticky = (lo & ((1L << (shift - 1)) - 1)) != 0;
+        }
+        if (half && (sticky || (top & 1L) != 0)) { ++top; }
+        double answer = Math.scalb((double) top, shift);
+        return negative ? -answer : answer;
     }
 
-    /**
-     * `BigInt(x)` on a number, which is a conversion with a precondition.
-     *
-     * <p>The specification throws a `RangeError` when the value is not an
-     * integer -- `BigInt(1.5)` is not `1n` -- so a plain cast would be a wrong
-     * answer rather than a lossy one. There is no `throw` to raise here, so
-     * this refuses the way an out-of-range index does, and with the same
-     * `nts:` prefix the differential reads.
-     */
     public static NtsBigInt fromNumber(double value) {
         if (Double.isNaN(value) || Double.isInfinite(value) || value != Math.floor(value)) {
-            throw new NtsRefusal(NtsRuntime.numberToString(value)
-                + " is not an integer, so it has no bigint");
+            throw new NtsRefusal(NtsRuntime.numberToString(value) + " is not an integer, so it has no bigint");
         }
-        java.math.BigInteger exact = new java.math.BigDecimal(value).toBigInteger();
-        if (exact.bitLength() > 127) {
-            throw new NtsRefusal(NtsRuntime.numberToString(value)
-                + " is past the 128 bits this bigint has");
+        if (value < -0x1p127 || value >= 0x1p127) {
+            throw new NtsRefusal(NtsRuntime.numberToString(value) + " is past the 128 bits this bigint has");
         }
-        return fromBigInteger(exact);
+        if (value >= -0x1p63 && value < 0x1p63) { return fromLong((long) value); }
+        long bits = Double.doubleToRawLongBits(value);
+        long significand = (bits & 0x000fffffffffffffL) | 0x0010000000000000L;
+        int shift = (int) ((bits >>> 52) & 0x7ff) - 1023 - 52;
+        long hi, lo;
+        if (shift >= 64) { hi = significand << (shift - 64); lo = 0; }
+        else { hi = significand >>> (64 - shift); lo = significand << shift; }
+        if (value < 0) { lo = -lo; hi = ~hi + (lo == 0 ? 1L : 0L); }
+        return of(hi, lo);
     }
 
+    /** Base-1e9 decimal conversion, using four unsigned base-2^32 limbs. */
     public static String toText(NtsBigInt a) {
-        return toBigInteger(a).toString();
+        if (a.hi == (a.lo >> 63)) { return Long.toString(a.lo); }
+        long hi = a.hi, lo = a.lo;
+        boolean negative = hi < 0;
+        if (negative) { lo = -lo; hi = ~hi + (lo == 0 ? 1L : 0L); }
+        char[] text = new char[40];
+        int pos = text.length;
+        do {
+            long carry = hi >>> 32;
+            long q3 = carry / 1000000000L;
+            carry = ((carry % 1000000000L) << 32) | (hi & 0xffffffffL);
+            long q2 = carry / 1000000000L;
+            carry = ((carry % 1000000000L) << 32) | (lo >>> 32);
+            long q1 = carry / 1000000000L;
+            carry = ((carry % 1000000000L) << 32) | (lo & 0xffffffffL);
+            long q0 = carry / 1000000000L;
+            int part = (int) (carry % 1000000000L);
+            hi = (q3 << 32) | q2; lo = (q1 << 32) | q0;
+            int digits = (hi | lo) == 0 ? 0 : 9;
+            do {
+                text[--pos] = (char) ('0' + part % 10);
+                part /= 10;
+            } while (--digits > 0 || part != 0);
+        } while ((hi | lo) != 0);
+        if (negative) { text[--pos] = '-'; }
+        return new String(text, pos, text.length - pos);
     }
-
-    /** `BigInt.asIntN(bits, x)`. */
     public static NtsBigInt asIntN(double bits, NtsBigInt a) {
         int n = (int) bits;
-        if (n <= 0) {
-            return ZERO;
-        }
-        if (n >= 128) {
-            return a;
-        }
-        java.math.BigInteger mask = java.math.BigInteger.ONE.shiftLeft(n).subtract(java.math.BigInteger.ONE);
-        java.math.BigInteger low = toBigInteger(a).and(mask);
-        if (low.testBit(n - 1)) {
-            low = low.subtract(java.math.BigInteger.ONE.shiftLeft(n));
-        }
-        return fromBigInteger(low);
+        if (n <= 0) { return ZERO; }
+        if (n >= 128) { return a; }
+        if (n < 64) { long low = (a.lo << (64 - n)) >> (64 - n); return fromLong(low); }
+        if (n == 64) { return fromLong(a.lo); }
+        return of((a.hi << (128 - n)) >> (128 - n), a.lo);
     }
-
-    /** `BigInt.asUintN(bits, x)`. */
     public static NtsBigInt asUintN(double bits, NtsBigInt a) {
         int n = (int) bits;
-        if (n <= 0) {
-            return ZERO;
-        }
-        if (n >= 128) {
-            return a;
-        }
-        java.math.BigInteger mask = java.math.BigInteger.ONE.shiftLeft(n).subtract(java.math.BigInteger.ONE);
-        return fromBigInteger(toBigInteger(a).and(mask));
+        if (n <= 0) { return ZERO; }
+        if (n >= 128) { return a; }
+        if (n < 64) { return of(0L, a.lo & (-1L >>> (64 - n))); }
+        if (n == 64) { return of(0L, a.lo); }
+        return of(a.hi & (-1L >>> (128 - n)), a.lo);
     }
 }
