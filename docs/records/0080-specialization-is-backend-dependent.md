@@ -93,9 +93,59 @@ instructions, a better emitter or a better C2 could absorb them. Latency on a
 loop-carried chain cannot be absorbed by anything downstream: the only fix is
 not to create the conversion, which is a decision made several passes earlier.
 
-Still unmeasured, and worth knowing before the pass changes: whether C2's
-counted-loop recognition also changes between the two shapes.
-`-XX:+PrintAssembly` needs `hsdis`, which is not installed.
+## What the machine code says, which is better than the guess
+
+With `hsdis` installed, `-XX:+PrintAssembly` gives the rest, and it is not the
+story either of us was telling.
+
+    path                    unroll   cvtsi2sd   xorps   stack spills
+    specialised int             52         53       6             12
+    unspecialised double         5          1       5              8
+
+**C2 already eliminated the redundancy.** Three `i2d` per iteration in the
+bytecode became *one* `cvtsi2sd` per unrolled copy — so common subexpression
+elimination, the thing that looked like the obvious fix, was already being done
+by the machine. That refutes the first two hypotheses outright rather than
+leaving them unproven.
+
+What it did instead is **unroll the loop fifty-two times**, because an `i32`
+counter with a constant stride is a *counted loop* and a `double` counter is not.
+And the unrolled body does not fit in the register file:
+
+```
+vcvtsi2sd %edi,%xmm1,%xmm1
+vmulsd    %xmm1,%xmm1,%xmm2
+vmovsd    %xmm2,(%rsp)          <- spill
+vmulsd    -0x12b(%rip),%xmm1,%xmm1
+vmovsd    %xmm1,0x8(%rsp)       <- spill
+vcvtsi2sd %edx,%xmm1,%xmm1      <- merges into the xmm1 it just read
+```
+
+Two costs, and the second is the interesting one. `vcvtsi2sd` writes only the
+low 64 bits and takes the upper half from its second operand — so
+`vcvtsi2sd %edx,%xmm1,%xmm1` carries a **false dependency on the previous value
+of `xmm1`**. There are 53 conversions and 6 `xorps`, so the dependency is broken
+six times and stands forty-seven times: the unrolled copies serialise on a
+register hazard that has nothing to do with the program.
+
+So the chain is:
+
+    specialize to i32
+      -> the loop becomes a counted loop
+        -> C2 unrolls it 52x
+          -> register pressure spills, and vcvtsi2sd false dependencies
+             serialise the copies
+            -> IPC 0.92 on a kernel that was already latency-bound
+
+**Unrolling buys nothing on a loop whose critical path is one dependent
+double-add**, which is exactly where this kernel already sat: 684ns for a
+thousand iterations is that add's latency and nothing else. The specialization
+therefore does not merely fail to help here — it hands C2 a shape it optimizes
+*harder*, and every one of those optimizations is a cost.
+
+That is worth stating generally, because it will happen again: **a transformation
+that makes a loop more analysable makes a downstream optimizer more aggressive,
+and aggression is only free when there is something to win.**
 
 ## What follows
 
