@@ -123,6 +123,76 @@ no state — which is a static, and this compiler already emits statics for name
 functions used as values. The measurement agreed with the argument rather than
 the argument being fitted to it.
 
+## And the benchmark said something else entirely
+
+At `716939c`, from a worktree pinned to it:
+
+    case               C++        nts C      nts LLVM    node       nts/C++   nts/node
+    closures           1.24 us    1.26 us    1.25 us     3.28 us    1.01x     0.38x
+    module-closures    2.56 us    17.84 us   12.37 us    5.77 us    4.83x     2.15x
+
+**A row that loses to node**, which the standing goal does not allow, and the
+first explanation to hand was the obvious one: a local closure lives in the
+frame where clang can see through it, a module-scope one is a heap object behind
+a global pointer, and that is the price of the feature.
+
+That explanation is wrong, and one probe says so. Same arithmetic, same two
+module-scope arrows, same globals — with `step` written as a `const` that folds
+instead of a `let` that is storage:
+
+    probe-const-step   2.55 us    2.51 us                5.64 us    ~0.99x
+
+**The closures cost nothing. The whole 4.83x is one mutable module-scope
+number.** `let step = 0` becomes `static double step`, so the closure body reads
+an `f64`, adds in floating point, and calls `nts_to_int32` on the way out — and
+every call site converts `int32` to `double` and back around it:
+
+    v16 = mix;
+    v59 = (double)v10;
+    v17 = Closure0__call(v16, v59);
+    v67 = (int32_t)v17;
+
+The C++ reference has `static std::int32_t step` and none of that. `drive__Closure0`
+sitting three lines away in the same file *is* specialized to `int32_t`, which is
+what makes the gap visible: the machinery exists and does not reach a global.
+
+It does not reach one on purpose. `hir::elements` excludes anything
+`stored_into_a_global` from element-width narrowing — a rule I added myself two
+days ago, for a real reason (a global's declared type is `number` and nothing was
+proving otherwise), and this is its bill. Narrowing a module-scope binding whose
+every write is an `int32` is the next piece of work, and it is worth more than
+this feature was: every counter and flag at module scope in `runtime/node` is
+paying the same toll.
+
+So the four-deliverable rule earned its keep here in the way it is supposed to.
+The example says the feature is correct, the unit tests say the refusal is
+honest, the memory case says it allocates nothing — and the benchmark is the only
+one of the four that could have said *the row still loses to node, for a reason
+that has nothing to do with what you built*.
+
+## A second bug, found by a probe rather than by looking
+
+The probe that put both arrows *inside* the function — the control for the one
+above — does not compile:
+
+    probe-local  failed: clang: error: use of undeclared identifier 'Closure1__call'
+    static void *const nts_vtable_NtsObj_Closure1[] = { (void *)Closure1__call };
+
+Reduced: **a local arrow that calls another local arrow.**
+
+    const inc = (x: number): number => x + 1;
+    const twice = (x: number): number => inc(inc(x));
+
+`nts check` declines it with `NTS2006 an object type with no layout`, which is a
+refusal and therefore fine. The specialized emission the benchmark uses does not
+decline it — it writes a vtable entry for a function it never defines. Same
+program, two paths, and only one of them refuses.
+
+Pre-existing: it reproduces identically at `a4ff456`, the parent of this commit.
+Recorded here rather than fixed because it is not this feature's, and because the
+interesting half is the shape — **a refusal that exists on one path and leaks on
+another** — which is worth looking for elsewhere before it is patched here.
+
 ## Two things the hostile inputs found that are not this
 
 **Unbounded recursion takes the signal.** `const fact = (n) => (n <= 1 ? 1 : n *
