@@ -1,4 +1,4 @@
-# 0091 — The check that costs nothing in C and 4.6x on the JVM
+# 0094 — The check that costs nothing in C and 4.6x on the JVM
 
 `examples/arrays` was answering `10` where node answers `NaN`. `xs[i]!` with a
 fractional index is `undefined` in JavaScript, and the JVM's own bounds check
