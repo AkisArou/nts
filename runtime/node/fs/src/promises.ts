@@ -14,9 +14,12 @@
 // and can be disposed.
 
 import { Buffer } from "../../buffer/src/main.ts";
+import type { Encoding } from "../../buffer/src/encodings.ts";
 import { EventEmitter } from "../../events/src/main.ts";
+import type { Readable } from "../../stream/src/readable.ts";
 import * as constants from "./constants.ts";
 import {
+  aggregateTwoErrors,
   AbortError,
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_STATE,
@@ -170,6 +173,156 @@ interface FileHandleWriteOptions {
   offset?: number;
   length?: number;
   position?: number;
+}
+
+/** One value accepted directly, or yielded, by the promise write APIs. */
+export type FileWriteChunk = string | ArrayBufferView;
+
+/** The complete data surface accepted by promise writeFile/appendFile. */
+export type FileWriteData =
+  | FileWriteChunk
+  | Iterable<FileWriteChunk>
+  | AsyncIterable<FileWriteChunk>
+  | Readable;
+
+type UnknownFileWriteIterable = Iterable<unknown> | AsyncIterable<unknown>;
+type FileWriteInput = FileWriteChunk | UnknownFileWriteIterable;
+const writeFileMaxChunkSize = 512 * 1024;
+
+function isFileWriteIterable(
+  value: unknown,
+): value is UnknownFileWriteIterable {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    ArrayBuffer.isView(value) ||
+    (typeof value !== "object" && typeof value !== "function")
+  ) {
+    return false;
+  }
+  const hasAsyncIterator = Symbol.asyncIterator in value &&
+    typeof value[Symbol.asyncIterator] === "function";
+  const hasIterator = Symbol.iterator in value &&
+    typeof value[Symbol.iterator] === "function";
+  return hasAsyncIterator || hasIterator;
+}
+
+function requireFileWriteData(value: unknown): FileWriteInput {
+  if (
+    typeof value !== "string" &&
+    !ArrayBuffer.isView(value) &&
+    !isFileWriteIterable(value)
+  ) {
+    throw new ERR_INVALID_ARG_TYPE(
+      "data",
+      [
+        "string",
+        "Buffer",
+        "TypedArray",
+        "DataView",
+        "AsyncIterable",
+        "Iterable",
+        "Stream",
+      ],
+      value,
+    );
+  }
+  return value;
+}
+
+function throwIfWriteAborted(signal: AbortSignalLike | undefined): void {
+  if (signal?.aborted) {
+    throw new AbortError(undefined, { cause: signal.reason });
+  }
+}
+
+/** Pinned Node's incremental `writeFileHandle` algorithm. */
+async function writeFileHandle(
+  handle: FileHandle,
+  data: FileWriteInput,
+  signal: AbortSignalLike | undefined,
+  encoding: Encoding,
+): Promise<void> {
+  throwIfWriteAborted(signal);
+
+  if (isFileWriteIterable(data)) {
+    for await (const chunk of data) {
+      throwIfWriteAborted(signal);
+      let bytes: ArrayBufferView;
+      if (typeof chunk === "string") {
+        bytes = Buffer.from(chunk, encoding);
+      } else if (ArrayBuffer.isView(chunk)) {
+        bytes = new Uint8Array(
+          chunk.buffer,
+          chunk.byteOffset,
+          chunk.byteLength,
+        );
+      } else {
+        throw new ERR_INVALID_ARG_TYPE(
+          "data",
+          ["string", "Buffer", "TypedArray", "DataView"],
+          chunk,
+        );
+      }
+
+      let offset = 0;
+      while (offset < bytes.byteLength) {
+        const length = Math.min(
+          writeFileMaxChunkSize,
+          bytes.byteLength - offset,
+        );
+        const { bytesWritten } = await handle.write(bytes, offset, length, null);
+        if (bytesWritten === 0) {
+          throw new Error("fs write made no progress");
+        }
+        offset += bytesWritten;
+        throwIfWriteAborted(signal);
+      }
+    }
+  } else {
+    let bytes: ArrayBufferView;
+    if (typeof data === "string") {
+      bytes = Buffer.from(data, encoding);
+    } else if (ArrayBuffer.isView(data)) {
+      bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    } else {
+      throw new Error("validated fs write data lost its scalar representation");
+    }
+
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      throwIfWriteAborted(signal);
+      const length = Math.min(
+        writeFileMaxChunkSize,
+        bytes.byteLength - offset,
+      );
+      const { bytesWritten } = await handle.write(bytes, offset, length, null);
+      if (bytesWritten === 0) {
+        throw new Error("fs write made no progress");
+      }
+      offset += bytesWritten;
+    }
+  }
+}
+
+async function writeFileToOpenHandle(
+  handle: FileHandle,
+  data: unknown,
+  options: string | FileOptions | undefined,
+): Promise<void> {
+  const settings = getOptions(options, { encoding: "utf8", flush: false });
+  const flush = settings.flush ?? false;
+  validateBoolean(flush, "options.flush");
+  const encoding = requireTextEncoding(
+    settings.encoding || "utf8",
+    "options.encoding",
+  );
+  await writeFileHandle(
+    handle,
+    requireFileWriteData(data),
+    settings.signal,
+    encoding,
+  );
 }
 
 /** Bytes accepted by Node's experimental FileHandle writer. */
@@ -552,59 +705,14 @@ export class FileHandle extends EventEmitter {
     });
   }
 
-  async writeFile(data: string | ArrayBufferView, options?: string | FileOptions): Promise<void>;
+  async writeFile(data: FileWriteData, options?: string | FileOptions): Promise<void>;
   async writeFile(data: unknown, options?: string | FileOptions): Promise<void> {
-    if (typeof data !== "string" && !ArrayBuffer.isView(data)) {
-      throw new ERR_INVALID_ARG_TYPE(
-        "data",
-        ["string", "Buffer", "TypedArray", "DataView", "AsyncIterable", "Iterable", "Stream"],
-        data,
-      );
-    }
-    await this.#writeWholeFile(data, options);
+    await writeFileToOpenHandle(this, data, options);
   }
 
-  async appendFile(data: string | ArrayBufferView, options?: string | FileOptions): Promise<void>;
+  async appendFile(data: FileWriteData, options?: string | FileOptions): Promise<void>;
   async appendFile(data: unknown, options?: string | FileOptions): Promise<void> {
-    if (typeof data !== "string" && !ArrayBuffer.isView(data)) {
-      throw new ERR_INVALID_ARG_TYPE(
-        "data",
-        ["string", "Buffer", "TypedArray", "DataView", "AsyncIterable", "Iterable", "Stream"],
-        data,
-      );
-    }
-    await this.#writeWholeFile(data, options);
-  }
-
-  async #writeWholeFile(
-    data: string | ArrayBufferView,
-    options?: string | FileOptions,
-  ): Promise<void> {
-    const settings = getOptions(options, { encoding: "utf8", flush: false });
-    const flush = settings.flush ?? false;
-    validateBoolean(flush, "options.flush");
-    const buffer = typeof data === "string"
-      ? Buffer.from(
-        data,
-        requireTextEncoding(settings.encoding ?? "utf8", "options.encoding"),
-      )
-      : Buffer.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-
-    const chunkLength = 512 * 1024;
-    let offset = 0;
-    do {
-      if (settings.signal?.aborted) {
-        throw new AbortError(undefined, { cause: settings.signal.reason });
-      }
-      const length = Math.min(chunkLength, buffer.length - offset);
-      const { bytesWritten } = await this.write(buffer, offset, length, null);
-      if (bytesWritten === 0 && length !== 0) {
-        throw new Error("fs write made no progress");
-      }
-      offset += bytesWritten;
-    } while (offset < buffer.length);
-
-    if (flush) await this.sync();
+    await writeFileToOpenHandle(this, data, options);
   }
 
   async chmod(mode: number): Promise<void> {
@@ -1070,10 +1178,51 @@ class FileHandleWriterImplementation implements FileHandleWriter {
   }
 }
 
+/** Open, incrementally write, optionally flush, and close one promise source. */
+async function writeDataToPath(
+  path: PathLike,
+  data: unknown,
+  options: string | FileOptions | undefined,
+  defaultFlag: "a" | "w",
+): Promise<void> {
+  const settings = getOptions(options, {
+    encoding: "utf8",
+    mode: 0o666,
+    flag: defaultFlag,
+    flush: false,
+  });
+  const flush = settings.flush ?? false;
+  validateBoolean(flush, "options.flush");
+  const encoding = requireTextEncoding(
+    settings.encoding || "utf8",
+    "options.encoding",
+  );
+  const validatedData = requireFileWriteData(data);
+  throwIfWriteAborted(settings.signal);
+
+  const handle = await open(
+    path,
+    settings.flag || defaultFlag,
+    settings.mode ?? 0o666,
+  );
+  try {
+    await writeFileHandle(handle, validatedData, settings.signal, encoding);
+    if (flush) await handle.sync();
+  } catch (operationError) {
+    try {
+      await handle.close();
+    } catch (closeError) {
+      throw aggregateTwoErrors(closeError, operationError);
+    }
+    throw operationError;
+  }
+  await handle.close();
+}
+
 export async function open(
   path: PathLike,
   flags: string | number = "r",
-  mode = 0o666,
+  mode: number | string = 0o666,
 ): Promise<FileHandle> {
   const fd = await promisifyValue(callbacks.open, "open")(path, flags, mode);
   return new FileHandle(fd);
@@ -1098,18 +1247,21 @@ export function opendir(
 }
 
 export const access = promisifyVoid(callbacks.access);
-export function appendFile(
+export async function appendFile(
   path: PathLike | FileHandle,
-  data: string | ArrayBufferView,
+  data: FileWriteData,
+  options?: string | FileOptions,
+): Promise<void>;
+export async function appendFile(
+  path: PathLike | FileHandle,
+  data: unknown,
   options?: string | FileOptions,
 ): Promise<void> {
-  if (path instanceof FileHandle) return path.appendFile(data, options);
-  return new Promise<void>((resolve, reject) => {
-    callbacks.appendFile(path, data, options ?? null, (error) => {
-      if (error !== null && error !== undefined) reject(error);
-      else resolve();
-    });
-  });
+  if (path instanceof FileHandle) {
+    await writeFileToOpenHandle(path, data, options);
+    return;
+  }
+  await writeDataToPath(path, data, options, "a");
 }
 export const chmod = promisifyVoid(callbacks.chmod);
 export const chown = promisifyVoid(callbacks.chown);
@@ -1373,18 +1525,21 @@ export async function lchmod(
   throw new ERR_METHOD_NOT_IMPLEMENTED("lchmod()");
 }
 export const lchown = promisifyVoid(callbacks.lchown);
-export function writeFile(
+export async function writeFile(
   path: PathLike | FileHandle,
-  data: string | ArrayBufferView,
+  data: FileWriteData,
+  options?: string | FileOptions,
+): Promise<void>;
+export async function writeFile(
+  path: PathLike | FileHandle,
+  data: unknown,
   options?: string | FileOptions,
 ): Promise<void> {
-  if (path instanceof FileHandle) return path.writeFile(data, options);
-  return new Promise<void>((resolve, reject) => {
-    callbacks.writeFile(path, data, options ?? null, (error) => {
-      if (error !== null && error !== undefined) reject(error);
-      else resolve();
-    });
-  });
+  if (path instanceof FileHandle) {
+    await writeFileToOpenHandle(path, data, options);
+    return;
+  }
+  await writeDataToPath(path, data, options, "w");
 }
 
 // The promise API deliberately has no `exists`. `access` with a `catch` says
