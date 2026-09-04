@@ -1315,6 +1315,7 @@ mod tests {
             ty: HirType::Float { bits: 64 },
             origin: origin(),
             known: crate::hir::facts::Facts::TOP,
+            shape: crate::hir::ParamShape::Ordinary,
         };
         let takes_two = Func {
             name: "f".to_owned(),

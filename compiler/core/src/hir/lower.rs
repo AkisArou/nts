@@ -21,7 +21,7 @@ use nts_semantic_schema::{
 use super::facts::Facts;
 use super::{
     BinOp, Block, BlockId, Callee, Field, Func, HirType, Layout, ManagedType, Op, OpKind, Param,
-    Program, Terminator, UnOp, ValueId,
+    ParamShape, Program, Terminator, UnOp, ValueId,
 };
 
 /// What a lowering produced, and what it could not.
@@ -4624,6 +4624,7 @@ impl<'a> FuncBuilder<'a> {
             self.base = self.base_class(class);
             params.push(Param {
                 name: "this".to_owned(),
+                shape: ParamShape::Ordinary,
                 ty: instance,
                 origin: origin.clone(),
                 known: Facts::TOP,
@@ -5719,6 +5720,7 @@ impl<'a> FuncBuilder<'a> {
         self.in_closure = true;
         let mut params = vec![Param {
             name: "this".to_owned(),
+                shape: ParamShape::Ordinary,
             ty: receiver_ty,
             origin: origin.clone(),
             known: Facts::TOP,
@@ -6245,6 +6247,21 @@ impl<'a> FuncBuilder<'a> {
             };
             args.push(value);
         }
+        // The rest can be reached *after* the defaults are filled, and the
+        // check above cannot see that: it fires only when the call itself
+        // stopped exactly at the rest. `f(a)` against
+        // `f(a, b = 5, ...rest: number[])` supplies `a`, the loop supplies `b`,
+        // and the array is still owed -- which reached the verifier as
+        // `CallArgumentCount { callee: "f", expected: 3, found: 2 }`.
+        //
+        // Both checks, rather than moving the first one down here. The early
+        // one returns before `omitted_after` runs, and that ordering is what
+        // keeps a call that stops at the rest from asking the signature about
+        // parameters past it.
+        if rest == Some(args.len()) {
+            let gathered = self.gather_rest(call, args.len(), &[])?;
+            args.push(gathered);
+        }
         Ok(args)
     }
 
@@ -6360,9 +6377,15 @@ impl<'a> FuncBuilder<'a> {
             .unwrap_or_default();
         let mut omitted = Vec::new();
         for (at, parameter) in signature.parameters.iter().enumerate().skip(provided) {
-            // A rest parameter is refused at the declaration, so its call sites
-            // are refused with it. Filling one here would build the argument it
-            // is supposed to collect.
+            // The rest is `lower_arguments`'s to fill, not this function's:
+            // filling it here would build the array it is supposed to collect,
+            // and everything after a rest is inside it. So this stops and the
+            // caller checks again once the defaults are in.
+            //
+            // The comment here used to say a rest parameter was refused at the
+            // declaration, which stopped being true when rest parameters
+            // landed. The `break` stayed correct and the reason for it did not,
+            // and the gap between them was one missing empty array.
             if parameter.rest {
                 break;
             }
@@ -6570,10 +6593,34 @@ impl<'a> FuncBuilder<'a> {
             self.bindings.insert(symbol.0, value);
         }
 
+        // What the declaration said, beyond the type. Both halves were already
+        // computed above -- the rest check reads `DOT_DOT_DOT_TOKEN` and the
+        // default check calls `default_of` -- and both were discarded.
+        //
+        // Order matters: a rest parameter cannot be optional or defaulted, and
+        // `x?: T = e` is not legal TypeScript, so the three are exclusive and
+        // the first match is the answer.
+        let shape = if children
+            .iter()
+            .any(|child| self.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN))
+        {
+            ParamShape::Rest
+        } else if self.default_of(id).is_some() {
+            ParamShape::Defaulted
+        } else if children
+            .iter()
+            .any(|child| self.kind_of(*child) == Some(syntax::QUESTION_TOKEN))
+        {
+            ParamShape::Optional
+        } else {
+            ParamShape::Ordinary
+        };
+
         Ok(Param {
             name,
             ty,
             origin,
+            shape,
             known,
         })
     }

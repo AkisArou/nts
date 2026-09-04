@@ -1097,6 +1097,7 @@ mod tests {
                     ty: HirType::Float { bits: 64 },
                     origin: origin(),
                     known: Facts::TOP,
+                    shape: crate::hir::ParamShape::Ordinary,
                 })
                 .collect(),
             return_type: HirType::Float { bits: 64 },
@@ -1221,6 +1222,7 @@ mod tests {
             ty: HirType::Float { bits: 64 },
             origin: origin(),
             known: Facts::TOP,
+            shape: crate::hir::ParamShape::Ordinary,
         });
 
         let analysis = analyze(&function);

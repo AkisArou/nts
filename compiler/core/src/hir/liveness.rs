@@ -242,6 +242,7 @@ mod tests {
                 ty: HirType::Float { bits: 64 },
                 origin: origin(),
                 known: crate::hir::facts::Facts::TOP,
+                shape: crate::hir::ParamShape::Ordinary,
             }],
             return_type: HirType::Float { bits: 64 },
             values,

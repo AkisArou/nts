@@ -228,6 +228,7 @@ mod tests {
                 ty: HirType::NUMBER,
                 origin: origin(),
                 known: Facts::TOP,
+                shape: crate::hir::ParamShape::Ordinary,
             }],
             return_type: HirType::NUMBER,
             values,
@@ -341,6 +342,7 @@ mod rounding_tests {
                     ty: HirType::NUMBER,
                     origin: origin(),
                     known: Facts::TOP,
+                    shape: crate::hir::ParamShape::Ordinary,
                 }],
                 return_type: HirType::NUMBER,
                 values: vec![

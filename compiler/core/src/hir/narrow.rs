@@ -243,6 +243,7 @@ mod tests {
                 ty: I64,
                 origin: origin(),
                 known: crate::hir::facts::Facts::TOP,
+                shape: crate::hir::ParamShape::Ordinary,
             }],
             return_type: I32,
             values,

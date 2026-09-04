@@ -656,6 +656,8 @@ fn assembled_resume(
         name: name.to_owned(),
         params: vec![super::Param {
             name: "frame".to_owned(),
+                // A receiver is not a declared parameter.
+                shape: super::ParamShape::Ordinary,
             ty: frame_ty,
             origin: func.origin.clone(),
             known: super::facts::Facts::TOP,

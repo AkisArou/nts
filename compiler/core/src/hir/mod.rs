@@ -454,6 +454,22 @@ pub struct Param {
     pub name: String,
     pub ty: HirType,
     pub origin: Origin,
+    /// What the declaration said, beyond the type.
+    ///
+    /// The type does not carry it: `...args: number[]` and `args: number[]` are
+    /// the same `Managed(Array(f64))`, and `x?: number` and `x: number = 1` are
+    /// both an `f64` slot the callee always has. TypeScript distinguishes all
+    /// three and this used to drop the distinction -- which is a precision loss
+    /// of the kind `docs/conformance/typescript.md` §16 exists to record, and
+    /// `lower_param` was computing both halves of it and throwing them away.
+    ///
+    /// Nothing is emitted for it: a parameter is a parameter in every backend
+    /// whatever its shape, and the work a rest or a default implies happens at
+    /// the *call* -- `lower_arguments` gathers the array and evaluates the
+    /// default, which is where JavaScript does. So this is a note on the
+    /// declaration and costs one discriminant on a struct that already carries
+    /// a `String`, an `Origin` and a `Facts`.
+    pub shape: ParamShape,
     /// What the *declared type* says the value can be.
     ///
     /// A parameter is an input, so nothing inside a function constrains it —
@@ -463,6 +479,32 @@ pub struct Param {
     /// is a fact about every possible caller, available without seeing one, and
     /// it is the only way a parameter becomes provable at all.
     pub known: facts::Facts,
+}
+
+/// What a parameter's declaration said, beyond its type.
+///
+/// [`Self::Optional`] and [`Self::Defaulted`] are *not* the same case, and the
+/// difference is observable. An omitted optional parameter is `undefined`
+/// inside the callee, which a caller can pass; an omitted defaulted one is
+/// never observable at all, because the *caller* evaluates the initializer --
+/// `lower_arguments` does it at every call site, which is where JavaScript
+/// evaluates it. So a boundary that is not a compiled call site can supply the
+/// first and cannot supply the second.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ParamShape {
+    /// A declared parameter, present at every call.
+    #[default]
+    Ordinary,
+    /// `...args: T[]`. An ordinary parameter of array type as far as the callee
+    /// is concerned; the array is gathered by the call.
+    Rest,
+    /// `x?: T`, with no initializer. Absent means `undefined`, which is a *tag*
+    /// rather than a zero -- so a caller supplying `0` is wrong rather than
+    /// imprecise.
+    Optional,
+    /// `x: T = expr`. The initializer is evaluated by each caller that omits
+    /// the argument, so the callee's parameter is ordinary and always present.
+    Defaulted,
 }
 
 /// One operation.

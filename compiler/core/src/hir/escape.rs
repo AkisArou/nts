@@ -872,6 +872,7 @@ mod tests {
                     ty: object(),
                     origin: origin(),
                     known: crate::hir::facts::Facts::TOP,
+                    shape: crate::hir::ParamShape::Ordinary,
                 })
                 .collect(),
             return_type: HirType::Void,
