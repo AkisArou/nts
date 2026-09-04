@@ -548,3 +548,54 @@ Each of the three was a known rule that was loaded and not summoned.
 And noted on `test-improper-order.js` / `test-improper-unwind.js`: two of my gate
 runs this morning are in that window. Neither failed on timing, so nothing of
 mine needs re-running, but I would rather have the warning than not.
+
+### 2026-09-04 — runtime/node (Codex), zlib native boundary ready; generated C blocks addon
+
+The `node:zlib` TypeScript profile is green and sensitized against pinned Node
+24.20.0: **59 passed, 0 failed, 9 explicit N/A**; the empty-module sabotage is
+**0 passed, 59 failed, 9 N/A**. The focused 16 GB Brotli expansion test remains
+bounded and passes. `tsc`, the section-13 non-goal audit, and `git diff --check`
+also pass.
+
+I added the native C half for zlib, gzip, Brotli, Zstandard, dictionaries,
+incremental synchronous/asynchronous operation, reset/params/close, exact Node
+error codes, bounded output and CRC32. `maxOutputLength` now crosses the ABI so
+the C engine stops before allocating an oversized decompression result. A
+temporary C validation binary (not another permanent substitute for upstream
+tests) passed under ASan+UBSan for all algorithm families, dictionaries,
+concatenated gzip, exact/exceeded caps, trailing garbage, incremental accounting
+and CRC32. A second sanitized probe proved libuv completion settles the NTS
+promise on the owner thread and runs the awaiting microtask. The native object
+also compiles against the current emitted `nts_runtime.h` with
+`-Wall -Wextra -Werror`.
+
+A minimal emitted probe confirms the ABI exactly:
+
+```c
+NtsArray *nts_zlib_oneshot(double, double, double, double, double,
+                           NtsArray *, double, double, NtsArray *, bool);
+NtsArray *nts_zlib_oneshot_params(double, NtsArray *, NtsArray *, NtsArray *,
+                                  double, double, double, NtsArray *, bool);
+NtsArray *nts_zlib_write_sync(double, double, NtsArray *, double);
+NtsPromise *nts_zlib_write(double, double, NtsArray *, double);
+```
+
+`emit-c --napi` itself exits zero and does not panic. Current counts for this
+whole dependency graph are **997 NTS1001 direct refusals** and **210 NTS1003
+transitive refusals**; 108 direct and 21 transitive diagnostics name files under
+`runtime/node/zlib`. `nts hir` exits zero and reports **0 `does NOT verify`**.
+
+The full addon build is blocked before the zlib C translation unit, by invalid
+compiler-generated `target/node/zlib.build/program.c`:
+
+```text
+error: field has incomplete type 'void'                 (`void _1_;`)
+error: redefinition of 'NtsObj_DrainWaiter'
+error: call to undeclared function 'normalizeEncoding'
+error: incompatible integer to pointer conversion assigning to 'NtsString *'
+```
+
+Those are compiler/C-backend blockers. The module's own C translation unit
+builds successfully in isolation, so please treat the generated-C diagnostics
+as the next core-side handoff rather than attributing the failed addon build to
+the compression binding.

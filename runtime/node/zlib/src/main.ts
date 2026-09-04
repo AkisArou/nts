@@ -21,78 +21,27 @@ import { finished } from "../../stream/src/main.ts";
 import type { TransformOptions } from "../../stream/src/transform.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
-  ERR_BROTLI_INVALID_PARAM,
+  ERR_BUFFER_TOO_LARGE,
   ERR_INVALID_ARG_TYPE,
   ERR_OUT_OF_RANGE,
+  ERR_TRAILING_JUNK_AFTER_STREAM_END,
 } from "../../internal/errors.ts";
-import { validateFunction } from "../../internal/validators.ts";
+import {
+  validateBoolean,
+  validateFunction,
+  validateInteger,
+} from "../../internal/validators.ts";
 import * as C from "./constants.ts";
+import { byteView, optionalByteView, parameterArrays } from "./options.ts";
+export * as iter from "./iter.ts";
 
 export * as constants from "./constants.ts";
 export { codes } from "./constants.ts";
 
-/**
- * Build an engine. A negative return is a failure code rather than a handle.
- *
- * The parameters are zlib's own and are passed through rather than bundled
- * into an options object, because their meanings are the library's: a
- * `windowBits` of 15 and of 31 select different *formats*, not different
- * amounts of memory.
- */
-declare function nts_zlib_create(
-  mode: number,
-  level: number,
-  windowBits: number,
-  memLevel: number,
-  strategy: number,
-  dictionary: number[],
-): number;
-
-/** Brotli and zstd take a parameter table rather than fixed arguments. */
-declare function nts_zlib_create_params(
-  mode: number,
-  keys: number[],
-  values: number[],
-): number;
-
-/**
- * Feed input and take whatever comes out.
- *
- * Asynchronous because compression of a large chunk is real work and node runs
- * it on the thread pool; `Transform._transform` takes a callback, so nothing
- * has to block for it.
- */
-declare function nts_zlib_write(
-  handle: number,
-  flush: number,
-  input: number[],
-  callback: (code: number, output: number[]) => void,
-): void;
-
-/** The whole of a one-shot compression or decompression, on this thread. */
-declare function nts_zlib_oneshot(
-  mode: number,
-  level: number,
-  windowBits: number,
-  memLevel: number,
-  strategy: number,
-  dictionary: number[],
-  finishFlush: number,
-  input: number[],
-): number[];
-
-declare function nts_zlib_oneshot_params(
-  mode: number,
-  keys: number[],
-  values: number[],
-  input: number[],
-): number[];
-
-declare function nts_zlib_error_message(handle: number): string;
-declare function nts_zlib_reset(handle: number): void;
-declare function nts_zlib_params(handle: number, level: number, strategy: number): number;
-declare function nts_zlib_close(handle: number): void;
-declare function nts_crc32(input: number[], initial: number): number;
+export type BinaryInput =
+  | ArrayBuffer
+  | SharedArrayBuffer
+  | ArrayBufferView<ArrayBufferLike>;
 
 /**
  * `flush` means two different things and both are spelled the same.
@@ -113,13 +62,28 @@ export interface ZlibOptions extends Omit<TransformOptions, "flush" | "transform
   level?: number | undefined;
   memLevel?: number | undefined;
   strategy?: number | undefined;
-  dictionary?: Buffer | undefined;
+  dictionary?: BinaryInput | undefined;
   info?: boolean | undefined;
   maxOutputLength?: number | undefined;
-  params?: Record<number, number> | undefined;
+  params?: Readonly<Record<number, number | boolean>> | undefined;
+  pledgedSrcSize?: number | undefined;
+  rejectGarbageAfterEnd?: boolean | undefined;
 }
 
 /** A number in range, or the default if it was not given at all. */
+function finiteOrDefault(value: unknown, name: string, byDefault: number): number {
+  if (value === undefined || (typeof value === "number" && Number.isNaN(value))) {
+    return byDefault;
+  }
+  if (typeof value !== "number") {
+    throw new ERR_INVALID_ARG_TYPE(name, "number", value);
+  }
+  if (!Number.isFinite(value)) {
+    throw new ERR_OUT_OF_RANGE(name, "a finite number", value);
+  }
+  return value;
+}
+
 function inRangeOrDefault(
   value: unknown,
   name: string,
@@ -127,13 +91,30 @@ function inRangeOrDefault(
   max: number,
   byDefault: number,
 ): number {
-  if (value === undefined) return byDefault;
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    throw new ERR_INVALID_ARG_TYPE(name, "number", value);
+  const number = finiteOrDefault(value, name, byDefault);
+  if (number < min || number > max) {
+    throw new ERR_OUT_OF_RANGE(name, `>= ${min} and <= ${max}`, number);
   }
-  if (value < min || value > max) {
-    throw new ERR_OUT_OF_RANGE(name, `>= ${min} and <= ${max}`, value);
+  return number;
+}
+
+function minimumOrDefault(
+  value: unknown,
+  name: string,
+  minimum: number,
+  byDefault: number,
+): number {
+  const number = finiteOrDefault(value, name, byDefault);
+  if (number < minimum) {
+    throw new ERR_OUT_OF_RANGE(name, `>= ${minimum}`, number);
   }
+  return number;
+}
+
+function rejectGarbageAfterEnd(options?: ZlibOptions): boolean {
+  const value = options?.rejectGarbageAfterEnd;
+  if (value === undefined) return false;
+  validateBoolean(value, "options.rejectGarbageAfterEnd");
   return value;
 }
 
@@ -142,13 +123,85 @@ export class ZlibError extends Error {
   errno: number;
   code: string;
 
-  constructor(message: string, errno: number) {
+  constructor(message: string, errno: number, nativeCode = "") {
     super(message);
     this.errno = errno;
-    this.code = (C.codes[String(errno)] as string) ?? "Z_UNKNOWN";
+    const fallbackCode = C.codes[String(errno)];
+    this.code = nativeCode ||
+      (typeof fallbackCode === "string" ? fallbackCode : "Z_UNKNOWN");
     this.name = "Error";
   }
 }
+
+/** Numeric flush requests queued behind earlier writes, keyed by their marker. */
+const flushFlags = new Map<Uint8Array, number>();
+
+type FlushFamily = "zlib" | "brotli" | "zstd";
+
+interface FlushDefaults {
+  readonly flush: number;
+  readonly finishFlush: number;
+  readonly fullFlush: number;
+  readonly minimum: number;
+  readonly maximum: number;
+  readonly family: FlushFamily;
+}
+
+function zlibFlushStrength(flush: number): number {
+  switch (flush) {
+    case C.Z_NO_FLUSH: return 0;
+    case C.Z_BLOCK: return 1;
+    case C.Z_PARTIAL_FLUSH: return 2;
+    case C.Z_SYNC_FLUSH: return 3;
+    case C.Z_FULL_FLUSH: return 4;
+    case C.Z_FINISH: return 5;
+    default: return -1;
+  }
+}
+
+function finalFlush(current: number, finishing: number, family: FlushFamily): number {
+  if (family !== "zlib") return Math.max(current, finishing);
+  return zlibFlushStrength(current) > zlibFlushStrength(finishing)
+    ? current
+    : finishing;
+}
+
+/**
+ * Typed control surface for the native engine.
+ *
+ * Node exposes `_handle` even though it is internal, and its regression suite
+ * calls `_handle.reset()` directly. Keeping the numeric ABI identifier inside
+ * this fixed-layout value preserves that behavior without treating a number
+ * as if it had methods. Hot writes read `identifier` once before crossing the
+ * native boundary; reset, parameter changes, and close are cold control paths.
+ */
+class ZlibNativeHandle {
+  readonly identifier: number;
+
+  constructor(identifier: number) {
+    this.identifier = identifier;
+  }
+
+  reset(): void {
+    nts_zlib_reset(this.identifier);
+  }
+
+  setParameters(level: number, strategy: number): void {
+    nts_zlib_params(this.identifier, level, strategy);
+  }
+
+  close(): void {
+    nts_zlib_close(this.identifier);
+  }
+}
+
+interface PausedNativeWrite {
+  readonly handle: number;
+  readonly flush: number;
+  readonly callback: (error?: unknown) => void;
+}
+
+const emptyNativeInput = new Uint8Array(0);
 
 /**
  * The stream every compressor and decompressor is.
@@ -160,24 +213,31 @@ export class ZlibError extends Error {
  */
 export class ZlibBase extends Transform {
   bytesWritten = 0;
-  _handle: number | null;
+  _handle: ZlibNativeHandle | null;
   _chunkSize: number;
   _defaultFlushFlag: number;
   _finishFlushFlag: number;
   _defaultFullFlushFlag: number;
+  _flushMinimum: number;
+  _flushMaximum: number;
+  _flushFamily: FlushFamily;
   _maxOutputLength: number;
   _info: boolean;
   #closed = false;
+  #outputBytes = 0;
+  #pausedWrite: PausedNativeWrite | null = null;
 
   constructor(
     options: ZlibOptions | undefined,
     handle: number,
-    defaults: { flush: number; finishFlush: number; fullFlush: number },
+    defaults: FlushDefaults,
   ) {
-    const chunkSize = options?.chunkSize ?? C.Z_DEFAULT_CHUNK;
-    if (chunkSize < C.Z_MIN_CHUNK) {
-      throw new ERR_OUT_OF_RANGE("options.chunkSize", `>= ${C.Z_MIN_CHUNK}`, chunkSize);
-    }
+    const chunkSize = minimumOrDefault(
+      options?.chunkSize,
+      "options.chunkSize",
+      C.Z_MIN_CHUNK,
+      C.Z_DEFAULT_CHUNK,
+    );
 
     // Built rather than spread: only the stream's own options cross over, so
     // zlib's numeric `flush` cannot be mistaken for the stream's hook of the
@@ -195,11 +255,26 @@ export class ZlibBase extends Transform {
       writableObjectMode: false,
     });
 
-    this._handle = handle;
+    this._handle = new ZlibNativeHandle(handle);
     this._chunkSize = chunkSize;
-    this._defaultFlushFlag = options?.flush ?? defaults.flush;
-    this._finishFlushFlag = options?.finishFlush ?? defaults.finishFlush;
+    this._defaultFlushFlag = inRangeOrDefault(
+      options?.flush,
+      "options.flush",
+      defaults.minimum,
+      defaults.maximum,
+      defaults.flush,
+    );
+    this._finishFlushFlag = inRangeOrDefault(
+      options?.finishFlush,
+      "options.finishFlush",
+      defaults.minimum,
+      defaults.maximum,
+      defaults.finishFlush,
+    );
     this._defaultFullFlushFlag = defaults.fullFlush;
+    this._flushMinimum = defaults.minimum;
+    this._flushMaximum = defaults.maximum;
+    this._flushFamily = defaults.family;
     this._maxOutputLength = inRangeOrDefault(
       options?.maxOutputLength,
       "options.maxOutputLength",
@@ -216,13 +291,16 @@ export class ZlibBase extends Transform {
   }
 
   override _transform(chunk: unknown, _encoding: string, callback: (error?: unknown) => void): void {
+    const input = asBytes(chunk, "chunk");
+    const requestedFlush = flushFlags.get(input);
+    if (requestedFlush !== undefined) flushFlags.delete(input);
     // The last chunk also carries the finishing flush, or the engine would
     // keep its final block and the output would be truncated.
-    const isLast = this.writableEnded && this.writableLength === (chunk as Buffer).length;
-    const flush = isLast
-      ? Math.max(this._defaultFlushFlag, this._finishFlushFlag)
-      : this._defaultFlushFlag;
-    this.#run(chunk as Buffer, flush, callback);
+    const isLast = this.writableEnded && this.writableLength === input.byteLength;
+    const flush = requestedFlush ?? (isLast
+      ? finalFlush(this._defaultFlushFlag, this._finishFlushFlag, this._flushFamily)
+      : this._defaultFlushFlag);
+    this.#run(input, flush, callback);
   }
 
   override _flush(callback: (error?: unknown) => void): void {
@@ -230,26 +308,130 @@ export class ZlibBase extends Transform {
     this.#run(Buffer.alloc(0), this._finishFlushFlag, callback);
   }
 
-  #run(chunk: Buffer, flush: number, callback: (error?: unknown) => void): void {
+  override _read(): void {
+    super._read();
+    const paused = this.#pausedWrite;
+    if (paused === null) return;
+    this.#pausedWrite = null;
+    this.#runAsync(
+      paused.handle,
+      emptyNativeInput,
+      paused.flush,
+      paused.callback,
+    );
+  }
+
+  _processChunk(chunk: unknown, flush: number): Buffer;
+  _processChunk(
+    chunk: unknown,
+    flush: number,
+    callback: (error?: unknown) => void,
+  ): void;
+  _processChunk(
+    chunk: unknown,
+    flush: number,
+    callback?: (error?: unknown) => void,
+  ): Buffer | void {
+    const input = asBytes(chunk, "chunk");
+    const handle = this._handle;
+    if (callback !== undefined) {
+      if (handle === null) {
+        nextTick(callback);
+      } else {
+        this.bytesWritten += input.byteLength;
+        this.#runAsync(handle.identifier, input, flush, callback);
+      }
+      return;
+    }
+    if (handle === null) throw new Error("zlib binding closed");
+
+    const output = nts_zlib_write_sync(
+      handle.identifier,
+      flush,
+      input,
+      this._maxOutputLength,
+    );
+    const status = nts_zlib_status(handle.identifier);
+    if (status !== 0) {
+      throw new ZlibError(
+        nts_zlib_error_message(handle.identifier),
+        status,
+        nts_zlib_error_code(handle.identifier),
+      );
+    }
+    if (output.byteLength > this._maxOutputLength) {
+      throw new RangeError(`Cannot create a Buffer larger than ${this._maxOutputLength} bytes`);
+    }
+    this.bytesWritten += input.byteLength;
+    handle.close();
+    this._handle = null;
+    return Buffer.from(output);
+  }
+
+  #run(chunk: Uint8Array, flush: number, callback: (error?: unknown) => void): void {
     if (this._handle === null) {
       nextTick(callback);
       return;
     }
-    const handle = this._handle;
+    const handle = this._handle.identifier;
     this.bytesWritten += chunk.length;
+    this.#runAsync(handle, chunk, flush, callback);
+  }
 
-    nts_zlib_write(handle, flush, Array.from(chunk) as number[], (code, output) => {
-      if (code < 0) {
-        callback(new ZlibError(nts_zlib_error_message(handle), code));
+  async #runAsync(
+    handle: number,
+    chunk: Uint8Array,
+    flush: number,
+    callback: (error?: unknown) => void,
+  ): Promise<void> {
+    let input = chunk;
+    while (true) {
+      let output: Uint8Array;
+      try {
+        const remainingOutput = this._maxOutputLength - this.#outputBytes;
+        const outputLimit = Math.min(this._chunkSize, remainingOutput + 1);
+        output = await nts_zlib_write(handle, flush, input, outputLimit);
+      } catch (error) {
+        callback(error);
         return;
       }
-      if (output.length > this._maxOutputLength) {
-        callback(new RangeError(`Cannot create a Buffer larger than ${this._maxOutputLength} bytes`));
+
+      // Destroying a stream closes its native handle. A write already running
+      // in libuv is allowed to finish, but its result no longer belongs to a
+      // live Transform and the handle may have been released before this
+      // continuation runs.
+      if (this.#closed) {
+        callback();
         return;
       }
-      if (output.length > 0) this.push(Buffer.from(output));
-      callback();
-    });
+
+      const status = nts_zlib_status(handle);
+      if (status !== 0) {
+        const code = nts_zlib_error_code(handle);
+        callback(code === "ERR_TRAILING_JUNK_AFTER_STREAM_END"
+          ? new ERR_TRAILING_JUNK_AFTER_STREAM_END()
+          : new ZlibError(nts_zlib_error_message(handle), status, code));
+        return;
+      }
+      this.bytesWritten = nts_zlib_bytes_written(handle);
+      this.#outputBytes += output.byteLength;
+      if (this.#outputBytes > this._maxOutputLength) {
+        callback(new ERR_BUFFER_TOO_LARGE(this._maxOutputLength));
+        return;
+      }
+
+      const canContinue = output.byteLength === 0 || this.push(Buffer.from(output));
+      if (!nts_zlib_operation_pending(handle)) {
+        if (nts_zlib_stream_ended(handle)) this.push(null);
+        callback();
+        return;
+      }
+      if (!canContinue) {
+        this.#pausedWrite = { handle, flush, callback };
+        return;
+      }
+      input = emptyNativeInput;
+    }
   }
 
   /**
@@ -265,39 +447,29 @@ export class ZlibBase extends Transform {
       kind = this._defaultFullFlushFlag;
     }
 
+    const validatedKind = inRangeOrDefault(
+      kind,
+      "kind",
+      this._flushMinimum,
+      this._flushMaximum,
+      this._defaultFullFlushFlag,
+    );
+
     if (this.writableFinished) {
       if (callback) nextTick(callback);
     } else if (this.writableEnded) {
       if (callback) this.once("end", callback);
     } else {
-      const marker = Buffer.alloc(0) as Buffer & { [key: symbol]: number };
-      marker[kFlushFlag] = (kind as number) ?? this._defaultFullFlushFlag;
-      this.write(marker, undefined, callback as never);
+      const marker = Buffer.alloc(0);
+      flushFlags.set(marker, validatedKind);
+      this.write(marker, undefined, callback);
     }
   }
 
   /** Forget everything and start a new stream on the same engine. */
   reset(): void {
     if (this._handle === null) throw new Error("zlib binding closed");
-    nts_zlib_reset(this._handle);
-  }
-
-  /**
-   * Change the compression level or strategy mid-stream.
-   *
-   * The engine has to flush first: the bytes already produced were compressed
-   * under the old settings, and a reader decoding them under the new ones
-   * would be reading a different stream.
-   */
-  params(level: number, strategy: number, callback?: () => void): void {
-    inRangeOrDefault(level, "level", C.Z_MIN_LEVEL, C.Z_MAX_LEVEL, C.Z_DEFAULT_LEVEL);
-    inRangeOrDefault(strategy, "strategy", C.Z_DEFAULT_STRATEGY, C.Z_FIXED, C.Z_DEFAULT_STRATEGY);
-    if (callback !== undefined) validateFunction(callback, "callback");
-
-    this.flush(C.Z_SYNC_FLUSH, () => {
-      if (this._handle !== null) nts_zlib_params(this._handle, level, strategy);
-      if (callback) callback();
-    });
+    this._handle.reset();
   }
 
   close(callback?: () => void): void {
@@ -306,17 +478,15 @@ export class ZlibBase extends Transform {
   }
 
   override _destroy(error: unknown, callback: (error?: unknown) => void): void {
+    this.#pausedWrite = null;
     if (!this.#closed && this._handle !== null) {
       this.#closed = true;
-      nts_zlib_close(this._handle);
+      this._handle.close();
       this._handle = null;
     }
     callback(error);
   }
 }
-
-/** Carries a flush request through the write queue on a zero-length chunk. */
-const kFlushFlag = Symbol("kFlushFlag");
 
 // ------------------------------------------------------------- the zlib family
 
@@ -324,14 +494,32 @@ const zlibDefaults = {
   flush: C.Z_NO_FLUSH,
   finishFlush: C.Z_FINISH,
   fullFlush: C.Z_FULL_FLUSH,
-};
+  minimum: C.Z_NO_FLUSH,
+  maximum: C.Z_BLOCK,
+  family: "zlib",
+} satisfies FlushDefaults;
 
-function zlibHandle(mode: number, options?: ZlibOptions): number {
+interface ZlibInitialization {
+  readonly handle: number;
+  readonly level: number;
+  readonly strategy: number;
+}
+
+function initializationError(handle: number, fallbackMessage: string): ZlibError {
+  const nativeStatus = nts_zlib_last_status();
+  return new ZlibError(
+    nts_zlib_error_message(handle) || fallbackMessage,
+    nativeStatus === 0 ? handle : nativeStatus,
+    nts_zlib_error_code(handle),
+  );
+}
+
+function initializeZlib(mode: number, options?: ZlibOptions): ZlibInitialization {
   let windowBits = C.Z_DEFAULT_WINDOWBITS;
   let level = C.Z_DEFAULT_COMPRESSION;
   let memLevel = C.Z_DEFAULT_MEMLEVEL;
   let strategy = C.Z_DEFAULT_STRATEGY;
-  let dictionary: number[] = [];
+  let dictionary: Uint8Array = new Uint8Array(0);
 
   if (options) {
     // `windowBits` is special twice over.
@@ -363,32 +551,64 @@ function zlibHandle(mode: number, options?: ZlibOptions): number {
     memLevel = inRangeOrDefault(options.memLevel, "options.memLevel", C.Z_MIN_MEMLEVEL, C.Z_MAX_MEMLEVEL, C.Z_DEFAULT_MEMLEVEL);
     strategy = inRangeOrDefault(options.strategy, "options.strategy", C.Z_DEFAULT_STRATEGY, C.Z_FIXED, C.Z_DEFAULT_STRATEGY);
 
-    if (options.dictionary !== undefined) {
-      const given = options.dictionary as unknown;
-      if (ArrayBuffer.isView(given)) {
-        dictionary = Array.from(
-          Buffer.from((given as ArrayBufferView).buffer as ArrayBuffer, given.byteOffset, given.byteLength),
-        ) as number[];
-      } else if (given instanceof ArrayBuffer) {
-        dictionary = Array.from(Buffer.from(given)) as number[];
-      } else {
-        throw new ERR_INVALID_ARG_TYPE(
-          "options.dictionary",
-          ["Buffer", "TypedArray", "DataView", "ArrayBuffer"],
-          given,
-        );
-      }
-    }
+    dictionary = optionalByteView(options.dictionary, "options.dictionary");
   }
 
-  const handle = nts_zlib_create(mode, level, windowBits, memLevel, strategy, dictionary);
-  if (handle < 0) throw new ZlibError("Failed to initialize the compression engine", handle);
-  return handle;
+  const handle = nts_zlib_create(
+    mode,
+    level,
+    windowBits,
+    memLevel,
+    strategy,
+    dictionary,
+    rejectGarbageAfterEnd(options),
+  );
+  if (handle < 0) {
+    throw initializationError(handle, "Failed to initialize the compression engine");
+  }
+  return { handle, level, strategy };
 }
 
 export class Zlib extends ZlibBase {
+  _level: number;
+  _strategy: number;
+  _mode: number;
+
   constructor(options: ZlibOptions | undefined, mode: number) {
-    super(options, zlibHandle(mode, options), zlibDefaults);
+    const initialization = initializeZlib(mode, options);
+    super(options, initialization.handle, zlibDefaults);
+    this._level = initialization.level;
+    this._strategy = initialization.strategy;
+    this._mode = mode;
+  }
+
+  /**
+   * Change the compression level or strategy after all earlier writes finish.
+   */
+  params(level: number, strategy: number, callback?: () => void): void {
+    inRangeOrDefault(level, "level", C.Z_MIN_LEVEL, C.Z_MAX_LEVEL, C.Z_DEFAULT_LEVEL);
+    inRangeOrDefault(
+      strategy,
+      "strategy",
+      C.Z_DEFAULT_STRATEGY,
+      C.Z_FIXED,
+      C.Z_DEFAULT_STRATEGY,
+    );
+    if (callback !== undefined) validateFunction(callback, "callback");
+
+    if (this._level === level && this._strategy === strategy) {
+      if (callback !== undefined) nextTick(callback);
+      return;
+    }
+
+    this.flush(C.Z_SYNC_FLUSH, () => {
+      if (this._handle === null) return;
+      this._handle.setParameters(level, strategy);
+      if (this.destroyed) return;
+      this._level = level;
+      this._strategy = strategy;
+      if (callback !== undefined) callback();
+    });
   }
 }
 
@@ -442,7 +662,10 @@ const brotliDefaults = {
   flush: C.BROTLI_OPERATION_PROCESS,
   finishFlush: C.BROTLI_OPERATION_FINISH,
   fullFlush: C.BROTLI_OPERATION_FLUSH,
-};
+  minimum: C.BROTLI_OPERATION_PROCESS,
+  maximum: C.BROTLI_OPERATION_EMIT_METADATA,
+  family: "brotli",
+} satisfies FlushDefaults;
 
 /**
  * The parameter keys each engine has.
@@ -453,41 +676,43 @@ const brotliDefaults = {
  * complaint.
  */
 const BROTLI_ENCODER_PARAM_MAX = C.BROTLI_PARAM_NDIRECT;
-const BROTLI_DECODER_PARAM_MAX = C.BROTLI_DECODER_PARAM_LARGE_WINDOW;
 
 function parameterTable(
   options: ZlibOptions | undefined,
   mode: number,
 ): [number[], number[]] {
-  const keys: number[] = [];
-  const values: number[] = [];
-  if (options?.params) {
-    const max = mode === C.BROTLI_ENCODE
-      ? BROTLI_ENCODER_PARAM_MAX
-      : mode === C.BROTLI_DECODE
-        ? BROTLI_DECODER_PARAM_MAX
-        : Infinity;
-
-    for (const [key, value] of Object.entries(options.params)) {
-      const index = Number(key);
-      if (!Number.isInteger(index) || index < 0 || index > max) {
-        throw new ERR_BROTLI_INVALID_PARAM(key);
-      }
-      if (typeof value !== "number" || Number.isNaN(value)) {
-        throw new ERR_INVALID_ARG_TYPE(`options.params[${key}]`, "number", value);
-      }
-      keys.push(index);
-      values.push(value);
-    }
+  if (mode === C.BROTLI_ENCODE || mode === C.BROTLI_DECODE) {
+    return parameterArrays(options?.params, BROTLI_ENCODER_PARAM_MAX, "brotli");
   }
-  return [keys, values];
+  return parameterArrays(
+    options?.params,
+    mode === C.ZSTD_COMPRESS ? 402 : C.ZSTD_d_windowLogMax,
+    "zstd",
+  );
+}
+
+function pledgedSourceSize(options: ZlibOptions | undefined): number {
+  const value = options?.pledgedSrcSize;
+  if (value === undefined) return -1;
+  validateInteger(value, "options.pledgedSrcSize", 0);
+  return value;
 }
 
 export class Brotli extends ZlibBase {
   constructor(options: ZlibOptions | undefined, mode: number) {
     const [keys, values] = parameterTable(options, mode);
-    const handle = nts_zlib_create_params(mode, keys, values);
-    if (handle < 0) throw new ZlibError("Failed to initialize the brotli engine", handle);
+    const dictionary = optionalByteView(options?.dictionary, "options.dictionary");
+    const handle = nts_zlib_create_params(
+      mode,
+      keys,
+      values,
+      dictionary,
+      -1,
+      rejectGarbageAfterEnd(options),
+    );
+    if (handle < 0) {
+      throw initializationError(handle, "Failed to initialize the brotli engine");
+    }
     super(options, handle, brotliDefaults);
   }
 }
@@ -509,13 +734,26 @@ const zstdDefaults = {
   flush: C.ZSTD_e_continue,
   finishFlush: C.ZSTD_e_end,
   fullFlush: C.ZSTD_e_flush,
-};
+  minimum: C.ZSTD_e_continue,
+  maximum: C.ZSTD_e_end,
+  family: "zstd",
+} satisfies FlushDefaults;
 
 export class Zstd extends ZlibBase {
   constructor(options: ZlibOptions | undefined, mode: number) {
     const [keys, values] = parameterTable(options, mode);
-    const handle = nts_zlib_create_params(mode, keys, values);
-    if (handle < 0) throw new ZlibError("Failed to initialize the zstd engine", handle);
+    const dictionary = optionalByteView(options?.dictionary, "options.dictionary");
+    const handle = nts_zlib_create_params(
+      mode,
+      keys,
+      values,
+      dictionary,
+      mode === C.ZSTD_COMPRESS ? pledgedSourceSize(options) : -1,
+      rejectGarbageAfterEnd(options),
+    );
+    if (handle < 0) {
+      throw initializationError(handle, "Failed to initialize the zstd engine");
+    }
     super(options, handle, zstdDefaults);
   }
 }
@@ -533,46 +771,168 @@ export class ZstdDecompress extends Zstd {
 
 // ------------------------------------------------------- one-shot convenience
 
-type OneShotCallback = (error: unknown, result?: Buffer) => void;
+export interface CompressionResult {
+  readonly buffer: Buffer;
+  readonly engine: ZlibBase;
+}
 
-function asBytes(input: unknown, name: string): number[] {
-  if (typeof input === "string") return Array.from(Buffer.from(input)) as number[];
-  if (input instanceof Buffer) return Array.from(input) as number[];
-  if (ArrayBuffer.isView(input)) {
-    return Array.from(
-      Buffer.from((input as ArrayBufferView).buffer as ArrayBuffer, input.byteOffset, input.byteLength),
-    ) as number[];
+export type OneShotResult = Buffer | CompressionResult;
+type OneShotCallback = (error: unknown, result?: OneShotResult) => void;
+
+function asBytes(input: unknown, name: string): Uint8Array {
+  if (typeof input === "string") return Buffer.from(input);
+  if (
+    input instanceof ArrayBuffer || input instanceof SharedArrayBuffer ||
+    ArrayBuffer.isView(input)
+  ) {
+    return byteView(input, name);
   }
-  if (input instanceof ArrayBuffer) return Array.from(Buffer.from(input)) as number[];
-  throw new ERR_INVALID_ARG_TYPE(name, ["string", "Buffer", "TypedArray", "DataView", "ArrayBuffer"], input);
+  throw new ERR_INVALID_ARG_TYPE(
+    name,
+    ["string", "Buffer", "TypedArray", "DataView", "ArrayBuffer"],
+    input,
+  );
 }
 
 /** The parameters a one-shot needs, resolved the same way a stream's are. */
-function zlibArguments(mode: number, options?: ZlibOptions) {
+interface ZlibArguments {
+  readonly level: number;
+  readonly windowBits: number;
+  readonly memLevel: number;
+  readonly strategy: number;
+  readonly dictionary: Uint8Array;
+  readonly finishFlush: number;
+  readonly rejectGarbageAfterEnd: boolean;
+}
+
+function zlibArguments(mode: number, options?: ZlibOptions): ZlibArguments {
   return {
     level: inRangeOrDefault(options?.level, "options.level", C.Z_MIN_LEVEL, C.Z_MAX_LEVEL, C.Z_DEFAULT_COMPRESSION),
     windowBits: inRangeOrDefault(options?.windowBits, "options.windowBits", C.Z_MIN_WINDOWBITS, C.Z_MAX_WINDOWBITS, C.Z_DEFAULT_WINDOWBITS),
     memLevel: inRangeOrDefault(options?.memLevel, "options.memLevel", C.Z_MIN_MEMLEVEL, C.Z_MAX_MEMLEVEL, C.Z_DEFAULT_MEMLEVEL),
     strategy: inRangeOrDefault(options?.strategy, "options.strategy", C.Z_DEFAULT_STRATEGY, C.Z_FIXED, C.Z_DEFAULT_STRATEGY),
-    dictionary: options?.dictionary ? Array.from(options.dictionary) as number[] : [],
-    finishFlush: options?.finishFlush ?? (mode >= C.BROTLI_DECODE ? C.BROTLI_OPERATION_FINISH : C.Z_FINISH),
+    dictionary: optionalByteView(options?.dictionary, "options.dictionary"),
+    finishFlush: finishFlushForMode(mode, options),
+    rejectGarbageAfterEnd: rejectGarbageAfterEnd(options),
   };
 }
 
-function oneShotSync(mode: number, input: unknown, options?: ZlibOptions): Buffer {
+function finishFlushForMode(mode: number, options?: ZlibOptions): number {
+  const defaults = mode === C.BROTLI_ENCODE || mode === C.BROTLI_DECODE
+    ? brotliDefaults
+    : (mode === C.ZSTD_COMPRESS || mode === C.ZSTD_DECOMPRESS
+      ? zstdDefaults
+      : zlibDefaults);
+  inRangeOrDefault(
+    options?.flush,
+    "options.flush",
+    defaults.minimum,
+    defaults.maximum,
+    defaults.flush,
+  );
+  return inRangeOrDefault(
+    options?.finishFlush,
+    "options.finishFlush",
+    defaults.minimum,
+    defaults.maximum,
+    defaults.finishFlush,
+  );
+}
+
+function engineForMode(mode: number, options?: ZlibOptions): ZlibBase {
+  switch (mode) {
+    case C.DEFLATE: return new Deflate(options);
+    case C.INFLATE: return new Inflate(options);
+    case C.GZIP: return new Gzip(options);
+    case C.GUNZIP: return new Gunzip(options);
+    case C.DEFLATERAW: return new DeflateRaw(options);
+    case C.INFLATERAW: return new InflateRaw(options);
+    case C.UNZIP: return new Unzip(options);
+    case C.BROTLI_ENCODE: return new BrotliCompress(options);
+    case C.BROTLI_DECODE: return new BrotliDecompress(options);
+    case C.ZSTD_COMPRESS: return new ZstdCompress(options);
+    case C.ZSTD_DECOMPRESS: return new ZstdDecompress(options);
+    default: throw new ERR_OUT_OF_RANGE("mode", "a supported compression mode", mode);
+  }
+}
+
+function maximumOutputLength(options?: ZlibOptions): number {
+  return inRangeOrDefault(
+    options?.maxOutputLength,
+    "options.maxOutputLength",
+    1,
+    Number.MAX_SAFE_INTEGER,
+    Number.MAX_SAFE_INTEGER,
+  );
+}
+
+function throwOneShotError(maximumOutput: number): void {
+  const status = nts_zlib_last_status();
+  if (status === 0) return;
+
+  const code = nts_zlib_last_error_code();
+  if (code === "ERR_BUFFER_TOO_LARGE") {
+    throw new ERR_BUFFER_TOO_LARGE(maximumOutput);
+  }
+  if (code === "ERR_TRAILING_JUNK_AFTER_STREAM_END") {
+    throw new ERR_TRAILING_JUNK_AFTER_STREAM_END();
+  }
+  throw new ZlibError(nts_zlib_last_error_message(), status, code);
+}
+
+function oneShotSync(mode: number, input: unknown, options?: ZlibOptions): OneShotResult {
   const bytes = asBytes(input, "buffer");
-  const output = mode >= C.BROTLI_DECODE
-    ? (() => {
-      const [keys, values] = parameterTable(options, mode);
-      return nts_zlib_oneshot_params(mode, keys, values, bytes);
-    })()
-    : (() => {
-      const a = zlibArguments(mode, options);
-      return nts_zlib_oneshot(
-        mode, a.level, a.windowBits, a.memLevel, a.strategy, a.dictionary, a.finishFlush, bytes,
-      );
-    })();
-  return Buffer.from(output);
+  let output: Uint8Array;
+  let maximum: number;
+
+  if (mode >= C.BROTLI_DECODE) {
+    const [keys, values] = parameterTable(options, mode);
+    const dictionary = optionalByteView(options?.dictionary, "options.dictionary");
+    const sourceSize = mode === C.ZSTD_COMPRESS ? pledgedSourceSize(options) : -1;
+    const finishFlush = finishFlushForMode(mode, options);
+    const rejectTrailingGarbage = rejectGarbageAfterEnd(options);
+    maximum = maximumOutputLength(options);
+    output = nts_zlib_oneshot_params(
+      mode,
+      keys,
+      values,
+      dictionary,
+      sourceSize,
+      finishFlush,
+      maximum,
+      bytes,
+      rejectTrailingGarbage,
+    );
+  } else {
+    const argumentsForZlib = zlibArguments(mode, options);
+    maximum = maximumOutputLength(options);
+    output = nts_zlib_oneshot(
+      mode,
+      argumentsForZlib.level,
+      argumentsForZlib.windowBits,
+      argumentsForZlib.memLevel,
+      argumentsForZlib.strategy,
+      argumentsForZlib.dictionary,
+      argumentsForZlib.finishFlush,
+      maximum,
+      bytes,
+      argumentsForZlib.rejectGarbageAfterEnd,
+    );
+  }
+
+  throwOneShotError(maximum);
+  if (output.byteLength > maximum) throw new ERR_BUFFER_TOO_LARGE(maximum);
+  const buffer = Buffer.from(output);
+  if (!options?.info) return buffer;
+
+  // Node returns the engine that performed the synchronous operation. The
+  // native one-shot entry point owns the actual work here, so construct the
+  // same public engine shape, record its input count, and close its unused
+  // incremental handle before exposing it.
+  const engine = engineForMode(mode, options);
+  engine.bytesWritten = bytes.byteLength;
+  engine.close();
+  return { buffer, engine };
 }
 
 function oneShot(
@@ -581,51 +941,121 @@ function oneShot(
   options: ZlibOptions | OneShotCallback | undefined,
   callback?: OneShotCallback,
 ): void {
+  let completion = callback;
+  let compressionOptions: ZlibOptions | undefined;
   if (typeof options === "function") {
-    callback = options;
-    options = undefined;
+    completion = options;
+    compressionOptions = undefined;
+  } else {
+    compressionOptions = options;
   }
-  validateFunction(callback, "callback");
+  validateFunction(completion, "callback");
   // On a tick, so a one-shot never calls back before it has returned. Node
   // runs the work on the thread pool; the difference is when the *work*
   // happens, not when the caller hears about it.
   nextTick(() => {
+    let result: OneShotResult;
     try {
-      (callback as OneShotCallback)(null, oneShotSync(mode, input, options as ZlibOptions));
+      result = oneShotSync(mode, input, compressionOptions);
     } catch (error) {
-      (callback as OneShotCallback)(error);
+      completion(error);
+      return;
     }
+    // Deliberately outside the try: an exception from user callback code must
+    // propagate once, not be mistaken for compression failure and delivered
+    // to the same callback a second time.
+    completion(null, result);
   });
 }
 
-const shorthand = (mode: number) => ({
-  async: (input: unknown, options?: ZlibOptions | OneShotCallback, callback?: OneShotCallback) =>
-    oneShot(mode, input, options, callback),
-  sync: (input: unknown, options?: ZlibOptions) => oneShotSync(mode, input, options),
-});
-
-export const deflate = shorthand(C.DEFLATE).async;
-export const deflateSync = shorthand(C.DEFLATE).sync;
-export const inflate = shorthand(C.INFLATE).async;
-export const inflateSync = shorthand(C.INFLATE).sync;
-export const gzip = shorthand(C.GZIP).async;
-export const gzipSync = shorthand(C.GZIP).sync;
-export const gunzip = shorthand(C.GUNZIP).async;
-export const gunzipSync = shorthand(C.GUNZIP).sync;
-export const deflateRaw = shorthand(C.DEFLATERAW).async;
-export const deflateRawSync = shorthand(C.DEFLATERAW).sync;
-export const inflateRaw = shorthand(C.INFLATERAW).async;
-export const inflateRawSync = shorthand(C.INFLATERAW).sync;
-export const unzip = shorthand(C.UNZIP).async;
-export const unzipSync = shorthand(C.UNZIP).sync;
-export const brotliCompress = shorthand(C.BROTLI_ENCODE).async;
-export const brotliCompressSync = shorthand(C.BROTLI_ENCODE).sync;
-export const brotliDecompress = shorthand(C.BROTLI_DECODE).async;
-export const brotliDecompressSync = shorthand(C.BROTLI_DECODE).sync;
-export const zstdCompress = shorthand(C.ZSTD_COMPRESS).async;
-export const zstdCompressSync = shorthand(C.ZSTD_COMPRESS).sync;
-export const zstdDecompress = shorthand(C.ZSTD_DECOMPRESS).async;
-export const zstdDecompressSync = shorthand(C.ZSTD_DECOMPRESS).sync;
+export function deflate(
+  input: unknown,
+  options?: ZlibOptions | OneShotCallback,
+  callback?: OneShotCallback,
+): void { oneShot(C.DEFLATE, input, options, callback); }
+export function deflateSync(input: unknown, options?: ZlibOptions): OneShotResult {
+  return oneShotSync(C.DEFLATE, input, options);
+}
+export function inflate(
+  input: unknown,
+  options?: ZlibOptions | OneShotCallback,
+  callback?: OneShotCallback,
+): void { oneShot(C.INFLATE, input, options, callback); }
+export function inflateSync(input: unknown, options?: ZlibOptions): OneShotResult {
+  return oneShotSync(C.INFLATE, input, options);
+}
+export function gzip(
+  input: unknown,
+  options?: ZlibOptions | OneShotCallback,
+  callback?: OneShotCallback,
+): void { oneShot(C.GZIP, input, options, callback); }
+export function gzipSync(input: unknown, options?: ZlibOptions): OneShotResult {
+  return oneShotSync(C.GZIP, input, options);
+}
+export function gunzip(
+  input: unknown,
+  options?: ZlibOptions | OneShotCallback,
+  callback?: OneShotCallback,
+): void { oneShot(C.GUNZIP, input, options, callback); }
+export function gunzipSync(input: unknown, options?: ZlibOptions): OneShotResult {
+  return oneShotSync(C.GUNZIP, input, options);
+}
+export function deflateRaw(
+  input: unknown,
+  options?: ZlibOptions | OneShotCallback,
+  callback?: OneShotCallback,
+): void { oneShot(C.DEFLATERAW, input, options, callback); }
+export function deflateRawSync(input: unknown, options?: ZlibOptions): OneShotResult {
+  return oneShotSync(C.DEFLATERAW, input, options);
+}
+export function inflateRaw(
+  input: unknown,
+  options?: ZlibOptions | OneShotCallback,
+  callback?: OneShotCallback,
+): void { oneShot(C.INFLATERAW, input, options, callback); }
+export function inflateRawSync(input: unknown, options?: ZlibOptions): OneShotResult {
+  return oneShotSync(C.INFLATERAW, input, options);
+}
+export function unzip(
+  input: unknown,
+  options?: ZlibOptions | OneShotCallback,
+  callback?: OneShotCallback,
+): void { oneShot(C.UNZIP, input, options, callback); }
+export function unzipSync(input: unknown, options?: ZlibOptions): OneShotResult {
+  return oneShotSync(C.UNZIP, input, options);
+}
+export function brotliCompress(
+  input: unknown,
+  options?: ZlibOptions | OneShotCallback,
+  callback?: OneShotCallback,
+): void { oneShot(C.BROTLI_ENCODE, input, options, callback); }
+export function brotliCompressSync(input: unknown, options?: ZlibOptions): OneShotResult {
+  return oneShotSync(C.BROTLI_ENCODE, input, options);
+}
+export function brotliDecompress(
+  input: unknown,
+  options?: ZlibOptions | OneShotCallback,
+  callback?: OneShotCallback,
+): void { oneShot(C.BROTLI_DECODE, input, options, callback); }
+export function brotliDecompressSync(input: unknown, options?: ZlibOptions): OneShotResult {
+  return oneShotSync(C.BROTLI_DECODE, input, options);
+}
+export function zstdCompress(
+  input: unknown,
+  options?: ZlibOptions | OneShotCallback,
+  callback?: OneShotCallback,
+): void { oneShot(C.ZSTD_COMPRESS, input, options, callback); }
+export function zstdCompressSync(input: unknown, options?: ZlibOptions): OneShotResult {
+  return oneShotSync(C.ZSTD_COMPRESS, input, options);
+}
+export function zstdDecompress(
+  input: unknown,
+  options?: ZlibOptions | OneShotCallback,
+  callback?: OneShotCallback,
+): void { oneShot(C.ZSTD_DECOMPRESS, input, options, callback); }
+export function zstdDecompressSync(input: unknown, options?: ZlibOptions): OneShotResult {
+  return oneShotSync(C.ZSTD_DECOMPRESS, input, options);
+}
 
 export const createDeflate = (o?: ZlibOptions) => new Deflate(o);
 export const createInflate = (o?: ZlibOptions) => new Inflate(o);

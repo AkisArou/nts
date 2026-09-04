@@ -121,31 +121,91 @@ export const ZSTD_e_continue = 0;
 export const ZSTD_e_flush = 1;
 export const ZSTD_e_end = 2;
 export const ZSTD_c_compressionLevel = 100;
+export const ZSTD_c_windowLog = 101;
+export const ZSTD_c_hashLog = 102;
+export const ZSTD_c_chainLog = 103;
+export const ZSTD_c_searchLog = 104;
+export const ZSTD_c_minMatch = 105;
+export const ZSTD_c_targetLength = 106;
+export const ZSTD_c_strategy = 107;
+export const ZSTD_c_enableLongDistanceMatching = 160;
+export const ZSTD_c_ldmHashLog = 161;
+export const ZSTD_c_ldmMinMatch = 162;
+export const ZSTD_c_ldmBucketSizeLog = 163;
+export const ZSTD_c_ldmHashRateLog = 164;
+export const ZSTD_c_contentSizeFlag = 200;
 export const ZSTD_c_checksumFlag = 201;
+export const ZSTD_c_dictIDFlag = 202;
+export const ZSTD_c_nbWorkers = 400;
+export const ZSTD_c_jobSize = 401;
+export const ZSTD_c_overlapLog = 402;
 export const ZSTD_d_windowLogMax = 100;
 export const ZSTD_CLEVEL_DEFAULT = 3;
 export const ZSTD_MIN_CLEVEL = -99;
 export const ZSTD_MAX_CLEVEL = 22;
 
-/** The error names zlib reports, by code. */
-export const codes: Record<string, string | number> = {
-  Z_OK: "Z_OK",
-  Z_STREAM_END: "Z_STREAM_END",
-  Z_NEED_DICT: "Z_NEED_DICT",
-  Z_ERRNO: "Z_ERRNO",
-  Z_STREAM_ERROR: "Z_STREAM_ERROR",
-  Z_DATA_ERROR: "Z_DATA_ERROR",
-  Z_MEM_ERROR: "Z_MEM_ERROR",
-  Z_BUF_ERROR: "Z_BUF_ERROR",
-  Z_VERSION_ERROR: "Z_VERSION_ERROR",
-};
+export const ZSTD_fast = 1;
+export const ZSTD_dfast = 2;
+export const ZSTD_greedy = 3;
+export const ZSTD_lazy = 4;
+export const ZSTD_lazy2 = 5;
+export const ZSTD_btlazy2 = 6;
+export const ZSTD_btopt = 7;
+export const ZSTD_btultra = 8;
+export const ZSTD_btultra2 = 9;
 
-// Node exposes the codes both ways round, so `codes[codes.Z_OK]` works.
-for (const [name, value] of Object.entries({
-  Z_OK, Z_STREAM_END, Z_NEED_DICT, Z_ERRNO, Z_STREAM_ERROR,
-  Z_DATA_ERROR, Z_MEM_ERROR, Z_BUF_ERROR, Z_VERSION_ERROR,
-})) {
-  codes[name] = value;
-  codes[String(value)] = name;
-}
-Object.freeze(codes);
+export const ZSTD_error_no_error = 0;
+export const ZSTD_error_GENERIC = 1;
+export const ZSTD_error_prefix_unknown = 10;
+export const ZSTD_error_version_unsupported = 12;
+export const ZSTD_error_frameParameter_unsupported = 14;
+export const ZSTD_error_frameParameter_windowTooLarge = 16;
+export const ZSTD_error_corruption_detected = 20;
+export const ZSTD_error_checksum_wrong = 22;
+export const ZSTD_error_literals_headerWrong = 24;
+export const ZSTD_error_dictionary_corrupted = 30;
+export const ZSTD_error_dictionary_wrong = 32;
+export const ZSTD_error_dictionaryCreation_failed = 34;
+export const ZSTD_error_parameter_unsupported = 40;
+export const ZSTD_error_parameter_combination_unsupported = 41;
+export const ZSTD_error_parameter_outOfBound = 42;
+export const ZSTD_error_tableLog_tooLarge = 44;
+export const ZSTD_error_maxSymbolValue_tooLarge = 46;
+export const ZSTD_error_maxSymbolValue_tooSmall = 48;
+export const ZSTD_error_stabilityCondition_notRespected = 50;
+export const ZSTD_error_stage_wrong = 60;
+export const ZSTD_error_init_missing = 62;
+export const ZSTD_error_memory_allocation = 64;
+export const ZSTD_error_workSpace_tooSmall = 66;
+export const ZSTD_error_dstSize_tooSmall = 70;
+export const ZSTD_error_srcSize_wrong = 72;
+export const ZSTD_error_dstBuffer_null = 74;
+export const ZSTD_error_noForwardProgress_destFull = 80;
+export const ZSTD_error_noForwardProgress_inputEmpty = 82;
+
+/**
+ * The error names zlib reports, indexed in both directions.
+ *
+ * This is written as one fixed-layout object instead of growing a property
+ * map at module initialization. The public Node shape freezes its copy.
+ */
+export const codes: Readonly<Record<string, string | number>> = {
+  "0": "Z_OK",
+  "1": "Z_STREAM_END",
+  "2": "Z_NEED_DICT",
+  "-1": "Z_ERRNO",
+  "-2": "Z_STREAM_ERROR",
+  "-3": "Z_DATA_ERROR",
+  "-4": "Z_MEM_ERROR",
+  "-5": "Z_BUF_ERROR",
+  "-6": "Z_VERSION_ERROR",
+  Z_OK,
+  Z_STREAM_END,
+  Z_NEED_DICT,
+  Z_ERRNO,
+  Z_STREAM_ERROR,
+  Z_DATA_ERROR,
+  Z_MEM_ERROR,
+  Z_BUF_ERROR,
+  Z_VERSION_ERROR,
+};

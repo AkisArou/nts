@@ -53,7 +53,12 @@ else
 fi
 
 mkdir -p "$work" "$out"
-NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$root/target/debug/nts" \
+compiler="${NTS_COMPILER:-$root/target/release/nts}"
+[ -x "$compiler" ] || {
+  echo "no compiler at $compiler; the compiler session must build it" >&2
+  exit 2
+}
+NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$compiler" \
   emit-c "$src/tsconfig.json" --out "$work" --napi
 
 # GAP: the C backend spells an exported function with its source name, so an
@@ -71,12 +76,18 @@ rename="-Ddirname=nts_node_dirname"
 # lowers enough to reach the link step yet.
 module_c=$(find "$src" -maxdepth 1 -name '*.c' 2>/dev/null | tr '\n' ' ')
 shared_c=$(find "$root/runtime/node/internal" -maxdepth 1 -name '*.c' | tr '\n' ' ')
+module_libraries=()
+case "$module" in
+  zlib)
+    module_libraries=(-lz -lbrotlienc -lbrotlidec -lzstd)
+    ;;
+esac
 
 clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared $rename \
   -I"$work" -I"$napi" $uv_flag -I"$src" -I"$root/runtime/node/internal" \
   -o "$out/$module.node" \
   "$work/program.c" "$work/nts_runtime.c" "$work/addon.c" \
   $module_c $shared_c \
-  -luv -lm
+  "${module_libraries[@]}" -luv -lm
 
 echo "$out/$module.node: $(stat -c%s "$out/$module.node") bytes"

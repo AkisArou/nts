@@ -6,14 +6,20 @@
 // program should be able to replace.
 export function shape(exports) {
   const zlib = { ...exports };
+  const codes = Object.freeze({ ...exports.codes });
   delete zlib.default;
+  delete zlib.iter;
   for (const name of ["codes", "constants"]) {
     Object.defineProperty(zlib, name, {
-      value: exports[name],
+      value: name === "codes" ? codes : exports.constants,
       enumerable: true,
       writable: false,
       configurable: false,
     });
   }
   return zlib;
+}
+
+export function subpaths(exports) {
+  return { "zlib/iter": exports.iter };
 }
