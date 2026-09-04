@@ -66,13 +66,19 @@ NTS_RC=1 ls examples/*/tsconfig.json | NTS_RC=1 xargs -P "$jobs" -n 1 sh -c '
   n=$(basename "$(dirname "$d")")
   case "$n" in
     invalid|unsupported)
-      # Fixtures that must *not* compile, inverted exactly as `gate.sh` does.
-      # Listing them as "known failing under reference counting" said nothing
-      # about reference counting: one does not typecheck and the other is a
-      # refused construct, and neither would pass under any provider.
-      if NTS_RC=1 ./target/release/nts check "$d" >/dev/null 2>&1
-        then echo "DIS  $n (should not have passed)"
-        else echo "ok   $n (not an oracle case)"
+      # Fixtures that must *refuse* something, asked exactly as `gate.sh` asks
+      # it. Listing them as "known failing under reference counting" said
+      # nothing about reference counting: one does not typecheck and the other
+      # is a refused construct, and neither would pass under any provider.
+      #
+      # Not "must fail to compile" -- see `gate.sh` for why that inversion was
+      # satisfied by the node parser rather than by the compiler. (No
+      # apostrophes in this block: it is the body of `sh -c` inside single
+      # quotes, and one closes the string. The comment fifteen lines up says so,
+      # and I wrote `node` with an apostrophe anyway.)
+      if NTS_RC=1 ./target/release/nts check "$d" 2>&1 | grep -q "refused:\|does not typecheck"
+        then echo "ok   $n (not an oracle case)"
+        else echo "DIS  $n (refused nothing)"
       fi ;;
     *)
       # An example with nothing for the differential to drive exits 0 without

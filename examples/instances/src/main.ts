@@ -95,3 +95,49 @@ export function chain(times: number): number {
   }
   return c.count;
 }
+
+// A parameter property: `constructor(private x: number)`.
+//
+// Two things wearing one syntax -- a parameter, and a member of the class
+// initialised from it. The checker already reports the member, so the layout
+// has always had the slot; what was missing was the assignment, which is why
+// this was a refusal rather than a gap.
+//
+// The stores go in before the body, because that is where JavaScript puts them
+// and the body may read `this.seed` on its first line.
+//
+// Node **cannot run this in strip-only mode** -- a parameter property is not
+// erasable, so it is `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` and the oracle refuses
+// the program rather than disagreeing with it. The differential now passes
+// `--experimental-transform-types`, which compiles the two non-erasable
+// constructs instead of refusing them, which is what `tsc` does and what the
+// language says they mean. Without that flag this feature is unverifiable
+// rather than unimplemented.
+class Tallied {
+  constructor(
+    private readonly seed: number,
+    public step: number,
+  ) {}
+
+  next(): number {
+    return this.seed + this.step;
+  }
+}
+
+// A parameter property beside an ordinary parameter, and a body that reads the
+// field it declared.
+class Blended {
+  total: number;
+  constructor(
+    public base: number,
+    extra: number,
+  ) {
+    this.total = this.base + extra;
+  }
+}
+
+export function parameterProperties(n: number): number {
+  const c = new Tallied(n, 2);
+  const m = new Blended(n, 3);
+  return c.next() + m.total + c.step + m.base;
+}

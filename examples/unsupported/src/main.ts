@@ -28,12 +28,6 @@ export function hasADefaultReadingAParameter(a: number, b: number = a * 2): numb
   return a + b;
 }
 
-// Declares a field and assigns it, which is a class feature wearing a
-// parameter's syntax. Counted as a default until the two were told apart.
-export class HasAParameterProperty {
-  constructor(private readonly seed: number) {}
-}
-
 // `Error` here is a message and a name (`hir::builtin`). `stack` is a record of
 // frames a compiled binary does not keep and `toString` is a method no class in
 // the hierarchy declares -- both refuse, and each says which it is rather than

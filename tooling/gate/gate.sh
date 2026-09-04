@@ -51,9 +51,25 @@ ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
   n=$(basename "$(dirname "$d")")
   case "$n" in
     invalid|unsupported)
-      if ./target/release/nts check "$d" >/dev/null 2>&1
-        then echo "DIS  $n (should not have passed)"
-        else echo "ok   $n (not an oracle case)"
+      # Not "this must fail to compile". `nts check` exits 0 for a program whose
+      # refused constructs simply never reach the differential -- the functions
+      # holding them are not emitted, the one supported function agrees, and the
+      # run succeeds. So the old inversion was not testing what it looked like.
+      #
+      # It passed for years on `unsupported` because that fixture held a
+      # *parameter property*, which node refuses to parse in strip-only mode, so
+      # the run died in the oracle before the compiler was judged at all.
+      # Implementing the feature and removing the construct made the fixture
+      # "pass" and the gate go red for a reason that had nothing to do with the
+      # change. A check satisfied by an unrelated accident is one nobody was
+      # watching.
+      #
+      # What is actually wanted is that these two *refuse* something -- which is
+      # the whole reason they exist and is visible in the output. `invalid` is
+      # rejected by the typechecker, `unsupported` by the lowering.
+      if ./target/release/nts check "$d" 2>&1 | grep -q "refused:\|does not typecheck"
+        then echo "ok   $n (not an oracle case)"
+        else echo "DIS  $n (refused nothing)"
       fi ;;
     *)
       # Kept, not discarded: an example with no exported function taking and

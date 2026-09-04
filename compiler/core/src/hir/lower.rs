@@ -4428,13 +4428,19 @@ impl<'a> FuncBuilder<'a> {
             });
         }
 
+        let mut declared = Vec::new();
         for child in self.children(member) {
             if self.kind_of(child) != Some(syntax::PARAMETER) {
                 continue;
             }
             let index = u32::try_from(params.len()).unwrap_or(0);
+            if self.declares_a_field(child) {
+                declared.push((child, index));
+            }
             params.push(self.lower_param(child, index)?);
         }
+
+        self.store_parameter_properties(&declared)?;
 
         let body = self
             .children(member)
@@ -6099,6 +6105,86 @@ impl<'a> FuncBuilder<'a> {
         Ok(omitted)
     }
 
+    /// `constructor(private x: number)`: the store the modifier implies.
+    ///
+    /// A parameter property is two things wearing one syntax -- a parameter,
+    /// and a member of the class initialised from it. The checker reports the
+    /// member like any other, so the layout already has the slot; only the
+    /// assignment was missing, which is why this was a refusal rather than a
+    /// gap.
+    ///
+    /// Before the body, because that is where JavaScript puts it and the body
+    /// may read `this.x` on its first line. In declaration order, because the
+    /// initialisers of two of them can be told apart by a getter.
+    ///
+    /// Node cannot run this in strip-only mode -- a parameter property is not
+    /// erasable, so the oracle refuses the program rather than disagreeing with
+    /// it. The differential passes `--experimental-transform-types` for exactly
+    /// this and for `enum`, the other non-erasable construct.
+    fn store_parameter_properties(
+        &mut self,
+        declared: &[(NodeId, u32)],
+    ) -> Result<(), Diagnostic> {
+        for (child, index) in declared.iter().copied() {
+            let name = self
+                .name_node(child)
+                .and_then(|node| self.literal_name(node))
+                .ok_or_else(|| {
+                    self.unsupported(child, "a parameter property whose name is not a literal")
+                })?;
+            let receiver = self
+                .this
+                .ok_or_else(|| self.unsupported(child, "a parameter property outside a class"))?;
+            let HirType::Managed(ManagedType::Object(owner)) =
+                self.values[receiver.0 as usize].ty.clone()
+            else {
+                return Err(self.unsupported(child, "a parameter property on a receiver with no layout"));
+            };
+            let layout = self.layout_of(child, owner)?;
+            let field = layout
+                .index_of(&name)
+                .ok_or_else(|| self.absent_member(child, owner, &name))?;
+            let value = self
+                .values
+                .iter()
+                .position(|op| matches!(op.kind, OpKind::Param(at) if at == index))
+                .map(|at| ValueId(u32::try_from(at).unwrap_or(0)))
+                .ok_or_else(|| self.unsupported(child, "a parameter property with no parameter"))?;
+            let want = layout.fields[field as usize].ty.clone();
+            let value = self.coerce(value, &want, child)?;
+            let origin = self.origin(child);
+            self.push(
+                OpKind::FieldSet {
+                    object: receiver,
+                    field,
+                    value,
+                },
+                HirType::Void,
+                origin,
+            );
+        }
+        Ok(())
+    }
+
+    /// Whether a parameter also declares a field.
+    ///
+    /// `constructor(private x: number)` is two things wearing one syntax: a
+    /// parameter, and a member of the class initialised from it. TypeScript
+    /// permits the modifier nowhere else, and the checker already reports the
+    /// member -- so the layout has the field and what was missing was the
+    /// store.
+    fn declares_a_field(&self, id: NodeId) -> bool {
+        let modifiers = self.node(id).modifiers;
+        [
+            DeclarationModifiers::PRIVATE,
+            DeclarationModifiers::PROTECTED,
+            DeclarationModifiers::PUBLIC,
+            DeclarationModifiers::READONLY,
+        ]
+        .into_iter()
+        .any(|flag| modifiers.contains(flag))
+    }
+
     fn lower_param(&mut self, id: NodeId, index: u32) -> Result<Param, Diagnostic> {
         let children = self.children(id);
         // A name, or a pattern standing where one would be. `function f({ x }:
@@ -6149,24 +6235,6 @@ impl<'a> FuncBuilder<'a> {
                 id,
                 "a rest parameter whose element type has no representation",
             ));
-        }
-        // `constructor(private x: number)` declares a field and assigns it, and
-        // is not a default at all. It was counted as one until the two were
-        // told apart, which is the same mistake in miniature: one message over
-        // two features ranks neither.
-        let modifiers = self.node(id).modifiers;
-        for (flag, spelling) in [
-            (DeclarationModifiers::PRIVATE, "private"),
-            (DeclarationModifiers::PROTECTED, "protected"),
-            (DeclarationModifiers::PUBLIC, "public"),
-            (DeclarationModifiers::READONLY, "readonly"),
-        ] {
-            if modifiers.contains(flag) {
-                return Err(self.unsupported(
-                    id,
-                    &format!("a `{spelling}` parameter property, which declares a field"),
-                ));
-            }
         }
         // A default is supplied by the calls that omit it, which is where
         // JavaScript evaluates it. What that cannot reach is the callee's own

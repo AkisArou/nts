@@ -1151,3 +1151,53 @@ fn a_protocol_loop_carries_no_cursor() {
         func.blocks.iter().map(|b| b.params.len()).collect::<Vec<_>>(),
     );
 }
+
+#[test]
+fn a_parameter_property_stores_the_field_before_the_body() {
+    let Some(lowered) = lowered("instances") else {
+        return;
+    };
+    // `constructor(private seed: number, public step: number)` declares two
+    // members and assigns both. The layout already had the slots -- the checker
+    // reports them like any other property -- so what this pins is the *stores*
+    // and where they are.
+    //
+    // Before the body, because that is where JavaScript puts them and a body may
+    // read `this.seed` on its first line. `Blended` is the case that would catch
+    // it: its body reads `this.base`, which is a parameter property, on the only
+    // line it has.
+    let constructor = func(&lowered, "Tallied#constructor");
+    let stores: Vec<u32> = constructor
+        .entry()
+        .ops
+        .iter()
+        .filter_map(|value| match constructor.values[value.0 as usize].kind {
+            OpKind::FieldSet { field, .. } => Some(field),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        stores.len(),
+        2,
+        "two parameter properties, two stores, got {stores:?}",
+    );
+
+    // A constructor whose body reads the field a parameter property declared.
+    // If the store were emitted after the body this reads an uninitialised slot
+    // and the answer is wrong rather than the program invalid.
+    let mixed = func(&lowered, "Blended#constructor");
+    let first_store = mixed
+        .entry()
+        .ops
+        .iter()
+        .position(|value| matches!(mixed.values[value.0 as usize].kind, OpKind::FieldSet { .. }));
+    let first_read = mixed
+        .entry()
+        .ops
+        .iter()
+        .position(|value| matches!(mixed.values[value.0 as usize].kind, OpKind::FieldGet { .. }));
+    assert!(
+        matches!((first_store, first_read), (Some(store), Some(read)) if store < read),
+        "the store must precede the body's read: store {first_store:?}, read {first_read:?}",
+    );
+}
