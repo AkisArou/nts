@@ -449,87 +449,80 @@ interface WatchFailure {
   readonly reason: unknown;
 }
 
+export function watch(
+  filename: PathLike,
+  options?: PromiseWatchOptions,
+): AsyncIterableIterator<WatchEvent>;
 /** One event queue and one native watcher, consumed at most once. */
-class PromiseWatchSource implements AsyncIterable<WatchEvent> {
-  readonly #filename: unknown;
-  readonly #options: unknown;
-  #started = false;
-
-  constructor(filename: unknown, options: unknown) {
-    this.#filename = filename;
-    this.#options = options;
+export async function* watch(
+  filenameValue: unknown,
+  options?: unknown,
+): AsyncGenerator<WatchEvent, void, undefined> {
+  const settings = normalizePromiseWatchOptions(options);
+  const filename = getValidatedPath(filenameValue, "filename");
+  const signal = settings.signal;
+  if (signal?.aborted) {
+    throw new AbortError(undefined, { cause: signal.reason });
   }
 
-  async *[Symbol.asyncIterator](): AsyncGenerator<WatchEvent, void, undefined> {
-    if (this.#started) return;
-    this.#started = true;
+  const watcher = new FSWatcher();
+  const queue: Array<WatchEvent | WatchFailure> = [];
+  let queueHead = 0;
+  let waiter = new WatchWaiter();
+  const onChange = (
+    eventType: WatchEventType,
+    changed: WatchFileName,
+  ): void => {
+    if (queue.length - queueHead < settings.maxQueue) {
+      queue.push({ eventType, filename: changed });
+      waiter.wake();
+    } else if (settings.overflow === "error") {
+      queue.length = 0;
+      queueHead = 0;
+      queue.push({
+        reason: new ERR_FS_WATCH_QUEUE_OVERFLOW(settings.maxQueue),
+      });
+      waiter.wake();
+    } else {
+      emitWarning("fs.watch maxQueue exceeded", "Warning", "");
+    }
+  };
+  const onError = (error: unknown): void => {
+    queue.push({ reason: error });
+    waiter.wake();
+  };
+  const onAbort = (): void => waiter.wake();
 
-    const settings = normalizePromiseWatchOptions(this.#options);
-    const filename = getValidatedPath(this.#filename, "filename");
-    const signal = settings.signal;
-    if (signal?.aborted) {
+  watcher.on("change", onChange);
+  watcher.on("error", onError);
+  if (signal !== undefined) {
+    signal.addEventListener("abort", onAbort, { once: true });
+  }
+
+  try {
+    watcher.start(filename, settings.watcher);
+    while (!signal?.aborted) {
+      await waiter.promise;
+      while (queueHead < queue.length) {
+        const item = queue[queueHead++];
+        if (item === undefined) {
+          throw new Error("fs watch queue is missing an event");
+        }
+        if ("reason" in item) throw item.reason;
+        yield item;
+      }
+      queue.length = 0;
+      queueHead = 0;
+      waiter = new WatchWaiter();
+    }
+    if (signal.aborted) {
       throw new AbortError(undefined, { cause: signal.reason });
     }
-
-    const watcher = new FSWatcher();
-    const queue: Array<WatchEvent | WatchFailure> = [];
-    let queueHead = 0;
-    let waiter = new WatchWaiter();
-    const onChange = (
-      eventType: WatchEventType,
-      changed: WatchFileName,
-    ): void => {
-      if (queue.length - queueHead < settings.maxQueue) {
-        queue.push({ eventType, filename: changed });
-        waiter.wake();
-      } else if (settings.overflow === "error") {
-        queue.length = 0;
-        queueHead = 0;
-        queue.push({
-          reason: new ERR_FS_WATCH_QUEUE_OVERFLOW(settings.maxQueue),
-        });
-        waiter.wake();
-      } else {
-        emitWarning("fs.watch maxQueue exceeded", "Warning", "");
-      }
-    };
-    const onError = (error: unknown): void => {
-      queue.push({ reason: error });
-      waiter.wake();
-    };
-    const onAbort = (): void => waiter.wake();
-
-    watcher.on("change", onChange);
-    watcher.on("error", onError);
-    if (signal !== undefined) {
-      signal.addEventListener("abort", onAbort, { once: true });
-    }
-
-    try {
-      watcher.start(filename, settings.watcher);
-      while (!signal?.aborted) {
-        await waiter.promise;
-        while (queueHead < queue.length) {
-          const item = queue[queueHead++];
-          if (item === undefined) {
-            throw new Error("fs watch queue is missing an event");
-          }
-          if ("reason" in item) throw item.reason;
-          yield item;
-        }
-        queue.length = 0;
-        queueHead = 0;
-        waiter = new WatchWaiter();
-      }
-      if (signal.aborted) {
-        throw new AbortError(undefined, { cause: signal.reason });
-      }
-    } finally {
-      watcher.close();
-      watcher.removeListener("change", onChange);
-      watcher.removeListener("error", onError);
-      signal?.removeEventListener("abort", onAbort);
-    }
+  } finally {
+    watcher.close();
+    watcher.removeListener("change", onChange);
+    watcher.removeListener("error", onError);
+    signal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -1844,16 +1837,6 @@ export function glob(
   options?: unknown,
 ): AsyncIterableIterator<string | Dirent> {
   return callbacks.globIterator(pattern, options);
-}
-export function watch(
-  filename: PathLike,
-  options?: PromiseWatchOptions,
-): AsyncIterableIterator<WatchEvent>;
-export function watch(
-  filename: unknown,
-  options?: unknown,
-): AsyncIterableIterator<WatchEvent> {
-  return new PromiseWatchSource(filename, options)[Symbol.asyncIterator]();
 }
 export const readlink = promisifyValue(callbacks.readlink, "readlink");
 export const realpath = promisifyValue(callbacks.realpath, "realpath");
