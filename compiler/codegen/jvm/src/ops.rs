@@ -1413,6 +1413,52 @@ impl Emitter<'_> {
                 ),
             ));
         }
+        // An integral operator whose operands are being *kept* in a float.
+        //
+        // `n === 0 ? 0 / 0 : n | 0` joins a NaN with an int32, so the join is a
+        // double and `|` arrives with `Float` operands. The C backend has
+        // spelled that since it was written -- `(double)((int32_t)a | (int32_t)b)`
+        // -- and this one emitted `ior` with two doubles on the stack, which is
+        // an unloadable class.
+        //
+        // The narrowing is exact rather than a conversion: `|` applies
+        // `ToInt32` to both operands first, so what reaches here is an integral
+        // value that was *widened* to a double, and `d2i` undoes the widening.
+        // Same reason C's cast is exact.
+        if matches!(
+            op,
+            BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr | BinOp::UShr
+        ) && matches!(kind, Kind::Double | Kind::Float)
+        {
+            self.push_as(code, lhs, Kind::Int, &origin)?;
+            self.push_as(code, rhs, Kind::Int, &origin)?;
+            match op {
+                BinOp::BitAnd => code.bitwise(&origin, insn::AND, Kind::Int),
+                BinOp::BitOr => code.bitwise(&origin, insn::OR, Kind::Int),
+                BinOp::BitXor => code.bitwise(&origin, insn::XOR, Kind::Int),
+                BinOp::Shl => code.shift(&origin, insn::SHL, Kind::Int),
+                BinOp::Shr => code.shift(&origin, insn::SHR, Kind::Int),
+                _ => code.shift(&origin, insn::USHR, Kind::Int),
+            }
+            // `>>>` is the one that is not sign-preserving: its result is a
+            // `uint32`, so widening it as a signed `int` would answer negative
+            // for anything with the top bit set.
+            if op == BinOp::UShr {
+                code.invoke_static(
+                    &origin,
+                    pool,
+                    "java/lang/Integer",
+                    "toUnsignedLong",
+                    "(I)J",
+                );
+                convert_kind(code, &origin, Kind::Long, kind)
+                    .ok_or_else(|| refuse(self.func, "an unsigned shift into an odd slot"))?;
+            } else {
+                convert_kind(code, &origin, Kind::Int, kind)
+                    .ok_or_else(|| refuse(self.func, "an integral result into an odd slot"))?;
+            }
+            return Ok(Placed::OnStack);
+        }
         self.load(code, lhs)?;
         self.load(code, rhs)?;
         match op {

@@ -407,6 +407,22 @@ impl Code {
         Some(kind as u8)
     }
 
+    /// Whether a kind is one the two-row integral families can index.
+    ///
+    /// See [`Self::bitwise`]. Separate from `arithmetic_kind` because the
+    /// four-row families accept a float and these do not, and the failure is a
+    /// neighbouring opcode in both cases.
+    fn integral(&mut self, kind: Kind) -> bool {
+        if matches!(kind, Kind::Int | Kind::Long) {
+            return true;
+        }
+        self.fail(Error::BadDescriptor(format!(
+            "a bitwise or shift instruction on a {kind:?}, which the JVM has \
+             only integral forms of"
+        )));
+        false
+    }
+
     pub fn arithmetic(&mut self, origin: &Origin, family: u8, kind: Kind) {
         let Some(index) = self.arithmetic_kind(kind) else { return };
         let words = kind.words();
@@ -420,8 +436,19 @@ impl Code {
     }
 
     /// One of the integral families: `insn::AND`, `OR`, `XOR`.
+    ///
+    /// **Integral**, and the family has two rows rather than four. `IOR + 0` is
+    /// `ior` and `IOR + 1` is `lor`, so a `Double` -- which is not `Long` --
+    /// silently selects `ior` and the two doubles on the stack are the wrong
+    /// type for it. That is a *type* error the depth accounting cannot see:
+    /// `ior` popping four words and pushing two is arithmetically consistent
+    /// with a double result, so `Code::depth` stays balanced while the class
+    /// becomes unloadable.
+    ///
+    /// It happened: `n === 0 ? 0 / 0 : n | 0` reaches here with `Float`
+    /// operands. So the family refuses anything that is not an integer.
     pub fn bitwise(&mut self, origin: &Origin, family: u8, kind: Kind) {
-        if self.arithmetic_kind(kind).is_none() {
+        if !self.integral(kind) {
             return;
         }
         let words = kind.words();
@@ -431,7 +458,7 @@ impl Code {
     /// `insn::SHL`, `SHR` or `USHR`. The shift *count* is always an `int` even
     /// when the value is a `long`, which is why this cannot use `bitwise`.
     pub fn shift(&mut self, origin: &Origin, family: u8, kind: Kind) {
-        if self.arithmetic_kind(kind).is_none() {
+        if !self.integral(kind) {
             return;
         }
         let words = kind.words();
