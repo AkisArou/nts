@@ -285,3 +285,68 @@ pub fn c_identifier(name: &str) -> String {
         name.to_string()
     }
 }
+
+/// What a name becomes on the JVM.
+///
+/// # A second rule, deliberately beside the first
+///
+/// [`c_identifier`] exists because a native linkage name has to survive every
+/// toolchain on the way to an executable, and C's is the narrowest of them. The
+/// JVM's constraint is a different one and much looser: JVMS 4.2.2 forbids
+/// exactly `.`, `;`, `[` and `/` in a member name, plus `<` and `>` outside the
+/// two names the format reserves. There are no reserved words, because a class
+/// file is not Java source -- `int`, `class` and `new` are all perfectly good
+/// method names, and a TypeScript program that uses one needs no rescuing.
+///
+/// The two rules live in one file so the difference between them is visible in
+/// a diff. Applying C's rule here would rename functions for a constraint the
+/// JVM does not have, and the two artifacts would disagree about what a program
+/// exports.
+#[must_use]
+pub fn jvm_member_name(raw: &str) -> String {
+    raw.chars()
+        .map(|ch| match ch {
+            // `module#init` becomes `module$init`: `#` is legal in a member
+            // name and reads badly in a stack trace, which is the one place a
+            // generated name is shown to a person.
+            '.' | ';' | '[' | '/' | '<' | '>' | '#' => '$',
+            other => other,
+        })
+        .collect()
+}
+
+/// A class's binary name: the same rule, plus the package this backend owns.
+///
+/// `nts/gen` for a program's own classes and `nts/rt` for the runtime, so a
+/// generated class can never collide with a platform one however a TypeScript
+/// file is named.
+#[must_use]
+pub fn jvm_class_name(raw: &str) -> String {
+    format!("nts/gen/{}", jvm_member_name(raw))
+}
+
+#[cfg(test)]
+mod jvm_tests {
+    use super::*;
+
+    #[test]
+    fn the_characters_the_format_forbids_are_the_only_ones_replaced() {
+        assert_eq!(jvm_member_name("resolve@win32"), "resolve@win32");
+        assert_eq!(jvm_member_name("module#init"), "module$init");
+        assert_eq!(jvm_member_name("a/b.c;d[e"), "a$b$c$d$e");
+    }
+
+    #[test]
+    fn a_java_keyword_is_a_perfectly_good_method_name() {
+        // The point of not reusing `c_identifier`: these need no escaping on a
+        // machine that never sees Java source.
+        for name in ["int", "class", "new", "double", "div"] {
+            assert_eq!(jvm_member_name(name), name);
+        }
+    }
+
+    #[test]
+    fn a_class_is_packaged_where_nothing_platform_can_collide() {
+        assert_eq!(jvm_class_name("Point"), "nts/gen/Point");
+    }
+}

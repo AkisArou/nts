@@ -36,6 +36,7 @@ use std::fmt::Write as _;
 
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
+use nts_codegen_common::Backend;
 use nts_core::hir::facts::Facts;
 use nts_core::hir::{self, HirType};
 use nts_frontend_ts::TsgoApi;
@@ -1031,10 +1032,16 @@ fn stopped(signal: Option<i32>, complaint: &str) -> Stopped {
 fn render(
     dir: &Utf8Path,
     program: &hir::Program,
-    through_llvm: bool,
+    backend: Backend,
     emitted: &nts_codegen_c::Emitted,
 ) -> Result<Utf8PathBuf> {
-    Ok(if through_llvm {
+    if backend == Backend::Jvm {
+        // Not a native object and not linked with clang: a JVM program is a
+        // directory of classes run by `java`, which is a different runner
+        // rather than a different arm of this one.
+        bail!("the JVM backend produces class files, which this driver cannot link");
+    }
+    Ok(if backend == Backend::Llvm {
         let rendered = nts_codegen_llvm::emit(program);
         if !rendered.diagnostics.is_empty() {
             for diagnostic in rendered.diagnostics.iter().take(3) {
@@ -1084,9 +1091,9 @@ fn run_native(
 ) -> Result<Vec<String>> {
     // Which backend renders the program.
     //
-    // `NTS_BACKEND=llvm` runs the whole differential -- every example, every
-    // case, the same hostile pool, the same comparison against node -- through
-    // the LLVM backend instead of the C one. That is a far stronger net than
+    // `NTS_BACKEND` runs the whole differential -- every example, every case,
+    // the same hostile pool, the same comparison against node -- through the
+    // named backend instead of the C one. That is a far stronger net than
     // comparing the two backends against each other on a handful of fixtures:
     // node is the oracle either way, and if both backends agree with node they
     // agree with each other.
@@ -1095,7 +1102,12 @@ fn run_native(
     // and the driver would fail to link, so an example is either wholly
     // rendered or reported as declined. That makes "how many examples does the
     // second backend carry" a number, which is the shape worth ratcheting.
-    let through_llvm = std::env::var("NTS_BACKEND").is_ok_and(|which| which == "llvm");
+    // An unrecognised name is an error rather than a fallback to C. It used to
+    // be `is_ok_and(|which| which == "llvm")`, so `NTS_BACKEND=llvmm` ran the C
+    // backend and the gate's llvm floor reported green having measured the
+    // wrong lane -- a quiet trap with two backends and a certainty with three,
+    // since `llvm` and `jvm` differ by one character.
+    let backend = Backend::from_environment()?;
     let emitted = nts_codegen_c::emit(program);
     // The backend's own refusals, which used to be dropped on the floor here.
     // A function the emitter cannot write is *absent* from the C, and the
@@ -1117,7 +1129,7 @@ fn run_native(
             emitted.diagnostics.len()
         );
     }
-    let generated = render(dir, program, through_llvm, &emitted)?;
+    let generated = render(dir, program, backend, &emitted)?;
     // The runtime, plus the Unicode tables when this program converts case.
     // Every `.c` among them goes on the command line below, so a helper that
     // arrives with a new translation unit needs no change here.

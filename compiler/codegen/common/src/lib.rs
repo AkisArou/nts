@@ -15,12 +15,14 @@
 //! SSA IR, so it consumes the block order and skips the destruction, mapping
 //! block parameters onto phi nodes directly.
 
+pub mod backend;
 pub mod symbols;
 pub mod layout;
 pub mod destruct;
 pub mod linearize;
 pub mod writer;
 
+pub use backend::{Backend, UnknownBackend};
 pub use destruct::{Copy, edge_copies};
 pub use linearize::block_order;
 pub use writer::CodeWriter;
