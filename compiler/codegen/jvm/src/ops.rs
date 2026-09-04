@@ -497,15 +497,13 @@ impl Emitter<'_> {
             }
             // A closed set of classes, so `instanceof` answers it directly --
             // one instruction against the C backend's chain of descriptor
-            // pointer comparisons. More than one class needs the set ORed
-            // together, which needs a branch; until the shape appears in a real
-            // program it is refused rather than guessed at.
+            // pointer comparisons, and a fixed few when the set is larger.
+            OpKind::InstanceOf { value, classes } if classes.len() != 1 => {
+                self.instance_of_any(code, pool, *value, classes, &origin)?
+            }
             OpKind::InstanceOf { value, classes } => {
                 let [only] = classes.as_slice() else {
-                    return Err(refuse(
-                        self.func,
-                        "an `instanceof` against more than one class",
-                    ));
+                    return Err(refuse(self.func, "an `instanceof` against no class at all"));
                 };
                 let Some(layout) = self.program.layout(*only) else {
                     return Err(refuse(self.func, "an `instanceof` against an unknown class"));
@@ -651,6 +649,105 @@ impl Emitter<'_> {
         };
         code.branch_zero(origin, branch, target);
         Ok(())
+    }
+
+    /// Whether a value may be stored into another's slot, as the *verifier*
+    /// asks it: by class, not by representation.
+    ///
+    /// Every other backend can skip this. C stores through a pointer cast and
+    /// LLVM's `ptr` is opaque, so an edge copy from a `TypeError` into a slot
+    /// the IR types `Error` is a no-op in both. Here the slot's frame entry
+    /// names a class, and the JVM refuses the whole class file if the value is
+    /// not that class or one below it.
+    ///
+    /// It fires today on the four provided error classes, which are not
+    /// declarations in the compiled program -- so `Hierarchy::base` never hears
+    /// of them and `Layout.base` is `None` for all four. They are structurally
+    /// identical, and record 0074 gives them a *nominal* guard for
+    /// `instanceof`; what they do not have is a base, so `nts/gen/TypeError`
+    /// extends `Object` here and is not assignable to `nts/gen/Error`.
+    ///
+    /// Refused by name rather than emitted. `VerifyError: inconsistent
+    /// stackmap frames` names a slot index and a bytecode offset; this names
+    /// the two classes.
+    fn assignable(&self, from: ValueId, to: ValueId) -> Result<(), Diagnostic> {
+        let (source, target) = (self.ty(from).clone(), self.ty(to).clone());
+        self.assignable_types(&source, &target)
+    }
+
+    /// The same question between two types rather than two values.
+    fn assignable_types(&self, source: &HirType, target: &HirType) -> Result<(), Diagnostic> {
+        let (
+            HirType::Managed(ManagedType::Object(source_id)),
+            HirType::Managed(ManagedType::Object(target_id)),
+        ) = (source, target)
+        else {
+            return Ok(());
+        };
+        if source_id == target_id {
+            return Ok(());
+        }
+        let (Some(source_layout), Some(target_layout)) = (
+            self.program.layout(*source_id),
+            self.program.layout(*target_id),
+        ) else {
+            return Ok(());
+        };
+        let wanted = types::class_name(target_layout);
+        if crate::hierarchy::ancestry(self.program, source_layout)
+            .iter()
+            .any(|ancestor| types::class_name(ancestor) == wanted)
+        {
+            return Ok(());
+        }
+        Err(refuse(
+            self.func,
+            &format!(
+                "storing a `{}` where a `{}` is declared, and the first does not \
+                 extend the second here -- the IR relates them and `Layout.base` \
+                 does not, so the JVM would refuse the class",
+                source_layout.name, target_layout.name
+            ),
+        ))
+    }
+
+    /// `x instanceof C` where the closed set of classes satisfying it has more
+    /// than one member.
+    ///
+    /// The set is closed at compile time -- `C` and everything that extends it,
+    /// which the hierarchy already knows -- so this is a fixed number of tests
+    /// with no chain to walk and no prototype to consult.
+    ///
+    /// `ior` rather than branches. `instanceof` leaves 0 or 1, so the tests
+    /// combine arithmetically and there is no label, no scratch slot and
+    /// nothing for the frame table to describe. A short-circuit would be fewer
+    /// instructions on the true path and would need both.
+    fn instance_of_any(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+        classes: &[nts_semantic_schema::TypeId],
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        if classes.is_empty() {
+            return Err(refuse(self.func, "an `instanceof` against no class at all"));
+        }
+        for (at, class) in classes.iter().enumerate() {
+            let Some(layout) = self.program.layout(*class) else {
+                return Err(refuse(self.func, "an `instanceof` against an unknown class"));
+            };
+            self.load(code, value)?;
+            // Unbox before asking for a class; see the single-class arm.
+            if *self.ty(value) == HirType::Erased {
+                code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+            }
+            code.instance_of(origin, pool, &types::class_name(layout));
+            if at > 0 {
+                code.bitwise(origin, insn::OR, Kind::Int);
+            }
+        }
+        Ok(Placed::OnStack)
     }
 
     /// The descriptor of what an array holds, or `None` if this is not one.
@@ -1670,6 +1767,15 @@ impl Emitter<'_> {
             code.invoke_static(&origin, pool, types::VALUE, "truthy", "(Lnts/rt/NtsValue;)Z");
             return Ok(Placed::OnStack);
         }
+        // Every other reference is truthy exactly when it is there. An empty
+        // array is truthy and so is an object with no fields -- emptiness is a
+        // string rule and only a string rule, which is why that case is above
+        // this one rather than folded into it.
+        if kind == Kind::Ref {
+            self.load(code, operand)?;
+            code.invoke_static(&origin, pool, RUNTIME, "isPresent", "(Ljava/lang/Object;)Z");
+            return Ok(Placed::OnStack);
+        }
         let Some(scratch) = self.scratch else {
             return Err(refuse(self.func, "a truthiness test with no scratch slot"));
         };
@@ -1917,6 +2023,17 @@ impl Emitter<'_> {
         let Some(signature) = crate::body::signature(self.program, target) else {
             return Err(refuse(self.func, &format!("a call to `{name}`, whose signature has no representation")));
         };
+        // Every argument against the parameter it lands in. The IR relates
+        // these types; the class file has to as well, and where `Layout.base`
+        // does not say so the JVM refuses the class rather than the call.
+        //
+        // This is what `examples/absent` hits: a closure whose own layout is
+        // `Closure3` passed where the *function type's* layout `Fn109` is
+        // declared, with no base relating them because a closure has no
+        // `extends` in the source.
+        for (&arg, param) in args.iter().zip(&target.params) {
+            self.assignable_types(&self.ty(arg).clone(), &param.ty)?;
+        }
         for &arg in args {
             self.load(code, arg)?;
         }
@@ -2064,6 +2181,7 @@ impl Emitter<'_> {
         for copy in copies {
             match copy {
                 Copy::Move { to, from } => {
+                    self.assignable(from, to)?;
                     let kind = self.kind_of(from)?;
                     let origin = self.func.values[from.0 as usize].origin.clone();
                     self.load(code, from)?;

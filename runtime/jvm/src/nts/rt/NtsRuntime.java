@@ -984,6 +984,18 @@ public final class NtsRuntime {
         return out == null ? s : out.toString();
     }
 
+    /**
+     * Truthiness of a reference that is not a string and not erased: it is
+     * truthy exactly when it is there.
+     *
+     * <p>An empty array is truthy, and so is an object with no fields.
+     * Emptiness is a *string* rule and only a string rule, which is why
+     * `stringTruthy` exists separately rather than this covering both.
+     */
+    public static boolean isPresent(Object value) {
+        return value != null;
+    }
+
     public static double mathExpm1(double x) {
         return StrictMath.expm1(x);
     }
