@@ -23,6 +23,23 @@ use super::{
 pub enum Invalid {
     /// A branch names a block that does not exist.
     DanglingSuccessor { func: String, target: BlockId },
+    /// A layout's base is not laid out as its prefix.
+    ///
+    /// Base-first layout is what makes an upcast free: the C backend spells it
+    /// as a pointer cast, the LLVM backend as nothing at all, and the JVM
+    /// backend as a `super_class` its verifier checks when the class loads. All
+    /// three rely on the base's fields sitting at the front of the derived's,
+    /// in order, and until this nothing said so -- it was a property everybody
+    /// assumed and no pass asserted.
+    ///
+    /// Only the fields. A dispatch table legitimately differs slot for slot
+    /// between a base and a class that overrides one of its methods; that is
+    /// what overriding *is*, and equality there would refuse every hierarchy
+    /// this compiler exists to compile.
+    BrokenBase {
+        layout: String,
+        base: String,
+    },
     /// A direct call passed an argument of an incompatible *representation*.
     ///
     /// Representation and not type, and the distinction is the whole of what
@@ -221,10 +238,41 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
         verify_func(func, &mut problems);
     }
     check_calls(program, &mut problems);
+    check_layouts(program, &mut problems);
     if problems.is_empty() {
         Ok(())
     } else {
         Err(problems)
+    }
+}
+
+/// Each layout's base, against the layout that extends it.
+///
+/// `Layout.base` was added so that two types differing only in what they extend
+/// stop merging -- `class Circle extends Shape {}` had `Shape`'s fields and
+/// `Shape`'s dispatch table and became `Shape`. Having introduced the field,
+/// this is what keeps it honest: a base named here has to be laid out as the
+/// prefix every backend already treats it as.
+fn check_layouts(program: &Program, problems: &mut Vec<Invalid>) {
+    for layout in &program.layouts {
+        let Some(at) = program.base_layout(layout) else {
+            continue;
+        };
+        let Some(base) = program.layouts.get(at) else {
+            continue;
+        };
+        let prefix = base.fields.len() <= layout.fields.len()
+            && base
+                .fields
+                .iter()
+                .zip(&layout.fields)
+                .all(|(mine, theirs)| mine.name == theirs.name && mine.ty == theirs.ty);
+        if !prefix {
+            problems.push(Invalid::BrokenBase {
+                layout: layout.name.clone(),
+                base: base.name.clone(),
+            });
+        }
     }
 }
 
@@ -917,6 +965,59 @@ mod tests {
                 async_result: None,
             }],
         }
+    }
+
+    /// A base has to be laid out as the prefix every backend treats it as.
+    ///
+    /// The upcast is a pointer cast in C, nothing at all in LLVM, and a
+    /// `super_class` the JVM verifier checks at load time. All three assume the
+    /// base's fields sit at the front of the derived's, in order, and nothing
+    /// asserted it until `Layout.base` existed to assert it against.
+    #[test]
+    fn a_base_must_be_the_prefix_of_what_extends_it() {
+        use crate::hir::{Field, Layout};
+        use nts_semantic_schema::TypeId;
+
+        let field = |name: &str| Field {
+            name: name.to_owned(),
+            ty: HirType::Float { bits: 64 },
+            readonly: false,
+        };
+        let laid_out = |base: Option<TypeId>, id: u32, name: &str, fields: Vec<Field>| Layout {
+            types: vec![TypeId(id)],
+            name: name.to_owned(),
+            fields,
+            methods: Vec::new(),
+            base,
+        };
+
+        let mut program = valid();
+        program.layouts = vec![
+            laid_out(None, 1, "Shape", vec![field("size")]),
+            // Derived, and its first field is not the base's.
+            laid_out(
+                Some(TypeId(1)),
+                2,
+                "Circle",
+                vec![field("radius"), field("size")],
+            ),
+        ];
+        let problems = verify(&program).expect_err("a reordered base is not laid out");
+        assert!(
+            problems
+                .iter()
+                .any(|problem| matches!(problem, Invalid::BrokenBase { .. })),
+            "expected a BrokenBase, got {problems:?}",
+        );
+
+        // The same two with the base first, which is what the compiler emits.
+        program.layouts[1] = laid_out(
+            Some(TypeId(1)),
+            2,
+            "Circle",
+            vec![field("size"), field("radius")],
+        );
+        assert!(verify(&program).is_ok(), "base-first must verify");
     }
 
     /// `f() { b0: %0 = param 0; ret %0 }`

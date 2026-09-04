@@ -969,6 +969,7 @@ mod tests {
                     readonly: false,
                 }],
                 methods: Vec::new(),
+                base: None,
             }],
             globals: Vec::new(),
         };
@@ -1080,6 +1081,7 @@ mod tests {
                     readonly: false,
                 }],
                 methods: Vec::new(),
+                base: None,
             }],
             globals: Vec::new(),
         };
@@ -1167,6 +1169,7 @@ mod tests {
                     readonly: false,
                 }],
                 methods: Vec::new(),
+                base: None,
             }],
             globals: Vec::new(),
         };

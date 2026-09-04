@@ -353,3 +353,42 @@ export function aStringIsNotAnError(n: number): number {
     return e instanceof Error ? 1 : 0;
   }
 }
+
+// Two classes of identical shape are two classes.
+//
+// `class Circle extends Shape {}` adds nothing: same fields, same (empty)
+// dispatch table. Layouts are structural, so it merged into `Shape` -- one
+// layout, one descriptor -- and `s instanceof Circle` was true of a `Shape`.
+// nts answered 3 where node answers 2.
+//
+// `Layout.base` is what tells them apart, and it is compared inside
+// `same_shape` rather than beside it so that neither of the two callers can
+// forget. Record `0074` found the same defect in the four provided error
+// classes and fixed it narrowly, because the general answer needed this field
+// and the field did not exist. That narrow guard stays: those four are not
+// declarations in this program, so they have no base to differ in, and the
+// question asked of them is nominal.
+class Shape {
+  size: number;
+  constructor(size: number) {
+    this.size = size;
+  }
+}
+
+class Circle extends Shape {}
+
+// What this does NOT close, found by writing the hostile case rather than by
+// reasoning: two empty *siblings*. `class Square extends Shape {}` beside
+// `Circle` has the same fields, the same dispatch table **and the same base**,
+// so they still merge and `a instanceof Circle` is true of a `Square` -- nts
+// answers 7 where node answers 6.
+//
+// A base distinguishes a subclass from what it extends. It cannot distinguish
+// two children of one parent that differ in nothing but their names, and
+// nothing structural can: that question is nominal, which is the same thing the
+// four provided error classes needed and got a nominal guard for. The ledger
+// row is narrowed rather than closed, and it now says which half is left.
+export function identicalShapesAreTold(n: number): number {
+  const a: unknown = n > 2 ? new Circle(n) : new Shape(n);
+  return (a instanceof Circle ? 1 : 0) + (a instanceof Shape ? 2 : 0);
+}

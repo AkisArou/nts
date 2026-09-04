@@ -108,7 +108,8 @@ counter, not by reading the emitted C.
 | ◐ | spread | every shape of it in an **array literal** works — `[...a]` is a copy, and `[...a, x, ...b]` sums the lengths before allocating; `f(...a)` and `{...o}` do not |
 | ✗ | `delete`, `void`, comma | `in` is named above |
 | ✅ | `instanceof` | against a class this program declares, or one of the four provided error classes. The set of classes that satisfy it is closed when the program is built, so it is a comparison and not a walk |
-| ✗ | `instanceof` between two classes of *identical shape* | they share a layout, and the descriptor with it — see below |
+| ✅ | `instanceof` between a class and an **empty subclass of it** | `class Circle extends Shape {}` has `Shape`'s fields and dispatch table, so layouts merged them and `s instanceof Circle` was true of a `Shape`. `Layout.base` tells them apart, compared *inside* `same_shape` so neither of its two callers can forget it |
+| ✗ | `instanceof` between two **empty siblings** | `Circle` and `Square` both extending `Shape` and adding nothing share fields, dispatch table *and* base, so they still merge — nts answers 7 where node answers 6. A base separates a child from its parent and cannot separate two children that differ only in name; that question is nominal, which is what the four provided error classes needed and got a nominal guard for. Found by writing the hostile case, not by reasoning |
 | ✗ | tagged templates | |
 
 ## 2. Statements and control flow

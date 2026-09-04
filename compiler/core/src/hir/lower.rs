@@ -2167,7 +2167,8 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
                 && super::builtin::is_error(&layout.name)
                 && known.name != layout.name;
             known.types.iter().any(|ty| layout.types.contains(ty))
-                || (!two_errors && known.same_shape(&layout.fields, &layout.methods))
+                || (!two_errors
+                    && known.same_shape(&layout.fields, &layout.methods, layout.base))
         }) {
             for ty in layout.types {
                 if !existing.types.contains(&ty) {
@@ -5644,6 +5645,8 @@ impl<'a> FuncBuilder<'a> {
             name: cell_name(index),
             fields,
             methods: vec![None; self.hierarchy.table_size()],
+            // A cell is storage a closure shares, not a class.
+            base: None,
         }
     }
 
@@ -5800,6 +5803,8 @@ impl<'a> FuncBuilder<'a> {
             name: class,
             fields,
             methods,
+            // Every closure is its own class and extends nothing.
+            base: None,
         }
     }
 
@@ -10601,45 +10606,6 @@ impl<'a> FuncBuilder<'a> {
             }
         }
     }
-
-    /// The layout of an object type, computed once and remembered.
-    ///
-    /// Declaration order, which is the order the checker reports members in.
-    /// When classes arrive this becomes base-first (RFC §8.1), so that a
-    /// subclass's prefix is its base's layout and an upcast is free.
-    /// The member names a type inherits, in the order its bases declare them.
-    ///
-    /// `extends` comes before `implements` in `base_types`, and a class extends
-    /// at most one class, so the first base is the superclass and its order is
-    /// the one that has to be a prefix. An interface listed after it contributes
-    /// only names already placed.
-    fn inherited_order(&self, ty: TypeId, into: &mut Vec<String>, depth: u32) {
-        // A type that reaches itself through its bases is not a hierarchy, and
-        // recursing on one would not stop.
-        if depth > 32 {
-            return;
-        }
-        let Some(bases) = self.snapshot.base_types.get(&ty) else {
-            return;
-        };
-        for base in bases {
-            self.inherited_order(*base, into, depth + 1);
-            let Some(TypeKind::Object { properties }) = self
-                .snapshot
-                .types
-                .get(base.0 as usize)
-                .map(|record| &record.kind)
-            else {
-                continue;
-            };
-            for property in properties {
-                if !into.contains(&property.name) {
-                    into.push(property.name.clone());
-                }
-            }
-        }
-    }
-
     /// The layout of a class this compiler provides, if `ty` names one.
     fn provided_layout(&mut self, ty: TypeId) -> Option<Layout> {
         let name = named(self.snapshot, ty)
@@ -10650,6 +10616,14 @@ impl<'a> FuncBuilder<'a> {
             name,
             fields: super::builtin::error_fields(),
             methods: vec![None; self.hierarchy.table_size()],
+            // The provided error classes are not declarations in this program,
+            // so the hierarchy has no base for them -- and giving them one from
+            // the checker would be worse than none: all four would carry
+            // `Error` and merge on identical fields, methods *and* base, which
+            // is the defect `0074` names. What keeps them apart is the nominal
+            // guard in `collect_layouts`, because the question asked of this
+            // family is nominal.
+            base: None,
         };
         self.layouts.push(layout.clone());
         Some(layout)
@@ -11076,6 +11050,8 @@ impl<'a> FuncBuilder<'a> {
             name: format!("Tuple{}", ty.0),
             fields,
             methods: Vec::new(),
+            // A tuple has no declaration to extend.
+            base: None,
         };
         self.layouts.push(layout.clone());
         Ok(layout)
@@ -11109,6 +11085,8 @@ impl<'a> FuncBuilder<'a> {
                 name: format!("Fn{}", ty.0),
                 fields: Vec::new(),
                 methods: Vec::new(),
+                // A function type is a signature, not a class.
+                base: None,
             };
             self.layouts.push(layout.clone());
             return Ok(layout);
@@ -11144,6 +11122,12 @@ impl<'a> FuncBuilder<'a> {
 
         let mut fields = self.fields_of(id, ty, &properties)?;
 
+        // What this type extends, where the program declares it. Needed twice
+        // below: once to order the fields base-first, and once so that two types
+        // differing only in their base do not merge -- `class B extends A {}`
+        // adding nothing is the case, and it merged into `A` until this.
+        let base = self.hierarchy.base.get(&ty).copied();
+
         // Base first, so a derived object's fields start with exactly the base's
         // and a pointer to one is a pointer to the other. That is what makes an
         // upcast free: `Square#area` and `Shape#doubled` read the same offsets
@@ -11152,15 +11136,42 @@ impl<'a> FuncBuilder<'a> {
         //
         // The checker's property list is flattened -- it already contains the
         // inherited members with nothing to say where they came from -- so the
-        // order has to be recovered from the base chain rather than read off.
-        let mut order = Vec::new();
-        self.inherited_order(ty, &mut order, 0);
-        fields.sort_by_key(|field| {
-            order
-                .iter()
-                .position(|name| *name == field.name)
-                .unwrap_or(usize::MAX)
-        });
+        // order has to be recovered from the base rather than read off.
+        //
+        // From the base's *layout*, which is the authoritative answer and cannot
+        // disagree with itself. Re-deriving it from the base type's properties
+        // is what this did before, and it silently produced nothing whenever the
+        // base's type record was not the `Object` kind -- which is every
+        // `abstract class` in `runtime/node`'s error hierarchy. The order then
+        // fell back to the checker's, which puts a class's *own* declarations
+        // first, so `ERR_INVALID_ARG_TYPE` laid out `["code", "name",
+        // "message"]` against its base's `["message", "name", "code"]`.
+        //
+        // Same fields, different order, and every backend's upcast is a pointer
+        // cast that assumes otherwise. Nothing caught it because nothing
+        // asserted base-first layout until `Layout.base` gave `verify` something
+        // to assert it against; the check found this on its first run.
+        // Taken *from* the base's layout rather than sorted towards it, which
+        // fixes a second thing at the same time. A field whose type has exactly
+        // one value needs no storage and is elided -- `override readonly code =
+        // "ERR_INVALID_ARG_TYPE"` is a string literal type -- so a derived class
+        // could drop a slot its base keeps. `ERR_INVALID_ARG_TYPE_FUNCTION` laid
+        // out `["message", "name"]` under a base laid out `["message", "name",
+        // "code"]`, and an upcast would have read past the end of it.
+        //
+        // Whatever the base stores, the derived stores, at the same offsets, in
+        // the same order. Then its own additions. That is base-first layout
+        // stated as a construction instead of hoped for as a sort.
+        if let Some(base) = base {
+            let inherited = self.layout_of(id, base)?.fields;
+            let mut ordered = inherited;
+            for field in fields {
+                if !ordered.iter().any(|kept| kept.name == field.name) {
+                    ordered.push(field);
+                }
+            }
+            fields = ordered;
+        }
 
         // The declared name where there is one. An anonymous object type —
         // `{ x: number }` written inline — has no symbol, so it is named after
@@ -11197,7 +11208,7 @@ impl<'a> FuncBuilder<'a> {
         if let Some(existing) = self
             .layouts
             .iter_mut()
-            .find(|layout| layout.same_shape(&fields, &methods))
+            .find(|layout| layout.same_shape(&fields, &methods, base))
         {
             existing.types.push(ty);
             // A declared name beats a generated one, whichever was seen first.
@@ -11215,6 +11226,7 @@ impl<'a> FuncBuilder<'a> {
             name,
             fields,
             methods,
+            base,
         };
         self.layouts.push(layout.clone());
         Ok(layout)

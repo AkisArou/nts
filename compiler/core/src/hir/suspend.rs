@@ -245,6 +245,8 @@ fn rewrite(func: &Func, index: usize) -> Result<Rewritten, Diagnostic> {
         name: frame_name,
         fields: frame_fields(func, &spilled),
         methods: Vec::new(),
+        // A suspended frame extends nothing.
+        base: None,
     };
     let entry = entry_function(func, &frame_ty, &resume_name, &slot_of);
     let resume = resume_function(func, &frame_ty, &resume_name, &slot_of, &points);

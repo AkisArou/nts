@@ -920,6 +920,22 @@ pub struct Layout {
     /// Empty for a class in a hierarchy where nothing is overridden, which is
     /// most of them — and an empty table is no table at all in the emitted code.
     pub methods: Vec<Option<String>>,
+    /// What this class extends, where the program declares it.
+    ///
+    /// `None` for an anonymous type, a closure, a tuple, and for a class with
+    /// no `extends` — and also for the four provided error classes, which this
+    /// program does not declare and whose relation to `Error` is spelled where
+    /// `instanceof` needs it rather than carried here.
+    ///
+    /// Load-bearing for *merging*. Layouts are structural, so `class B extends
+    /// A {}` that adds nothing has A's fields and A's dispatch table and used to
+    /// merge into A — one layout, one descriptor, and `b instanceof A` true of
+    /// an `A`. Two types that differ only in what they extend are two classes,
+    /// and this is what [`Layout::same_shape`] compares to say so.
+    ///
+    /// A `TypeId` rather than a layout index, because indices move as layouts
+    /// merge and a `TypeId` does not. [`Program::base_layout`] resolves it.
+    pub base: Option<TypeId>,
 }
 
 impl Layout {
@@ -936,8 +952,17 @@ impl Layout {
     /// fields are what they captured, and two closures capturing one number
     /// each are the same shape and different code.
     #[must_use]
-    pub fn same_shape(&self, fields: &[Field], methods: &[Option<String>]) -> bool {
-        self.fields.len() == fields.len()
+    pub fn same_shape(
+        &self,
+        fields: &[Field],
+        methods: &[Option<String>],
+        base: Option<TypeId>,
+    ) -> bool {
+        // The base is a parameter rather than a comparison the callers make,
+        // so that neither of them can forget it. There are two, they must
+        // agree, and "two places that must agree" has cost this project a week.
+        self.base == base
+            && self.fields.len() == fields.len()
             && self
                 .fields
                 .iter()
@@ -1063,6 +1088,18 @@ pub struct Global {
 }
 
 impl Program {
+    /// Where a layout's base lives in the program's layout list.
+    ///
+    /// Resolved here rather than in each backend, because a base's `TypeId` may
+    /// be one of several sharing a layout and the map that knows is this one.
+    #[must_use]
+    pub fn base_layout(&self, layout: &Layout) -> Option<usize> {
+        let base = layout.base?;
+        self.layouts
+            .iter()
+            .position(|candidate| candidate.types.contains(&base))
+    }
+
     /// Which layouts can be part of a reference cycle.
     ///
     /// A cycle is what reference counting cannot reclaim on its own, so a
@@ -2025,7 +2062,39 @@ mod tests {
             name: name.to_owned(),
             fields,
             methods: Vec::new(),
+            base: None,
         }
+    }
+
+    /// Two types that differ only in what they extend are two classes.
+    ///
+    /// `class Circle extends Shape {}` adds nothing, so it has `Shape`'s fields
+    /// and `Shape`'s dispatch table. Layouts are structural and merged them,
+    /// which gave `Circle` `Shape`'s descriptor and made `s instanceof Circle`
+    /// true of a `Shape`.
+    ///
+    /// The base is compared inside `same_shape` rather than beside it at the
+    /// two call sites, so that neither can forget -- which is the failure this
+    /// project has paid for repeatedly.
+    #[test]
+    fn a_base_keeps_two_identical_shapes_apart() {
+        let shape = Layout {
+            types: vec![TypeId(1)],
+            name: "Shape".to_owned(),
+            fields: vec![field("size", HirType::NUMBER)],
+            methods: Vec::new(),
+            base: None,
+        };
+        let derived_fields = vec![field("size", HirType::NUMBER)];
+
+        // Identical in every structural respect, and not the same class.
+        assert!(
+            !shape.same_shape(&derived_fields, &[], Some(TypeId(1))),
+            "an empty subclass must not merge into what it extends",
+        );
+        // And a type with the same base is still merged on shape, which is what
+        // keeps two spellings of one anonymous type from becoming two layouts.
+        assert!(shape.same_shape(&derived_fields, &[], None));
     }
 
     fn field(name: &str, ty: HirType) -> Field {
