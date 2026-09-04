@@ -1077,34 +1077,73 @@ impl Emitter<'_> {
         if op == UnOp::Truthy {
             return self.truthy(code, pool, operand, from);
         }
-        self.load(code, operand)?;
         let kind = types::kind(result)
             .ok_or_else(|| refuse(self.func, "a unary result of unrepresentable type"))?;
-        match op {
-            UnOp::Neg => code.negate(&origin, kind),
+        // Two ends again: what the *instruction* operates on and what the
+        // middle end chose to keep the answer in. They agree in most prepared
+        // HIR and they do not always -- `Math.abs` of an `i32` arrives with an
+        // `i64` result in `examples/mathops`, and taking the signature from the
+        // result called `Math.abs(J)J` with an `int` on the stack.
+        //
+        // So each arm names the kind it works in, the operand is pushed as
+        // that, and the answer is adapted to the slot. The double-only ones say
+        // `Kind::Double` twice rather than once, because `Math.floor` takes and
+        // returns a double whatever the surrounding types are.
+        let produced = match op {
+            // Widened to the *result's* kind before operating, not the
+            // operand's. `-x` and `abs(x)` are the two arithmetic operations
+            // whose answer does not fit the type of their argument: `abs` of
+            // `i32::MIN` is `2^31`, which is why the middle end gives it an
+            // `i64` result over an `i32` operand. Doing the work in the
+            // operand's width and widening afterwards returns `i32::MIN`
+            // unchanged -- `Math.abs` is documented to, and it is the one
+            // answer that is a plausible number rather than a crash.
+            //
+            // `examples/mathops` reported -32768 where node says 32768.
+            UnOp::Neg => {
+                self.push_as(code, operand, kind, &origin)?;
+                code.negate(&origin, kind);
+                kind
+            }
             // `!x` on a boolean, which is an `int` that is 0 or 1.
             UnOp::Not => {
+                self.push_as(code, operand, Kind::Int, &origin)?;
                 code.const_int(&origin, pool, 1);
                 code.bitwise(&origin, insn::XOR, Kind::Int);
+                Kind::Int
             }
             UnOp::ToInt32 | UnOp::ToUint32 => {
+                self.load(code, operand)?;
                 self.coercion(code, pool, op, from, result, &origin)?;
+                // `coercion` lands the value in the result's own kind, having
+                // been told what it is.
+                kind
             }
-            UnOp::Floor => code.invoke_static(&origin, pool, "java/lang/Math", "floor", "(D)D"),
-            UnOp::Ceil => code.invoke_static(&origin, pool, "java/lang/Math", "ceil", "(D)D"),
-            UnOp::Sqrt => code.invoke_static(&origin, pool, "java/lang/Math", "sqrt", "(D)D"),
-            // `java.lang.Math` has no `trunc`, and `Math.round` returns a
-            // `long`: it saturates, answers 0 for NaN, and cannot produce the
-            // `-0` that `Math.round(-0.4)` must.
-            UnOp::Trunc => code.invoke_static(&origin, pool, RUNTIME, "trunc", "(D)D"),
-            UnOp::Round => code.invoke_static(&origin, pool, RUNTIME, "round", "(D)D"),
+            UnOp::Floor | UnOp::Ceil | UnOp::Sqrt | UnOp::Trunc | UnOp::Round => {
+                self.push_as(code, operand, Kind::Double, &origin)?;
+                let (owner, name) = match op {
+                    UnOp::Floor => ("java/lang/Math", "floor"),
+                    UnOp::Ceil => ("java/lang/Math", "ceil"),
+                    UnOp::Sqrt => ("java/lang/Math", "sqrt"),
+                    // `java.lang.Math` has no `trunc`, and `Math.round` returns
+                    // a `long`: it saturates, answers 0 for NaN, and cannot
+                    // produce the `-0` that `Math.round(-0.4)` must.
+                    UnOp::Trunc => (RUNTIME, "trunc"),
+                    _ => (RUNTIME, "round"),
+                };
+                code.invoke_static(&origin, pool, owner, name, "(D)D");
+                Kind::Double
+            }
             UnOp::Abs => {
+                self.push_as(code, operand, kind, &origin)?;
                 let descriptor = kind.descriptor();
                 let signature = format!("({descriptor}){descriptor}");
                 code.invoke_static(&origin, pool, "java/lang/Math", "abs", &signature);
+                kind
             }
             UnOp::Truthy => unreachable!("handled above"),
-        }
+        };
+        self.adapt(code, produced, result, &origin)?;
         Ok(Placed::OnStack)
     }
 
