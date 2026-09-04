@@ -18,6 +18,17 @@ import type { Encoding } from "../../buffer/src/encodings.ts";
 import { EventEmitter } from "../../events/src/main.ts";
 import { Interface as ReadLineInterface } from "../../readline/src/interface.ts";
 import type { Readable } from "../../stream/src/readable.ts";
+import {
+  createParsedPull,
+  createParsedPullSync,
+  parsePullArguments,
+  type Transform,
+} from "../../stream/src/iter/pull.ts";
+import type {
+  AsyncByteStream,
+  ByteBatch,
+  SyncByteStream,
+} from "../../stream/src/iter/utils.ts";
 import * as constants from "./constants.ts";
 import {
   aggregateTwoErrors,
@@ -71,9 +82,11 @@ import { resolve as resolvePath } from "../../path/src/posix.ts";
 
 export { constants };
 
-// The synchronous half of FileHandle.writer uses the same established native
-// operations as fs.writeSync/writevSync/closeSync. They are declared here too
-// because importing main.ts would create the cycle main -> promises -> main.
+// FileHandle's synchronous stream operations use the same established native
+// operations as fs.readSync/writeSync/writevSync/closeSync. They are declared
+// here too because importing main.ts would create the cycle main -> promises
+// -> main.
+declare function nts_fs_read(fd: number, length: number, position: number): number[];
 declare function nts_fs_write(fd: number, bytes: number[], position: number): number;
 declare function nts_fs_writev(
   fd: number,
@@ -82,6 +95,7 @@ declare function nts_fs_writev(
   position: number,
 ): number;
 declare function nts_fs_close(fd: number): number;
+declare function nts_errno(): number;
 
 /**
  * The file streams, filled in by `main.ts`.
@@ -336,6 +350,10 @@ export interface FileHandleWriterOptions {
   chunkSize?: number | undefined;
 }
 
+export interface FileHandlePullOptions extends FileHandleWriterOptions {
+  signal?: AbortSignalLike | undefined;
+}
+
 export interface FileHandleWriterOperationOptions {
   signal?: AbortSignalLike | undefined;
 }
@@ -354,6 +372,11 @@ interface NormalizedFileHandleWriterOptions {
   chunkSize: number;
 }
 
+interface NormalizedFileHandlePullOptions
+  extends NormalizedFileHandleWriterOptions {
+  signal: AbortSignalLike | undefined;
+}
+
 interface RawFileHandleWriterOperationOptions {
   signal?: unknown;
 }
@@ -364,10 +387,9 @@ function writerOptionsObject(
   validateObject(value, "options");
 }
 
-function normalizeWriterOptions(value: unknown): NormalizedFileHandleWriterOptions {
-  const options = value === undefined ? {} : value;
-  writerOptionsObject(options);
-
+function normalizeValidatedFileHandleOptions(
+  options: RawFileHandleWriterOptions,
+): NormalizedFileHandleWriterOptions {
   const autoClose = options.autoClose === undefined ? false : options.autoClose;
   const chunkSize = options.chunkSize === undefined ? 128 * 1024 : options.chunkSize;
 
@@ -387,6 +409,27 @@ function normalizeWriterOptions(value: unknown): NormalizedFileHandleWriterOptio
     limit = options.limit;
   }
   return { autoClose, start, limit, chunkSize };
+}
+
+function normalizeWriterOptions(value: unknown): NormalizedFileHandleWriterOptions {
+  const options = value === undefined ? {} : value;
+  writerOptionsObject(options);
+  return normalizeValidatedFileHandleOptions(options);
+}
+
+function normalizePullOptions(value: unknown): NormalizedFileHandlePullOptions {
+  const options = value === undefined ? {} : value;
+  writerOptionsObject(options);
+  const signal = "signal" in options ? options.signal : undefined;
+  writerSignal(signal);
+  const normalized = normalizeValidatedFileHandleOptions(options);
+  return {
+    autoClose: normalized.autoClose,
+    start: normalized.start,
+    limit: normalized.limit,
+    chunkSize: normalized.chunkSize,
+    signal,
+  };
 }
 
 function writerSignal(
@@ -445,7 +488,7 @@ export class FileHandle extends EventEmitter {
   #resolveClose: (() => void) | undefined;
   #rejectClose: ((error: unknown) => void) | undefined;
   #descriptorClosed = false;
-  #writerLocked = false;
+  #operationLocked = false;
 
   constructor(fd: number) {
     super();
@@ -640,6 +683,51 @@ export class FileHandle extends EventEmitter {
     });
   }
 
+  #requireOperationAvailable(): void {
+    if (this.#descriptorClosed) {
+      throw new ERR_INVALID_STATE("The FileHandle is closed");
+    }
+    if (this.#closePromise !== undefined) {
+      throw new ERR_INVALID_STATE("The FileHandle is closing");
+    }
+    if (this.#operationLocked) {
+      throw new ERR_INVALID_STATE("The FileHandle is locked");
+    }
+  }
+
+  /** Read this handle as an asynchronous stream/iter byte source. */
+  pull(
+    ...args: (Transform | FileHandlePullOptions)[]
+  ): AsyncByteStream;
+  pull(...args: unknown[]): AsyncByteStream {
+    this.#requireOperationAvailable();
+    const parsed = parsePullArguments(args);
+    const settings = normalizePullOptions(parsed.options);
+    this.#operationLocked = true;
+
+    const source = new FileHandleAsyncSource(this, settings);
+    return parsed.transforms.length === 0
+      ? source
+      : createParsedPull(source, parsed);
+  }
+
+  /** Read this handle as a synchronous stream/iter byte source. */
+  pullSync(
+    ...args: (Transform | FileHandleWriterOptions)[]
+  ): SyncByteStream;
+  pullSync(...args: unknown[]): SyncByteStream {
+    this.#requireOperationAvailable();
+    const parsed = parsePullArguments(args);
+    const settings = normalizeWriterOptions(parsed.options);
+    this.#operationLocked = true;
+    this._refForStream();
+
+    const source = new FileHandleSyncSource(this, this.#fd, settings);
+    return parsed.transforms.length === 0
+      ? source
+      : createParsedPullSync(source, parsed.transforms);
+  }
+
   /**
    * A bounded writer over this handle.
    *
@@ -650,36 +738,27 @@ export class FileHandle extends EventEmitter {
    */
   writer(options?: FileHandleWriterOptions): FileHandleWriter;
   writer(options?: unknown): FileHandleWriter {
-    if (this.#descriptorClosed) {
-      throw new ERR_INVALID_STATE("The FileHandle is closed");
-    }
-    if (this.#closePromise !== undefined) {
-      throw new ERR_INVALID_STATE("The FileHandle is closing");
-    }
-    if (this.#writerLocked) {
-      throw new ERR_INVALID_STATE("The FileHandle is locked");
-    }
-
+    this.#requireOperationAvailable();
     const settings = normalizeWriterOptions(options);
-    this.#writerLocked = true;
+    this.#operationLocked = true;
     this._refForStream();
     return new FileHandleWriterImplementation(this, this.#fd, settings);
   }
 
-  /** Release the descriptor reference owned by one completed writer. */
-  async _finishWriter(autoClose: boolean): Promise<void> {
-    if (!this.#writerLocked) return;
-    this.#writerLocked = false;
+  /** Release the descriptor reference owned by a completed pull or writer. */
+  async _finishOperation(autoClose: boolean): Promise<void> {
+    if (!this.#operationLocked) return;
+    this.#operationLocked = false;
     this._unrefForStream();
     if (autoClose) await this.close();
   }
 
-  /** The synchronous counterpart used by fail() and endSync(). */
-  _finishWriterSync(autoClose: boolean): void {
-    if (!this.#writerLocked) return;
-    this.#writerLocked = false;
+  /** The synchronous counterpart used by pullSync, fail, and endSync. */
+  _finishOperationSync(autoClose: boolean): void {
+    if (!this.#operationLocked) return;
+    this.#operationLocked = false;
     if (this.#references <= 0) {
-      throw new Error("FileHandle writer reference count underflow");
+      throw new Error("FileHandle operation reference count underflow");
     }
     this.#references--;
 
@@ -862,6 +941,155 @@ export class FileHandle extends EventEmitter {
     else resolve?.();
   }
 
+}
+
+/** The single-use asynchronous byte source returned by FileHandle.pull(). */
+class FileHandleAsyncSource implements AsyncByteStream {
+  readonly #handle: FileHandle;
+  readonly #autoClose: boolean;
+  readonly #chunkSize: number;
+  readonly #signal: AbortSignalLike | undefined;
+  #position: number;
+  #remaining: number;
+  #started = false;
+
+  constructor(
+    handle: FileHandle,
+    options: NormalizedFileHandlePullOptions,
+  ) {
+    this.#handle = handle;
+    this.#autoClose = options.autoClose;
+    this.#chunkSize = options.chunkSize;
+    this.#signal = options.signal;
+    this.#position = options.start;
+    this.#remaining = options.limit;
+  }
+
+  async *[Symbol.asyncIterator](): AsyncGenerator<ByteBatch, void, undefined> {
+    // A FileHandle source owns one cursor and one lock. A second traversal is
+    // therefore exhausted instead of being allowed to release a later
+    // operation's lock.
+    if (this.#started) return;
+    this.#started = true;
+    this.#handle._refForStream();
+    try {
+      const signal = this.#signal;
+      if (signal !== undefined) {
+        while (this.#remaining !== 0) {
+          if (signal.aborted) {
+            throw signal.reason ?? new AbortError();
+          }
+          const toRead = this.#remaining > 0
+            ? Math.min(this.#chunkSize, this.#remaining)
+            : this.#chunkSize;
+          const buffer = Buffer.allocUnsafe(toRead);
+          const result = await this.#handle.read(
+            buffer,
+            0,
+            toRead,
+            this.#position,
+          );
+          if (result.bytesRead === 0) return;
+          if (this.#position >= 0) this.#position += result.bytesRead;
+          if (this.#remaining > 0) this.#remaining -= result.bytesRead;
+          const chunk = result.bytesRead < toRead
+            ? buffer.subarray(0, result.bytesRead)
+            : buffer;
+          yield [chunk];
+        }
+        return;
+      }
+
+      // The ordinary path deliberately has no cancellation branch in its
+      // read loop. This is the hot path for file pipelines.
+      while (this.#remaining !== 0) {
+        const toRead = this.#remaining > 0
+          ? Math.min(this.#chunkSize, this.#remaining)
+          : this.#chunkSize;
+        const buffer = Buffer.allocUnsafe(toRead);
+        const result = await this.#handle.read(
+          buffer,
+          0,
+          toRead,
+          this.#position,
+        );
+        if (result.bytesRead === 0) return;
+        if (this.#position >= 0) this.#position += result.bytesRead;
+        if (this.#remaining > 0) this.#remaining -= result.bytesRead;
+        const chunk = result.bytesRead < toRead
+          ? buffer.subarray(0, result.bytesRead)
+          : buffer;
+        yield [chunk];
+      }
+    } finally {
+      await this.#handle._finishOperation(this.#autoClose);
+    }
+  }
+}
+
+/**
+ * The single-object iterator returned by FileHandle.pullSync().
+ *
+ * The source is its own iterator: one FileHandle operation has one cursor and
+ * one ownership reference. `return()` performs the same cleanup as EOF, so a
+ * `break` cannot leave the handle locked.
+ */
+class FileHandleSyncSource implements SyncByteStream, Iterator<ByteBatch, undefined, undefined> {
+  readonly #handle: FileHandle;
+  readonly #fd: number;
+  readonly #autoClose: boolean;
+  readonly #chunkSize: number;
+  #position: number;
+  #remaining: number;
+  #done = false;
+
+  constructor(
+    handle: FileHandle,
+    fd: number,
+    options: NormalizedFileHandleWriterOptions,
+  ) {
+    this.#handle = handle;
+    this.#fd = fd;
+    this.#autoClose = options.autoClose;
+    this.#chunkSize = options.chunkSize;
+    this.#position = options.start;
+    this.#remaining = options.limit;
+  }
+
+  [Symbol.iterator](): FileHandleSyncSource {
+    return this;
+  }
+
+  next(): IteratorResult<ByteBatch, undefined> {
+    if (this.#done || this.#remaining === 0) return this.#finish();
+
+    const toRead = this.#remaining > 0
+      ? Math.min(this.#chunkSize, this.#remaining)
+      : this.#chunkSize;
+    const bytes = nts_fs_read(this.#fd, toRead, this.#position);
+    const errno = nts_errno();
+    if (errno !== 0) {
+      this.#finish();
+      throw uvException(-errno, "read");
+    }
+    if (bytes.length === 0) return this.#finish();
+
+    if (this.#position >= 0) this.#position += bytes.length;
+    if (this.#remaining > 0) this.#remaining -= bytes.length;
+    return { value: [Buffer.from(bytes)], done: false };
+  }
+
+  return(): IteratorResult<ByteBatch, undefined> {
+    return this.#finish();
+  }
+
+  #finish(): IteratorResult<ByteBatch, undefined> {
+    if (!this.#done) {
+      this.#done = true;
+      this.#handle._finishOperationSync(this.#autoClose);
+    }
+    return { value: undefined, done: true };
+  }
 }
 
 /** The ordinary, statically callable surface of FileHandle.writer(). */
@@ -1058,7 +1286,7 @@ class FileHandleWriterImplementation implements FileHandleWriter {
     if (this.#error !== undefined || this.#asyncOperations !== 0) return -1;
     if (this.#closed) return this.#totalBytesWritten;
     this.#closed = true;
-    this.#handle._finishWriterSync(this.#autoClose);
+    this.#handle._finishOperationSync(this.#autoClose);
     return this.#totalBytesWritten;
   }
 
@@ -1066,7 +1294,7 @@ class FileHandleWriterImplementation implements FileHandleWriter {
     if (this.#closed || this.#error !== undefined) return;
     this.#error = reason ?? new ERR_INVALID_STATE("Failed");
     this.#closed = true;
-    this.#handle._finishWriterSync(this.#autoClose);
+    this.#handle._finishOperationSync(this.#autoClose);
   }
 
   async #writeAll(
@@ -1182,7 +1410,7 @@ class FileHandleWriterImplementation implements FileHandleWriter {
   async #cleanup(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
-    await this.#handle._finishWriter(this.#autoClose);
+    await this.#handle._finishOperation(this.#autoClose);
   }
 }
 

@@ -1,8 +1,8 @@
 // Ordinary typed portion of upstream
-// `test/parallel/test-fs-promises-file-handle-writer.js`. That file also
-// requires pull()/stream-iter pipelines and Symbol.dispose/asyncDispose; this
-// focused test keeps every writer state and I/O operation that does not depend
-// on those explicit Native TypeScript non-goals.
+// `test/parallel/test-fs-promises-file-handle-writer.js`. That file also mixes
+// in Symbol.dispose/asyncDispose; this focused test keeps every ordinary writer
+// state and I/O operation independent of those Native TypeScript non-goals.
+// The pull()/stream-iter pipelines run in their own untouched upstream tests.
 'use strict';
 
 const common = require('../common');

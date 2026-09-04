@@ -59,6 +59,7 @@ export interface TransformOptions {
 
 export interface PullOptions {
   signal?: StreamAbortSignal;
+  [name: string]: unknown;
 }
 
 export interface PipeOptions extends PullOptions {
@@ -66,16 +67,21 @@ export interface PipeOptions extends PullOptions {
   preventFail?: boolean;
 }
 
-type StatelessTransform = (
+export type StatelessTransform = (
   chunks: ByteBatch | null,
   options?: TransformOptions,
 ) => unknown;
 
-interface StatefulTransform {
+export interface StatefulTransform {
   transform(source: unknown, options?: TransformOptions): unknown;
 }
 
-type Transform = StatelessTransform | StatefulTransform;
+export type Transform = StatelessTransform | StatefulTransform;
+
+export interface ParsedPullArguments {
+  transforms: Transform[];
+  options?: PullOptions;
+}
 
 function isStatelessTransform(value: unknown): value is StatelessTransform {
   return typeof value === "function";
@@ -109,10 +115,9 @@ function validateSignal(signal: unknown): asserts signal is StreamAbortSignal | 
   }
 }
 
-function parsePullArguments(args: readonly unknown[]): {
-  transforms: Transform[];
-  options?: PullOptions;
-} {
+export function parsePullArguments(
+  args: readonly unknown[],
+): ParsedPullArguments {
   let end = args.length;
   let options: PullOptions | undefined;
   const last = args[args.length - 1];
@@ -501,11 +506,31 @@ export function pullSync(source: unknown, ...values: unknown[]): SyncByteStream 
     }
     transforms.push(transform);
   }
-  return new SyncPipeline(source, transforms);
+  return createParsedPullSync(source, transforms);
 }
 
 export function pull(source: unknown, ...args: unknown[]): AsyncByteStream {
   const parsed = parsePullArguments(args);
+  return createParsedPull(source, parsed);
+}
+
+/**
+ * Build a synchronous pipeline from arguments already validated by the shared
+ * parser. Internal consumers such as FileHandle use this to avoid parsing the
+ * same transform list twice at construction time.
+ */
+export function createParsedPullSync(
+  source: unknown,
+  transforms: Transform[],
+): SyncByteStream {
+  return new SyncPipeline(source, transforms);
+}
+
+/** The asynchronous counterpart of createParsedPullSync. */
+export function createParsedPull(
+  source: unknown,
+  parsed: ParsedPullArguments,
+): AsyncByteStream {
   const signal = parsed.options?.signal;
   validateSignal(signal);
   if (signal?.aborted) return new RejectedAsyncPipeline(signal.reason);
