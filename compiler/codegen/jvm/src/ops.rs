@@ -399,6 +399,28 @@ impl Emitter<'_> {
                     return Err(refuse(self.func, "an `instanceof` against an unknown class"));
                 };
                 self.load(code, *value)?;
+                // An erased operand is the common case, and `InstanceOf`'s own
+                // doc says so: "the operand may be erased, in which case its
+                // tag has to say it is a reference before its class can be
+                // asked for -- the lowering emits that test; this operation
+                // assumes it." So the reference comes out of the box before the
+                // class is asked, and `instanceof` on the box itself is always
+                // false.
+                //
+                // Which is exactly what it was. `benches/cases/instanceof`
+                // returned 3 per iteration where node returns an average of 2:
+                // every test false, every `else` taken, and a plausible number
+                // out the end. The benchmark's cross-variant checksum caught
+                // it; nothing in the emitter did.
+                if *self.ty(*value) == HirType::Erased {
+                    code.get_field(
+                        &origin,
+                        pool,
+                        types::VALUE,
+                        "ref",
+                        "Ljava/lang/Object;",
+                    );
+                }
                 code.instance_of(&origin, pool, &types::class_name(layout));
                 Placed::OnStack
             }

@@ -601,29 +601,82 @@ public final class NtsRuntime {
         }
 
         boolean negative = x < 0;
-        java.math.BigDecimal exact = new java.math.BigDecimal(Math.abs(x));
-        java.math.BigDecimal shortest = null;
-        for (int precision = 1; precision <= 17; precision++) {
-            java.math.BigDecimal candidate =
-                exact.round(new java.math.MathContext(precision, java.math.RoundingMode.HALF_EVEN));
-            if (candidate.doubleValue() == Math.abs(x)) {
-                shortest = candidate.stripTrailingZeros();
-                break;
+        double magnitude = Math.abs(x);
+        java.math.BigDecimal exact = new java.math.BigDecimal(magnitude);
+
+        // Start from a guess rather than scanning 1..17.
+        //
+        // `Double.toString` is *not* trusted for the answer -- before JDK 19 it
+        // does not produce the shortest digits, which is why this method exists
+        // -- but it is a good guess at how many there are, and the round-trip
+        // check below is what decides. A wrong guess costs a step in one
+        // direction; scanning from one cost seventeen `BigDecimal` roundings on
+        // every call, and `benches/cases/number-format-double` measured that at
+        // 91us against 4.72us for the C lane.
+        int precision = Math.max(1, Math.min(17, significantDigits(Double.toString(magnitude))));
+        java.math.BigDecimal shortest = roundTo(exact, precision);
+        if (shortest.doubleValue() != magnitude) {
+            // The guess was short. Widen until it reads back; seventeen digits
+            // always do.
+            while (precision < 17) {
+                precision++;
+                shortest = roundTo(exact, precision);
+                if (shortest.doubleValue() == magnitude) {
+                    break;
+                }
+            }
+        } else {
+            // The guess reads back, but a shorter one may too.
+            while (precision > 1) {
+                java.math.BigDecimal shorter = roundTo(exact, precision - 1);
+                if (shorter.doubleValue() != magnitude) {
+                    break;
+                }
+                shortest = shorter;
+                precision--;
             }
         }
-        if (shortest == null) {
-            // Unreachable: seventeen significant digits always round-trip a
-            // double. Kept as an answer rather than an exception because a
-            // runtime that throws where the language cannot is worse than one
-            // that is briefly wrong, and this says which it is.
-            return Double.toString(x);
-        }
+        shortest = shortest.stripTrailingZeros();
 
         String digits = shortest.unscaledValue().toString();
         // `n` in the specification: the position of the decimal point, so that
         // the value is `0.digits * 10^n`.
         int n = digits.length() - shortest.scale();
         return (negative ? "-" : "") + layout(digits, n);
+    }
+
+    private static java.math.BigDecimal roundTo(java.math.BigDecimal exact, int precision) {
+        return exact.round(new java.math.MathContext(precision, java.math.RoundingMode.HALF_EVEN));
+    }
+
+    /**
+     * How many significant digits a `Double.toString` result carries.
+     *
+     * <p>Used only as a starting point, never as the answer: `1.0E21` is two
+     * characters of digits and one significant one, and an older JDK's
+     * non-shortest output is simply a guess that is too large.
+     */
+    private static int significantDigits(String text) {
+        int digits = 0;
+        int trailingZeroes = 0;
+        boolean seen = false;
+        for (int at = 0; at < text.length(); at++) {
+            char c = text.charAt(at);
+            if (c == 'E' || c == 'e') {
+                break;
+            }
+            if (c < '0' || c > '9') {
+                continue;
+            }
+            if (c == '0' && !seen) {
+                // Leading zeroes are not significant: `0.001` has one digit.
+                continue;
+            }
+            seen = true;
+            digits++;
+            trailingZeroes = c == '0' ? trailingZeroes + 1 : 0;
+        }
+        return Math.max(1, digits - trailingZeroes);
     }
 
     /**

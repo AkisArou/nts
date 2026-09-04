@@ -97,6 +97,18 @@ public final class NtsValue {
         return value == null ? NULL_VALUE : new NtsValue(STRING, 0.0, value);
     }
 
+    /**
+     * A reference whose tag the *compiler* knows.
+     *
+     * <p>`ofObject` derives the tag by looking at what it was handed; this one
+     * is told. A string and an object are both references here, and only the
+     * static type says which -- so `nts_promise_fulfill_tagged` exists in the C
+     * ABI for the same reason and passes the tag beside the pointer.
+     */
+    public static NtsValue ofTagged(int tag, Object value) {
+        return value == null ? NULL_VALUE : new NtsValue(tag, 0.0, value);
+    }
+
     public static NtsValue ofObject(Object value) {
         return value == null ? NULL_VALUE : new NtsValue(OBJECT, 0.0, value);
     }
