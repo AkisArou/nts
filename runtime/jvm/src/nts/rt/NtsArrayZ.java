@@ -118,7 +118,7 @@ public final class NtsArrayZ {
 
     /** `at`, where a negative index counts from the end. */
     public static boolean at(NtsArrayZ a, double index) {
-                double i = toInteger(index);
+                double i = NtsArrays.toInteger(index);
         if (i < 0) {
             i += a.length;
         }
@@ -162,20 +162,10 @@ public final class NtsArrayZ {
         return a;
     }
 
-    private static int clamp(double index, int length) {
-        double at = Double.isNaN(index) ? 0.0 : (index < 0.0 ? Math.ceil(index) : Math.floor(index));
-        if (at < 0.0) {
-            at += length;
-        }
-        if (at < 0.0) {
-            return 0;
-        }
-        return at >= length ? length : (int) at;
-    }
 
     public static NtsArrayZ slice(NtsArrayZ a, double from, double to) {
-        int start = clamp(from, a.length);
-        int end = Math.max(start, clamp(to, a.length));
+        int start = NtsArrays.clamp(from, a.length);
+        int end = Math.max(start, NtsArrays.clamp(to, a.length));
         return new NtsArrayZ(java.util.Arrays.copyOfRange(a.items, start, end), end - start);
     }
 
@@ -206,7 +196,7 @@ public final class NtsArrayZ {
 
     /** `splice`: remove `count` from `at`, and answer what was removed. */
     public static NtsArrayZ splice(NtsArrayZ a, double at, double count) {
-        int start = clamp(at, a.length);
+        int start = NtsArrays.clamp(at, a.length);
         int removed = Math.max(0, Math.min((int) count, a.length - start));
         NtsArrayZ taken =
             new NtsArrayZ(java.util.Arrays.copyOfRange(a.items, start, start + removed), removed);
@@ -243,7 +233,7 @@ public final class NtsArrayZ {
     }
 
     public static NtsValue atValue(NtsArrayZ a, double index) {
-                double i = toInteger(index);
+                double i = NtsArrays.toInteger(index);
         if (i < 0) {
             i += a.length;
         }
@@ -252,19 +242,4 @@ public final class NtsArrayZ {
             : NtsValue.ofBoolean(a.items[(int) i]);
     }
 
-    /**
-     * `ToInteger`: truncate toward zero, NaN is zero.
-     *
-     * <p>`at` applies this **before** turning a negative index into an offset
-     * from the end, and the order is observable: `at(-1.5)` truncates to `-1`
-     * and reads the last element, where adding the length first and truncating
-     * after reads the one before it. `examples/arrays` disagreed with node on
-     * ten cases for exactly that.
-     */
-    private static double toInteger(double x) {
-        if (Double.isNaN(x)) {
-            return 0.0;
-        }
-        return x < 0.0 ? Math.ceil(x) : Math.floor(x);
-    }
 }
