@@ -4413,6 +4413,96 @@ impl<'a> FuncBuilder<'a> {
     /// already substituted, so the layout needs nothing; what needs the
     /// substitution this builder carries is the body, whose nodes are shared
     /// with every other copy.
+    /// Whether this member is the implementation behind overload signatures.
+    ///
+    /// Detected from the *siblings* rather than from the member itself: an
+    /// overload implementation looks exactly like an ordinary method, and what
+    /// makes it one is that another member of the same class shares its name and
+    /// has no body. `abstract` is excluded, which is the whole reason this is a
+    /// separate question -- an abstract method in a base and an implementation
+    /// in a subclass are two classes, so they are never siblings, and an
+    /// abstract declaration beside its own implementation is not legal
+    /// TypeScript.
+    fn is_an_overload(&mut self, class: NodeId, member: NodeId) -> bool {
+        let Some(name) = self.member_key(member) else {
+            return false;
+        };
+        // Collected first, because the checks below take `&mut self` and a
+        // closure holding the iterator would hold a borrow across them.
+        let siblings: Vec<NodeId> = members_of(self.snapshot, class)
+            .into_iter()
+            .filter(|sibling| *sibling != member)
+            .collect();
+        for sibling in siblings {
+            if self.member_key(sibling).as_deref() != Some(name.as_str()) {
+                continue;
+            }
+            let modifiers = self.node(sibling).modifiers;
+            if modifiers.contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT) {
+                continue;
+            }
+            let has_body = self
+                .children(sibling)
+                .into_iter()
+                .any(|child| self.kind_of(child) == Some(syntax::BLOCK));
+            if !has_body {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// The name a member is declared under, for comparing two of them.
+    fn member_key(&mut self, member: NodeId) -> Option<String> {
+        self.children(member)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .and_then(|child| self.node(child).text.clone())
+    }
+
+    /// The block a method's code is in, where it has one.
+    ///
+    /// An `abstract` method is the one declaration that is *meant* to have no
+    /// body, and `None` says so. Anything else without one is a declaration
+    /// whose code this lowering cannot see -- an overload signature, an ambient
+    /// declaration -- and stays refused, because emitting an unreachable
+    /// function for one of those would be a function that *can* be reached and
+    /// does nothing. The call goes to the implementation below it.
+    fn method_body(
+        &mut self,
+        class: NodeId,
+        member: NodeId,
+        is_abstract: bool,
+    ) -> Result<Option<NodeId>, Diagnostic> {
+        // An overload *implementation* is refused, not only its signatures.
+        //
+        // Refusing the signatures alone left the implementation lowered and the
+        // call sites resolving against the signature TypeScript picked, whose
+        // parameter list is not the implementation's: `pick(a: number)` beside
+        // `pick(a: number, b?: number) { .. }` gave
+        // `CallArgumentCount { expected: 3, found: 2 }` -- invalid HIR from a
+        // program every refusal had been reported for. A refusal that leaves a
+        // broken artifact is worse than no refusal, because the diagnostics say
+        // the compiler noticed.
+        if self.is_an_overload(class, member) {
+            return Err(self.unsupported(
+                member,
+                "an overloaded method, whose call sites resolve against a signature that is not \
+                 the implementation's",
+            ));
+        }
+        let body = self
+            .children(member)
+            .into_iter()
+            .rev()
+            .find(|child| self.kind_of(*child) == Some(syntax::BLOCK));
+        match (body, is_abstract) {
+            (Some(body), _) => Ok(Some(body)),
+            (None, true) => Ok(None),
+            (None, false) => Err(self.unsupported(member, "a method without a body")),
+        }
+    }
+
     fn lower_method_of(
         &mut self,
         class: NodeId,
@@ -4451,9 +4541,22 @@ impl<'a> FuncBuilder<'a> {
         if modifiers.contains(nts_semantic_schema::DeclarationModifiers::ASYNC) {
             return Err(self.unsupported(member, "an `async` method"));
         }
-        if modifiers.contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT) {
-            return Err(self.unsupported(member, "an abstract method"));
-        }
+        // An `abstract` method declares a dispatch slot and nothing else. It is
+        // lowered rather than refused because the *signature* is needed: a call
+        // through `Shape#area` on a `Shape` receiver is an indirect call, and
+        // the backend takes the function-pointer type from the declaration --
+        // `virtual_signature` looks the name up in `program.funcs` and said "no
+        // declaration for `Shape#area` to take a signature from" when this was
+        // refused.
+        //
+        // So it becomes a function with the declared parameters and return type
+        // and no body. The block is left open, which `finish` terminates as
+        // `Unreachable`, and that is the truth rather than a placeholder: an
+        // abstract class is never instantiated, so its slot is never the one
+        // dispatch lands on. Every reachable receiver is a subclass whose
+        // override fills the slot.
+        let is_abstract =
+            modifiers.contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT);
 
         let is_constructor = self.kind_of(member) == Some(syntax::CONSTRUCTOR);
         self.in_constructor = is_constructor;
@@ -4541,12 +4644,7 @@ impl<'a> FuncBuilder<'a> {
 
         self.store_parameter_properties(&declared)?;
 
-        let body = self
-            .children(member)
-            .into_iter()
-            .rev()
-            .find(|child| self.kind_of(*child) == Some(syntax::BLOCK))
-            .ok_or_else(|| self.unsupported(member, "a method without a body"))?;
+        let body = self.method_body(class, member, is_abstract)?;
 
         // A constructor returns nothing. It could return the instance -- it has
         // one in hand -- but the caller allocated that instance and already
@@ -4571,8 +4669,10 @@ impl<'a> FuncBuilder<'a> {
         self.materialize(member, &return_type)?;
 
         self.returns = return_type.clone();
-        self.lower_block(body)?;
-        self.close_body(&return_type);
+        if let Some(body) = body {
+            self.lower_block(body)?;
+            self.close_body(&return_type);
+        }
 
         // A method is reachable from outside exactly when its class is, so the
         // class's `export` is what makes it a root.

@@ -161,3 +161,32 @@ export function inWithAComputedKey(n: number): number {
   const o: Named = { a: 1 };
   return key in o ? 1 : 0;
 }
+
+// A method with no body that is not `abstract`.
+//
+// An overload signature declares a shape the implementation below satisfies;
+// there is no code for it and there is not meant to be. `abstract` means the
+// same thing about the *body* and something different about the call: an
+// abstract method's slot is filled by every subclass, so a declaration with an
+// unreachable body is honest. An overload signature's is not — the call goes to
+// the implementation, and emitting a function for the signature would be one
+// that can be reached and does nothing.
+class Overloaded {
+  pick(a: number): number;
+  pick(a: number, b: number): number;
+  pick(a: number, b?: number): number {
+    return b === undefined ? a : a + b;
+  }
+}
+
+// Not exported, and that is about this file's test rather than about the
+// feature. A caller of a refused method is refused too, by
+// `drop_callers_of_refused` -- but that runs after lowering, and
+// `an_unsupported_construct_is_refused_rather_than_skipped` reads the lowering's
+// own output to check that nothing was *silently skipped*. A two-stage refusal
+// there would read as a survivor. The class above is refused either way, which
+// is what this case is for.
+function overloadCaller(n: number): number {
+  return new Overloaded().pick(n, 1);
+}
+void overloadCaller;
