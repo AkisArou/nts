@@ -1315,15 +1315,15 @@ fn run_jvm(
     // one place that does not matter.
     let mut cases = String::new();
     for (one, at, tuple) in interleaved(testable) {
-        let Some(returns) = nts_codegen_jvm::types::descriptor(&one.returns) else {
+        let Some(returns) = nts_codegen_jvm::types::descriptor(program, &one.returns) else {
             bail!("`{}` returns a type the JVM backend rendered but this harness cannot", one.name);
         };
         let mut parameters = String::new();
         for (ty, _) in &one.params {
-            let Some(descriptor) = nts_codegen_jvm::types::descriptor(ty) else {
+            let Some(descriptor) = nts_codegen_jvm::types::descriptor(program, ty) else {
                 bail!("`{}` takes a type the JVM backend rendered but this harness cannot", one.name);
             };
-            parameters.push_str(descriptor);
+            parameters.push_str(&descriptor);
         }
         let _ = write!(
             cases,

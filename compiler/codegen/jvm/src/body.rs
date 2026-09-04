@@ -76,14 +76,14 @@ impl<'a> Emitter<'a> {
     /// Lay out storage, or refuse a type this slice has no representation for.
     pub fn new(program: &'a Program, func: &'a Func) -> Result<Self, Diagnostic> {
         for param in &func.params {
-            if types::descriptor(&param.ty).is_none() {
+            if types::descriptor(program, &param.ty).is_none() {
                 return Err(refuse(
                     func,
                     &format!("a parameter of unrepresentable type: {}", types::describe(&param.ty)),
                 ));
             }
         }
-        if types::descriptor(&func.return_type).is_none() {
+        if types::descriptor(program, &func.return_type).is_none() {
             return Err(refuse(
                 func,
                 &format!(
@@ -103,7 +103,7 @@ impl<'a> Emitter<'a> {
         // every later one.
         let mut param_slot = Vec::with_capacity(func.params.len());
         for param in &func.params {
-            let Some(vtype) = types::vtype(&param.ty) else {
+            let Some(vtype) = types::vtype(program, &param.ty) else {
                 return Err(refuse(func, "a parameter with no verification type"));
             };
             param_slot.push(u16::try_from(next).unwrap_or(u16::MAX));
@@ -136,7 +136,7 @@ impl<'a> Emitter<'a> {
             if matches!(ty, HirType::Void) {
                 continue;
             }
-            let Some(vtype) = types::vtype(ty) else {
+            let Some(vtype) = types::vtype(program, ty) else {
                 return Err(refuse(
                     func,
                     &format!("a value of unrepresentable type: {}", types::describe(ty)),
@@ -195,7 +195,7 @@ impl<'a> Emitter<'a> {
                 .func
                 .params
                 .iter()
-                .filter_map(|param| types::vtype(&param.ty))
+                .filter_map(|param| types::vtype(self.program, &param.ty))
                 .map(|vtype| vtype.slots())
                 .sum();
             let origin = self.func.origin.clone();
@@ -363,13 +363,14 @@ pub fn method_name(raw: &str) -> String {
 
 /// The descriptor of a function, from its own signature.
 #[must_use]
-pub fn signature(func: &Func) -> Option<String> {
+pub fn signature(program: &Program, func: &Func) -> Option<String> {
     let mut params = Vec::with_capacity(func.params.len());
     for param in &func.params {
-        params.push(types::descriptor(&param.ty)?);
+        params.push(types::descriptor(program, &param.ty)?);
     }
+    let borrowed: Vec<&str> = params.iter().map(String::as_str).collect();
     Some(nts_jvm_emitter::descriptor::method(
-        &params,
-        types::descriptor(&func.return_type)?,
+        &borrowed,
+        &types::descriptor(program, &func.return_type)?,
     ))
 }

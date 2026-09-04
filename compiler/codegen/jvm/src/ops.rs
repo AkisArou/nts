@@ -71,39 +71,8 @@ impl Emitter<'_> {
             // parameter because every edge into this block wrote it.
             OpKind::Param(_) | OpKind::BlockParam(_) => return Ok(()),
 
-            OpKind::ConstBool(flag) => {
-                code.const_int(&origin, pool, i32::from(*flag));
-                Placed::OnStack
-            }
-            OpKind::ConstInt(number) => {
-                match types::kind(&op.ty) {
-                    Some(Kind::Long) => {
-                        let Ok(narrow) = i64::try_from(*number) else {
-                            return Err(refuse(self.func, "an integer literal wider than 64 bits"));
-                        };
-                        code.const_long(&origin, pool, narrow);
-                    }
-                    Some(Kind::Int) => {
-                        let Ok(narrow) = i32::try_from(*number) else {
-                            return Err(refuse(self.func, "an integer literal wider than its slot"));
-                        };
-                        code.const_int(&origin, pool, narrow);
-                    }
-                    _ => return Err(refuse(self.func, "an integer literal of unrepresentable type")),
-                }
-                Placed::OnStack
-            }
-            OpKind::ConstFloat(number) => {
-                if matches!(op.ty, HirType::Float { bits: 32 }) {
-                    #[allow(
-                        clippy::cast_possible_truncation,
-                        reason = "the lowering typed this value `f32`, so it is one"
-                    )]
-                    code.const_float(&origin, pool, *number as f32);
-                } else {
-                    code.const_double(&origin, pool, *number);
-                }
-                Placed::OnStack
+            OpKind::ConstBool(_) | OpKind::ConstInt(_) | OpKind::ConstFloat(_) => {
+                self.constant(code, pool, &op.kind, &op.ty, &origin)?
             }
 
             OpKind::Binary { op: bin, lhs, rhs } => self.binary(code, pool, &op.ty, *bin, *lhs, *rhs)?,
@@ -119,27 +88,79 @@ impl Emitter<'_> {
                 let Some(entry) = self.program.globals.get(*global as usize) else {
                     return Err(refuse(self.func, "a global this program does not declare"));
                 };
-                let Some(descriptor) = types::descriptor(&entry.ty) else {
+                let Some(descriptor) = types::descriptor(self.program, &entry.ty) else {
                     return Err(refuse(self.func, "a global of unrepresentable type"));
                 };
                 let name = crate::body::method_name(&entry.name);
-                code.get_static(&origin, pool, PROGRAM, &name, descriptor);
+                code.get_static(&origin, pool, PROGRAM, &name, &descriptor);
                 Placed::OnStack
             }
             OpKind::GlobalSet { global, value: stored } => {
                 let Some(entry) = self.program.globals.get(*global as usize) else {
                     return Err(refuse(self.func, "a global this program does not declare"));
                 };
-                let Some(descriptor) = types::descriptor(&entry.ty) else {
+                let Some(descriptor) = types::descriptor(self.program, &entry.ty) else {
                     return Err(refuse(self.func, "a global of unrepresentable type"));
                 };
                 let name = crate::body::method_name(&entry.name);
                 self.load(code, *stored)?;
-                code.put_static(&origin, pool, PROGRAM, &name, descriptor);
+                code.put_static(&origin, pool, PROGRAM, &name, &descriptor);
                 return Ok(());
             }
 
             OpKind::Call { callee, args, .. } => self.call(code, pool, &op.ty, callee, args, &origin)?,
+
+            // `new; dup; invokespecial <init>()V`, and then the lowering calls
+            // the TypeScript constructor as an ordinary method on the result --
+            // which is what `Func::initializes_receiver` already promises: a
+            // freshly allocated receiver with every field zero, which is
+            // exactly what the JVM hands back.
+            //
+            // `frame` is ignored. It is escape analysis asking for stack
+            // placement, and there is nothing here to place: HotSpot decides
+            // that at run time from the same evidence. On ART, whose escape
+            // analysis is much weaker, honouring the hint may be worth
+            // something -- and that is a measurement for when a DEX pipeline
+            // exists, not a guess now.
+            OpKind::ObjectNew { .. } => {
+                let class = self.object_class(&op.ty)?;
+                code.new_object(&origin, pool, &class);
+                code.dup(&origin);
+                code.invoke_special(&origin, pool, &class, "<init>", "()V");
+                Placed::OnStack
+            }
+            OpKind::FieldGet { object, field } => {
+                let (class, name, descriptor) = self.field_ref(*object, *field)?;
+                self.load(code, *object)?;
+                code.get_field(&origin, pool, &class, &name, &descriptor);
+                Placed::OnStack
+            }
+            OpKind::FieldSet { object, field, value: stored } => {
+                let (class, name, descriptor) = self.field_ref(*object, *field)?;
+                self.load(code, *object)?;
+                self.load(code, *stored)?;
+                code.put_field(&origin, pool, &class, &name, &descriptor);
+                return Ok(());
+            }
+            // A closed set of classes, so `instanceof` answers it directly --
+            // one instruction against the C backend's chain of descriptor
+            // pointer comparisons. More than one class needs the set ORed
+            // together, which needs a branch; until the shape appears in a real
+            // program it is refused rather than guessed at.
+            OpKind::InstanceOf { value, classes } => {
+                let [only] = classes.as_slice() else {
+                    return Err(refuse(
+                        self.func,
+                        "an `instanceof` against more than one class",
+                    ));
+                };
+                let Some(layout) = self.program.layout(*only) else {
+                    return Err(refuse(self.func, "an `instanceof` against an unknown class"));
+                };
+                self.load(code, *value)?;
+                code.instance_of(&origin, pool, &types::class_name(layout));
+                Placed::OnStack
+            }
 
             // Everything the managed and erased slices bring, refused by name
             // rather than half-emitted -- a backend that writes *something* for
@@ -161,6 +182,89 @@ impl Emitter<'_> {
             }
         }
         Ok(())
+    }
+
+    /// A literal, in whichever width the middle end gave it.
+    fn constant(
+        &self,
+        code: &mut Code,
+        pool: &mut Pool,
+        kind: &OpKind,
+        ty: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        match kind {
+            OpKind::ConstBool(flag) => code.const_int(origin, pool, i32::from(*flag)),
+            OpKind::ConstInt(number) => match types::kind(ty) {
+                Some(Kind::Long) => {
+                    let Ok(narrow) = i64::try_from(*number) else {
+                        return Err(refuse(self.func, "an integer literal wider than 64 bits"));
+                    };
+                    code.const_long(origin, pool, narrow);
+                }
+                Some(Kind::Int) => {
+                    let Ok(narrow) = i32::try_from(*number) else {
+                        return Err(refuse(self.func, "an integer literal wider than its slot"));
+                    };
+                    code.const_int(origin, pool, narrow);
+                }
+                _ => return Err(refuse(self.func, "an integer literal of unrepresentable type")),
+            },
+            OpKind::ConstFloat(number) => {
+                if matches!(ty, HirType::Float { bits: 32 }) {
+                    #[allow(
+                        clippy::cast_possible_truncation,
+                        reason = "the lowering typed this value `f32`, so it is one"
+                    )]
+                    code.const_float(origin, pool, *number as f32);
+                } else {
+                    code.const_double(origin, pool, *number);
+                }
+            }
+            _ => return Err(refuse(self.func, "a literal this backend does not spell")),
+        }
+        Ok(Placed::OnStack)
+    }
+
+    /// The class a value of this type is an instance of.
+    fn object_class(&self, ty: &HirType) -> Result<String, Diagnostic> {
+        let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
+            return Err(refuse(self.func, "an object operation on something that is not one"));
+        };
+        let Some(layout) = self.program.layout(*id) else {
+            return Err(refuse(self.func, "an object whose layout this program does not carry"));
+        };
+        Ok(types::class_name(layout))
+    }
+
+    /// The owning class, member name and descriptor of one field.
+    ///
+    /// Read from the *object's* layout by index, because `FieldSet`/`FieldGet`
+    /// carry a position rather than a name -- the position `codegen_common`'s
+    /// layout decided, so that no two backends can disagree about which field
+    /// is which.
+    fn field_ref(&self, object: ValueId, field: u32) -> Result<(String, String, String), Diagnostic> {
+        let ty = self.ty(object).clone();
+        let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
+            return Err(refuse(self.func, "a field of something that is not an object"));
+        };
+        let Some(layout) = self.program.layout(id) else {
+            return Err(refuse(self.func, "a field of an object with no layout"));
+        };
+        let Some(entry) = layout.fields.get(field as usize) else {
+            return Err(refuse(self.func, "a field this object's layout does not have"));
+        };
+        let Some(descriptor) = types::descriptor(self.program, &entry.ty) else {
+            return Err(refuse(
+                self.func,
+                &format!("a field of unrepresentable type: {}", types::describe(&entry.ty)),
+            ));
+        };
+        Ok((
+            types::class_name(layout),
+            crate::body::method_name(&entry.name),
+            descriptor,
+        ))
     }
 
     fn binary(
@@ -563,7 +667,7 @@ impl Emitter<'_> {
         let Some(target) = self.program.funcs.iter().find(|func| &func.name == name) else {
             return Err(refuse(self.func, &format!("a call to `{name}`, which is not in this program")));
         };
-        let Some(signature) = crate::body::signature(target) else {
+        let Some(signature) = crate::body::signature(self.program, target) else {
             return Err(refuse(self.func, &format!("a call to `{name}`, whose signature has no representation")));
         };
         for &arg in args {
@@ -761,10 +865,6 @@ fn unsupported(kind: &OpKind) -> String {
         }
         OpKind::Length(_) => "a length".to_owned(),
         OpKind::StringUnitAt { .. } => "indexing a string".to_owned(),
-        OpKind::ObjectNew { .. } | OpKind::FieldGet { .. } | OpKind::FieldSet { .. } => {
-            "an object".to_owned()
-        }
-        OpKind::InstanceOf { .. } => "an `instanceof` test".to_owned(),
         OpKind::ClosureStatic => "a function used as a value".to_owned(),
         OpKind::CellReady { .. } => "a captured binding".to_owned(),
         OpKind::Retain(_) | OpKind::Release(_) => {

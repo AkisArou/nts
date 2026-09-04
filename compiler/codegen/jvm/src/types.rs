@@ -19,25 +19,43 @@
 //! observable arrives as an explicit `Convert` from the middle end rather than
 //! being implied by a parameter's width.
 
-use nts_core::hir::{HirType, ManagedType};
+use nts_codegen_common::symbols::jvm_class_name;
+use nts_core::hir::{HirType, Layout, ManagedType, Program};
 use nts_jvm_emitter::{Kind, VType};
+
+/// The binary name of the class one layout becomes.
+///
+/// One class per `Layout`, not per source type: structural typing merges
+/// `Point` and the anonymous `{ x: number; y: number }` of a literal into one
+/// layout, and giving them separate classes would emit two classes that are the
+/// same class and could not be passed to each other.
+#[must_use]
+pub fn class_name(layout: &Layout) -> String {
+    jvm_class_name(&layout.name)
+}
 
 /// The descriptor for a parameter, result or field.
 ///
 /// `None` is a type this backend cannot represent yet, which is a refusal by
 /// name rather than a guess.
 #[must_use]
-pub fn descriptor(ty: &HirType) -> Option<&'static str> {
+pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
     Some(match ty {
-        HirType::Void => "V",
-        HirType::Bool => "Z",
-        HirType::Int { bits: 64, .. } => "J",
-        HirType::Int { .. } => "I",
-        HirType::Float { bits: 32 } => "F",
-        HirType::Float { .. } => "D",
-        // The managed slice, `Erased` and `BigInt` all arrive in later steps.
+        HirType::Void => "V".to_owned(),
+        HirType::Bool => "Z".to_owned(),
+        HirType::Int { bits: 64, .. } => "J".to_owned(),
+        HirType::Int { .. } => "I".to_owned(),
+        HirType::Float { bits: 32 } => "F".to_owned(),
+        HirType::Float { .. } => "D".to_owned(),
+        HirType::Managed(ManagedType::Object(id)) => {
+            nts_jvm_emitter::descriptor::object(&class_name(program.layout(*id)?))
+        }
+        // Strings, arrays, `Erased` and `BigInt` arrive in later steps.
         // Answering here would emit something for a type nothing implements.
-        HirType::Never | HirType::BigInt | HirType::Erased | HirType::Managed(_) => return None,
+        HirType::Never
+        | HirType::BigInt
+        | HirType::Erased
+        | HirType::Managed(_) => return None,
     })
 }
 
@@ -45,6 +63,7 @@ pub fn descriptor(ty: &HirType) -> Option<&'static str> {
 #[must_use]
 pub fn kind(ty: &HirType) -> Option<Kind> {
     Some(match ty {
+        HirType::Managed(ManagedType::Object(_)) => Kind::Ref,
         HirType::Int { bits: 64, .. } => Kind::Long,
         // A `boolean` is an `int` everywhere except in a descriptor: there is
         // no narrower computational type on this machine.
@@ -59,13 +78,18 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
 
 /// The frame entry for a slot holding this type.
 #[must_use]
-pub fn vtype(ty: &HirType) -> Option<VType> {
+pub fn vtype(program: &Program, ty: &HirType) -> Option<VType> {
     Some(match kind(ty)? {
         Kind::Int => VType::Integer,
         Kind::Long => VType::Long,
         Kind::Float => VType::Float,
         Kind::Double => VType::Double,
-        Kind::Ref => return None,
+        Kind::Ref => {
+            let HirType::Managed(ManagedType::Object(id)) = ty else {
+                return None;
+            };
+            VType::Object(class_name(program.layout(*id)?))
+        }
     })
 }
 
@@ -92,34 +116,38 @@ pub fn describe(ty: &HirType) -> String {
 mod tests {
     use super::*;
 
+    fn empty() -> Program {
+        Program::default()
+    }
+
     #[test]
     fn a_narrow_integer_is_an_int_in_every_vocabulary_but_none() {
         let byte = HirType::Int { bits: 8, signed: true };
-        assert_eq!(descriptor(&byte), Some("I"));
+        assert_eq!(descriptor(&empty(), &byte).as_deref(), Some("I"));
         assert_eq!(kind(&byte), Some(Kind::Int));
-        assert_eq!(vtype(&byte), Some(VType::Integer));
+        assert_eq!(vtype(&empty(), &byte), Some(VType::Integer));
     }
 
     #[test]
     fn a_bool_is_an_int_to_compute_and_a_z_to_declare() {
-        assert_eq!(descriptor(&HirType::Bool), Some("Z"));
+        assert_eq!(descriptor(&empty(), &HirType::Bool).as_deref(), Some("Z"));
         assert_eq!(kind(&HirType::Bool), Some(Kind::Int));
     }
 
     #[test]
     fn sixty_four_bits_is_the_only_wide_integer() {
         let long = HirType::Int { bits: 64, signed: true };
-        assert_eq!(descriptor(&long), Some("J"));
+        assert_eq!(descriptor(&empty(), &long).as_deref(), Some("J"));
         assert_eq!(kind(&long), Some(Kind::Long));
-        assert_eq!(vtype(&long), Some(VType::Long));
+        assert_eq!(vtype(&empty(), &long), Some(VType::Long));
     }
 
     #[test]
     fn what_this_slice_does_not_represent_says_so() {
         for ty in [HirType::BigInt, HirType::Erased, HirType::Never] {
-            assert_eq!(descriptor(&ty), None, "{ty:?}");
+            assert_eq!(descriptor(&empty(), &ty), None, "{ty:?}");
         }
-        assert_eq!(descriptor(&HirType::Void), Some("V"));
+        assert_eq!(descriptor(&empty(), &HirType::Void).as_deref(), Some("V"));
         assert_eq!(kind(&HirType::Void), None, "void has no computational kind");
     }
 }

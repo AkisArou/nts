@@ -94,7 +94,7 @@ pub fn emit(program: &Program) -> Emitted {
     // exports it, for the reason the C backend makes it `static`: a name
     // outside the program is a name something outside can collide with.
     for global in &program.globals {
-        let Some(descriptor) = types::descriptor(&global.ty) else {
+        let Some(descriptor) = types::descriptor(program, &global.ty) else {
             diagnostics.push(Diagnostic::error(
                 "NTS4002",
                 format!(
@@ -139,8 +139,20 @@ pub fn emit(program: &Program) -> Emitted {
         }
     }
 
+    let mut classes = Vec::new();
+    for layout in &program.layouts {
+        match object_class(program, layout) {
+            Ok(Some(class)) => classes.push(class),
+            Ok(None) => {}
+            Err(diagnostic) => diagnostics.push(diagnostic),
+        }
+    }
+
     match builder.build(pool) {
-        Ok(class) => Emitted { classes: vec![class], diagnostics },
+        Ok(class) => {
+            classes.push(class);
+            Emitted { classes, diagnostics }
+        }
         Err(error) => {
             diagnostics.push(Diagnostic::error(
                 "NTS4004",
@@ -152,13 +164,100 @@ pub fn emit(program: &Program) -> Emitted {
     }
 }
 
+/// One class per layout: its fields, and the constructor `new` needs.
+///
+/// # No `super_class`, and how that is kept honest
+///
+/// `Layout` records fields and methods and not the class it extends, so this
+/// emits every generated class as a direct subclass of `Object`. That is
+/// correct for a program with no inheritance and *unverifiable* for one with
+/// it: passing a `Square` where `(LShape;)D` is declared needs a real
+/// `super_class`, and base-first field order is not one.
+///
+/// So a program where any layout's fields are a prefix of another's is refused
+/// whole. That test over-refuses -- two unrelated types can share a prefix --
+/// which is the right direction for a check standing in for a fact the IR does
+/// not carry yet. `Layout.base` is the fix and it belongs upstream.
+///
+/// # `readonly` is not `ACC_FINAL` here
+///
+/// A TypeScript constructor is an ordinary method called after `new`, and since
+/// JDK 9 a `putfield` to a final field outside its declaring `<init>` throws
+/// `IllegalAccessError`. Inlining the constructor body into `<init>` would buy
+/// the flag and cost the verifier's `uninitializedThis` state; it is a later
+/// step and only worth taking if `benches/cases/objects` says the JIT cares.
+fn object_class(program: &Program, layout: &nts_core::hir::Layout) -> Result<Option<Class>, Diagnostic> {
+    let origin = program_origin(program);
+    if program.layouts.iter().any(|other| is_base_of(layout, other)) {
+        return Err(Diagnostic::error(
+            "NTS4005",
+            format!(
+                "`{}` looks like a base class, and this backend has no `super_class` \
+                 to give it -- `Layout` records fields and methods but not what a \
+                 class extends",
+                layout.name
+            ),
+            origin.location,
+        ));
+    }
+    let mut pool = Pool::new();
+    let name = types::class_name(layout);
+    let mut builder = ClassBuilder::new(name, "java/lang/Object");
+    builder.access = access::PUBLIC | access::SUPER | access::FINAL;
+    builder.source_file = Some("nts".to_owned());
+    for field in &layout.fields {
+        let Some(descriptor) = types::descriptor(program, &field.ty) else {
+            return Err(Diagnostic::error(
+                "NTS4006",
+                format!(
+                    "`{}.{}` has no representation: {}",
+                    layout.name,
+                    field.name,
+                    types::describe(&field.ty)
+                ),
+                origin.location,
+            ));
+        };
+        builder.field(access::PUBLIC, body::method_name(&field.name), descriptor);
+    }
+    builder.default_constructor(&origin, &mut pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4003",
+            format!("`{}` could not be given a constructor: {error}", layout.name),
+            origin.location,
+        )
+    })?;
+    builder
+        .build(pool)
+        .map(Some)
+        .map_err(|error| {
+            Diagnostic::error(
+                "NTS4004",
+                format!("`{}` could not be written: {error}", layout.name),
+                origin.location,
+            )
+        })
+}
+
+/// Whether `maybe_base`'s fields are a proper prefix of `derived`'s, which is
+/// what base-first layout makes inheritance look like from here.
+fn is_base_of(maybe_base: &nts_core::hir::Layout, derived: &nts_core::hir::Layout) -> bool {
+    !maybe_base.fields.is_empty()
+        && derived.fields.len() > maybe_base.fields.len()
+        && derived
+            .fields
+            .iter()
+            .zip(&maybe_base.fields)
+            .all(|(theirs, mine)| theirs.name == mine.name && theirs.ty == mine.ty)
+}
+
 fn render(
     program: &Program,
     func: &nts_core::hir::Func,
     pool: &mut Pool,
 ) -> Result<(String, String, nts_jvm_emitter::Body), Diagnostic> {
     let emitter = body::Emitter::new(program, func)?;
-    let signature = body::signature(func)
+    let signature = body::signature(program, func)
         .ok_or_else(|| body::refuse(func, "a signature with no representation"))?;
     let rendered = emitter.emit(pool)?;
     Ok((body::method_name(&func.name), signature, rendered))
@@ -173,7 +272,7 @@ fn class_initializer(program: &Program, pool: &mut Pool) -> Option<nts_jvm_emitt
     let interesting: Vec<_> = program
         .globals
         .iter()
-        .filter(|global| global.initial != 0.0 && types::descriptor(&global.ty).is_some())
+        .filter(|global| global.initial != 0.0 && types::descriptor(program, &global.ty).is_some())
         .collect();
     if interesting.is_empty() {
         return None;
@@ -181,7 +280,7 @@ fn class_initializer(program: &Program, pool: &mut Pool) -> Option<nts_jvm_emitt
     let mut code = Code::new(Vec::<VType>::new(), 0);
     for global in interesting {
         let origin = global.origin.clone();
-        let descriptor = types::descriptor(&global.ty)?;
+        let descriptor = types::descriptor(program, &global.ty)?;
         match types::kind(&global.ty)? {
             Kind::Double => code.const_double(&origin, pool, global.initial),
             #[allow(
@@ -200,7 +299,7 @@ fn class_initializer(program: &Program, pool: &mut Pool) -> Option<nts_jvm_emitt
             )]
             _ => code.const_int(&origin, pool, global.initial as i32),
         }
-        code.put_static(&origin, pool, PROGRAM, &body::method_name(&global.name), descriptor);
+        code.put_static(&origin, pool, PROGRAM, &body::method_name(&global.name), &descriptor);
     }
     let origin = program_origin(program);
     code.ret(&origin, None);
