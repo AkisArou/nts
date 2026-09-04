@@ -277,6 +277,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nts-jvm-emitter"
+version = "0.0.0"
+dependencies = [
+ "nts-diagnostics",
+ "nts-semantic-schema",
+ "rustc-hash",
+]
+
+[[package]]
 name = "nts-memory-lowering"
 version = "0.0.0"
 dependencies = [

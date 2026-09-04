@@ -11,6 +11,7 @@ members = [
     "compiler/codegen/c",
     "compiler/codegen/llvm",
     "compiler/codegen/napi",
+    "compiler/jvm-emitter",
     "build",
     "tooling/cli",
     "tooling/bench",
@@ -38,6 +39,7 @@ nts-differential = { path = "tooling/differential" }
 nts-debug-lowering = { path = "compiler/debug-lowering" }
 nts-diagnostics = { path = "compiler/diagnostics" }
 nts-frontend-ts = { path = "compiler/frontend-ts" }
+nts-jvm-emitter = { path = "compiler/jvm-emitter" }
 nts-memory-lowering = { path = "compiler/memory-lowering" }
 nts-semantic-schema = { path = "compiler/semantic-schema" }
 
