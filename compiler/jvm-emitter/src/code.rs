@@ -150,6 +150,17 @@ impl Code {
         }
     }
 
+    /// How many words the operand stack currently holds.
+    ///
+    /// Exposed so a caller that keeps its own model of what is on the stack can
+    /// check it against this one rather than trust it. A backend that leaves
+    /// values on the stack between operations has two accounts of the same
+    /// thing, and the emitted code is wrong long before anything here notices.
+    #[must_use]
+    pub fn depth(&self) -> i32 {
+        self.stack
+    }
+
     #[must_use]
     pub fn offset(&self) -> u16 {
         u16::try_from(self.bytes.len()).unwrap_or(u16::MAX)
