@@ -158,12 +158,34 @@ pub fn describe(ty: &HirType) -> String {
             .to_owned(),
         HirType::Erased => "an erased value".to_owned(),
         HirType::Managed(ManagedType::String) => "a string".to_owned(),
-        HirType::Managed(ManagedType::Array(_)) => "an array".to_owned(),
+        // The element, because the one message that most needs this is two
+        // arrays that differ only in it -- `an array` twice says nothing about
+        // why the two would not agree.
+        HirType::Managed(ManagedType::Array(element)) => {
+            format!("an array of {}", short(element))
+        }
         HirType::Managed(ManagedType::Object(_)) => "an object".to_owned(),
         HirType::Managed(ManagedType::Promise(_)) => "a promise".to_owned(),
         HirType::Managed(ManagedType::Map(..)) => "a map".to_owned(),
         HirType::Managed(ManagedType::Set(_)) => "a set".to_owned(),
-        other => format!("a value of type {other:?}"),
+        HirType::Bool => "a boolean".to_owned(),
+        HirType::Void => "nothing".to_owned(),
+        HirType::Int { bits, signed } => {
+            format!("{}{bits}", if *signed { "an i" } else { "a u" })
+        }
+        HirType::Float { bits } => format!("an f{bits}"),
+    }
+}
+
+/// A type's name without the article, for reading inside another name.
+fn short(ty: &HirType) -> String {
+    match ty {
+        HirType::Bool => "bool".to_owned(),
+        HirType::Erased => "erased values".to_owned(),
+        HirType::Int { bits, signed } => format!("{}{bits}", if *signed { "i" } else { "u" }),
+        HirType::Float { bits } => format!("f{bits}"),
+        HirType::Managed(ManagedType::String) => "strings".to_owned(),
+        other => describe(other),
     }
 }
 

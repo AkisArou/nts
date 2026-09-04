@@ -408,7 +408,7 @@ impl Row {
     ///
     /// Deliberately not `against`: that one divides the *primary* column, which
     /// is the C backend, and dividing a native binary by a JVM number would be
-    /// a ratio about HotSpot rather than about anything this compiler decided.
+    /// a ratio about `HotSpot` rather than about anything this compiler decided.
     fn jvm_against_java(&self) -> String {
         match (self.jvm, self.java) {
             (Some(ours), Some(theirs)) => format!("{ours_over:.2}x", ours_over = ours / theirs),
@@ -630,8 +630,10 @@ fn finish_row(case: &Utf8Path, shown: &str, results: &[Option<Measured>]) -> Res
     // Twenty times is far outside any codegen difference. Java can beat C++ on
     // a row and does; it cannot beat it by an order of magnitude on a numeric
     // kernel, so a gap that size means one of them is doing different work.
-    if let (Some(cpp), Some(java)) = (row.cpp, row.java) {
-        if java * 20.0 < cpp || cpp * 20.0 < java {
+    if let (Some(cpp), Some(java)) = (row.cpp, row.java)
+        && (java * 20.0 < cpp || cpp * 20.0 < java)
+    {
+        {
             bail!(
                 "the Java reference for {} ran in {} against {} for the C++ \
                  reference -- that is not a codegen difference, it is the two \

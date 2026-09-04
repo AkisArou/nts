@@ -206,6 +206,36 @@ impl Emitter<'_> {
                     return Err(refuse(self.func, "a global of unrepresentable type"));
                 };
                 let name = crate::body::method_name(&entry.name);
+                // The value's type and the global's have to be the same type,
+                // and on this backend that is a *descriptor*, checked at load.
+                //
+                // They can differ. Specialization narrows an array of integer
+                // literals to `managed<[i32]>` and does not narrow the global
+                // it is stored into, so `const arr = [1, 2]` at module scope
+                // produces `array.new : managed<[i32]>` feeding
+                // `global.set` on a `managed<[f64]>`. `hir::verify` accepts it
+                // and the other two backends cannot see it -- C spells every
+                // array `NtsArray *` and LLVM spells every reference `ptr`, so
+                // the disagreement has nothing to land on. Here it is a
+                // `VerifyError` at class load.
+                //
+                // Refused by name rather than emitted, which is the whole
+                // contract: a class the JVM will not load is worse than a
+                // function that is absent and reported.
+                let held = self.ty(*stored).clone();
+                if types::descriptor(self.program, &held).as_deref() != Some(descriptor.as_str()) {
+                    return Err(refuse(
+                        self.func,
+                        &format!(
+                            "a store of {} into the global `{}`, which is {} -- the \
+                             middle end narrowed one and not the other, and the JVM \
+                             would refuse the class rather than the store",
+                            types::describe(&held),
+                            entry.name,
+                            types::describe(&entry.ty)
+                        ),
+                    ));
+                }
                 self.load(code, *stored)?;
                 code.put_static(&origin, pool, PROGRAM, &name, &descriptor);
                 return Ok(());

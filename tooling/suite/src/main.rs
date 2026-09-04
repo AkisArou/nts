@@ -281,10 +281,10 @@ fn has_a_jdk() -> bool {
     use std::sync::OnceLock;
     static PRESENT: OnceLock<bool> = OnceLock::new();
     *PRESENT.get_or_init(|| {
-        if let Ok(home) = std::env::var("JAVA_HOME") {
-            if std::path::Path::new(&home).join("bin/java").exists() {
-                return true;
-            }
+        if let Ok(home) = std::env::var("JAVA_HOME")
+            && std::path::Path::new(&home).join("bin/java").exists()
+        {
+            return true;
         }
         std::process::Command::new("sh")
             .arg("-c")
