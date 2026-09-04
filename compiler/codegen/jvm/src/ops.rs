@@ -265,6 +265,35 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         // it selects a specialised hash and comparison, which is an
         // optimisation rather than a semantic, and taking the parameter keeps
         // `hir::runtime` the single answer about the signature.
+        "nts_promise_new" => (types::PROMISE, "newPromise", "()Lnts/rt/NtsPromise;"),
+        "nts_promise_fulfill_void" => (types::PROMISE, "fulfillVoid", "(Lnts/rt/NtsPromise;)V"),
+        "nts_promise_fulfill_number" => {
+            (types::PROMISE, "fulfillNumber", "(Lnts/rt/NtsPromise;D)V")
+        }
+        "nts_promise_fulfill_reference" => {
+            (types::PROMISE, "fulfillReference", "(Lnts/rt/NtsPromise;Ljava/lang/Object;)V")
+        }
+        "nts_promise_fulfill_tagged" => {
+            (types::PROMISE, "fulfillTagged", "(Lnts/rt/NtsPromise;Ljava/lang/Object;I)V")
+        }
+        "nts_promise_fulfill_value" => {
+            (types::PROMISE, "fulfillValue", "(Lnts/rt/NtsPromise;Lnts/rt/NtsValue;)V")
+        }
+        "nts_promise_reject" => {
+            (types::PROMISE, "reject", "(Lnts/rt/NtsPromise;Ljava/lang/Object;)V")
+        }
+        "nts_promise_reject_with" => {
+            (types::PROMISE, "rejectWith", "(Lnts/rt/NtsPromise;Lnts/rt/NtsPromise;)V")
+        }
+        "nts_promise_is_rejected" => (types::PROMISE, "isRejected", "(Lnts/rt/NtsPromise;)Z"),
+        "nts_promise_number" => (types::PROMISE, "number", "(Lnts/rt/NtsPromise;)D"),
+        "nts_promise_reference" => {
+            (types::PROMISE, "reference", "(Lnts/rt/NtsPromise;)Ljava/lang/Object;")
+        }
+        "nts_promise_value" => {
+            (types::PROMISE, "value", "(Lnts/rt/NtsPromise;)Lnts/rt/NtsValue;")
+        }
+
         "nts_map_new" => (types::MAP, "newMap", "(D)Lnts/rt/NtsMap;"),
         "nts_set_new" => (types::MAP, "newSet", "(D)Lnts/rt/NtsMap;"),
         "nts_map_get" => (types::MAP, "get", MAP_KEY_TO_VALUE),
@@ -498,6 +527,17 @@ impl Emitter<'_> {
             // A closed set of classes, so `instanceof` answers it directly --
             // one instruction against the C backend's chain of descriptor
             // pointer comparisons, and a fixed few when the set is larger.
+            // Subscribe the frame to the promise. The `Return` that follows is
+            // the suspension itself -- this operation only records who to come
+            // back to.
+            //
+            // The frame's class implements `NtsResumable`, which is the one
+            // nominal relationship this backend *creates* rather than recovers:
+            // `Suspend` names a frame and a function, and both are emitted
+            // here, so nothing upstream has to carry it.
+            OpKind::Suspend { promise, frame, .. } => {
+                self.suspend(code, pool, *promise, *frame, &origin)?
+            }
             OpKind::InstanceOf { value, classes } if classes.len() != 1 => {
                 self.instance_of_any(code, pool, *value, classes, &origin)?
             }
@@ -649,6 +689,33 @@ impl Emitter<'_> {
         };
         code.branch_zero(origin, branch, target);
         Ok(())
+    }
+
+    /// Subscribe a frame to the promise it is waiting on.
+    ///
+    /// The `Return` that follows is the suspension itself; this only records
+    /// who to come back to. The frame's class implements `NtsResumable`, which
+    /// is the one nominal relationship this backend *creates* rather than
+    /// recovers -- `Suspend` names a frame and a function and both are emitted
+    /// here, so nothing upstream has to carry it.
+    fn suspend(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        promise: ValueId,
+        frame: ValueId,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        self.load(code, promise)?;
+        self.load(code, frame)?;
+        code.invoke_static(
+            origin,
+            pool,
+            types::PROMISE,
+            "subscribe",
+            "(Lnts/rt/NtsPromise;Lnts/rt/NtsResumable;)V",
+        );
+        Ok(Placed::Stored)
     }
 
     /// Whether a value may be stored into another's slot, as the *verifier*

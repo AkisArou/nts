@@ -270,6 +270,34 @@ fn object_class(program: &Program, layout: &nts_core::hir::Layout) -> Result<Opt
         };
         builder.field(access::PUBLIC, body::method_name(&field.name), descriptor);
     }
+    // A frame a `Suspend` names implements `NtsResumable`, with `resume()`
+    // forwarding to the static body -- the same shape as a dispatch slot's
+    // forwarder, and the reason promises are not blocked behind the closure
+    // base question: this relationship is created here rather than recovered
+    // from the IR.
+    if let Some(resume) = resumes(program, layout) {
+        builder.interfaces.push(types::RESUMABLE.to_owned());
+        let origin = program_origin(program);
+        let mut code = Code::new(vec![VType::Object(types::class_name(layout))], 1);
+        code.load(&origin, Kind::Ref, 0);
+        code.invoke_static(
+            &origin,
+            &mut pool,
+            PROGRAM,
+            &body::method_name(&resume),
+            &format!("(L{};)V", types::class_name(layout)),
+        );
+        code.ret(&origin, None);
+        let rendered = code.finish(&pool).map_err(|error| {
+            Diagnostic::error(
+                "NTS4008",
+                format!("the resume forwarder for `{}` could not be written: {error}", layout.name),
+                program_origin(program).location,
+            )
+        })?;
+        builder.method(access::PUBLIC, "resume", "()V", Some(rendered));
+    }
+
     dispatch_forwarders(program, layout, &mut builder, &mut pool)?;
     builder.default_constructor(&origin, &mut pool).map_err(|error| {
         Diagnostic::error(
@@ -444,6 +472,32 @@ pub(crate) fn instance_descriptor(program: &Program, func: &nts_core::hir::Func)
         &borrowed,
         &types::descriptor(program, &func.return_type)?,
     ))
+}
+
+/// The function that resumes this layout, where it is a suspended frame.
+///
+/// A scan of `Suspend` operations rather than a flag on the layout, for the
+/// same reason `closure_singletons` scans: which layouts are frames is a fact
+/// about the program's *operations*, and `object_class` sees one layout at a
+/// time.
+fn resumes(program: &Program, layout: &nts_core::hir::Layout) -> Option<String> {
+    let wanted = types::class_name(layout);
+    for func in &program.funcs {
+        for op in &func.values {
+            let nts_core::hir::OpKind::Suspend { frame, resume, .. } = &op.kind else {
+                continue;
+            };
+            let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) =
+                func.values[frame.0 as usize].ty
+            else {
+                continue;
+            };
+            if program.layout(id).map(types::class_name).as_deref() == Some(wanted.as_str()) {
+                return Some(resume.clone());
+            }
+        }
+    }
+    None
 }
 
 /// The closure classes this program uses as *values*, and the field each gets.

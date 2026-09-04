@@ -61,6 +61,15 @@ pub fn class_name(layout: &Layout) -> String {
     jvm_class_name(&layout.name)
 }
 
+/// A promise: a settled-or-not value and the frames waiting on it.
+pub const PROMISE: &str = "nts/rt/NtsPromise";
+pub const PROMISE_DESCRIPTOR: &str = "Lnts/rt/NtsPromise;";
+
+/// The interface a suspended function's frame implements, so the loop can run
+/// it. Created by this backend rather than recovered from the IR: `Suspend`
+/// names a frame and a function, and both are emitted here.
+pub const RESUMABLE: &str = "nts/rt/NtsResumable";
+
 /// `Map` and `Set`, which are one table with the values left out of one of them.
 pub const MAP: &str = "nts/rt/NtsMap";
 pub const MAP_DESCRIPTOR: &str = "Lnts/rt/NtsMap;";
@@ -110,6 +119,11 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
         HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_)) => {
             MAP_DESCRIPTOR.to_owned()
         }
+        // One runtime class whatever it settles with, which is what
+        // `ManagedType::Promise`'s payload type says it is for: the payload is
+        // in the type for the *compiler*, to choose which `fulfill` to emit and
+        // how to read the value back. Not a monomorphization.
+        HirType::Managed(ManagedType::Promise(_)) => PROMISE_DESCRIPTOR.to_owned(),
         // A bare JVM array, which is what a Java programmer writes and what the
         // hand-written reference will use. `arraylength` is one instruction,
         // the bounds check is mandatory *and* eliminated in a counted loop, and
@@ -122,9 +136,11 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
         HirType::Managed(ManagedType::Array(element)) => {
             nts_jvm_emitter::descriptor::array_of(&descriptor(program, element)?)
         }
-        // Strings, arrays, `Erased` and `BigInt` arrive in later steps.
-        // Answering here would emit something for a type nothing implements.
-        HirType::Never | HirType::Managed(_) => return None,
+        // Every `ManagedType` is spelled above, so there is no catch-all here
+        // and adding a variant upstream is a compile error rather than a
+        // silent refusal. `never` reaching a value position means control got
+        // somewhere the type system said it could not.
+        HirType::Never => return None,
     })
 }
 
@@ -139,7 +155,8 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
             | ManagedType::String
             | ManagedType::Array(_)
             | ManagedType::Map(..)
-            | ManagedType::Set(_),
+            | ManagedType::Set(_)
+            | ManagedType::Promise(_),
         ) => Kind::Ref,
         HirType::Int { bits: 64, .. } => Kind::Long,
         // A `boolean` is an `int` everywhere except in a descriptor: there is
@@ -147,7 +164,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
         HirType::Bool | HirType::Int { .. } => Kind::Int,
         HirType::Float { bits: 32 } => Kind::Float,
         HirType::Float { .. } => Kind::Double,
-        HirType::Void | HirType::Never | HirType::Managed(_) => return None,
+        HirType::Void | HirType::Never => return None,
     })
 }
 
@@ -165,6 +182,7 @@ pub fn vtype(program: &Program, ty: &HirType) -> Option<VType> {
             HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_)) => {
                 VType::Object(MAP.to_owned())
             }
+            HirType::Managed(ManagedType::Promise(_)) => VType::Object(PROMISE.to_owned()),
             HirType::Managed(ManagedType::String) => VType::Object(STRING.to_owned()),
             // An array's *class* constant is named by its descriptor rather
             // than by an internal name: `[D`, not `D` and not `L[D;`.
