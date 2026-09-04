@@ -62,7 +62,11 @@ declare function nts_fs_watch_start(
   recursive: boolean,
   persistent: boolean,
   throwIfNoEntry: boolean,
-  callback: (status: number, event: string, filename: number[] | null) => void,
+  callback: (
+    status: number,
+    event: WatchEventType,
+    filename: number[] | null,
+  ) => void,
 ): number;
 declare function nts_fs_watch_stop(handle: number): void;
 declare function nts_fs_watch_ref(handle: number): void;
@@ -90,7 +94,11 @@ export interface WatchSignal {
 }
 
 export type WatchFileName = string | Buffer | null;
-export type WatchListener = (event: string, filename: WatchFileName) => void;
+export type WatchEventType = "rename" | "change";
+export type WatchListener = (
+  event: WatchEventType,
+  filename: WatchFileName,
+) => void;
 export type WatchIgnoreFunction = (filename: string) => boolean;
 export type WatchIgnoreElement = string | RegExp | WatchIgnoreFunction;
 export type WatchIgnore = WatchIgnoreElement | WatchIgnoreElement[];
@@ -102,6 +110,30 @@ export interface WatchOptions {
   signal?: WatchSignal | undefined;
   throwIfNoEntry?: boolean | undefined;
   ignore?: WatchIgnore | null | undefined;
+}
+
+export function validateWatchSignal(
+  value: unknown,
+  name = "options.signal",
+): asserts value is WatchSignal | undefined {
+  validateAbortSignal(value, name);
+  if (value === undefined) return;
+  if (!("addEventListener" in value)) {
+    throw new ERR_INVALID_ARG_TYPE(
+      `${name}.addEventListener`,
+      "Function",
+      undefined,
+    );
+  }
+  if (!("removeEventListener" in value)) {
+    throw new ERR_INVALID_ARG_TYPE(
+      `${name}.removeEventListener`,
+      "Function",
+      undefined,
+    );
+  }
+  validateFunction(value.addEventListener, `${name}.addEventListener`);
+  validateFunction(value.removeEventListener, `${name}.removeEventListener`);
 }
 
 function validateIgnoreElement(
@@ -290,7 +322,7 @@ export class FSWatcher extends EventEmitter {
       recursive,
       persistent,
       throwIfNoEntry,
-      (status: number, event: string, filename: number[] | null) => {
+      (status: number, event: WatchEventType, filename: number[] | null) => {
         if (status < 0) {
           const error = uvException(status, "watch", validatedPath);
           error.filename = validatedPath;
@@ -328,9 +360,7 @@ export class FSWatcher extends EventEmitter {
 
   /** Attach cancellation after listeners can be installed on the watcher. */
   attachSignal(signal: WatchSignal): void {
-    validateAbortSignal(signal, "options.signal");
-    validateFunction(signal.addEventListener, "options.signal.addEventListener");
-    validateFunction(signal.removeEventListener, "options.signal.removeEventListener");
+    validateWatchSignal(signal);
     if (signal.aborted) {
       nextTick(closeWatcher, this);
       return;
@@ -464,6 +494,7 @@ export function watch(
     throw new ERR_INVALID_ARG_TYPE("options", ["string", "Object", "Function"], options);
   }
   if (listener !== undefined) validateFunction(listener, "listener");
+  if (opts.signal !== undefined) validateWatchSignal(opts.signal);
 
   const watcher = new FSWatcher();
   watcher.start(path, opts);

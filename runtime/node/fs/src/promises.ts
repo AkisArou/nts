@@ -79,6 +79,8 @@ import type { GlobOptions, GlobPatternInput } from "./glob.ts";
 import {
   FSWatcher,
   normalizeWatchIgnore,
+  validateWatchSignal,
+  type WatchEventType,
   type WatchFileName,
   type WatchOptions,
   type WatchSignal,
@@ -361,7 +363,7 @@ export interface PromiseWatchOptions
 }
 
 export interface WatchEvent {
-  eventType: string;
+  eventType: WatchEventType;
   filename: WatchFileName;
 }
 
@@ -380,41 +382,6 @@ interface NormalizedPromiseWatchOptions {
   signal: WatchSignal | undefined;
   maxQueue: number;
   overflow: WatchOverflow;
-}
-
-function validatePromiseWatchSignal(
-  value: unknown,
-): asserts value is WatchSignal | undefined {
-  validateAbortSignal(value, "options.signal");
-  if (value === undefined) return;
-  if (!("addEventListener" in value)) {
-    throw new ERR_INVALID_ARG_TYPE(
-      "options.signal.addEventListener",
-      "Function",
-      undefined,
-    );
-  }
-  if (!("removeEventListener" in value)) {
-    throw new ERR_INVALID_ARG_TYPE(
-      "options.signal.removeEventListener",
-      "Function",
-      undefined,
-    );
-  }
-  if (typeof value.addEventListener !== "function") {
-    throw new ERR_INVALID_ARG_TYPE(
-      "options.signal.addEventListener",
-      "Function",
-      value.addEventListener,
-    );
-  }
-  if (typeof value.removeEventListener !== "function") {
-    throw new ERR_INVALID_ARG_TYPE(
-      "options.signal.removeEventListener",
-      "Function",
-      value.removeEventListener,
-    );
-  }
 }
 
 function normalizePromiseWatchOptions(
@@ -445,7 +412,7 @@ function normalizePromiseWatchOptions(
 
   const encoding = normalizeFileResultEncoding(options.encoding ?? "utf8");
   const ignore = normalizeWatchIgnore(options.ignore);
-  validatePromiseWatchSignal(options.signal);
+  validateWatchSignal(options.signal);
   return {
     watcher: {
       persistent,
@@ -508,7 +475,10 @@ class PromiseWatchSource implements AsyncIterable<WatchEvent> {
     const queue: Array<WatchEvent | WatchFailure> = [];
     let queueHead = 0;
     let waiter = new WatchWaiter();
-    const onChange = (eventType: string, changed: WatchFileName): void => {
+    const onChange = (
+      eventType: WatchEventType,
+      changed: WatchFileName,
+    ): void => {
       if (queue.length - queueHead < settings.maxQueue) {
         queue.push({ eventType, filename: changed });
         waiter.wake();
