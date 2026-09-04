@@ -383,16 +383,21 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  # Eighty-two of ninety-three, measured at `d9fd588` in a pinned worktree
-  # rather than in the shared tree -- and this time the two agreed, which is
-  # the first run where the pinned measurement confirmed the shared one
-  # instead of correcting it.
+  # Eighty-four of ninety-three, measured at `a682cc1` in a pinned worktree
+  # rather than in the shared tree.
+  #
+  # What is left is nine programs and five causes, which is worth writing here
+  # because the count alone reads like a long tail and it is not: four want a
+  # closure's layout to name its function type's as a base, one wants the same
+  # for the provided error classes, one is a call *through* a closure, one is
+  # an absent value with no reference to carry it, and two want
+  # `nts_set_timeout`.
   #
   # The floor is planted on *agreement* rather than on rendering, because
   # rendering is a property of the emitter and agreeing is a property of the
   # language, and a floor on the wrong one rewards emitting more while meaning
   # less.
-  backend_examples 82 "through the JVM backend" ); }
+  backend_examples 84 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
