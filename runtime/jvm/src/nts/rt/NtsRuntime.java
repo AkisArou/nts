@@ -548,4 +548,117 @@ public final class NtsRuntime {
             from = at + pattern.length();
         }
     }
+
+    // ----- number to string -----------------------------------------------
+
+    /**
+     * {@code String(x)} for a number, to the letter of `Number::toString`.
+     *
+     * <p><b>Not {@code Double.toString}.</b> Two things are wrong with it and
+     * only one of them is cosmetic. The format differs -- `1.0E21` where the
+     * language says `1e+21`, and `1.0` where the language says `1` -- and that
+     * alone would be enough, because the differential compares these as text.
+     * The other is that before JDK 19 it does not produce the *shortest* digits
+     * that read back, so on an older JVM it is a different number's spelling.
+     * Depending on the host JDK for correctness is a cliff with nothing at the
+     * edge of it.
+     *
+     * <p>The C runtime answers this with Grisu3 and an arbitrary-precision
+     * fallback for the 0.22% of doubles Grisu declines. This does the exact
+     * thing directly: {@code new BigDecimal(double)} is the double's *exact*
+     * value, and rounding it to p significant digits and asking whether it
+     * reads back is the shortest-digits search by definition. Slower than
+     * Grisu and correct on every JDK, which is the right order to do them in --
+     * the integer fast path below covers most of what programs actually print,
+     * and a Grisu port is an optimisation with a measurement attached rather
+     * than a prerequisite.
+     *
+     * <p>{@code HALF_EVEN} because the specification says so, and I had it
+     * backwards first: "if there are two such possible values of s, choose the
+     * one that is **even**". `HALF_UP` -- the larger -- disagreed with node on
+     * 27 of 99,957 random doubles, every one of them a last digit 3 where node
+     * says 2. Which is 0.027%: frequent enough that the corpus would eventually
+     * have caught it, and rare enough that no example would.
+     */
+    public static String numberToString(double x) {
+        if (Double.isNaN(x)) {
+            return "NaN";
+        }
+        if (Double.isInfinite(x)) {
+            return x > 0 ? "Infinity" : "-Infinity";
+        }
+        if (x == 0.0) {
+            // Both zeroes print as "0": the sign of zero is observable through
+            // `Object.is` and `1/x`, and not through `String`.
+            return "0";
+        }
+        // Whole numbers a `long` can hold, which is most of what is printed.
+        // The bound is 2^53 rather than `Long.MAX_VALUE`: above it a double's
+        // neighbours are more than one apart, so the shortest representation is
+        // not necessarily every digit of the integer.
+        if (x == Math.floor(x) && Math.abs(x) < 9007199254740992.0) {
+            return Long.toString((long) x);
+        }
+
+        boolean negative = x < 0;
+        java.math.BigDecimal exact = new java.math.BigDecimal(Math.abs(x));
+        java.math.BigDecimal shortest = null;
+        for (int precision = 1; precision <= 17; precision++) {
+            java.math.BigDecimal candidate =
+                exact.round(new java.math.MathContext(precision, java.math.RoundingMode.HALF_EVEN));
+            if (candidate.doubleValue() == Math.abs(x)) {
+                shortest = candidate.stripTrailingZeros();
+                break;
+            }
+        }
+        if (shortest == null) {
+            // Unreachable: seventeen significant digits always round-trip a
+            // double. Kept as an answer rather than an exception because a
+            // runtime that throws where the language cannot is worse than one
+            // that is briefly wrong, and this says which it is.
+            return Double.toString(x);
+        }
+
+        String digits = shortest.unscaledValue().toString();
+        // `n` in the specification: the position of the decimal point, so that
+        // the value is `0.digits * 10^n`.
+        int n = digits.length() - shortest.scale();
+        return (negative ? "-" : "") + layout(digits, n);
+    }
+
+    /**
+     * The five cases of `Number::toString` step 5 onwards, given the shortest
+     * digits and where the point goes.
+     *
+     * <p>The thresholds are the language's and are not round numbers by
+     * accident: 21 digits is where it gives up on positional notation going up,
+     * and -6 is where it gives up going down. `1e21` is exponential and
+     * `1e20` is not.
+     */
+    private static String layout(String digits, int n) {
+        int k = digits.length();
+        if (k <= n && n <= 21) {
+            StringBuilder out = new StringBuilder(n);
+            out.append(digits);
+            for (int i = 0; i < n - k; i++) {
+                out.append('0');
+            }
+            return out.toString();
+        }
+        if (0 < n && n <= 21) {
+            return digits.substring(0, n) + "." + digits.substring(n);
+        }
+        if (-6 < n && n <= 0) {
+            StringBuilder out = new StringBuilder("0.");
+            for (int i = 0; i < -n; i++) {
+                out.append('0');
+            }
+            return out.append(digits).toString();
+        }
+        String exponent = (n - 1 >= 0 ? "+" : "-") + Math.abs(n - 1);
+        if (k == 1) {
+            return digits + "e" + exponent;
+        }
+        return digits.charAt(0) + "." + digits.substring(1) + "e" + exponent;
+    }
 }

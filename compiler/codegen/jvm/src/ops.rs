@@ -137,6 +137,7 @@ fn external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
         "nts_str_replace" => (RUNTIME, "strReplace", STRING_STRING_STRING_TO_STRING),
         "nts_str_replace_all" => (RUNTIME, "strReplaceAll", STRING_STRING_STRING_TO_STRING),
 
+        "nts_number_to_string" => (RUNTIME, "numberToString", "(D)Ljava/lang/String;"),
         "nts_string_from_char_code" => {
             (RUNTIME, "stringFromCharCode", "(D)Ljava/lang/String;")
         }

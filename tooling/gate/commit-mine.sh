@@ -57,18 +57,49 @@ done
 # decision worth having to type.
 if [ -z "${NTS_SKIP_CLIPPY-}" ] && command -v cargo > /dev/null 2>&1; then
   if ! cargo clippy --workspace --all-targets > /tmp/nts-commit-clippy.$$ 2>&1; then
-    echo "commit-mine: REFUSING -- clippy is not clean:" >&2
-    grep -E '^(warning|error)' /tmp/nts-commit-clippy.$$ | head -20 >&2
+    # A *build* failure is not a lint failure, and with three sessions in one
+    # checkout it is often somebody else's edit landing mid-run. Still a
+    # refusal -- committing against a workspace that does not build means the
+    # commit is untested -- but named, so the next step is "wait or ask" rather
+    # than "hunt for my warning".
+    if grep -qE '^error\[E[0-9]+\]|^error: could not compile' /tmp/nts-commit-clippy.$$; then
+      echo "commit-mine: REFUSING -- the workspace does not build, so nothing" >&2
+      echo "  here has been linted. This may be another session mid-edit:" >&2
+      grep -E '^error' /tmp/nts-commit-clippy.$$ | head -8 >&2
+    else
+      echo "commit-mine: REFUSING -- clippy is not clean:" >&2
+      grep -E '^(warning|error)' /tmp/nts-commit-clippy.$$ | head -20 >&2
+    fi
     rm -f /tmp/nts-commit-clippy.$$
     exit 1
   fi
+
   # `--all-targets` exits zero on warnings unless denied, so the text is the
   # check rather than the status.
-  if grep -qE '^warning: ' /tmp/nts-commit-clippy.$$; then
-    echo "commit-mine: REFUSING -- clippy reported warnings:" >&2
-    grep -E '^warning: [a-z]' -A 2 /tmp/nts-commit-clippy.$$ | head -20 >&2
+  #
+  # Scoped to the files being committed. Three sessions share this checkout, and
+  # blocking my commit on somebody else's in-flight warning is the same coupling
+  # the private-index convention was reaching for and got wrong -- it makes one
+  # session's editing pause another's work for no gain, since the gate will
+  # catch theirs anyway. Warnings elsewhere are printed and not fatal.
+  mine=""
+  for path in "$@"; do
+    if grep -q -- "--> $path:" /tmp/nts-commit-clippy.$$; then
+      mine="$mine $path"
+    fi
+  done
+  if [ -n "$mine" ]; then
+    echo "commit-mine: REFUSING -- clippy warns about files in this commit:" >&2
+    for path in $mine; do
+      grep -B 1 -- "--> $path:" /tmp/nts-commit-clippy.$$ | head -6 >&2
+    done
     rm -f /tmp/nts-commit-clippy.$$
     exit 1
+  fi
+  if grep -qE '^warning: ' /tmp/nts-commit-clippy.$$; then
+    echo "commit-mine: note -- clippy warns elsewhere in the workspace," >&2
+    echo "  not in these files. The gate will still be red until it is fixed." >&2
+    grep -E '\-\->' /tmp/nts-commit-clippy.$$ | sort -u | head -5 >&2
   fi
   rm -f /tmp/nts-commit-clippy.$$
 fi
