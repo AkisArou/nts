@@ -1,8 +1,9 @@
-# 0077 — Two things that must agree, and the second one should assert
+# 0077 — Two things that must agree, and the second one recomputing the first
 
-The JVM backend produced two bugs of one shape on its first day, at two levels,
-and the second one is only interesting because the first had already been fixed
-the wrong way round.
+**The second place that must agree should not recompute the first.** In one day
+the JVM lane produced five instances of that sentence, at five levels, and only
+the last one has nothing to do with compilers — which is what makes it the
+clearest.
 
 ## The comparison and the branch that reads it
 
@@ -95,6 +96,27 @@ least visible.
 the value, rather than casting and hoping. If it never fires, an assumption has
 become a checked one for nothing.
 
+## And a fifth, in the lock, with no compiler anywhere near it
+
+```sh
+mkdir "$LOCK" 2>/dev/null || echo "busy"
+if [ -d "$LOCK" ]; then  ...measure...  rmdir "$LOCK"; fi
+```
+
+The `mkdir` correctly failed and correctly said `busy`. Then `[ -d ]` tested
+**existence**, which was true precisely because another session held it — so the
+measurement ran under that session's gate and released a lock this one never
+had, mid-certification.
+
+Acquisition is `mkdir` returning zero. It is a fact, and the second line
+re-derived it by looking at something that cannot distinguish "mine" from
+"theirs".
+
+`tooling/gate/with-lock.sh` fixes it in the strongest available form, which is
+better than a variable: the release is a `trap` installed **only on the path
+where the `mkdir` succeeded**, so on a path that did not acquire, the release
+does not exist. Not checked — unrepresentable.
+
 ## What they have in common
 
 Every one is two places that must agree.
@@ -103,17 +125,23 @@ Every one is two places that must agree.
     the comparison and its negation               deleted one of them
     an operation's result type and its operands   asserted
     the C driver's cast and the JVM harness's     asserted
+    taking a lock and releasing it                made unrepresentable
 
-The first two could be closed by making the wrong thing unspellable. The last
-two cannot: an operation's result type and its operands are separate facts the
-middle end decides, and the C driver and the JVM harness are genuinely different
-programs. Where deleting is unavailable, the second place should be a **check**
-rather than a copy.
+Three responses, in descending order of how much they are worth:
 
-The four are not one mistake repeated. They are one class surfacing at four
-levels, each invisible from where the last was fixed — which is why a helper
-that makes the wrong thing unspellable at one level is not the same as an
-invariant.
+1. **Make the wrong state unrepresentable.** The lock's release does not exist on
+   the path that did not acquire. Nothing can call it wrongly because there is
+   nothing to call.
+2. **Delete one of the two.** `branch_float` emits the comparison and the branch
+   together, so there is no pairing to get wrong — but note that this closed an
+   *instance* and not the class, and the fix itself opened the next one.
+3. **Make the second place check rather than compute.** For the two where
+   deleting is unavailable: an operation's result type and its operand types are
+   separate facts the middle end decides, and the C driver and the JVM harness
+   are genuinely different programs.
+
+The five are not one mistake repeated. They are one class surfacing at five
+levels, each invisible from where the last was fixed.
 
 That is the general form, and it is worth stating because this repository keeps
 meeting it: `costs_nothing` and `counted_here` answering one question two ways;
