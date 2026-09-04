@@ -143,11 +143,40 @@ and `nts_array_allocate` at 0.51%.
 
 Both are `nts_runtime.c` functions called from generated C, so neither inlines
 without LTO, and the two of them touch the same slot twice: one scans forward
-for a live entry and the other loads its key. That is named work with a number
-and a location, which is what the allocation claim above was pretending to be.
+for a live entry and the other loads its key.
 
 The profile took one command and I ran it after four hypotheses rather than
 before one.
+
+### And inlining them buys nothing, which narrows it further
+
+Moving all three walk functions to `static inline` in the header — where every
+field they read is already visible — was tried and **reverted**:
+
+    array-from (rc)   1.80 ms out of line   1.84 ms inlined
+    map-and-set (rc)  5.09 us out of line   5.07 us inlined
+
+No change on either, and it **breaks the LLVM lane**: that backend emits calls
+to these as external symbols, and a `static inline` in a header provides no
+definition to link against — `undefined reference to nts_map_next`. Two reasons
+to revert and one of them is a correctness one.
+
+The negative result is worth more than the change would have been. **The 51% is
+the work inside those functions, not the cost of calling them.** Which leaves
+two candidates and a way to tell them apart: `nts_map_next`'s forward scan,
+which is O(1) per element on a table with no holes and so should be nearly free
+in this program; and the `nts_value_retain` inside `nts_map_key_at`, which is
+*another* out-of-line call, made once per element, for a key that is a number
+and needs no counting at all. Record 0091 measured that exact shape elsewhere:
+65% of the reference-counting operations in `awfy-list` were retains of null
+that returned on their first line.
+
+**And the knob did not move the first time I tried this either.** The runtime is
+`include_str!`'d into the compiler, so editing `runtime/c` and running the
+benchmark without rebuilding measures the old runtime. The first reading was
+1.80 ms against 1.80 ms, which is what a change that never happened looks like —
+and is indistinguishable from a change that did nothing. Third time in one day;
+the control is `strings target/release/nts | grep`.
 
 ## The ledger went 40 to 41
 
