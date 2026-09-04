@@ -74,20 +74,6 @@ fn the_three_tag_tables_agree() {
     }
 }
 
-#[test]
-fn the_ordering_typeof_depends_on_still_holds() {
-    // Not a restatement of the table: these are the two facts the *numbering*
-    // exists to make true, and either could survive a renumbering that this
-    // file's other test would also survive if it only compared names.
-    use nts_core::hir::tags;
-    assert!(
-        tags::NULL > tags::OBJECT,
-        "`typeof x === \"object\"` is emitted as `tag >= OBJECT`, so null must \
-         be inside that range"
-    );
-    assert!(
-        tags::FUNCTION < tags::OBJECT,
-        "a closure must fall outside `tag >= OBJECT`, or `typeof f` answers \
-         \"object\""
-    );
-}
+// The ordering `typeof` depends on is checked at *compile* time, in
+// `codegen/jvm/src/types.rs`: it is a fact about two constants, so a test that
+// runs is a weaker statement than a `const` assertion that does not build.

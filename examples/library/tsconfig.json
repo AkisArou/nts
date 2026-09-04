@@ -1,9 +1,0 @@
-{
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "rootDir": ".",
-    "noEmit": false
-  },
-  "include": ["src/**/*", "nts.config.ts"],
-  "references": [{ "path": "../../tooling/config" }]
-}

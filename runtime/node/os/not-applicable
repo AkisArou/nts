@@ -1,5 +1,0 @@
-# Tests that spawn `process.execPath` and assert on the child. The child is
-# real node running real node modules; our implementation is not in it, so the
-# assertion is about node's binary. Each line is `file: reason`.
-test-os-homedir-no-envvar.js: spawns a node child and asserts on its exit status
-test-os-userinfo-handles-getter-errors.js: runs `node -e` and asserts on its stderr

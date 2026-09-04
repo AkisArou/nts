@@ -23,6 +23,25 @@ use nts_codegen_common::symbols::jvm_class_name;
 use nts_core::hir::{HirType, Layout, ManagedType, Program};
 use nts_jvm_emitter::{Kind, VType};
 
+/// The two properties the tag *numbering* exists to make true.
+///
+/// Asserted at compile time rather than in a test, because they are facts about
+/// two constants and there is no run in which they could differ. A backend that
+/// depends on `tag >= OBJECT` meaning "object" should not build against a table
+/// where that is false.
+///
+/// A renumbering that kept every name would pass a table comparison and make
+/// `typeof f` answer `"object"` in every program, so these are stated
+/// separately from the table rather than implied by it.
+const _: () = assert!(
+    nts_core::hir::tags::NULL > nts_core::hir::tags::OBJECT,
+    "`typeof x === \"object\"` is emitted as `tag >= OBJECT`, so null must be inside that range"
+);
+const _: () = assert!(
+    nts_core::hir::tags::FUNCTION < nts_core::hir::tags::OBJECT,
+    "a closure must fall outside `tag >= OBJECT`, or `typeof f` answers \"object\""
+);
+
 /// The erased value: a tag beside a payload, mirroring the C struct.
 pub const VALUE: &str = "nts/rt/NtsValue";
 pub const VALUE_DESCRIPTOR: &str = "Lnts/rt/NtsValue;";

@@ -1,1 +1,0 @@
-^test-(async-hooks|async-local-storage)(-.*)?\.js$

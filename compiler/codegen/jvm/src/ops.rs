@@ -88,24 +88,8 @@ impl Emitter<'_> {
             OpKind::Erase { .. } | OpKind::TagOf { .. } | OpKind::Unerase { .. } => {
                 self.erasure(code, pool, &op.kind, &op.ty, &origin)?
             }
-            // The two absences. Erased they are interned singletons, because
-            // they carry no payload and a compiled program mentions them
-            // constantly; as a reference they are both the null pointer, which
-            // is what makes `T | null` cost nothing.
-            OpKind::ConstNull | OpKind::ConstUndefined if op.ty == HirType::Erased => {
-                let which = if matches!(op.kind, OpKind::ConstNull) {
-                    "NULL_VALUE"
-                } else {
-                    "UNDEFINED_VALUE"
-                };
-                code.get_static(&origin, pool, types::VALUE, which, types::VALUE_DESCRIPTOR);
-                Placed::OnStack
-            }
-            OpKind::ConstNull | OpKind::ConstUndefined
-                if matches!(op.ty, HirType::Managed(_)) =>
-            {
-                code.const_null(&origin);
-                Placed::OnStack
+            OpKind::ConstNull | OpKind::ConstUndefined => {
+                self.absence(code, pool, &op.kind, &op.ty, &origin)?
             }
             OpKind::Binary { op: bin, lhs, rhs } => self.binary(code, pool, &op.ty, *bin, *lhs, *rhs)?,
             OpKind::Unary { op: un, operand } => self.unary(code, pool, &op.ty, *un, *operand)?,
@@ -216,6 +200,38 @@ impl Emitter<'_> {
         Ok(())
     }
 
+    /// `null` and `undefined`, which are one value or two depending on where
+    /// they land.
+    ///
+    /// Erased they are interned singletons: they carry no payload, so every one
+    /// is the same one, and a compiled program mentions `undefined` constantly.
+    /// As a reference they are both the null pointer, which is what makes
+    /// `T | null` cost nothing -- one absence fits in a pointer and two do not,
+    /// which is why `T | null | undefined` erases instead.
+    fn absence(
+        &self,
+        code: &mut Code,
+        pool: &mut Pool,
+        kind: &OpKind,
+        ty: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        if *ty == HirType::Erased {
+            let which = if matches!(kind, OpKind::ConstNull) {
+                "NULL_VALUE"
+            } else {
+                "UNDEFINED_VALUE"
+            };
+            code.get_static(origin, pool, types::VALUE, which, types::VALUE_DESCRIPTOR);
+            return Ok(Placed::OnStack);
+        }
+        if matches!(ty, HirType::Managed(_)) {
+            code.const_null(origin);
+            return Ok(Placed::OnStack);
+        }
+        Err(refuse(self.func, "an absent value with no reference to be"))
+    }
+
     /// Putting a tag on a value, reading it off, and taking it back.
     ///
     /// `TagOf` **is** `typeof`: the tag numbering is chosen so that
@@ -231,53 +247,8 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         match kind {
-            OpKind::Erase { value } => {
-                let from = self.ty(*value).clone();
+            OpKind::Erase { value } => self.erase(code, pool, *value, origin),
                 // A `Void` erases to `undefined` and has nothing to load.
-                if matches!(from, HirType::Void) {
-                    code.get_static(
-                        origin,
-                        pool,
-                        types::VALUE,
-                        "UNDEFINED_VALUE",
-                        types::VALUE_DESCRIPTOR,
-                    );
-                    return Ok(Placed::OnStack);
-                }
-                self.load(code, *value)?;
-                let (name, signature) = match &from {
-                    HirType::Bool => ("ofBoolean", "(Z)Lnts/rt/NtsValue;"),
-                    HirType::Managed(ManagedType::String) => {
-                        ("ofString", "(Ljava/lang/String;)Lnts/rt/NtsValue;")
-                    }
-                    HirType::Managed(_) => ("ofObject", "(Ljava/lang/Object;)Lnts/rt/NtsValue;"),
-                    HirType::Int { .. } | HirType::Float { .. } => {
-                        // The payload is a double whatever the value was, which
-                        // is what makes one erased value able to hold any
-                        // number -- so the widening happens here rather than
-                        // being a second representation to keep in step.
-                        let source = types::kind(&from)
-                            .ok_or_else(|| refuse(self.func, "erasing an unrepresentable value"))?;
-                        if source != Kind::Double {
-                            let opcode = match source {
-                                Kind::Long => insn::L2D,
-                                Kind::Float => insn::F2D,
-                                _ => insn::I2D,
-                            };
-                            code.convert(origin, opcode, source, Kind::Double);
-                        }
-                        ("ofNumber", "(D)Lnts/rt/NtsValue;")
-                    }
-                    other => {
-                        return Err(refuse(
-                            self.func,
-                            &format!("erasing {}", types::describe(other)),
-                        ));
-                    }
-                };
-                code.invoke_static(origin, pool, types::VALUE, name, signature);
-                Ok(Placed::OnStack)
-            }
             OpKind::TagOf { value } => {
                 self.load(code, *value)?;
                 code.get_field(origin, pool, types::VALUE, "tag", "I");
@@ -331,6 +302,52 @@ impl Emitter<'_> {
             }
             _ => Err(refuse(self.func, "an erasure this backend does not spell")),
         }
+    }
+
+    /// Putting a tag on a value.
+    ///
+    /// The payload is a `double` whatever the number was, which is what lets one
+    /// erased value hold any of them -- so the widening happens here rather than
+    /// being a second representation to keep in step with the first.
+    fn erase(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        let from = self.ty(value).clone();
+        // A `Void` erases to `undefined` and has nothing to load.
+        if matches!(from, HirType::Void) {
+            code.get_static(origin, pool, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR);
+            return Ok(Placed::OnStack);
+        }
+        self.load(code, value)?;
+        let (name, signature) = match &from {
+            HirType::Bool => ("ofBoolean", "(Z)Lnts/rt/NtsValue;"),
+            HirType::Managed(ManagedType::String) => {
+                ("ofString", "(Ljava/lang/String;)Lnts/rt/NtsValue;")
+            }
+            HirType::Managed(_) => ("ofObject", "(Ljava/lang/Object;)Lnts/rt/NtsValue;"),
+            HirType::Int { .. } | HirType::Float { .. } => {
+                let source = types::kind(&from)
+                    .ok_or_else(|| refuse(self.func, "erasing an unrepresentable value"))?;
+                if source != Kind::Double {
+                    let opcode = match source {
+                        Kind::Long => insn::L2D,
+                        Kind::Float => insn::F2D,
+                        _ => insn::I2D,
+                    };
+                    code.convert(origin, opcode, source, Kind::Double);
+                }
+                ("ofNumber", "(D)Lnts/rt/NtsValue;")
+            }
+            other => {
+                return Err(refuse(self.func, &format!("erasing {}", types::describe(other))));
+            }
+        };
+        code.invoke_static(origin, pool, types::VALUE, name, signature);
+        Ok(Placed::OnStack)
     }
 
     /// Allocation, load and store on a bare JVM array.
@@ -541,6 +558,89 @@ impl Emitter<'_> {
         ))
     }
 
+    /// The binary operations whose operands are references, which is every one
+    /// where the JVM's own instruction would compare or concatenate the wrong
+    /// thing. `None` means this is ordinary scalar arithmetic.
+    ///
+    /// `===` on two strings compares by value, so it is a helper call and never
+    /// `if_acmpeq`. Getting that wrong is silent wherever two equal strings
+    /// happen to be one constant-pool entry, which is most of a test suite --
+    /// record 0044 found exactly that in the LLVM backend.
+    fn reference_binary(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        op: BinOp,
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> Result<Option<Placed>, Diagnostic> {
+        let equality = matches!(op, BinOp::Eq | BinOp::Ne);
+        let (owner, name, signature) = match self.ty(lhs) {
+            HirType::Managed(ManagedType::String) if equality => (
+                RUNTIME,
+                "stringEq",
+                "(Ljava/lang/String;Ljava/lang/String;)Z",
+            ),
+            HirType::Erased if equality => (
+                types::VALUE,
+                "strictEq",
+                "(Lnts/rt/NtsValue;Lnts/rt/NtsValue;)Z",
+            ),
+            _ if op == BinOp::Concat => {
+                let origin = self.func.values[lhs.0 as usize].origin.clone();
+                self.load(code, lhs)?;
+                self.load(code, rhs)?;
+                code.invoke_virtual(
+                    &origin,
+                    pool,
+                    types::STRING,
+                    "concat",
+                    "(Ljava/lang/String;)Ljava/lang/String;",
+                );
+                return Ok(Some(Placed::OnStack));
+            }
+            _ => return Ok(None),
+        };
+        let origin = self.func.values[lhs.0 as usize].origin.clone();
+        self.load(code, lhs)?;
+        self.load(code, rhs)?;
+        code.invoke_static(&origin, pool, owner, name, signature);
+        if op == BinOp::Ne {
+            code.const_int(&origin, pool, 1);
+            code.bitwise(&origin, insn::XOR, Kind::Int);
+        }
+        Ok(Some(Placed::OnStack))
+    }
+
+    /// A comparison whose result is a value rather than a branch: 0 or 1
+    /// through the scratch slot, so the operand stack is empty at both labels
+    /// and the frame stays the universal one.
+    fn materialize_comparison(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        compare: Compare,
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> Result<Placed, Diagnostic> {
+        let origin = self.func.origin.clone();
+        let Some(scratch) = self.scratch else {
+            return Err(refuse(self.func, "a comparison with no scratch slot"));
+        };
+        let taken = code.label();
+        let done = code.label();
+        self.compare_and_branch(code, compare, false, lhs, rhs, taken)?;
+        code.const_int(&origin, pool, 0);
+        code.store(&origin, Kind::Int, scratch);
+        code.goto(&origin, done);
+        code.bind(taken);
+        code.const_int(&origin, pool, 1);
+        code.store(&origin, Kind::Int, scratch);
+        code.bind(done);
+        code.load(&origin, Kind::Int, scratch);
+        Ok(Placed::OnStack)
+    }
+
     fn binary(
         &mut self,
         code: &mut Code,
@@ -551,77 +651,11 @@ impl Emitter<'_> {
         rhs: ValueId,
     ) -> Result<Placed, Diagnostic> {
         let origin = self.func.origin.clone();
-        // `===` on two strings compares by value, so it is `Objects.equals`
-        // and never `if_acmpeq`. Getting that wrong is silent wherever two
-        // equal strings happen to be one constant-pool entry, which is most of
-        // a test suite -- record 0044 found exactly that in the LLVM backend.
-        if matches!(op, BinOp::Eq | BinOp::Ne)
-            && matches!(self.ty(lhs), HirType::Managed(ManagedType::String))
-        {
-            let origin = self.func.values[lhs.0 as usize].origin.clone();
-            self.load(code, lhs)?;
-            self.load(code, rhs)?;
-            code.invoke_static(
-                &origin,
-                pool,
-                RUNTIME,
-                "stringEq",
-                "(Ljava/lang/String;Ljava/lang/String;)Z",
-            );
-            if op == BinOp::Ne {
-                code.const_int(&origin, pool, 1);
-                code.bitwise(&origin, insn::XOR, Kind::Int);
-            }
-            return Ok(Placed::OnStack);
-        }
-        if matches!(op, BinOp::Eq | BinOp::Ne) && *self.ty(lhs) == HirType::Erased {
-            let origin = self.func.values[lhs.0 as usize].origin.clone();
-            self.load(code, lhs)?;
-            self.load(code, rhs)?;
-            code.invoke_static(
-                &origin,
-                pool,
-                types::VALUE,
-                "strictEq",
-                "(Lnts/rt/NtsValue;Lnts/rt/NtsValue;)Z",
-            );
-            if op == BinOp::Ne {
-                code.const_int(&origin, pool, 1);
-                code.bitwise(&origin, insn::XOR, Kind::Int);
-            }
-            return Ok(Placed::OnStack);
-        }
-        if op == BinOp::Concat {
-            let origin = self.func.values[lhs.0 as usize].origin.clone();
-            self.load(code, lhs)?;
-            self.load(code, rhs)?;
-            code.invoke_virtual(
-                &origin,
-                pool,
-                types::STRING,
-                "concat",
-                "(Ljava/lang/String;)Ljava/lang/String;",
-            );
-            return Ok(Placed::OnStack);
+        if let Some(placed) = self.reference_binary(code, pool, op, lhs, rhs)? {
+            return Ok(placed);
         }
         if let Some(compare) = comparison(op) {
-            // Materialize: 0 or 1 through the scratch slot, so the stack is
-            // empty at both labels and the frame stays the universal one.
-            let Some(scratch) = self.scratch else {
-                return Err(refuse(self.func, "a comparison with no scratch slot"));
-            };
-            let taken = code.label();
-            let done = code.label();
-            self.compare_and_branch(code, compare, false, lhs, rhs, taken)?;
-            code.const_int(&origin, pool, 0);
-            code.store(&origin, Kind::Int, scratch);
-            code.goto(&origin, done);
-            code.bind(taken);
-            code.const_int(&origin, pool, 1);
-            code.store(&origin, Kind::Int, scratch);
-            code.bind(done);
-            code.load(&origin, Kind::Int, scratch);
-            return Ok(Placed::OnStack);
+            return self.materialize_comparison(code, pool, compare, lhs, rhs);
         }
 
         let kind = types::kind(result)
