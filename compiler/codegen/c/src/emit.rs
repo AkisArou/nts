@@ -656,10 +656,43 @@ fn call_text(
 ///
 /// A descriptor is read through an object's own header, so only a layout a
 /// program allocates can ever have its read.
-fn allocated_layouts(program: &Program) -> rustc_hash::FxHashSet<usize> {
+fn layouts_needing_descriptors(program: &Program) -> rustc_hash::FxHashSet<usize> {
     let mut found = rustc_hash::FxHashSet::default();
+    let want = |found: &mut rustc_hash::FxHashSet<usize>, ty: &nts_core::hir::ClassId| {
+        if let Some(at) = program
+            .layouts
+            .iter()
+            .position(|layout| layout.types.contains(ty))
+        {
+            found.insert(at);
+        }
+    };
     for func in &program.funcs {
         for op in &func.values {
+            // An `instanceof` names one descriptor per class in its closed
+            // set, and that set is every class extending the one written -- so
+            // a class this program declares, tests against, and never
+            // constructs still needs its descriptor to exist.
+            //
+            // It did not. `instance_of` emitted `&nts_desc_X` for any class
+            // with a *layout* while this scan admitted only classes something
+            // *allocates*, so a module declaring twenty error subclasses whose
+            // constructors were refused produced C that referenced twenty
+            // descriptors and defined none -- from an `emit-c` that reported
+            // success. Found by the Codex session compiling `runtime/node`,
+            // where clang stopped after twenty undeclared identifiers.
+            //
+            // Defined rather than dropped from the test. Filtering the
+            // disjunction to allocated classes emits less code and is sound
+            // only for as long as this scan never under-approximates; resting
+            // a correctness property on a whole-program scan being complete is
+            // a worse trade than a few static structs nothing reads.
+            if let OpKind::InstanceOf { classes, .. } = &op.kind {
+                for class in classes {
+                    want(&mut found, class);
+                }
+                continue;
+            }
             // A static closure instance is not allocated, but it *is* an
             // object: it carries a header, and a header needs a descriptor to
             // point at. Reference counting reads that descriptor before it
@@ -670,13 +703,7 @@ fn allocated_layouts(program: &Program) -> rustc_hash::FxHashSet<usize> {
             let HirType::Managed(ManagedType::Object(ty)) = &op.ty else {
                 continue;
             };
-            if let Some(at) = program
-                .layouts
-                .iter()
-                .position(|layout| layout.types.contains(ty))
-            {
-                found.insert(at);
-            }
+            want(&mut found, ty);
         }
     }
     found
@@ -1221,13 +1248,17 @@ fn emit_object_types(
 /// come first because a declaration's parameter types need them.
 fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
     let cyclic_layouts = program.cyclic_layouts();
-    let allocated = allocated_layouts(program);
+    let needed = layouts_needing_descriptors(program);
     for (index, layout) in program.layouts.iter().enumerate() {
-        // A layout nothing allocates needs no descriptor. It still needs its
-        // struct, because something is declared as a pointer to it -- a
-        // closure's signature type is exactly that: every value of it is really
-        // a closure, and the closure's own descriptor is the one at runtime.
-        if !allocated.contains(&index) {
+        // A layout nothing allocates *and* nothing tests against needs no
+        // descriptor. It still needs its struct, because something is declared
+        // as a pointer to it -- a closure's signature type is exactly that:
+        // every value of it is really a closure, and the closure's own
+        // descriptor is the one at runtime.
+        //
+        // "And nothing tests against" is the second half, and it was missing.
+        // See `layouts_needing_descriptors`.
+        if !needed.contains(&index) {
             continue;
         }
         let name = object_type_name(layout);

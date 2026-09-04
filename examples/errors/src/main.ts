@@ -66,3 +66,35 @@ export function messageIsWritable(n: number): number {
   e.message = "considerably longer";
   return e.message.length + n;
 }
+
+// A class that extends `Error`, is named in a signature, and is never
+// constructed.
+//
+// `e instanceof Error` is a comparison against a closed set, and the set is
+// every class that extends the one written -- so it names `Unbuilt`'s
+// descriptor. The descriptor emitter used to skip any layout nothing
+// *allocates*, so the C referenced a descriptor it never defined and clang
+// stopped at `use of undeclared identifier 'nts_desc_NtsObj_Unbuilt'` -- from
+// an `emit-c` that had reported success.
+//
+// The shape is only reachable when the two rules disagree, which is why it is
+// an example rather than a unit test: the `examples` gate step compiles and
+// runs the emitted C, and that is what catches an emitter promising a symbol
+// it does not write. Found by the Codex session compiling `runtime/node`,
+// where a module declares many error subclasses whose constructors are refused.
+class Unbuilt extends Error {
+  code: number = 0;
+}
+
+// Deliberately not `new Error(...)` against `new RangeError(...)`: those two
+// are structurally identical, share a layout, and `instanceof` between classes
+// of identical shape is a separate open row in typescript.md. The number here
+// is about the descriptor being *defined*, not about telling two errors apart.
+export function neverConstructed(n: number): number {
+  const e: unknown = n > 2 ? new Error("x") : 5;
+  return e instanceof Error ? 1 : 0;
+}
+
+export function namesTheUnbuiltClass(w: Unbuilt): number {
+  return w.code;
+}
