@@ -970,7 +970,7 @@ export function globIteratorWithFileSystem(
   pattern: unknown,
   options: unknown,
   fileSystem: AsyncGlobFileSystem,
-): AsyncIterable<string | Dirent> {
+): AsyncGenerator<string | Dirent, void, undefined> {
   const normalized = normalizeGlobOptions(pattern, options);
   return new AsyncGlobWalker(
     normalized.patterns,

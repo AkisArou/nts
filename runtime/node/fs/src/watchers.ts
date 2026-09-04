@@ -55,7 +55,7 @@ declare function nts_fs_watch_start(
   recursive: boolean,
   persistent: boolean,
   throwIfNoEntry: boolean,
-  callback: (event: string, filename: number[] | null) => void,
+  callback: (status: number, event: string, filename: number[] | null) => void,
 ): number;
 declare function nts_fs_watch_stop(handle: number): void;
 declare function nts_fs_watch_ref(handle: number): void;
@@ -111,17 +111,18 @@ function validateIgnoreElement(
   throw new ERR_INVALID_ARG_TYPE(name, ["string", "RegExp", "Function"], value);
 }
 
-function validateIgnoreOption(
+export function normalizeWatchIgnore(
   value: unknown,
-): asserts value is WatchIgnore | null | undefined {
-  if (value === null || value === undefined) return;
+): WatchIgnore | undefined {
+  if (value === null || value === undefined) return undefined;
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length; i++) {
       validateIgnoreElement(value[i], `options.ignore[${i}]`);
     }
-    return;
+    return value;
   }
   validateIgnoreElement(value, "options.ignore");
+  return value;
 }
 
 /** Match one glob segment with `*` and `?`, using bounded backtracking. */
@@ -264,8 +265,7 @@ export class FSWatcher extends EventEmitter {
     validateBoolean(persistent, "options.persistent");
     validateBoolean(recursive, "options.recursive");
     validateBoolean(throwIfNoEntry, "options.throwIfNoEntry");
-    validateIgnoreOption(options.ignore);
-    this.#ignore = options.ignore ?? undefined;
+    this.#ignore = normalizeWatchIgnore(options.ignore);
     this.#encoding = normalizeFileResultEncoding(options.encoding);
     const validatedPath = getValidatedPath(path, "filename");
     this.#path = validatedPath;
@@ -274,7 +274,14 @@ export class FSWatcher extends EventEmitter {
       recursive,
       persistent,
       throwIfNoEntry,
-      (event: string, filename: number[] | null) => {
+      (status: number, event: string, filename: number[] | null) => {
+        if (status < 0) {
+          const error = uvException(status, "watch", validatedPath);
+          error.filename = validatedPath;
+          this.close();
+          this.emit("error", error);
+          return;
+        }
         const decoded = filename === null ? null : Buffer.from(filename).toString();
         if (decoded !== null && shouldIgnore(this.#ignore, decoded)) return;
         const prior = AsyncContextFrame.exchange(this.#contextFrame);

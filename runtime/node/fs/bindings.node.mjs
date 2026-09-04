@@ -586,7 +586,7 @@ globalThis.nts_fs_watch_start = (
       { recursive, persistent, throwIfNoEntry, encoding: "buffer" },
       (event, filename) => {
         if (filename === null) {
-          cb(event, null);
+          cb(0, event, null);
           return;
         }
         // Node's recursive Linux watcher currently reports a string even when
@@ -594,9 +594,10 @@ globalThis.nts_fs_watch_start = (
         // so normalize that host inconsistency here just as the real C binding
         // does before TypeScript applies the caller's requested encoding.
         const bytes = typeof filename === "string" ? Buffer.from(filename) : filename;
-        cb(event, Array.from(bytes));
+        cb(0, event, Array.from(bytes));
       },
     );
+    w.on("error", (error) => cb(codeOf(error), "", null));
     const handle = nextWatchHandle++;
     watchers.set(handle, w);
     return handle;

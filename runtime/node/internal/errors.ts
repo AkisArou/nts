@@ -849,6 +849,16 @@ export class ERR_FS_FILE_TOO_LARGE extends NodeRangeError {
   }
 }
 
+/** The promised fs watcher could not buffer another pending event. */
+export class ERR_FS_WATCH_QUEUE_OVERFLOW extends NodeError {
+  override readonly code = "ERR_FS_WATCH_QUEUE_OVERFLOW";
+
+  constructor(maxQueue: number) {
+    super(`fs.watch() queued more than ${maxQueue} events`);
+    this.name = "Error";
+  }
+}
+
 /** A callback that was already called, called again. */
 export class ERR_MULTIPLE_CALLBACK extends NodeError {
   override get ["constructor"](): unknown { return Error; }

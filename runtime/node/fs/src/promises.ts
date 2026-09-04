@@ -33,7 +33,9 @@ import * as constants from "./constants.ts";
 import {
   aggregateTwoErrors,
   AbortError,
+  ERR_FS_WATCH_QUEUE_OVERFLOW,
   ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_ARG_VALUE,
   ERR_INVALID_STATE,
   ERR_INVALID_STATE_TYPE,
   ERR_METHOD_NOT_IMPLEMENTED,
@@ -47,6 +49,7 @@ import {
   validateObject,
 } from "../../internal/validators.ts";
 import { uvException } from "../../internal/uv.ts";
+import { emitWarning } from "../../internal/process-warning.ts";
 import * as callbacks from "./async.ts";
 import { isBigIntStatFs, isBigIntStats } from "./stats.ts";
 import type {
@@ -61,6 +64,7 @@ import type {
 import {
   getOptions,
   getValidatedPath,
+  normalizeFileResultEncoding,
   requireTextEncoding,
   type EncodedFileName,
   type AbortSignalLike,
@@ -72,6 +76,13 @@ import {
 } from "./options.ts";
 import { normalizeCpOptions, type CopyOptions } from "./cp-common.ts";
 import type { GlobOptions, GlobPatternInput } from "./glob.ts";
+import {
+  FSWatcher,
+  normalizeWatchIgnore,
+  type WatchFileName,
+  type WatchOptions,
+  type WatchSignal,
+} from "./watchers.ts";
 import { bufferLengths, flattenBuffers } from "./vector-io.ts";
 import type { FileStreamOptions, ReadStream, WriteStream } from "./streams.ts";
 import {
@@ -339,6 +350,217 @@ async function writeFileToOpenHandle(
     settings.signal,
     encoding,
   );
+}
+
+export type WatchOverflow = "ignore" | "error";
+
+export interface PromiseWatchOptions
+  extends Omit<WatchOptions, "throwIfNoEntry"> {
+  maxQueue?: number | undefined;
+  overflow?: WatchOverflow | undefined;
+}
+
+export interface WatchEvent {
+  eventType: string;
+  filename: WatchFileName;
+}
+
+interface RawPromiseWatchOptions {
+  persistent?: unknown;
+  recursive?: unknown;
+  encoding?: unknown;
+  signal?: unknown;
+  ignore?: unknown;
+  maxQueue?: unknown;
+  overflow?: unknown;
+}
+
+interface NormalizedPromiseWatchOptions {
+  watcher: WatchOptions;
+  signal: WatchSignal | undefined;
+  maxQueue: number;
+  overflow: WatchOverflow;
+}
+
+function validatePromiseWatchSignal(
+  value: unknown,
+): asserts value is WatchSignal | undefined {
+  validateAbortSignal(value, "options.signal");
+  if (value === undefined) return;
+  if (!("addEventListener" in value)) {
+    throw new ERR_INVALID_ARG_TYPE(
+      "options.signal.addEventListener",
+      "Function",
+      undefined,
+    );
+  }
+  if (!("removeEventListener" in value)) {
+    throw new ERR_INVALID_ARG_TYPE(
+      "options.signal.removeEventListener",
+      "Function",
+      undefined,
+    );
+  }
+  if (typeof value.addEventListener !== "function") {
+    throw new ERR_INVALID_ARG_TYPE(
+      "options.signal.addEventListener",
+      "Function",
+      value.addEventListener,
+    );
+  }
+  if (typeof value.removeEventListener !== "function") {
+    throw new ERR_INVALID_ARG_TYPE(
+      "options.signal.removeEventListener",
+      "Function",
+      value.removeEventListener,
+    );
+  }
+}
+
+function normalizePromiseWatchOptions(
+  value: unknown,
+): NormalizedPromiseWatchOptions {
+  const raw = value === undefined ? {} : value;
+  validateObject(raw, "options");
+  const options: RawPromiseWatchOptions = raw;
+
+  const persistent = options.persistent === undefined
+    ? true
+    : options.persistent;
+  const recursive = options.recursive === undefined
+    ? false
+    : options.recursive;
+  const maxQueue = options.maxQueue === undefined ? 2048 : options.maxQueue;
+  const overflow = options.overflow === undefined ? "ignore" : options.overflow;
+  validateBoolean(persistent, "options.persistent");
+  validateBoolean(recursive, "options.recursive");
+  validateInteger(maxQueue, "options.maxQueue");
+  if (overflow !== "ignore" && overflow !== "error") {
+    throw new ERR_INVALID_ARG_VALUE(
+      "options.overflow",
+      overflow,
+      "must be one of: 'ignore', 'error'",
+    );
+  }
+
+  const encoding = normalizeFileResultEncoding(options.encoding ?? "utf8");
+  const ignore = normalizeWatchIgnore(options.ignore);
+  validatePromiseWatchSignal(options.signal);
+  return {
+    watcher: {
+      persistent,
+      recursive,
+      encoding,
+      ignore,
+    },
+    signal: options.signal,
+    maxQueue,
+    overflow,
+  };
+}
+
+class WatchWaiter {
+  readonly promise: Promise<void>;
+  #resolve: (() => void) | undefined;
+
+  constructor() {
+    this.promise = new Promise<void>((resolve) => {
+      this.#resolve = resolve;
+    });
+  }
+
+  wake(): void {
+    const resolve = this.#resolve;
+    if (resolve === undefined) {
+      throw new Error("fs watch waiter has no resolver");
+    }
+    resolve();
+  }
+}
+
+interface WatchFailure {
+  readonly reason: unknown;
+}
+
+/** One event queue and one native watcher, consumed at most once. */
+class PromiseWatchSource implements AsyncIterable<WatchEvent> {
+  readonly #filename: unknown;
+  readonly #options: unknown;
+  #started = false;
+
+  constructor(filename: unknown, options: unknown) {
+    this.#filename = filename;
+    this.#options = options;
+  }
+
+  async *[Symbol.asyncIterator](): AsyncGenerator<WatchEvent, void, undefined> {
+    if (this.#started) return;
+    this.#started = true;
+
+    const settings = normalizePromiseWatchOptions(this.#options);
+    const filename = getValidatedPath(this.#filename, "filename");
+    const signal = settings.signal;
+    if (signal?.aborted) {
+      throw new AbortError(undefined, { cause: signal.reason });
+    }
+
+    const watcher = new FSWatcher();
+    const queue: Array<WatchEvent | WatchFailure> = [];
+    let queueHead = 0;
+    let waiter = new WatchWaiter();
+    const onChange = (eventType: string, changed: WatchFileName): void => {
+      if (queue.length - queueHead < settings.maxQueue) {
+        queue.push({ eventType, filename: changed });
+        waiter.wake();
+      } else if (settings.overflow === "error") {
+        queue.length = 0;
+        queueHead = 0;
+        queue.push({
+          reason: new ERR_FS_WATCH_QUEUE_OVERFLOW(settings.maxQueue),
+        });
+        waiter.wake();
+      } else {
+        emitWarning("fs.watch maxQueue exceeded", "Warning", "");
+      }
+    };
+    const onError = (error: unknown): void => {
+      queue.push({ reason: error });
+      waiter.wake();
+    };
+    const onAbort = (): void => waiter.wake();
+
+    watcher.on("change", onChange);
+    watcher.on("error", onError);
+    if (signal !== undefined) {
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    try {
+      watcher.start(filename, settings.watcher);
+      while (!signal?.aborted) {
+        await waiter.promise;
+        while (queueHead < queue.length) {
+          const item = queue[queueHead++];
+          if (item === undefined) {
+            throw new Error("fs watch queue is missing an event");
+          }
+          if ("reason" in item) throw item.reason;
+          yield item;
+        }
+        queue.length = 0;
+        queueHead = 0;
+        waiter = new WatchWaiter();
+      }
+      if (signal.aborted) {
+        throw new AbortError(undefined, { cause: signal.reason });
+      }
+    } finally {
+      watcher.close();
+      watcher.removeListener("change", onChange);
+      watcher.removeListener("error", onError);
+      signal?.removeEventListener("abort", onAbort);
+    }
+  }
 }
 
 /** Bytes accepted by Node's experimental FileHandle writer. */
@@ -1642,16 +1864,26 @@ export const readdir = promisifyValue(callbacks.readdir, "readdir");
 export function glob(
   pattern: GlobPatternInput,
   options: GlobOptions & { withFileTypes: true },
-): AsyncIterable<Dirent>;
+): AsyncIterableIterator<Dirent>;
 export function glob(
   pattern: GlobPatternInput,
   options?: GlobOptions,
-): AsyncIterable<string>;
+): AsyncIterableIterator<string>;
 export function glob(
   pattern: unknown,
   options?: unknown,
-): AsyncIterable<string | Dirent> {
+): AsyncIterableIterator<string | Dirent> {
   return callbacks.globIterator(pattern, options);
+}
+export function watch(
+  filename: PathLike,
+  options?: PromiseWatchOptions,
+): AsyncIterableIterator<WatchEvent>;
+export function watch(
+  filename: unknown,
+  options?: unknown,
+): AsyncIterableIterator<WatchEvent> {
+  return new PromiseWatchSource(filename, options)[Symbol.asyncIterator]();
 }
 export const readlink = promisifyValue(callbacks.readlink, "readlink");
 export const realpath = promisifyValue(callbacks.realpath, "realpath");

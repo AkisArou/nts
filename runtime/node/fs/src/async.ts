@@ -188,19 +188,19 @@ const publicAsyncGlobFileSystem = new PublicAsyncGlobFileSystem();
 export function globIterator(
   pattern: GlobPatternInput,
   options: GlobOptions & { withFileTypes: true },
-): AsyncIterable<Dirent>;
+): AsyncIterableIterator<Dirent>;
 export function globIterator(
   pattern: GlobPatternInput,
   options?: GlobOptions,
-): AsyncIterable<string>;
+): AsyncIterableIterator<string>;
 export function globIterator(
   pattern: unknown,
   options?: unknown,
-): AsyncIterable<string | Dirent>;
+): AsyncIterableIterator<string | Dirent>;
 export function globIterator(
   pattern: unknown,
   options?: unknown,
-): AsyncIterable<string | Dirent> {
+): AsyncIterableIterator<string | Dirent> {
   return globIteratorWithFileSystem(
     pattern,
     options,
