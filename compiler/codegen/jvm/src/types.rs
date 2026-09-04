@@ -23,6 +23,10 @@ use nts_codegen_common::symbols::jvm_class_name;
 use nts_core::hir::{HirType, Layout, ManagedType, Program};
 use nts_jvm_emitter::{Kind, VType};
 
+/// The erased value: a tag beside a payload, mirroring the C struct.
+pub const VALUE: &str = "nts/rt/NtsValue";
+pub const VALUE_DESCRIPTOR: &str = "Lnts/rt/NtsValue;";
+
 /// `java.lang.String`, the JVM's name for it.
 pub const STRING: &str = "java/lang/String";
 pub const STRING_DESCRIPTOR: &str = "Ljava/lang/String;";
@@ -59,6 +63,12 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
         // string *is*. `length`, `charAt`, `substring` and `equals` are already
         // the language's semantics, and JIT intrinsics besides.
         HirType::Managed(ManagedType::String) => STRING_DESCRIPTOR.to_owned(),
+        // A tag beside a payload, the same three fields and the same tag
+        // numbering as the C struct -- so `hir::tags` stays one fact and
+        // `typeof x === "object"` stays the single comparison `tag >= OBJECT`,
+        // which erasing to a bare `Object` and testing with `instanceof` would
+        // throw away.
+        HirType::Erased => VALUE_DESCRIPTOR.to_owned(),
         // A bare JVM array, which is what a Java programmer writes and what the
         // hand-written reference will use. `arraylength` is one instruction,
         // the bounds check is mandatory *and* eliminated in a counted loop, and
@@ -73,10 +83,7 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
         }
         // Strings, arrays, `Erased` and `BigInt` arrive in later steps.
         // Answering here would emit something for a type nothing implements.
-        HirType::Never
-        | HirType::BigInt
-        | HirType::Erased
-        | HirType::Managed(_) => return None,
+        HirType::Never | HirType::BigInt | HirType::Managed(_) => return None,
     })
 }
 
@@ -84,7 +91,8 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
 #[must_use]
 pub fn kind(ty: &HirType) -> Option<Kind> {
     Some(match ty {
-        HirType::Managed(
+        HirType::Erased
+        | HirType::Managed(
             ManagedType::Object(_) | ManagedType::String | ManagedType::Array(_),
         ) => Kind::Ref,
         HirType::Int { bits: 64, .. } => Kind::Long,
@@ -93,9 +101,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
         HirType::Bool | HirType::Int { .. } => Kind::Int,
         HirType::Float { bits: 32 } => Kind::Float,
         HirType::Float { .. } => Kind::Double,
-        HirType::Void | HirType::Never | HirType::BigInt | HirType::Erased | HirType::Managed(_) => {
-            return None;
-        }
+        HirType::Void | HirType::Never | HirType::BigInt | HirType::Managed(_) => return None,
     })
 }
 
@@ -108,6 +114,7 @@ pub fn vtype(program: &Program, ty: &HirType) -> Option<VType> {
         Kind::Float => VType::Float,
         Kind::Double => VType::Double,
         Kind::Ref => match ty {
+            HirType::Erased => VType::Object(VALUE.to_owned()),
             HirType::Managed(ManagedType::String) => VType::Object(STRING.to_owned()),
             // An array's *class* constant is named by its descriptor rather
             // than by an internal name: `[D`, not `D` and not `L[D;`.
@@ -173,7 +180,7 @@ mod tests {
 
     #[test]
     fn what_this_slice_does_not_represent_says_so() {
-        for ty in [HirType::BigInt, HirType::Erased, HirType::Never] {
+        for ty in [HirType::BigInt, HirType::Never] {
             assert_eq!(descriptor(&empty(), &ty), None, "{ty:?}");
         }
         assert_eq!(descriptor(&empty(), &HirType::Void).as_deref(), Some("V"));

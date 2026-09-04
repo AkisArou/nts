@@ -85,6 +85,28 @@ impl Emitter<'_> {
             OpKind::ArrayNew { .. } | OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
                 self.array_operation(code, pool, &op.kind, &op.ty, &origin)?
             }
+            OpKind::Erase { .. } | OpKind::TagOf { .. } | OpKind::Unerase { .. } => {
+                self.erasure(code, pool, &op.kind, &op.ty, &origin)?
+            }
+            // The two absences. Erased they are interned singletons, because
+            // they carry no payload and a compiled program mentions them
+            // constantly; as a reference they are both the null pointer, which
+            // is what makes `T | null` cost nothing.
+            OpKind::ConstNull | OpKind::ConstUndefined if op.ty == HirType::Erased => {
+                let which = if matches!(op.kind, OpKind::ConstNull) {
+                    "NULL_VALUE"
+                } else {
+                    "UNDEFINED_VALUE"
+                };
+                code.get_static(&origin, pool, types::VALUE, which, types::VALUE_DESCRIPTOR);
+                Placed::OnStack
+            }
+            OpKind::ConstNull | OpKind::ConstUndefined
+                if matches!(op.ty, HirType::Managed(_)) =>
+            {
+                code.const_null(&origin);
+                Placed::OnStack
+            }
             OpKind::Binary { op: bin, lhs, rhs } => self.binary(code, pool, &op.ty, *bin, *lhs, *rhs)?,
             OpKind::Unary { op: un, operand } => self.unary(code, pool, &op.ty, *un, *operand)?,
             OpKind::Convert(operand) => {
@@ -192,6 +214,123 @@ impl Emitter<'_> {
             }
         }
         Ok(())
+    }
+
+    /// Putting a tag on a value, reading it off, and taking it back.
+    ///
+    /// `TagOf` **is** `typeof`: the tag numbering is chosen so that
+    /// `typeof x === "object"` is the single comparison `tag >= OBJECT`, which
+    /// is why the erased value is this three-field class rather than a bare
+    /// `Object` tested with `instanceof`.
+    fn erasure(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        kind: &OpKind,
+        ty: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        match kind {
+            OpKind::Erase { value } => {
+                let from = self.ty(*value).clone();
+                // A `Void` erases to `undefined` and has nothing to load.
+                if matches!(from, HirType::Void) {
+                    code.get_static(
+                        origin,
+                        pool,
+                        types::VALUE,
+                        "UNDEFINED_VALUE",
+                        types::VALUE_DESCRIPTOR,
+                    );
+                    return Ok(Placed::OnStack);
+                }
+                self.load(code, *value)?;
+                let (name, signature) = match &from {
+                    HirType::Bool => ("ofBoolean", "(Z)Lnts/rt/NtsValue;"),
+                    HirType::Managed(ManagedType::String) => {
+                        ("ofString", "(Ljava/lang/String;)Lnts/rt/NtsValue;")
+                    }
+                    HirType::Managed(_) => ("ofObject", "(Ljava/lang/Object;)Lnts/rt/NtsValue;"),
+                    HirType::Int { .. } | HirType::Float { .. } => {
+                        // The payload is a double whatever the value was, which
+                        // is what makes one erased value able to hold any
+                        // number -- so the widening happens here rather than
+                        // being a second representation to keep in step.
+                        let source = types::kind(&from)
+                            .ok_or_else(|| refuse(self.func, "erasing an unrepresentable value"))?;
+                        if source != Kind::Double {
+                            let opcode = match source {
+                                Kind::Long => insn::L2D,
+                                Kind::Float => insn::F2D,
+                                _ => insn::I2D,
+                            };
+                            code.convert(origin, opcode, source, Kind::Double);
+                        }
+                        ("ofNumber", "(D)Lnts/rt/NtsValue;")
+                    }
+                    other => {
+                        return Err(refuse(
+                            self.func,
+                            &format!("erasing {}", types::describe(other)),
+                        ));
+                    }
+                };
+                code.invoke_static(origin, pool, types::VALUE, name, signature);
+                Ok(Placed::OnStack)
+            }
+            OpKind::TagOf { value } => {
+                self.load(code, *value)?;
+                code.get_field(origin, pool, types::VALUE, "tag", "I");
+                // The tag lands in whatever slot the middle end chose, which is
+                // not always an `int` one -- the same rule the coercions keep.
+                if types::kind(ty) == Some(Kind::Double) {
+                    code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
+                }
+                Ok(Placed::OnStack)
+            }
+            OpKind::Unerase { value } => {
+                self.load(code, *value)?;
+                match ty {
+                    HirType::Bool => code.invoke_static(
+                        origin,
+                        pool,
+                        types::VALUE,
+                        "asBoolean",
+                        "(Lnts/rt/NtsValue;)Z",
+                    ),
+                    HirType::Int { .. } | HirType::Float { .. } => {
+                        code.get_field(origin, pool, types::VALUE, "num", "D");
+                        let target = types::kind(ty)
+                            .ok_or_else(|| refuse(self.func, "unerasing to an unrepresentable type"))?;
+                        if target != Kind::Double {
+                            let opcode = match target {
+                                Kind::Long => insn::D2L,
+                                Kind::Float => insn::D2F,
+                                _ => insn::D2I,
+                            };
+                            code.convert(origin, opcode, Kind::Double, target);
+                        }
+                    }
+                    HirType::Managed(_) => {
+                        code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+                        let descriptor = types::descriptor(self.program, ty).ok_or_else(|| {
+                            refuse(self.func, "unerasing to an unrepresentable reference")
+                        })?;
+                        // Unchecked by construction upstream, but the verifier
+                        // needs the narrowing spelled: the field is `Object`.
+                        code.check_cast(origin, pool, &descriptor);
+                    }
+                    other => {
+                        return Err(refuse(
+                            self.func,
+                            &format!("unerasing to {}", types::describe(other)),
+                        ));
+                    }
+                }
+                Ok(Placed::OnStack)
+            }
+            _ => Err(refuse(self.func, "an erasure this backend does not spell")),
+        }
     }
 
     /// Allocation, load and store on a bare JVM array.
@@ -428,6 +567,23 @@ impl Emitter<'_> {
                 RUNTIME,
                 "stringEq",
                 "(Ljava/lang/String;Ljava/lang/String;)Z",
+            );
+            if op == BinOp::Ne {
+                code.const_int(&origin, pool, 1);
+                code.bitwise(&origin, insn::XOR, Kind::Int);
+            }
+            return Ok(Placed::OnStack);
+        }
+        if matches!(op, BinOp::Eq | BinOp::Ne) && *self.ty(lhs) == HirType::Erased {
+            let origin = self.func.values[lhs.0 as usize].origin.clone();
+            self.load(code, lhs)?;
+            self.load(code, rhs)?;
+            code.invoke_static(
+                &origin,
+                pool,
+                types::VALUE,
+                "strictEq",
+                "(Lnts/rt/NtsValue;Lnts/rt/NtsValue;)Z",
             );
             if op == BinOp::Ne {
                 code.const_int(&origin, pool, 1);
@@ -710,6 +866,11 @@ impl Emitter<'_> {
         if matches!(self.ty(operand), HirType::Managed(ManagedType::String)) {
             self.load(code, operand)?;
             code.invoke_static(&origin, pool, RUNTIME, "stringTruthy", "(Ljava/lang/String;)Z");
+            return Ok(Placed::OnStack);
+        }
+        if *self.ty(operand) == HirType::Erased {
+            self.load(code, operand)?;
+            code.invoke_static(&origin, pool, types::VALUE, "truthy", "(Lnts/rt/NtsValue;)Z");
             return Ok(Placed::OnStack);
         }
         let Some(scratch) = self.scratch else {
@@ -1034,9 +1195,6 @@ impl Emitter<'_> {
 fn unsupported(kind: &OpKind) -> String {
     match kind {
         OpKind::ConstNull | OpKind::ConstUndefined => "an absent value".to_owned(),
-        OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::TagOf { .. } => {
-            "an erased value".to_owned()
-        }
         OpKind::ClosureStatic => "a function used as a value".to_owned(),
         OpKind::CellReady { .. } => "a captured binding".to_owned(),
         OpKind::Retain(_) | OpKind::Release(_) => {
