@@ -1352,10 +1352,6 @@ export class InterfaceBase extends EventEmitter {
     }
     return this.#lineObjectStream;
   }
-
-  [Symbol.dispose](): void {
-    this.close();
-  }
 }
 
 /** The callback-oriented `node:readline` public interface. */
