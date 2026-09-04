@@ -17,9 +17,11 @@ because The array is allocated **at the walk's length** and filled by index,
 because because a table keeps its live entry count in the header field an array
 because uses for `length`. Appending instead measures **nine**: the same five
 because plus four doublings of the result. That difference is the whole of what
-because this case ratchets, and it is invisible to the benchmark -- 2.66 ms
-because against 2.70 ms, which is no change at all. Two instruments, one of
-because which sees this and one of which cannot.
+because this case ratchets, and it is invisible to the benchmark -- 1.86 ms
+because against 1.84 ms, which is no change at all. Two instruments, one of
+because which sees this and one of which cannot. Measured under both memory
+because providers, because the sibling decision in the same change was measured
+because under a build that never frees and had to be retracted -- record 0102.
 because
 because Operations: two, and the floor is two rather than zero. `closure-capture`
 because states the rule as an allocation floor of zero forcing an operation floor

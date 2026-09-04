@@ -8001,17 +8001,20 @@ impl<'a> FuncBuilder<'a> {
     /// 0029 describes is what makes appending the right answer for all five.
     fn lower_array_from(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
         // An array source keeps its `slice`, and the reason is measured rather
-        // than assumed. The same row, 256 elements copied two thousand times:
+        // than assumed. 256 elements copied two thousand times, against a C++
+        // reference at 41.65 us:
         //
-        //     walked   1.05 ms
-        //     sliced   782 us     -- 1.34x
+        //     walked   462.77 us   12.18x C++   3.80x node
+        //     sliced    53.07 us    1.27x C++   0.45x node
         //
-        // A `slice` is a memcpy of one run of memory whose length is known
-        // before it starts; the walk is a bounds check, a load and a store per
-        // element. Both numbers sit against a C++ reference at 43 us, and that
-        // 17.7x is the array *copy* rather than the walk -- record 0102 has the
-        // decomposition, and reading it the other way first is how this comment
-        // nearly said 24x.
+        // **8.7x**, and sliced it beats node. A `slice` is a memcpy of one run
+        // of memory whose length is known before it starts; the walk is a
+        // bounds check, a load and a store per element.
+        //
+        // This comment said 1.34x for a while, from a benchmark run under a
+        // provider that never frees -- so both variants were measuring page
+        // faults and the difference between them nearly vanished. Record 0102
+        // is about that.
         //
         // Every other shape has no run of memory to copy: a `Set` with holes, a
         // string by code point, a generator. So this is one specialization with
@@ -8064,11 +8067,14 @@ impl<'a> FuncBuilder<'a> {
         //
         // The difference is worth a branch here, and the evidence is *not* the
         // timing: `Array.from(set)` over 256 elements two thousand times reads
-        // 2.66 ms growing against 2.70 ms sized, which is no change. It is the
+        // 1.86 ms growing against 1.84 ms sized, which is no change. It is the
         // allocation count, which goes from nine to five for a sixteen-element
         // walk -- `tooling/memory/cases/array-from`. Doubling makes the copying
         // about one extra pass, and one extra pass over two kilobytes is not
         // what a timing harness can see.
+        //
+        // Measured twice, under both providers, because the sibling decision
+        // above was measured under the wrong one and had to be retracted.
         let counted = matches!(
             walk,
             Walk::Counted(_) | Walk::Table { .. } | Walk::Entries { .. }

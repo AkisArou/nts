@@ -12,12 +12,18 @@ nothing.
 
 ## Three numbers, and only one of them said what I expected
 
-**The array fast path stays, and I read its number wrong first.** Removing it
-measured 1.05 ms against C++'s 43.19 us and I wrote "24.67x, the walk is 24x a
-memcpy". It is not: with the `slice` restored the same row is 782 us, so the
-*walk* costs **1.34x** the slice and the 17.7x is the array copy itself, which
-predates all of this. The specialization is worth keeping and it is worth
-1.34x — a real number, and a fifth of the one I nearly wrote down.
+**The array fast path stays, and it is worth 8.7x.** Both numbers below are
+under reference counting, which took two goes to get right — see *The benchmark
+that measured page faults* below, where the first version of this paragraph
+said 1.34x.
+
+    Array.from(array), 256 elements x 2000    C++ 41.65 us
+      sliced    53.07 us    1.27x C++    0.45x node
+      walked   462.77 us   12.18x C++    3.80x node
+
+A `slice` is a memcpy of one run of memory whose length is known before it
+starts; the walk is a bounds check, a load and a store per element, and a
+release of the array it replaces. **Sliced, `Array.from(array)` beats node.**
 
 **Sizing the result from a known length changed nothing at all.** Three of the
 six shapes know how many elements are coming before they start: an array and a
@@ -25,12 +31,14 @@ typed array from their length, a `Map` or `Set` from its live entry count, which
 is the same `Length` because a table keeps it in the header field an array uses.
 Sizing the result there rather than growing it by doubling:
 
-    Array.from(set), 256 elements x 2000    2.66 ms growing    2.70 ms sized
+    Array.from(set), 256 elements x 2000    1.86 ms growing    1.84 ms sized
 
 That is no change. The hypothesis — nine reallocations per round, each copying
 everything written so far — was wrong about what it cost: doubling makes the
 total copy about one extra pass, and one extra pass over 2 KB is not the
-bottleneck.
+bottleneck. **Measured again under the correct provider afterwards, and it
+holds**: this is the one conclusion in this record the provider mistake did not
+move.
 
 **The allocation count changed by nearly half.**
 
@@ -76,23 +84,70 @@ fast path. The guard is now the two element widths `slice` actually reads, and
 rather than for "an array" — because "an array" is exactly the word that was
 wrong.
 
-## What the row says, including the part that is not good
+## The benchmark that measured page faults, and the four claims it made me retract
 
-    case         C++         nts C      nts LLVM   node        bun       nts/C++   nts/node
-    array-from   538.30 us   3.65 ms    3.53 ms    492.66 us   1.27 ms   6.56x     7.17x
+Every number in the first version of this record was measured under a build
+**that never frees**. `benches/cases/array-from` allocates an array per
+iteration and I did not give it a `provider` file, so it ran under `NoGC` — and
+`provider_for` in `tooling/bench/src/main.rs` says exactly what that does:
 
-**Slower than node**, and it is worth saying plainly rather than reporting the
-half that improved. Decomposed by building each half alone:
+> A case that allocates per iteration declares `rc` in a file beside its
+> `tsconfig.json`; the default is `NoGC`, which never frees, so a run calibrated
+> to a hundred milliseconds of work would **measure page faults rather than the
+> code**.
 
-    Array.from(array), sliced    43.11 us C++    782.25 us nts    17.72x
-    Array.from(set),   walked   496.54 us C++      2.70 ms nts     5.44x
+The harness documented the trap and I walked into it anyway, because I wrote the
+case before I had a reason to think about reclamation. Measured: **2.5 GB peak
+RSS and 623,845 page faults** for 1.2 million array allocations, in a program
+whose live set is two arrays.
 
-The array half is the worse ratio and the smaller absolute number.
-`nts_array_slice` is already `nts_array_new_uninitialized` plus a `memcpy`, so
-there is nothing in the copy to improve: 391 ns per 2 KB array against C++'s
-21 ns, where a 2 KB `memcpy` is about 50 ns. **The gap is the allocation, not
-the copy**, and that is named work with a number rather than something to fix
-inside a change about iteration.
+Four things I had written down were wrong, and they were wrong in both
+directions:
+
+- **"The gap is the allocation, not the copy."** Retracted entirely. There is no
+  gap: `Array.from(array)` is **1.27x C++ and 0.45x node**. It beats node.
+- **"The fast path is worth 1.34x."** It is worth **8.7x** — 462.77 us walking
+  against 53.07 us slicing. Under `NoGC` both were dominated by page faults,
+  which flattened the difference to nothing.
+- **"The row is 6.56x C++ and 7.17x node."** It is **3.51x and 3.82x**.
+- **"391 ns per 2 KB array against C++'s 21 ns, where the memcpy is 50 ns."**
+  That arithmetic was sound and its premise was a leak.
+
+The correction cost two more wrong answers on the way, and both are the same
+mistake in miniature. I raised the recycler's ceiling — `NTS_CLASSES 65u`, one
+thousand and twenty-four bytes, and the array in question is two thousand — and
+measured no change, twice, **on a program where the array copy was a fifth of
+the work and then on one where nothing was ever freed**. Then I built with
+`NTS_NO_RECYCLE` as a control and got the identical time and the identical page
+fault count, which is the reading that finally said the knob had never moved.
+
+That control is the thing to keep. The JVM session had just told me the same
+rule from the other lane — *verify the knob moved before trusting what it says*
+— after "refuting" an inlining theory with flags that changed no inlining
+decision. Two sessions, two instruments, one afternoon.
+
+## What the row actually says
+
+    case              C++         nts C     nts LLVM   node        bun       nts/C++   nts/node
+    array-from (rc)   511.00 us   1.80 ms   1.80 ms    470.32 us   1.20 ms   3.51x     3.82x
+
+Still slower than node, and decomposed the cost is not where I looked for it:
+
+    Array.from(array), sliced    41.65 us C++    53.07 us nts    1.27x    0.45x node
+    Array.from(set),   walked   476.87 us C++     1.73 ms nts    3.79x    5.16x node
+
+**The table walk is the whole of it**, and `perf` says so directly rather than
+by subtraction: `nts_map_key_at` 27.8% and `nts_map_next` 23.3% — **51% of the
+program in two runtime calls per element** — against `nts_array_slice` at 0.36%
+and `nts_array_allocate` at 0.51%.
+
+Both are `nts_runtime.c` functions called from generated C, so neither inlines
+without LTO, and the two of them touch the same slot twice: one scans forward
+for a live entry and the other loads its key. That is named work with a number
+and a location, which is what the allocation claim above was pretending to be.
+
+The profile took one command and I ran it after four hypotheses rather than
+before one.
 
 ## The ledger went 40 to 41
 
@@ -118,4 +173,6 @@ the constructors and the spread, which still want an array.
   nothing fails a third; and sizing a **string** by its length fails a fourth
   **and 29 differential cases**, which print the surrogate pair split in half.
 - `tooling/memory/cases/array-from` — 5 / 2, argued at 2 / 0 and corrected.
-- `benches/cases/array-from` — 6.56x C++, 7.17x node, decomposed above.
+- `benches/cases/array-from` — 3.51x C++, 3.82x node, decomposed above, **with
+  a `provider` file** saying `rc`, which is what a case that allocates per
+  iteration has to declare.
