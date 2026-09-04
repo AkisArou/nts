@@ -16,6 +16,7 @@
 import { Buffer } from "../../buffer/src/main.ts";
 import type { Encoding } from "../../buffer/src/encodings.ts";
 import { EventEmitter } from "../../events/src/main.ts";
+import { Interface as ReadLineInterface } from "../../readline/src/interface.ts";
 import type { Readable } from "../../stream/src/readable.ts";
 import * as constants from "./constants.ts";
 import {
@@ -702,6 +703,13 @@ export class FileHandle extends EventEmitter {
           resolve(contents);
         }
       });
+    });
+  }
+
+  readLines(options?: FileStreamOptions): ReadLineInterface {
+    return new ReadLineInterface({
+      input: this.createReadStream(options),
+      crlfDelay: Infinity,
     });
   }
 

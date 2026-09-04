@@ -3,6 +3,9 @@ import "../internal/bindings.node.mjs";
 // The file streams are built on `node:stream`, whose siblings need their
 // native halves before this module is evaluated.
 import "../stream/bindings.node.mjs";
+// FileHandle.readLines constructs readline.Interface directly. Its module
+// evaluates the timer-backed keypress parser even for non-terminal inputs.
+import "../readline/bindings.node.mjs";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 //
