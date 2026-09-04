@@ -78,6 +78,7 @@ double nts_fs_o_trunc(void);
 double nts_fs_o_append(void);
 double nts_fs_o_sync(void);
 bool nts_fs_binding_warns_on_mkdtemp(void);
+bool nts_fs_is_32_bit(void);
 double nts_fs_eisdir(void);
 double nts_errno(void);
 

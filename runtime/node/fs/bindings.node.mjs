@@ -59,6 +59,8 @@ function attemptNumber(fn) {
 // the negative instant and therefore matches the direct libuv C seam.
 const dateFromUnixSeconds = (seconds) => new Date(seconds * 1000);
 
+globalThis.nts_fs_is_32_bit = () => process.arch === "ia32";
+
 const statColumns = (s) => [
   s.dev, s.mode, s.nlink, s.uid, s.gid, s.rdev, s.blksize, s.ino, s.size,
   s.blocks, s.atimeMs, s.mtimeMs, s.ctimeMs, s.birthtimeMs,

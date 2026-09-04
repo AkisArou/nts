@@ -52,6 +52,15 @@ import {
 } from "./readdir.ts";
 import { normalizeReadPosition } from "./read-position.ts";
 import {
+  cpInvalidPath,
+  cpStatsAreIdentical,
+  CpSystemError,
+  isSrcSubdir,
+  normalizeCpOptions,
+  type CopyOptions,
+  type NormalizedCpOptions,
+} from "./cp-common.ts";
+import {
   appendMkdtempSuffix,
   bytePathForBinding,
   displayBytePath,
@@ -82,7 +91,12 @@ import {
   type SymlinkType,
 } from "./options.ts";
 import { flagsOf } from "./flags.ts";
-import { resolve as resolvePath } from "../../path/src/posix.ts";
+import {
+  dirname as dirnamePath,
+  isAbsolute as isAbsolutePath,
+  join as joinPath,
+  resolve as resolvePath,
+} from "../../path/src/posix.ts";
 import {
   bufferLengths,
   fillBuffers,
@@ -91,6 +105,7 @@ import {
   vectorPosition,
 } from "./vector-io.ts";
 import { nextTick } from "../../internal/tick.ts";
+import { emitWarning } from "../../internal/process-warning.ts";
 import { asRequest, type Callback } from "./request.ts";
 
 export type { Callback } from "./request.ts";
@@ -238,6 +253,7 @@ declare function nts_fs_mkdtemp_async(
 declare function nts_fs_mkdtemp_bytes_async(
   template: number[], callback: (errno: number, path: number[]) => void,
 ): void;
+declare function nts_fs_is_32_bit(): boolean;
 
 /**
  * Turn the seam's `(errno, value)` into node's `(error, value)`.
@@ -1721,6 +1737,511 @@ export function copyFile(
     validatedTo,
     validateAccessMode(flags),
     settle(request, "copyfile", validatedFrom, validatedTo),
+  );
+}
+
+function cpErrorHasCode(error: unknown, code: string): boolean {
+  return error !== null && typeof error === "object" &&
+    "code" in error && error.code === code;
+}
+
+function cpBigIntStat(
+  path: string,
+  options: NormalizedCpOptions,
+  allowMissing: boolean,
+): Promise<BigIntStats | undefined> {
+  return new Promise<BigIntStats | undefined>((resolve, reject) => {
+    const complete = (error: unknown, value?: AnyStats): void => {
+      if (error !== null && error !== undefined) {
+        if (
+          allowMissing &&
+          (cpErrorHasCode(error, "ENOENT") || cpErrorHasCode(error, "ENOTDIR"))
+        ) {
+          resolve(undefined);
+        } else {
+          reject(error);
+        }
+      } else if (value instanceof BigIntStats) {
+        resolve(value);
+      } else {
+        reject(new Error("fs cp bigint stat completed without metadata"));
+      }
+    };
+    if (options.dereference) stat(path, { bigint: true }, complete);
+    else lstat(path, { bigint: true }, complete);
+  });
+}
+
+function cpNumberStat(
+  path: string,
+  options: NormalizedCpOptions,
+  allowMissing: boolean,
+): Promise<Stats | undefined> {
+  return new Promise<Stats | undefined>((resolve, reject) => {
+    const complete = (error: unknown, value?: AnyStats): void => {
+      if (error !== null && error !== undefined) {
+        if (
+          allowMissing &&
+          (cpErrorHasCode(error, "ENOENT") || cpErrorHasCode(error, "ENOTDIR"))
+        ) {
+          resolve(undefined);
+        } else {
+          reject(error);
+        }
+      } else if (value instanceof Stats) {
+        resolve(value);
+      } else {
+        reject(new Error("fs cp stat completed without metadata"));
+      }
+    };
+    if (options.dereference) stat(path, undefined, complete);
+    else lstat(path, undefined, complete);
+  });
+}
+
+function cpFollowingStat(
+  path: string,
+  allowMissing: boolean,
+): Promise<Stats | undefined> {
+  return new Promise<Stats | undefined>((resolve, reject) => {
+    stat(path, (error: unknown, value?: AnyStats): void => {
+      if (error !== null && error !== undefined) {
+        if (
+          allowMissing &&
+          (cpErrorHasCode(error, "ENOENT") || cpErrorHasCode(error, "ENOTDIR"))
+        ) {
+          resolve(undefined);
+        } else {
+          reject(error);
+        }
+      } else if (value instanceof Stats) {
+        resolve(value);
+      } else {
+        reject(new Error("fs cp stat completed without metadata"));
+      }
+    });
+  });
+}
+
+function cpFollowingBigIntStat(
+  path: string,
+  allowMissing: boolean,
+): Promise<BigIntStats | undefined> {
+  return new Promise<BigIntStats | undefined>((resolve, reject) => {
+    stat(path, { bigint: true }, (error: unknown, value?: AnyStats): void => {
+      if (error !== null && error !== undefined) {
+        if (
+          allowMissing &&
+          (cpErrorHasCode(error, "ENOENT") || cpErrorHasCode(error, "ENOTDIR"))
+        ) {
+          resolve(undefined);
+        } else {
+          reject(error);
+        }
+      } else if (value instanceof BigIntStats) {
+        resolve(value);
+      } else {
+        reject(new Error("fs cp bigint stat completed without metadata"));
+      }
+    });
+  });
+}
+
+function cpCopyFile(
+  source: string,
+  destination: string,
+  mode: number,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    copyFile(source, destination, mode, (error: unknown): void => {
+      if (error !== null && error !== undefined) reject(error);
+      else resolve();
+    });
+  });
+}
+
+function cpChmod(path: string, mode: number): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    chmod(path, mode, (error: unknown): void => {
+      if (error !== null && error !== undefined) reject(error);
+      else resolve();
+    });
+  });
+}
+
+function cpMkdir(path: string, recursive: boolean): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    mkdir(path, { recursive }, (error: unknown): void => {
+      if (error !== null && error !== undefined) reject(error);
+      else resolve();
+    });
+  });
+}
+
+function cpUnlink(path: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    unlink(path, (error: unknown): void => {
+      if (error !== null && error !== undefined) reject(error);
+      else resolve();
+    });
+  });
+}
+
+function cpSymlink(target: string, path: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    symlink(target, path, (error: unknown): void => {
+      if (error !== null && error !== undefined) reject(error);
+      else resolve();
+    });
+  });
+}
+
+function cpReadlink(path: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    readlink(path, (error: unknown, value?: EncodedFileName): void => {
+      if (error !== null && error !== undefined) reject(error);
+      else if (typeof value === "string") resolve(value);
+      else reject(new Error("fs cp readlink completed without a string"));
+    });
+  });
+}
+
+function cpUtimes(
+  path: string,
+  accessTime: Date,
+  modificationTime: Date,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    utimes(path, accessTime, modificationTime, (error: unknown): void => {
+      if (error !== null && error !== undefined) reject(error);
+      else resolve();
+    });
+  });
+}
+
+function cpReadDirectory(path: string): Promise<string[]> {
+  return new Promise<string[]>((resolve, reject) => {
+    readdir(path, (error: unknown, value?: ReaddirResult): void => {
+      if (error !== null && error !== undefined) {
+        reject(error);
+        return;
+      }
+      if (!Array.isArray(value)) {
+        reject(new Error("fs cp readdir completed without entries"));
+        return;
+      }
+      const names = new Array<string>(value.length);
+      for (let index = 0; index < value.length; index++) {
+        const name = value[index];
+        if (typeof name !== "string") {
+          reject(new Error("fs cp readdir returned a non-string entry"));
+          return;
+        }
+        names[index] = name;
+      }
+      resolve(names);
+    });
+  });
+}
+
+async function checkCpParentPaths(
+  sourcePath: string,
+  source: BigIntStats,
+  destinationPath: string,
+): Promise<void> {
+  const sourceParent = resolvePath(dirnamePath(sourcePath));
+  let destinationParent = resolvePath(dirnamePath(destinationPath));
+  while (
+    destinationParent !== sourceParent &&
+    destinationParent !== dirnamePath(destinationParent)
+  ) {
+    const parent = await cpFollowingBigIntStat(destinationParent, true);
+    if (parent === undefined) return;
+    if (cpStatsAreIdentical(source, parent)) {
+      throw cpInvalidPath(
+        `cannot copy ${sourcePath} to a subdirectory of self ${destinationPath}`,
+        destinationPath,
+      );
+    }
+    destinationParent = dirnamePath(destinationParent);
+  }
+}
+
+async function checkCpPaths(
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): Promise<void> {
+  const source = await cpBigIntStat(sourcePath, options, false);
+  if (source === undefined) {
+    throw new Error("fs cp source stat completed without metadata");
+  }
+  const destination = await cpBigIntStat(destinationPath, options, true);
+  if (destination !== undefined) {
+    if (cpStatsAreIdentical(source, destination)) {
+      throw cpInvalidPath("src and dest cannot be the same", destinationPath);
+    }
+    if (source.isDirectory() && !destination.isDirectory()) {
+      throw new CpSystemError(
+        "ERR_FS_CP_DIR_TO_NON_DIR",
+        "EISDIR",
+        `cannot overwrite non-directory ${destinationPath} with directory ${sourcePath}`,
+        destinationPath,
+      );
+    }
+    if (!source.isDirectory() && destination.isDirectory()) {
+      throw new CpSystemError(
+        "ERR_FS_CP_NON_DIR_TO_DIR",
+        "ENOTDIR",
+        `cannot overwrite directory ${destinationPath} with non-directory ${sourcePath}`,
+        destinationPath,
+      );
+    }
+  }
+  if (source.isDirectory() && isSrcSubdir(sourcePath, destinationPath)) {
+    throw cpInvalidPath(
+      `cannot copy ${sourcePath} to a subdirectory of self ${destinationPath}`,
+      destinationPath,
+    );
+  }
+  await checkCpParentPaths(sourcePath, source, destinationPath);
+}
+
+async function ensureCpParent(destinationPath: string): Promise<void> {
+  const parent = dirnamePath(destinationPath);
+  if (await cpFollowingStat(parent, true) === undefined) {
+    await cpMkdir(parent, true);
+  }
+}
+
+async function copyCpFile(
+  source: Stats,
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): Promise<void> {
+  await cpCopyFile(sourcePath, destinationPath, options.mode);
+  if (options.preserveTimestamps) {
+    if ((source.mode & 0o200) === 0) {
+      await cpChmod(destinationPath, source.mode | 0o200);
+    }
+    const updatedSource = await cpFollowingStat(sourcePath, false);
+    if (updatedSource === undefined) {
+      throw new Error("fs cp source stat completed without metadata");
+    }
+    await cpUtimes(
+      destinationPath,
+      updatedSource.atime,
+      updatedSource.mtime,
+    );
+  }
+  await cpChmod(destinationPath, source.mode);
+}
+
+async function onCpFile(
+  source: Stats,
+  destination: Stats | undefined,
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): Promise<void> {
+  if (destination === undefined) {
+    await copyCpFile(source, sourcePath, destinationPath, options);
+  } else if (options.force) {
+    await cpUnlink(destinationPath);
+    await copyCpFile(source, sourcePath, destinationPath, options);
+  } else if (options.errorOnExist) {
+    throw new CpSystemError(
+      "ERR_FS_CP_EEXIST",
+      "EEXIST",
+      `${destinationPath} already exists`,
+      destinationPath,
+    );
+  }
+}
+
+async function onCpDirectory(
+  source: Stats,
+  destination: Stats | undefined,
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): Promise<void> {
+  const made = destination === undefined;
+  if (made) {
+    await cpMkdir(destinationPath, false);
+  } else if (options.errorOnExist && !options.force) {
+    throw new CpSystemError(
+      "ERR_FS_CP_EEXIST",
+      "EEXIST",
+      `${destinationPath} already exists`,
+      destinationPath,
+    );
+  }
+  const names = await cpReadDirectory(sourcePath);
+  for (const name of names) {
+    await copyCpEntry(
+      joinPath(sourcePath, name),
+      joinPath(destinationPath, name),
+      options,
+    );
+  }
+  if (made) await cpChmod(destinationPath, source.mode);
+}
+
+async function onCpLink(
+  destination: Stats | undefined,
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): Promise<void> {
+  let resolvedSource = await cpReadlink(sourcePath);
+  if (!options.verbatimSymlinks && !isAbsolutePath(resolvedSource)) {
+    resolvedSource = resolvePath(dirnamePath(sourcePath), resolvedSource);
+  }
+  if (destination === undefined) {
+    await cpSymlink(resolvedSource, destinationPath);
+    return;
+  }
+
+  let resolvedDestination: string;
+  try {
+    resolvedDestination = await cpReadlink(destinationPath);
+  } catch (error) {
+    if (cpErrorHasCode(error, "EINVAL") || cpErrorHasCode(error, "UNKNOWN")) {
+      await cpSymlink(resolvedSource, destinationPath);
+      return;
+    }
+    throw error;
+  }
+  if (!isAbsolutePath(resolvedDestination)) {
+    resolvedDestination = resolvePath(
+      dirnamePath(destinationPath),
+      resolvedDestination,
+    );
+  }
+  const source = await cpFollowingStat(sourcePath, false);
+  if (
+    source !== undefined && source.isDirectory() &&
+    isSrcSubdir(resolvedSource, resolvedDestination)
+  ) {
+    throw cpInvalidPath(
+      `cannot copy ${resolvedSource} to a subdirectory of self ${resolvedDestination}`,
+      destinationPath,
+    );
+  }
+  const followedDestination = await cpFollowingStat(destinationPath, false);
+  if (
+    followedDestination !== undefined && followedDestination.isDirectory() &&
+    isSrcSubdir(resolvedDestination, resolvedSource)
+  ) {
+    throw new CpSystemError(
+      "ERR_FS_CP_SYMLINK_TO_SUBDIRECTORY",
+      "EINVAL",
+      `cannot overwrite ${resolvedDestination} with ${resolvedSource}`,
+      destinationPath,
+    );
+  }
+  await cpUnlink(destinationPath);
+  await cpSymlink(resolvedSource, destinationPath);
+}
+
+async function copyCpEntry(
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): Promise<void> {
+  if (options.filter !== undefined && !(await options.filter(sourcePath, destinationPath))) {
+    return;
+  }
+  await checkCpPaths(sourcePath, destinationPath, options);
+  await ensureCpParent(destinationPath);
+  const source = await cpNumberStat(sourcePath, options, false);
+  if (source === undefined) {
+    throw new Error("fs cp source stat completed without metadata");
+  }
+  const destination = await cpNumberStat(destinationPath, options, true);
+  if (source.isDirectory()) {
+    if (!options.recursive) {
+      throw new CpSystemError(
+        "ERR_FS_EISDIR",
+        "EISDIR",
+        `${sourcePath} is a directory (not copied)`,
+        sourcePath,
+      );
+    }
+    await onCpDirectory(source, destination, sourcePath, destinationPath, options);
+  } else if (
+    source.isFile() || source.isCharacterDevice() || source.isBlockDevice()
+  ) {
+    await onCpFile(source, destination, sourcePath, destinationPath, options);
+  } else if (source.isSymbolicLink()) {
+    await onCpLink(destination, sourcePath, destinationPath, options);
+  } else if (source.isSocket()) {
+    throw new CpSystemError(
+      "ERR_FS_CP_SOCKET",
+      "EINVAL",
+      `cannot copy a socket file: ${destinationPath}`,
+      destinationPath,
+    );
+  } else if (source.isFIFO()) {
+    throw new CpSystemError(
+      "ERR_FS_CP_FIFO_PIPE",
+      "EINVAL",
+      `cannot copy a FIFO pipe: ${destinationPath}`,
+      destinationPath,
+    );
+  } else {
+    throw new CpSystemError(
+      "ERR_FS_CP_UNKNOWN",
+      "EINVAL",
+      `cannot copy an unknown file type: ${destinationPath}`,
+      destinationPath,
+    );
+  }
+}
+
+export function cp(
+  source: PathLike,
+  destination: PathLike,
+  callback: Callback,
+): void;
+export function cp(
+  source: PathLike,
+  destination: PathLike,
+  options: CopyOptions,
+  callback: Callback,
+): void;
+export function cp(
+  source: unknown,
+  destination: unknown,
+  optionsOrCallback: CopyOptions | Callback,
+  suppliedCallback?: Callback,
+): void {
+  let options: unknown;
+  let callback: Callback | undefined;
+  if (typeof optionsOrCallback === "function") {
+    options = undefined;
+    callback = optionsOrCallback;
+  } else {
+    options = optionsOrCallback;
+    callback = suppliedCallback;
+  }
+  validateFunction(callback, "cb");
+  const settings = normalizeCpOptions(options);
+  const sourcePath = getValidatedPath(source, "src");
+  const destinationPath = getValidatedPath(destination, "dest");
+  const request = asRequest(callback, "cp");
+  if (settings.preserveTimestamps && nts_fs_is_32_bit()) {
+    emitWarning(
+      "Using the preserveTimestamps option in 32-bit node is not recommended",
+      "TimestampPrecisionWarning",
+      "",
+    );
+  }
+  copyCpEntry(sourcePath, destinationPath, settings).then(
+    () => request(null),
+    (error: unknown) => request(error),
   );
 }
 

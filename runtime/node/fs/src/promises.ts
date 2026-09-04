@@ -45,6 +45,7 @@ import type {
 } from "./stats.ts";
 import {
   getOptions,
+  getValidatedPath,
   requireTextEncoding,
   type EncodedFileName,
   type AbortSignalLike,
@@ -54,6 +55,7 @@ import {
   type RmdirOptions,
   type RmOptions,
 } from "./options.ts";
+import { normalizeCpOptions, type CopyOptions } from "./cp-common.ts";
 import { bufferLengths, flattenBuffers } from "./vector-io.ts";
 import type { FileStreamOptions, ReadStream, WriteStream } from "./streams.ts";
 import {
@@ -1112,6 +1114,26 @@ export function appendFile(
 export const chmod = promisifyVoid(callbacks.chmod);
 export const chown = promisifyVoid(callbacks.chown);
 export const copyFile = promisifyVoid(callbacks.copyFile);
+export function cp(
+  source: PathLike,
+  destination: PathLike,
+  options?: CopyOptions,
+): Promise<void>;
+export function cp(
+  source: unknown,
+  destination: unknown,
+  options?: unknown,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const settings = normalizeCpOptions(options);
+    const sourcePath = getValidatedPath(source, "src");
+    const destinationPath = getValidatedPath(destination, "dest");
+    callbacks.cp(sourcePath, destinationPath, settings, (error: unknown): void => {
+      if (error !== null && error !== undefined) reject(error);
+      else resolve();
+    });
+  });
+}
 export const link = promisifyVoid(callbacks.link);
 export function lstat(
   path: BytePathLike,

@@ -42,7 +42,12 @@ import {
 } from "./stats.ts";
 import * as constants from "./constants.ts";
 import { flagsOf } from "./flags.ts";
-import { resolve as resolvePath } from "../../path/src/posix.ts";
+import {
+  dirname as dirnamePath,
+  isAbsolute as isAbsolutePath,
+  join as joinPath,
+  resolve as resolvePath,
+} from "../../path/src/posix.ts";
 import {
   decodeScandirRows,
   normalizeReaddirOptions,
@@ -57,6 +62,16 @@ import {
   vectorPosition,
 } from "./vector-io.ts";
 import { normalizeReadPosition } from "./read-position.ts";
+import {
+  cpInvalidPath,
+  cpStatsAreIdentical,
+  CpSystemError,
+  isSrcSubdir,
+  normalizeCpOptions,
+  synchronousFilterAllows,
+  type CopySyncOptions,
+  type NormalizedCpOptions,
+} from "./cp-common.ts";
 import {
   appendMkdtempSuffix,
   bytePathForBinding,
@@ -98,7 +113,7 @@ export { toUnixTimestamp as _toUnixTimestamp } from "./options.ts";
 // The callback surface, which shares this module's argument handling and its
 // errors: the work is the same system call and only the route back differs.
 export {
-  access, appendFile, chmod, chown, close, copyFile, exists, fdatasync, fstat,
+  access, appendFile, chmod, chown, close, copyFile, cp, exists, fdatasync, fstat,
   fsync, ftruncate, lchown, link, lstat, mkdir, mkdtemp, open, read, readFile, readdir,
   readlink, realpath, rename, rm, rmdir, stat, symlink, truncate, unlink,
   utimes, lutimes, write, writeFile, writev, readv, fchmod, fchown, futimes,
@@ -107,6 +122,7 @@ export {
 
 // `fs.promises` and `node:fs/promises` are the same object.
 export * as promises from "./promises.ts";
+export type { CopyOptions, CopySyncOptions } from "./cp-common.ts";
 
 export { ReadStream, WriteStream, createReadStream, createWriteStream } from "./streams.ts";
 export { FSWatcher, StatWatcher, watch, watchFile, unwatchFile } from "./watchers.ts";
@@ -205,6 +221,7 @@ declare function nts_fs_writev(
   fd: number, bytes: number[], lengths: number[], position: number,
 ): number;
 declare function nts_fs_eisdir(): number;
+declare function nts_fs_is_32_bit(): boolean;
 declare function nts_errno(): number;
 
 /** Raise whatever the last binding call failed with. */
@@ -1176,6 +1193,343 @@ export function lutimesSync(
     "lutime",
     validatedPath,
   );
+}
+
+function cpStatSync(
+  path: string,
+  options: NormalizedCpOptions,
+): Stats | undefined {
+  const statOptions: StatSyncOptions & {
+    bigint: false;
+    throwIfNoEntry: false;
+  } = {
+    bigint: false,
+    throwIfNoEntry: false,
+  };
+  return options.dereference
+    ? statSync(path, statOptions)
+    : lstatSync(path, statOptions);
+}
+
+function cpBigIntStatSync(
+  path: string,
+  options: NormalizedCpOptions,
+): BigIntStats | undefined {
+  const statOptions: StatSyncOptions & {
+    bigint: true;
+    throwIfNoEntry: false;
+  } = {
+    bigint: true,
+    throwIfNoEntry: false,
+  };
+  return options.dereference
+    ? statSync(path, statOptions)
+    : lstatSync(path, statOptions);
+}
+
+function checkCpPathKinds(
+  source: BigIntStats,
+  destination: BigIntStats,
+  sourcePath: string,
+  destinationPath: string,
+): void {
+  if (cpStatsAreIdentical(source, destination)) {
+    throw cpInvalidPath("src and dest cannot be the same", destinationPath);
+  }
+  if (source.isDirectory() && !destination.isDirectory()) {
+    throw new CpSystemError(
+      "ERR_FS_CP_DIR_TO_NON_DIR",
+      "EISDIR",
+      `cannot overwrite non-directory ${destinationPath} with directory ${sourcePath}`,
+      destinationPath,
+    );
+  }
+  if (!source.isDirectory() && destination.isDirectory()) {
+    throw new CpSystemError(
+      "ERR_FS_CP_NON_DIR_TO_DIR",
+      "ENOTDIR",
+      `cannot overwrite directory ${destinationPath} with non-directory ${sourcePath}`,
+      destinationPath,
+    );
+  }
+}
+
+function checkCpParentPathsSync(
+  sourcePath: string,
+  source: BigIntStats,
+  destinationPath: string,
+): void {
+  const sourceParent = resolvePath(dirnamePath(sourcePath));
+  let destinationParent = resolvePath(dirnamePath(destinationPath));
+  while (
+    destinationParent !== sourceParent &&
+    destinationParent !== dirnamePath(destinationParent)
+  ) {
+    const parent = statSync(destinationParent, {
+      bigint: true,
+      throwIfNoEntry: false,
+    });
+    if (parent === undefined) return;
+    if (cpStatsAreIdentical(source, parent)) {
+      throw cpInvalidPath(
+        `cannot copy ${sourcePath} to a subdirectory of self ${destinationPath}`,
+        destinationPath,
+      );
+    }
+    destinationParent = dirnamePath(destinationParent);
+  }
+}
+
+function checkCpPathsSync(
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): void {
+  const source = cpBigIntStatSync(sourcePath, options);
+  if (source === undefined) {
+    // The source stat is never optional in Node. Repeat through the throwing
+    // overload so the original syscall code and path are retained.
+    if (options.dereference) statSync(sourcePath);
+    else lstatSync(sourcePath);
+    throw new Error("fs cp source stat completed without metadata");
+  }
+  const destination = cpBigIntStatSync(destinationPath, options);
+  if (destination !== undefined) {
+    checkCpPathKinds(source, destination, sourcePath, destinationPath);
+  }
+  if (source.isDirectory() && isSrcSubdir(sourcePath, destinationPath)) {
+    throw cpInvalidPath(
+      `cannot copy ${sourcePath} to a subdirectory of self ${destinationPath}`,
+      destinationPath,
+    );
+  }
+  checkCpParentPathsSync(sourcePath, source, destinationPath);
+  if (source.isDirectory() && !options.recursive) {
+    throw new CpSystemError(
+      "ERR_FS_EISDIR",
+      "EISDIR",
+      `${sourcePath} is a directory (not copied)`,
+      sourcePath,
+    );
+  }
+  if (source.isSocket()) {
+    throw new CpSystemError(
+      "ERR_FS_CP_SOCKET",
+      "EINVAL",
+      `cannot copy a socket file: ${destinationPath}`,
+      destinationPath,
+    );
+  }
+  if (source.isFIFO()) {
+    throw new CpSystemError(
+      "ERR_FS_CP_FIFO_PIPE",
+      "EINVAL",
+      `cannot copy a FIFO pipe: ${destinationPath}`,
+      destinationPath,
+    );
+  }
+}
+
+function ensureCpParentSync(destinationPath: string): void {
+  const parent = dirnamePath(destinationPath);
+  if (statSync(parent, { throwIfNoEntry: false }) === undefined) {
+    mkdirSync(parent, { recursive: true });
+  }
+}
+
+function setCpDestinationMode(destinationPath: string, sourceMode: number): void {
+  chmodSync(destinationPath, sourceMode);
+}
+
+function setCpDestinationTimestamps(
+  sourcePath: string,
+  destinationPath: string,
+): void {
+  // Copying may update atime, so Node deliberately stats the source again.
+  const updatedSource = statSync(sourcePath);
+  utimesSync(destinationPath, updatedSource.atime, updatedSource.mtime);
+}
+
+function copyCpFileSync(
+  source: Stats,
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): void {
+  copyFileSync(sourcePath, destinationPath, options.mode);
+  if (options.preserveTimestamps) {
+    if ((source.mode & 0o200) === 0) {
+      setCpDestinationMode(destinationPath, source.mode | 0o200);
+    }
+    setCpDestinationTimestamps(sourcePath, destinationPath);
+  }
+  setCpDestinationMode(destinationPath, source.mode);
+}
+
+function onCpFileSync(
+  source: Stats,
+  destination: Stats | undefined,
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): void {
+  if (destination === undefined) {
+    copyCpFileSync(source, sourcePath, destinationPath, options);
+    return;
+  }
+  if (options.force) {
+    unlinkSync(destinationPath);
+    copyCpFileSync(source, sourcePath, destinationPath, options);
+    return;
+  }
+  if (options.errorOnExist) {
+    throw new CpSystemError(
+      "ERR_FS_CP_EEXIST",
+      "EEXIST",
+      `${destinationPath} already exists`,
+      destinationPath,
+    );
+  }
+}
+
+function onCpDirectorySync(
+  source: Stats,
+  destination: Stats | undefined,
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): void {
+  const made = destination === undefined;
+  if (made) {
+    mkdirSync(destinationPath);
+  } else if (options.errorOnExist && !options.force) {
+    throw new CpSystemError(
+      "ERR_FS_CP_EEXIST",
+      "EEXIST",
+      `${destinationPath} already exists`,
+      destinationPath,
+    );
+  }
+  for (const name of readdirSync(sourcePath)) {
+    copyCpEntrySync(
+      joinPath(sourcePath, name),
+      joinPath(destinationPath, name),
+      options,
+    );
+  }
+  if (made) setCpDestinationMode(destinationPath, source.mode);
+}
+
+function onCpLinkSync(
+  destination: Stats | undefined,
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): void {
+  let resolvedSource = readlinkSync(sourcePath);
+  if (!options.verbatimSymlinks && !isAbsolutePath(resolvedSource)) {
+    resolvedSource = resolvePath(dirnamePath(sourcePath), resolvedSource);
+  }
+  if (destination === undefined) {
+    symlinkSync(resolvedSource, destinationPath);
+    return;
+  }
+
+  let resolvedDestination: string;
+  try {
+    resolvedDestination = readlinkSync(destinationPath);
+  } catch (error) {
+    if (hasErrorCode(error, "EINVAL") || hasErrorCode(error, "UNKNOWN")) {
+      symlinkSync(resolvedSource, destinationPath);
+      return;
+    }
+    throw error;
+  }
+  if (!isAbsolutePath(resolvedDestination)) {
+    resolvedDestination = resolvePath(
+      dirnamePath(destinationPath),
+      resolvedDestination,
+    );
+  }
+  if (
+    statSync(sourcePath).isDirectory() &&
+    isSrcSubdir(resolvedSource, resolvedDestination)
+  ) {
+    throw cpInvalidPath(
+      `cannot copy ${resolvedSource} to a subdirectory of self ${resolvedDestination}`,
+      destinationPath,
+    );
+  }
+  if (
+    statSync(destinationPath).isDirectory() &&
+    isSrcSubdir(resolvedDestination, resolvedSource)
+  ) {
+    throw new CpSystemError(
+      "ERR_FS_CP_SYMLINK_TO_SUBDIRECTORY",
+      "EINVAL",
+      `cannot overwrite ${resolvedDestination} with ${resolvedSource}`,
+      destinationPath,
+    );
+  }
+  unlinkSync(destinationPath);
+  symlinkSync(resolvedSource, destinationPath);
+}
+
+function copyCpEntrySync(
+  sourcePath: string,
+  destinationPath: string,
+  options: NormalizedCpOptions,
+): void {
+  if (!synchronousFilterAllows(options.filter, sourcePath, destinationPath)) {
+    return;
+  }
+  checkCpPathsSync(sourcePath, destinationPath, options);
+  ensureCpParentSync(destinationPath);
+  const source = cpStatSync(sourcePath, options);
+  if (source === undefined) {
+    throw new Error("fs cp source stat completed without metadata");
+  }
+  const destination = cpStatSync(destinationPath, options);
+  if (source.isDirectory()) {
+    onCpDirectorySync(source, destination, sourcePath, destinationPath, options);
+  } else if (
+    source.isFile() || source.isCharacterDevice() || source.isBlockDevice()
+  ) {
+    onCpFileSync(source, destination, sourcePath, destinationPath, options);
+  } else if (source.isSymbolicLink()) {
+    onCpLinkSync(destination, sourcePath, destinationPath, options);
+  } else {
+    throw new CpSystemError(
+      "ERR_FS_CP_UNKNOWN",
+      "EINVAL",
+      `cannot copy an unknown file type: ${destinationPath}`,
+      destinationPath,
+    );
+  }
+}
+
+/** Upstream `fs.cpSync`, using the same primitives as the rest of this module. */
+export function cpSync(
+  source: PathLike,
+  destination: PathLike,
+  options?: CopySyncOptions,
+): void;
+export function cpSync(
+  source: unknown,
+  destination: unknown,
+  options?: unknown,
+): void {
+  const settings = normalizeCpOptions(options);
+  const sourcePath = getValidatedPath(source, "src");
+  const destinationPath = getValidatedPath(destination, "dest");
+  if (settings.preserveTimestamps && nts_fs_is_32_bit()) {
+    emitWarning(
+      "Using the preserveTimestamps option in 32-bit node is not recommended",
+      "TimestampPrecisionWarning",
+      "",
+    );
+  }
+  copyCpEntrySync(sourcePath, destinationPath, settings);
 }
 
 /** Upstream `lib/fs.js`. `rm -r`, assembled here from the one-syscall bindings. */

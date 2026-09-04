@@ -369,6 +369,7 @@ try {
 // suffix.
 const common = makeCommon(
   relative(hostProcess.cwd(), tmpdir.resolve(`node-test.${hostProcess.pid}.sock`)),
+  join(ROOT, "third_party/node/test/common"),
 );
 const realRequire = createRequire(import.meta.url);
 const nodeTestRoot = join(ROOT, "third_party/node/test");

@@ -134,7 +134,7 @@ export function checkPending() {
   return missed;
 }
 
-export function makeCommon(pipePath) {
+export function makeCommon(pipePath, nodeCommonDirectory = "") {
   const warningHandlers = new Map();
 
   function expectedWarning(name, expected, code) {
@@ -207,6 +207,13 @@ export function makeCommon(pipePath) {
     isWindows: false,
     isLinux: hostProcess.platform === "linux",
     isMainThread: true,
+    isInsideDirWithUnusualChars:
+      nodeCommonDirectory.includes("%") ||
+      (hostProcess.platform !== "win32" && nodeCommonDirectory.includes("\\")) ||
+      nodeCommonDirectory.includes("$") ||
+      nodeCommonDirectory.includes("\n") ||
+      nodeCommonDirectory.includes("\r") ||
+      nodeCommonDirectory.includes("\t"),
     // The truth about the process these tests run in, not a conservative
     // default. Reporting `false` makes every `{ skip: !hasIntl }` case skip,
     // and a file whose every case skipped still exits 0 -- which the runner

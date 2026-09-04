@@ -78,6 +78,7 @@ double nts_fs_o_trunc(void) { return (double)O_TRUNC; }
 double nts_fs_o_append(void) { return (double)O_APPEND; }
 double nts_fs_o_sync(void) { return (double)O_SYNC; }
 bool nts_fs_binding_warns_on_mkdtemp(void) { return false; }
+bool nts_fs_is_32_bit(void) { return sizeof(void *) == 4; }
 double nts_fs_eisdir(void) { return (double)UV_EISDIR; }
 
 /* ------------------------------------------------------------------ stat */
