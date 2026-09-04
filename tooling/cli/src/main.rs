@@ -16,15 +16,49 @@ use nts_semantic_schema::SCHEMA_VERSION;
 
 /// The tsconfig a subcommand was pointed at: the first positional argument, or
 /// the one in the working directory.
-fn project(rest: &[String]) -> Utf8PathBuf {
-    rest.iter()
-        .find(|a| !a.starts_with("--"))
-        .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from)
+/// Flags that take a value, so that the value is not mistaken for the project.
+///
+/// `nts emit-jvm --out /tmp/x proj/tsconfig.json` used to compile `/tmp/x`:
+/// the scan below took the first argument not starting with `--`, and that is
+/// the *out directory*. tsgo answered with an empty snapshot, the backend
+/// emitted a class containing nothing but its constructor, and the command
+/// printed "wrote 1 class(es)" and exited zero. An hour went into looking for
+/// the emitter bug that had lost every method.
+const TAKES_A_VALUE: [&str; 1] = ["--out"];
+
+/// The tsconfig a command was pointed at.
+///
+/// Returns an error rather than a path so that naming something that is not a
+/// project fails here instead of downstream as an empty program -- which is
+/// indistinguishable from a program that legitimately has nothing in it.
+fn project(rest: &[String]) -> Result<Utf8PathBuf> {
+    let mut skip_next = false;
+    let mut found = None;
+    for arg in rest {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if TAKES_A_VALUE.contains(&arg.as_str()) {
+            skip_next = true;
+            continue;
+        }
+        if !arg.starts_with("--") {
+            found = Some(Utf8PathBuf::from(arg));
+            break;
+        }
+    }
+    let path = found.unwrap_or_else(|| Utf8PathBuf::from("tsconfig.json"));
+    let path = if path.is_dir() { path.join("tsconfig.json") } else { path };
+    if !path.is_file() {
+        bail!("`{path}` is not a tsconfig: name the project's tsconfig.json");
+    }
+    Ok(path)
 }
 
 /// `nts check`: run a compiled program and node side by side.
 fn check(rest: &[String]) -> Result<()> {
-    let tsconfig = project(rest);
+    let tsconfig = project(rest)?;
     let report = nts_differential::check(&tsconfig)?;
     if report.functions == 0 {
         println!(
@@ -102,7 +136,7 @@ fn main() -> Result<()> {
             let decompose = rest.iter().any(|a| a == "--decompose");
             let calls = rest.iter().any(|a| a == "--calls");
             let constants = rest.iter().any(|a| a == "--constants");
-            let tsconfig = project(&rest);
+            let tsconfig = project(&rest)?;
             frontend(&tsconfig, decompose, calls, constants)
         }
         Some("check") => check(&args.collect::<Vec<String>>()),
@@ -127,7 +161,7 @@ fn main() -> Result<()> {
         // week before it existed.
         Some("emit-llvm") => {
             let rest: Vec<String> = args.collect();
-            emit_llvm(&project(&rest))
+            emit_llvm(&project(&rest)?)
         }
         // The third backend. Not textual, so `--text` renders the listing that
         // stands in for reading `program.c` -- disassembled from the bytes
@@ -141,7 +175,7 @@ fn main() -> Result<()> {
                 .and_then(|at| rest.get(at + 1))
                 .map(Utf8PathBuf::from);
             emit_jvm(
-                &project(&rest),
+                &project(&rest)?,
                 out.as_deref(),
                 rest.iter().any(|arg| arg == "--text"),
             )
@@ -152,16 +186,16 @@ fn main() -> Result<()> {
         // working on representation.
         Some("types") => {
             let rest: Vec<String> = args.collect();
-            print_types(&project(&rest))
+            print_types(&project(&rest)?)
         }
         Some("hir") => {
             let rest: Vec<String> = args.collect();
-            let tsconfig = project(&rest);
+            let tsconfig = project(&rest)?;
             dump_hir(&tsconfig)
         }
         Some("facts") => {
             let rest: Vec<String> = args.collect();
-            let tsconfig = project(&rest);
+            let tsconfig = project(&rest)?;
             dump_facts(&tsconfig)
         }
         // The module graph, and the order it implies. The instrument comes
@@ -170,7 +204,7 @@ fn main() -> Result<()> {
         // has to be visible.
         Some("modules") => {
             let rest: Vec<String> = args.collect();
-            dump_modules(&project(&rest))
+            dump_modules(&project(&rest)?)
         }
         // What a program does with its `any` and `unknown` values.
         //
@@ -181,7 +215,7 @@ fn main() -> Result<()> {
         // purpose: the numbers decide whether the design is right.
         Some("erasure") => {
             let rest: Vec<String> = args.collect();
-            dump_erasure(&project(&rest), rest.iter().any(|a| a == "--sites"))
+            dump_erasure(&project(&rest)?, rest.iter().any(|a| a == "--sites"))
         }
         Some("version") | None => {
             println!("nts {}", env!("CARGO_PKG_VERSION"));

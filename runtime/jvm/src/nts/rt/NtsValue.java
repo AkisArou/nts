@@ -67,12 +67,30 @@ public final class NtsValue {
     public static final NtsValue UNDEFINED_VALUE = new NtsValue(UNDEFINED, 0.0, null);
     public static final NtsValue NULL_VALUE = new NtsValue(NULL, 0.0, null);
 
+    /**
+     * The two booleans, interned for the same reason and on a measurement.
+     *
+     * <p>A boolean has exactly two values, so two instances cover every erasure
+     * of one -- there is no payload to distinguish a third. Measured on a
+     * thousand-element {@code unknown[]} half filled with booleans: 36,016
+     * bytes per operation before, which is the reference array plus a
+     * thirty-two byte box per element, and 20,016 after. The five hundred boxes
+     * that went away held one bit each.
+     *
+     * <p>Numbers are deliberately not interned. There is no small set to cover,
+     * a cache would be a lookup on the hot path to save an allocation C2
+     * already removes wherever the value does not escape, and where it does
+     * escape the array is holding a distinct number per slot by construction.
+     */
+    private static final NtsValue TRUE_VALUE = new NtsValue(BOOLEAN, 1.0, null);
+    private static final NtsValue FALSE_VALUE = new NtsValue(BOOLEAN, 0.0, null);
+
     public static NtsValue ofNumber(double value) {
         return new NtsValue(NUMBER, value, null);
     }
 
     public static NtsValue ofBoolean(boolean value) {
-        return new NtsValue(BOOLEAN, value ? 1.0 : 0.0, null);
+        return value ? TRUE_VALUE : FALSE_VALUE;
     }
 
     public static NtsValue ofString(String value) {

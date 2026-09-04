@@ -41,6 +41,7 @@
 //! input is a backend nobody can trust the output of.
 
 pub mod body;
+pub mod hierarchy;
 pub mod ops;
 pub mod types;
 
@@ -183,20 +184,8 @@ pub fn emit(program: &Program) -> Emitted {
     }
 }
 
-/// One class per layout: its fields, and the constructor `new` needs.
-///
-/// # No `super_class`, and how that is kept honest
-///
-/// `Layout` records fields and methods and not the class it extends, so this
-/// emits every generated class as a direct subclass of `Object`. That is
-/// correct for a program with no inheritance and *unverifiable* for one with
-/// it: passing a `Square` where `(LShape;)D` is declared needs a real
-/// `super_class`, and base-first field order is not one.
-///
-/// So a program where any layout's fields are a prefix of another's is refused
-/// whole. That test over-refuses -- two unrelated types can share a prefix --
-/// which is the right direction for a check standing in for a fact the IR does
-/// not carry yet. `Layout.base` is the fix and it belongs upstream.
+/// One class per layout: what it extends, the fields it declares, the
+/// constructor `new` needs, and one forwarder per dispatch slot.
 ///
 /// # `readonly` is not `ACC_FINAL` here
 ///
@@ -207,24 +196,26 @@ pub fn emit(program: &Program) -> Emitted {
 /// step and only worth taking if `benches/cases/objects` says the JIT cares.
 fn object_class(program: &Program, layout: &nts_core::hir::Layout) -> Result<Option<Class>, Diagnostic> {
     let origin = program_origin(program);
-    if program.layouts.iter().any(|other| is_base_of(layout, other)) {
-        return Err(Diagnostic::error(
-            "NTS4005",
-            format!(
-                "`{}` looks like a base class, and this backend has no `super_class` \
-                 to give it -- `Layout` records fields and methods but not what a \
-                 class extends",
-                layout.name
-            ),
-            origin.location,
-        ));
-    }
     let mut pool = Pool::new();
     let name = types::class_name(layout);
-    let mut builder = ClassBuilder::new(name, "java/lang/Object");
-    builder.access = access::PUBLIC | access::SUPER | access::FINAL;
+    let super_name = program
+        .base_layout(layout)
+        .and_then(|at| program.layouts.get(at))
+        .map_or_else(|| "java/lang/Object".to_owned(), types::class_name);
+    let mut builder = ClassBuilder::new(name, super_name);
+    // `final` only where nothing extends it. A base class marked final is
+    // rejected at load time, not at emit time, so this is the one place the
+    // hierarchy has to be consulted for something other than a name.
+    builder.access = if hierarchy::extended(program, layout) {
+        access::PUBLIC | access::SUPER
+    } else {
+        access::PUBLIC | access::SUPER | access::FINAL
+    };
     builder.source_file = Some("nts".to_owned());
-    for field in &layout.fields {
+    // Only what this class adds. A base's fields are a prefix of the derived's,
+    // so redeclaring them here would give the object two of each and leave
+    // `getfield` reading whichever the descriptor named.
+    for field in hierarchy::declared(program, layout) {
         let Some(descriptor) = types::descriptor(program, &field.ty) else {
             return Err(Diagnostic::error(
                 "NTS4006",
@@ -239,6 +230,7 @@ fn object_class(program: &Program, layout: &nts_core::hir::Layout) -> Result<Opt
         };
         builder.field(access::PUBLIC, body::method_name(&field.name), descriptor);
     }
+    dispatch_forwarders(program, layout, &mut builder, &mut pool)?;
     builder.default_constructor(&origin, &mut pool).map_err(|error| {
         Diagnostic::error(
             "NTS4003",
@@ -258,17 +250,6 @@ fn object_class(program: &Program, layout: &nts_core::hir::Layout) -> Result<Opt
         })
 }
 
-/// Whether `maybe_base`'s fields are a proper prefix of `derived`'s, which is
-/// what base-first layout makes inheritance look like from here.
-fn is_base_of(maybe_base: &nts_core::hir::Layout, derived: &nts_core::hir::Layout) -> bool {
-    !maybe_base.fields.is_empty()
-        && derived.fields.len() > maybe_base.fields.len()
-        && derived
-            .fields
-            .iter()
-            .zip(&maybe_base.fields)
-            .all(|(theirs, mine)| theirs.name == mine.name && theirs.ty == mine.ty)
-}
 
 fn render(
     program: &Program,
@@ -280,6 +261,149 @@ fn render(
         .ok_or_else(|| body::refuse(func, "a signature with no representation"))?;
     let rendered = emitter.emit(pool)?;
     Ok((body::method_name(&func.name), signature, rendered))
+}
+
+/// One instance method per dispatch slot, forwarding to the static body.
+///
+/// The bodies stay static on `nts/gen/Program`, and each class gets a four-byte
+/// `aload_0; invokestatic; return` per slot it implements. That is deliberate
+/// and it is the cheaper half of a fork:
+///
+/// - A direct call stays `invokestatic`, which is what most calls are. Moving
+///   the bodies onto the classes would make every call to a method virtual,
+///   and C2 would have to devirtualise back to where it started.
+/// - Nothing about how a body is emitted changes -- the signature, the slots
+///   and the prologue are the same whether or not a method is dispatched.
+/// - A forwarder is far below `FreqInlineSize`, so C2 inlines it away and the
+///   frame does not exist at run time.
+///
+/// The overriding is done by the forwarders' *names and descriptors*, which is
+/// why `slot` is unused on this backend: the JVM has its own vtable, and naming
+/// the method lets the JIT devirtualise through class-hierarchy analysis. It
+/// also means an override and the thing it overrides must agree on the
+/// descriptor exactly -- if they do not, the JVM sees two unrelated methods,
+/// both present, and dispatch quietly picks the wrong one with no verifier
+/// error. `signatures::specialize` pinning anything a dispatch table names and
+/// `unerase::narrow_returns` excluding `dispatched` are what make them agree
+/// today, so the agreement is **checked here** rather than assumed.
+fn dispatch_forwarders(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+) -> Result<(), Diagnostic> {
+    let origin = program_origin(program);
+    let base = program.base_layout(layout).and_then(|at| program.layouts.get(at));
+    for (slot, entry) in layout.methods.iter().enumerate() {
+        let Some(func_name) = entry else { continue };
+        // A class declares a forwarder only where its implementation differs
+        // from the one it would inherit; otherwise the base's already dispatches
+        // correctly and a second copy is bytes with no meaning.
+        if base.and_then(|b| b.methods.get(slot)) == Some(entry) {
+            continue;
+        }
+        let Some(target) = program.funcs.iter().find(|f| &f.name == func_name) else {
+            // A slot naming a function the program does not carry is a fact
+            // about the IR, not about this backend, so it is reported rather
+            // than skipped -- a silently absent forwarder is an
+            // `AbstractMethodError` at run time.
+            return Err(Diagnostic::error(
+                "NTS4008",
+                format!("`{}` dispatches slot {slot} to `{func_name}`, which this program does not define", layout.name),
+                origin.location,
+            ));
+        };
+        let Some(full) = body::signature(program, target) else {
+            return Err(Diagnostic::error(
+                "NTS4008",
+                format!("`{func_name}` has no representable signature to dispatch to"),
+                origin.location,
+            ));
+        };
+        let member = hierarchy::member_name(func_name);
+        let descriptor = instance_descriptor(program, target).ok_or_else(|| {
+            Diagnostic::error(
+                "NTS4008",
+                format!("`{func_name}` has no receiver to dispatch on"),
+                origin.location,
+            )
+        })?;
+        // The agreement that dispatch depends on, asserted where it is cheap.
+        if let Some(inherited) = base
+            .and_then(|b| b.methods.get(slot))
+            .and_then(|m| m.as_ref())
+            .and_then(|name| program.funcs.iter().find(|f| &f.name == name))
+            .and_then(|f| instance_descriptor(program, f))
+            .filter(|inherited| inherited != &descriptor)
+        {
+            {
+                return Err(Diagnostic::error(
+                    "NTS4009",
+                    format!(
+                        "`{}.{member}` is `{descriptor}` where the method it overrides is \
+                         `{inherited}` -- the JVM would treat these as two unrelated methods \
+                         and dispatch would silently reach the wrong one",
+                        layout.name
+                    ),
+                    origin.location,
+                ));
+            }
+        }
+
+        let mut locals = vec![VType::Object(types::class_name(layout))];
+        for param in target.params.iter().skip(1) {
+            let Some(vtype) = types::vtype(program, &param.ty) else {
+                return Err(Diagnostic::error(
+                    "NTS4008",
+                    format!("`{func_name}` takes a parameter with no representation"),
+                    origin.location,
+                ));
+            };
+            locals.push(vtype);
+        }
+        let slots: u16 = locals.iter().map(VType::slots).sum();
+        let mut code = Code::new(locals, slots);
+        code.load(&origin, Kind::Ref, 0);
+        let mut at: u16 = 1;
+        for param in target.params.iter().skip(1) {
+            let Some(kind) = types::kind(&param.ty) else {
+                return Err(Diagnostic::error(
+                    "NTS4008",
+                    format!("`{func_name}` takes a parameter with no representation"),
+                    origin.location,
+                ));
+            };
+            code.load(&origin, kind, at);
+            at += kind.words();
+        }
+        code.invoke_static(&origin, pool, PROGRAM, &body::method_name(func_name), &full);
+        code.ret(&origin, types::kind(&target.return_type));
+        let rendered = code.finish(pool).map_err(|error| {
+            Diagnostic::error(
+                "NTS4008",
+                format!("the forwarder for `{func_name}` could not be written: {error}"),
+                origin.location,
+            )
+        })?;
+        builder.method(access::PUBLIC, member, descriptor, Some(rendered));
+    }
+    Ok(())
+}
+
+/// A dispatched method's descriptor as an *instance* method: its own signature
+/// with the receiver dropped, because on the JVM the receiver is not a
+/// parameter.
+pub(crate) fn instance_descriptor(program: &Program, func: &nts_core::hir::Func) -> Option<String> {
+    let mut params = Vec::with_capacity(func.params.len());
+    for param in func.params.iter().skip(1) {
+        params.push(types::descriptor(program, &param.ty)?);
+    }
+    func.params.first()?;
+    let borrowed: Vec<&str> = params.iter().map(String::as_str).collect();
+    Some(nts_jvm_emitter::descriptor::method(
+        &borrowed,
+        &types::descriptor(program, &func.return_type)?,
+    ))
 }
 
 /// `<clinit>`, where a global that starts as something other than zero is set.

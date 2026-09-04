@@ -611,6 +611,11 @@ impl Emitter<'_> {
         let Some(entry) = layout.fields.get(field as usize) else {
             return Err(refuse(self.func, "a field this object's layout does not have"));
         };
+        // Named on the class that *declares* it. A derived class does not
+        // redeclare its base's fields, so `getfield nts/gen/Square.x` where `x`
+        // came from `Shape` is a `NoSuchFieldError` at link time rather than
+        // anything the verifier catches.
+        let owner = crate::hierarchy::declares_field(self.program, layout, field as usize);
         let Some(descriptor) = types::descriptor(self.program, &entry.ty) else {
             return Err(refuse(
                 self.func,
@@ -618,7 +623,7 @@ impl Emitter<'_> {
             ));
         };
         Ok((
-            types::class_name(layout),
+            types::class_name(owner),
             crate::body::method_name(&entry.name),
             descriptor,
         ))
@@ -1096,8 +1101,38 @@ impl Emitter<'_> {
                     &format!("a call to `{name}`, which needs a runtime this slice has not built"),
                 ));
             }
+            // `invokevirtual` on the receiver's *static* class, by name. The
+            // slot is unused: the JVM has its own vtable, and naming the method
+            // is what lets C2 devirtualise through class-hierarchy analysis --
+            // which is why this lane is expected to win the `dispatch` row
+            // rather than merely match it.
             Callee::Virtual { declared, .. } => {
-                return Err(refuse(self.func, &format!("a virtual call to `{declared}`")));
+                let Some(&receiver) = args.first() else {
+                    return Err(refuse(self.func, "a virtual call with no receiver"));
+                };
+                let owner = self.object_class(&self.ty(receiver).clone())?;
+                let Some(target) = self.program.funcs.iter().find(|f| &f.name == declared) else {
+                    return Err(refuse(
+                        self.func,
+                        &format!("a virtual call to `{declared}`, which is not in this program"),
+                    ));
+                };
+                let Some(descriptor) = crate::instance_descriptor(self.program, target) else {
+                    return Err(refuse(
+                        self.func,
+                        &format!("a virtual call to `{declared}`, whose signature has no representation"),
+                    ));
+                };
+                for &arg in args {
+                    self.load(code, arg)?;
+                }
+                let member = crate::hierarchy::member_name(declared);
+                code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
+                return Ok(if matches!(result, HirType::Void) {
+                    Placed::Stored
+                } else {
+                    Placed::OnStack
+                });
             }
             Callee::Closure { .. } => {
                 return Err(refuse(self.func, "a call through a closure"));
