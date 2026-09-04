@@ -232,7 +232,11 @@ jobs=${NTS_GATE_JOBS:-$( [ "$cores" -lt "$crowded" ] && echo "$cores" || echo "$
 # the environment, which the callers export inside a subshell so it reaches the
 # workers and does not outlive the step -- `examples` and `rc` run after these
 # two and would otherwise inherit a backend nobody asked them for.
-llvm_examples() {
+# `NTS_BIN` overrides which binary is driven, defaulting to the one `build`
+# produces. Three sessions share this checkout and not all of them build into
+# `target/`: a hard-coded path means a step can measure a *different* session's
+# binary and report a floor for code that is not the code in front of you.
+backend_examples() {
   floor=$1
   said=$2
   results=$(mktemp)
@@ -242,7 +246,7 @@ llvm_examples() {
     case "$n" in
       invalid|unsupported) exit 0 ;;
     esac
-    out=$(./target/release/nts check "$d" 2>&1)
+    out=$("${NTS_BIN:-./target/release/nts}" check "$d" 2>&1)
     if [ $? -ne 0 ]; then
       echo "no $n"
     elif [ "${out#*nothing to check}" != "$out" ]; then
@@ -271,7 +275,7 @@ llvm_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  llvm_examples 86 "through the LLVM backend, counting" ); }
+  backend_examples 86 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -282,7 +286,30 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  llvm_examples 86 "through the LLVM backend" ); }
+  backend_examples 86 "through the LLVM backend" ); }
+# The third backend, against the same oracle and with the same ratchet.
+#
+# No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
+# collector's heap, so this lane emits no retains and there would be nothing for
+# a counting run to count. A function that reaches one is refused by name rather
+# than emitted with them dropped -- a build whose lifetimes came from somewhere
+# unexplained is worse than one that stops.
+#
+# This runs `java`, so it needs a JDK where the other two need clang. A missing
+# one is not a passing step: it is reported and the step fails, for the reason
+# `codegen/llvm`'s signature test gives about clang.
+jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
+  if ! command -v java > /dev/null 2>&1 && [ ! -x "${JAVA_HOME-}/bin/java" ]; then
+    echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
+    return 1
+  fi
+  # Nineteen of eighty-seven, and every example this backend renders is also
+  # one it agrees with node on -- there is no gap between the two counts today.
+  # The floor is planted on *agreement* rather than on rendering, because
+  # rendering is a property of the emitter and agreeing is a property of the
+  # language, and a floor on the wrong one rewards emitting more while meaning
+  # less.
+  backend_examples 19 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
@@ -348,6 +375,7 @@ step "profile"  profile
 step "sweep"    sweep
 step "llvm"    llvm
 step "llvm-rc" llvm_rc
+step "jvm"     jvm
 # Every benchmark case, compiled by both backends and not run. `corpus` proves
 # arbitrary input compiles and `examples` proves the examples agree with node;
 # nothing covered `benches/cases`, so a code generation bug that only showed up

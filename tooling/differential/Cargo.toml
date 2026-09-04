@@ -11,6 +11,7 @@ anyhow.workspace = true
 camino.workspace = true
 nts-codegen-c.workspace = true
 nts-codegen-common.workspace = true
+nts-codegen-jvm.workspace = true
 nts-codegen-llvm.workspace = true
 nts-core.workspace = true
 nts-frontend-ts.workspace = true

@@ -435,6 +435,37 @@ impl Code {
     /// inverted; the hostile pool in the differential carries a `NaN` and would
     /// have found it later and further from the cause.
     pub fn branch_float(&mut self, origin: &Origin, compare: Compare, kind: Kind, target: Label) {
+        self.branch_float_when(origin, compare, false, kind, target);
+    }
+
+    /// The same, taking the branch when the comparison is **false**.
+    ///
+    /// # Why this is not `branch_float(compare.inverted(), ..)`
+    ///
+    /// Because `!(a > b)` is not `a <= b`. Against `NaN` both are false, so the
+    /// negation of the first is *true* and the second is not -- the relational
+    /// operators are not a total order and inverting one does not give its
+    /// complement.
+    ///
+    /// Concretely: `a > b` is `dcmpl` then `ifgt`, and `NaN` makes `dcmpl`
+    /// answer -1, which `ifgt` rejects. Its negation must therefore be `dcmpl`
+    /// then `ifle`, which -1 *accepts*. Inverting the comparison instead would
+    /// pick `dcmpg` -- a different `NaN` answer -- and quietly reject it twice.
+    ///
+    /// So the comparison chooses the `dcmp` form and the negation chooses only
+    /// the branch. This is the same bug as pairing `dcmpl` with `iflt`, made
+    /// available again by the inverter that fixed it: `examples/conditionals`
+    /// answered `sign(NaN)` as 1 where node answers 0, and the differential
+    /// found it on its first run.
+    pub fn branch_float_when(
+        &mut self,
+        origin: &Origin,
+        compare: Compare,
+        negate: bool,
+        kind: Kind,
+        target: Label,
+    ) {
+        // Chosen from the comparison as written, *not* from the test below.
         let opcode = match (kind, compare) {
             (Kind::Float, Compare::Lt | Compare::Le) => insn::FCMPG,
             (Kind::Float, _) => insn::FCMPL,
@@ -442,7 +473,8 @@ impl Code {
             (_, _) => insn::DCMPL,
         };
         self.compare(origin, opcode, kind);
-        self.branch_zero(origin, compare, target);
+        let test = if negate { compare.inverted() } else { compare };
+        self.branch_zero(origin, test, target);
     }
 
     // ----- control flow -------------------------------------------------

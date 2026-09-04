@@ -360,13 +360,15 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
 
     let mut refused = Vec::new();
     let mut aborts = Vec::new();
-    let native = run_native(
-        &dir,
-        &prepared.program,
-        &testable,
-        &mut refused,
-        &mut aborts,
-    )?;
+    // Which lane runs. The JVM is a sibling rather than a third arm of
+    // `render`, because a JVM program is a directory of classes driven by
+    // `java` -- a different artifact *and* a different runner, where C and
+    // LLVM differ only in what they hand the same linker.
+    let native = if Backend::from_environment()? == Backend::Jvm {
+        run_jvm(&dir, &prepared.program, &testable, &mut refused, &mut aborts)?
+    } else {
+        run_native(&dir, &prepared.program, &testable, &mut refused, &mut aborts)?
+    };
     let engine = run_node(&dir, &entry, &testable)?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
     let mut report = report(&native, &engine, &testable, &refused, &approximate);
@@ -1206,15 +1208,37 @@ fn run_native(
     // such case costs every case after it. Node answers `undefined` for the same
     // input, so the two had nothing to compare there anyway; what matters is
     // that the *rest* of the program still gets checked.
+    collect_restarting(interleaved(testable).len(), refused, aborts, |from| {
+        bounded(binary.as_str())
+            .arg(from.to_string())
+            .output()
+            .context("running the compiled program")
+    })
+}
+
+/// Run a case set, restarting past whatever ends it.
+///
+/// A case can end the process -- an out-of-range index is the program keeping
+/// the promise its `!` made -- and without restarting, one such case costs
+/// every case after it. Node answers `undefined` for the same input, so the two
+/// had nothing to compare there anyway; what matters is that the *rest* of the
+/// program still gets checked.
+///
+/// Shared by both runners rather than written twice. The two lanes produce
+/// different artifacts and start them differently, but "what does a run that
+/// stopped early mean" is one question, and two answers to it would be two
+/// different accountings of the same refusal.
+fn collect_restarting(
+    total: usize,
+    refused: &mut Vec<usize>,
+    aborts: &mut Vec<String>,
+    run_from: impl Fn(usize) -> Result<std::process::Output>,
+) -> Result<Vec<String>> {
     let mut collected: Vec<String> = Vec::new();
-    let total = interleaved(testable).len();
     let mut from = 0;
     let mut restarts = 0;
     while from < total && restarts <= REFUSALS {
-        let run = bounded(binary.as_str())
-            .arg(from.to_string())
-            .output()
-            .context("running the compiled program")?;
+        let run = run_from(from)?;
         let produced = lines(&run.stdout);
         let reached = produced.len();
         collected.extend(produced);
@@ -1242,6 +1266,174 @@ fn run_native(
         restarts += 1;
     }
     Ok(collected)
+}
+
+/// The JVM lane: classes, a jar, and `java`.
+///
+/// Everything upstream of this is shared -- the same HIR, the same testable
+/// set, the same hostile pool, the same comparison against node. What differs
+/// is that the artifact is a directory of class files rather than a linked
+/// binary, so there is nothing for `render` to hand a linker and this is a
+/// sibling of `run_native` rather than a third arm of it.
+fn run_jvm(
+    dir: &Utf8Path,
+    program: &hir::Program,
+    testable: &[Testable],
+    refused: &mut Vec<usize>,
+    aborts: &mut Vec<String>,
+) -> Result<Vec<String>> {
+    let emitted = nts_codegen_jvm::emit(program);
+    for diagnostic in &emitted.diagnostics {
+        eprintln!("  not emitted: {} {}", diagnostic.code, diagnostic.message);
+    }
+    if !emitted.diagnostics.is_empty() {
+        // The same rule the C arm keeps: stop here rather than at the point of
+        // use. A method the backend declined is *absent*, and the harness
+        // reflects for it by name -- so the failure would arrive as a
+        // `NoSuchMethodException` naming a method and nothing about the
+        // construct behind it.
+        bail!(
+            "the backend declined {} function(s), listed above; nothing can be \
+             checked until they are removed or supported",
+            emitted.diagnostics.len()
+        );
+    }
+    for class in &emitted.classes {
+        let path = dir.join(class.path());
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, &class.bytes)?;
+    }
+    let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
+    std::fs::write(&jar, nts_codegen_jvm::RUNTIME_JAR)?;
+
+    // The cases, as data. Generating and compiling a driver per case set would
+    // put `javac` in this loop -- some 300ms against nine hundred cases -- to
+    // build something thrown away immediately. `nts/rt/Check` is compiled once
+    // into the jar and reflects; it is slow, and a correctness harness is the
+    // one place that does not matter.
+    let mut cases = String::new();
+    for (one, at, tuple) in interleaved(testable) {
+        let Some(returns) = nts_codegen_jvm::types::descriptor(&one.returns) else {
+            bail!("`{}` returns a type the JVM backend rendered but this harness cannot", one.name);
+        };
+        let mut parameters = String::new();
+        for (ty, _) in &one.params {
+            let Some(descriptor) = nts_codegen_jvm::types::descriptor(ty) else {
+                bail!("`{}` takes a type the JVM backend rendered but this harness cannot", one.name);
+            };
+            parameters.push_str(descriptor);
+        }
+        let _ = write!(
+            cases,
+            "{} {at} {returns} {}",
+            nts_codegen_jvm::body::method_name(&one.name),
+            if parameters.is_empty() { "-" } else { &parameters }
+        );
+        // Bit patterns rather than decimal: the pool contains values whose
+        // shortest decimal is not their whole story, and a harness that lost a
+        // bit in transit would report a disagreement it caused itself.
+        for (slot, value) in tuple.iter().enumerate() {
+            let descriptor = parameters.as_bytes().get(slot).copied().unwrap_or(b'D');
+            representable(*value, descriptor).with_context(|| {
+                format!("parameter {slot} of `{}`", one.name)
+            })?;
+            let _ = write!(cases, " {:016x}", value.to_bits());
+        }
+        cases.push('\n');
+    }
+    let cases_path = dir.join("cases.txt");
+    std::fs::write(&cases_path, cases)?;
+
+    let classpath = format!("{dir}:{jar}");
+    collect_restarting(interleaved(testable).len(), refused, aborts, move |from| {
+        bounded_jvm()
+            .arg("-cp")
+            .arg(&classpath)
+            .arg("nts.rt.Check")
+            .arg(cases_path.as_str())
+            .arg(from.to_string())
+            .output()
+            .context("running the compiled classes")
+    })
+}
+
+/// Whether a pool value is one the parameter's proved type can hold.
+///
+/// # Why this refuses rather than casts
+///
+/// The pool is doubles whatever the parameter is, so both harnesses have to
+/// narrow. The C driver writes the narrowing as a literal cast in generated
+/// source, where out of range is undefined and clang picks; this side would
+/// narrow at run time, where the JVM saturates. The instinct is to make one
+/// match the other.
+///
+/// That is the wrong goal, and asking which of them matches *node* shows why:
+/// neither, because in the source there is no `int32` parameter at all. It is
+/// `number`, and `I` exists only because the compiler **proved** the value is an
+/// int32. So a pool value outside that range means one of two things -- the
+/// proof is wrong, or [`inputs`] ignored it -- and both are findings.
+///
+/// Two harnesses quietly agreeing on a value the source cannot produce is
+/// strictly worse than two that disagree, because the disagreement is at least
+/// visible. So the narrowing is a checked claim rather than a conversion, and
+/// if it never fires an assumption has become a checked one for nothing.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "the narrowing is the question: the round trip is what answers it"
+)]
+#[allow(
+    clippy::float_cmp,
+    reason = "exactness is the question. A tolerance here would accept a value \
+              the parameter's proved type cannot hold, which is the thing being \
+              checked -- and `-0.0 == 0.0` is wanted, since a boolean parameter \
+              given the negative zero the pool carries is `false` on both sides"
+)]
+fn representable(value: f64, descriptor: u8) -> Result<()> {
+    let whole = value.fract() == 0.0 && value.is_finite();
+    let ok = match descriptor {
+        b'D' => true,
+        b'F' => f64::from(value as f32) == value,
+        b'Z' => value == 0.0 || value == 1.0,
+        b'J' => whole && value >= -(2f64.powi(63)) && value < 2f64.powi(63),
+        _ => whole && value >= f64::from(i32::MIN) && value <= f64::from(i32::MAX),
+    };
+    if ok {
+        return Ok(());
+    }
+    bail!(
+        "the pool offered {value} to a parameter the compiler proved is `{}` -- \
+         either that proof is wrong or the pool filter ignored it, and casting \
+         here would hide whichever it is",
+        descriptor as char
+    );
+}
+
+/// A JVM child, bounded -- but not the way a native one is.
+///
+/// `bounded` caps *address space* at two gigabytes, which is right for a native
+/// program and fatal for this one: `HotSpot` reserves far more virtual address
+/// space than it commits -- heap, code cache, metaspace, GC structures -- and a
+/// two-gigabyte `--as` stops it before `main`. The equivalent bound here is on
+/// the heap, which is what a runaway actually consumes, so it is `-Xmx` and the
+/// same timeout rather than `prlimit`.
+///
+/// `-XX:TieredStopAtLevel=1` and `-Xshare:auto` are not tuning: a correctness
+/// harness runs each case once, so time spent in C2 is time spent compiling
+/// code that runs a handful of times.
+fn bounded_jvm() -> std::process::Command {
+    let java = std::env::var("JAVA_HOME")
+        .map_or_else(|_| "java".to_owned(), |home| format!("{home}/bin/java"));
+    let mut command = std::process::Command::new("timeout");
+    command
+        .arg(TIMEOUT)
+        .arg(java)
+        .arg("-Xmx512m")
+        .arg("-XX:MaxMetaspaceSize=128m")
+        .arg("-XX:TieredStopAtLevel=1")
+        .arg("-XX:-UsePerfData");
+    command
 }
 
 /// One case's arguments: what to build, what to pass, what to give back.

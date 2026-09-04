@@ -181,7 +181,7 @@ impl Emitter<'_> {
             };
             let taken = code.label();
             let done = code.label();
-            self.compare_and_branch(code, compare, lhs, rhs, taken)?;
+            self.compare_and_branch(code, compare, false, lhs, rhs, taken)?;
             code.const_int(&origin, pool, 0);
             code.store(&origin, Kind::Int, scratch);
             code.goto(&origin, done);
@@ -239,10 +239,16 @@ impl Emitter<'_> {
     }
 
     /// Load two operands and branch when the comparison holds.
+    /// `negate` asks for the branch taken when the comparison is false, which
+    /// is what a fallthrough to the true arm needs. It is passed down rather
+    /// than applied here: on a float, inverting the *comparison* changes which
+    /// `dcmp` form is correct and gets `NaN` wrong -- see
+    /// [`Code::branch_float_when`].
     pub(crate) fn compare_and_branch(
         &mut self,
         code: &mut Code,
         compare: Compare,
+        negate: bool,
         lhs: ValueId,
         rhs: ValueId,
         target: Label,
@@ -251,15 +257,21 @@ impl Emitter<'_> {
         let kind = self.kind_of(lhs)?;
         self.load(code, lhs)?;
         self.load(code, rhs)?;
+        // Integers are totally ordered, so inverting the comparison and
+        // inverting the test are the same thing there. Floats are not, which is
+        // why only this arm may do it.
+        let test = if negate { compare.inverted() } else { compare };
         match kind {
-            Kind::Int => code.branch_int(&origin, compare, target),
+            Kind::Int => code.branch_int(&origin, test, target),
             // No `if_lcmp`: a `long` comparison is `lcmp` and then a test
             // against zero, which is what `branch_zero` reads.
             Kind::Long => {
                 code.compare(&origin, insn::LCMP, Kind::Long);
-                code.branch_zero(&origin, compare, target);
+                code.branch_zero(&origin, test, target);
             }
-            Kind::Float | Kind::Double => code.branch_float(&origin, compare, kind, target),
+            Kind::Float | Kind::Double => {
+                code.branch_float_when(&origin, compare, negate, kind, target);
+            }
             Kind::Ref => return Err(refuse(self.func, "a comparison of references")),
         }
         Ok(())
@@ -584,8 +596,7 @@ impl Emitter<'_> {
             let Some(compare) = comparison(op) else {
                 return Err(refuse(self.func, "a fused condition that is not a comparison"));
             };
-            let compare = if invert { compare.inverted() } else { compare };
-            return self.compare_and_branch(code, compare, lhs, rhs, target);
+            return self.compare_and_branch(code, compare, invert, lhs, rhs, target);
         }
         self.load(code, cond)?;
         let compare = if invert { Compare::Eq } else { Compare::Ne };
