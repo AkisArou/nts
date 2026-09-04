@@ -5364,6 +5364,61 @@ impl<'a> FuncBuilder<'a> {
         self.represent(signature.parameters.get(at)?.ty)
     }
 
+    /// `delete o.x`, which TypeScript permits only where `x` is optional.
+    ///
+    /// `TS2790: The operand of a 'delete' operator must be optional` -- so the
+    /// property being deleted always holds `T | undefined` and always has a slot
+    /// with a tag in it. Deleting it is writing the `undefined` tag.
+    ///
+    /// # Why that is the whole of it
+    ///
+    /// JavaScript distinguishes a deleted property from one set to `undefined`:
+    /// `"x" in o` is false after the first and true after the second, and
+    /// `Object.keys` differs the same way. This representation cannot tell them
+    /// apart -- an optional slot is zeroed at allocation and zero *is* the
+    /// `undefined` tag.
+    ///
+    /// So the conflation would be a wrong answer, except that every operator
+    /// that could see it already refuses on an optional property: `in` names it,
+    /// `Object.keys` and `Object.hasOwn` name it, and `for...in` is refused
+    /// outright. Three refusals that were each argued on their own terms, and
+    /// together they are what makes this one sound. If any of them is ever
+    /// implemented for an optional property, this becomes wrong on the same day
+    /// -- which is why they all name the *property* rather than the feature.
+    ///
+    /// The result is `true`. In a strict-mode program every deletable property
+    /// is configurable, and TypeScript has refused the rest above.
+    fn lower_delete(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let children = self.children(id);
+        let [target] = children.as_slice() else {
+            return Err(self.unsupported(id, "a `delete` of unexpected shape"));
+        };
+        let origin = self.origin(id);
+        // A property access only. `delete o[k]` for a computed `k` is a
+        // question about a value, and the slot it names is not known here.
+        if self.kind_of(*target) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return Err(self.unsupported(
+                *target,
+                "a `delete` of something other than a named property",
+            ));
+        }
+        // Through `place_of` and `write_place`, which is what an ordinary
+        // assignment uses. A setter or an element is refused by the property
+        // check above; what reaches here is a field, and `coerce_to_slot` builds
+        // the `undefined` at the slot's own representation rather than at a
+        // guess.
+        let place = self.place_of(*target)?;
+        if !matches!(place, Place::Field { .. }) {
+            return Err(self.unsupported(
+                *target,
+                "a `delete` of something that is not a stored field",
+            ));
+        }
+        let absent = self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone());
+        self.write_place(id, &place, absent);
+        Ok(self.push(OpKind::ConstBool(true), HirType::Bool, origin))
+    }
+
     /// `typeof x`, where `x` has one known primitive type.
     ///
     /// In a typed compiler this is a constant. If `value` is a `number` then
@@ -7525,12 +7580,51 @@ impl<'a> FuncBuilder<'a> {
                 "an `Object` static over something that is not an object here",
             ));
         };
+        // An **optional** property is not a name the layout can answer for.
+        //
+        // `Object.keys` and `Object.hasOwn` report what an object *has*, and an
+        // optional property's slot exists whether or not it was written -- so
+        // the declaration says `maybe` is there and the value may disagree.
+        // `{ keep: 1 }` against `interface Bag { keep: number; maybe?: number }`
+        // gave `["keep", "maybe"]` where node gives `["keep"]`, which the
+        // differential reported on 29 of 29 cases once a fixture asked.
+        //
+        // Refused rather than answered from the tag, and the reason is the same
+        // one `in` gives for the same property: an optional slot holds
+        // `T | undefined` and a fresh allocation is zeroed, which is already the
+        // `undefined` tag -- so `{}` and `{ maybe: undefined }` are one object
+        // here and JavaScript says their key lists differ.
+        //
+        // A run-time answer is possible and is a different feature: a loop over
+        // the layout testing each optional tag, producing an array whose length
+        // is not known until it runs. Nothing in the profile asks for it.
+        if let Some(optional) = self.optional_property_of(type_id) {
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "an `Object` static over a type with the optional property `{optional}`, \
+                     whose presence is a fact about the value rather than the type"
+                ),
+            ));
+        }
         let layout = self.layout_of(id, type_id)?;
         Ok(layout
             .fields
             .iter()
             .map(|field| field.name.clone())
             .collect())
+    }
+
+    /// The first optional property a type declares, where it has one.
+    fn optional_property_of(&self, ty: TypeId) -> Option<String> {
+        let record = self.snapshot.types.get(ty.0 as usize)?;
+        let TypeKind::Object { properties } = &record.kind else {
+            return None;
+        };
+        properties
+            .iter()
+            .find(|property| property.optional)
+            .map(|property| property.name.clone())
     }
 
     /// `Object.keys(o)`, as the array of names the layout already holds.
@@ -10866,6 +10960,7 @@ impl<'a> FuncBuilder<'a> {
                 ))
             }
             Some(syntax::TEMPLATE_EXPRESSION) => self.lower_template(id),
+            Some(syntax::DELETE_EXPRESSION) => self.lower_delete(id),
             Some(syntax::TYPE_OF_EXPRESSION) => self.lower_typeof(id),
             // Named rather than left to the fallthrough below, for the reason
             // `yield` is: an unlabelled refusal cannot be grouped, ranked or

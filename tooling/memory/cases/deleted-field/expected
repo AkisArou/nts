@@ -1,0 +1,20 @@
+ideal 0
+allocated 0
+because nothing, and the deletion is what is being checked rather than the
+because source of a number.
+because
+because Allocations: none. Seventeen holders, each dying with the iteration that
+because made it -- nothing stores one, returns one, or hands one to anything
+because that could keep it -- so a frame slot holds each in turn.
+because
+because Operations: none, and by the rule `closure-capture` states -- an
+because allocation floor of zero forces an operation floor of zero. Beyond that
+because there is nothing here for a count to reach: the property holds a number,
+because so the store `delete` becomes writes a tag over a double and gives
+because nothing up.
+because
+because What the case is for is the shape of that store rather than its cost. A
+because `delete` lowered as anything other than a store -- a call into the
+because runtime to remove a key, a rebuild of the object without the property --
+because would show up here and nowhere else, because the answers would stay
+because right either way.

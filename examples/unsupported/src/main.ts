@@ -190,3 +190,28 @@ function overloadCaller(n: number): number {
   return new Overloaded().pick(n, 1);
 }
 void overloadCaller;
+
+// `Object.keys` over a type with an optional property.
+//
+// `Object.keys` reports what an object *has*, and an optional property's slot
+// exists whether or not it was written -- so the declaration says `maybe` is
+// there and the value may disagree. This answered from the layout and gave
+// `["keep", "maybe"]` for `{ keep: 1 }` where node gives `["keep"]`, on 29 of
+// 29 cases once a fixture asked.
+//
+// Refused rather than answered from the tag, for the reason `in` gives about
+// the same property: an optional slot is zeroed at allocation and zero is
+// already the `undefined` tag, so `{}` and `{ maybe: undefined }` are one
+// object here and JavaScript says their key lists differ.
+//
+// A run-time answer is a different feature -- a loop over the layout testing
+// each optional tag, producing an array whose length is not known until it runs.
+interface Sparse {
+  keep: number;
+  maybe?: number;
+}
+
+export function keysOfAnOptional(n: number): number {
+  const sparse: Sparse = { keep: n };
+  return Object.keys(sparse).length;
+}

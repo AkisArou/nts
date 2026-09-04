@@ -141,6 +141,7 @@ pub const YIELD_EXPRESSION: u16 = 230;
 /// enum, which is how the number is arrived at; `erasure::tests` pins it
 /// against a real program, because a wrong constant here would silently
 /// reclassify every type test as something else.
+pub const DELETE_EXPRESSION: u16 = 221;
 pub const TYPE_OF_EXPRESSION: u16 = 222;
 pub const IN_KEYWORD: u16 = 102;
 /// 103, not 104. 104 is `new`.
