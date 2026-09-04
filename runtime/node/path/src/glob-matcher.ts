@@ -20,18 +20,23 @@ export class GlobSegmentMatcher {
   readonly pattern: string;
   readonly expression: RegExp;
   readonly allowsEmpty: boolean;
+  readonly allowsNavigation: boolean;
 
-  constructor(pattern: string) {
+  constructor(pattern: string, nocase = false, allowsNavigation = false) {
     this.pattern = pattern;
     const dot = startsWithExplicitDot(pattern) ? "" : "(?!\\.)";
-    this.expression = new RegExp(`^${dot}${compileSequence(pattern, 0, pattern.length)}$`);
+    this.expression = new RegExp(
+      `^${dot}${compileSequence(pattern, 0, pattern.length)}$`,
+      nocase ? "i" : "",
+    );
     this.allowsEmpty = !containsOnlyStars(pattern) && this.expression.test("");
+    this.allowsNavigation = allowsNavigation;
   }
 
   test(value: string): boolean {
     // Magic never traverses the two directory-navigation components. Exact
-    // literal `.` and `..` patterns are represented as strings instead.
-    if (value === "." || value === "..") return false;
+    // literals remain eligible when nocase compilation represents them here.
+    if (!this.allowsNavigation && (value === "." || value === "..")) return false;
     if (value.length === 0 && !this.allowsEmpty) return false;
     return this.expression.test(value);
   }
@@ -44,13 +49,13 @@ export class CompiledGlobPattern {
   readonly parts: GlobPart[];
   readonly sourceParts: string[];
 
-  constructor(sourceParts: string[]) {
+  constructor(sourceParts: string[], nocase = false) {
     this.sourceParts = sourceParts;
     this.parts = new Array<GlobPart>(sourceParts.length);
     for (let index = 0; index < sourceParts.length; index++) {
       const part = sourceParts[index];
       if (part === undefined) throw new Error(`glob pattern is missing component ${index}`);
-      this.parts[index] = compilePart(part);
+      this.parts[index] = compilePart(part, nocase);
     }
   }
 }
@@ -244,10 +249,11 @@ function hasMagic(part: string): boolean {
   return false;
 }
 
-function compilePart(part: string): GlobPart {
+function compilePart(part: string, nocase: boolean): GlobPart {
   if (part === "**") return globStar;
-  if (!hasMagic(part)) return part;
-  return new GlobSegmentMatcher(part);
+  const magic = hasMagic(part);
+  if (!magic && !nocase) return part;
+  return new GlobSegmentMatcher(part, nocase, !magic);
 }
 
 function findBalancedBrace(pattern: string, open: number): number {
@@ -492,6 +498,7 @@ function preprocessPatternParts(initial: string[]): string[][] {
 export function compileGlobPatterns(
   pattern: string,
   windows: boolean,
+  nocase = false,
 ): CompiledGlobPattern[] {
   const expanded: string[] = [];
   expandBracesInto(pattern, expanded);
@@ -509,7 +516,7 @@ export function compileGlobPatterns(
   for (let index = 0; index < componentPatterns.length; index++) {
     const parts = componentPatterns[index];
     if (parts === undefined) throw new Error(`glob is missing component pattern ${index}`);
-    compiled[index] = new CompiledGlobPattern(parts);
+    compiled[index] = new CompiledGlobPattern(parts, nocase);
   }
   return compiled;
 }

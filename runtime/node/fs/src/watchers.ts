@@ -31,6 +31,11 @@ import {
 import { nextTick } from "../../internal/tick.ts";
 import { uvException } from "../../internal/uv.ts";
 import {
+  compileGlobPatterns,
+  matchesCompiledGlobPatterns,
+  type CompiledGlobPattern,
+} from "../../path/src/glob-matcher.ts";
+import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
 } from "../../internal/errors.ts";
@@ -48,6 +53,8 @@ import {
   type FileResultEncoding,
   type PathLike,
 } from "./options.ts";
+
+declare function nts_platform(): string;
 
 /** Start watching. The handle is what stops it again. */
 declare function nts_fs_watch_start(
@@ -125,89 +132,98 @@ export function normalizeWatchIgnore(
   return value;
 }
 
-/** Match one glob segment with `*` and `?`, using bounded backtracking. */
-function matchGlobSegment(pattern: string, value: string): boolean {
-  let patternIndex = 0;
-  let valueIndex = 0;
-  let starIndex = -1;
-  let starValueIndex = 0;
-
-  while (valueIndex < value.length) {
-    const patternCode = pattern.charCodeAt(patternIndex);
-    if (
-      patternIndex < pattern.length &&
-      (patternCode === 0x3f || patternCode === value.charCodeAt(valueIndex))
-    ) {
-      patternIndex++;
-      valueIndex++;
-    } else if (patternIndex < pattern.length && patternCode === 0x2a) {
-      starIndex = patternIndex;
-      patternIndex++;
-      starValueIndex = valueIndex;
-    } else if (starIndex !== -1) {
-      patternIndex = starIndex + 1;
-      starValueIndex++;
-      valueIndex = starValueIndex;
-    } else {
-      return false;
-    }
-  }
-  while (pattern.charCodeAt(patternIndex) === 0x2a) patternIndex++;
-  return patternIndex === pattern.length;
+interface CompiledWatchGlob {
+  readonly kind: "glob";
+  readonly alternatives: CompiledGlobPattern[];
+  readonly matchBase: boolean;
 }
 
-function matchGlobParts(
-  pattern: string[],
-  patternIndex: number,
-  value: string[],
-  valueIndex: number,
+interface CompiledWatchRegExp {
+  readonly kind: "regexp";
+  readonly expression: RegExp;
+}
+
+interface CompiledWatchFunction {
+  readonly kind: "function";
+  readonly predicate: WatchIgnoreFunction;
+}
+
+type CompiledWatchIgnore =
+  | CompiledWatchGlob
+  | CompiledWatchRegExp
+  | CompiledWatchFunction;
+
+const watchPlatform = nts_platform();
+const watchWindows = watchPlatform === "win32";
+const watchNocase = watchWindows || watchPlatform === "darwin";
+
+function watchPatternHasSeparator(pattern: string): boolean {
+  return pattern.includes("/") || (watchWindows && pattern.includes("\\"));
+}
+
+function watchBaseName(filename: string): string {
+  const slash = filename.lastIndexOf("/");
+  const backslash = watchWindows ? filename.lastIndexOf("\\") : -1;
+  return filename.slice(Math.max(slash, backslash) + 1);
+}
+
+function compileWatchIgnoreElement(
+  matcher: WatchIgnoreElement,
+): CompiledWatchIgnore {
+  if (typeof matcher === "string") {
+    return {
+      kind: "glob",
+      alternatives: compileGlobPatterns(matcher, watchWindows, watchNocase),
+      matchBase: !watchPatternHasSeparator(matcher),
+    };
+  }
+  if (typeof matcher === "function") {
+    return { kind: "function", predicate: matcher };
+  }
+  return { kind: "regexp", expression: matcher };
+}
+
+function compileWatchIgnore(
+  ignore: WatchIgnore | undefined,
+): CompiledWatchIgnore[] | undefined {
+  if (ignore === undefined) return undefined;
+  if (!Array.isArray(ignore)) return [compileWatchIgnoreElement(ignore)];
+
+  const compiled = new Array<CompiledWatchIgnore>(ignore.length);
+  for (let index = 0; index < ignore.length; index++) {
+    const matcher = ignore[index];
+    if (matcher === undefined) {
+      throw new Error(`watch ignore list is missing element ${index}`);
+    }
+    compiled[index] = compileWatchIgnoreElement(matcher);
+  }
+  return compiled;
+}
+
+function ignoreElementMatches(
+  matcher: CompiledWatchIgnore,
+  filename: string,
 ): boolean {
-  if (patternIndex === pattern.length) return valueIndex === value.length;
-  const part = pattern[patternIndex];
-  if (part === undefined) return false;
-  if (part === "**") {
-    let nextPattern = patternIndex + 1;
-    while (pattern[nextPattern] === "**") nextPattern++;
-    if (nextPattern === pattern.length) return true;
-    for (let nextValue = valueIndex; nextValue <= value.length; nextValue++) {
-      if (matchGlobParts(pattern, nextPattern, value, nextValue)) return true;
-    }
-    return false;
-  }
-  const valuePart = value[valueIndex];
-  return valuePart !== undefined &&
-    matchGlobSegment(part, valuePart) &&
-    matchGlobParts(pattern, patternIndex + 1, value, valueIndex + 1);
-}
-
-/** The matchBase-oriented subset used by Node's fs watcher ignore option. */
-function matchWatchGlob(pattern: string, filename: string): boolean {
-  const normalizedPattern = pattern.replaceAll("\\", "/");
-  const normalizedFilename = filename.replaceAll("\\", "/");
-  if (!normalizedPattern.includes("/")) {
-    const slash = normalizedFilename.lastIndexOf("/");
-    return matchGlobSegment(normalizedPattern, normalizedFilename.slice(slash + 1));
-  }
-  return matchGlobParts(
-    normalizedPattern.split("/"),
-    0,
-    normalizedFilename.split("/"),
-    0,
+  if (matcher.kind === "function") return matcher.predicate(filename);
+  if (matcher.kind === "regexp") return matcher.expression.test(filename);
+  const candidate = matcher.matchBase ? watchBaseName(filename) : filename;
+  return matchesCompiledGlobPatterns(
+    candidate,
+    matcher.alternatives,
+    watchWindows,
   );
 }
 
-function ignoreElementMatches(matcher: WatchIgnoreElement, filename: string): boolean {
-  if (typeof matcher === "string") return matchWatchGlob(matcher, filename);
-  if (typeof matcher === "function") return matcher(filename);
-  return matcher.test(filename);
-}
-
-function shouldIgnore(ignore: WatchIgnore | undefined, filename: string): boolean {
+function shouldIgnore(
+  ignore: CompiledWatchIgnore[] | undefined,
+  filename: string,
+): boolean {
   if (ignore === undefined) return false;
-  if (!Array.isArray(ignore)) return ignoreElementMatches(ignore, filename);
-  for (let i = 0; i < ignore.length; i++) {
-    const matcher = ignore[i];
-    if (matcher !== undefined && ignoreElementMatches(matcher, filename)) return true;
+  for (let index = 0; index < ignore.length; index++) {
+    const matcher = ignore[index];
+    if (matcher !== undefined && ignoreElementMatches(matcher, filename)) {
+      return true;
+    }
   }
   return false;
 }
@@ -234,7 +250,7 @@ export class FSWatcher extends EventEmitter {
   #encoding: FileResultEncoding | undefined;
   #signal: WatchSignal | undefined;
   #abortListener: (() => void) | undefined;
-  #ignore: WatchIgnore | undefined;
+  #ignore: CompiledWatchIgnore[] | undefined;
 
   constructor() {
     super();
@@ -265,7 +281,7 @@ export class FSWatcher extends EventEmitter {
     validateBoolean(persistent, "options.persistent");
     validateBoolean(recursive, "options.recursive");
     validateBoolean(throwIfNoEntry, "options.throwIfNoEntry");
-    this.#ignore = normalizeWatchIgnore(options.ignore);
+    this.#ignore = compileWatchIgnore(normalizeWatchIgnore(options.ignore));
     this.#encoding = normalizeFileResultEncoding(options.encoding);
     const validatedPath = getValidatedPath(path, "filename");
     this.#path = validatedPath;
