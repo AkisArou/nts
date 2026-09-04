@@ -2300,6 +2300,27 @@ impl Emitter<'_> {
             .ok_or_else(|| refuse(self.func, "a conversion from an unrepresentable type"))?;
         let target = types::kind(to)
             .ok_or_else(|| refuse(self.func, "a conversion to an unrepresentable type"))?;
+        // A `uint32` fills its slot, so its top bit is a value bit and `i2d`
+        // would read it as a sign: `storeU32` answered -2147483648 where node
+        // said 2147483648, and -1 where node said 4294967294. The narrower
+        // unsigned widths do not have this problem, because the mask below
+        // leaves them zero-extended inside an `int` that is wider than they
+        // are -- only a `uint32` has no room left to be zero-extended into.
+        //
+        // `Integer.toUnsignedLong` is the JVM's spelling of `zext`, and it is
+        // the same route `ToUint32` already takes a few hundred lines up. This
+        // is a case where the JVM's lack of unsigned types is a *correctness*
+        // problem rather than the performance one the plan predicted: `Kind`
+        // is the stack representation and has no signedness, so a table keyed
+        // on it cannot see the difference and answers plausibly.
+        let source = if matches!(from, HirType::Int { bits: 32, signed: false })
+            && matches!(target, Kind::Long | Kind::Float | Kind::Double)
+        {
+            code.invoke_static(origin, pool, "java/lang/Integer", "toUnsignedLong", "(I)J");
+            Kind::Long
+        } else {
+            source
+        };
         // Widen to the computational kind first, then narrow to the declared
         // width. Doing it in one step would need a case per pair.
         let opcode = match (source, target) {
@@ -2452,7 +2473,24 @@ impl Emitter<'_> {
                 return Err(refuse(self.func, "a call through a closure"));
             }
         };
-        let Some(target) = self.program.funcs.iter().find(|func| &func.name == name) else {
+        self.direct_call(code, pool, result, name, args, origin)
+    }
+
+    /// `invokestatic` on `nts/gen/Program`, which is what most calls are.
+    ///
+    /// Split out of `call` because the three indirect forms return early and
+    /// this one is the fallthrough, so it reads as a tail rather than as a
+    /// fourth arm.
+    fn direct_call(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        result: &HirType,
+        name: &str,
+        args: &[ValueId],
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        let Some(target) = self.program.funcs.iter().find(|func| func.name == name) else {
             return Err(refuse(self.func, &format!("a call to `{name}`, which is not in this program")));
         };
         // An abstract declaration has no static body -- it is `ACC_ABSTRACT`
@@ -2492,6 +2530,27 @@ impl Emitter<'_> {
         }
         let method = crate::body::method_name(name);
         code.invoke_static(origin, pool, PROGRAM, &method, &signature);
+        // The callee's descriptor says what *it* returns; the IR says what this
+        // call site gets, and for a method returning `this` those differ. A
+        // `Counter.bump()` called on a `Labelled` is typed `Labelled` by the
+        // frontend and emitted as `invokestatic Counter$bump` returning
+        // `Counter`, so the verifier sees a `Counter` reaching the next call's
+        // `Labelled` parameter and rejects the *class*.
+        //
+        // It rejected it at load, with a `VerifyError` the differential read as
+        // seventeen declined cases and attributed to a bounds check the program
+        // does not contain -- there is not one subscript in the file. A lane
+        // that refuses loudly still has to be believed about *what* it refused.
+        //
+        // The narrowing is the same one the external path already spells, for
+        // the same reason: the middle end proved it and the descriptor cannot
+        // carry it.
+        if let Some(want) = types::descriptor(self.shape, result)
+            && types::kind(result) == Some(Kind::Ref)
+            && signature.rsplit(')').next() != Some(want.as_str())
+        {
+            code.check_cast(origin, pool, &want);
+        }
         Ok(if matches!(result, HirType::Void) {
             Placed::Stored
         } else {

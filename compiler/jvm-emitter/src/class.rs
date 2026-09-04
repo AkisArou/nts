@@ -28,6 +28,10 @@ pub mod access {
     pub const PRIVATE: u16 = 0x0002;
     pub const STATIC: u16 = 0x0008;
     pub const FINAL: u16 = 0x0010;
+    /// A method the compiler generated to make a covariant override dispatch.
+    /// Same bit as `ACC_VOLATILE`, which is a field flag, so the two never
+    /// meet.
+    pub const BRIDGE: u16 = 0x0040;
     /// On a class, and always set: without it `invokespecial` uses the pre-1.0
     /// lookup rule that no compiler has wanted since 1997.
     pub const SUPER: u16 = 0x0020;

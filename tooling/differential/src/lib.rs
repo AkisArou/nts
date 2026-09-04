@@ -1125,6 +1125,38 @@ fn stopped(signal: Option<i32>, complaint: &str) -> Stopped {
     }) {
         return Stopped::Defect(line.trim().to_owned());
     }
+    // A class file the JVM will not load or link is the characteristic failure
+    // of a bytecode emitter, and it must never read as a declined case.
+    //
+    // `Check.java` already says so -- its catch-all prints a stack trace with
+    // the comment "the runner must count it as one rather than as a declined
+    // case" -- but saying so was the whole of the enforcement, and this
+    // function's fallthrough is `Declined`. A `VerifyError` in
+    // `examples/fluent-this` was reported as "17 case(s) the compiled program
+    // declined -- an index its `!` promised was in range and was not", about a
+    // file containing no subscript at all. The lane was refusing loudly and
+    // being believed about the wrong thing.
+    //
+    // These are the errors that mean *the class is wrong*, as opposed to the
+    // program computing something wrong, and there is no input for which any
+    // of them is a legitimate answer.
+    if let Some(line) = complaint.lines().find(|line| {
+        [
+            "VerifyError",
+            "ClassFormatError",
+            "UnsupportedClassVersionError",
+            "NoClassDefFoundError",
+            "NoSuchMethodError",
+            "NoSuchFieldError",
+            "AbstractMethodError",
+            "IllegalAccessError",
+            "IncompatibleClassChangeError",
+        ]
+        .iter()
+        .any(|bad| line.contains(bad))
+    }) {
+        return Stopped::Defect(line.trim().to_owned());
+    }
     let said_something = complaint
         .lines()
         .any(|line| line.starts_with(REFUSED) || line.starts_with(EXHAUSTED));
@@ -1848,6 +1880,60 @@ fn report(
         approximated,
         disagreements,
         aborts: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod classification {
+    use super::{Stopped, stopped};
+
+    /// The text `java` actually prints, kept verbatim rather than paraphrased:
+    /// the classifier reads stderr, so a test that invented its own wording
+    /// would agree with itself about a format nothing produces.
+    const VERIFY_ERROR: &str = "Exception in thread \"main\" java.lang.VerifyError: Bad type on operand stack\nException Details:\n  Location:\n    nts/gen/Program.subclassChain(D)D @19: invokestatic\n  Reason:\n    Type 'nts/gen/Counter' (current frame, stack[0]) is not assignable to 'nts/gen/Labelled'\n";
+
+    #[test]
+    fn a_class_that_will_not_verify_is_a_defect() {
+        assert!(
+            matches!(stopped(None, VERIFY_ERROR), Stopped::Defect(_)),
+            "a VerifyError read as a declined case, which is how              `examples/fluent-this` reported seventeen bounds failures about a              file with no subscript in it"
+        );
+    }
+
+    #[test]
+    fn every_linkage_failure_is_a_defect() {
+        // Each of these means the class is wrong rather than the program
+        // computing something wrong, and there is no input for which any of
+        // them is a legitimate answer.
+        for name in [
+            "NoSuchMethodError",
+            "AbstractMethodError",
+            "ClassFormatError",
+            "IllegalAccessError",
+            "IncompatibleClassChangeError",
+            "NoClassDefFoundError",
+            "NoSuchFieldError",
+            "UnsupportedClassVersionError",
+        ] {
+            let complaint = format!("Exception in thread \"main\" java.lang.{name}: nts/gen/Program\n");
+            assert!(
+                matches!(stopped(None, &complaint), Stopped::Defect(_)),
+                "{name} read as a declined case"
+            );
+        }
+    }
+
+    #[test]
+    fn a_refusal_is_still_a_declined_case() {
+        // The other half, and the reason this is not simply "non-empty stderr
+        // is a defect": a program that declines an input says so on stderr and
+        // exits non-zero, and that is the normal, expected outcome for a pool
+        // value outside a parameter's proved type.
+        assert!(matches!(
+            stopped(None, "nts: refused: index 5 is outside [0, 3)\n"),
+            Stopped::Declined
+        ));
+        assert!(matches!(stopped(None, "nts: out of memory\n"), Stopped::Declined));
     }
 }
 

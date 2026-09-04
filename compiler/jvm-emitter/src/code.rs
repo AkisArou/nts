@@ -102,7 +102,11 @@ struct Fixup {
 }
 
 /// A finished method body, and everything the `Code` attribute needs.
-#[derive(Debug)]
+///
+/// `Clone` because a covariant override needs the *same* body under a second
+/// descriptor -- a bridge method is byte-for-byte the forwarder it stands in
+/// front of, and rebuilding it would be two chances to emit one thing.
+#[derive(Debug, Clone)]
 pub struct Body {
     pub max_stack: u16,
     pub max_locals: u16,

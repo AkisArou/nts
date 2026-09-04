@@ -406,27 +406,23 @@ fn dispatch_forwarders(
                 origin.location,
             )
         })?;
-        // The agreement that dispatch depends on, asserted where it is cheap.
-        if let Some(inherited) = base
-            .and_then(|b| b.methods.get(slot))
-            .and_then(|m| m.as_ref())
-            .and_then(|name| program.funcs.iter().find(|f| &f.name == name))
-            .and_then(|f| instance_descriptor(program, f))
-            .filter(|inherited| inherited != &descriptor)
-        {
-            {
-                return Err(Diagnostic::error(
-                    "NTS4009",
-                    format!(
-                        "`{}.{member}` is `{descriptor}` where the method it overrides is \
-                         `{inherited}` -- the JVM would treat these as two unrelated methods \
-                         and dispatch would silently reach the wrong one",
-                        layout.name
-                    ),
-                    origin.location,
-                ));
-            }
-        }
+        // The agreement that dispatch depends on, asserted where it is cheap --
+        // and where the disagreement is one the JVM has an answer for, taken.
+        //
+        // A method returning `this` narrows its return type in every subclass:
+        // `Counter.bump(): Counter` and `Doubling.bump(): Doubling`. That is a
+        // covariant override, which Java has had since 5 and the *JVM* has
+        // never had -- a method is identified by name and descriptor, so those
+        // two are unrelated and dispatch through `Counter` would miss the
+        // override entirely. javac's answer is a **bridge**: a second method on
+        // the subclass with the inherited descriptor, whose body is the
+        // forwarder's, and which the verifier accepts because a `Doubling`
+        // returned where `Counter` is declared is an ordinary widening.
+        //
+        // Only the *return* may differ. Covariant parameters are not
+        // overriding in any language on this platform -- they are overloading,
+        // and a bridge would silently make one call the other.
+        let bridge = bridge_for(program, layout, base, slot, &member, &descriptor, &origin)?;
 
         // An abstract declaration gets the method with no `Code`, and the
         // verifier is what makes the absence safe: `invokevirtual` on an
@@ -482,9 +478,87 @@ fn dispatch_forwarders(
                 origin.location,
             )
         })?;
+        if let Some(inherited) = bridge {
+            // Byte-for-byte the forwarder, under the descriptor the base
+            // declared. `ACC_BRIDGE` is what tells a reader -- and any tool
+            // reading these classes -- that the duplicate is deliberate.
+            builder.method(
+                access::PUBLIC | access::BRIDGE | access::SYNTHETIC,
+                member.clone(),
+                inherited,
+                Some(rendered.clone()),
+            );
+        }
         builder.method(access::PUBLIC, member, descriptor, Some(rendered));
     }
     Ok(())
+}
+
+/// The descriptor a bridge method needs, or `None` when the override agrees
+/// with what it overrides and no bridge is called for.
+///
+/// Refuses when they disagree in a way the JVM has no answer for.
+fn bridge_for(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    base: Option<&nts_core::hir::Layout>,
+    slot: usize,
+    member: &str,
+    descriptor: &str,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<Option<String>, Diagnostic> {
+    let Some(inherited) = base
+        .and_then(|b| b.methods.get(slot))
+        .and_then(|m| m.as_ref())
+        .and_then(|name| program.funcs.iter().find(|f| &f.name == name))
+        .and_then(|f| instance_descriptor(program, f))
+        .filter(|inherited| inherited != descriptor)
+    else {
+        return Ok(None);
+    };
+    if !narrows_return(program, descriptor, &inherited) {
+        return Err(Diagnostic::error(
+            "NTS4009",
+            format!(
+                "`{}.{member}` is `{descriptor}` where the method it overrides is \
+                 `{inherited}` -- the JVM would treat these as two unrelated methods \
+                 and dispatch would silently reach the wrong one",
+                layout.name
+            ),
+            origin.location,
+        ));
+    }
+    Ok(Some(inherited))
+}
+
+/// Whether two method descriptors differ only in that the first returns a
+/// subclass of what the second returns.
+///
+/// The parameters must be identical: a difference there is an overload, and
+/// bridging one to the other would make a call reach a method that was never
+/// written for it.
+fn narrows_return(program: &Program, derived: &str, base: &str) -> bool {
+    let Some((derived_params, derived_result)) = derived.split_once(')') else { return false };
+    let Some((base_params, base_result)) = base.split_once(')') else { return false };
+    if derived_params != base_params {
+        return false;
+    }
+    let (Some(from), Some(to)) = (class_of(derived_result), class_of(base_result)) else {
+        return false;
+    };
+    let Some(layout) = program.layouts.iter().find(|l| types::class_name(l) == from) else {
+        return false;
+    };
+    hierarchy::ancestry(program, layout).iter().any(|a| types::class_name(a) == to)
+}
+
+/// The internal name inside an object descriptor, or `None` for anything else.
+/// A primitive return that disagrees is not covariance and has no bridge.
+fn class_of(descriptor: &str) -> Option<String> {
+    descriptor
+        .strip_prefix('L')
+        .and_then(|rest| rest.strip_suffix(';'))
+        .map(str::to_owned)
 }
 
 /// A dispatched method's descriptor as an *instance* method: its own signature
