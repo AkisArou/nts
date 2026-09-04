@@ -383,12 +383,12 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  # Sixty-three of eighty-nine, measured at a commit rather than in the shared tree.
+  # Sixty-nine of eighty-nine, measured at a commit rather than in the shared tree.
   # The floor is planted on *agreement* rather than on rendering, because
   # rendering is a property of the emitter and agreeing is a property of the
   # language, and a floor on the wrong one rewards emitting more while meaning
   # less.
-  backend_examples 63 "through the JVM backend" ); }
+  backend_examples 69 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
