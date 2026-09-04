@@ -573,6 +573,7 @@ export class WriteStream extends Writable {
       autoDestroy: normalized.autoClose ?? true,
       emitClose: normalized.emitClose ?? true,
     });
+    this._writev = this.#writeVector;
 
     this.path = prepared.path;
     this.fd = prepared.fd;
@@ -655,7 +656,7 @@ export class WriteStream extends Writable {
    * through the single-buffer retry path; resending the original vector would
    * duplicate the prefix already written.
    */
-  override _writev(chunks: BufferedWrite[], callback: WriteCallback): void {
+  #writeVector(chunks: BufferedWrite[], callback: WriteCallback): void {
     const buffers = new Array<Buffer>(chunks.length);
     let total = 0;
     for (let index = 0; index < chunks.length; index++) {

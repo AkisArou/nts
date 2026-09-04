@@ -38,6 +38,7 @@ import type {
   BufferedWrite,
   WritableOptions,
   WriteCallback,
+  WritevCallback,
 } from "./writable.ts";
 import { construct, destroy } from "./destroy.ts";
 import { addAbortSignalNoValidate } from "./add-abort-signal.ts";
@@ -63,13 +64,9 @@ export interface DuplexOptions extends ReadableOptions, WritableOptions {
   writable?: boolean | undefined;
 }
 
-/** Optional vector hook installed by constructor options or a subclass. */
-export interface Duplex {
-  _writev?(chunks: BufferedWrite[], callback: WriteCallback): void;
-}
-
 export class Duplex extends Readable {
   _writableState: WritableState;
+  _writev: WritevCallback | null = null;
   _final?(callback: WriteCallback): void;
 
   /**
@@ -174,7 +171,7 @@ export class Duplex extends Readable {
   }
 
   _write(chunk: unknown, encoding: string | undefined, callback: WriteCallback): void {
-    if (this._writev !== undefined) {
+    if (this._writev !== null) {
       this._writev([{ chunk, encoding, callback: ignoreWrite }], callback);
       return;
     }

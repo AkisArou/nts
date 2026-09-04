@@ -457,17 +457,6 @@ export class PushWriter {
     this.#queue.fail(reasons.length === 0 ? kNoFailReason : reasons[0]);
   }
 
-  async [Symbol.asyncDispose](): Promise<void> {
-    if (this.#queue.writerState === "closing") {
-      await (this.#queue.pendingEndPromise ?? resolvedVoid);
-    } else if (this.#queue.writerState === "open") {
-      this.fail();
-    }
-  }
-
-  [Symbol.dispose](): void {
-    this.fail();
-  }
 }
 
 class PushIterator implements AsyncIterator<ByteBatch> {

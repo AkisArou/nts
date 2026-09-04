@@ -23,7 +23,6 @@ import { StringDecoder } from "../../string_decoder/src/main.ts";
 import { validateAbortSignal, validateObject } from "../../internal/validators.ts";
 import {
   aggregateTwoErrors,
-  AbortError,
   ERR_INVALID_ARG_TYPE,
   ERR_METHOD_NOT_IMPLEMENTED,
   ERR_OUT_OF_RANGE,
@@ -1039,16 +1038,6 @@ export class Readable extends Stream {
     }).wrap(src);
   }
 
-  async [Symbol.asyncDispose](): Promise<void> {
-    let error: unknown;
-    if (!this.destroyed) {
-      error = this.readableEnded ? null : new AbortError();
-      this.destroy(error);
-    }
-    await new Promise<void>((resolve, reject) =>
-      eos(this, (err) => (err && err !== error ? reject(err) : resolve()))
-    );
-  }
 }
 
 /**

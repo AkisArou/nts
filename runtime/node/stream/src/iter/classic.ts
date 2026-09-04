@@ -486,21 +486,6 @@ class ClassicWritableWriter implements AsyncWriter {
     });
   }
 
-  [Symbol.asyncDispose](): Promise<void> {
-    if (this.#isWritable()) {
-      this.#cleanup();
-      this.#writable.destroy?.();
-    }
-    return Promise.resolve();
-  }
-
-  [Symbol.dispose](): void {
-    if (this.#isWritable()) {
-      this.#cleanup();
-      this.#writable.destroy?.();
-    }
-  }
-
   #isWritable(): boolean {
     return !this.#writable.destroyed &&
       !this.#writable.writableFinished &&

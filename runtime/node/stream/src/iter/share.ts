@@ -259,10 +259,6 @@ export class AsyncShareController {
     this.#wakePullWaiters();
   }
 
-  [Symbol.dispose](): void {
-    this.cancel();
-  }
-
   #createConsumerState(): AsyncConsumerState {
     const state = new AsyncConsumerState(this.#bufferStart);
     this.#consumers.add(state);
@@ -560,10 +556,6 @@ export class SyncShareController {
     for (const consumer of this.#consumers) consumer.detached = true;
     this.#consumers.clear();
     this.#cachedMinCursorConsumers = 0;
-  }
-
-  [Symbol.dispose](): void {
-    this.cancel();
   }
 
   #createConsumerState(): SyncConsumerState {

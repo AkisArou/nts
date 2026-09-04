@@ -22,7 +22,6 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import {
-  AbortError,
   ERR_INVALID_ARG_TYPE,
   ERR_METHOD_NOT_IMPLEMENTED,
   ERR_MULTIPLE_CALLBACK,
@@ -39,7 +38,6 @@ import { getDefaultHighWaterMark, getHighWaterMark } from "./state.ts";
 import { construct, destroy, errorOrDestroy, undestroy } from "./destroy.ts";
 import type { DestroyableStream } from "./destroy.ts";
 import { addAbortSignalNoValidate } from "./add-abort-signal.ts";
-import { eos } from "./end-of-stream.ts";
 import type { AbortSignalLike } from "./end-of-stream.ts";
 import { captureRejectionSymbol } from "../../events/src/main.ts";
 import { newWritableFromWeb, newWritableToWeb } from "./web-adapters.ts";
@@ -62,6 +60,11 @@ export interface BufferedWrite {
   encoding: string | undefined;
   callback: WriteCallback;
 }
+
+export type WritevCallback = (
+  chunks: BufferedWrite[],
+  callback: WriteCallback,
+) => void;
 
 function bufferedWriteAt(
   entries: readonly BufferedWrite[],
@@ -102,7 +105,7 @@ function chunkLength(chunk: unknown): number {
  */
 export interface WritableImplementation extends DestroyableStream {
   _writableState: WritableState;
-  _writev?(chunks: BufferedWrite[], callback: WriteCallback): void;
+  _writev: WritevCallback | null;
   _final?(callback: WriteCallback): void;
   _write(chunk: unknown, encoding: string | undefined, callback: WriteCallback): void;
   _writeAfterEndError(): Error;
@@ -251,13 +254,9 @@ function resetBuffer(state: WritableState): void {
   state.allNoop = true;
 }
 
-/** Optional vector hook installed by constructor options or a subclass. */
-export interface Writable {
-  _writev?(chunks: BufferedWrite[], callback: WriteCallback): void;
-}
-
 export class Writable extends Stream {
   _writableState: WritableState;
+  _writev: WritevCallback | null = null;
   _final?(callback: WriteCallback): void;
   _construct?(callback: WriteCallback): void;
 
@@ -350,7 +349,7 @@ export class Writable extends Stream {
    * says so rather than silently swallowing.
    */
   _write(chunk: unknown, encoding: string | undefined, callback: WriteCallback): void {
-    if (this._writev !== undefined) {
+    if (this._writev !== null) {
       this._writev([{ chunk, encoding, callback: nop }], callback);
     } else {
       throw new ERR_METHOD_NOT_IMPLEMENTED("_write()");
@@ -528,22 +527,6 @@ export class Writable extends Stream {
     return newWritableToWeb(stream);
   }
 
-  async [Symbol.asyncDispose](): Promise<void> {
-    if (!this.destroyed) {
-      const error = this.writableFinished ? null : new AbortError();
-      this.destroy(error);
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      eos(this, (error) => {
-        if (error instanceof Error && error.name !== "AbortError") {
-          reject(error);
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
 }
 
 /**
@@ -708,7 +691,7 @@ function doWritev(
 
   if (state.destroyed) {
     state.onwrite(new ERR_STREAM_DESTROYED("write"));
-  } else if (stream._writev !== undefined) {
+  } else if (stream._writev !== null) {
     stream._writev(chunks, state.onwrite);
   } else {
     state.onwrite(new ERR_METHOD_NOT_IMPLEMENTED("_writev()"));
@@ -883,7 +866,7 @@ export function clearBuffer(
   let i = state.bufferedIndex;
   state.bufferProcessing = true;
 
-  if (bufferedLength > 1 && stream._writev !== undefined) {
+  if (bufferedLength > 1 && stream._writev !== null) {
     // One `_writev` replaces N `_write`s and therefore N-1 callbacks.
     state.pendingcb -= bufferedLength - 1;
 
