@@ -43,5 +43,11 @@ export function measure(run) {
   if (Number.isNaN(sink)) {
     throw new Error("unreachable");
   }
-  process.stdout.write(`${best.toFixed(4)} ${checksum}\n`);
+  // The sixty-four bits, not the number's text. See the comment in main.cpp:
+  // `%.17g` and JavaScript's shortest round-trip disagree on values like 0.1,
+  // and the runner compares checksums as strings.
+  const view = new DataView(new ArrayBuffer(8));
+  view.setFloat64(0, checksum);
+  const bits = view.getBigUint64(0).toString(16).padStart(16, "0");
+  process.stdout.write(`${best.toFixed(4)} ${bits}\n`);
 }

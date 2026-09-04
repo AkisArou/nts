@@ -3,8 +3,23 @@
 // The checksum is not decoration. The runner compares it across variants, so a
 // backend that is fast because it computes the wrong thing fails the benchmark
 // rather than winning it.
+//
+// It is printed as the value's **sixty-four bits**, and that is load-bearing
+// rather than fussy. `%.17g` and JavaScript's shortest round-trip disagree on
+// ordinary values -- `0.1` is `0.10000000000000001` here and `0.1` there -- and
+// the runner compares checksums as *strings*, so the first case to return one
+// would report a disagreement no lane caused. Nothing has, because every
+// checksum so far happens to be integral. Java's `Double.toString` disagrees
+// with both (`1.437497244444425E7`), so a third lane makes it certain rather
+// than likely.
+//
+// This is the convention `nts/rt/Check` already uses in the differential, for
+// the reason written there: a harness that lost a bit in transit would report a
+// disagreement it caused itself.
 #include <chrono>
 #include <cstdio>
+#include <cstring>
+#include <cstdint>
 #include "harness.h"
 
 static double now_ns(void) {
@@ -45,6 +60,8 @@ int main(void) {
     }
 
     static_cast<void>(sink);
-    printf("%.4f %.17g\n", best, checksum);
+    std::uint64_t bits;
+    std::memcpy(&bits, &checksum, sizeof bits);
+    printf("%.4f %016llx\n", best, static_cast<unsigned long long>(bits));
     return 0;
 }
