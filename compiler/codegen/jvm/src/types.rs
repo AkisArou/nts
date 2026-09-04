@@ -23,6 +23,10 @@ use nts_codegen_common::symbols::jvm_class_name;
 use nts_core::hir::{HirType, Layout, ManagedType, Program};
 use nts_jvm_emitter::{Kind, VType};
 
+/// `java.lang.String`, the JVM's name for it.
+pub const STRING: &str = "java/lang/String";
+pub const STRING_DESCRIPTOR: &str = "Ljava/lang/String;";
+
 /// The binary name of the class one layout becomes.
 ///
 /// One class per `Layout`, not per source type: structural typing merges
@@ -50,6 +54,11 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
         HirType::Managed(ManagedType::Object(id)) => {
             nts_jvm_emitter::descriptor::object(&class_name(program.layout(*id)?))
         }
+        // UTF-16 code units with a compact one-byte/two-byte representation --
+        // which is what `NtsString` implements by hand and what JavaScript's
+        // string *is*. `length`, `charAt`, `substring` and `equals` are already
+        // the language's semantics, and JIT intrinsics besides.
+        HirType::Managed(ManagedType::String) => STRING_DESCRIPTOR.to_owned(),
         // Strings, arrays, `Erased` and `BigInt` arrive in later steps.
         // Answering here would emit something for a type nothing implements.
         HirType::Never
@@ -63,7 +72,7 @@ pub fn descriptor(program: &Program, ty: &HirType) -> Option<String> {
 #[must_use]
 pub fn kind(ty: &HirType) -> Option<Kind> {
     Some(match ty {
-        HirType::Managed(ManagedType::Object(_)) => Kind::Ref,
+        HirType::Managed(ManagedType::Object(_) | ManagedType::String) => Kind::Ref,
         HirType::Int { bits: 64, .. } => Kind::Long,
         // A `boolean` is an `int` everywhere except in a descriptor: there is
         // no narrower computational type on this machine.
@@ -84,12 +93,13 @@ pub fn vtype(program: &Program, ty: &HirType) -> Option<VType> {
         Kind::Long => VType::Long,
         Kind::Float => VType::Float,
         Kind::Double => VType::Double,
-        Kind::Ref => {
-            let HirType::Managed(ManagedType::Object(id)) = ty else {
-                return None;
-            };
-            VType::Object(class_name(program.layout(*id)?))
-        }
+        Kind::Ref => match ty {
+            HirType::Managed(ManagedType::String) => VType::Object(STRING.to_owned()),
+            HirType::Managed(ManagedType::Object(id)) => {
+                VType::Object(class_name(program.layout(*id)?))
+            }
+            _ => return None,
+        },
     })
 }
 

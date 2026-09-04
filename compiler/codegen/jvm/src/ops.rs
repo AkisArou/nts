@@ -11,7 +11,7 @@
 //! anyway, or writes 0 or 1 through a scratch slot.
 
 use nts_codegen_common::Copy;
-use nts_core::hir::{BinOp, BlockId, Callee, HirType, OpKind, Terminator, UnOp, ValueId};
+use nts_core::hir::{BinOp, BlockId, Callee, HirType, ManagedType, OpKind, Terminator, UnOp, ValueId};
 use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::code::{Code, Label};
 use nts_jvm_emitter::{Compare, Kind, Pool, insn};
@@ -52,9 +52,14 @@ impl Emitter<'_> {
         if ops.last() != Some(cond) || self.uses.get(cond.0 as usize).copied() != Some(1) {
             return None;
         }
-        let OpKind::Binary { op, .. } = self.func.values[cond.0 as usize].kind else {
+        let OpKind::Binary { op, lhs, .. } = self.func.values[cond.0 as usize].kind else {
             return None;
         };
+        // A string comparison is a call that leaves a boolean, not a branch, so
+        // there is nothing to fuse into.
+        if matches!(self.ty(lhs), HirType::Managed(ManagedType::String)) {
+            return None;
+        }
         comparison(op).map(|_| *cond)
     }
 
@@ -74,7 +79,9 @@ impl Emitter<'_> {
             OpKind::ConstBool(_) | OpKind::ConstInt(_) | OpKind::ConstFloat(_) => {
                 self.constant(code, pool, &op.kind, &op.ty, &origin)?
             }
-
+            OpKind::ConstString(_) | OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
+                self.string_operation(code, pool, &op.kind, &origin)?
+            }
             OpKind::Binary { op: bin, lhs, rhs } => self.binary(code, pool, &op.ty, *bin, *lhs, *rhs)?,
             OpKind::Unary { op: un, operand } => self.unary(code, pool, &op.ty, *un, *operand)?,
             OpKind::Convert(operand) => {
@@ -184,6 +191,61 @@ impl Emitter<'_> {
         Ok(())
     }
 
+    /// The operations `java.lang.String` already is.
+    ///
+    /// Lifted out of `operation` because it went past a hundred lines, which in
+    /// this repository has a habit of finding a real duplication rather than
+    /// merely a long function. Here it found that all three arms want the
+    /// string on the stack first and nothing else in common.
+    fn string_operation(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        kind: &OpKind,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        match kind {
+            // A literal is a constant pool entry, deduplicated by the pool and
+            // free at the use -- better than the C backend, which emits a
+            // static per literal and takes its address.
+            OpKind::ConstString(text) => {
+                if nts_jvm_emitter::Pool::utf8_length(text) > 65_535 {
+                    return Err(refuse(self.func, "a string literal past the 65,535-byte constant limit"));
+                }
+                code.const_string(origin, pool, text);
+                Ok(Placed::OnStack)
+            }
+            // `String.length()` is an `int`; the middle end types a length as a
+            // double, having been told once that it is a `uint32_t` and worth
+            // 4.0x to say so. The widening is explicit here for the same reason
+            // the coercion's is: the slot the middle end chose is the slot.
+            OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::String)) => {
+                self.load(code, *of)?;
+                code.invoke_virtual(origin, pool, types::STRING, "length", "()I");
+                code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
+                Ok(Placed::OnStack)
+            }
+            // Out of range JavaScript answers `NaN` where `charAt` throws, and a
+            // fractional index truncates rather than being an error. Where the
+            // compiler proved the index in range neither applies, so `charAt`
+            // is called directly and the helper is not in the program.
+            OpKind::StringUnitAt { string, index, checked } => {
+                self.load(code, *string)?;
+                self.load(code, *index)?;
+                if *checked {
+                    code.invoke_static(origin, pool, RUNTIME, "charCodeAt", "(Ljava/lang/String;D)D");
+                } else {
+                    code.convert(origin, insn::D2I, Kind::Double, Kind::Int);
+                    code.invoke_virtual(origin, pool, types::STRING, "charAt", "(I)C");
+                    code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
+                }
+                Ok(Placed::OnStack)
+            }
+
+            _ => Err(refuse(self.func, "a string operation this backend does not spell")),
+        }
+    }
+
     /// A literal, in whichever width the middle end gave it.
     fn constant(
         &self,
@@ -277,6 +339,42 @@ impl Emitter<'_> {
         rhs: ValueId,
     ) -> Result<Placed, Diagnostic> {
         let origin = self.func.origin.clone();
+        // `===` on two strings compares by value, so it is `Objects.equals`
+        // and never `if_acmpeq`. Getting that wrong is silent wherever two
+        // equal strings happen to be one constant-pool entry, which is most of
+        // a test suite -- record 0044 found exactly that in the LLVM backend.
+        if matches!(op, BinOp::Eq | BinOp::Ne)
+            && matches!(self.ty(lhs), HirType::Managed(ManagedType::String))
+        {
+            let origin = self.func.values[lhs.0 as usize].origin.clone();
+            self.load(code, lhs)?;
+            self.load(code, rhs)?;
+            code.invoke_static(
+                &origin,
+                pool,
+                RUNTIME,
+                "stringEq",
+                "(Ljava/lang/String;Ljava/lang/String;)Z",
+            );
+            if op == BinOp::Ne {
+                code.const_int(&origin, pool, 1);
+                code.bitwise(&origin, insn::XOR, Kind::Int);
+            }
+            return Ok(Placed::OnStack);
+        }
+        if op == BinOp::Concat {
+            let origin = self.func.values[lhs.0 as usize].origin.clone();
+            self.load(code, lhs)?;
+            self.load(code, rhs)?;
+            code.invoke_virtual(
+                &origin,
+                pool,
+                types::STRING,
+                "concat",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+            );
+            return Ok(Placed::OnStack);
+        }
         if let Some(compare) = comparison(op) {
             // Materialize: 0 or 1 through the scratch slot, so the stack is
             // empty at both labels and the frame stays the universal one.
@@ -532,6 +630,13 @@ impl Emitter<'_> {
         let origin = self.func.values[operand.0 as usize].origin.clone();
         if matches!(self.ty(operand), HirType::Bool) {
             self.load(code, operand)?;
+            return Ok(Placed::OnStack);
+        }
+        // Emptiness, not nullness -- and a null one is falsy too, so a length
+        // check alone throws on the case it is meant to answer.
+        if matches!(self.ty(operand), HirType::Managed(ManagedType::String)) {
+            self.load(code, operand)?;
+            code.invoke_static(&origin, pool, RUNTIME, "stringTruthy", "(Ljava/lang/String;)Z");
             return Ok(Placed::OnStack);
         }
         let Some(scratch) = self.scratch else {
@@ -855,7 +960,6 @@ impl Emitter<'_> {
 /// What a refusal calls an operation this slice does not implement.
 fn unsupported(kind: &OpKind) -> String {
     match kind {
-        OpKind::ConstString(_) => "a string literal".to_owned(),
         OpKind::ConstNull | OpKind::ConstUndefined => "an absent value".to_owned(),
         OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::TagOf { .. } => {
             "an erased value".to_owned()
@@ -863,8 +967,7 @@ fn unsupported(kind: &OpKind) -> String {
         OpKind::ArrayNew { .. } | OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
             "an array".to_owned()
         }
-        OpKind::Length(_) => "a length".to_owned(),
-        OpKind::StringUnitAt { .. } => "indexing a string".to_owned(),
+        OpKind::Length(_) => "the length of an array".to_owned(),
         OpKind::ClosureStatic => "a function used as a value".to_owned(),
         OpKind::CellReady { .. } => "a captured binding".to_owned(),
         OpKind::Retain(_) | OpKind::Release(_) => {

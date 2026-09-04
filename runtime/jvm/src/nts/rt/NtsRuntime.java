@@ -144,6 +144,51 @@ public final class NtsRuntime {
     }
 
     /**
+     * {@code String.prototype.charCodeAt}, which is not {@code String.charAt}.
+     *
+     * <p>Two differences, both observable. Out of range JavaScript answers
+     * {@code NaN} where Java throws {@code StringIndexOutOfBoundsException};
+     * and a fractional index truncates toward zero rather than being an error,
+     * because the specification runs {@code ToIntegerOrInfinity} on it first.
+     *
+     * <p>Reached only where the compiler could *not* prove the index in range.
+     * Where it could, the emitter calls {@code charAt} directly and this is not
+     * in the program at all.
+     */
+    public static double charCodeAt(String text, double index) {
+        int at = (int) index;
+        if (at < 0 || at >= text.length()) {
+            return Double.NaN;
+        }
+        return text.charAt(at);
+    }
+
+    /**
+     * JavaScript equality on two strings, which compares by *value*.
+     *
+     * <p>{@code java.util.Objects.equals} rather than {@code a.equals(b)}: a
+     * `string | null` is an ordinary reference here with `null` as its absence,
+     * so either side may be null and `equals` would throw where JavaScript
+     * answers false. The C runtime has the same rule written the other way
+     * round -- a null comparison is settled before the string one, "because
+     * `s === null` is a question about the pointer and answering it by reading
+     * through the pointer reads through the null one".
+     */
+    public static boolean stringEq(String left, String right) {
+        return java.util.Objects.equals(left, right);
+    }
+
+    /**
+     * JavaScript truthiness of a string, which is emptiness and not nullness.
+     *
+     * <p>{@code ""} is falsy and so is a null one, and both have to be tested:
+     * a length check alone throws on the absent case.
+     */
+    public static boolean stringTruthy(String text) {
+        return text != null && !text.isEmpty();
+    }
+
+    /**
      * The terminator for a block the compiler proved unreachable.
      *
      * <p>The C backend writes {@code __builtin_unreachable()} here, which is a

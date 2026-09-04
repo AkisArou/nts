@@ -27,6 +27,28 @@ cd "$root"
 NTS_TSGO=${NTS_TSGO:-$root/target/tsgo}
 export NTS_TSGO
 
+# Where the run's temporary directories go, which is a property of the run
+# rather than of whoever remembered to set it.
+#
+# `/tmp` on this machine is a **tmpfs**: 16G of RAM, and the differential
+# creates an `nts-check-<pid>` per run while the C backend's tests create an
+# `nts-e2e-*` per test, neither of which removes itself. Three sessions running
+# all day filled it to 13G, and the failures that produced were not failures of
+# the thing being tested -- `rc` reported 11 of 89 examples passing, which reads
+# exactly like a compiler regression and was a full filesystem. `javac` in the
+# JVM lane reported `Disk quota exceeded` for one class file, which at least
+# says what it is.
+#
+# The RAM matters more than the space. Thirteen gigabytes of tmpfs is thirteen
+# gigabytes unavailable to a benchmark's working set and to the page cache its
+# C++ references are compiled through -- and the occupancy *changes during a
+# run*, so a long measurement is not sampling a constant machine.
+#
+# `std::env::temp_dir()` honours `TMPDIR`, so this needs no code change.
+TMPDIR=${TMPDIR:-$HOME/.cache/nts-tmp}
+export TMPDIR
+mkdir -p "$TMPDIR"
+
 # One knob for how hard this is allowed to run the machine.
 #
 #   NTS_JOBS=6 tooling/gate/all.sh
@@ -303,12 +325,12 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  # Twenty-four of eighty-seven.
+  # Twenty-nine of eighty-seven.
   # The floor is planted on *agreement* rather than on rendering, because
   # rendering is a property of the emitter and agreeing is a property of the
   # language, and a floor on the wrong one rewards emitting more while meaning
   # less.
-  backend_examples 24 "through the JVM backend" ); }
+  backend_examples 29 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
