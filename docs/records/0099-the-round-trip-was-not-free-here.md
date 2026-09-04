@@ -1,0 +1,101 @@
+# 0099 — The round trip was not free here
+
+**1.53x more instructions per operation than hand-written Java, for the same
+program, at higher IPC.** `awfy-bounce`, and it settles a prediction this plan
+made and never checked.
+
+## The prediction
+
+> **The `store`/`load` round trip.** Every value goes to its slot and comes
+> back. C2 removes it, exactly as `mem2reg` removes the C backend's
+> equivalent — record 0004 measured that at parity and called emitting
+> "simple, regular, obviously correct" code "measurably free". **Justified
+> only if a profile disagrees.**
+
+The profile disagrees.
+
+## The measurement
+
+A fixed-count driver — 20,000 warmup then exactly 200,000 operations, no
+calibration — because record 0049 already recorded why the ordinary harness
+cannot answer this: it is time-budgeted, so two binaries run different
+iteration counts and their instruction totals do not compare. All three
+variants return the same checksum, so they did the same work.
+
+| variant | ns/op | instructions/op | IPC |
+| --- | --- | --- | --- |
+| nts (JVM) | 7807.2 | **265,735** | 5.36 |
+| hand-written Java, `int` fields | 4776.6 | 185,940 | 6.02 |
+| hand-written Java, `double` fields | 5438.0 | **173,724** | 4.95 |
+
+Against the variant it should be compared with — the reference with only its
+four `Ball` fields changed from `int` to `double`, which is what a TypeScript
+`number` is — this backend executes **1.53x the instructions** and recovers
+**1.08x** of it through better IPC. 1.53 / 1.08 = 1.42, and the measured time
+ratio is 1.44.
+
+## The row, decomposed
+
+    field width      1.14x   (int fields -> double fields, reference vs itself)
+    instruction count 1.44x   (double-field reference -> this backend)
+    product          1.64x
+    observed         1.63x
+
+Two causes, and the codegen one is the larger.
+
+## What this rules out, which is most of what I would have guessed
+
+**Not stalls.** The obvious story for a compiled-language backend losing to a
+hand-written one is that it chases pointers and misses cache. IPC says
+otherwise: **5.36 against the reference's 4.95**. This lane runs *better* per
+cycle than the thing it loses to, which leaves only instruction count.
+
+**Not the by-value storage that explains the C++ gap.** Record 0049 has this
+row at 1.56x against C++ because the C++ reference holds balls in a
+`std::array<Ball, N>` where we hold references. Java has no value types —
+`Ball[] balls = new Ball[ballCount]` is an array of references exactly like
+ours — so that lever cannot touch this column. Suggested as one cause and
+refuted by reading two source files.
+
+**Not the checked index.** `javap` finds zero calls to `NtsRuntime.bounds` in
+the emitted program. Record 0094 has that costing 4.6x on `awfy-nbody`; it is
+not present here.
+
+**Not the hot method.** `Ball$bounce` calls nothing but `java.lang.Math.abs`,
+four times, which is a JIT intrinsic.
+
+**Not the prologue.** The definite-assignment stores are once per call, and
+each call runs 50 x 100 bounces, so they are a five-thousandth of the work.
+
+## What is left, and why the C backend's answer did not transfer
+
+Record 0004 is about C, and `mem2reg` runs over an entire function with the
+whole SSA graph in front of it. C2 is a JIT with an inlining budget and a
+compilation deadline, and what it sees is the *bytecode* — where a block
+parameter is a real store to a real local and a real load back, and there are
+a great many of them. Reading `Bounce$benchmark`, the loop's tail is nine
+load/store pairs to move six values across one edge.
+
+The conclusion is not that C2 is bad at this. It is that **"the other
+backend's optimiser removes this" is not evidence about a different optimiser
+on a different IR at a different time**, and this plan treated it as though it
+were. Same shape as the error one level up: `hir::escape` proves something,
+C2 also does it, and neither fact implies the other.
+
+## What would move it
+
+Named, not chosen — the next thing is to attribute the 1.53x between the
+candidates rather than to pick one.
+
+- **Slot reuse by live range.** `hir::liveness` exists. It costs the
+  eighty-line stack-map design, since frames become per-block again.
+- **Fusing the block-parameter copies.** `edge_copies` and `destruct` already
+  compute what moves across an edge; the copies are emitted through slots
+  rather than left on the stack.
+- **The materialised boolean**, where a comparison is stored rather than
+  branched on.
+- **Field specialization**, which is upstream and worth 1.14x here on its own:
+  number specialization narrows locals and not fields, so `Ball` is four
+  doubles on every lane — `_Static_assert(sizeof(NtsObj_Ball) == 56u)` on the
+  C side. A second instance found in the same function: the `bounces`
+  accumulator is a `double` where the loop counter beside it is an `int`.
