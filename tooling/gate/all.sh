@@ -383,24 +383,25 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  # Ninety-five of ninety-six, measured at `5d6ade1` in a pinned worktree and
-  # confirmed against the shared tree.
+  # **Ninety-six of ninety-six**, measured at `d282a7a` in a pinned worktree.
+  # Every example in the corpus agrees with node through this backend.
   #
-  # One example does not agree: `exceptions`, which wants the provided error
-  # classes to name `Error` as a base -- a fact `provided_errors_under`
-  # already carries at the `instanceof` site and `Layout.base` does not get.
-  # That is upstream and taken.
+  # The plan set the target at 86 of 87, which was the LLVM floor the day it
+  # was written; the corpus has grown by nine since and the two lanes are
+  # level. A floor equal to the corpus is a different kind of number from one
+  # below it -- from here it can only be held, and any new example that does
+  # not agree fails this step on the day it lands rather than being absorbed.
+  # That is the point of writing it at the ceiling rather than one below.
   #
-  # The plan's target for this lane was 86 of 87, which was the LLVM floor
-  # when it was written. The corpus has grown since and the two are level.
-  # What is left for this backend is not coverage; it is the three AWFY rows
-  # still above hand-written Java.
+  # What is left for this backend is not coverage. It is the three AWFY rows
+  # still above hand-written Java: `awfy-nbody` 4.93x, `awfy-bounce` 1.67x,
+  # `awfy-queens` 1.24x.
   #
   # The floor is planted on *agreement* rather than on rendering, because
   # rendering is a property of the emitter and agreeing is a property of the
   # language, and a floor on the wrong one rewards emitting more while meaning
   # less.
-  backend_examples 95 "through the JVM backend" ); }
+  backend_examples 96 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
