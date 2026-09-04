@@ -1,0 +1,29 @@
+ideal 2
+allocated 5
+because `Array.from` over a table, which is the shape with no run of memory to
+because copy. One array comes out and it *is* the answer, so this cannot be
+because zero; what the case is about is how many arrays were built to arrive at
+because one, and how much of the total is the `Set` rather than the walk.
+because
+because Allocations: five, and exactly one of them is `Array.from`'s.
+because
+because   1  the `Set` object
+because   3  its table, grown 0 -> 8 -> 16 -> 32. `nts_map_rehash` takes
+because      `used * 2` with a floor of eight, and nothing tells a `Set` how
+because      many elements are coming.
+because   1  the array
+because
+because The array is allocated **at the walk's length** and filled by index,
+because because a table keeps its live entry count in the header field an array
+because uses for `length`. Appending instead measures **nine**: the same five
+because plus four doublings of the result. That difference is the whole of what
+because this case ratchets, and it is invisible to the benchmark -- 2.66 ms
+because against 2.70 ms, which is no change at all. Two instruments, one of
+because which sees this and one of which cannot.
+because
+because Operations: two, and the floor is two rather than zero. `closure-capture`
+because states the rule as an allocation floor of zero forcing an operation floor
+because of zero; the converse holds here. Two heap objects are made in this
+because function and both are dead when it returns, so each is given back once.
+because Neither escapes and the elements are numbers, so nothing else is
+because counted -- filling the array takes no references.

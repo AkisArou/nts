@@ -7940,7 +7940,18 @@ impl<'a> FuncBuilder<'a> {
             // argument; the ones that take a mapper, or something that is
             // iterable without being an array, are a different question and
             // fall through to being refused by name.
-            ("Array", "from", [argument]) => self.decide_array_from(id, *argument),
+            ("Array", "from", [argument]) => Some(self.lower_array_from(id, *argument)),
+            // The two-argument form is two features wearing one name. With an
+            // iterable it is `map` fused into the walk, which the callback
+            // machinery does for `xs.map(f)` and would have to do here; with
+            // `{ length: n }` it is not an iteration at all -- an *array-like*
+            // is read by index, and `Array.from({ length: 4 })` builds four
+            // `undefined`s from an object that has no elements. Both are in
+            // `runtime/node`, and neither is this.
+            ("Array", "from", [_, _]) => Some(Err(self.unsupported(
+                id,
+                "an `Array.from` with a mapping callback, or over an array-like",
+            ))),
             ("Object", "keys", [argument]) => Some(self.decide_object_keys(id, *argument)),
             ("Object", "hasOwn", [argument, key]) => Some(self.decide_has_own(id, *argument, *key)),
             // `BigInt.asIntN(64, v)`, which is how the profile reads a signed
@@ -7958,25 +7969,238 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// `Array.from(xs)` where `xs` is an array: a copy.
+    /// `Array.from(xs)`: the walk, appending.
     ///
-    /// `None` where the argument is not one, so the ordinary path refuses it
-    /// with a message naming `Array.from` rather than this deciding something
-    /// about a `Set` it cannot walk.
-    fn decide_array_from(
-        &mut self,
-        id: NodeId,
-        argument: NodeId,
-    ) -> Option<Result<ValueId, Diagnostic>> {
-        if !matches!(
+    /// # Why this is the walk and not four special cases
+    ///
+    /// `Array.from` takes *anything iterable*, and this compiler already knows
+    /// how to iterate five things -- an array, a typed array, a string by code
+    /// point, a `Map` or `Set`, a user type with `[Symbol.iterator]`, and a
+    /// generator. [`Self::walk_of`] is that knowledge, and it is the same
+    /// function a `for...of` asks. So this is a loop over the walk with an
+    /// append where the body would be, and every shape `for...of` learns
+    /// afterwards arrives here for nothing.
+    ///
+    /// It replaced a version that handled one case: `Array.from(xs)` where
+    /// `xs` was already an array, lowered as `slice`. That refused a typed
+    /// array by name (`slice` reads doubles or pointers and a `Uint8Array` is
+    /// neither), refused a string, and refused a `Set` -- which together are
+    /// **eight of the ten `Array.from` calls in `runtime/node`**, and the copy
+    /// it did handle is the one case that had `[...xs]` as an alternative.
+    ///
+    /// # What the loop looks like
+    ///
+    /// The array is allocated empty *before* the loop and appended to, so it
+    /// dominates the body and is not a carried name -- only the cursor is. That
+    /// is the same reason `for...of` does not carry the sequence.
+    ///
+    /// The length is not known in advance for three of the five shapes: a
+    /// `Map` with holes, a string by code point, and a generator. Asking for it
+    /// where it *is* known would size the allocation exactly and cost a second
+    /// path through this function to be wrong in; the growth strategy record
+    /// 0029 describes is what makes appending the right answer for all five.
+    fn lower_array_from(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
+        // An array source keeps its `slice`, and the reason is measured rather
+        // than assumed. The same row, 256 elements copied two thousand times:
+        //
+        //     walked   1.05 ms
+        //     sliced   782 us     -- 1.34x
+        //
+        // A `slice` is a memcpy of one run of memory whose length is known
+        // before it starts; the walk is a bounds check, a load and a store per
+        // element. Both numbers sit against a C++ reference at 43 us, and that
+        // 17.7x is the array *copy* rather than the walk -- record 0102 has the
+        // decomposition, and reading it the other way first is how this comment
+        // nearly said 24x.
+        //
+        // Every other shape has no run of memory to copy: a `Set` with holes, a
+        // string by code point, a generator. So this is one specialization with
+        // a number on it rather than two paths kept in step.
+        //
+        // Exactly the two element widths `slice` reads -- a double and a
+        // pointer. A **typed** array is `Array` too and is neither, and routing
+        // one here refused it by name: `slice` moves eight bytes or a word, and
+        // a `Uint8Array` holds one. That was a regression this file's own
+        // example caught within the hour, and it is why the test asks for the
+        // typed source rather than for "an array".
+        if matches!(
             self.type_of(argument),
-            Some(HirType::Managed(ManagedType::Array(_)))
-        ) {
-            return None;
+            Some(HirType::Managed(ManagedType::Array(element)))
+                if matches!(*element, HirType::Float { bits: 64 } | HirType::Managed(_))
+        ) && let Some(ty) = self.type_of(id)
+        {
+            let origin = self.origin(id);
+            return self.lower_array_copy(argument, &ty, &origin);
         }
-        let ty = self.type_of(id)?;
+        let (sequence, forced) = self.table_source(argument);
+        let sequence_value = self.lower_expression(sequence)?;
+        let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
+
         let origin = self.origin(id);
-        Some(self.lower_array_copy(argument, &ty, &origin))
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "what `Array.from` builds"))?;
+        let HirType::Managed(ManagedType::Array(element_ty)) = ty.clone() else {
+            return Err(self.unsupported(id, "an `Array.from` that does not build an array"));
+        };
+        let append = match *element_ty {
+            HirType::Managed(_) => "nts_array_push_ref",
+            HirType::Float { bits: 64 } => "nts_array_push",
+            // A narrower element is a *typed* array being built, which
+            // `Array.from` does not do -- `Uint8Array.from` does, and is its
+            // own question.
+            _ => return Err(self.unsupported(id, "an `Array.from` building a typed array")),
+        };
+
+        // How many elements are coming, where that is known before the walk
+        // starts. Three of the five shapes know: an array and a typed array
+        // from their length, a `Map` or `Set` from its live entry count --
+        // which is the same `Length`, because a table keeps it in the header
+        // field an array uses.
+        //
+        // Two do not, and cannot. A string's code points are one or two units
+        // each, so its `length` is an upper bound and not an answer; a
+        // generator's elements do not exist until it is asked for them.
+        //
+        // The difference is worth a branch here, and the evidence is *not* the
+        // timing: `Array.from(set)` over 256 elements two thousand times reads
+        // 2.66 ms growing against 2.70 ms sized, which is no change. It is the
+        // allocation count, which goes from nine to five for a sixteen-element
+        // walk -- `tooling/memory/cases/array-from`. Doubling makes the copying
+        // about one extra pass, and one extra pass over two kilobytes is not
+        // what a timing harness can see.
+        let counted = matches!(
+            walk,
+            Walk::Counted(_) | Walk::Table { .. } | Walk::Entries { .. }
+        );
+        let start = if counted {
+            self.push(OpKind::Length(sequence_value), HirType::NUMBER, origin.clone())
+        } else {
+            self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone())
+        };
+        let out = self.push(
+            OpKind::ArrayNew {
+                length: start,
+                zeroed: true,
+            },
+            ty.clone(),
+            origin.clone(),
+        );
+
+        let index = self.walk_cursor(&walk, sequence_value, &origin);
+        // Where the *next element goes*, which is not the cursor: a table's
+        // cursor is an entry index and its holes are not elements, so a walk
+        // that wrote at the cursor would leave gaps and run off the end.
+        let filled = self.synthetic_symbol();
+        if counted {
+            let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+            self.bindings.insert(filled, zero);
+        }
+        let mut carried: Vec<u32> = index.into_iter().collect();
+        if counted {
+            carried.push(filled);
+        }
+        let steps = !matches!(walk, Walk::Protocol { .. } | Walk::Generator { .. });
+        let record = self.begin_loop(id, &carried, steps, &origin)?;
+
+        let (stepped, at) = if let Some(index) = index {
+            (None, self.bindings[&index])
+        } else {
+            let (step, done) = self.protocol_step(id, &walk, &origin)?;
+            (Some(step), done)
+        };
+        let cond = self.walk_condition(&walk, at, sequence_value, &origin);
+        self.test_loop(cond, &record);
+        self.switch_to(record.body);
+
+        let element = self.walk_element(&walk, sequence_value, at, stepped, &origin);
+        let element = self.coerce(element, &element_ty, sequence)?;
+        if counted {
+            let position = self.bindings[&filled];
+            self.push(
+                OpKind::ArraySet {
+                    array: out,
+                    index: position,
+                    value: element,
+                    // Checked, and `hir::bounds` is what should remove it: the
+                    // array was allocated at the walk's own length and the
+                    // position advances once per element, so a proof exists.
+                    // Asserting it here instead would be this lowering
+                    // promising something no pass had verified.
+                    checked: true,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+            let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+            let next = self.push(
+                OpKind::Binary {
+                    op: BinOp::Add,
+                    lhs: position,
+                    rhs: one,
+                },
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            self.bindings.insert(filled, next);
+        } else {
+            self.runtime_call(append, vec![out, element], HirType::Void, origin.clone());
+        }
+
+        let step = match index {
+            None => Step::None,
+            Some(cursor) => Step::Walk {
+                cursor,
+                walk,
+                sequence: sequence_value,
+            },
+        };
+        self.end_loop(&record, step)?;
+        Ok(out)
+    }
+
+    /// The one value a walk hands the body, whichever kind of walk it is.
+    ///
+    /// The two cursorless walks read theirs out of what the step returned --
+    /// a generator's frame, or the `{ value, done }` an iterator built -- and
+    /// the three with a cursor read the sequence at it. Written once because
+    /// `for...of` and `Array.from` both need exactly this and had it inline.
+    fn walk_element(
+        &mut self,
+        walk: &Walk,
+        sequence: ValueId,
+        at: ValueId,
+        stepped: Option<ValueId>,
+        origin: &Origin,
+    ) -> ValueId {
+        match (walk, stepped) {
+            (Walk::Generator { element, .. }, Some(frame)) => {
+                let element = element.clone();
+                self.push(
+                    OpKind::FieldGet {
+                        object: frame,
+                        field: super::suspend::FIELD_YIELDED,
+                    },
+                    element,
+                    origin.clone(),
+                )
+            }
+            (Walk::Protocol { value, element, .. }, Some(step)) => {
+                let (value, element) = (*value, element.clone());
+                self.push(
+                    OpKind::FieldGet {
+                        object: step,
+                        field: value,
+                    },
+                    element,
+                    origin.clone(),
+                )
+            }
+            _ => {
+                let mut values = self.read_element(walk, sequence, at, origin);
+                values.remove(0)
+            }
+        }
     }
 
     /// The field names of whatever the argument's layout is.
@@ -9503,30 +9727,10 @@ impl<'a> FuncBuilder<'a> {
         self.test_loop(cond, &record);
         self.switch_to(record.body);
 
-        let values = match (&walk, stepped) {
-            (Walk::Generator { element, .. }, Some(frame)) => {
-                let element = element.clone();
-                vec![self.push(
-                    OpKind::FieldGet {
-                        object: frame,
-                        field: super::suspend::FIELD_YIELDED,
-                    },
-                    element,
-                    origin.clone(),
-                )]
-            }
-            (Walk::Protocol { value, element, .. }, Some(step)) => {
-                let (value, element) = (*value, element.clone());
-                vec![self.push(
-                    OpKind::FieldGet {
-                        object: step,
-                        field: value,
-                    },
-                    element,
-                    origin.clone(),
-                )]
-            }
-            _ => self.read_element(&walk, sequence_value, at, &origin),
+        let values = if stepped.is_some() {
+            vec![self.walk_element(&walk, sequence_value, at, stepped, &origin)]
+        } else {
+            self.read_element(&walk, sequence_value, at, &origin)
         };
         self.bind_head(id, &head, &element_symbols, values)?;
 
