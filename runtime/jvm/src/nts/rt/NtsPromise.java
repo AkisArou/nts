@@ -129,4 +129,108 @@ public final class NtsPromise {
         }
         promise.waiting[promise.waitingCount++] = frame;
     }
+
+    // ----- combinators (docs/async.md 5b) ---------------------------------
+
+    /**
+     * `Promise.all`: fulfils with the values in **input order** once every
+     * element has fulfilled, and rejects with the first rejection.
+     *
+     * <p>Subscribes to every element *before* returning, so an element that
+     * settles during the call is not missed -- which is why the loop below
+     * cannot exit early on a rejection.
+     *
+     * <p>`values` is allocated by the compiler because only it knows whether a
+     * payload is a double or a reference, and it is written in place rather
+     * than returned: the caller already has the array and its element type.
+     *
+     * <p>A named class rather than a lambda. `LambdaMetafactory` spins a hidden
+     * class through `invokedynamic`, which this runtime forbids outright --
+     * `runtime_jar.rs` asserts zero of them, because `invokedynamic` needs
+     * Android API 26 and that assertion is what keeps the Android path open for
+     * free.
+     */
+    private static final class Waiting implements NtsResumable {
+        private final NtsPromise element;
+        private final NtsPromise result;
+        private final All group;
+
+        Waiting(NtsPromise element, NtsPromise result, All group) {
+            this.element = element;
+            this.result = result;
+            this.group = group;
+        }
+
+        @Override
+        public void resume() {
+            if (group == null) {
+                // `race`: the first settlement of either kind wins, and every
+                // later one finds the result already settled and is ignored.
+                if (isRejected(element)) {
+                    settle(result, REJECTED, element.settled);
+                } else {
+                    settle(result, FULFILLED, element.settled);
+                }
+                return;
+            }
+            if (isRejected(element)) {
+                settle(result, REJECTED, element.settled);
+                return;
+            }
+            group.store(element.settled);
+            if (--group.remaining == 0) {
+                settle(result, FULFILLED, NtsValue.UNDEFINED_VALUE);
+            }
+        }
+    }
+
+    /** Where one element's value goes, and how many are still outstanding. */
+    private abstract static class All {
+        int remaining;
+        int at;
+
+        abstract void store(NtsValue value);
+    }
+
+    private static NtsPromise combine(NtsPromise[] promises, All group) {
+        NtsPromise result = new NtsPromise();
+        if (promises.length == 0) {
+            // `all` of nothing is already fulfilled; `race` of nothing never
+            // settles, which is what the language says and what this does.
+            if (group != null) {
+                settle(result, FULFILLED, NtsValue.UNDEFINED_VALUE);
+            }
+            return result;
+        }
+        for (NtsPromise element : promises) {
+            subscribe(element, new Waiting(element, result, group));
+        }
+        return result;
+    }
+
+    public static NtsPromise all(NtsPromise[] promises, final double[] values) {
+        All group = new All() {
+            @Override
+            void store(NtsValue value) {
+                values[at++] = value.num;
+            }
+        };
+        group.remaining = promises.length;
+        return combine(promises, group);
+    }
+
+    public static NtsPromise all(NtsPromise[] promises, final Object[] values) {
+        All group = new All() {
+            @Override
+            void store(NtsValue value) {
+                values[at++] = value.ref;
+            }
+        };
+        group.remaining = promises.length;
+        return combine(promises, group);
+    }
+
+    public static NtsPromise race(NtsPromise[] promises) {
+        return combine(promises, null);
+    }
 }

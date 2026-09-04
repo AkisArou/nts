@@ -116,10 +116,52 @@ public final class Check {
 
         Method method = program.getMethod(name, types);
         Object result = method.invoke(null, arguments);
+        if (result instanceof NtsPromise) {
+            showSettled(name, at, (NtsPromise) result);
+            return;
+        }
         if (returns.equals("Ljava/lang/String;")) {
             showString(name, at, (String) result);
         } else {
             show(name, at, widen(returns, result));
+        }
+    }
+
+    /**
+     * What an `async` function settled with, once the loop has run enough to
+     * settle it.
+     *
+     * <p>Every line here has to match the C driver's `show_settled` word for
+     * word, because the runner compares them as text. The budget is a bound
+     * rather than a guess: a program that starves the loop fails here instead
+     * of hanging the run.
+     *
+     * <p>Until it *settles*, not until the loop falls quiet -- see
+     * {@link NtsLoop#step()} for why those differ.
+     */
+    private static void showSettled(String name, int at, NtsPromise promise) {
+        int budget = 1000000;
+        while (!NtsPromise.isSettled(promise) && budget > 0) {
+            if (!NtsLoop.step()) {
+                break;
+            }
+            budget--;
+        }
+        if (budget == 0) {
+            System.out.println(name + " " + at + " starved");
+            return;
+        }
+        NtsValue settled = NtsPromise.value(promise);
+        if (!NtsPromise.isSettled(promise)) {
+            System.out.println(name + " " + at + " pending");
+        } else if (NtsPromise.isRejected(promise)) {
+            System.out.println(name + " " + at + " rejected");
+        } else if (settled.tag == NtsValue.NUMBER) {
+            show(name, at, settled.num);
+        } else if (settled.tag == NtsValue.STRING) {
+            showString(name, at, (String) settled.ref);
+        } else {
+            System.out.println(name + " " + at + " undefined");
         }
     }
 

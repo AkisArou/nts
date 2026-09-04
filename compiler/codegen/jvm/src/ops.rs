@@ -117,6 +117,15 @@ fn array_external(name: &str, element: &str) -> Option<(&'static str, &'static s
         _ => ("[Ljava/lang/Object;", "[Ljava/lang/Object;"),
     };
     Some(match name {
+        // `Promise.all`'s *values* array is the one the compiler allocated, and
+        // its element type is what says whether a payload is a double or a
+        // reference -- so this dispatches on the second argument rather than
+        // the first, which is why it is here rather than in `external`.
+        "nts_promise_all" => (
+            types::PROMISE,
+            "all",
+            format!("([Lnts/rt/NtsPromise;{array})Lnts/rt/NtsPromise;"),
+        ),
         "nts_array_slice" => (RUNTIME, "arraySlice", format!("({array}DD){result}")),
         "nts_array_reverse" => (RUNTIME, "arrayReverse", format!("({array}){result}")),
         "nts_array_join_str" => (
@@ -266,6 +275,9 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         // optimisation rather than a semantic, and taking the parameter keeps
         // `hir::runtime` the single answer about the signature.
         "nts_promise_new" => (types::PROMISE, "newPromise", "()Lnts/rt/NtsPromise;"),
+        "nts_promise_race" => {
+            (types::PROMISE, "race", "([Lnts/rt/NtsPromise;)Lnts/rt/NtsPromise;")
+        }
         "nts_promise_fulfill_void" => (types::PROMISE, "fulfillVoid", "(Lnts/rt/NtsPromise;)V"),
         "nts_promise_fulfill_number" => {
             (types::PROMISE, "fulfillNumber", "(Lnts/rt/NtsPromise;D)V")
@@ -504,13 +516,7 @@ impl Emitter<'_> {
             // analysis is much weaker, honouring the hint may be worth
             // something -- and that is a measurement for when a DEX pipeline
             // exists, not a guess now.
-            OpKind::ObjectNew { .. } => {
-                let class = self.object_class(&op.ty)?;
-                code.new_object(&origin, pool, &class);
-                code.dup(&origin);
-                code.invoke_special(&origin, pool, &class, "<init>", "()V");
-                Placed::OnStack
-            }
+            OpKind::ObjectNew { .. } => self.object_new(code, pool, &op.ty, &origin)?,
             OpKind::FieldGet { object, field } => {
                 let (class, name, descriptor) = self.field_ref(*object, *field)?;
                 self.load(code, *object)?;
@@ -535,6 +541,27 @@ impl Emitter<'_> {
             // nominal relationship this backend *creates* rather than recovers:
             // `Suspend` names a frame and a function, and both are emitted
             // here, so nothing upstream has to carry it.
+            // A retain under a tracing collector has nothing to do, and the
+            // guard was never about the operation -- it was about not knowing
+            // why it was there.
+            //
+            // `hir::suspend` emits one regardless of provider, because a frame
+            // outliving its function is a lifetime question the provider does
+            // not answer: the resume *consumes* a reference, so the runtime
+            // holds one until the resumption runs. Here that reference is the
+            // frame sitting in the promise's waiting list, which is a strong
+            // reference and is the whole of what keeps it alive.
+            //
+            // So this refuses only under `ReferenceCounting`, where a retain
+            // means the middle end expects *this backend* to be counting and it
+            // is not. Under `NoGc` the pair is dropped, both halves together --
+            // `suspend.rs` emits the matching `Release` and ignoring one
+            // without the other is not a thing.
+            OpKind::Retain(_) | OpKind::Release(_)
+                if self.program.provider != nts_core::hir::Provider::ReferenceCounting =>
+            {
+                Placed::Stored
+            }
             OpKind::Suspend { promise, frame, .. } => {
                 self.suspend(code, pool, *promise, *frame, &origin)?
             }
@@ -689,6 +716,34 @@ impl Emitter<'_> {
         };
         code.branch_zero(origin, branch, target);
         Ok(())
+    }
+
+    /// `new; dup; invokespecial <init>()V`, after which the lowering calls the
+    /// TypeScript constructor as an ordinary method on the result.
+    ///
+    /// That is what `Func::initializes_receiver` already promises: a freshly
+    /// allocated receiver with every field zero, which is exactly what the JVM
+    /// hands back. It also dodges the verifier's `uninitializedThis` state,
+    /// which is the single most error-prone region of the specification and the
+    /// one that would otherwise infect the frame table.
+    ///
+    /// `frame` is ignored. It is escape analysis asking for stack placement,
+    /// and there is nothing here to place: `HotSpot` decides that at run time
+    /// from the same evidence. On ART, whose escape analysis is much weaker,
+    /// honouring it may be worth something -- a measurement for when a DEX
+    /// pipeline exists, not a guess now.
+    fn object_new(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        ty: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        let class = self.object_class(ty)?;
+        code.new_object(origin, pool, &class);
+        code.dup(origin);
+        code.invoke_special(origin, pool, &class, "<init>", "()V");
+        Ok(Placed::OnStack)
     }
 
     /// Subscribe a frame to the promise it is waiting on.
@@ -2049,8 +2104,13 @@ impl Emitter<'_> {
         let name = match callee {
             Callee::Direct(name) => name,
             Callee::External(name) => {
+                // The array whose element type picks the overload. For most
+                // helpers that is the first argument; `Promise.all` takes the
+                // promises first and the values second, and it is the values
+                // that carry the payload representation.
+                let which = usize::from(name == "nts_promise_all");
                 let element = args
-                    .first()
+                    .get(which)
                     .map(|&first| self.ty(first).clone())
                     .and_then(|ty| self.array_element_descriptor(&ty));
                 let found = external(name)

@@ -68,6 +68,28 @@ public final class NtsLoop {
     }
 
     /**
+     * Run one queued task, and say whether there was one.
+     *
+     * <p>Ticks before microtasks, which is the checkpoint's order and not an
+     * arbitrary choice. The harness needs this rather than {@link #drain()}
+     * because it runs the loop *until a particular promise settles*, not until
+     * the loop falls quiet -- `await` on node returns when its promise does,
+     * and the two differ as soon as timers exist: a program that left another
+     * timer pending would have it fire on this side and not on node's.
+     */
+    public static boolean step() {
+        NtsResumable next = TICKS.pollFirst();
+        if (next == null) {
+            next = MICROTASKS.pollFirst();
+        }
+        if (next == null) {
+            return false;
+        }
+        next.resume();
+        return true;
+    }
+
+    /**
      * Run everything queued, for a program whose `main` has returned.
      *
      * <p>A compiled program's entry point is not inside an `enter`/`leave`
