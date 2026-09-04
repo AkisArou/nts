@@ -106,6 +106,55 @@ lint() { cargo clippy --workspace --all-targets 2>&1 | grep -E '^(warning|error)
 #
 # Skipped rather than failed where clang-format is absent: it is not a build
 # dependency, and a contributor without it should still be able to run the gate.
+# A file whose working-tree change is *only* formatting.
+#
+# `clang-format` on `runtime/c` is a gate step, so C formatting is enforced.
+# Rust formatting is not: `cargo fmt` is forbidden by a sentence in a document,
+# nothing watches, and one editor with format-on-save defeats it silently. On
+# 2026-09-04 `compiler/core/src/hir/bounds.rs` was reflowed by nobody who would
+# admit to it, and it was found three hours later by someone reading `git
+# status` rather than by anything that runs.
+#
+# This makes no claim about what the formatting *should* be, which is the whole
+# reason it is affordable. Adopting `cargo fmt --check` means deciding what the
+# formatting is, which costs one deliberate run rewriting every file nobody is
+# working in -- the harm the rule exists to prevent, paid up front. This only
+# refuses to let an unattributed reformat through unnoticed.
+#
+# Compared with every whitespace character removed, so a *reflow* is caught and
+# not merely a re-indent. Moving tokens between lines is exactly what rustfmt
+# does, and a line-wise comparison would miss it.
+#
+# What it does NOT catch, stated because it is the case that motivated it: a
+# reformat that also removes redundant *syntax*. The `bounds.rs` change above
+# reflowed one expression **and** dropped a closure body's `{ }`, so the token
+# stream differs by two characters and this is silent on it. I found that out by
+# reintroducing the change and watching the step pass -- which is the same
+# lesson as the three `| 0` examples that agreed with node while the bug was
+# still in: a check has to be shown failing before it is believed.
+#
+# It is kept anyway, because `cargo fmt` does not run on one file. A bulk run
+# touches hundreds, most of them re-indented only, and this fires on those --
+# which is the alarm that matters. It is a smoke detector, not a lock.
+#
+# Three sessions share this tree, so this can fail on somebody else's in-flight
+# edit. That is intended, and the resolution is the same either way: commit it
+# deliberately, or revert it.
+reformatted() {
+  bad=$(git diff --name-only -- '*.rs' '*.ts' '*.mjs' | while read -r f; do
+          [ -f "$f" ] || continue
+          before=$(git show "HEAD:$f" 2>/dev/null | tr -d '[:space:]' | cksum)
+          after=$(tr -d '[:space:]' < "$f" | cksum)
+          [ "$before" = "$after" ] && echo "$f"
+        done)
+  [ -z "$bad" ] && return 0
+  echo "  changed with no content, only formatting:"
+  echo "$bad" | sed 's/^/    /'
+  echo "  commit it deliberately or revert it -- a reformat nobody claims"
+  echo "  buries three sessions' real diffs"
+  return 1
+}
+
 format() {
   command -v clang-format >/dev/null || { echo "  clang-format absent, skipped"; return 0; }
   bad=$(for f in runtime/c/*.c runtime/c/*.h runtime/c/tests/*.c; do
@@ -384,6 +433,7 @@ fi
 step "build"   cargo build --release
 step "clippy"  lint
 step "format"  format
+step "reformat" reformatted
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
 # what is measured, and a claim nothing checks is how a closed primitive quietly
