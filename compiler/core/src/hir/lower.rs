@@ -16002,9 +16002,15 @@ impl<'a> FuncBuilder<'a> {
         let method = kind.name();
         let (parameters, body) = self.callback_shape(callback, kind)?;
         let names = parameters.as_slice();
-        let element_symbol = *names.last().ok_or_else(|| {
+        // Where the element is, which is not "the last one" once an index may
+        // follow it. `reduce` takes the accumulator first, everything else
+        // takes the element first, and the index -- when the callback asks for
+        // one -- is always after both.
+        let element_at = usize::from(matches!(kind, Iteration::Reduce));
+        let element_symbol = *names.get(element_at).ok_or_else(|| {
             self.unsupported(callback, &format!("a `{method}` callback of this shape"))
         })?;
+        let index_symbol = names.get(element_at + 1).copied();
 
         let origin = self.origin(id);
         let index = self.synthetic_symbol();
@@ -16054,6 +16060,20 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         self.bindings.insert(element_symbol, value);
+        // The counter itself, under the name the callback gave it. It is the
+        // same value the `ArrayGet` above just indexed with, so the body sees
+        // the position it is looking at rather than a second count that could
+        // drift from it.
+        //
+        // The refusal this replaces said the index "would need the loop
+        // counter's identity to survive into the body, and this has no test for
+        // that yet". It survives: `at` is read from `self.bindings[&index]`
+        // *inside* the body block, after `begin_loop` has made the carried
+        // names block parameters, so it is the current iteration's value and
+        // not the one the loop started with.
+        if let Some(index_symbol) = index_symbol {
+            self.bindings.insert(index_symbol, at);
+        }
         if let (Iteration::Reduce, Some(accumulator), Some(name)) =
             (kind, accumulator, names.first())
         {
@@ -16509,10 +16529,21 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<(Vec<u32>, NodeId), Diagnostic> {
         let method = kind.name();
         let parameters = self.callback_parameters(callback, method)?;
-        if parameters.len() != kind.parameters() {
+        // The element, plus the accumulator where the method has one, plus an
+        // optional index. The third parameter every one of these callbacks may
+        // take is the *array*, and that is still refused: handing the receiver
+        // to the body would let it be stored somewhere the loop cannot see, and
+        // the loop is what proves the array does not escape.
+        let least = kind.parameters();
+        if parameters.len() != least && parameters.len() != least + 1 {
             return Err(self.unsupported(
                 callback,
-                &format!("a `{method}` callback taking this many parameters"),
+                &format!(
+                    "a `{method}` callback taking {} parameters, where it may take {least} or \
+                     {} -- the element, the index, and for `reduce` the accumulator before them",
+                    parameters.len(),
+                    least + 1
+                ),
             ));
         }
         let body = *self.children(callback).last().ok_or_else(|| {

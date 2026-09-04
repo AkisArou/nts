@@ -1,0 +1,33 @@
+ideal 1
+allocated 1
+because one array, walked once, and one reference to give back at the end.
+because
+because Allocations: one. The array is a local literal, never stored, returned
+because or handed anywhere -- and it is on the heap regardless, because every
+because array here is: `ObjectNew` carries a `frame` flag and `ArrayNew` does
+because not, which `docs/records/0092` names as work with a number attached.
+because
+because Operations: one, and it is the array's own. It is allocated here and
+because dies here, so something has to free it -- an allocation floor of one
+because forces an operation floor of one, which is the contrapositive of the
+because rule `closure-capture` states and is the half I forgot: this was argued
+because as zero on the reasoning that the *walk* takes no reference, which is
+because true and is not all of it.
+because
+because The walk itself takes none. The elements are numbers, so a read produces
+because a double and there is no reference to take or give back. The accumulator
+because is
+because `reduce`'s, which is loop-carried by construction -- that is what keeps
+because `reduce` free of an allocation. And the index is the loop's own counter,
+because which exists for the bounds test and the increment whether or not the
+because callback names it, so naming it emits no operation.
+because
+because A `forEach` assigning an outer local was the fourth thing tried here and
+because reads 18: the assignment boxes the local into a *cell*, even though the
+because callback is inlined into the same function and `carried_across` exists
+because to make exactly that name loop-carried. Pre-existing, not the index's,
+because and named in the record rather than charged to this case.
+because
+because That last sentence is the claim. A lowering that materialised a second
+because counter per iteration, or took a reference to each element for the body,
+because would show up here and change no answer anywhere.

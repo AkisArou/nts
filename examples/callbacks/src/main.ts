@@ -420,3 +420,103 @@ export function findsAName(seed: number): string {
   const long = names.find((s) => s.length > 2 + (seed - seed));
   return long ?? "none";
 }
+
+// The **index** parameter, which every one of these callbacks may take and
+// which was refused until now.
+//
+// The refusal said why: the index "would need the loop counter's identity to
+// survive into the body". It does survive — the counter is read from the
+// bindings *inside* the body block, after `begin_loop` has made the carried
+// names block parameters, so what the body sees is this iteration's value and
+// not the one the loop started with. The `ArrayGet` immediately above indexes
+// with the same value, so the element and its position cannot drift apart.
+//
+// The parameter order is the thing to get wrong: `reduce` takes the accumulator
+// first and everything else takes the element first, so "the last parameter is
+// the element" — which was the rule — stops being true the moment an index may
+// follow it.
+
+// The control for the index, walking the same literal with a one-parameter
+// callback. Its only purpose is to be compared against the one below: if
+// naming the index costs anything, the difference shows up between these two
+// and nowhere else.
+export function forEachWithoutIndex(n: number): number {
+  const values = [n, n + 1, n + 2, n + 3];
+  let total = 0;
+  values.forEach((value) => {
+    total = total + value;
+  });
+  return total;
+}
+
+export function forEachWithIndex(n: number): number {
+  const values = [n, n + 1, n + 2, n + 3];
+  let total = 0;
+  values.forEach((value, at) => {
+    total = total + value * at;
+  });
+  return total;
+}
+
+export function mapWithIndex(n: number): number {
+  const values = [n, n + 1, n + 2];
+  const scaled = values.map((value, at) => value * (at + 1));
+  let total = 0;
+  for (let i = 0; i < scaled.length; i++) {
+    total = total + scaled[i]!;
+  }
+  return total;
+}
+
+// `reduce` takes three: the accumulator, the element, then the index.
+export function reduceWithIndex(n: number): number {
+  const values = [n, n + 1, n + 2];
+  return values.reduce((carried, value, at) => carried + value * at, 0);
+}
+
+export function filterWithIndex(n: number): number {
+  const values = [n, n + 1, n + 2, n + 3];
+  const kept = values.filter((value, at) => at % 2 === 0 && value > -1000);
+  return kept.length * 1000 + (kept.length > 0 ? kept[0]! : -1);
+}
+
+// The short-circuiting three, where the index has to be right on the iteration
+// that stops rather than on all of them.
+export function someWithIndex(n: number): number {
+  const values = [n, n + 1, n + 2];
+  return values.some((value, at) => value === at) ? 1 : 0;
+}
+
+export function everyWithIndex(n: number): number {
+  const values = [n, n + 1, n + 2];
+  return values.every((value, at) => value >= at) ? 1 : 0;
+}
+
+export function findIndexWithIndex(n: number): number {
+  const values = [n, n + 1, n + 2];
+  return values.findIndex((value, at) => value > at + 1);
+}
+
+// A callback that takes the index and never reads the element, so the element
+// binding is live only for the loop's own use.
+export function onlyTheIndex(n: number): number {
+  const values = [n, n + 1, n + 2];
+  let total = 0;
+  values.forEach((_value, at) => {
+    total = total + at * at;
+  });
+  return total;
+}
+
+// Nested, so two loops each have an index and neither takes the other's.
+export function nestedIndices(n: number): number {
+  const outer = [n, n + 1];
+  const inner = [n + 2, n + 3];
+  let total = 0;
+  outer.forEach((left, i) => {
+    inner.forEach((right, j) => {
+      total = total + (left + right) * (i * 10 + j);
+    });
+  });
+  return total;
+}

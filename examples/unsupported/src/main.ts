@@ -215,3 +215,23 @@ export function keysOfAnOptional(n: number): number {
   const sparse: Sparse = { keep: n };
   return Object.keys(sparse).length;
 }
+
+// The **array** parameter of a callback, which is the third every one of these
+// may take.
+//
+// The element and the index are bound now; the receiver is not. Handing the
+// array to the body would let it be stored somewhere the loop cannot see, and
+// the loop is what proves the array does not escape — which is what keeps
+// `map` and `filter` free of an allocation for the receiver and lets the
+// bounds check on every `ArrayGet` be removed.
+//
+// So this is refused rather than bound, and the message says how many the
+// callback took and how many it may take rather than naming the feature.
+export function callbackTakingTheArray(n: number): number {
+  const values = [n, n + 1];
+  let total = 0;
+  values.forEach((value, at, all) => {
+    total = total + value * at + all.length;
+  });
+  return total;
+}
