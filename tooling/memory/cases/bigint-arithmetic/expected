@@ -1,0 +1,30 @@
+ideal 0
+allocated 0
+because a `bigint` is `__int128` -- a machine value, two words wide. It is not
+because managed, so `own::counted` answers no for it, and there is no retain or
+because release to emit wherever it goes.
+because
+because The four places it is put are the four places a value gets charged.
+because
+because A field: `ledger.total` and `ledger.step` are stores into an object,
+because and a store into a slot has to give up what the slot was holding --
+because seventeen operations in `nulled-field`, none here, because the slot
+because holds an integer and `layout.reference_fields()` for `Ledger` is empty.
+because A bigint does drag the object's alignment to sixteen, which is a
+because layout question and not an allocation one.
+because
+because A parameter and a return: `advance` takes two and hands one back. An
+because unmanaged parameter is not an obligation, so a call that would cost two
+because retains and two releases on references costs nothing.
+because
+because An accumulator: `carried` crosses the back edge seventeen times and is
+because a plain value each time. Nothing is copied and nothing is shared.
+because
+because Allocations: the `Ledger` never leaves `work`, so escape analysis puts
+because it in the frame, and a bigint has no storage of its own to allocate --
+because which is the whole argument for 128 bits over a true bignum. A bignum
+because would put one allocation in every operation above. Zero.
+because
+because If this case ever needs an operation or an allocation, `bigint` has
+because stopped being a machine value and `typescript.md`'s argument for the
+because width has lost its point.

@@ -1,0 +1,34 @@
+ideal 0
+allocated 0
+because thirty four `Base` objects -- two an iteration -- and one reference each
+because to give back. The `Derived` costs nothing: it does not escape, so it
+because lives in the frame and never reaches the allocator.
+because
+because Zero retains. The first store writes over a zero, because a constructor
+because that only initializes leaves the slot as it found it and `super()` does
+because not change that. The read of `b.left` *takes*: the slot is overwritten
+because before anything else can reach it, so the reference moves out rather
+because than being copied, and the store that overwrites owes nothing. One
+because `Base` is then given back where `got` dies and the other where the frame
+because ends.
+because
+because Written as fifty three first, counting the `Derived` as an object
+because because it is spelled like one. That is the fourth ideal in this suite I
+because have put too high and the fourth time for the same reason.
+because
+because What this case is really for is the answer rather than the count. `d` and
+because `b` are one object under two types, and `d.left` and `b.left` are the
+because same eight bytes; telling slots apart by *type* would decide the store
+because cannot disturb the load, elide the retain, and free `got` while it is
+because still named. The read of `got.tag` is what would notice.
+because
+because Allocations: nothing. The `Derived` is a frame object already, and the
+because two `Base` objects an iteration die with it.
+because
+because Operations: none, and that follows from the allocation floor rather than
+because from a separate argument. Nothing here reaches the allocator, and a
+because frame object has no count to change: its storage ends with the frame
+because whatever points at it, and a reference *to* one is a release the
+because compiler can see is a no-op. An allocation floor of zero forces an
+because operation floor of zero, and `run.sh` now refuses an `expected` that
+because says otherwise.

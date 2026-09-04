@@ -1,0 +1,8 @@
+-std=c11
+-D_GNU_SOURCE
+-I.
+-I../c
+-I../../third_party/node/deps/uv/include
+-I../../third_party/node/src
+-Wall
+-Wextra

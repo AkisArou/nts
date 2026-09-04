@@ -1,0 +1,18 @@
+ideal 18
+allocated 18
+because eighteen disks, one reference each to give back. The pile does not
+because escape and lives in the frame; every disk is made inside a loop and
+because stored into it, so no frame slot holds one.
+because
+because The pushing should be free. `push` reads `this.top` and overwrites that
+because very slot two lines later, which is a take -- the reference moves out
+because rather than being copied, and the store owes nothing. The walk at the
+because end holds no store and no call.
+because
+because What stands between is the guard. It reads the slot, tests what it
+because found, and only then stores, so the storing block is reached by a join
+because and the pending take has to survive one. The arm that throws is not a
+because problem: an uncaught `throw` ends the program, so nothing after it is
+because observed,
+because which is the same reason `crossing_borrows` treats an operation in an
+because unreachable block as unobserved.

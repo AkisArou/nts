@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --all-features
+
+      # The frontend tests skip without a tsgo binary, so build the pinned one.
+      # A green run that silently tested nothing is the failure mode here.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/typescript-go/go.mod
+          cache-dependency-path: third_party/typescript-go/go.sum
+      - name: Build pinned tsgo
+        run: go build -o "$GITHUB_WORKSPACE/target/tsgo" ./cmd/tsgo
+        working-directory: third_party/typescript-go
+      - name: Verify tsgo matches the pin
+        run: |
+          version="$(./target/tsgo --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+          pinned="$(grep -oP 'PINNED_TSGO: &str = "\K[^"]+' compiler/frontend-ts/src/tsgo/mod.rs)"
+          echo "built=$version pinned=$pinned"
+          test "$version" = "$pinned"
+
+      - uses: taiki-e/install-action@nextest
+      - run: cargo nextest run --all-features
+        env:
+          NTS_TSGO: ${{ github.workspace }}/target/tsgo
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build

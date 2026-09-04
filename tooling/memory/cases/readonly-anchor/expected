@@ -1,0 +1,44 @@
+ideal 40
+allocated 2
+because `Field::readonly` had been computed since layouts existed and nothing
+because had ever read it. Its own comment called it load-bearing. Without it
+because this case costs 75 -- which is the naive count exactly, meaning every
+because single read of a field the checker proved constant was being counted.
+because
+because What is owed, per call, with seventeen iterations. Nineteen retains:
+because
+because   17  `bump` puts a reference in `spare`.
+because    1  the constructor puts the label in two slots and the caller handed
+because       over the one reference it was holding, so the second slot costs
+because       one and the first costs nothing.
+because    1  the module-level slot takes ownership of the config.
+because
+because And twenty-one releases:
+because
+because   17  `bump` gives up what `spare` held.
+because    1  the config the slot held before, whose count reaches zero.
+because    2  that config's two reference fields, walked as it is destroyed,
+because       which is how the label it was holding twice is given back.
+because    1  the local's own reference to the config it made.
+because
+because The borrow is not on either list. `held = config.label` crosses a call
+because that stores a reference, which is the only kind of store that can
+because disconnect anything -- so `mutating` has `bump`, `initializing_only`
+because does not, and every borrow crossing it died. The slot is `readonly`:
+because no callee can write it, which is what the word means, so the reference
+because the load found is still held by a container this borrow already
+because required to be alive.
+because
+because Two allocations, not zero: a store to a module-level slot publishes the
+because object, and the config is still there when the call returns.
+because
+because Predicted 38 before measuring, and wrong three ways. One was arithmetic
+because the harness settles: it calls `module#init` before resetting the
+because counters, so the initializer's work is not on this bill. One was a cost
+because I had not thought of: destroying an object walks its reference fields
+because and every one of those releases is counted, which is right -- it is the
+because program's own work and not the collector's. And one was a limit that
+because turned out not to be one: a parameter stored into two slots retained
+because twice because `consuming` accepted a single store, where the
+because arithmetic only ever needed one reference per slot and one of them
+because handed over.

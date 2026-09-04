@@ -1,0 +1,38 @@
+# Each of these spawns a real `node` and asserts on what the child printed or
+# what status it exited with. The child is node running node's own `process`,
+# so the assertion is about node's binary; there is no way to install our
+# module into a process we did not start.
+#
+# `test-process-env.js` and `test-process-kill-null.js` also spawn, but only
+# after testing in-process behaviour that is ours, so they are left in and fail
+# on the spawned half rather than being excluded whole.
+test-process-argv-0.js: spawns node to see what argv[0] the child reports
+test-process-exec-argv.js: spawns node with flags and reads back execArgv
+test-process-execpath.js: spawns node at its own execPath
+test-process-ppid.js: spawns node and compares the child's ppid to our pid
+test-process-execve-abort.js: spawns node to watch a process image be replaced
+test-process-remove-all-signal-listeners.js: spawns node and signals it
+test-process-really-exit.js: spawns node to observe a monkey-patched exit
+test-process-uncaught-exception-monitor.js: spawns node to read its exit status
+test-process-raw-debug.js: spawns node and reads the child's raw stderr
+test-process-exit-after-fetch-throw.js: spawns node and reads its exit code
+test-process-exit-code.js: spawns node once per exit-code case
+test-process-exit-code-validation.js: spawns node once per invalid exit code
+test-process-external-stdio-close.js: spawns node with its stdio closed
+test-process-external-stdio-close-spawn.js: spawns node with its stdio closed
+test-process-getgroups.js: shells out to `id -G` and compares
+test-process-redirect-warnings.js: spawns node with --redirect-warnings
+test-process-redirect-warnings-env.js: spawns node with NODE_REDIRECT_WARNINGS
+
+# `execve` replaces the process image. A test that calls it successfully does
+# not fail the runner, it *ends* it -- the kernel loads another program over
+# this one, and whatever the runner still had to report goes with it. There is
+# no in-process form of that. `test-process-execve-validation.js` is left in:
+# every one of its calls is expected to throw before reaching the system call.
+test-process-execve.js: replaces the process image, taking the runner with it
+test-process-execve-no-args.js: replaces the process image
+test-process-execve-on-exit.js: replaces the process image from an exit handler
+test-process-execve-socket.js: replaces the process image with an open socket
+test-process-execve-permission-fail.js: needs --permission to deny the call
+test-process-execve-permission-granted.js: needs --permission to allow the call
+test-process-execve-worker-threads.js: needs worker_threads to be the caller

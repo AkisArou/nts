@@ -1,0 +1,12 @@
+{
+  "//": "Every TypeScript program this repository compiles *with nts* — the examples, the benchmark cases, and the memory cases. Not the compiler's own source, which is Rust, and not the two TypeScript packages that ship (`examples/library`, `tooling/config`); those extend `tsconfig.base.json` and are built by `tsc`.",
+  "//lib": "Left to the target, which means `lib.esnext.full` and so includes DOM. Naming `[\"ESNext\"]` here drops it, and `setTimeout` is not an ECMAScript global: `examples/timers` and `examples/standalone` stopped typechecking the moment it was named.",
+  "//target": "ESNext, and deliberately. A compiler for TypeScript is measured against what TypeScript *is* today, and pinning the fixtures to ES2022 quietly decided that whole language features were out of scope: `String.prototype.isWellFormed` was implemented here, could not be named by any program, and had to be removed again. A fixture that cannot ask for a construct is a construct nobody discovers is missing.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true
+  }
+}

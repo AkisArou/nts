@@ -1,0 +1,168 @@
+# 0002 — Type decomposition costs round trips per type, not per file
+
+Status: measured; decomposition is opt-in until reachability exists
+Recorded: 2026-08-26
+
+[0001](0001-frontend-transport-cost.md) established that producing a semantic
+snapshot costs round trips proportional to **files**, because ASTs transfer in
+bulk and type queries batch per file.
+
+Decomposing structured types does not share that property, and this record is
+the measurement of what it costs instead.
+
+## Why it cannot batch
+
+`getTypeAtLocations` takes a list. The endpoints that answer *what is inside* a
+type do not:
+
+| Endpoint | Parameter | Batched |
+| --- | --- | :---: |
+| `getTypesOfType` (union/intersection members) | one type | no |
+| `getPropertiesOfType` | one type | no |
+| `getTypeArguments` | one type | no |
+| `isArrayType` | one type | no |
+| `getTypesOfSymbols` | many symbols | **yes** |
+
+Only the last batches, which is why an object's properties cost two exchanges
+regardless of how many properties it has — the symbols come back in one call, and
+their types in another. Everything else is one exchange per type.
+
+## Result
+
+250 generated files, 3,000 lines, tsgo 7.0.2 from the pinned submodule.
+Re-measured once symbol resolution and call signatures landed.
+
+| | Round trips | Per file | Elapsed |
+| --- | ---: | ---: | ---: |
+| Complete frontend | 1,002 | 4.01 | 1,713 ms |
+| + decompose all, with signatures | 13,006 | 52.02 | 2,252 ms |
+
+Decomposing 3,002 of 3,256 distinct types costs **+12,004 round trips** and
+**+539 ms**. Marginal cost is ~4 exchanges per type: one for a union; two for an
+array; three for an object; four for a function type (`getSignaturesOfType`,
+a batched `getTypesOfSymbols` for parameters, `getReturnTypeOfSignature`, plus
+the `isArrayType` probe that precedes them).
+
+### Correction: round trips are not the wall-clock cost
+
+An earlier revision of this record reported "14.5x the round trips and **4.7x the
+wall clock**" and treated the two as the same finding. They are not.
+
+13x the round trips buy only **1.31x** the wall clock. At ~0.045 ms per exchange,
+the pipe is nearly free; what costs is the checker work behind each answer. The
+4.7x figure was also inflated by comparing against a 450 ms baseline that did not
+yet include symbol resolution — the same decomposition against the complete
+frontend is a 31% increase, not a 370% one.
+
+The absolute cost is what to reason about: **decomposition adds roughly half a
+second to a 250-file program**, whether or not the baseline moves.
+
+## Decision
+
+Decomposition is **opt-in** (`TsgoApi::with_decomposition`, `nts frontend
+--decompose`) and off by default.
+
+The engine is worklist-driven from a **seed set** rather than sweeping the arena.
+That is the part built for the future: today the caller seeds it with every
+interned type, because nothing yet knows which types a build will reach. When
+reachability lands (RFC §7), only the seed argument changes — the walk, the
+memoization, and the cycle handling stay as they are.
+
+## What this says about reachability
+
+The 3,256 distinct types behind 46,750 typed nodes are the whole program,
+including every type of every unreferenced export in every file. A real product
+reaches a fraction of that, so a seeded walk should decompose far fewer.
+
+That remains worth doing, but the corrected numbers make it a real optimization
+rather than a prerequisite. Half a second on 250 files is a cost worth removing,
+not a wall. Decomposition being opt-in already keeps it off the default path, and
+the worklist is seeded rather than sweeping, so reachability slots in by changing
+one argument whenever it arrives.
+
+## Guardrails
+
+- [`Budget`] bounds a walk, and `decomposition_exhausted` is reported rather than
+  swallowed. A partial type graph is a legitimate result; presenting it as
+  complete is not.
+- Arrays are detected before being decomposed as objects. An array *is* an object
+  type, so the naive path yields `length`, `push`, `map` and the rest of the
+  prototype instead of an element type. There is a test asserting no decomposed
+  object carries a `push` property.
+
+## Addendum: the closure reaches the standard library
+
+Measured after call resolution and constant folding landed, on
+`examples/classes` — a single 180-node file.
+
+| | Value |
+| --- | ---: |
+| Nodes decoded | 180 |
+| Distinct types after decomposition | **5,773** |
+| Types decomposed before the budget stopped it | 4,096 |
+| Round trips | 15,578 |
+
+A 180-node file produces 5,773 distinct types. `Promise<void>`, a class and its
+prototype, and an `implements` clause are enough to pull the standard library's
+type graph in transitively, and the walk does not terminate anywhere useful
+because nothing tells it where the program ends.
+
+Two things follow.
+
+**The budget earns its place.** It stopped at 4,096 and reported
+`decomposition_exhausted`, so the result is a partial type graph that says it is
+partial. Without it this run would have returned a subset presented as complete —
+a backend reading it would find members missing with no way to tell whether the
+type really has none.
+
+**Seeding is not an optimization here.** The earlier framing in this record —
+half a second on 250 files, worth removing but not a wall — holds only for
+programs whose types stay inside themselves. As soon as a program touches
+`Promise`, `Array`, or a DOM type, the unseeded closure is the standard library
+and the walk is unbounded in the only sense that matters. Reachability is what
+gives the walk an edge to stop at.
+
+## Addendum 2: the bound is the library boundary, not reachability
+
+The previous addendum concluded that reachability was what would give the
+decomposition walk an edge to stop at. That was wrong, and the correction is the
+useful part.
+
+Reachability bounds the **seeds**. It does nothing about the **closure**: a
+reachable `Promise<void>` still pulls in `then`, `catch`, their signatures, and
+onward through the standard library. Measured on `examples/classes`, declaration
+reachability retained 37 of 39 shallow types — because the fixture exports nearly
+everything — and would not have prevented the explosion at all.
+
+What bounds the walk is refusing to decompose a type declared outside the files
+being compiled. A named type whose symbol has no declaration node in the decoded
+set is not this compiler's to lower; it stays a placeholder carrying its flags,
+the same treatment a foreign platform object gets (RFC §14). An anonymous type
+has no declaring symbol and is always ours, because it exists only where it was
+written.
+
+`examples/classes`, a single 180-node file, with every deep pass enabled:
+
+| | Before | After |
+| --- | ---: | ---: |
+| Distinct types | 5,773 | **43** |
+| Types decomposed | 4,096 (budget exhausted) | 20 |
+| Round trips | 15,578 | **87** |
+| Elapsed | 4,555 ms | 1,603 ms |
+
+179x fewer round trips, and the budget is no longer reached, so the type graph is
+complete rather than truncated.
+
+Reachability is still worth having — it is what narrows seeds for a real product,
+and it is the roots a library's public surface defines (RFC §27.1). But it is an
+optimization on top of the boundary, not the mechanism that makes the walk
+terminate.
+
+### A bug the boundary depended on
+
+Implementing this exposed that `TypeRecord::symbol` was being filled with tsgo's
+raw symbol id while typed as an arena index. The arena is dense, so any raw id is
+in range: every lookup would have silently returned an unrelated symbol rather
+than failing. Symbol ids are now mapped through the interning table, and a type
+whose symbol was never interned records `None` instead of a plausible wrong
+answer.

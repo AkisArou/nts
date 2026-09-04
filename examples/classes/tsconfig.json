@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.fixtures.json",
+  "compilerOptions": {
+    "experimentalDecorators": false
+  },
+  "include": [
+    "src"
+  ]
+}

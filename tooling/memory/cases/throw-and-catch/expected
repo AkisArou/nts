@@ -1,0 +1,26 @@
+ideal 0
+allocated 0
+because the thrown `Failure` never leaves `work`. It is constructed at the
+because `throw`, it reaches the handler as a block argument, and the handler
+because asks it for its tag and then drops it -- so it is not returned, not
+because stored, and not passed anywhere that could keep it. Escape analysis
+because already answers exactly this question, and a frame object has no count
+because to change.
+because
+because What is new here is not the answer but the path to it. Everywhere else
+because in this suite an object reaches its use directly. Here it is wrapped by
+because an `erase`, handed across an edge as a block parameter, and read back
+because through a tag test. Each of those is a step the analysis could fail to
+because see through, and failing any one of them puts the object on the heap or
+because counts a reference to something that has no count.
+because
+because Allocations: nothing. A `throw` caught in the same function is a jump
+because carrying an argument, and a jump allocates nothing. If this ever reads
+because above zero, the handler stopped being an edge.
+because
+because Operations: none. `Failure` holds a number, so a frame `Failure` has
+because nothing to give back when the frame ends -- and the erased value that
+because carries it is exactly what it wraps, so it has nothing to give back
+because either. That second step is the one this case pins: an `erase` used to
+because be counted unconditionally, and the wrapper was retained on the edge
+because into the handler and released on both ways out of it.

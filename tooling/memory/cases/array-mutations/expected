@@ -1,0 +1,42 @@
+ideal 5
+allocated 9
+because five arrays exist at the end and each is released once, and nothing
+because else here touches a count.
+because
+because The elements are numbers. A number in an array of numbers is not a
+because reference and never was, so filling `xs`, moving its elements about, and
+because copying them into four more arrays costs no operation at all. What is
+because left is `xs`, `gone`, `joined`, `copy` and `from` -- five references the
+because function holds and gives up where it returns.
+because
+because Not `shift` and not `unshift`. Both move elements *within* an array
+because that already exists: `shift` takes the first and slides the rest down,
+because `unshift` slides them up and writes the front. Neither makes anything
+because and neither counts anything, and this case exists to say so in a number
+because rather than in a comment.
+because
+because Allocations: nine.
+because
+because   xs       1 header, then 4 blocks grown through
+because   splice   1
+because   concat   1
+because   spread   1
+because   Array.from  1
+because
+because `xs` is made empty and filled by `push`, which doubles from a floor of
+because four, so seventeen elements pass through capacities 4, 8, 16 and 32.
+because That is the same four `array-of-objects` pays and the same four a known
+because trip count would remove; the argument is written out there.
+because
+because The other five are one each, and one each is the claim. Every one of
+because them hands back a *new* array and so must allocate, and every one of
+because them allocates the whole result at its final length -- so the elements
+because live inline in the header block the way every sized array's do, and
+because there is no growth and no second block.
+because
+because `unshift` is the one that could have been two. It needs room at the
+because front and the array is contiguous, so a version that allocated a longer
+because block and copied into it would be the obvious way to write it. It does
+because not: `nts_array_reserve` has already made room at the *end*, and moving
+because the elements up one is the same `memmove` either way. The array only
+because grows when it is full, and after the `shift` above it is not.

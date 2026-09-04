@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.fixtures.json",
+  "include": [
+    "src"
+  ],
+  "compilerOptions": {
+    "lib": [
+      "ESNext"
+    ]
+  }
+}

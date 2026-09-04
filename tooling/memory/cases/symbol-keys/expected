@@ -1,0 +1,23 @@
+ideal 0
+allocated 0
+because a symbol key is a field name and nothing else.
+because
+because `const kRefed = Symbol("refed")` at module scope is *one* symbol, known
+because where it is written, so `[kRefed]` is a field with an unusual name --
+because TypeScript spells it `__@kRefed@2` and this compiler lays it out beside
+because `plainRefed` in the same struct. Reading it is a load at an offset.
+because
+because So the four members here are two spellings of one thing, and the loop
+because writes both on every iteration on purpose: if the symbol-keyed pair
+because ever cost more than the plain pair, the claim in `typescript.md` that
+because `[kRefed]` "costs exactly what `_refed` would" is wrong, and the way it
+because would be wrong is a property map -- a hash lookup that allocates where
+because a field does not.
+because
+because Allocations: the `Immediate` never leaves `work`, so escape analysis
+because puts it in the frame. Its fields are a bool and a number, so
+because `layout.reference_fields()` is empty and a store gives nothing back --
+because which is the seventeen operations `nulled-field` costs, at zero here.
+because
+because Any number above zero on either column means a symbol key stopped
+because being a name and became a lookup.

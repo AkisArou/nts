@@ -1,0 +1,31 @@
+[package]
+name = "nts-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "nts"
+path = "src/main.rs"
+
+[dependencies]
+nts-build.workspace = true
+nts-codegen-c.workspace = true
+nts-codegen-jvm.workspace = true
+nts-codegen-llvm.workspace = true
+nts-codegen-napi.workspace = true
+nts-core.workspace = true
+nts-differential.workspace = true
+nts-debug-lowering.workspace = true
+nts-diagnostics.workspace = true
+nts-frontend-ts.workspace = true
+nts-memory-lowering.workspace = true
+nts-semantic-schema.workspace = true
+
+anyhow.workspace = true
+camino.workspace = true
+
+[lints]
+workspace = true

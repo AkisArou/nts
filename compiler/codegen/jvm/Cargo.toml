@@ -1,0 +1,19 @@
+[package]
+name = "nts-codegen-jvm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+nts-codegen-common.workspace = true
+nts-core.workspace = true
+nts-diagnostics.workspace = true
+nts-jvm-emitter.workspace = true
+nts-semantic-schema.workspace = true
+
+rustc-hash.workspace = true
+
+[lints]
+workspace = true

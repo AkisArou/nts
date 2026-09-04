@@ -1,0 +1,23 @@
+# Each of these spawns a real `node` and asserts on what the child did. The
+# child is node running node's own `async_hooks`, so the assertion is about
+# node's binary; there is no way to install our module into a process we did
+# not start.
+#
+# The three stack-overflow files are worth naming precisely, because the thing
+# they test is real and we will want it later: that a `RangeError` from an
+# exhausted stack still reaches `uncaughtException` when hooks are enabled,
+# rather than aborting. It is untestable from here only because the overflow
+# has to happen in a process the test controls from the outside.
+test-async-hooks-fatal-error.js: spawns node to watch a throwing hook abort the child
+test-async-hooks-stack-overflow.js: spawns node to overflow its stack with hooks enabled
+test-async-hooks-stack-overflow-nested-async.js: spawns node, same, from nested async frames
+test-async-hooks-stack-overflow-try-catch.js: spawns node, same, inside a try/catch
+
+# These four run the whole test inside a `worker_threads` Worker, which is
+# node's thread running node's `async_hooks` from an `eval` string. Our module
+# is never loaded in there. They pass with this module blanked, which is what
+# gave them away.
+test-async-hooks-worker-asyncfn-terminate-1.js: runs in a node Worker, on node's async_hooks
+test-async-hooks-worker-asyncfn-terminate-2.js: runs in a node Worker, on node's async_hooks
+test-async-hooks-worker-asyncfn-terminate-3.js: runs in a node Worker, on node's async_hooks
+test-async-hooks-worker-asyncfn-terminate-4.js: runs in a node Worker, on node's async_hooks

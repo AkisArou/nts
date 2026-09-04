@@ -1,0 +1,23 @@
+[package]
+name = "nts-codegen-c"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+nts-diagnostics.workspace = true
+nts-core.workspace = true
+nts-memory-lowering.workspace = true
+nts-codegen-common.workspace = true
+rustc-hash.workspace = true
+nts-debug-lowering.workspace = true
+nts-semantic-schema.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+nts-frontend-ts.workspace = true
+camino.workspace = true

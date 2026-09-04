@@ -1,0 +1,32 @@
+ideal 3
+allocated 17
+because one retain, and two references given back. The chain itself is not on
+because this bill, and that is not an elision -- it is who does the work.
+because
+because The shared head is held twice, and only one birth reference exists to
+because fill two edges, so at least one retain is unavoidable. `right.next` can
+because take the local's reference by moving it, since that is its last use.
+because Then the two heads are dropped, each destroy gives up the `next` it was
+because holding, and the second of those takes the shared head to zero.
+because
+because Zero, on a type that can point to itself, means *buffered* rather than
+because destroyed: the collector frees the seventeen links, and the harness reads
+because its counters before collecting precisely so that the runtime's own work
+because is not charged to the program. So the cascade `traversal` pays seventeen
+because for does not appear here at all.
+because
+because Written as twenty one first, counting one release per link. That is the
+because fifth ideal in this suite I have put too high and the first for a new
+because reason: the other four counted objects that never left the frame, and
+because this one counted work the collector does.
+because
+because The distance from three is `left` and `right`, which do not escape and
+because should not be heap objects at all. That is escape analysis, not counting.
+because
+because And this case still cannot reach zero, which is what it is for. Take
+because either count away and the tail is either freed while the second head
+because still points at it -- which the answer would catch -- or never freed at
+because all, which the leak check would.
+because
+because Allocations: seventeen links. The two heads die with the call and belong
+because in the frame; the chain is a list built in a loop and does not.

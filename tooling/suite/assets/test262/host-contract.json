@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "declarations": "host.d.ts",
+  "intrinsics": [
+    { "declaration": "Test262Error", "id": "test262.error", "capability": "assertions" },
+    { "declaration": "Test262Error.thrower", "id": "test262.error.thrower", "capability": "assertions" },
+    { "declaration": "assert", "id": "test262.assert", "capability": "assertions" },
+    { "declaration": "assert.sameValue", "id": "test262.assert.same-value", "capability": "assertions" },
+    { "declaration": "assert.notSameValue", "id": "test262.assert.not-same-value", "capability": "assertions" },
+    { "declaration": "assert.throws", "id": "test262.assert.throws", "capability": "caught-exceptions" },
+    { "declaration": "assert.compareArray", "id": "test262.assert.compare-array", "capability": "assertions" },
+    { "declaration": "compareArray", "id": "test262.compare-array", "capability": "assertions" },
+    { "declaration": "compareArray.format", "id": "test262.compare-array.format", "capability": "assertions" },
+    { "declaration": "isNegativeZero", "id": "test262.is-negative-zero", "capability": "assertions" },
+    { "declaration": "isPrimitive", "id": "test262.is-primitive", "capability": "assertions" },
+    { "declaration": "formatIdentityFreeValue", "id": "test262.format-identity-free-value", "capability": "assertions" },
+    { "declaration": "formatSimpleValue", "id": "test262.format-simple-value", "capability": "assertions" },
+    { "declaration": "print", "id": "test262.print", "capability": "print" },
+    { "declaration": "$DONE", "id": "test262.done", "capability": "async-completion" },
+    { "declaration": "$DONOTEVALUATE", "id": "test262.do-not-evaluate", "capability": "assertions" },
+    { "declaration": "$262.AbstractModuleSource", "id": "test262.abstract-module-source", "capability": "abstract-module-source" },
+    { "declaration": "$262.IsHTMLDDA", "id": "test262.is-html-dda", "capability": "is-html-dda" },
+    { "declaration": "$262.createRealm", "id": "test262.create-realm", "capability": "realms" },
+    { "declaration": "$262.evalScript", "id": "test262.eval-script", "capability": "dynamic-script" },
+    { "declaration": "$262.detachArrayBuffer", "id": "test262.detach-array-buffer", "capability": "detach-array-buffer" },
+    { "declaration": "$262.gc", "id": "test262.gc", "capability": "gc-control" },
+    { "declaration": "$262.agent", "id": "test262.agent", "capability": "agents" }
+  ]
+}
