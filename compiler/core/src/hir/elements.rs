@@ -452,6 +452,7 @@ mod tests {
             }],
             layouts: Vec::new(),
             globals: Vec::new(),
+            ..Program::default()
         }
     }
 

@@ -988,6 +988,7 @@ mod tests {
                 initializes_receiver: false,
                 async_result: None,
             }],
+            ..Program::default()
         }
     }
 
@@ -1355,6 +1356,7 @@ mod tests {
             funcs: vec![takes_two, passes_one],
             layouts: Vec::new(),
             globals: Vec::new(),
+            ..Program::default()
         };
         let problems = verify(&program).expect_err("one argument for two parameters");
         assert!(

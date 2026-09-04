@@ -1063,6 +1063,19 @@ pub struct Program {
     pub layouts: Vec<Layout>,
     /// Variables declared at module scope, indexed by [`OpKind::GlobalGet`].
     pub globals: Vec<Global>,
+    /// The memory discipline this program was lowered under.
+    ///
+    /// A backend receives a `Program` and not the [`Options`] that produced it,
+    /// so a decision made here was previously invisible downstream -- and one
+    /// backend has to act on it. The JVM lane refuses a function containing
+    /// [`OpKind::Retain`] or [`OpKind::Release`], because a build that silently
+    /// dropped them would have its lifetimes come from somewhere unexplained.
+    /// That is the right guard against a *misconfiguration*, and it was firing
+    /// on every `async` function: [`suspend`] emits one retain regardless of
+    /// provider, since a suspension frame outliving its function is a lifetime
+    /// question the provider does not answer. Without this field the backend
+    /// could not tell the two cases apart.
+    pub provider: Provider,
 }
 
 /// A variable that outlives every call.
@@ -1851,6 +1864,10 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     } else {
         rc::Report::default()
     };
+    // Recorded on the program rather than left in the options, because a
+    // backend is handed the program alone and one of them has to act on this.
+    // Set here, beside the pass it describes, so the two cannot drift.
+    program.provider = options.provider;
 
     // Bounds checks last, once the facts are as sharp as they are going to get:
     // a check is removed only where the index was proven, and specialization
@@ -2196,6 +2213,7 @@ mod tests {
             }],
             globals: Vec::new(),
             layouts: Vec::new(),
+            ..Program::default()
         }
     }
 
@@ -2252,6 +2270,7 @@ mod tests {
                     )],
                 ),
             ],
+            ..Program::default()
         };
 
         assert_eq!(
@@ -2269,6 +2288,7 @@ mod tests {
             funcs: Vec::new(),
             globals: Vec::new(),
             layouts: vec![layout("Holder", 1, vec![field("other", object(99))])],
+            ..Program::default()
         };
         assert_eq!(program.cyclic_layouts(), vec![true]);
     }

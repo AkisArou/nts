@@ -907,6 +907,7 @@ mod tests {
             funcs: vec![func("reader", 1, values, blocks)],
             layouts: Vec::new(),
             globals: Vec::new(),
+            ..Program::default()
         };
         let escapes = analyze_program(&program);
         assert!(!escapes[0].escapes(ValueId(0)));
@@ -945,6 +946,7 @@ mod tests {
             funcs: vec![func("keeper", 2, values, blocks)],
             layouts: Vec::new(),
             globals: Vec::new(),
+            ..Program::default()
         };
         let escapes = analyze_program(&program);
         assert!(!escapes[0].escapes(ValueId(0)));
@@ -972,6 +974,7 @@ mod tests {
                 base: None,
             }],
             globals: Vec::new(),
+            ..Program::default()
         };
 
         // `reader(o) { return o.f }`
@@ -1084,6 +1087,7 @@ mod tests {
                 base: None,
             }],
             globals: Vec::new(),
+            ..Program::default()
         };
         program.funcs.push(func(
             "keeper",
@@ -1172,6 +1176,7 @@ mod tests {
                 base: None,
             }],
             globals: Vec::new(),
+            ..Program::default()
         };
         program.funcs.push(func(
             "keeper",
@@ -1280,6 +1285,7 @@ mod tests {
             )],
             layouts: Vec::new(),
             globals: Vec::new(),
+            ..Program::default()
         };
         let escapes = analyze_program(&program);
         assert!(escapes[0].is_frame_local(ValueId(0)));
@@ -1315,6 +1321,7 @@ mod tests {
             )],
             layouts: Vec::new(),
             globals: Vec::new(),
+            ..Program::default()
         };
         let escapes = analyze_program(&program);
         assert!(escapes[0].is_frame_local(ValueId(0)));
@@ -1372,6 +1379,7 @@ mod tests {
             )],
             layouts: Vec::new(),
             globals: Vec::new(),
+            ..Program::default()
         };
         let escapes = analyze_program(&program);
         // The array goes nowhere, and nothing here says otherwise.
@@ -1410,6 +1418,7 @@ mod tests {
             )],
             layouts: Vec::new(),
             globals: Vec::new(),
+            ..Program::default()
         };
         let escapes = analyze_program(&program);
         assert!(escapes[0].escapes(ValueId(0)));

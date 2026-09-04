@@ -234,3 +234,41 @@ fn arithmetic_on_a_global_read_stays_integer() {
     }
     assert!(consumers > 0, "something does arithmetic on the read");
 }
+
+/// A program records which memory discipline it was lowered under.
+///
+/// Not about globals, and here because this file already prepares a program
+/// twice. A backend is handed a `Program` and never the `Options` behind it, so
+/// until this field existed a decision made in `prepare_with` was invisible
+/// downstream — and the JVM lane has to act on it, because it refuses a
+/// function containing `Retain` or `Release` and `hir::suspend` emits one
+/// regardless of provider.
+///
+/// Asserted both ways. A field that is always `NoGc` would pass a test that
+/// only checked the default, which is how `Global::exported` came to have three
+/// consumers and one value.
+#[test]
+fn a_program_records_the_provider_it_was_lowered_under() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/module-numbers/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("examples/module-numbers is checked in");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed");
+
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let options = hir::Options {
+            provider,
+            ..hir::Options::default()
+        };
+        let prepared = hir::prepare_with(&snapshot, &options).expect("valid HIR");
+        assert_eq!(
+            prepared.program.provider, provider,
+            "the program should say which provider produced it",
+        );
+    }
+}
