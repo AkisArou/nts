@@ -103,6 +103,34 @@ fn bigint_operation(op: BinOp) -> Option<(&'static str, &'static str)> {
     })
 }
 
+/// The array helpers, which need one entry point per element width.
+///
+/// `element` is `"D"`, `"Z"` or `"L"` -- the two primitive widths that appear
+/// and everything else. Separate from `external` because the *name* is not
+/// enough here: `nts_array_slice` on numbers and on references are different
+/// Java methods, and picking between them is reading the array's type rather
+/// than reading the call.
+fn array_external(name: &str, element: &str) -> Option<(&'static str, &'static str, String)> {
+    let (array, result) = match element {
+        "D" => ("[D", "[D"),
+        "Z" => ("[Z", "[Z"),
+        _ => ("[Ljava/lang/Object;", "[Ljava/lang/Object;"),
+    };
+    Some(match name {
+        "nts_array_slice" => (RUNTIME, "arraySlice", format!("({array}DD){result}")),
+        "nts_array_reverse" => (RUNTIME, "arrayReverse", format!("({array}){result}")),
+        "nts_array_join_str" => (
+            RUNTIME,
+            "arrayJoinStr",
+            format!("({array}Ljava/lang/String;)Ljava/lang/String;"),
+        ),
+        _ => return None,
+    })
+}
+
+const D_TO_D: &str = "(D)D";
+const STRING_TO_STRING: &str = "(Ljava/lang/String;)Ljava/lang/String;";
+const STRING_D_TO_STRING: &str = "(Ljava/lang/String;D)Ljava/lang/String;";
 const MAP_KEY_TO_VALUE: &str = "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;)Lnts/rt/NtsValue;";
 const MAP_AT_TO_VALUE: &str = "(Lnts/rt/NtsMap;D)Lnts/rt/NtsValue;";
 const BIGINT_BINARY: &str = "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
@@ -113,7 +141,9 @@ const STRING_DD_TO_STRING: &str = "(Ljava/lang/String;DD)Ljava/lang/String;";
 const STRING_STRING_STRING_TO_STRING: &str =
     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;";
 
-fn external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
+/// The helpers that are the runtime itself: stopping, filling, coercing,
+/// and turning a number into its characters.
+fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match name {
         "nts_uncaught" => (RUNTIME, "uncaught", "(Lnts/rt/NtsValue;Ljava/lang/String;)V"),
         "nts_array_fill" => (RUNTIME, "arrayFill", "([DD)[D"),
@@ -135,10 +165,69 @@ fn external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
         "nts_to_uint16" => (RUNTIME, "toUint16", "(D)I"),
         "nts_to_uint32" => (RUNTIME, "toUint32", "(D)I"),
 
+        "nts_number_to_string" => (RUNTIME, "numberToString", "(D)Ljava/lang/String;"),
+        _ => return None,
+    })
+}
+
+/// `Math`, which is mostly `java.lang.StrictMath` and occasionally not.
+fn math_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    Some(match name {
         "nts_math_pow" => (RUNTIME, "mathPow", "(DD)D"),
+        "nts_math_sin" => (RUNTIME, "mathSin", D_TO_D),
+        "nts_math_cos" => (RUNTIME, "mathCos", D_TO_D),
+        "nts_math_tan" => (RUNTIME, "mathTan", D_TO_D),
+        "nts_math_asin" => (RUNTIME, "mathAsin", D_TO_D),
+        "nts_math_acos" => (RUNTIME, "mathAcos", D_TO_D),
+        "nts_math_atan" => (RUNTIME, "mathAtan", D_TO_D),
+        "nts_math_atan2" => (RUNTIME, "mathAtan2", "(DD)D"),
+        "nts_math_exp" => (RUNTIME, "mathExp", D_TO_D),
+        "nts_math_log" => (RUNTIME, "mathLog", D_TO_D),
+        "nts_math_log2" => (RUNTIME, "mathLog2", D_TO_D),
+        "nts_math_log10" => (RUNTIME, "mathLog10", D_TO_D),
+        "nts_math_cosh" => (RUNTIME, "mathCosh", D_TO_D),
+        "nts_math_tanh" => (RUNTIME, "mathTanh", D_TO_D),
+        "nts_math_cbrt" => (RUNTIME, "mathCbrt", D_TO_D),
+        "nts_math_hypot" => (RUNTIME, "mathHypot", "(DD)D"),
+        "nts_math_sign" => (RUNTIME, "mathSign", D_TO_D),
+        "nts_math_fround" => (RUNTIME, "mathFround", D_TO_D),
+        "nts_math_expm1" => (RUNTIME, "mathExpm1", D_TO_D),
+        "nts_math_log1p" => (RUNTIME, "mathLog1p", D_TO_D),
+
+        "nts_is_integer" => (RUNTIME, "isInteger", "(D)Z"),
+        "nts_is_safe_integer" => (RUNTIME, "isSafeInteger", "(D)Z"),
+        "nts_bool_to_string" => (RUNTIME, "boolToString", "(Z)Ljava/lang/String;"),
+        "nts_tag_name" => (RUNTIME, "tagName", "(I)Ljava/lang/String;"),
+
+        "nts_str_at" => (RUNTIME, "strAt", STRING_D_TO_STRING),
+        "nts_str_char_at" => (RUNTIME, "strCharAt", STRING_D_TO_STRING),
+        "nts_str_code_point_at" => (RUNTIME, "strCodePointAt", "(Ljava/lang/String;D)D"),
+        "nts_str_index_of_from" => (
+            RUNTIME,
+            "strIndexOfFrom",
+            "(Ljava/lang/String;Ljava/lang/String;D)D",
+        ),
+        "nts_str_trim_start" => (RUNTIME, "strTrimStart", STRING_TO_STRING),
+        "nts_str_trim_end" => (RUNTIME, "strTrimEnd", STRING_TO_STRING),
+        "nts_str_pad_end" => (
+            RUNTIME,
+            "strPadEnd",
+            "(Ljava/lang/String;DLjava/lang/String;)Ljava/lang/String;",
+        ),
+        "nts_str_to_lower_case" => (RUNTIME, "strToLowerCase", STRING_TO_STRING),
+        "nts_str_to_upper_case" => (RUNTIME, "strToUpperCase", STRING_TO_STRING),
+        "nts_str_to_well_formed" => (RUNTIME, "strToWellFormed", STRING_TO_STRING),
+        "nts_str_is_well_formed" => (RUNTIME, "strIsWellFormed", "(Ljava/lang/String;)Z"),
         "nts_math_sinh" => (RUNTIME, "mathSinh", "(D)D"),
         "nts_is_finite" => (RUNTIME, "isFinite", "(D)Z"),
+        _ => return None,
+    })
+}
 
+/// The string methods -- mostly `java.lang.String`, and occasionally
+/// something written out because Java's answer is not JavaScript's.
+fn string_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    Some(match name {
         "nts_str_index_of" => (RUNTIME, "strIndexOf", STRING_STRING_TO_D),
         "nts_str_last_index_of" => (RUNTIME, "strLastIndexOf", STRING_STRING_TO_D),
         "nts_str_includes" => (RUNTIME, "strIncludes", STRING_STRING_TO_Z),
@@ -165,9 +254,13 @@ fn external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
         ),
         "nts_str_replace" => (RUNTIME, "strReplace", STRING_STRING_STRING_TO_STRING),
         "nts_str_replace_all" => (RUNTIME, "strReplaceAll", STRING_STRING_STRING_TO_STRING),
+        _ => return None,
+    })
+}
 
-        "nts_number_to_string" => (RUNTIME, "numberToString", "(D)Ljava/lang/String;"),
-
+/// `Map`, `Set` and `bigint`: the three types with a class of their own.
+fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    Some(match name {
         // One class for `Map` and `Set`. `kind` is accepted and ignored: in C
         // it selects a specialised hash and comparison, which is an
         // optimisation rather than a semantic, and taking the parameter keeps
@@ -205,10 +298,29 @@ fn external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
         "nts_string_from_code_point" => {
             (RUNTIME, "stringFromCodePoint", "(D)Ljava/lang/String;")
         }
-
         _ => return None,
     })
 }
+
+/// The runtime helpers this backend can call, and how each is spelled here.
+///
+/// Split by family rather than kept as one table, because the families
+/// answer to different sources: `core_external` is `runtime/c`'s own
+/// behaviour, `math_external` is where `java.lang.Math` agrees with the
+/// language and where it does not, `string_external` likewise for
+/// `java.lang.String`.
+///
+/// A table rather than a naming rule, because `hir::runtime` is the single
+/// answer about what a helper *takes*. A missing entry is a refusal by name
+/// and never a call to something that does not exist.
+fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
+    let found = core_external(name)
+        .or_else(|| math_external(name))
+        .or_else(|| string_external(name))
+        .or_else(|| collection_external(name))?;
+    Some((found.0, found.1, found.2.to_owned()))
+}
+
 
 impl Emitter<'_> {
     /// One block: its operations, then its terminator.
@@ -539,6 +651,27 @@ impl Emitter<'_> {
         };
         code.branch_zero(origin, branch, target);
         Ok(())
+    }
+
+    /// The descriptor of what an array holds, or `None` if this is not one.
+    ///
+    /// Used to pick between overloads: `arraySlice(double[], ..)` and
+    /// `arraySlice(Object[], ..)` are different methods, and a bare `double[]`
+    /// is not an `Object[]`, so there is no generic version to fall back to
+    /// even if one were wanted.
+    fn array_element_descriptor(&self, ty: &HirType) -> Option<String> {
+        let HirType::Managed(ManagedType::Array(element)) = ty else {
+            return None;
+        };
+        let descriptor = types::descriptor(self.program, element)?;
+        // Three overloads cover every element type: the two primitive widths
+        // that appear, and references. `Object[]` accepts any reference array
+        // by Java's array covariance, and the result is `checkcast` back.
+        Some(match descriptor.as_str() {
+            "D" => "D".to_owned(),
+            "Z" => "Z".to_owned(),
+            _ => "L".to_owned(),
+        })
     }
 
     /// Load a value as an `NtsValue`, boxing it if it is not already one.
@@ -1697,7 +1830,13 @@ impl Emitter<'_> {
         let name = match callee {
             Callee::Direct(name) => name,
             Callee::External(name) => {
-                let Some((owner, member, descriptor)) = external(name) else {
+                let element = args
+                    .first()
+                    .map(|&first| self.ty(first).clone())
+                    .and_then(|ty| self.array_element_descriptor(&ty));
+                let found = external(name)
+                    .or_else(|| element.as_deref().and_then(|e| array_external(name, e)));
+                let Some((owner, member, descriptor)) = found else {
                     return Err(refuse(
                         self.func,
                         &format!("a call to `{name}`, which needs a runtime this slice has not built"),
@@ -1706,8 +1845,9 @@ impl Emitter<'_> {
                 for &arg in args {
                     self.load(code, arg)?;
                 }
-                code.invoke_static(origin, pool, owner, member, descriptor);
-                let returns = descriptor.rsplit(')').next().unwrap_or("");
+                code.invoke_static(origin, pool, owner, member, &descriptor);
+                let returns = descriptor.rsplit(')').next().unwrap_or("").to_owned();
+                let returns = returns.as_str();
                 if matches!(result, HirType::Void) {
                     // A helper whose answer nothing wants. `nts_map_set`
                     // returns the map, because that is what `m.set(k, v)`

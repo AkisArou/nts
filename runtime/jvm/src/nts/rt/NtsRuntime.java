@@ -518,33 +518,85 @@ public final class NtsRuntime {
         return parts.toArray(new String[0]);
     }
 
+    /**
+     * The replacement text for one match, with the `$` patterns expanded.
+     *
+     * <p>`GetSubstitution` in the specification, and the reason `replace`
+     * cannot be a splice: a **string** replacement is not literal. `$$` is a
+     * dollar, `$&` is what matched, `` $` `` is everything before it and `$'`
+     * everything after. `examples/string-methods` disagreed with node on 87
+     * cases for exactly this -- it kept `[$&]` where node produces `[-]`.
+     *
+     * <p>`$1` and `$<name>` stay literal here, and that is correct rather than
+     * unfinished: a string pattern has no capture groups, and the
+     * specification says an unmatched `$n` is left alone.
+     */
+    private static void substitution(
+        StringBuilder out, String matched, String whole, int at, String replacement) {
+        int i = 0;
+        while (i < replacement.length()) {
+            char c = replacement.charAt(i);
+            if (c != '$' || i + 1 >= replacement.length()) {
+                out.append(c);
+                i++;
+                continue;
+            }
+            char next = replacement.charAt(i + 1);
+            switch (next) {
+                case '$':
+                    out.append('$');
+                    break;
+                case '&':
+                    out.append(matched);
+                    break;
+                case '`':
+                    out.append(whole, 0, at);
+                    break;
+                case '\'':
+                    out.append(whole, at + matched.length(), whole.length());
+                    break;
+                default:
+                    // Not a recognised pattern: both characters are literal.
+                    out.append(c).append(next);
+                    break;
+            }
+            i += 2;
+        }
+    }
+
     /** `replace` with a string pattern: the first occurrence only. */
     public static String strReplace(String s, String pattern, String with) {
         int at = s.indexOf(pattern);
         if (at < 0) {
             return s;
         }
-        return s.substring(0, at) + with + s.substring(at + pattern.length());
+        StringBuilder out = new StringBuilder(s.length() + with.length());
+        out.append(s, 0, at);
+        substitution(out, pattern, s, at, with);
+        return out.append(s, at + pattern.length(), s.length()).toString();
     }
 
     /** `replaceAll` with a string pattern; an empty pattern matches everywhere. */
     public static String strReplaceAll(String s, String pattern, String with) {
+        StringBuilder out = new StringBuilder();
         if (pattern.isEmpty()) {
-            StringBuilder out = new StringBuilder();
-            out.append(with);
+            // An empty pattern matches at every position including both ends,
+            // so the replacement lands between every pair of code units.
+            substitution(out, "", s, 0, with);
             for (int i = 0; i < s.length(); i++) {
-                out.append(s.charAt(i)).append(with);
+                out.append(s.charAt(i));
+                substitution(out, "", s, i + 1, with);
             }
             return out.toString();
         }
-        StringBuilder out = new StringBuilder();
         int from = 0;
         while (true) {
             int at = s.indexOf(pattern, from);
             if (at < 0) {
                 return out.append(s, from, s.length()).toString();
             }
-            out.append(s, from, at).append(with);
+            out.append(s, from, at);
+            substitution(out, pattern, s, at, with);
             from = at + pattern.length();
         }
     }
@@ -713,5 +765,364 @@ public final class NtsRuntime {
             return digits + "e" + exponent;
         }
         return digits.charAt(0) + "." + digits.substring(1) + "e" + exponent;
+    }
+
+    // ----- more Math -------------------------------------------------------
+    //
+    // `StrictMath` rather than `Math` for the transcendentals, on purpose.
+    // `Math.sin` is allowed 1 ulp of slack and may use an intrinsic; `StrictMath`
+    // is fdlibm, and V8's is an fdlibm port too -- so the strict one is the more
+    // likely to produce the same bits as the oracle. `sqrt`, `floor`, `ceil` and
+    // `abs` are exact in both and stay on `Math`, where they are single
+    // instructions.
+
+    public static double mathSin(double x) {
+        return StrictMath.sin(x);
+    }
+
+    public static double mathCos(double x) {
+        return StrictMath.cos(x);
+    }
+
+    public static double mathTan(double x) {
+        return StrictMath.tan(x);
+    }
+
+    public static double mathAsin(double x) {
+        return StrictMath.asin(x);
+    }
+
+    public static double mathAcos(double x) {
+        return StrictMath.acos(x);
+    }
+
+    public static double mathAtan(double x) {
+        return StrictMath.atan(x);
+    }
+
+    public static double mathAtan2(double y, double x) {
+        return StrictMath.atan2(y, x);
+    }
+
+    public static double mathExp(double x) {
+        return StrictMath.exp(x);
+    }
+
+    public static double mathLog(double x) {
+        return StrictMath.log(x);
+    }
+
+    public static double mathLog2(double x) {
+        return StrictMath.log(x) / StrictMath.log(2.0);
+    }
+
+    public static double mathLog10(double x) {
+        return StrictMath.log10(x);
+    }
+
+    public static double mathCosh(double x) {
+        return StrictMath.cosh(x);
+    }
+
+    public static double mathTanh(double x) {
+        return StrictMath.tanh(x);
+    }
+
+    public static double mathCbrt(double x) {
+        return StrictMath.cbrt(x);
+    }
+
+    public static double mathHypot(double x, double y) {
+        return StrictMath.hypot(x, y);
+    }
+
+    /**
+     * `Math.sign`, which is `Math.signum` exactly.
+     *
+     * <p>Both return the argument itself for a zero and for NaN, so `-0` stays
+     * `-0` and NaN stays NaN -- the two cases a naive `x < 0 ? -1 : 1` gets
+     * wrong, and the reason this is not written out.
+     */
+    public static double mathSign(double x) {
+        return Math.signum(x);
+    }
+
+    /** `Math.fround`: through a `float` and back. */
+    public static double mathFround(double x) {
+        return (float) x;
+    }
+
+    // ----- number predicates ----------------------------------------------
+
+    public static boolean isInteger(double x) {
+        return !Double.isNaN(x) && !Double.isInfinite(x) && x == Math.floor(x);
+    }
+
+    public static boolean isSafeInteger(double x) {
+        return isInteger(x) && Math.abs(x) <= 9007199254740991.0;
+    }
+
+    public static String boolToString(boolean value) {
+        return value ? "true" : "false";
+    }
+
+    public static String tagName(int tag) {
+        return NtsValue.tagName(tag);
+    }
+
+    // ----- more strings ----------------------------------------------------
+
+    /**
+     * `at`: a negative index counts from the end, and out of range is
+     * `undefined` -- which is a null reference here, because the caller's type
+     * is `string | undefined` and `T | null` costs nothing on this backend.
+     */
+    public static String strAt(String s, double index) {
+        double at = toInteger(index);
+        if (at < 0.0) {
+            at += s.length();
+        }
+        if (at < 0.0 || at >= s.length()) {
+            return null;
+        }
+        return String.valueOf(s.charAt((int) at));
+    }
+
+    /** `charAt`, which answers the empty string out of range rather than undefined. */
+    public static String strCharAt(String s, double index) {
+        double at = toInteger(index);
+        if (at < 0.0 || at >= s.length()) {
+            return "";
+        }
+        return String.valueOf(s.charAt((int) at));
+    }
+
+    /** `codePointAt`, which is NaN out of range. */
+    public static double strCodePointAt(String s, double index) {
+        double at = toInteger(index);
+        if (at < 0.0 || at >= s.length()) {
+            return Double.NaN;
+        }
+        return s.codePointAt((int) at);
+    }
+
+    public static double strIndexOfFrom(String s, String needle, double from) {
+        return s.indexOf(needle, clamp(from, s.length(), false));
+    }
+
+    public static String strTrimStart(String s) {
+        int start = 0;
+        while (start < s.length() && isJsWhitespace(s.charAt(start))) {
+            start++;
+        }
+        return s.substring(start);
+    }
+
+    public static String strTrimEnd(String s) {
+        int end = s.length();
+        while (end > 0 && isJsWhitespace(s.charAt(end - 1))) {
+            end--;
+        }
+        return s.substring(0, end);
+    }
+
+    public static String strPadEnd(String s, double target, String pad) {
+        int want = (int) toInteger(target);
+        if (want <= s.length() || pad.isEmpty()) {
+            return s;
+        }
+        StringBuilder out = new StringBuilder(want).append(s);
+        while (out.length() < want) {
+            out.append(pad);
+        }
+        out.setLength(want);
+        return out.toString();
+    }
+
+    /**
+     * `toLowerCase` and `toUpperCase`, with `Locale.ROOT`.
+     *
+     * <p>These were refused on the belief that Java's differ from JavaScript's
+     * on final sigma -- a belief held from memory and **wrong**. Checked against
+     * node on nineteen hostile cases including `ΣΣ`, `ἈΙ`, `İ`, `ß`, `ẞ`, `Ǳ`,
+     * the `ﬀ` ligature and an astral pair: identical on every one, in both
+     * directions. Both implement the Unicode conditional mappings, and
+     * `Locale.ROOT` is what removes the Turkish dotted-I rule that would
+     * otherwise be the real divergence.
+     *
+     * <p>`java.util.Locale.ROOT` is not optional. The no-argument overload uses
+     * the *default* locale, so the same program would answer differently on a
+     * machine set to Turkish -- a wrong answer that depends on the host, which
+     * is the worst kind to ship.
+     */
+    public static String strToLowerCase(String s) {
+        return s.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    public static String strToUpperCase(String s) {
+        return s.toUpperCase(java.util.Locale.ROOT);
+    }
+
+    /** `toWellFormed`: every unpaired surrogate becomes U+FFFD. */
+    public static String strToWellFormed(String s) {
+        StringBuilder out = null;
+        for (int at = 0; at < s.length(); at++) {
+            char c = s.charAt(at);
+            boolean lone = false;
+            if (Character.isHighSurrogate(c)) {
+                lone = at + 1 >= s.length() || !Character.isLowSurrogate(s.charAt(at + 1));
+            } else if (Character.isLowSurrogate(c)) {
+                lone = true;
+            }
+            if (lone && out == null) {
+                out = new StringBuilder(s.length()).append(s, 0, at);
+            }
+            if (out != null) {
+                out.append(lone ? '\uFFFD' : c);
+            }
+        }
+        return out == null ? s : out.toString();
+    }
+
+    public static double mathExpm1(double x) {
+        return StrictMath.expm1(x);
+    }
+
+    public static double mathLog1p(double x) {
+        return StrictMath.log1p(x);
+    }
+
+    /** `isWellFormed`: no unpaired surrogate anywhere. */
+    public static boolean strIsWellFormed(String s) {
+        for (int at = 0; at < s.length(); at++) {
+            char c = s.charAt(at);
+            if (Character.isHighSurrogate(c)) {
+                if (at + 1 >= s.length() || !Character.isLowSurrogate(s.charAt(at + 1))) {
+                    return false;
+                }
+                at++;
+            } else if (Character.isLowSurrogate(c)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // ----- arrays, one entry point per element width ------------------------
+    //
+    // Overloaded rather than generic, for the reason `nts_runtime.h` gives
+    // about its own `fill` family: the compiler knows the element type, and a
+    // runtime that had to be told it would be told it wrongly one day. Java
+    // picks the overload by descriptor, so the *backend* decides which by
+    // reading the array's HIR type -- the same both-ends rule as everywhere
+    // else here.
+    //
+    // A bare `double[]` is not an `Object[]`, so there is no generic version
+    // to fall back to even if one were wanted.
+
+    private static int[] range(int length, double from, double to) {
+        int start = (int) clamp(from, length, true);
+        int end = (int) clamp(to, length, true);
+        return new int[] {start, Math.max(start, end)};
+    }
+
+    public static double[] arraySlice(double[] a, double from, double to) {
+        int[] at = range(a.length, from, to);
+        return java.util.Arrays.copyOfRange(a, at[0], at[1]);
+    }
+
+    public static boolean[] arraySlice(boolean[] a, double from, double to) {
+        int[] at = range(a.length, from, to);
+        return java.util.Arrays.copyOfRange(a, at[0], at[1]);
+    }
+
+    public static Object[] arraySlice(Object[] a, double from, double to) {
+        int[] at = range(a.length, from, to);
+        return java.util.Arrays.copyOfRange(a, at[0], at[1]);
+    }
+
+    /** `reverse` reverses **in place** and answers the same array. */
+    public static double[] arrayReverse(double[] a) {
+        for (int i = 0, j = a.length - 1; i < j; i++, j--) {
+            double swap = a[i];
+            a[i] = a[j];
+            a[j] = swap;
+        }
+        return a;
+    }
+
+    public static boolean[] arrayReverse(boolean[] a) {
+        for (int i = 0, j = a.length - 1; i < j; i++, j--) {
+            boolean swap = a[i];
+            a[i] = a[j];
+            a[j] = swap;
+        }
+        return a;
+    }
+
+    public static Object[] arrayReverse(Object[] a) {
+        for (int i = 0, j = a.length - 1; i < j; i++, j--) {
+            Object swap = a[i];
+            a[i] = a[j];
+            a[j] = swap;
+        }
+        return a;
+    }
+
+    /**
+     * `join`.
+     *
+     * <p>`null` and `undefined` become the empty string rather than "null" --
+     * the one rule of `join` that is not "stringify each element", and the one
+     * a `StringJoiner` would get wrong.
+     */
+    public static String arrayJoinStr(double[] a, String separator) {
+        StringBuilder out = new StringBuilder();
+        for (int at = 0; at < a.length; at++) {
+            if (at > 0) {
+                out.append(separator);
+            }
+            out.append(numberToString(a[at]));
+        }
+        return out.toString();
+    }
+
+    public static String arrayJoinStr(boolean[] a, String separator) {
+        StringBuilder out = new StringBuilder();
+        for (int at = 0; at < a.length; at++) {
+            if (at > 0) {
+                out.append(separator);
+            }
+            out.append(a[at] ? "true" : "false");
+        }
+        return out.toString();
+    }
+
+    public static String arrayJoinStr(Object[] a, String separator) {
+        StringBuilder out = new StringBuilder();
+        for (int at = 0; at < a.length; at++) {
+            if (at > 0) {
+                out.append(separator);
+            }
+            Object element = a[at];
+            if (element != null) {
+                out.append(element instanceof NtsValue
+                    ? valueToString((NtsValue) element)
+                    : element.toString());
+            }
+        }
+        return out.toString();
+    }
+
+    /** `String(x)` on an erased value, which `join` needs and `+` will. */
+    public static String valueToString(NtsValue value) {
+        switch (value.tag) {
+            case NtsValue.UNDEFINED: return "undefined";
+            case NtsValue.NULL: return "null";
+            case NtsValue.BOOLEAN: return value.num != 0.0 ? "true" : "false";
+            case NtsValue.NUMBER: return numberToString(value.num);
+            case NtsValue.STRING: return (String) value.ref;
+            default: return String.valueOf(value.ref);
+        }
     }
 }
