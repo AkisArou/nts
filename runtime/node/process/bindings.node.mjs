@@ -178,11 +178,32 @@ globalThis.nts_process_execve = (path, args, env) => host.execve(path, args,
 globalThis.nts_process_load_env_file = (path) => errnoOf(() => host.loadEnvFile(path));
 globalThis.nts_process_raw_debug = (text) => host._rawDebug(text);
 
+const installedProcess = () => {
+  const candidate = globalThis.process;
+  if (candidate === host || typeof candidate?._fatalException !== "function") return null;
+  return candidate;
+};
+
 // The loop's lifecycle, forwarded from node's process to ours. In a compiled
 // program these are the runtime noticing its own queues are empty; here node
 // notices and we relay, so a listener on our process sees the same moment.
 globalThis.nts_process_on_before_exit = (callback) => {
-  host.on("beforeExit", callback);
+  const relay = (code) => {
+    try {
+      callback(code);
+    } catch (error) {
+      const target = installedProcess();
+      if (target !== null && target._fatalException(error, false)) return;
+
+      // Throwing from a host `uncaughtException` listener makes Node exit with
+      // its internal-handler-failure status and skips the lifecycle relay.
+      // Stop this beforeExit source instead; the host can then exit naturally,
+      // delivering the typed process's `exit` event through the hook below.
+      host.removeListener("beforeExit", relay);
+      host.exitCode = 1;
+    }
+  };
+  host.on("beforeExit", relay);
 };
 globalThis.nts_process_on_exit = (callback) => {
   // The conformance runner also grades from an exit listener, registered
@@ -205,12 +226,6 @@ globalThis.nts_process_on_exit = (callback) => {
 // the process implementation installed by this profile. Relay those runtime
 // escape points into its ordinary `_fatalException` algorithm. This is only
 // transport: monitor/capture/event ordering remains in typed source.
-const installedProcess = () => {
-  const candidate = globalThis.process;
-  if (candidate === host || typeof candidate?._fatalException !== "function") return null;
-  return candidate;
-};
-
 host.on("uncaughtException", (error, origin) => {
   const target = installedProcess();
   if (target === null || !target._fatalException(error, origin === "unhandledRejection")) {
