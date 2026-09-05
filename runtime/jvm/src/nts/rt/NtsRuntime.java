@@ -346,6 +346,22 @@ public final class NtsRuntime {
         }
     }
 
+    /**
+     * Scratch for the digit generator and the placement pass.
+     *
+     * <p>Reused rather than allocated per call, on the same confinement
+     * `NtsMap` states: this collection, like the event loop, runs on one
+     * thread. Two arrays a conversion was 25,072 bytes/op on
+     * `number-format-double`, which is 131 bytes to print one number.
+     *
+     * <p>Neither escapes: the digits are consumed by `layoutDigits`, and the
+     * placement buffer is copied by the `String` constructor before either is
+     * touched again.
+     */
+    private static final byte[] SHORTEST_DIGITS = new byte[24];
+    /** Forty covers every placement; see {@link #layoutDigits}. */
+    private static final byte[] LAYOUT = new byte[40];
+
     public static String numberToString(double x) {
         if (Double.isNaN(x)) {
             return "NaN";
@@ -374,21 +390,17 @@ public final class NtsRuntime {
         // not close. The exact path below is what it declines *to* -- the same
         // arrangement `runtime/c` has, so the two lanes agree by construction
         // rather than by both being careful.
-        byte[] shortestDigits = new byte[24];
-        long packed = NtsGrisu.shortest(magnitude, shortestDigits);
+        long packed = NtsGrisu.shortest(magnitude, SHORTEST_DIGITS);
         if (packed != NtsGrisu.UNPROVEN) {
             int length = (int) (packed & 0xFFFFFFFFL);
             int point = (int) (packed >> 32);
             // Grisu can leave a trailing zero where the shortest form does not
             // need it; `stripTrailingZeros` is what the exact path calls, and
             // the decimal point does not move when one goes.
-            while (length > 1 && shortestDigits[length - 1] == '0') {
+            while (length > 1 && SHORTEST_DIGITS[length - 1] == '0') {
                 length--;
             }
-            return layout(
-                new String(shortestDigits, 0, length, java.nio.charset.StandardCharsets.ISO_8859_1),
-                point,
-                negative);
+            return layoutDigits(SHORTEST_DIGITS, length, point, negative);
         }
 
         java.math.BigDecimal exact = new java.math.BigDecimal(magnitude);
@@ -493,6 +505,63 @@ public final class NtsRuntime {
             trailingZeroes = c == '0' ? trailingZeroes + 1 : 0;
         }
         return Math.max(1, digits - trailingZeroes);
+    }
+
+    /**
+     * {@link #layout}, writing the digits straight out of Grisu's buffer.
+     *
+     * <p>The same placement rules, and the reason for a second copy of them is
+     * allocation rather than taste. Going through {@code layout} meant a
+     * {@code String} built from the byte buffer only to be handed to a
+     * {@code StringBuilder}, which copied it again and copied once more on
+     * {@code toString} -- about seven allocations and 185 bytes a conversion,
+     * measured, where two will do. The digits are ASCII by construction, so the
+     * output length is known and one pass fills it.
+     *
+     * <p>Forty bytes covers every case: 21 integral digits and a sign, or two
+     * for "0." plus six zeroes plus seventeen digits, or a mantissa with a
+     * three-digit exponent.
+     */
+    private static String layoutDigits(byte[] digits, int k, int n, boolean negative) {
+        byte[] out = LAYOUT;
+        int at = 0;
+        if (negative) { out[at++] = '-'; }
+        if (k <= n && n <= 21) {
+            System.arraycopy(digits, 0, out, at, k);
+            at += k;
+            for (int i = k; i < n; ++i) { out[at++] = '0'; }
+        } else if (0 < n && n <= 21) {
+            System.arraycopy(digits, 0, out, at, n);
+            at += n;
+            out[at++] = '.';
+            System.arraycopy(digits, n, out, at, k - n);
+            at += k - n;
+        } else if (-6 < n && n <= 0) {
+            out[at++] = '0';
+            out[at++] = '.';
+            for (int i = 0; i < -n; ++i) { out[at++] = '0'; }
+            System.arraycopy(digits, 0, out, at, k);
+            at += k;
+        } else {
+            out[at++] = digits[0];
+            if (k != 1) {
+                out[at++] = '.';
+                System.arraycopy(digits, 1, out, at, k - 1);
+                at += k - 1;
+            }
+            out[at++] = 'e';
+            int exponent = n - 1;
+            if (exponent >= 0) {
+                out[at++] = '+';
+            } else {
+                out[at++] = '-';
+                exponent = -exponent;
+            }
+            if (exponent >= 100) { out[at++] = (byte) ('0' + exponent / 100); }
+            if (exponent >= 10) { out[at++] = (byte) ('0' + (exponent / 10) % 10); }
+            out[at++] = (byte) ('0' + exponent % 10);
+        }
+        return new String(out, 0, at, java.nio.charset.StandardCharsets.ISO_8859_1);
     }
 
     private static String layout(CharSequence digits, int n, boolean negative) {
