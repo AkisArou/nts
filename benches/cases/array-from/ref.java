@@ -1,32 +1,28 @@
-// What a Java programmer writes for `Array.from`: `Arrays.copyOf` for an array
-// and `toArray` for a set.
+// What a Java programmer writes for `Array.from` over an array and over a
+// `Set`: `Arrays.copyOf` and `Set.toArray`.
 //
-// Two different copies, which is why the case names both. `Arrays.copyOf` is an
-// intrinsic that becomes a bulk memory move; `Set::toArray` has to walk the
-// table and cannot, so it is a scan with a store per element. The TypeScript's
-// two `Array.from` calls have exactly that split under them, and the row is
-// whether ours splits the same way.
+// `Array.from(xs)` on an array is a copy and nothing else, which is what
+// `Arrays.copyOf` is. `Array.from(set)` walks the set and materialises it,
+// which is `toArray` -- and `toArray` on a `HashSet` allocates an `Object[]`
+// and fills it by iterating, exactly as the lowering does.
 //
-// The set's *length* is read rather than an element, for the reason the
-// TypeScript gives: a `Set`'s iteration order is insertion order in JavaScript
-// and hash order in Java, so indexing one would compare two orders rather than
-// two copies. The walk runs to the end either way, so the work is the same and
-// only the comparison is made safe.
+// **`double[]` and `Set<Double>`, not `int[]` and `Set<Integer>`.** The
+// narrower pair was here deliberately, as the harder reference; it is the
+// thing the rule forbids, and on a row that is mostly `Arrays.copyOf` of 256
+// elements the width is half the bytes moved. `Set<Integer>` is worse than
+// narrow -- `Integer.valueOf` caches -128..127 and `Double.valueOf` caches
+// nothing, so half the keys here were free on one lane and allocated on the
+// other. Our own `NtsMap` keys through `Double.valueOf`, so `Set<Double>` is
+// the matched representation rather than the generous one.
 //
-// `Set<Integer>` boxes, as `map-and-set/ref.java` does and for the same reason:
-// the JDK has no primitive set.
+// Correcting it moved the published row from 2.39x to 1.95x, and **none of
+// that is code generation.** What is left is `Arrays.copyOf` of 256 elements,
+// two thousand times, which is the thing the row is for.
 //
-// `int[]` rather than `double[]`, which is the deliberate harder reference
-// `arrays` and `array-predicates` also write, and it is worth naming here
-// because on this row it is most of the number. The TypeScript is `number[]`,
-// so the lane prepares `managed<[f64]>` and copies eight bytes an element where
-// this copies four. Measured rather than assumed: **8,280,888 bytes/op against
-// the reference's 4,176,848**, a factor of 1.98 on a row whose whole subject is
-// two copies.
-//
-// So the gap is element width and the row should show it. `hir::elements`
-// proving these are int32 is what closes it, and `dispatch` -- which already
-// prepares as `[i32]` -- is what that looks like when it has happened.
+// The *length* of the listed set, not an element: a `Set`'s iteration order is
+// insertion order for us and a hash order for `HashSet`, so indexing one would
+// compare two orders rather than two copies. The walk runs to the end either
+// way, which is the part being measured.
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -36,18 +32,18 @@ final class Ref extends Bench.Work {
     private static volatile double seed = 5;
 
     static double work(int seed) {
-        int[] xs = new int[256];
+        double[] xs = new double[256];
         for (int i = 0; i < 256; i++) {
             xs[i] = i + seed;
         }
-        Set<Integer> marks = new HashSet<>();
+        Set<Double> marks = new HashSet<>();
         for (int i = 0; i < 256; i++) {
-            marks.add(i * 3 + seed);
+            marks.add((double) (i * 3 + seed));
         }
 
         double total = 0;
         for (int round = 0; round < 2000; round++) {
-            int[] copied = Arrays.copyOf(xs, xs.length);
+            double[] copied = Arrays.copyOf(xs, xs.length);
             total = total + copied[round % 256];
             Object[] listed = marks.toArray();
             total = total + listed.length;

@@ -81,3 +81,62 @@ buys 9% (R3 → R8), and hoisting *with* it buys 25%.
 Composed, the ceiling is R5 — **1.24x hand-written Java over a bare array,
 from 4.26x** — and the remaining 24% is the wrapper's construction and the
 `push` the filter cannot avoid.
+
+---
+
+## Correction, same day: the 1.6% was measured with the wrong instrument
+
+Everything above is about instructions per operation, chosen because the row's
+own timing varies 1.22x between runs and cannot resolve a 10% change. That was
+the right instrument for the three factors it was pointed at, and **it is the
+wrong instrument for element width**, because width does not change how many
+instructions you execute. It changes how long each one takes.
+
+Widening the reference from `int[]` to `double[]`, both instruments, four
+repetitions, two-point:
+
+| | instructions/op | cycles/op | IPC |
+| --- | ---: | ---: | ---: |
+| `int[]` | 33,139 | 6,969 | **4.76** |
+| `double[]` | 35,717 | 13,293 | **2.69** |
+| | +7.8% | **+90.7%** | |
+
+Nearly the same instructions and **1.9x the cycles**. This row *stalls*, and I
+reached for the counter that is blind to stalling.
+
+The mechanism is not cache capacity -- 259 elements is 2 KB against 1 KB and
+both are L1-resident. It is the compare. `some`, `every` and `findIndex` all
+break out of their loop on the comparison's own result, so the compare's latency
+is the loop-carried dependence, and `dcmpl` against `if_icmplt` is several
+cycles against one. The `filter` writes are the same shape.
+
+So the published effect of correcting the four `int[]` references is not the
+tidying job this record called it:
+
+| row | with `int[]` | with `double[]` |
+| --- | ---: | ---: |
+| `array-predicates` | 3.28x | **1.71x** |
+| `array-methods` | 1.67x | **1.18x** |
+| `arrays` | 1.35x | **1.02x** |
+| `array-from` | 2.39x | **1.95x** |
+
+**Four rows moved in our favour and none of it is code generation.** It is the
+correction of references that were faster than the program they stand for, and
+a reader discounting the column should discount exactly this much of it. The
+gap it was hiding is real and is upstream: a TypeScript `number` is an f64, this
+lane emits `double[]`, and a Java programmer writing the same loops over the
+same values gets `int[]` for free. That belongs in a message to `hir` with a
+number on it, which is where it now is -- not in a ratio that is supposed to be
+about what this backend emits.
+
+And the fifth reference moved the other way. `array-mutations` was an
+`ArrayList<Integer>`, which boxes what the compiled program keeps unboxed;
+replacing it with a hand-written growable `double[]` made the reference
+**slower**, 2.03 us to 2.48 us, and the row went 1.06x to 0.68x. An `Object[]`
+of small `Integer`s moves four bytes an element under compressed oops where a
+`double[]` moves eight, and `ArrayList`'s shift and splice are `System.arraycopy`
+over that. The rule that forbids the boxing is still right; the reasoning
+usually given for it -- that boxing must be costing the reference -- was not
+true here, and the row is one we win by less than the old number said rather
+than more.
+
