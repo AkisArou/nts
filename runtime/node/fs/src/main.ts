@@ -87,11 +87,14 @@ import {
   encodeFileName,
   emitRecursiveRmdirWarning,
   getOptions,
+  getReadFileBuffer,
+  getReadFileOptions,
   getValidatedBytePath,
   getValidatedPath,
   normalizeRmOptions,
   normalizeRmdirOptions,
   normalizeFileResultEncoding,
+  readFileBufferByteLengthName,
   requireTextEncoding,
   symlinkTypeFlags,
   toUnixTimestamp,
@@ -104,6 +107,7 @@ import {
   type FileOptions,
   type NormalizedRmOptions,
   type PathLike,
+  type ReadFileOptions,
   type RmdirOptions,
   type RmOptions,
   type SymlinkType,
@@ -111,7 +115,7 @@ import {
 
 export { Stats, StatFs, Dirent, constants };
 export type { BigIntStats } from "./stats.ts";
-export type { RmdirOptions, RmOptions } from "./options.ts";
+export type { ReadFileBuffer, ReadFileOptions, RmdirOptions, RmOptions } from "./options.ts";
 export { Dir, opendir, opendirSync } from "./dir.ts";
 export type { OpenDirOptions } from "./dir.ts";
 export { flagsOf } from "./flags.ts";
@@ -720,12 +724,15 @@ export function accessSync(path: BytePathLike, mode: number | null = constants.F
  * made for the caller.
  */
 export function readFileSync(path: PathLike | number, options?: null): Buffer;
-export function readFileSync(path: PathLike | number, options: string | FileOptions): string;
 export function readFileSync(
   path: PathLike | number,
-  options?: string | FileOptions | null,
+  options: string | ReadFileOptions,
+): string | Buffer;
+export function readFileSync(
+  path: PathLike | number,
+  options?: string | ReadFileOptions | null,
 ): string | Buffer {
-  const settings = getOptions(options, { flag: "r" });
+  const settings = getReadFileOptions(options);
   const ownsDescriptor = typeof path !== "number";
   const fd = ownsDescriptor
     ? openSync(path, settings.flag ?? "r", 0o666)
@@ -733,8 +740,54 @@ export function readFileSync(
   if (!ownsDescriptor) validateFileDescriptor(fd);
 
   try {
-    const size = fstatSync(fd).size;
+    const stats = fstatSync(fd);
+    const size = stats.isFile() ? stats.size : 0;
     if (size > 2 ** 31 - 1) throw new ERR_FS_FILE_TOO_LARGE(size);
+
+    const supplied = getReadFileBuffer(settings, size);
+    if (supplied !== undefined) {
+      let position = 0;
+      if (size > 0) {
+        while (position < size) {
+          const bytesRead = readSync(
+            fd,
+            supplied,
+            position,
+            size - position,
+            null,
+          );
+          position += bytesRead;
+          if (bytesRead === 0) break;
+        }
+      } else {
+        while (position < supplied.byteLength) {
+          const bytesRead = readSync(
+            fd,
+            supplied,
+            position,
+            supplied.byteLength - position,
+            null,
+          );
+          position += bytesRead;
+          if (bytesRead === 0) break;
+        }
+        if (position === supplied.byteLength) {
+          const overflow = Buffer.allocUnsafeSlow(1);
+          if (readSync(fd, overflow, 0, 1, null) !== 0) {
+            throw new ERR_INVALID_ARG_VALUE(
+              readFileBufferByteLengthName(settings),
+              supplied.byteLength,
+              "is too small to contain the entire file",
+            );
+          }
+        }
+      }
+
+      const contents = supplied.subarray(0, position);
+      if (settings.encoding === null || settings.encoding === undefined) return contents;
+      return contents.toString(requireTextEncoding(settings.encoding, "options.encoding"));
+    }
+
     const bytes = nts_fs_read_file_bytes_fd(fd);
     checkErrno("read");
     const contents = Buffer.from(bytes);

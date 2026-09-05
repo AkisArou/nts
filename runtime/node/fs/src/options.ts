@@ -39,6 +39,16 @@ export interface FileOptions {
   flush?: boolean;
 }
 
+/** Storage supplied by a caller to one of the whole-file read APIs. */
+export type ReadFileBuffer =
+  | ArrayBufferView<ArrayBuffer>
+  | ((size: number) => ArrayBufferView<ArrayBuffer>);
+
+/** Node 24's read-only extension to the ordinary filesystem options. */
+export interface ReadFileOptions extends FileOptions {
+  buffer?: ReadFileBuffer;
+}
+
 /** Options shared by the callback, promise, and synchronous `rm` forms. */
 export interface RmOptions {
   force?: boolean;
@@ -226,6 +236,78 @@ export function getOptions(
   validateEncodingOption(result.encoding);
   validateAbortSignal(result.signal, "options.signal");
   return result;
+}
+
+/**
+ * Normalize and validate the options shared by all four `readFile` surfaces.
+ *
+ * Keeping `buffer` out of `FileOptions` matters: it is not an option accepted
+ * by write, append, or metadata operations. Node validates it before opening
+ * the path so an invalid destination cannot leak a descriptor.
+ */
+export function getReadFileOptions(
+  options: string | ReadFileOptions | null | undefined,
+): ReadFileOptions {
+  const settings = getOptions(options, { flag: "r" });
+  const buffer = typeof options === "object" && options !== null
+    ? options.buffer
+    : undefined;
+  if (
+    buffer !== undefined &&
+    typeof buffer !== "function" &&
+    (!ArrayBuffer.isView(buffer) || !(buffer.buffer instanceof ArrayBuffer))
+  ) {
+    throw new ERR_INVALID_ARG_TYPE(
+      "options.buffer",
+      ["Buffer", "TypedArray", "DataView", "Function"],
+      buffer,
+    );
+  }
+  return { ...settings, buffer };
+}
+
+/** The property name Node reports when a caller-provided buffer is too small. */
+export function readFileBufferByteLengthName(options: ReadFileOptions): string {
+  return typeof options.buffer === "function"
+    ? "options.buffer().byteLength"
+    : "options.buffer.byteLength";
+}
+
+/**
+ * Resolve a fixed buffer or invoke its size-aware provider without copying.
+ *
+ * The resulting `Buffer` is a view over exactly the caller's bytes. Reads
+ * therefore update the supplied typed array in place, including when the
+ * returned result is later narrowed with `subarray`.
+ */
+export function getReadFileBuffer(
+  options: ReadFileOptions,
+  size: number,
+): Buffer | undefined {
+  let view = options.buffer;
+  if (typeof view === "function") {
+    view = view(size);
+    if (!ArrayBuffer.isView(view) || !(view.buffer instanceof ArrayBuffer)) {
+      throw new ERR_INVALID_ARG_TYPE(
+        "options.buffer()",
+        ["Buffer", "TypedArray", "DataView"],
+        view,
+      );
+    }
+  }
+  if (view === undefined) return undefined;
+
+  const buffer = view instanceof Buffer
+    ? view
+    : new Buffer(view.buffer, view.byteOffset, view.byteLength);
+  if (size > buffer.byteLength) {
+    throw new ERR_INVALID_ARG_VALUE(
+      readFileBufferByteLengthName(options),
+      buffer.byteLength,
+      `is smaller than the file size of ${size} bytes`,
+    );
+  }
+  return buffer;
 }
 
 /** Node's shared `assertEncoding`, used before any filesystem work begins. */

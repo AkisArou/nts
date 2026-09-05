@@ -69,6 +69,7 @@ import {
   type EncodedFileName,
   type AbortSignalLike,
   type FileOptions,
+  type ReadFileOptions,
   type BytePathLike,
   type PathLike,
   type RmdirOptions,
@@ -957,7 +958,7 @@ export class FileHandle extends EventEmitter {
     }
   }
 
-  async readFile(options?: string | FileOptions): Promise<string | Buffer> {
+  async readFile(options?: string | ReadFileOptions): Promise<string | Buffer> {
     return new Promise((resolve, reject) => {
       callbacks.readFile(this.#fd, options ?? null, (error, contents) => {
         if (error !== null && error !== undefined) {
@@ -1809,7 +1810,7 @@ export async function mkdtempDisposable(
 
 export function readFile(
   path: PathLike | FileHandle,
-  options?: string | FileOptions,
+  options?: string | ReadFileOptions,
 ): Promise<string | Buffer> {
   if (path instanceof FileHandle) return path.readFile(options);
   return new Promise((resolve, reject) => {

@@ -77,12 +77,15 @@ import {
   encodeFileName,
   emitRecursiveRmdirWarning,
   getOptions,
+  getReadFileBuffer,
+  getReadFileOptions,
   getValidatedBytePath,
   getValidatedPath,
   isFileDescriptor,
   normalizeRmOptions,
   normalizeRmdirOptions,
   normalizeFileResultEncoding,
+  readFileBufferByteLengthName,
   requireTextEncoding,
   symlinkTypeFlags,
   toUnixTimestamp,
@@ -95,6 +98,7 @@ import {
   type EncodedFileName,
   type FileOptions,
   type PathLike,
+  type ReadFileOptions,
   type RmdirOptions,
   type RmOptions,
   type SymlinkType,
@@ -950,17 +954,22 @@ class ReadFileContext {
   #ownsDescriptor: boolean;
   #encoding: string | null | undefined;
   #flag: string | number;
+  #options: ReadFileOptions;
   #callback: ReadFileCallback;
   #signal: FileOptions["signal"];
   #fd = -1;
   #size = 0;
   #position = 0;
   #buffer: Buffer | undefined;
+  #userBuffer = false;
+  #bufferByteLengthName = "options.buffer.byteLength";
+  #overflowBuffer: Buffer | undefined;
+  #checkOverflow = false;
   #chunks = new Array<Buffer | undefined>(4);
   #chunkCount = 0;
   #pendingError: unknown = null;
 
-  constructor(source: string | number, options: FileOptions, callback: ReadFileCallback) {
+  constructor(source: string | number, options: ReadFileOptions, callback: ReadFileCallback) {
     this.#ownsDescriptor = typeof source === "string";
     if (typeof source === "string") {
       this.#path = source;
@@ -969,6 +978,7 @@ class ReadFileContext {
     }
     this.#encoding = options.encoding;
     this.#flag = options.flag ?? "r";
+    this.#options = options;
     this.#callback = callback;
     this.#signal = options.signal;
   }
@@ -1026,8 +1036,18 @@ class ReadFileContext {
       this.#close(new ERR_FS_FILE_TOO_LARGE(this.#size));
       return;
     }
-    if (this.#size > 0) {
-      this.#buffer = Buffer.allocUnsafeSlow(this.#size);
+    try {
+      const supplied = getReadFileBuffer(this.#options, this.#size);
+      if (supplied !== undefined) {
+        this.#buffer = supplied;
+        this.#userBuffer = true;
+        this.#bufferByteLengthName = readFileBufferByteLengthName(this.#options);
+      } else if (this.#size > 0) {
+        this.#buffer = Buffer.allocUnsafeSlow(this.#size);
+      }
+    } catch (bufferError) {
+      this.#close(bufferError);
+      return;
     }
     this.#readNext();
   }
@@ -1042,7 +1062,30 @@ class ReadFileContext {
     let offset: number;
     let length: number;
 
-    if (this.#size > 0) {
+    if (this.#userBuffer) {
+      const supplied = this.#buffer;
+      if (supplied === undefined) {
+        this.#close(new Error("fs readFile lost its caller-provided buffer"));
+        return;
+      }
+      if (this.#size === 0) {
+        buffer = supplied;
+        offset = this.#position;
+        length = supplied.byteLength - this.#position;
+        if (length === 0) {
+          const overflow = this.#overflowBuffer ?? Buffer.allocUnsafeSlow(1);
+          this.#overflowBuffer = overflow;
+          buffer = overflow;
+          offset = 0;
+          length = 1;
+          this.#checkOverflow = true;
+        }
+      } else {
+        buffer = supplied;
+        offset = this.#position;
+        length = Math.min(readFileBufferLength, this.#size - this.#position);
+      }
+    } else if (this.#size > 0) {
       buffer = this.#buffer ?? Buffer.allocUnsafeSlow(this.#size);
       this.#buffer = buffer;
       offset = this.#position;
@@ -1074,7 +1117,26 @@ class ReadFileContext {
       return;
     }
 
-    if (this.#size === 0 && bytesRead > 0) {
+    if (this.#checkOverflow) {
+      this.#checkOverflow = false;
+      if (bytesRead !== 0) {
+        const supplied = this.#buffer;
+        if (supplied === undefined) {
+          this.#close(new Error("fs readFile lost its overflow-check buffer"));
+          return;
+        }
+        this.#close(new ERR_INVALID_ARG_VALUE(
+          this.#bufferByteLengthName,
+          supplied.byteLength,
+          "is too small to contain the entire file",
+        ));
+      } else {
+        this.#close(null);
+      }
+      return;
+    }
+
+    if (!this.#userBuffer && this.#size === 0 && bytesRead > 0) {
       const buffer = this.#buffer;
       if (buffer === undefined) {
         this.#close(new Error("fs read completed without its destination buffer"));
@@ -1084,6 +1146,14 @@ class ReadFileContext {
     }
 
     this.#position += bytesRead;
+    if (this.#userBuffer) {
+      if (bytesRead === 0 || this.#position === this.#size) {
+        this.#close(null);
+      } else {
+        this.#readNext();
+      }
+      return;
+    }
     if (bytesRead === 0 || (this.#size > 0 && this.#position >= this.#size)) {
       this.#close(null);
       return;
@@ -1118,7 +1188,14 @@ class ReadFileContext {
     }
 
     let result: Buffer;
-    if (this.#size > 0) {
+    if (this.#userBuffer) {
+      const buffer = this.#buffer;
+      if (buffer === undefined) {
+        this.#callback(new Error("fs readFile lost its caller-provided result buffer"));
+        return;
+      }
+      result = buffer.subarray(0, this.#position);
+    } else if (this.#size > 0) {
       const buffer = this.#buffer;
       if (buffer === undefined) {
         this.#callback(new Error("fs read completed without its result buffer"));
@@ -1147,15 +1224,15 @@ class ReadFileContext {
 export function readFile(path: PathLike | number, callback: ReadFileCallback): void;
 export function readFile(
   path: PathLike | number,
-  options: string | FileOptions | null,
+  options: string | ReadFileOptions | null,
   callback: ReadFileCallback,
 ): void;
 export function readFile(
   path: PathLike | number,
-  optionsOrCallback: string | FileOptions | null | ReadFileCallback,
+  optionsOrCallback: string | ReadFileOptions | null | ReadFileCallback,
   callback?: ReadFileCallback,
 ): void {
-  let options: string | FileOptions | null | undefined;
+  let options: string | ReadFileOptions | null | undefined;
   let complete: ReadFileCallback;
   if (typeof optionsOrCallback === "function") {
     options = undefined;
@@ -1166,7 +1243,7 @@ export function readFile(
     complete = callback;
   }
 
-  const settings = getOptions(options, { flag: "r" });
+  const settings = getReadFileOptions(options);
   validateAbortSignal(settings.signal, "options.signal");
   const usesCallerDescriptor = isFileDescriptor(path);
   if (!usesCallerDescriptor && settings.signal?.aborted) {
