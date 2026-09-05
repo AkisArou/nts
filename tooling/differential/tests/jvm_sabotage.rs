@@ -69,8 +69,13 @@ const SABOTAGES: &[Sabotage] = &[
     Sabotage {
         file: "nts/rt/NtsRuntime.java",
         method: "toInt32",
-        pattern: "return (int) (long) wrapped;",
-        replacement: "return (int) (long) wrapped + 1;",
+        // Re-anchored when `toInt32` became bit-based: the old body rounded a
+        // double and wrapped modulo 2^32, and the line this used to patch no
+        // longer exists. The test refused to run rather than patch nothing and
+        // report that every sabotage was noticed, which is the whole point of
+        // requiring the pattern to be unique inside its method.
+        pattern: "return bits < 0 ? -low : low;",
+        replacement: "return bits < 0 ? -low : low + 1;",
         example: "bitwise",
         guards: "`|0` and every other `ToInt32`, which Java's `d2i` saturates \
                  where JavaScript wraps",
