@@ -368,6 +368,29 @@ public final class NtsRuntime {
 
         boolean negative = x < 0;
         double magnitude = Math.abs(x);
+
+        // Grisu2 first, which answers with integer arithmetic and one 128-bit
+        // multiply, and declines rather than guessing when the interval does
+        // not close. The exact path below is what it declines *to* -- the same
+        // arrangement `runtime/c` has, so the two lanes agree by construction
+        // rather than by both being careful.
+        byte[] shortestDigits = new byte[24];
+        long packed = NtsGrisu.shortest(magnitude, shortestDigits);
+        if (packed != NtsGrisu.UNPROVEN) {
+            int length = (int) (packed & 0xFFFFFFFFL);
+            int point = (int) (packed >> 32);
+            // Grisu can leave a trailing zero where the shortest form does not
+            // need it; `stripTrailingZeros` is what the exact path calls, and
+            // the decimal point does not move when one goes.
+            while (length > 1 && shortestDigits[length - 1] == '0') {
+                length--;
+            }
+            return layout(
+                new String(shortestDigits, 0, length, java.nio.charset.StandardCharsets.ISO_8859_1),
+                point,
+                negative);
+        }
+
         java.math.BigDecimal exact = new java.math.BigDecimal(magnitude);
 
         // Start from a guess rather than scanning 1..17. `Double.toString` is
