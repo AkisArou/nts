@@ -115,6 +115,7 @@ import {
 
 export { Stats, StatFs, Dirent, constants };
 export type { BigIntStats } from "./stats.ts";
+export { BigIntStats as _BigIntStats } from "./stats.ts";
 export type { ReadFileBuffer, ReadFileOptions, RmdirOptions, RmOptions } from "./options.ts";
 export { Dir, opendir, opendirSync } from "./dir.ts";
 export type { OpenDirOptions } from "./dir.ts";
@@ -138,6 +139,11 @@ export type { GlobExclude, GlobOptions, GlobPatternInput } from "./glob.ts";
 
 export { ReadStream, WriteStream, createReadStream, createWriteStream } from "./streams.ts";
 export { FSWatcher, StatWatcher, watch, watchFile, unwatchFile } from "./watchers.ts";
+export type {
+  BigIntStatsListener,
+  StatsListener,
+  WatchFileOptions,
+} from "./watchers.ts";
 
 /** Named arguments accepted by the current `readSync` overload. */
 export interface ReadOptions {
@@ -1652,14 +1658,48 @@ export function rmSync(path: PathLike, options?: RmOptions): void {
   rmSyncValidated(validatedPath, normalizeRmOptions(options));
 }
 
+/**
+ * Raw export for Node's `internal/fs/utils.validateRmOptionsSync` fixture.
+ *
+ * Public `rmSync` performs the same checks inline. Keeping this entry explicit
+ * lets the upstream mixed public/internal test observe our validator without
+ * making a private helper part of the `node:fs` object.
+ */
+export function _validateRmOptionsSync(
+  path: BytePathLike,
+  options?: RmOptions,
+  expectDirectory = false,
+): NormalizedRmOptions | false {
+  const settings = normalizeRmOptions(options);
+  if (!settings.force || expectDirectory || !settings.recursive) {
+    const stats = lstatSync(path, { throwIfNoEntry: !settings.force });
+    const isDirectory = stats?.isDirectory() === true;
+    if (expectDirectory && !isDirectory) return false;
+    if (isDirectory && !settings.recursive) {
+      const validatedPath = getValidatedBytePath(path);
+      const displayPath = displayBytePath(validatedPath);
+      const errno = nts_fs_eisdir();
+      throw new ERR_FS_EISDIR(
+        errno,
+        errName(errno),
+        errMessage(errno),
+        displayPath,
+      );
+    }
+  }
+  return settings;
+}
+
 /** Traverse with options that were validated once at the public boundary. */
 function rmSyncValidated(validatedPath: string, options: NormalizedRmOptions): void {
   const columns = nts_fs_stat(validatedPath, false);
   if (columns.length === 0) {
-    if (options.force) {
+    const errno = -nts_errno();
+    const code = errName(errno);
+    if (options.force && (code === "ENOENT" || code === "ENOTDIR")) {
       return;
     }
-    throw uvException(-nts_errno(), "stat", validatedPath);
+    throw uvException(errno, "lstat", validatedPath);
   }
 
   const stats = new Stats(columns);

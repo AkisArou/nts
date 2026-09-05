@@ -612,10 +612,12 @@ globalThis.nts_fs_watch_stop = (handle) => {
 globalThis.nts_fs_watch_ref = (handle) => watchers.get(handle)?.ref();
 globalThis.nts_fs_watch_unref = (handle) => watchers.get(handle)?.unref();
 
-globalThis.nts_fs_watchfile_start = (path, interval, persistent, cb) => {
-  const listener = (current, previous) => cb(statColumns(current), statColumns(previous));
+globalThis.nts_fs_watchfile_start = (path, interval, persistent, bigint, cb) => {
+  const listener = bigint
+    ? (current, previous) => cb(statBigIntColumns(current), statBigIntColumns(previous))
+    : (current, previous) => cb(statColumns(current), statColumns(previous));
   const handle = nextWatchHandle++;
-  const watcher = fs.watchFile(path, { interval, persistent }, listener);
+  const watcher = fs.watchFile(path, { interval, persistent, bigint }, listener);
   watchers.set(handle, { path, listener, watcher });
   return handle;
 };

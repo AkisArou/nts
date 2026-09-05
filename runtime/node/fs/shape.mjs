@@ -11,12 +11,67 @@ export function shape(exports) {
   module.realpathSync.native = exports._realpathSyncNative;
   delete module._realpathNative;
   delete module._realpathSyncNative;
+  delete module._BigIntStats;
+  delete module._toUnixTimestamp;
+  delete module._validateRmOptionsSync;
+  delete module.flagsOf;
   return module;
 }
 
 /** `node:fs/promises` is the exact same namespace exposed as `fs.promises`. */
 export function subpaths(exports) {
   return { "fs/promises": exports.promises };
+}
+
+/** Private utilities explicitly exercised by otherwise applicable fs tests. */
+export function internals(exports) {
+  return {
+    "internal/fs/utils": {
+      BigIntStats: callableBigIntStats(exports._BigIntStats),
+      stringToFlags: exports.flagsOf,
+      toUnixTimestamp: exports._toUnixTimestamp,
+      validateRmOptionsSync: exports._validateRmOptionsSync,
+    },
+  };
+}
+
+/** Node's internal constructor takes fourteen bigint columns positionally. */
+function callableBigIntStats(Implementation) {
+  function BigIntStats(
+    dev,
+    mode,
+    nlink,
+    uid,
+    gid,
+    rdev,
+    blksize,
+    ino,
+    size,
+    blocks,
+    atimeNs,
+    mtimeNs,
+    ctimeNs,
+    birthtimeNs,
+  ) {
+    return new Implementation([
+      dev,
+      mode,
+      nlink,
+      uid,
+      gid,
+      rdev,
+      blksize,
+      ino,
+      size,
+      blocks,
+      atimeNs,
+      mtimeNs,
+      ctimeNs,
+      birthtimeNs,
+    ].map(String));
+  }
+  BigIntStats.prototype = Implementation.prototype;
+  return BigIntStats;
 }
 
 /**

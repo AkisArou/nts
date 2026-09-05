@@ -19,6 +19,7 @@
 import {
   AbortError,
   aggregateTwoErrors,
+  ERR_FS_EISDIR,
   ERR_FS_FILE_TOO_LARGE,
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
@@ -32,7 +33,7 @@ import {
   validateInteger,
   validateObject,
 } from "../../internal/validators.ts";
-import { errName, uvException } from "../../internal/uv.ts";
+import { errMessage, errName, uvException } from "../../internal/uv.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 import {
   bigintStatFs,
@@ -356,6 +357,7 @@ declare function nts_fs_mkdtemp_bytes_async(
   template: number[], callback: (errno: number, path: number[]) => void,
 ): void;
 declare function nts_fs_is_32_bit(): boolean;
+declare function nts_fs_eisdir(): number;
 
 /**
  * Turn the seam's `(errno, value)` into node's `(error, value)`.
@@ -1904,14 +1906,44 @@ export function rm(
   const validatedPath = getValidatedPath(path);
   const request = asRequest(callback, "rm");
   const settings = normalizeRmOptions(options);
-  nts_fs_rm_async(
-    validatedPath,
-    settings.recursive,
-    settings.force,
-    settings.maxRetries,
-    settings.retryDelay,
-    settle(request, "rm", validatedPath),
-  );
+  lstat(validatedPath, (error: unknown, stats?: AnyStats) => {
+    if (error !== null && error !== undefined) {
+      if (settings.force && errorHasCode(error, "ENOENT")) {
+        request(null);
+      } else {
+        request(error);
+      }
+      return;
+    }
+    if (stats === undefined) {
+      request(new Error("fs lstat completed without file metadata"));
+      return;
+    }
+    if (stats.isDirectory() && !settings.recursive) {
+      const errno = nts_fs_eisdir();
+      request(new ERR_FS_EISDIR(
+        errno,
+        errName(errno),
+        errMessage(errno),
+        validatedPath,
+      ));
+      return;
+    }
+    nts_fs_rm_async(
+      validatedPath,
+      settings.recursive,
+      settings.force,
+      settings.maxRetries,
+      settings.retryDelay,
+      settle(request, "rm", validatedPath),
+    );
+  });
+}
+
+/** Narrow the stat callback's unknown error without weakening the public API. */
+function errorHasCode(error: unknown, code: string): boolean {
+  return error !== null && typeof error === "object" &&
+    "code" in error && error.code === code;
 }
 
 export function unlink(path: PathLike, callback?: Callback): void {

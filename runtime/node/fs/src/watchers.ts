@@ -35,6 +35,8 @@ import {
   matchesCompiledGlobPatterns,
   type CompiledGlobPattern,
 } from "../../path/src/glob-matcher.ts";
+import { resolve as resolvePosixPath } from "../../path/src/posix.ts";
+import { resolve as resolveWindowsPath } from "../../path/src/win32.ts";
 import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
@@ -43,9 +45,9 @@ import {
   validateAbortSignal,
   validateBoolean,
   validateFunction,
-  validateInteger,
+  validateUint32,
 } from "../../internal/validators.ts";
-import { Stats } from "./stats.ts";
+import { BigIntStats, Stats } from "./stats.ts";
 import {
   getValidatedPath,
   encodeNormalizedFileBytes,
@@ -76,7 +78,15 @@ declare function nts_fs_watchfile_start(
   path: string,
   interval: number,
   persistent: boolean,
+  bigint: false,
   callback: (current: number[], previous: number[]) => void,
+): number;
+declare function nts_fs_watchfile_start(
+  path: string,
+  interval: number,
+  persistent: boolean,
+  bigint: true,
+  callback: (current: string[], previous: string[]) => void,
 ): number;
 declare function nts_fs_watchfile_stop(handle: number): void;
 declare function nts_fs_watchfile_ref(handle: number): void;
@@ -188,6 +198,10 @@ type CompiledWatchIgnore =
 const watchPlatform = nts_platform();
 const watchWindows = watchPlatform === "win32";
 const watchNocase = watchWindows || watchPlatform === "darwin";
+
+function resolveWatchFilePath(path: string): string {
+  return watchWindows ? resolveWindowsPath(path) : resolvePosixPath(path);
+}
 
 function watchPatternHasSeparator(pattern: string): boolean {
   return pattern.includes("/") || (watchWindows && pattern.includes("\\"));
@@ -422,6 +436,12 @@ export class StatWatcher extends EventEmitter {
   #asyncId = 0;
   #triggerAsyncId = 0;
   #contextFrame: AsyncContextFrame | undefined;
+  readonly #bigint: boolean;
+
+  constructor(bigint = false) {
+    super();
+    this.#bigint = bigint;
+  }
 
   start(path: string, interval: number, persistent: boolean): this {
     if (this.#handle !== null) return this;
@@ -438,17 +458,39 @@ export class StatWatcher extends EventEmitter {
       );
     }
 
-    this.#handle = nts_fs_watchfile_start(path, interval, persistent, (current, previous) => {
-      const prior = AsyncContextFrame.exchange(this.#contextFrame);
-      emitBefore(this.#asyncId, this.#triggerAsyncId, this);
-      try {
-        this.emit("change", new Stats(current), new Stats(previous));
-      } finally {
-        emitAfter(this.#asyncId);
-        AsyncContextFrame.setCurrent(prior);
-      }
-    });
+    if (this.#bigint) {
+      this.#handle = nts_fs_watchfile_start(
+        path,
+        interval,
+        persistent,
+        true,
+        (current: string[], previous: string[]) => {
+          this.#emitChange(new BigIntStats(current), new BigIntStats(previous));
+        },
+      );
+    } else {
+      this.#handle = nts_fs_watchfile_start(
+        path,
+        interval,
+        persistent,
+        false,
+        (current: number[], previous: number[]) => {
+          this.#emitChange(new Stats(current), new Stats(previous));
+        },
+      );
+    }
     return this;
+  }
+
+  #emitChange(current: Stats | BigIntStats, previous: Stats | BigIntStats): void {
+    const prior = AsyncContextFrame.exchange(this.#contextFrame);
+    emitBefore(this.#asyncId, this.#triggerAsyncId, this);
+    try {
+      this.emit("change", current, previous);
+    } finally {
+      emitAfter(this.#asyncId);
+      AsyncContextFrame.setCurrent(prior);
+    }
   }
 
   stop(): void {
@@ -516,48 +558,72 @@ export function watch(
  */
 const statWatchers = new Map<string, StatWatcher>();
 
+export interface WatchFileOptions {
+  bigint?: boolean | undefined;
+  persistent?: boolean | undefined;
+  interval?: number | undefined;
+}
+
+export type StatsListener = (current: Stats, previous: Stats) => void;
+export type BigIntStatsListener = (
+  current: BigIntStats,
+  previous: BigIntStats,
+) => void;
+
+function isEventListener(value: unknown): value is (...args: unknown[]) => unknown {
+  return typeof value === "function";
+}
+
 export function watchFile(
   path: PathLike,
-  options?: { interval?: number; persistent?: boolean } |
-    ((current: Stats, previous: Stats) => void),
-  listener?: (current: Stats, previous: Stats) => void,
+  options: WatchFileOptions & { bigint: true },
+  listener: BigIntStatsListener,
+): StatWatcher;
+export function watchFile(
+  path: PathLike,
+  options: (WatchFileOptions & { bigint?: false | undefined }) | undefined,
+  listener: StatsListener,
+): StatWatcher;
+export function watchFile(path: PathLike, listener: StatsListener): StatWatcher;
+export function watchFile(
+  path: unknown,
+  optionsOrListener: unknown,
+  suppliedListener?: unknown,
 ): StatWatcher {
-  let interval = 5007;
-  let persistent = true;
-  if (typeof options === "function") {
-    listener = options;
-  } else if (options !== null && options !== undefined) {
-    if (typeof options !== "object") {
-      throw new ERR_INVALID_ARG_TYPE("options", "Object", options);
-    }
-    if (options.interval !== undefined) interval = options.interval;
-    if (options.persistent !== undefined) persistent = options.persistent;
+  let listener: unknown = suppliedListener;
+  let interval: unknown = 5007;
+  let persistent: unknown = true;
+  let bigint = false;
+  if (optionsOrListener === null || typeof optionsOrListener !== "object") {
+    listener = optionsOrListener;
+  } else {
+    if ("interval" in optionsOrListener) interval = optionsOrListener.interval;
+    if ("persistent" in optionsOrListener) persistent = optionsOrListener.persistent;
+    if ("bigint" in optionsOrListener) bigint = optionsOrListener.bigint === true;
   }
   validateFunction(listener, "listener");
-  validateInteger(interval, "options.interval", 0, 2_147_483_647);
-  validateBoolean(persistent, "options.persistent");
+  validateUint32(interval, "interval");
 
-  const validatedPath = getValidatedPath(path, "filename");
+  const validatedPath = resolveWatchFilePath(getValidatedPath(path, "filename"));
 
   let watcher = statWatchers.get(validatedPath);
   if (!watcher) {
-    watcher = new StatWatcher();
+    watcher = new StatWatcher(bigint);
     statWatchers.set(validatedPath, watcher);
-    watcher.start(validatedPath, interval, persistent);
+    watcher.start(validatedPath, interval, Boolean(persistent));
   }
   watcher.on("change", listener);
   return watcher;
 }
 
-export function unwatchFile(
-  path: PathLike,
-  listener?: (current: Stats, previous: Stats) => void,
-): void {
-  const validatedPath = getValidatedPath(path, "filename");
+export function unwatchFile(path: PathLike, listener?: StatsListener): void;
+export function unwatchFile(path: PathLike, listener?: BigIntStatsListener): void;
+export function unwatchFile(path: unknown, listener?: unknown): void {
+  const validatedPath = resolveWatchFilePath(getValidatedPath(path, "filename"));
   const watcher = statWatchers.get(validatedPath);
   if (!watcher) return;
 
-  if (typeof listener === "function") {
+  if (isEventListener(listener)) {
     watcher.removeListener("change", listener);
   } else {
     watcher.removeAllListeners("change");

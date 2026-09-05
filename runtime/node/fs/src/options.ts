@@ -421,19 +421,19 @@ export function symlinkTypeFlags(type: unknown): 0 | 1 | 2 {
 /** Validate `rm` options once before traversal begins. */
 export function normalizeRmOptions(options: unknown): NormalizedRmOptions {
   if (options === undefined) {
-    return { force: false, maxRetries: 0, recursive: false, retryDelay: 100 };
+    return { retryDelay: 100, maxRetries: 0, recursive: false, force: false };
   }
   validateRemovalOptionsObject(options);
 
-  const force = options.force ?? false;
-  const maxRetries = options.maxRetries ?? 0;
-  const recursive = options.recursive ?? false;
-  const retryDelay = options.retryDelay ?? 100;
+  const force = "force" in options ? options.force : false;
+  const maxRetries = "maxRetries" in options ? options.maxRetries : 0;
+  const recursive = "recursive" in options ? options.recursive : false;
+  const retryDelay = "retryDelay" in options ? options.retryDelay : 100;
   validateBoolean(force, "options.force");
   validateUint32(maxRetries, "options.maxRetries");
   validateBoolean(recursive, "options.recursive");
   validateInteger(retryDelay, "options.retryDelay", 0, 2_147_483_647);
-  return { force, maxRetries, recursive, retryDelay };
+  return { retryDelay, maxRetries, recursive, force };
 }
 
 /** Validate legacy `rmdir` options without admitting `rm`'s `force` flag. */
@@ -443,9 +443,9 @@ export function normalizeRmdirOptions(options: unknown): NormalizedRmdirOptions 
   }
   validateRemovalOptionsObject(options);
 
-  const maxRetries = options.maxRetries ?? 0;
-  const recursive = options.recursive ?? false;
-  const retryDelay = options.retryDelay ?? 100;
+  const maxRetries = "maxRetries" in options ? options.maxRetries : 0;
+  const recursive = "recursive" in options ? options.recursive : false;
+  const retryDelay = "retryDelay" in options ? options.retryDelay : 100;
   validateUint32(maxRetries, "options.maxRetries");
   validateBoolean(recursive, "options.recursive");
   validateInteger(retryDelay, "options.retryDelay", 0, 2_147_483_647);
