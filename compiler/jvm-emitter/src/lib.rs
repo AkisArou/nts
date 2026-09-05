@@ -43,7 +43,7 @@ pub mod insn;
 pub mod pool;
 pub mod text;
 
-pub use class::{Class, ClassBuilder, MAJOR_JAVA_5, MAJOR_JAVA_8, access};
+pub use class::{Class, ClassBuilder, FieldFromStatic, MAJOR_JAVA_5, MAJOR_JAVA_8, access};
 pub use code::{Body, Code, Error, Label};
 pub use frames::VType;
 pub use insn::{Compare, Kind};

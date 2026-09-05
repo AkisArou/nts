@@ -109,6 +109,22 @@ pub struct ClassBuilder {
     pub major: u16,
 }
 
+/// One field a constructor sets from a static constant.
+///
+/// The field and the constant share a descriptor: this exists to install a
+/// canonical value, not to convert one.
+#[derive(Clone, Copy, Debug)]
+pub struct FieldFromStatic<'a> {
+    /// The instance field to set.
+    pub field: &'a str,
+    /// The class holding the constant.
+    pub from_class: &'a str,
+    /// The static field to read it from.
+    pub from_field: &'a str,
+    /// Shared by both, and checked by the verifier.
+    pub descriptor: &'a str,
+}
+
 impl ClassBuilder {
     #[must_use]
     pub fn new(name: impl Into<String>, super_name: impl Into<String>) -> Self {
@@ -150,12 +166,41 @@ impl ClassBuilder {
     /// otherwise reach into the stack map design. The JVM zeroes fields, which
     /// is exactly what `Func::initializes_receiver` already promises.
     pub fn default_constructor(&mut self, origin: &Origin, pool: &mut Pool) -> Result<(), Error> {
+        self.constructor(origin, pool, &[])
+    }
+
+    /// `<init>()V`, optionally establishing fields whose correct initial value
+    /// is not the all-zero one the JVM gives them.
+    ///
+    /// The JVM zeroes an instance field, and for most of them that is the right
+    /// answer. It is not for a field whose zero has a *meaning* the platform's
+    /// zero does not carry: a reference field is `null`, and a language in
+    /// which `null` and `undefined` are different values cannot let one stand
+    /// in for the other.
+    ///
+    /// Each entry says "set this field from that static constant", which is all
+    /// the caller needs and keeps this crate ignorant of what the constant
+    /// means.
+    pub fn constructor(
+        &mut self,
+        origin: &Origin,
+        pool: &mut Pool,
+        initial: &[FieldFromStatic<'_>],
+    ) -> Result<(), Error> {
         let mut code = crate::code::Code::new(
             vec![frames::VType::Object(self.name.clone())],
             1,
         );
         code.load(origin, crate::insn::Kind::Ref, 0);
         code.invoke_special(origin, pool, &self.super_name, "<init>", "()V");
+        // After the super call, so `this` is initialized and a `putfield`
+        // against it verifies. Before it, the receiver is `uninitializedThis`
+        // and only the super constructor may touch it.
+        for field in initial {
+            code.load(origin, crate::insn::Kind::Ref, 0);
+            code.get_static(origin, pool, field.from_class, field.from_field, field.descriptor);
+            code.put_field(origin, pool, &self.name, field.field, field.descriptor);
+        }
         code.ret(origin, None);
         let body = code.finish(pool)?;
         self.method(access::PUBLIC, "<init>", "()V", Some(body));

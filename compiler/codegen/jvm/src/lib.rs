@@ -324,7 +324,34 @@ fn object_class(program: &Program, layout: &nts_core::hir::Layout) -> Result<Opt
     }
 
     dispatch_forwarders(program, layout, &mut builder, &mut pool)?;
-    builder.default_constructor(&origin, &mut pool).map_err(|error| {
+    // A field the JVM zeroes to `null` where the language's zero is
+    // `undefined`.
+    //
+    // The C lane gets this for free: an `NtsValue` is a struct, `UNDEFINED` is
+    // tag 0, and zeroed storage *is* an undefined value. A JVM reference field
+    // zeroes to `null`, which is a different value -- and `null` is a legal
+    // TypeScript value in its own right, so it cannot be read as the absence.
+    //
+    // The symptom was a `NullPointerException` reading `NtsValue.ref` out of an
+    // optional field that had never been assigned: `benches/cases/optional-chain`
+    // builds `{}` and calls `h.fn?.(1)`, and half its iterations reach a field
+    // nothing ever wrote. `Func::initializes_receiver` promises the fields are
+    // zeroed and this is what keeping that promise costs on this platform.
+    let erased: Vec<_> = hierarchy::declared(program, layout)
+        .iter()
+        .filter(|field| matches!(field.ty, nts_core::hir::HirType::Erased))
+        .map(|field| body::method_name(&field.name))
+        .collect();
+    let initial: Vec<nts_jvm_emitter::FieldFromStatic<'_>> = erased
+        .iter()
+        .map(|field| nts_jvm_emitter::FieldFromStatic {
+            field,
+            from_class: types::VALUE,
+            from_field: "UNDEFINED_VALUE",
+            descriptor: types::VALUE_DESCRIPTOR,
+        })
+        .collect();
+    builder.constructor(&origin, &mut pool, &initial).map_err(|error| {
         Diagnostic::error(
             "NTS4003",
             format!("`{}` could not be given a constructor: {error}", layout.name),
