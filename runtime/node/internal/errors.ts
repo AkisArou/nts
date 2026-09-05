@@ -1305,6 +1305,19 @@ export class ERR_HTTP_HEADERS_SENT extends NodeError {
   }
 }
 
+/** A HEAD response or bodyless status was given payload bytes under strict policy. */
+export class ERR_HTTP_BODY_NOT_ALLOWED extends NodeError {
+  override get ["constructor"](): unknown {
+    return Error;
+  }
+  override readonly code = "ERR_HTTP_BODY_NOT_ALLOWED";
+
+  constructor() {
+    super("Adding content for this request method or response status is not allowed.");
+    this.name = "Error";
+  }
+}
+
 /** Strict HTTP body bytes do not match the declared Content-Length. */
 export class ERR_HTTP_CONTENT_LENGTH_MISMATCH extends NodeError {
   override get ["constructor"](): unknown {

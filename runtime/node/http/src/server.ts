@@ -49,6 +49,7 @@ export interface HttpServerOptions extends NetServerOptions {
   requireHostHeader?: boolean | undefined;
   uniqueHeaders?: readonly string[] | undefined;
   joinDuplicateHeaders?: boolean | undefined;
+  rejectNonStandardBodyWrites?: boolean | undefined;
   shouldUpgradeCallback?: ShouldUpgradeCallback | undefined;
   IncomingMessage?: typeof IncomingMessage | undefined;
   ServerResponse?: typeof ServerResponse | undefined;
@@ -105,6 +106,7 @@ export class Server extends NetServer {
   timeout = 0;
   maxHeadersCount: number | null = null;
   maxRequestsPerSocket = 0;
+  rejectNonStandardBodyWrites: boolean;
   requireHostHeader: boolean;
   shouldUpgradeCallback: ShouldUpgradeCallback;
 
@@ -182,6 +184,9 @@ export class Server extends NetServer {
     if (opts.joinDuplicateHeaders !== undefined) {
       validateBoolean(opts.joinDuplicateHeaders, "options.joinDuplicateHeaders");
     }
+    if (opts.rejectNonStandardBodyWrites !== undefined) {
+      validateBoolean(opts.rejectNonStandardBodyWrites, "options.rejectNonStandardBodyWrites");
+    }
     if (opts.shouldUpgradeCallback !== undefined) {
       validateFunction(opts.shouldUpgradeCallback, "options.shouldUpgradeCallback");
     }
@@ -204,6 +209,7 @@ export class Server extends NetServer {
     this.headersTimeout = headersTimeout;
     this.requestTimeout = requestTimeout;
     this.connectionsCheckingInterval = connectionsCheckingInterval;
+    this.rejectNonStandardBodyWrites = opts.rejectNonStandardBodyWrites ?? false;
     this.requireHostHeader = requireHostHeader;
     this.#uniqueHeaders = parseUniqueHeadersOption(opts.uniqueHeaders);
     this.#joinDuplicateHeaders = opts.joinDuplicateHeaders ?? false;
@@ -504,7 +510,9 @@ export class Server extends NetServer {
         }
       }
 
-      response = new this.#ServerResponse(message);
+      response = new this.#ServerResponse(message, {
+        rejectNonStandardBodyWrites: this.rejectNonStandardBodyWrites,
+      });
       response._setHeaderValidation(this.#lenientHeaderValues);
       response._setUniqueHeaders(this.#uniqueHeaders);
       response.shouldKeepAlive = info.shouldKeepAlive;

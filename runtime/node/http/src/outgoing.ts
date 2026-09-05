@@ -23,6 +23,7 @@ import { captureRejectionSymbol, EventEmitter } from "../../events/src/main.ts";
 import { getDefaultHighWaterMark } from "../../stream/src/state.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
+  ERR_HTTP_BODY_NOT_ALLOWED,
   ERR_HTTP_CONTENT_LENGTH_MISMATCH,
   ERR_HTTP_HEADERS_SENT,
   ERR_HTTP_INVALID_HEADER_VALUE,
@@ -88,6 +89,11 @@ interface PendingWrite {
   chunk: Buffer | string;
   encoding: string | undefined;
   callback: WriteCallback | undefined;
+}
+
+/** Internal options supplied while a server constructs one response. */
+export interface OutgoingMessageOptions {
+  rejectNonStandardBodyWrites?: boolean | undefined;
 }
 
 /** RFC 9110's `token`: what a header name may contain. */
@@ -235,6 +241,7 @@ export class OutgoingMessage extends EventEmitter {
   #errored: unknown = null;
   #flushError: unknown = null;
   #endCallbacks: EndCallback[] = [];
+  #rejectNonStandardBodyWrites: boolean;
 
   readonly #onSocketDrain = (): void => {
     if (this.#needDrain && this.writableLength === 0 && !this.destroyed && !this.finished) {
@@ -251,9 +258,10 @@ export class OutgoingMessage extends EventEmitter {
     this.#completeFlush(error);
   };
 
-  constructor() {
+  constructor(options: OutgoingMessageOptions = {}) {
     super();
     this.#highWaterMark = getDefaultHighWaterMark(false);
+    this.#rejectNonStandardBodyWrites = options.rejectNonStandardBodyWrites ?? false;
   }
 
   override [captureRejectionSymbol] = destroyOnRejection;
@@ -743,6 +751,7 @@ export class OutgoingMessage extends EventEmitter {
     }
 
     if (!this.hasBody) {
+      if (this.#rejectNonStandardBodyWrites) throw new ERR_HTTP_BODY_NOT_ALLOWED();
       this.flushHeaders();
       if (callback) nextTick(callback);
       return true;
@@ -988,12 +997,15 @@ export class ServerResponse extends OutgoingMessage {
   statusMessage: string | undefined;
   _sent100 = false;
 
-  constructor(request: {
-    httpVersionMajor: number;
-    httpVersionMinor: number;
-    method: string | null;
-  }) {
-    super();
+  constructor(
+    request: {
+      httpVersionMajor: number;
+      httpVersionMinor: number;
+      method: string | null;
+    },
+    options: OutgoingMessageOptions = {},
+  ) {
+    super(options);
     // HTTP/1.0 has no chunked encoding, so a response with no declared length
     // has to be delimited by closing the connection.
     this.useChunkedEncodingByDefault =
