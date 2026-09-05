@@ -6,6 +6,7 @@
 export function shape(exports) {
   const mod = { ...exports };
   delete mod.default;
+  delete mod._createBlobFromExternalSource;
   return mod;
 }
 

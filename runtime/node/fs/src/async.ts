@@ -121,6 +121,12 @@ import {
 import { nextTick } from "../../internal/tick.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
 import { asRequest, type Callback } from "./request.ts";
+import {
+  _closeAsync as nts_fs_close_async,
+  _openAsync as nts_fs_open_async,
+  _openBytesAsync as nts_fs_open_bytes_async,
+  _readAsync as nts_fs_read_async,
+} from "./file-handle-binding.ts";
 
 export type { Callback } from "./request.ts";
 
@@ -213,20 +219,6 @@ export function globIterator(
   );
 }
 
-declare function nts_fs_open_async(
-  path: string, flags: number, mode: number, callback: (errno: number, fd: number) => void,
-): void;
-declare function nts_fs_open_bytes_async(
-  path: number[], flags: number, mode: number,
-  callback: (errno: number, fd: number) => void,
-): void;
-declare function nts_fs_close_async(
-  fd: number, callback: (errno: number) => void,
-): void;
-declare function nts_fs_read_async(
-  fd: number, length: number, position: number,
-  callback: (errno: number, bytesRead: number, bytes: number[]) => void,
-): void;
 declare function nts_fs_read_bigint_async(
   fd: number, length: number, position: bigint,
   callback: (errno: number, bytesRead: number, bytes: number[]) => void,

@@ -30,6 +30,19 @@ import { errMessage, errName, uvException } from "../../internal/uv.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 import {
+  _close as nts_fs_close,
+  _open as nts_fs_open,
+  _openBytes as nts_fs_open_bytes,
+} from "./file-handle-binding.ts";
+import {
+  _fstatBigIntColumns as nts_fs_fstat_bigint,
+  _fstatColumns as nts_fs_fstat,
+  _statBigIntByteColumns as nts_fs_stat_bigint_bytes,
+  _statBigIntColumns as nts_fs_stat_bigint,
+  _statByteColumns as nts_fs_stat_bytes,
+  _statColumns as nts_fs_stat,
+} from "./stat-binding.ts";
+import {
   bigintStatFs,
   BigIntStats,
   Dirent,
@@ -121,6 +134,8 @@ export { Dir, opendir, opendirSync } from "./dir.ts";
 export type { OpenDirOptions } from "./dir.ts";
 export { flagsOf } from "./flags.ts";
 export { toUnixTimestamp as _toUnixTimestamp } from "./options.ts";
+export { openAsBlob } from "./blob.ts";
+export type { OpenAsBlobOptions } from "./blob.ts";
 
 // The callback surface, which shares this module's argument handling and its
 // errors: the work is the same system call and only the route back differs.
@@ -169,19 +184,10 @@ setStreamFactories(makeReadStream, makeWriteStream);
 
 // -------------------------------------------------------------- the bindings
 
-declare function nts_fs_stat(path: string, follow: boolean): number[];
-declare function nts_fs_stat_bytes(path: number[], follow: boolean): number[];
-declare function nts_fs_stat_bigint(path: string, follow: boolean): string[];
-declare function nts_fs_stat_bigint_bytes(path: number[], follow: boolean): string[];
-declare function nts_fs_fstat(fd: number): number[];
-declare function nts_fs_fstat_bigint(fd: number): string[];
 declare function nts_fs_statfs(path: string): number[];
 declare function nts_fs_statfs_bytes(path: number[]): number[];
 declare function nts_fs_statfs_bigint(path: string): string[];
 declare function nts_fs_statfs_bigint_bytes(path: number[]): string[];
-declare function nts_fs_open(path: string, flags: number, mode: number): number;
-declare function nts_fs_open_bytes(path: number[], flags: number, mode: number): number;
-declare function nts_fs_close(fd: number): number;
 declare function nts_fs_read_file_bytes_fd(fd: number): number[];
 declare function nts_fs_write_file_utf8(
   path: string, contents: string, flags: number, mode: number, flush: boolean,
