@@ -114,7 +114,8 @@ export class Server extends NetServer {
   connectionsCheckingInterval = 30000;
   timeout = 0;
   maxHeadersCount: number | null = null;
-  maxRequestsPerSocket = 0;
+  maxRequestsPerSocket: number | null = 0;
+  httpAllowHalfOpen = false;
   rejectNonStandardBodyWrites: boolean;
   requireHostHeader: boolean;
   shouldUpgradeCallback: ShouldUpgradeCallback;
@@ -160,7 +161,14 @@ export class Server extends NetServer {
       opts = options;
     }
 
-    super(opts);
+    super({
+      allowHalfOpen: true,
+      pauseOnConnect: opts.pauseOnConnect,
+      noDelay: opts.noDelay ?? true,
+      keepAlive: opts.keepAlive,
+      keepAliveInitialDelay: opts.keepAliveInitialDelay,
+      blockList: opts.blockList,
+    });
 
     const requestTimeout = opts.requestTimeout ?? 300000;
     const headersTimeout = opts.headersTimeout ?? Math.min(60000, requestTimeout);
@@ -329,6 +337,7 @@ export class Server extends NetServer {
     let upgradeRequest: IncomingMessage | null = null;
     let parseErrorSeen = false;
     let socketErrorsSuppressed = false;
+    let requestCount = 0;
 
     const abortQueuedResponses = (error: unknown): void => {
       for (let index = queuedResponseIndex; index < queuedResponses.length; index++) {
@@ -533,6 +542,7 @@ export class Server extends NetServer {
       response._setUniqueHeaders(this.#uniqueHeaders);
       response.shouldKeepAlive = info.shouldKeepAlive;
       response._keepAliveTimeout = this.keepAliveTimeout;
+      response._maxRequestsPerSocket = this.maxRequestsPerSocket;
 
       if (activeResponse === null) {
         activeResponse = response;
@@ -570,6 +580,24 @@ export class Server extends NetServer {
         finished.writeHead(400, { Connection: "close" });
         finished.end();
         return 0;
+      }
+
+      const maximumRequests = this.maxRequestsPerSocket;
+      if (
+        info.versionMajor === 1 &&
+        info.versionMinor === 1 &&
+        typeof maximumRequests === "number" &&
+        maximumRequests > 0
+      ) {
+        requestCount += 1;
+        finished.maxRequestsOnConnectionReached = maximumRequests <= requestCount;
+        if (maximumRequests < requestCount) {
+          this.emit("dropRequest", message, socket);
+          finished.shouldKeepAlive = false;
+          finished.writeHead(503);
+          finished.end();
+          return 0;
+        }
       }
 
       // A client that said `Expect: 100-continue` is waiting for permission
@@ -629,6 +657,8 @@ export class Server extends NetServer {
         const error = parser.error;
         if (error === null) throw new Error("HTTP parser failed without an error");
         handleParseError(error, Buffer.alloc(0));
+      } else if (!this.httpAllowHalfOpen) {
+        socket.end();
       }
     };
 

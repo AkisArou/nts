@@ -395,6 +395,8 @@ export class OutgoingMessage extends EventEmitter {
 
   /** Set by the server or the client before anything is written. */
   shouldKeepAlive = true;
+  maxRequestsOnConnectionReached = false;
+  _maxRequestsPerSocket: number | null = 0;
   useChunkedEncodingByDefault = true;
   protected keepAliveWithoutFramingWhenEmpty = false;
   sendDate = false;
@@ -669,16 +671,21 @@ export class OutgoingMessage extends EventEmitter {
     }
 
     if (!this._removedConnection && !this.headersMap.has("connection")) {
-      automaticHeaders += `Connection: ${this.shouldKeepAlive ? "keep-alive" : "close"}\r\n`;
+      const connection =
+        this.shouldKeepAlive && !this.maxRequestsOnConnectionReached ? "keep-alive" : "close";
+      automaticHeaders += `Connection: ${connection}\r\n`;
     }
 
     if (
       this.shouldKeepAlive &&
+      !this.maxRequestsOnConnectionReached &&
       this._defaultKeepAlive &&
       this._keepAliveTimeout > 0 &&
       !this.headersMap.has("keep-alive")
     ) {
-      automaticHeaders += `Keep-Alive: timeout=${Math.floor(this._keepAliveTimeout / 1000)}\r\n`;
+      const maximum = this._maxRequestsPerSocket;
+      const max = typeof maximum === "number" && (maximum | 0) > 0 ? `, max=${maximum}` : "";
+      automaticHeaders += `Keep-Alive: timeout=${Math.floor(this._keepAliveTimeout / 1000)}${max}\r\n`;
     }
 
     if (addChunkedHeader) {
