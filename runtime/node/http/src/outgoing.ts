@@ -67,6 +67,7 @@ export interface OutgoingSocket {
   setKeepAlive(enable?: boolean, initialDelay?: number): unknown;
   cork?(): void;
   uncork?(): void;
+  readonly connecting?: boolean;
   readonly destroyed?: boolean;
   readonly errored?: unknown;
   readonly writableCorked?: number;
@@ -266,6 +267,7 @@ export class OutgoingMessage extends EventEmitter {
   /** Fixed legacy fields used by `stream.finished()` to identify this type. */
   _closed = false;
   _defaultKeepAlive = true;
+  _keepAliveTimeout = 0;
   _removedConnection = false;
   _removedContLen = false;
   _removedTE = false;
@@ -502,6 +504,18 @@ export class OutgoingMessage extends EventEmitter {
       this.headersMap.set("connection", [
         "Connection",
         this.shouldKeepAlive ? "keep-alive" : "close",
+      ]);
+    }
+
+    if (
+      this.shouldKeepAlive &&
+      this._defaultKeepAlive &&
+      this._keepAliveTimeout > 0 &&
+      !this.headersMap.has("keep-alive")
+    ) {
+      this.headersMap.set("keep-alive", [
+        "Keep-Alive",
+        `timeout=${Math.floor(this._keepAliveTimeout / 1000)}`,
       ]);
     }
 
@@ -897,6 +911,7 @@ export class ServerResponse extends OutgoingMessage {
   /** Attach the connection currently carrying this response. */
   assignSocket(socket: OutgoingSocket): void {
     this.socket = socket;
+    this.emit("socket", socket);
   }
 
   /** Release a completed response from the connection that carried it. */

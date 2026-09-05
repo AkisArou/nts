@@ -17,6 +17,7 @@ import { Socket } from "../../net/src/main.ts";
 import type { LookupFunction } from "../../net/src/main.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
 import { addAbortSignal } from "../../stream/src/add-abort-signal.ts";
+import { getTimerDuration } from "../../timers/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
   ConnResetException,
@@ -132,6 +133,8 @@ export class ClientRequest extends OutgoingMessage {
   reusedSocket = false;
   timeout: number | undefined;
   timeoutCb: (() => void) | null = null;
+  #pendingSocketTimeout: number | undefined;
+  #responseEnded = false;
   /** The response, once its head has arrived. */
   res: IncomingMessage | null = null;
 
@@ -177,7 +180,9 @@ export class ClientRequest extends OutgoingMessage {
     this.protocol = opts.protocol ?? selectedAgent?.protocol ?? "http:";
     const defaultPort = opts.defaultPort || selectedAgent?.defaultPort || 80;
     this.#port = Number(opts.port || defaultPort);
-    this.timeout = opts.timeout;
+    const timeoutOption: unknown = opts.timeout;
+    this.timeout =
+      timeoutOption === undefined ? undefined : getTimerDuration(timeoutOption, "timeout");
 
     const httpValidation: unknown = opts.httpValidation;
     const insecureHTTPParser: unknown = opts.insecureHTTPParser;
@@ -211,7 +216,7 @@ export class ClientRequest extends OutgoingMessage {
     this.hasBody = true;
     this.useChunkedEncodingByDefault = !BODILESS.has(this.method);
     this.keepAliveWithoutFramingWhenEmpty = BODILESS.has(this.method);
-    this.shouldKeepAlive = true;
+    this.shouldKeepAlive = selectedAgent !== null;
 
     const rawHeaderArray = opts.headers !== undefined && requestHeadersAreArray(opts.headers);
     if (opts.headers !== undefined) {
@@ -247,6 +252,7 @@ export class ClientRequest extends OutgoingMessage {
       family: opts.family,
       hints: opts.hints,
       path: opts.socketPath,
+      timeout: this.timeout,
     };
     if (opts.signal !== undefined) addAbortSignal(opts.signal, this);
     if (this.destroyed) return;
@@ -348,6 +354,10 @@ export class ClientRequest extends OutgoingMessage {
       response._destroyFromSocket(error);
     };
 
+    const onResponseTimeout = (): void => {
+      response?.emit("timeout", socket);
+    };
+
     const onData = (chunk: Buffer): void => {
       const consumed = parser.execute(chunk);
       if (consumed < 0) {
@@ -365,9 +375,10 @@ export class ClientRequest extends OutgoingMessage {
     const onEnd = (): void => {
       // A response with no framing ends when the connection does, so the end
       // of the socket is what completes the message.
-      if (parser.finish() < 0 && response === null) {
+      parser.finish();
+      if (response === null) {
         cleanupSocketListeners();
-        this.#fail(new Error("socket hang up"));
+        this.#failAfterSocketEnd(new ConnResetException("socket hang up"));
       } else {
         abortResponse();
       }
@@ -397,6 +408,7 @@ export class ClientRequest extends OutgoingMessage {
       socket.removeListener("end", onEnd);
       socket.removeListener("error", onError);
       socket.removeListener("close", onClose);
+      socket.removeListener("timeout", onResponseTimeout);
       if (this.timeoutCb !== null) {
         socket.removeListener("timeout", this.timeoutCb);
         this.timeoutCb = null;
@@ -436,7 +448,9 @@ export class ClientRequest extends OutgoingMessage {
 
       response = message;
       this.res = message;
+      socket.on("timeout", onResponseTimeout);
       message.once("end", () => {
+        this.#responseEnded = true;
         message._detachAbortSignal();
         // Registered before the response is exposed, so this schedules the
         // pool transition before next-tick work queued by user `end`
@@ -481,9 +495,18 @@ export class ClientRequest extends OutgoingMessage {
     // lifecycle listeners must already be installed when that happens.
     this.socket = socket;
 
+    const pendingSocketTimeout = this.#pendingSocketTimeout;
+    this.#pendingSocketTimeout = undefined;
+    if (pendingSocketTimeout !== undefined) {
+      if (socket.connecting) {
+        socket.once("connect", () => socket.setTimeout(pendingSocketTimeout));
+      } else {
+        socket.setTimeout(pendingSocketTimeout);
+      }
+    }
+
     const timeout = this.timeout ?? this.agent?.options.timeout;
     if (timeout !== undefined) {
-      socket.setTimeout(timeout);
       this.timeoutCb = () => {
         this.emit("timeout");
       };
@@ -538,6 +561,14 @@ export class ClientRequest extends OutgoingMessage {
     super.destroy(error);
   }
 
+  /** Report an EOF-before-response without turning that clean EOF into a socket error. */
+  #failAfterSocketEnd(error: unknown): void {
+    if (this.aborted || this.#errorEmitted) return;
+    this.#errorEmitted = true;
+    this.emit("error", error);
+    super.destroy();
+  }
+
   /** Node's older name for `destroy`, kept because programs call it. */
   abort(): void {
     if (this.aborted) return;
@@ -564,18 +595,27 @@ export class ClientRequest extends OutgoingMessage {
   }
 
   override setTimeout(msecs: number, callback?: () => void): this {
-    this.timeout = msecs;
+    if (this.#responseEnded) return this;
+    const duration = getTimerDuration(msecs, "msecs");
+    this.timeout = duration;
     if (callback) this.once("timeout", callback);
     const socket = this.socket;
-    if (socket !== null) {
+    if (socket === null) {
+      this.#pendingSocketTimeout = duration;
+    } else {
       if (this.timeoutCb !== null) socket.removeListener("timeout", this.timeoutCb);
-      socket.setTimeout(msecs);
+      if (socket.connecting === true) socket.once("connect", () => socket.setTimeout(duration));
+      else socket.setTimeout(duration);
       this.timeoutCb = () => {
         this.emit("timeout");
       };
       socket.once("timeout", this.timeoutCb);
     }
     return this;
+  }
+
+  clearTimeout(callback?: () => void): this {
+    return this.setTimeout(0, callback);
   }
 
   /** Disable Nagle on the underlying socket once there is one. */

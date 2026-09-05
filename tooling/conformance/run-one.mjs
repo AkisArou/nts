@@ -845,7 +845,7 @@ function executeTestModule(modulePath) {
       "exports",
       "__filename",
       "__dirname",
-      readFileSync(modulePath, "utf8"),
+      `${readFileSync(modulePath, "utf8")}\n//# sourceURL=${pathToFileURL(modulePath).href}`,
     );
     const localRequire = createRequire(modulePath);
     const requireFromHere = (id) => shimmedRequire(id, modulePath);

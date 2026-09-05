@@ -36,6 +36,8 @@ import {
 export interface HttpServerOptions extends NetServerOptions {
   /** How long a connection may sit idle between requests. */
   keepAliveTimeout?: number | undefined;
+  /** Internal safety margin added to the advertised keep-alive timeout. */
+  keepAliveTimeoutBuffer?: number | undefined;
   /** How long the head of a request may take to arrive. */
   headersTimeout?: number | undefined;
   requestTimeout?: number | undefined;
@@ -54,6 +56,7 @@ interface ConnectionDeadline {
   socket: Socket;
   headersStartedAt: number;
   requestStartedAt: number;
+  requestStarted: boolean;
   headersComplete: boolean;
   requestComplete: boolean;
 }
@@ -99,9 +102,11 @@ export class Server extends NetServer {
    * backlog, and a server with a few thousand of those stops accepting.
    */
   keepAliveTimeout = 5000;
+  keepAliveTimeoutBuffer = 1000;
   headersTimeout = 60000;
   requestTimeout = 300000;
   connectionsCheckingInterval = 30000;
+  timeout = 0;
   maxHeadersCount: number | null = null;
   maxRequestsPerSocket = 0;
   requireHostHeader: boolean;
@@ -150,6 +155,7 @@ export class Server extends NetServer {
     const requestTimeout = opts.requestTimeout ?? 300000;
     const headersTimeout = opts.headersTimeout ?? Math.min(60000, requestTimeout);
     const keepAliveTimeout = opts.keepAliveTimeout ?? 5000;
+    const keepAliveTimeoutBuffer = opts.keepAliveTimeoutBuffer ?? 1000;
     const connectionsCheckingInterval = opts.connectionsCheckingInterval ?? 30000;
     const maxHeaderSize = opts.maxHeaderSize ?? 80 * 1024;
     const httpValidation: unknown = opts.httpValidation;
@@ -158,6 +164,7 @@ export class Server extends NetServer {
     validateInteger(requestTimeout, "requestTimeout", 0);
     validateInteger(headersTimeout, "headersTimeout", 0);
     validateInteger(keepAliveTimeout, "keepAliveTimeout", 0);
+    validateInteger(keepAliveTimeoutBuffer, "keepAliveTimeoutBuffer", 0);
     validateInteger(connectionsCheckingInterval, "connectionsCheckingInterval", 0);
     validateInteger(maxHeaderSize, "maxHeaderSize", 0);
     if (httpValidation !== undefined) {
@@ -188,6 +195,7 @@ export class Server extends NetServer {
     this.#IncomingMessage = opts.IncomingMessage ?? IncomingMessage;
     this.#ServerResponse = opts.ServerResponse ?? ServerResponse;
     this.keepAliveTimeout = keepAliveTimeout;
+    this.keepAliveTimeoutBuffer = keepAliveTimeoutBuffer;
     this.headersTimeout = headersTimeout;
     this.requestTimeout = requestTimeout;
     this.connectionsCheckingInterval = connectionsCheckingInterval;
@@ -222,10 +230,12 @@ export class Server extends NetServer {
     const now = Date.now();
     for (const deadline of this.#deadlines.values()) {
       const headersExpired =
+        deadline.requestStarted &&
         !deadline.headersComplete &&
         headersTimeout > 0 &&
         now - deadline.headersStartedAt >= headersTimeout;
       const requestExpired =
+        deadline.requestStarted &&
         !deadline.requestComplete &&
         requestTimeout > 0 &&
         now - deadline.requestStartedAt >= requestTimeout;
@@ -243,6 +253,13 @@ export class Server extends NetServer {
     const now = Date.now();
     deadline.headersStartedAt = now;
     deadline.requestStartedAt = now;
+    deadline.requestStarted = true;
+    deadline.headersComplete = false;
+    deadline.requestComplete = false;
+  }
+
+  #awaitRequest(deadline: ConnectionDeadline): void {
+    deadline.requestStarted = false;
     deadline.headersComplete = false;
     deadline.requestComplete = false;
   }
@@ -255,6 +272,7 @@ export class Server extends NetServer {
       socket,
       headersStartedAt: now,
       requestStartedAt: now,
+      requestStarted: true,
       headersComplete: false,
       requestComplete: false,
     };
@@ -277,6 +295,7 @@ export class Server extends NetServer {
     let activeResponse: ServerResponse | null = null;
     let queuedResponses: ServerResponse[] = [];
     let queuedResponseIndex = 0;
+    let keepAliveTimeoutSet = false;
     /** Bytes that arrived after a message ended, belonging to the next one. */
     let pending: Buffer | null = null;
 
@@ -300,19 +319,47 @@ export class Server extends NetServer {
       parser.free();
     });
 
+    const onSocketTimeout = (): void => {
+      const requestHandled =
+        incoming !== null && !incoming.complete && incoming.emit("timeout", socket);
+      const responseHandled = activeResponse !== null && activeResponse.emit("timeout", socket);
+      const serverHandled = this.emit("timeout", socket);
+      if (!requestHandled && !responseHandled && !serverHandled) socket.destroy();
+    };
+
+    if (this.timeout > 0) socket.setTimeout(this.timeout);
+    socket.on("timeout", onSocketTimeout);
+
     const advanceResponseQueue = (): void => {
       const next = queuedResponses[queuedResponseIndex];
       if (next !== undefined) {
         queuedResponseIndex += 1;
         activeResponse = next;
-        next.socket = socket;
+        next.assignSocket(socket);
         return;
       }
 
       queuedResponses = [];
       queuedResponseIndex = 0;
       activeResponse = null;
-      this.#beginRequest(deadline);
+
+      const keepAliveTimeout =
+        Number.isFinite(this.keepAliveTimeout) && this.keepAliveTimeout >= 0
+          ? this.keepAliveTimeout
+          : 0;
+      const keepAliveTimeoutBuffer =
+        Number.isFinite(this.keepAliveTimeoutBuffer) && this.keepAliveTimeoutBuffer >= 0
+          ? this.keepAliveTimeoutBuffer
+          : 1000;
+      if (keepAliveTimeout > 0) {
+        socket.setTimeout(keepAliveTimeout + keepAliveTimeoutBuffer);
+        keepAliveTimeoutSet = true;
+      }
+
+      // A later pipelined request may already have started while this
+      // response was draining. Only enter the idle state when the parser has
+      // no in-progress message whose own request deadline must remain armed.
+      if (deadline.requestComplete) this.#awaitRequest(deadline);
       socket.resume();
       this.#idle.add(socket);
       socket.unref();
@@ -343,6 +390,7 @@ export class Server extends NetServer {
     };
 
     const feed = (data: Buffer): void => {
+      if (!deadline.requestStarted) this.#beginRequest(deadline);
       let view: Uint8Array = data;
       for (;;) {
         const consumed = parser.execute(view);
@@ -371,6 +419,10 @@ export class Server extends NetServer {
       if (info.type !== REQUEST) {
         throw new Error("request parser produced response metadata");
       }
+      if (keepAliveTimeoutSet) {
+        socket.setTimeout(this.timeout);
+        keepAliveTimeoutSet = false;
+      }
       deadline.headersComplete = true;
       const message = new this.#IncomingMessage(socket);
       message.httpVersionMajor = info.versionMajor;
@@ -387,10 +439,11 @@ export class Server extends NetServer {
       response = new this.#ServerResponse(message);
       response._setHeaderValidation(this.#lenientHeaderValues);
       response.shouldKeepAlive = info.shouldKeepAlive;
+      response._keepAliveTimeout = this.keepAliveTimeout;
 
       if (activeResponse === null) {
         activeResponse = response;
-        response.socket = socket;
+        response.assignSocket(socket);
       } else {
         queuedResponses.push(response);
       }
@@ -519,8 +572,8 @@ export class Server extends NetServer {
 
   /** Node's name for the idle timeout on accepted connections. */
   setTimeout(msecs: number, callback?: () => void): this {
-    void msecs;
-    void callback;
+    this.timeout = msecs;
+    if (callback !== undefined) this.on("timeout", callback);
     return this;
   }
 

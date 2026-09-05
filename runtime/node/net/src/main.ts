@@ -50,7 +50,7 @@ import { BlockList, SocketAddress } from "./block-list.ts";
 // This module's own timers, not an ambient global: the idle timeout wants a
 // `Timeout` object it can `refresh()`, which is what makes resetting the clock
 // on every byte one pointer write rather than a new timer per byte.
-import { clearTimeout, setTimeout } from "../../timers/src/main.ts";
+import { clearTimeout, getTimerDuration, setTimeout } from "../../timers/src/main.ts";
 import type { Timeout } from "../../timers/src/main.ts";
 import { AsyncContextFrame } from "../../internal/async-context.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
@@ -211,6 +211,7 @@ export interface ConnectOptions {
   family?: number | undefined;
   hints?: number | undefined;
   lookup?: LookupFunction | undefined;
+  timeout?: number | undefined;
   signal?: AbortSignalLike | undefined;
   noDelay?: boolean | undefined;
   keepAlive?: boolean | undefined;
@@ -1457,16 +1458,18 @@ export class Socket extends Duplex {
    * to a request and to an idle keep-alive connection.
    */
   setTimeout(msecs: number, callback?: () => void): this {
-    validateNumber(msecs, "msecs");
+    const duration = getTimerDuration(msecs, "msecs");
     this.#clearTimeout();
-    this.timeout = msecs;
+    this.timeout = duration;
 
-    if (msecs > 0) {
+    if (duration > 0) {
       this.#timer = setTimeout(() => {
         this.emit("timeout");
-      }, msecs);
+      }, duration);
       this.#timer.unref();
       if (callback) this.once("timeout", callback);
+    } else if (callback !== undefined) {
+      this.removeListener("timeout", callback);
     }
     return this;
   }
@@ -2004,6 +2007,10 @@ function readConnectOptions(input: object): ConnectOptions {
     validateFunction(input.lookup, "options.lookup");
     options.lookup = input.lookup;
   }
+  if ("timeout" in input && input.timeout !== undefined) {
+    validateNumber(input.timeout, "options.timeout");
+    options.timeout = input.timeout;
+  }
   if ("signal" in input && input.signal !== undefined) {
     if (!isAbortSignalLike(input.signal)) {
       throw new ERR_INVALID_ARG_TYPE("options.signal", "AbortSignal", input.signal);
@@ -2205,7 +2212,9 @@ export function createServer(
 }
 
 export function connect(...args: ConnectArguments): Socket {
+  const { options } = normaliseConnectArguments(args);
   const socket = new Socket();
+  if (options.timeout) socket.setTimeout(options.timeout);
   return socket.connect(...args);
 }
 

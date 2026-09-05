@@ -155,11 +155,13 @@ export class Agent extends EventEmitter {
    * that does both still installs exactly one socket.
    */
   createSocket(
-    _request: SocketReceiver,
+    request: SocketReceiver,
     options: AgentConnectionOptions,
     callback: CreateSocketCallback,
   ): void {
     const connectionOptions = this.#connectionOptions(options);
+    const timeout = request.timeout || this.options.timeout;
+    if (timeout !== undefined) connectionOptions.timeout = timeout;
     if (this.keepAlive) {
       connectionOptions.keepAlive = true;
       connectionOptions.keepAliveInitialDelay = this.keepAliveMsecs;
@@ -214,6 +216,7 @@ export class Agent extends EventEmitter {
         this.reuseSocket(socket, request);
         (this.sockets[name] ??= []).push(socket);
         request.onSocket(socket);
+        this.#setRequestSocketTimeout(socket, request);
         return;
       }
     }
@@ -305,6 +308,7 @@ export class Agent extends EventEmitter {
           (this.sockets[name] ??= []).push(socket);
           this.reuseSocket(socket, next.request);
           next.request.onSocket(socket);
+          this.#setRequestSocketTimeout(socket, next.request);
         });
       } finally {
         next.resource.emitDestroy();
@@ -380,7 +384,7 @@ export class Agent extends EventEmitter {
     this.#socketOptions.set(socket, options);
     this.totalSocketCount++;
     (this.sockets[name] ??= []).push(socket);
-    socket.setTimeout(this.options.timeout ?? 0);
+    socket.setTimeout(request.timeout || this.options.timeout || 0);
 
     const listeners: ManagedSocketListeners = {
       close: () => this.#socketClosed(name, socket),
@@ -463,6 +467,14 @@ export class Agent extends EventEmitter {
       if (key !== name && this.#pruneDestroyedRequests(key) !== undefined) return true;
     }
     return false;
+  }
+
+  /** Restore a request-specific timeout after an idle socket is reused. */
+  #setRequestSocketTimeout(socket: Socket, request: SocketReceiver): void {
+    const agentTimeout = this.options.timeout ?? 0;
+    if (request.timeout !== undefined && request.timeout !== agentTimeout) {
+      socket.setTimeout(request.timeout);
+    }
   }
 
   /** Drop requests cancelled while they waited for an Agent socket. */

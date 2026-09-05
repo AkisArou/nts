@@ -305,7 +305,8 @@ export class IncomingMessage extends Readable {
    * idle connection.
    */
   setTimeout(msecs: number, callback?: () => void): this {
-    this.socket?.setTimeout?.(msecs, callback);
+    if (callback !== undefined) this.on("timeout", callback);
+    this.socket?.setTimeout?.(msecs);
     return this;
   }
 
