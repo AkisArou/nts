@@ -2,3 +2,4 @@
 test-os.js: language non-goal (typescript.md section 13); after its public OS checks the file requires every exported function to be a mutable object with a Symbol.toPrimitive hook; local/core-static.js preserves the supported scalar, CPU, memory, network-interface, directory, user, EOL, and devNull behavior
 test-os-homedir-no-envvar.js: host-binary subprocess; spawns a fresh node process and asserts on its built-in os module
 test-os-userinfo-handles-getter-errors.js: host-binary subprocess; runs node -e and asserts on the built-in os module's stderr
+test-os-checked-function.js: language non-goal (§13); replaces a method on Node's private os binding before module load to synthesize an error context, which requires dynamic binding-object mutation
