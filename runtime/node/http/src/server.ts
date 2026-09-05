@@ -93,6 +93,14 @@ function defaultParseErrorResponse(code: string): string {
   return "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n";
 }
 
+/** Node accepts `100-continue` as one token in a comma-delimited Expect field. */
+const CONTINUE_EXPRESSION = /(?:^|\W)100-continue(?:$|\W)/i;
+
+function expectationContainsContinue(expectation: string | string[]): boolean {
+  const value = Array.isArray(expectation) ? expectation.join(", ") : expectation;
+  return CONTINUE_EXPRESSION.test(value);
+}
+
 /** A server parser must always receive bytes, including after protocol handoff. */
 class HTTPServerSocket extends Socket {
   override setEncoding(_encoding: Encoding): this {
@@ -616,16 +624,34 @@ export class Server extends NetServer {
         }
       }
 
-      // A client that said `Expect: 100-continue` is waiting for permission
-      // before it sends the body. Node emits an event if anyone is listening
-      // and otherwise answers yes, because a server that never replies leaves
-      // the client waiting for a timeout.
-      if (String(message.headers["expect"] ?? "").toLowerCase() === "100-continue") {
-        if (this.listenerCount("checkContinue") > 0) {
-          this.emit("checkContinue", message, finished);
+      if (info.versionMajor === 1 && info.versionMinor === 1) {
+        const expectation = message.headers["expect"];
+        if (expectation !== undefined) {
+          if (expectationContainsContinue(expectation)) {
+            // The client may withhold its body until this decision. A listener
+            // owns that decision; otherwise Node permits the body and delivers
+            // the request through the ordinary event.
+            finished._expect_continue = true;
+            if (this.listenerCount("checkContinue") > 0) {
+              this.emit("checkContinue", message, finished);
+              return 0;
+            }
+            finished.writeContinue();
+            this.emit("request", message, finished);
+            return 0;
+          }
+
+          // Unknown expectations never reach the ordinary request listener.
+          // Applications may decide how to answer them; without a listener,
+          // RFC 9110's standard response is 417 Expectation Failed.
+          if (this.listenerCount("checkExpectation") > 0) {
+            this.emit("checkExpectation", message, finished);
+            return 0;
+          }
+          finished.writeHead(417);
+          finished.end();
           return 0;
         }
-        finished.writeContinue();
       }
 
       this.emit("request", message, finished);

@@ -1005,6 +1005,7 @@ export class ServerResponse extends OutgoingMessage {
   statusCode = 200;
   statusMessage: string | undefined;
   _sent100 = false;
+  _expect_continue = false;
 
   constructor(
     request: {
@@ -1106,6 +1107,11 @@ export class ServerResponse extends OutgoingMessage {
     } else if (fields) {
       for (const [name, value] of Object.entries(fields)) this.setHeader(name, value);
     }
+
+    // If the client is still waiting for 100 Continue, it may send its body
+    // after receiving this final response. The connection cannot safely carry
+    // another request because those bytes would be ambiguous there.
+    if (this._expect_continue && !this._sent100) this.shouldKeepAlive = false;
 
     this._implicitHeader();
     this.prepareHeaders();
