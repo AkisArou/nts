@@ -105,6 +105,9 @@ const RESPONSE_VERSION = "HTTP/1.1";
 
 export type OutgoingHeaderValue = string | number | string[];
 export type OutgoingHeaders = Record<string, OutgoingHeaderValue>;
+export type OutgoingHeaderPair = readonly [string, OutgoingHeaderValue];
+export type OutgoingHeaderArray = readonly (OutgoingHeaderValue | OutgoingHeaderPair)[];
+export type ResponseHeaders = OutgoingHeaders | OutgoingHeaderArray;
 export type InformationHeaderValue = OutgoingHeaderValue | null | undefined;
 export type InformationHeaderPair = readonly [string, InformationHeaderValue];
 export type InformationHeaders =
@@ -118,8 +121,26 @@ function isTrailerEntries(headers: OutgoingHeaders | TrailerEntries): headers is
   return Array.isArray(headers);
 }
 
-function isInformationHeaderPair(value: unknown): value is readonly [unknown, unknown] {
+function isHeaderPair(value: unknown): value is readonly [unknown, unknown] {
   return Array.isArray(value) && value.length >= 2;
+}
+
+function responseHeadersAreArray(headers: ResponseHeaders): headers is OutgoingHeaderArray {
+  return Array.isArray(headers);
+}
+
+function validateOutgoingHeaderValue(
+  value: unknown,
+  headers: readonly unknown[],
+): asserts value is OutgoingHeaderValue {
+  if (typeof value === "string" || typeof value === "number") return;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (typeof entry !== "string") throw new ERR_INVALID_ARG_VALUE("headers", headers);
+    }
+    return;
+  }
+  throw new ERR_INVALID_ARG_VALUE("headers", headers);
 }
 
 function processInformationHeader(name: unknown, value: unknown, lenient: boolean): string {
@@ -924,8 +945,8 @@ export class ServerResponse extends OutgoingMessage {
    */
   writeHead(
     statusCode: number,
-    statusMessage?: string | OutgoingHeaders | OutgoingHeaderValue[],
-    headers?: OutgoingHeaders | OutgoingHeaderValue[],
+    statusMessage?: string | ResponseHeaders,
+    headers?: ResponseHeaders,
   ): this {
     if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("write");
 
@@ -952,32 +973,48 @@ export class ServerResponse extends OutgoingMessage {
       this.statusMessage = STATUS_CODES[statusCode] ?? "unknown";
     }
 
-    if (Array.isArray(fields)) {
-      // The flat `[name, value, name, value]` form, which is what a proxy
-      // forwarding raw headers already has.
-      if (fields.length % 2 !== 0) {
-        throw new ERR_INVALID_ARG_VALUE("headers", fields);
-      }
+    if (fields !== undefined && responseHeadersAreArray(fields)) {
+      const values: readonly unknown[] = fields;
+      if (isHeaderPair(values[0])) {
+        for (const value of values) {
+          if (!isHeaderPair(value)) {
+            throw new ERR_INVALID_ARG_VALUE("headers", fields);
+          }
+          validateHeaderName(value[0]);
+          validateOutgoingHeaderValue(value[1], values);
+          this.removeHeader(value[0]);
+        }
+        for (const value of values) {
+          if (!isHeaderPair(value)) {
+            throw new ERR_INVALID_ARG_VALUE("headers", fields);
+          }
+          validateHeaderName(value[0]);
+          validateOutgoingHeaderValue(value[1], values);
+          this.appendHeader(value[0], value[1]);
+        }
+      } else {
+        // The flat `[name, value, name, value]` form, which is what a
+        // proxy forwarding raw headers already has.
+        if (values.length % 2 !== 0) {
+          throw new ERR_INVALID_ARG_VALUE("headers", fields);
+        }
 
-      // A raw list overrides progressively set fields, but repeated entries
-      // in that list are deliberate and must remain separate lines.
-      for (let i = 0; i < fields.length; i += 2) {
-        const name = fields[i];
-        const value = fields[i + 1];
-        validateHeaderName(name);
-        if (value === undefined) {
-          throw new ERR_INVALID_ARG_VALUE("headers", fields);
+        // A raw list overrides progressively set fields, but repeated entries
+        // in that list are deliberate and must remain separate lines.
+        for (let index = 0; index < values.length; index += 2) {
+          const name = values[index];
+          const value = values[index + 1];
+          validateHeaderName(name);
+          validateOutgoingHeaderValue(value, values);
+          this.removeHeader(name);
         }
-        this.removeHeader(name);
-      }
-      for (let i = 0; i < fields.length; i += 2) {
-        const name = fields[i];
-        const value = fields[i + 1];
-        validateHeaderName(name);
-        if (value === undefined) {
-          throw new ERR_INVALID_ARG_VALUE("headers", fields);
+        for (let index = 0; index < values.length; index += 2) {
+          const name = values[index];
+          const value = values[index + 1];
+          validateHeaderName(name);
+          validateOutgoingHeaderValue(value, values);
+          this.appendHeader(name, value);
         }
-        this.appendHeader(name, value);
       }
     } else if (fields) {
       for (const [name, value] of Object.entries(fields)) this.setHeader(name, value);
@@ -1036,10 +1073,10 @@ export class ServerResponse extends OutgoingMessage {
     if (headers !== undefined && headers !== null) {
       if (Array.isArray(headers)) {
         const values: readonly unknown[] = headers;
-        if (isInformationHeaderPair(values[0])) {
+        if (isHeaderPair(values[0])) {
           for (let index = 0; index < values.length; index++) {
             const entry: unknown = values[index];
-            if (!isInformationHeaderPair(entry)) {
+            if (!isHeaderPair(entry)) {
               throw new ERR_INVALID_ARG_VALUE("headers", headers);
             }
             head += processInformationHeader(entry[0], entry[1], lenient);
