@@ -1,5 +1,6 @@
 # Each line is `file: reason`; mixed files name their independent coverage.
-test-os.js: language non-goal (typescript.md section 13); after its public OS checks the file requires every exported function to be a mutable object with a Symbol.toPrimitive hook; local/core-static.js preserves the supported scalar, CPU, memory, network-interface, directory, user, EOL, and devNull behavior
-test-os-homedir-no-envvar.js: host-binary subprocess; spawns a fresh node process and asserts on its built-in os module
-test-os-userinfo-handles-getter-errors.js: host-binary subprocess; runs node -e and asserts on the built-in os module's stderr
+test-os.js: mixed language non-goal (typescript.md §13); after its ordinary public checks the file coerces selected function objects through Node's mutable Symbol.toPrimitive hooks; local/core-static.js retains every supported assertion before and after that block
+test-os-homedir-no-envvar.js: host-binary subprocess; spawns a fresh Node process and asserts on its built-in os module; local/core-static.js directly removes HOME or USERPROFILE and retains the same supported fallback assertion against this implementation
+test-os-userinfo-handles-getter-errors.js: host-binary subprocess plus language non-goal (§13); its only call runs in `node -e` against Node's built-in os module and observes an accessor-getter side effect while reading options.encoding
 test-os-checked-function.js: language non-goal (§13); replaces a method on Node's private os binding before module load to synthesize an error context, which requires dynamic binding-object mutation
+test-os-constants-signals.js: hollow oracle; an absent `constants` value throws the same TypeError that the test expects from mutating frozen signals, so it passes empty-module sabotage; local/constants-signals-static.js first proves the public table exists and is frozen before retaining the upstream mutation assertion

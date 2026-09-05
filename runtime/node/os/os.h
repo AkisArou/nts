@@ -14,40 +14,20 @@
 
 /* os */
 NtsString *nts_os_hostname(void);
-NtsString *nts_os_type(void);
-NtsString *nts_os_version(void);
-NtsString *nts_os_machine(void);
-NtsString *nts_os_arch(void);
-NtsString *nts_os_platform(void);
+NtsArray  *nts_os_static_information(void);
 NtsString *nts_os_homedir(void);
 NtsString *nts_os_tmpdir(void);
-NtsString *nts_os_devnull(void);
-NtsString *nts_os_eol(void);
-NtsString *nts_os_endianness(void);
 double     nts_os_uptime(void);
 double     nts_os_totalmem(void);
 double     nts_os_freemem(void);
 double     nts_os_available_parallelism(void);
 NtsArray  *nts_os_loadavg(void);
-NtsArray  *nts_os_cpu_models(void);
-NtsArray  *nts_os_cpu_speeds(void);
-NtsArray  *nts_os_cpu_times(void);
-NtsArray  *nts_os_if_names(void);
-NtsArray  *nts_os_if_addresses(void);
-NtsArray  *nts_os_if_netmasks(void);
-NtsArray  *nts_os_if_families(void);
-NtsArray  *nts_os_if_macs(void);
-NtsArray  *nts_os_if_internal(void);
-NtsArray  *nts_os_if_scopeids(void);
-double     nts_os_user_uid(void);
-double     nts_os_user_gid(void);
-NtsString *nts_os_user_username(void);
-NtsString *nts_os_user_homedir(void);
-NtsString *nts_os_user_shell(void);
+NtsArray  *nts_os_cpus(void);
+NtsArray  *nts_os_network_interfaces(void);
+NtsArray  *nts_os_user_info(void);
 double     nts_os_get_priority(double pid);
 double     nts_os_set_priority(double pid, double priority);
-NtsArray  *nts_os_constant_groups(void);
-NtsArray  *nts_os_constant_names(void);
-NtsArray  *nts_os_constant_values(void);
+NtsArray  *nts_os_constants(void);
+double     nts_os_udp_reuseaddr(void);
 
 #endif
