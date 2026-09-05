@@ -401,7 +401,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # rendering is a property of the emitter and agreeing is a property of the
   # language, and a floor on the wrong one rewards emitting more while meaning
   # less.
-  backend_examples 104 "through the JVM backend" ); }
+  backend_examples 105 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \

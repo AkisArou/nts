@@ -232,61 +232,38 @@ pub fn plan(program: &Program) -> Plan {
     let mut refused: FxHashSet<u32> = FxHashSet::default();
     let mut wanted: FxHashSet<u32> = FxHashSet::default();
 
-    for func in program.funcs.iter().filter(|it| emitted(it)) {
-        // Edges into block parameters, and arithmetic with its operands.
-        for block in &func.blocks {
-            let outgoing: Vec<(nts_core::hir::BlockId, &Vec<ValueId>)> = match &block.terminator {
-                Terminator::Jump { target, args } => vec![(*target, args)],
-                Terminator::Branch { then_target, then_args, else_target, else_args, .. } => {
-                    vec![(*then_target, then_args), (*else_target, else_args)]
-                }
-                _ => Vec::new(),
-            };
-            for (target, args) in outgoing {
-                let Some(params) = func.blocks.get(target.0 as usize).map(|it| &it.params) else {
-                    continue;
-                };
-                for (param, arg) in params.iter().zip(args) {
-                    classes.union(id(func, *param), id(func, *arg));
-                }
-            }
-            for &value in &block.ops {
-                match &func.values[value.0 as usize].kind {
-                    OpKind::Binary { op, lhs, rhs } if shares_representation(*op) => {
-                        classes.union(id(func, *lhs), id(func, *rhs));
-                        if narrow(&func.values[value.0 as usize].ty) {
-                            classes.union(id(func, value), id(func, *lhs));
-                        }
-                    }
-                    OpKind::FieldGet { object, field } => {
-                        if let Some(slot) = field_of(program, func, *object, *field)
-                            .and_then(|(key, _)| field_index.get(&key))
-                        {
-                            classes.union(id(func, value), *slot);
-                        }
-                    }
-                    OpKind::FieldSet { object, field, value: stored } => {
-                        if let Some(slot) = field_of(program, func, *object, *field)
-                            .and_then(|(key, _)| field_index.get(&key))
-                        {
-                            classes.union(id(func, *stored), *slot);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
+    unify(program, &mut classes, &offset, &field_index);
 
     strike_down(program, &mut classes, &offset, &mut refused, &mut wanted);
 
+    // Only a class that reaches a **field**.
+    //
+    // Widening locals alone was measured twice and lost both times. It moved
+    // two conversions across the entire suite -- and on `closures` it removed
+    // exactly one `i2d` from a 103-instruction method and cost **30%**:
+    // 1.15x to 1.49x, with every hot method byte-identical apart from that
+    // conversion and one slot's type. A `double` slot where an `int` would do
+    // perturbs register allocation for no gain.
+    //
+    // The win is fields, and it is a different mechanism: `upTo$frame.yielded`
+    // is read and converted once per element, so widening it deletes work from
+    // a loop rather than shuffling slots in one. `generator` 3.41x -> 1.00x.
+    //
+    // So the rule is not "widen what is exact" -- that was true of the locals
+    // too -- but "widen what removes a conversion from a field access".
+    let reaching_a_field: FxHashSet<u32> =
+        field_index.values().map(|slot| classes.find(*slot)).collect();
     let mut plan = Plan::empty();
     for func in program.funcs.iter().filter(|it| emitted(it)) {
         let mut kept = FxHashSet::default();
         for value in live_ops(func) {
             let op = &func.values[value.0 as usize];
             let root = classes.find(id(func, value));
-            if narrow(&op.ty) && !refused.contains(&root) && wanted.contains(&root) {
+            if narrow(&op.ty)
+                && !refused.contains(&root)
+                && wanted.contains(&root)
+                && reaching_a_field.contains(&root)
+            {
                 kept.insert(value);
             }
         }
@@ -294,10 +271,10 @@ pub fn plan(program: &Program) -> Plan {
             plan.values.insert(func.name.clone(), kept);
         }
     }
-    for (key, slot) in field_index {
-        let root = classes.find(slot);
+    for (key, slot) in &field_index {
+        let root = classes.find(*slot);
         if !refused.contains(&root) && wanted.contains(&root) {
-            plan.fields.insert(key);
+            plan.fields.insert(key.clone());
         }
     }
     plan
@@ -369,6 +346,69 @@ fn strike_down(
             {
                 let root = classes.find(id(func, *value));
                 refused.insert(root);
+            }
+        }
+    }
+
+}
+
+/// Tie together everything that must share one representation.
+///
+/// A block parameter and every argument reaching it; an arithmetic result and
+/// its operands; a field and every value read from or written to it. Widening
+/// one without the others would put back exactly the conversion this is trying
+/// to remove.
+fn unify(
+    program: &Program,
+    classes: &mut Classes,
+    offset: &FxHashMap<String, usize>,
+    field_index: &FxHashMap<(String, String), u32>,
+) {
+    let id = |func: &Func, value: ValueId| -> u32 {
+        u32::try_from(offset[&func.name] + value.0 as usize).unwrap_or(u32::MAX)
+    };
+    for func in program.funcs.iter().filter(|it| emitted(it)) {
+        // Edges into block parameters, and arithmetic with its operands.
+        for block in &func.blocks {
+            let outgoing: Vec<(nts_core::hir::BlockId, &Vec<ValueId>)> = match &block.terminator {
+                Terminator::Jump { target, args } => vec![(*target, args)],
+                Terminator::Branch { then_target, then_args, else_target, else_args, .. } => {
+                    vec![(*then_target, then_args), (*else_target, else_args)]
+                }
+                _ => Vec::new(),
+            };
+            for (target, args) in outgoing {
+                let Some(params) = func.blocks.get(target.0 as usize).map(|it| &it.params) else {
+                    continue;
+                };
+                for (param, arg) in params.iter().zip(args) {
+                    classes.union(id(func, *param), id(func, *arg));
+                }
+            }
+            for &value in &block.ops {
+                match &func.values[value.0 as usize].kind {
+                    OpKind::Binary { op, lhs, rhs } if shares_representation(*op) => {
+                        classes.union(id(func, *lhs), id(func, *rhs));
+                        if narrow(&func.values[value.0 as usize].ty) {
+                            classes.union(id(func, value), id(func, *lhs));
+                        }
+                    }
+                    OpKind::FieldGet { object, field } => {
+                        if let Some(slot) = field_of(program, func, *object, *field)
+                            .and_then(|(key, _)| field_index.get(&key))
+                        {
+                            classes.union(id(func, value), *slot);
+                        }
+                    }
+                    OpKind::FieldSet { object, field, value: stored } => {
+                        if let Some(slot) = field_of(program, func, *object, *field)
+                            .and_then(|(key, _)| field_index.get(&key))
+                        {
+                            classes.union(id(func, *stored), *slot);
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
     }
