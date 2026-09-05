@@ -96,7 +96,7 @@ The suite also measures the same TypeScript with number specialization switched 
 
 `nts (JVM)` is the same TypeScript compiled to class files and run by `java`. **`refused` is not `--`**: every case is attempted on every backend, so a missing JVM number is always a construct the lane declines by name, and a blank would be indistinguishable from the `Java` column's blank, which means nobody wrote a reference.
 
-`Java` is Are We Fast Yet's **own** hand-written Java for the same benchmark, on the same JVM in the same run — the only reference here written in the language the column beside it compiles to, which is what makes `nts (JVM)/Java` a statement about codegen with the runtime divided out. Every other ratio in this table mixes a codegen difference with an engine difference and cannot separate them. It is `--` for every case that is not a port of one of theirs, which is all but the `awfy-*` rows: writing a second implementation of `substrings` or `bytes` in Java to have something to divide by would be a correctness burden rather than a reference, which is the same reason the `C++` column has the gaps it does.
+`Java` is Are We Fast Yet's **own** hand-written Java for the same benchmark, on the same JVM in the same run — the only reference here written in the language the column beside it compiles to, which is what makes `nts (JVM)/Java` a statement about codegen with the runtime divided out. Every other ratio in this table mixes a codegen difference with an engine difference and cannot separate them. On the `awfy-*` rows it is their code unmodified. Everywhere else it is a `ref.java` written beside the case, on the argument that a row with no reference is not a row that passed -- it is one nobody wrote the comparison for, and the blank was doing the work of a good number. A reference is what a competent Java programmer would write for the same problem, and it declines anything that would put a cost in one lane only: no `Iterator<Double>` where the subject boxes nothing, and no field narrower than the `double` a TypeScript `number` is -- except where a comment says otherwise and says why, which is where this lane's element width is the gap and the reference is deliberately the harder one so the row shows it.
 
 **The JVM column excludes startup, deliberately and at this lane's own cost.** It is timed inside its own process after the same 20,000 warmup iterations bounded by 300 ms that `V8` and `Bun` get, then calibrated, then best-of-five. A JIT's first iterations measure the compiler rather than the code, so including them would report how long HotSpot took to decide, not what it decided. The honest consequence is that **cold start is absent from this table and is the one number where this lane loses by two orders of magnitude** — it belongs in a column of its own rather than smuggled into these.
 
@@ -117,13 +117,13 @@ question.
 
 | outcome | files |
 | --- | ---: |
-| lowered completely | **49** |
-| refused a construct | 48 |
+| lowered completely | **51** |
+| refused a construct | 46 |
 | rejected by the typechecker | 86 |
 | **the frontend fell over** | **1** |
 | **invalid HIR or a panic** | **0** |
 
-Of the 97 that typecheck, **50%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
+Of the 97 that typecheck, **52%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
 
 The last two rows are the ones that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do, and so is a query this compiler makes that the typechecker cannot answer.
 
@@ -138,7 +138,6 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | `console.log`, a global member with no definition here | 7 |
 | a module declaration, which has code in it | 6 |
 | a rest parameter whose element type has no representation | 6 |
-| a string enum member | 5 |
 | a module-scope variable with no initializer, whose type has no representation for the `undefined` it starts as | 4 |
 | a property `timestamp` of unrepresentable type (`Date`) | 4 |
 | a tagged template expression | 4 |
@@ -147,6 +146,7 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | a method on an object literal | 3 |
 | a parameter of unrepresentable type (any) | 3 |
 | `a`, which `an anonymous type` does not declare | 2 |
+| `null` or `undefined` where what it stands in for is not a reference | 2 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->

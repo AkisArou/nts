@@ -2573,7 +2573,16 @@ impl Emitter<'_> {
             (Kind::Double, Kind::Int) => Some(insn::D2I),
             (Kind::Double, Kind::Long) => Some(insn::D2L),
             (Kind::Double, Kind::Float) => Some(insn::D2F),
-            _ => return Err(refuse(self.func, "a conversion this backend has no opcode for")),
+            _ => {
+                return Err(refuse(
+                    self.func,
+                    &format!(
+                        "a conversion this backend has no opcode for: {} to {}",
+                        types::describe(from),
+                        types::describe(to)
+                    ),
+                ));
+            }
         };
         if let Some(opcode) = opcode {
             code.convert(origin, opcode, source, target);

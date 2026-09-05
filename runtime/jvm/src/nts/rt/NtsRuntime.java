@@ -10,8 +10,31 @@ import java.util.Locale;
 public final class NtsRuntime {
     private NtsRuntime() {}
 
-    /** ToInt32 via significand bits: truncation modulo 2^32, not a saturating cast. */
+    /**
+     * ToInt32 via significand bits: truncation modulo 2^32, not a saturating cast.
+     *
+     * <p>The first two lines are a fast path for the only case most programs
+     * have. `d2i` saturates where JS wraps, which is why the general answer has
+     * to read the exponent -- but saturation is observable *only* outside int
+     * range, and `fast == x` is false there, because the clamped value is not
+     * the input. It is also false for a fraction and for NaN, both of which
+     * need the slow path. Inside the range and integral, `d2i` and ToInt32 are
+     * the same number by definition, and the guard is a `d2i`, an `i2d` and a
+     * compare.
+     *
+     * <p>Worth the two lines because this is not a string or an array helper
+     * and it was 17.6% of `node-utf8` -- the largest single entry in that
+     * row's profile, ahead of the copies. Every `&`, `|`, `^`, `<<` and `>>`
+     * on a `number` arrives here, and a UTF-8 state machine is nothing else.
+     * `toUint32`, `toInt8`, `toUint8`, `toInt16` and `toUint16` all route
+     * through it, so they get the same path without their own copy of it.
+     *
+     * <p>`-0.0` returns 0 through the fast path: `(int) -0.0` is 0 and
+     * `0 == -0.0` holds, which is ToInt32's answer.
+     */
     public static int toInt32(double x) {
+        int fast = (int) x;
+        if (fast == x) { return fast; }
         long bits = Double.doubleToRawLongBits(x);
         int exponent = (int) ((bits >>> 52) & 0x7ff) - 1023;
         // Fractions smaller than one, and integral multiples of 2^32 (also NaN/Inf).
@@ -650,8 +673,29 @@ public final class NtsRuntime {
         for (int i = 0; i < a.length; ++i) { if (i != 0) { out.append(separator); } appendJoinElement(out, a[i]); }
         return out.toString();
     }
+    /**
+     * A subscript that may be fractional, out of range, or not a number at all.
+     *
+     * <p>The cast comes first and everything else is asked of the `int`, which
+     * is the same move `toInt32` makes and for the same reason. `d2i` saturates
+     * and gives 0 for NaN, so `i == index` is false for every input the range
+     * test would have had to reject on its own -- a fraction, a NaN, and
+     * anything beyond int range, where the clamped value cannot equal what
+     * produced it. What survives the equality is an exact integer, and `>= 0`
+     * and `< length` on it are ordinary `int` compares.
+     *
+     * <p>Written the other way round -- `index >= 0.0 && index < length &&
+     * index == (double) (int) index` -- it cost two `d2i`, two `i2d` and three
+     * `dcmp` per element against this version's one, one and one. It was 13.6%
+     * of `node-utf8`, whose eleven subscripts all take this overload because
+     * the index stays an `f64`.
+     *
+     * <p>`-0.0` indexes element zero, which is what JavaScript does: `(int)
+     * -0.0` is 0 and `0 == -0.0` holds.
+     */
     public static int bounds(int length, double index) {
-        if (index >= 0.0 && index < length && index == (double) (int) index) { return (int) index; }
+        int i = (int) index;
+        if (i == index && i >= 0 && i < length) { return i; }
         return outside(index, length);
     }
     public static int bounds(int length, int index) {
