@@ -86,22 +86,30 @@ const requestOptionNames = [
   "maxHeaderSize",
 ];
 
-function requestOptions(options) {
+// In `request(url, options)`, only location fields the caller actually supplied
+// override the URL. Synthetic `undefined` fields still mask prototype pollution
+// everywhere else, but must not erase the location parsed from the first argument.
+const urlLocationOptionNames = new Set(["host", "hostname", "port", "path", "protocol", "auth"]);
+
+function requestOptions(options, preserveUrlLocation = false) {
   if (options === null || typeof options !== "object") return options;
   const shaped = Object.assign(Object.create(null), options);
   if (options instanceof URL) shaped.href = options.href;
-  const derivesLocationFromHref = typeof shaped.href === "string";
+  const derivesLocationFromHref = preserveUrlLocation || typeof shaped.href === "string";
   for (const name of requestOptionNames) {
     if (name in shaped) continue;
-    if (
-      derivesLocationFromHref &&
-      (name === "host" || name === "hostname" || name === "port" || name === "path")
-    ) {
-      continue;
-    }
+    if (derivesLocationFromHref && urlLocationOptionNames.has(name)) continue;
     shaped[name] = undefined;
   }
   return shaped;
+}
+
+function optionsSupplyUrlLocation(options) {
+  return (
+    typeof options === "string" ||
+    options instanceof URL ||
+    (options !== null && typeof options === "object" && typeof options.href === "string")
+  );
 }
 
 function requestConstructor(Class) {
@@ -124,10 +132,22 @@ export function shape(exports) {
   http.Agent = callableConstructor(exports.Agent, "Agent");
   http.ClientRequest = requestConstructor(exports.ClientRequest);
   http.Server = callableConstructor(exports.Server, "Server");
-  http.request = (options, optionsOrCallback, callback) =>
-    exports.request(requestOptions(options), requestOptions(optionsOrCallback), callback);
-  http.get = (options, optionsOrCallback, callback) =>
-    exports.get(requestOptions(options), requestOptions(optionsOrCallback), callback);
+  http.request = (options, optionsOrCallback, callback) => {
+    const preserveUrlLocation = optionsSupplyUrlLocation(options);
+    return exports.request(
+      requestOptions(options),
+      requestOptions(optionsOrCallback, preserveUrlLocation),
+      callback,
+    );
+  };
+  http.get = (options, optionsOrCallback, callback) => {
+    const preserveUrlLocation = optionsSupplyUrlLocation(options);
+    return exports.get(
+      requestOptions(options),
+      requestOptions(optionsOrCallback, preserveUrlLocation),
+      callback,
+    );
+  };
   return http;
 }
 
