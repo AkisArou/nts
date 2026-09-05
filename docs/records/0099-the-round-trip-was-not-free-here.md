@@ -150,3 +150,42 @@ candidates rather than to pick one.
   counter beside it in the same loop is correctly an `int`. Possibly the same
   self-dependent-field bug if it is a field; a separate gap if it is a local.
   Open, and named rather than guessed at.
+
+## The candidate list is now empty, and that is the result
+
+0099 named three: slot reuse by live range, fusing block-parameter copies, and
+the materialised boolean. All three have been tested and none is the residue.
+
+**Bytecode volume** — record 0102. Constants stopped going to slots: 196 → 160
+bytecodes on `generator`'s per-element body, and the time did not move at all.
+
+**Redundant jumps.** Seven of fourteen `goto`s in `Ball$bounce` targeted the
+next instruction, because the `Branch` lowering checked for fall-through on the
+path without block-parameter copies and not on the path with them. Fixed in
+`852b9ca`, and it measured **about 1%** — `awfy-bounce` 7.28us to 7.20us.
+Predicted beforehand: a jump to the next instruction is the cheapest thing a
+JIT removes.
+
+**The materialised boolean.** Refuted by counting: `Ball$bounce` emits **four**
+conditional branches and the hand-written reference emits **four**. There is no
+extra test to remove.
+
+## Where the numbers actually point now
+
+    ours        7873.8 ns/op   57.51e9 instructions   11.65e9 branches   IPC 5.75
+    reference   4774.6 ns/op   37.19e9 instructions    7.16e9 branches   IPC 6.02
+
+1.55x the instructions, **1.63x the branches**, and *the same IPC*. Unlike
+`generator` -- identical branches with 3.4x the cycles, which is latency --
+this is throughput: the program executes more work at the same efficiency.
+
+And the extra branches are **not in the hot method**, which has the same four.
+So they are in the caller or in what the caller inlines, and the next
+measurement is a branch profile per method rather than another guess at the
+emitter. `Ball$bounce`'s prologue is 19 default stores and it runs 5,000 times
+per operation rather than once -- the amortisation argument this record made
+for `awfy-bounce` was about the *caller*, and it does not hold for the callee.
+
+Four candidates tested, four refuted, and the residue is still unattributed.
+That is worth writing down as a state rather than leaving the list looking
+untried.
