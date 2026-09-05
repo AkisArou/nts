@@ -920,13 +920,29 @@ export class ServerResponse extends OutgoingMessage {
     if ((statusCode >= 100 && statusCode < 200) || statusCode === 204 || statusCode === 304) {
       this.hasBody = false;
     }
-    if (message !== undefined) this.statusMessage = message;
+    if (message !== undefined) {
+      this.statusMessage = message;
+    } else if (!this.statusMessage) {
+      this.statusMessage = STATUS_CODES[statusCode] ?? "unknown";
+    }
 
     if (Array.isArray(fields)) {
       // The flat `[name, value, name, value]` form, which is what a proxy
       // forwarding raw headers already has.
       if (fields.length % 2 !== 0) {
         throw new ERR_INVALID_ARG_VALUE("headers", fields);
+      }
+
+      // A raw list overrides progressively set fields, but repeated entries
+      // in that list are deliberate and must remain separate lines.
+      for (let i = 0; i < fields.length; i += 2) {
+        const name = fields[i];
+        const value = fields[i + 1];
+        validateHeaderName(name);
+        if (value === undefined) {
+          throw new ERR_INVALID_ARG_VALUE("headers", fields);
+        }
+        this.removeHeader(name);
       }
       for (let i = 0; i < fields.length; i += 2) {
         const name = fields[i];
@@ -935,7 +951,7 @@ export class ServerResponse extends OutgoingMessage {
         if (value === undefined) {
           throw new ERR_INVALID_ARG_VALUE("headers", fields);
         }
-        this.setHeader(name, value);
+        this.appendHeader(name, value);
       }
     } else if (fields) {
       for (const [name, value] of Object.entries(fields)) this.setHeader(name, value);
@@ -948,6 +964,7 @@ export class ServerResponse extends OutgoingMessage {
 
   protected override _implicitHeader(): void {
     const message = this.statusMessage ?? STATUS_CODES[this.statusCode] ?? "unknown";
+    if (checkInvalidHeaderChar(message)) throw new ERR_INVALID_CHAR("statusMessage");
     this.statusLine = `${RESPONSE_VERSION} ${this.statusCode} ${message}`;
   }
 
