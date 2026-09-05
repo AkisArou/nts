@@ -35,8 +35,11 @@ final class Ref extends Bench.Work {
         double total = 0;
         for (int round = 0; round < 64; round++) {
             final double r = round;
-            double[] scaled = Arrays.stream(xs).map(v -> v * 3.5 + r).toArray();
-            total = total + Arrays.stream(scaled).reduce(0, (acc, v) -> acc + v * 0.5);
+            double[] scaled = new double[length];
+            for (int i = 0; i < length; i++) { scaled[i] = xs[i] * 3.5 + r; }
+            double acc = 0;
+            for (int i = 0; i < length; i++) { acc = acc + scaled[i] * 0.5; }
+            total = total + acc;
         }
         return total;
     }

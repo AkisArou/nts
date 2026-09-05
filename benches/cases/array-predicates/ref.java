@@ -34,16 +34,19 @@ final class Ref extends Bench.Work {
         int total = 0;
         for (int round = 0; round < 8; round++) {
             final int target = round * 13 + seed;
-            if (Arrays.stream(xs).anyMatch(v -> v == target)) {
-                total = total + 1;
-            }
-            // Never false, so this one walks all of it.
-            if (Arrays.stream(xs).allMatch(v -> v >= 0)) {
-                total = total + 2;
-            }
-            total = total + IntStream.range(0, n).filter(i -> xs[i] > target).findFirst().orElse(-1);
-            int[] kept = Arrays.stream(xs).filter(v -> v > target).toArray();
-            total = total + kept.length;
+            boolean some = false;
+            for (int i = 0; i < n; i++) { if (xs[i] == target) { some = true; break; } }
+            if (some) { total = total + 1; }
+            boolean every = true;
+            for (int i = 0; i < n; i++) { if (xs[i] < 0) { every = false; break; } }
+            if (every) { total = total + 2; }
+            int found = -1;
+            for (int i = 0; i < n; i++) { if (xs[i] > target) { found = i; break; } }
+            total = total + found;
+            int[] kept = new int[n];
+            int keptCount = 0;
+            for (int i = 0; i < n; i++) { if (xs[i] > target) { kept[keptCount++] = xs[i]; } }
+            total = total + keptCount;
         }
         return total;
     }
