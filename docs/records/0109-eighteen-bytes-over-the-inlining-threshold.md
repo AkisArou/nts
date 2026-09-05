@@ -252,3 +252,42 @@ earlier and unchanged by this work.
 Java a person writes, the same generated code wins. Two references disagreeing
 about the same row is not a contradiction; it is what having both columns is
 for.
+
+## How general the lever is: measured, and it is not
+
+This record claimed the byte budget "applies to every method this backend emits,
+not just this one". That was worth checking rather than repeating, so: every
+method in every bench case, decoded and sized.
+
+**208 methods. 28 exceed `FreqInlineSize`'s 325. Of those, 22 are the
+benchmark's own entry point** -- the `run(double)` or `work(double)` the harness
+calls once per operation, where being inlined into the driver is worth nothing.
+
+The six that are not:
+
+    1328  node-utf8      utf8Write$whole
+     890  awfy-nbody     NBodySystem$advance
+     683  awfy-mandelbrot Mandelbrot$mandelbrot
+     616  awfy-nbody     NBodySystem$createBodies
+     573  awfy-nbody     NBodySystem$energy
+     461  node-utf8      utf8Length
+
+None of these is a `Ball$bounce`. Each is either called once per operation with
+a large body inside it -- so a call is amortised over the work it does -- or is
+in a case this lane already wins (`awfy-mandelbrot` is 0.84x). `Ball$bounce` was
+special *because it was small work called 5,000 times*, and 343 bytes of mostly
+prologue is exactly the shape that is cheap to run and expensive to inline.
+
+So the honest form of the claim is narrower than the one written above, and the
+difference matters for what to build next:
+
+> The byte budget pays where a **small, hot, frequently-called** method is over
+> the threshold for reasons that are not its work. Across this whole suite that
+> was one method.
+
+The prologue removal is still right and still ships -- it made every method
+smaller and cost nothing -- but there is no queue of further victims behind it,
+and building more byte-shaving machinery on the strength of one row would be
+optimising for a population of one. `awfy-queens` at 1.25x and `awfy-nbody` at
+1.14x are both above `FreqInlineSize` in the wrong places or not at all, so
+neither is waiting on this.
