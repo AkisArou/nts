@@ -33,6 +33,6 @@ NtsArray *nts_uv_error_names(void);
  * `program.c` -- and those are `static`. A binding is a separate translation
  * unit, so it needs its own. Same shape, same meaning: eight bytes an element
  * and nothing in them for a collector to trace. */
-extern const NtsDescriptor nts_desc_double;
+extern const NtsDescriptor nts_node_desc_double;
 
 #endif

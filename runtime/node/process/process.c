@@ -29,7 +29,7 @@ static NtsString *utf8(const char *text) {
 }
 
 static NtsArray *number_array(size_t length) {
-    return nts_array_new(&nts_desc_double, (double)length);
+    return nts_array_new(&nts_node_desc_double, (double)length);
 }
 
 static double system_error(void) {

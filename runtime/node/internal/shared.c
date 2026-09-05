@@ -3,8 +3,8 @@
 #include <string.h>
 #include "shared.h"
 
-const NtsDescriptor nts_desc_double = {NTS_KIND_ARRAY, sizeof(double), 0, 0, 0,
-                                       0,              "double",      0, 0};
+const NtsDescriptor nts_node_desc_double = {
+    NTS_KIND_ARRAY, sizeof(double), 0, 0, 0, 0, "double", 0, 0};
 
 static int last_errno = 0;
 
@@ -103,7 +103,8 @@ static const char *const uv_error_names[NTS_UV_ERROR_COUNT_VALUE] = {
 #undef NTS_UV_ERROR_NAME
 
 NtsArray *nts_uv_error_codes(void) {
-    NtsArray *codes = nts_array_new(&nts_desc_double, NTS_UV_ERROR_COUNT_VALUE);
+    NtsArray *codes =
+        nts_array_new(&nts_node_desc_double, NTS_UV_ERROR_COUNT_VALUE);
     for (size_t i = 0; i < NTS_UV_ERROR_COUNT_VALUE; i++) {
         NTS_ITEMS(codes, double)[i] = (double)uv_error_codes[i];
     }

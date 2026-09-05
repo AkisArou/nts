@@ -31,7 +31,7 @@ static NtsArray *string_array(char **items, size_t count) {
 }
 
 static NtsArray *number_array(const double *items, size_t count) {
-    NtsArray *a = nts_array_new(&nts_desc_double, (double)count);
+    NtsArray *a = nts_array_new(&nts_node_desc_double, (double)count);
     for (size_t i = 0; i < count; i++) {
         NTS_ITEMS(a, double)[i] = items[i];
     }
@@ -193,7 +193,7 @@ NtsArray *nts_os_cpu_models(void) {
 }
 
 NtsArray *nts_os_cpu_speeds(void) {
-    NtsArray *a = nts_array_new(&nts_desc_double, (double)cpu_count);
+    NtsArray *a = nts_array_new(&nts_node_desc_double, (double)cpu_count);
     for (int i = 0; i < cpu_count; i++) {
         NTS_ITEMS(a, double)[i] = (double)cpu_infos[i].speed;
     }
@@ -201,7 +201,8 @@ NtsArray *nts_os_cpu_speeds(void) {
 }
 
 NtsArray *nts_os_cpu_times(void) {
-    NtsArray *a = nts_array_new(&nts_desc_double, (double)(cpu_count * 5));
+    NtsArray *a =
+        nts_array_new(&nts_node_desc_double, (double)(cpu_count * 5));
     for (int i = 0; i < cpu_count; i++) {
         double *at = &NTS_ITEMS(a, double)[i * 5];
         at[0] = (double)cpu_infos[i].cpu_times.user;
@@ -289,7 +290,8 @@ NtsArray *nts_os_if_macs(void) {
 }
 
 NtsArray *nts_os_if_internal(void) {
-    NtsArray *a = nts_array_new(&nts_desc_double, (double)interface_count);
+    NtsArray *a =
+        nts_array_new(&nts_node_desc_double, (double)interface_count);
     for (int i = 0; i < interface_count; i++) {
         NTS_ITEMS(a, double)[i] = interfaces[i].is_internal ? 1.0 : 0.0;
     }
@@ -297,7 +299,8 @@ NtsArray *nts_os_if_internal(void) {
 }
 
 NtsArray *nts_os_if_scopeids(void) {
-    NtsArray *a = nts_array_new(&nts_desc_double, (double)interface_count);
+    NtsArray *a =
+        nts_array_new(&nts_node_desc_double, (double)interface_count);
     for (int i = 0; i < interface_count; i++) {
         int v6 = interfaces[i].address.address4.sin_family == AF_INET6;
         NTS_ITEMS(a, double)[i] =
@@ -438,7 +441,8 @@ NtsArray *nts_os_constant_names(void) {
 }
 
 NtsArray *nts_os_constant_values(void) {
-    NtsArray *a = nts_array_new(&nts_desc_double, (double)OS_CONSTANT_COUNT);
+    NtsArray *a =
+        nts_array_new(&nts_node_desc_double, (double)OS_CONSTANT_COUNT);
     for (size_t i = 0; i < OS_CONSTANT_COUNT; i++) {
         NTS_ITEMS(a, double)[i] = OS_CONSTANTS[i].value;
     }

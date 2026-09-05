@@ -56,7 +56,7 @@ static char *native_byte_path(const NtsArray *path) {
 }
 
 static NtsArray *native_bytes(const char *value, size_t length) {
-  NtsArray *bytes = nts_array_new(&nts_desc_double, (double)length);
+  NtsArray *bytes = nts_array_new(&nts_node_desc_double, (double)length);
   double *items = NTS_ITEMS(bytes, double);
   for (size_t i = 0; i < length; i++) {
     items[i] = (double)(unsigned char)value[i];
@@ -65,7 +65,7 @@ static NtsArray *native_bytes(const char *value, size_t length) {
 }
 
 static NtsArray *empty_doubles(void) {
-  return nts_array_new(&nts_desc_double, 0);
+  return nts_array_new(&nts_node_desc_double, 0);
 }
 
 static NtsString *empty_string(void) {
@@ -87,7 +87,7 @@ double nts_fs_eisdir(void) { return (double)UV_EISDIR; }
  * binding answers `stat`, `lstat` and `fstat`: the difference is which libuv
  * call fills the buffer, not what comes back. */
 static NtsArray *stat_columns(const uv_stat_t *st) {
-  NtsArray *a = nts_array_new(&nts_desc_double, 14);
+  NtsArray *a = nts_array_new(&nts_node_desc_double, 14);
   double *v = NTS_ITEMS(a, double);
   v[0] = (double)st->st_dev;
   v[1] = (double)st->st_mode;
@@ -248,7 +248,7 @@ static NtsArray *statfs_number_native_path(const char *path) {
   }
   uint64_t columns[8];
   statfs_columns(request.ptr, columns);
-  NtsArray *values = nts_array_new(&nts_desc_double, 8);
+  NtsArray *values = nts_array_new(&nts_node_desc_double, 8);
   for (size_t index = 0; index < 8; index++) {
     NTS_ITEMS(values, double)[index] = (double)columns[index];
   }
@@ -351,7 +351,7 @@ static NtsArray *read_from_descriptor(double fd, double length,
   char *data = malloc(size > 0 ? size : 1);
   if (data == NULL) {
     nts_node_set_errno(UV_ENOMEM);
-    return nts_array_new(&nts_desc_double, 0);
+    return nts_array_new(&nts_node_desc_double, 0);
   }
 
   uv_buf_t buffer = uv_buf_init(data, (unsigned int)size);
@@ -362,7 +362,7 @@ static NtsArray *read_from_descriptor(double fd, double length,
   nts_node_set_errno(result);
 
   size_t count = result < 0 ? 0 : (size_t)result;
-  NtsArray *bytes = nts_array_new(&nts_desc_double, (double)count);
+  NtsArray *bytes = nts_array_new(&nts_node_desc_double, (double)count);
   for (size_t i = 0; i < count; i++) {
     NTS_ITEMS(bytes, double)[i] = (double)(unsigned char)data[i];
   }
@@ -433,7 +433,8 @@ NtsArray *nts_fs_readv(double fd, NtsArray *lengths, double position) {
   nts_node_set_errno(result);
 
   size_t bytes_read = result < 0 ? 0 : (size_t)result;
-  NtsArray *bytes = nts_array_new(&nts_desc_double, (double)bytes_read);
+  NtsArray *bytes =
+      nts_array_new(&nts_node_desc_double, (double)bytes_read);
   for (size_t index = 0; index < bytes_read; index++) {
     NTS_ITEMS(bytes, double)[index] = (double)(unsigned char)data[index];
   }
@@ -720,7 +721,8 @@ static NtsArray *dirent_rows(const uv_dirent_t *entries, size_t count) {
   for (size_t index = 0; index < count; index++) {
     const uv_dirent_t *entry = &entries[index];
     size_t name_length = strlen(entry->name);
-    NtsArray *row = nts_array_new(&nts_desc_double, (double)(name_length + 1));
+    NtsArray *row =
+        nts_array_new(&nts_node_desc_double, (double)(name_length + 1));
     double *values = NTS_ITEMS(row, double);
     values[0] = (double)entry->type;
     for (size_t byte_index = 0; byte_index < name_length; byte_index++) {
@@ -1142,7 +1144,7 @@ NtsArray *nts_fs_read_file_bytes_fd(double fd) {
   nts_node_set_errno(error);
   if (data == NULL) return empty_doubles();
 
-  NtsArray *out = nts_array_new(&nts_desc_double, (double)length);
+  NtsArray *out = nts_array_new(&nts_node_desc_double, (double)length);
   for (size_t i = 0; i < length; i++) {
     NTS_ITEMS(out, double)[i] = (double)(unsigned char)data[i];
   }
