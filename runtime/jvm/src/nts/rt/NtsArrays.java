@@ -3,7 +3,7 @@ package nts.rt;
 /** Element-independent operations; array storage stays primitive and specialized. */
 final class NtsArrays {
     private NtsArrays() {}
-    private static final int MAX_ARRAY = Integer.MAX_VALUE - 8;
+    static final int MAX_ARRAY = Integer.MAX_VALUE - 8;
 
     static double toInteger(double x) {
         if (Double.isNaN(x)) { return 0.0; }

@@ -10,6 +10,25 @@ public final class NtsArrayZ {
 
     private NtsArrayZ(boolean[] items, int length) { this.items = items; this.length = length; }
 
+
+    /**
+     * The same construction with an integral length, which needs no round trip.
+     *
+     * The generated code computes a length in an `i64`, and with only a
+     * `double` overload to reach it emitted `d2l; l2d` around the call so that
+     * `of` could narrow it back with `(int) n`. `array-predicates` does that
+     * per `filter`. Same defect as the subscript's, in the constructor.
+     */
+    public static NtsArrayZ of(long n) {
+        int count = n <= 0 ? 0 : (n >= NtsArrays.MAX_ARRAY ? NtsArrays.MAX_ARRAY : (int) n);
+        return new NtsArrayZ(count == 0 ? EMPTY : new boolean[count], count);
+    }
+
+    public static NtsArrayZ of(int n) {
+        int count = Math.max(0, n);
+        return new NtsArrayZ(count == 0 ? EMPTY : new boolean[count], count);
+    }
+
     public static NtsArrayZ of(double n) {
         int count = Math.max(0, (int) n);
         return new NtsArrayZ(count == 0 ? EMPTY : new boolean[count], count);

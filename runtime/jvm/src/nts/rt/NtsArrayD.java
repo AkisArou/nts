@@ -10,6 +10,25 @@ public final class NtsArrayD {
 
     private NtsArrayD(double[] items, int length) { this.items = items; this.length = length; }
 
+
+    /**
+     * The same construction with an integral length, which needs no round trip.
+     *
+     * The generated code computes a length in an `i64`, and with only a
+     * `double` overload to reach it emitted `d2l; l2d` around the call so that
+     * `of` could narrow it back with `(int) n`. `array-predicates` does that
+     * per `filter`. Same defect as the subscript's, in the constructor.
+     */
+    public static NtsArrayD of(long n) {
+        int count = n <= 0 ? 0 : (n >= NtsArrays.MAX_ARRAY ? NtsArrays.MAX_ARRAY : (int) n);
+        return new NtsArrayD(count == 0 ? EMPTY : new double[count], count);
+    }
+
+    public static NtsArrayD of(int n) {
+        int count = Math.max(0, n);
+        return new NtsArrayD(count == 0 ? EMPTY : new double[count], count);
+    }
+
     public static NtsArrayD of(double n) {
         int count = Math.max(0, (int) n);
         return new NtsArrayD(count == 0 ? EMPTY : new double[count], count);
@@ -81,11 +100,30 @@ public final class NtsArrayD {
         }
     }
     public static double push(NtsArrayD a, double value) {
-        int n = NtsArrays.checkedLength((long) a.length + 1);
-        reserve(a, n);
-        a.items[a.length] = value;
-        a.length = n;
-        return n;
+        // An append, in `int` and with one read of `items`.
+        //
+        // It widened `a.length + 1` to a `long` so `checkedLength` could
+        // range-check it and narrow it back, then loaded `a.items` twice --
+        // once through `reserve` and once to store. `a.length` is a
+        // non-negative `int`, so the only value that can overflow is
+        // `MAX_ARRAY` itself, and comparing against it directly says the same
+        // thing without leaving `int`.
+        //
+        // `push` is **22.6%** of `array-predicates` and `reserve` a further
+        // 11.4%: that row's `filter` builds a fresh array an element at a time,
+        // eight times an operation, where the reference allocates once.
+        int length = a.length;
+        if (length >= NtsArrays.MAX_ARRAY) {
+            throw new OutOfMemoryError("array capacity exhausted");
+        }
+        double[] items = a.items;
+        if (length == items.length) {
+            items = Arrays.copyOf(items, NtsArrays.growCapacity(items.length, length + 1));
+            a.items = items;
+        }
+        items[length] = value;
+        a.length = length + 1;
+        return length + 1;
     }
     /** The nonempty precondition is supplied by lowering; use popValue otherwise. */
     public static double pop(NtsArrayD a) {

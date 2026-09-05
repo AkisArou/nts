@@ -1422,8 +1422,21 @@ impl Emitter<'_> {
             // it saves a narrowing at each site.
             OpKind::ArrayNew { length, .. } if self.shape.grows => {
                 let class = self.growable_class(ty)?;
-                self.push_as(code, pool, *length, Kind::Double, origin)?;
-                code.invoke_static(origin, pool, &class, "of", &format!("(D)L{class};"));
+                // By the length's own kind, for the reason `ArrayGet` picks its
+                // subscript's: an `i64` length reached the `double` overload
+                // through `d2l; l2d` so that `of` could narrow it back.
+                let size = match self.kind_of(*length)? {
+                    Kind::Int => Kind::Int,
+                    Kind::Long => Kind::Long,
+                    _ => Kind::Double,
+                };
+                self.push_as(code, pool, *length, size, origin)?;
+                let n = match size {
+                    Kind::Int => "I",
+                    Kind::Long => "J",
+                    _ => "D",
+                };
+                code.invoke_static(origin, pool, &class, "of", &format!("({n})L{class};"));
                 Ok(Placed::OnStack)
             }
             OpKind::ArrayGet { array, index, .. } if self.shape.grows => {
