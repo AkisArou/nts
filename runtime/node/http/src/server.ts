@@ -820,11 +820,17 @@ export class Server extends NetServer {
     // ownership of the body back to the server.  Drain it so an ignored body
     // cannot become the next request on this connection, and so an already
     // complete empty body still advances through `end` and `close`.
-    if (
-      !message._consuming &&
-      !message.readableDidRead &&
-      !message._readableState.resumeScheduled
-    ) {
+    // `_consuming` is not sufficient here: Readable's internal prefetch also
+    // calls `_read(0)`. These fields distinguish an actual consumer from that
+    // automatic fill without inspecting listeners dynamically.
+    const readableState = message._readableState;
+    const consumerOwnsBody =
+      message.readableDidRead ||
+      readableState.resumeScheduled ||
+      readableState.readableListening ||
+      readableState.pipes.length > 0 ||
+      (readableState.hasFlowing && readableState.flowing);
+    if (!consumerOwnsBody) {
       message._dump();
     }
 
