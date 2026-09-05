@@ -195,6 +195,8 @@ pub struct Emitter<'a> {
     pub(crate) unboxed: rustc_hash::FxHashSet<ValueId>,
     /// `i32` values held in a `double` slot on this target; see `widen`.
     pub(crate) widened: rustc_hash::FxHashSet<ValueId>,
+    /// `i64` values held in an `int` slot on this target; see `narrow`.
+    pub(crate) narrowed: rustc_hash::FxHashSet<ValueId>,
     /// `(declaring class, field name)` for fields held as a `double`.
     pub(crate) widened_fields: rustc_hash::FxHashSet<(String, String)>,
     /// Scratch for a parallel-copy cycle, one per `(temp, kind)` actually used.
@@ -228,6 +230,7 @@ impl<'a> Emitter<'a> {
         // disagree -- there is one answer and both read it.
         let unboxed = crate::unbox::unboxable(func);
         let widened = plan.values_in(func);
+        let narrowed = crate::narrow::narrowable(func);
         let widened_fields = plan.fields().clone();
         let mut param_slot = Vec::with_capacity(func.params.len());
         for param in &func.params {
@@ -270,7 +273,8 @@ impl<'a> Emitter<'a> {
                 continue;
             }
             let held = crate::unbox::held_as(&unboxed, value)
-                .or_else(|| widened.contains(&value).then_some(nts_jvm_emitter::VType::Double));
+                .or_else(|| widened.contains(&value).then_some(nts_jvm_emitter::VType::Double))
+                .or_else(|| narrowed.contains(&value).then_some(nts_jvm_emitter::VType::Integer));
             let Some(vtype) = held.or_else(|| types::vtype(types::Shape::of(program), ty)) else {
                 return Err(refuse(
                     func,
@@ -329,6 +333,7 @@ impl<'a> Emitter<'a> {
             scratch: None,
             unboxed,
             widened,
+            narrowed,
             widened_fields,
             temps: FxHashMap::default(),
             labels: FxHashMap::default(),
@@ -459,6 +464,9 @@ impl<'a> Emitter<'a> {
         if self.widened.contains(&value) {
             return Ok(Kind::Double);
         }
+        if self.narrowed.contains(&value) {
+            return Ok(Kind::Int);
+        }
         types::kind(self.ty(value))
             .ok_or_else(|| refuse(self.func, &format!("a value of type {:?}", self.ty(value))))
     }
@@ -472,6 +480,16 @@ impl<'a> Emitter<'a> {
         let origin = self.func.values[value.0 as usize].origin.clone();
         if rematerialised(self.func, value) {
             let op = &self.func.values[value.0 as usize];
+            // A narrowed `i64` literal is an int literal here, for the same
+            // reason the widened case below is a double one: the push and the
+            // slot have to agree, and `constant` reads the declared type.
+            if self.narrowed.contains(&value)
+                && let OpKind::ConstInt(number) = op.kind
+                && let Ok(small) = i32::try_from(number)
+            {
+                code.const_int(&origin, pool, small);
+                return Ok(());
+            }
             // A widened `i32` literal is a double literal here.
             if self.widened.contains(&value)
                 && let OpKind::ConstInt(number) = op.kind

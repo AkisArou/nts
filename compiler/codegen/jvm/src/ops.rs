@@ -583,7 +583,7 @@ impl Emitter<'_> {
                 self.constant(code, pool, &op.kind, &op.ty, &origin)?
             }
             OpKind::ConstString(_) | OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
-                self.string_operation(code, pool, &op.kind, &op.ty, &origin)?
+                self.string_operation(code, pool, value, &op.kind, &op.ty, &origin)?
             }
             OpKind::ArrayNew { .. } | OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
                 self.array_operation(code, pool, &op.kind, &op.ty, &origin)?
@@ -734,6 +734,7 @@ impl Emitter<'_> {
     ///
     /// A value nothing reads is discarded rather than left on the stack, which
     /// `Code::bind` would refuse at the end of the block.
+    ///
     fn place(
         &self,
         code: &mut Code,
@@ -1230,7 +1231,7 @@ impl Emitter<'_> {
             OpKind::TagOf { value } => {
                 self.load(code, pool, *value)?;
                 code.get_field(origin, pool, types::VALUE, "tag", "I");
-                self.adapt(code, Kind::Int, ty, origin)?;
+                self.adapt_to(code, Kind::Int, result, origin)?;
                 Ok(Placed::OnStack)
             }
             OpKind::Unerase { value } if self.unboxed.contains(value) => {
@@ -1703,6 +1704,26 @@ impl Emitter<'_> {
     ///
     /// The symptom is a `VerifyError` at the store, hundreds of bytes from the
     /// operation, naming a frame with a hundred and seventy locals in it.
+    /// Convert what an instruction produced into what this value is *held* in.
+    ///
+    /// [`Self::adapt`] answers from the declared type, which is right wherever
+    /// the two agree and wrong wherever this backend chose otherwise. A
+    /// narrowed `array.len` is the case: `arraylength` produces an `int`, the
+    /// declared type is `i64`, and the slot is an `int` -- so adapting to the
+    /// declaration emits an `i2l` for a slot that wanted neither.
+    fn adapt_to(
+        &self,
+        code: &mut Code,
+        produced: Kind,
+        value: ValueId,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        let want = self.kind_of(value)?;
+        convert_kind(code, origin, produced, want).ok_or_else(|| {
+            refuse(self.func, &format!("a {produced:?} result in a {want:?} slot"))
+        })
+    }
+
     fn adapt(
         &self,
         code: &mut Code,
@@ -1736,6 +1757,7 @@ impl Emitter<'_> {
         &mut self,
         code: &mut Code,
         pool: &mut Pool,
+        value: ValueId,
         kind: &OpKind,
         ty: &HirType,
         origin: &nts_semantic_schema::Origin,
@@ -1758,7 +1780,7 @@ impl Emitter<'_> {
             OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::String)) => {
                 self.load(code, pool, *of)?;
                 code.invoke_virtual(origin, pool, types::STRING, "length", "()I");
-                self.adapt(code, Kind::Int, ty, origin)?;
+                self.adapt_to(code, Kind::Int, value, origin)?;
                 Ok(Placed::OnStack)
             }
             // `map.size` and `set.size` are the same operation on the same
@@ -1773,7 +1795,7 @@ impl Emitter<'_> {
             {
                 self.load(code, pool, *of)?;
                 code.invoke_static(origin, pool, types::MAP, "size", "(Lnts/rt/NtsMap;)D");
-                self.adapt(code, Kind::Double, ty, origin)?;
+                self.adapt_to(code, Kind::Double, value, origin)?;
                 Ok(Placed::OnStack)
             }
             OpKind::Length(of)
@@ -1783,13 +1805,13 @@ impl Emitter<'_> {
                 let class = self.growable_class(&self.ty(*of).clone())?;
                 self.load(code, pool, *of)?;
                 code.invoke_static(origin, pool, &class, "length", &format!("(L{class};)D"));
-                self.adapt(code, Kind::Double, ty, origin)?;
+                self.adapt_to(code, Kind::Double, value, origin)?;
                 Ok(Placed::OnStack)
             }
             OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) => {
                 self.load(code, pool, *of)?;
                 code.array_length(origin);
-                self.adapt(code, Kind::Int, ty, origin)?;
+                self.adapt_to(code, Kind::Int, value, origin)?;
                 Ok(Placed::OnStack)
             }
             // Anything else has no length this backend knows how to take, and
@@ -2065,7 +2087,30 @@ impl Emitter<'_> {
         if self.widened.contains(&operand) && self.kind_of(value)? == Kind::Double {
             return Ok(Placed::OnStack);
         }
+        // The mirror: an `i32` widened to an `i64` that `narrow` decided to keep
+        // in an `int` slot has nothing left to do. Guarded on the declared types
+        // being exactly that widening, because `Convert` between a float and an
+        // integer is a truncation and skipping *that* would be a wrong answer.
+        if self.narrowed.contains(&value)
+            && matches!(self.ty(operand), HirType::Int { bits, .. } if *bits <= 32)
+            && matches!(result, HirType::Int { bits: 64, .. })
+        {
+            return Ok(Placed::OnStack);
+        }
         let from = self.ty(operand).clone();
+        // `convert` is written in declared types, so what it is handed has to be
+        // in one. A narrowed `i64` is on the stack as an `int` and a widened
+        // `i32` as a `double`; putting the operand back in its declaration is
+        // the crossing, and without it `convert %66 : f64` emitted `l2d` over an
+        // `int` and the emitter's accounting caught it one instruction later.
+        if let Some(declared) = types::kind(&from) {
+            let held = self.kind_of(operand)?;
+            if held != declared {
+                convert_kind(code, origin, held, declared).ok_or_else(|| {
+                    refuse(self.func, &format!("a {held:?} operand where a {declared:?} was declared"))
+                })?;
+            }
+        }
         self.convert(code, pool, &from, result, origin)?;
         Ok(Placed::OnStack)
     }
