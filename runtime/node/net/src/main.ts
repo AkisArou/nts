@@ -1624,6 +1624,11 @@ export class Server extends EventEmitter {
     if (connectionListener) this.on("connection", connectionListener);
   }
 
+  /** Build the transport object exposed for one accepted native handle. */
+  protected createAcceptedSocket(options: SocketOptions): Socket {
+    return new Socket(options);
+  }
+
   /**
    * Run `fn` as this server's own asynchronous work.
    *
@@ -1704,7 +1709,7 @@ export class Server extends EventEmitter {
       () => this.#scheduleListening(),
       (connection: number) =>
         this.#inScope(() => {
-          const socket = new Socket({
+          const socket = this.createAcceptedSocket({
             handle: connection,
             handleType: isPipe ? "pipe" : "tcp",
             allowHalfOpen: this.#options.allowHalfOpen,

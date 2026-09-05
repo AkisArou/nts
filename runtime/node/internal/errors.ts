@@ -1381,6 +1381,19 @@ export class ERR_HTTP_INVALID_HEADER_VALUE extends NodeTypeError {
   }
 }
 
+/** HTTP parses bytes itself, so its transport cannot decode them into strings. */
+export class ERR_HTTP_SOCKET_ENCODING extends NodeError {
+  override get ["constructor"](): unknown {
+    return Error;
+  }
+  override readonly code = "ERR_HTTP_SOCKET_ENCODING";
+
+  constructor() {
+    super("Changing the socket encoding is not allowed per RFC7230 Section 3.");
+    this.name = "Error";
+  }
+}
+
 /** Text contains a character forbidden by the protocol field. */
 export class ERR_INVALID_CHAR extends NodeTypeError {
   override get ["constructor"](): unknown {

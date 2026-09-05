@@ -13,7 +13,8 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import { Server as NetServer, Socket } from "../../net/src/main.ts";
-import type { ServerOptions as NetServerOptions } from "../../net/src/main.ts";
+import type { ServerOptions as NetServerOptions, SocketOptions } from "../../net/src/main.ts";
+import type { Encoding } from "../../buffer/src/encodings.ts";
 import { DEFAULT_MAX_HEADER_SIZE, HTTPParseError, HTTPParser, REQUEST, methods } from "./parser.ts";
 import type { ParserError } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
@@ -30,6 +31,7 @@ import {
 } from "../../internal/validators.ts";
 import {
   ConnResetException,
+  ERR_HTTP_SOCKET_ENCODING,
   ERR_INVALID_ARG_VALUE,
   ERR_OUT_OF_RANGE,
 } from "../../internal/errors.ts";
@@ -88,6 +90,13 @@ function defaultParseErrorResponse(code: string): string {
     return "HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\n\r\n";
   }
   return "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n";
+}
+
+/** A server parser must always receive bytes, including after protocol handoff. */
+class HTTPServerSocket extends Socket {
+  override setEncoding(_encoding: Encoding): this {
+    throw new ERR_HTTP_SOCKET_ENCODING();
+  }
 }
 
 export class Server extends NetServer {
@@ -221,6 +230,10 @@ export class Server extends NetServer {
     if (handler) this.on("request", handler);
     this.on("connection", (socket: Socket) => this.#serve(socket));
     this.on("listening", () => this.#startConnectionsChecker());
+  }
+
+  protected override createAcceptedSocket(options: SocketOptions): Socket {
+    return new HTTPServerSocket(options);
   }
 
   #startConnectionsChecker(): void {
