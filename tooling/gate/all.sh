@@ -221,13 +221,37 @@ profile() {
     echo "  no runtime/node modules found -- this step checked nothing"
     return 1
   fi
+  # Refusals counted in the same pass, because reach is the project's own
+  # signal -- "`runtime/node` is the signal, not ledger count" -- and nothing
+  # gated it. A feature that lands is supposed to move this number down, and a
+  # change that quietly moves it *up* has been the shape of several regressions:
+  # a symbol interned from the wrong file cost 232 sites and nothing failed.
+  #
+  # A ceiling rather than an exact figure. It is deliberately loose enough that
+  # ordinary work does not trip it and tight enough that a large regression
+  # does, and it is lowered when a feature earns it -- the same bargain as the
+  # example floors, which is why the message says which direction to edit.
+  refusals=0
   crashed=$(for m in "$root"/runtime/node/*/tsconfig.json; do
-              if ./target/release/nts emit-c "$m" --out "$root/target/gate-profile" \
-                   --napi 2>&1 | grep -q "panicked at"; then
+              out=$(./target/release/nts emit-c "$m" --out "$root/target/gate-profile" \
+                      --napi 2>&1)
+              refusals=$((refusals + $(printf '%s' "$out" | grep -c 'NTS1001')))
+              printf '%s' "$refusals" > "$root/target/gate-profile/.refusals"
+              if printf '%s' "$out" | grep -q "panicked at"; then
                 basename "$(dirname "$m")"
               fi
             done)
-  printf '  %s modules emitted\n' "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)"
+  refusals=$(cat "$root/target/gate-profile/.refusals" 2>/dev/null || echo 0)
+  printf '  %s modules emitted, %s refusal(s)\n' \
+    "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)" "$refusals"
+  # The ceiling. Lower it when a feature earns it.
+  ceiling=9600
+  if [ "$refusals" -gt "$ceiling" ]; then
+    printf '  ^ above the ceiling of %s -- reach went backwards\n' "$ceiling"
+    return 1
+  fi
+  [ "$refusals" -lt $((ceiling - 400)) ] && \
+    printf '  ^ lower the ceiling in tooling/gate/all.sh toward %s\n' "$refusals"
   if [ -n "$crashed" ]; then
     echo "  the emitter panicked on:"
     echo "$crashed" | sed 's/^/    /'
@@ -375,7 +399,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 107 "through the LLVM backend, counting" ); }
+  backend_examples 108 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -386,7 +410,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 107 "through the LLVM backend" ); }
+  backend_examples 108 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform

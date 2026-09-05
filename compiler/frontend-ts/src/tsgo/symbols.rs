@@ -227,14 +227,7 @@ fn intern(
     base: u32,
     _file: SourceId,
 ) -> SymbolId {
-    // FxHashMap rather than a generic hasher: this map is hit once per node in a
-    // program, and the point of choosing it is lost if a caller can substitute a
-    // cryptographic one.
-    if let Some(&existing) = interned.get(&response.id) {
-        return existing;
-    }
-
-    let declarations = response
+    let declarations: Vec<NodeId> = response
         .declarations
         .iter()
         .filter_map(|handle| declaration_index(handle, path))
@@ -244,6 +237,37 @@ fn intern(
         .filter(|index| (*index as usize) < snapshot.nodes.len())
         .map(NodeId)
         .collect();
+
+    // FxHashMap rather than a generic hasher: this map is hit once per node in a
+    // program, and the point of choosing it is lost if a caller can substitute a
+    // cryptographic one.
+    //
+    // **Interning is first-come-first-served and the first comer may be a file
+    // that only mentions the symbol.** `declaration_index` keeps the
+    // declarations that are in *this* file, so a symbol first reached from an
+    // importer was recorded with none, and the cache then handed that empty
+    // record back when its own file was interned.
+    //
+    // The symbols that go wrong are therefore decided by module order, which is
+    // why it looked like a property of particular classes. `Readable` is
+    // declared in `stream/src/readable.ts` and first seen from `duplex.ts`, so
+    // it had no declarations -- and `decompose`'s library boundary is
+    // `is_ours`, which is exactly "does this symbol have any declarations".
+    // Every member of `Readable` was refused as "a class this compiler has no
+    // type for", 110 of them in `stream` alone, and 187 more classes were
+    // refused for having a base that was.
+    if let Some(&existing) = interned.get(&response.id) {
+        // Fill them in where this file is the one that has them. A symbol keeps
+        // whatever it already had otherwise: two files cannot both hold the
+        // declarations of one symbol, so this can only go from empty to filled.
+        if !declarations.is_empty()
+            && let Some(record) = snapshot.symbols.get_mut(existing.0 as usize)
+            && record.declarations.is_empty()
+        {
+            record.declarations = declarations;
+        }
+        return existing;
+    }
 
     let id = SymbolId(u32::try_from(snapshot.symbols.len()).unwrap_or(u32::MAX));
     snapshot.symbols.push(SymbolRecord {
