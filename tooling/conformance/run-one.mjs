@@ -15,11 +15,7 @@ import { createRequire, registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import assert from "node:assert";
 import process from "node:process";
-import {
-  getSystemErrorMap,
-  getSystemErrorMessage,
-  getSystemErrorName,
-} from "node:util";
+import { getSystemErrorMap, getSystemErrorMessage, getSystemErrorName } from "node:util";
 import { makeCommon, checkPending, peekPending, Skip } from "./common.mjs";
 import tmpdir from "./tmpdir.mjs";
 import fixtures from "./fixtures.mjs";
@@ -112,10 +108,13 @@ hostProcess.on("exit", () => {
     report({
       kind: "fail",
       why: `${m.name} was called ${m.actual} times, expected ${m.expected}`,
-      detail: missed.map((pendingCall) =>
-        `${pendingCall.name}: ${pendingCall.actual}/${pendingCall.expected}` +
-        (pendingCall.registeredAt === undefined ? "" : ` ${pendingCall.registeredAt.trim()}`),
-      ).join("\n"),
+      detail: missed
+        .map(
+          (pendingCall) =>
+            `${pendingCall.name}: ${pendingCall.actual}/${pendingCall.expected}` +
+            (pendingCall.registeredAt === undefined ? "" : ` ${pendingCall.registeredAt.trim()}`),
+        )
+        .join("\n"),
     });
   } else {
     report({ kind: "pass" });
@@ -201,7 +200,7 @@ function judge() {
       const m = missed[0];
       throw new Error(
         `${m.name} was called ${m.actual} times, expected ${m.expected}` +
-        (m.registeredAt === undefined ? "" : ` (${m.registeredAt.trim()})`),
+          (m.registeredAt === undefined ? "" : ` (${m.registeredAt.trim()})`),
       );
     }
     if (testCases.registered > 0 && testCases.skipped === testCases.registered) {
@@ -277,19 +276,20 @@ try {
   const shapePath = join(moduleDir, "shape.mjs");
   let shapeModule = null;
   if (existsSync(shapePath)) {
-    const compiledShapeGuard = addon && addon !== "-"
-      ? registerHooks({
-        resolve(specifier, context, nextResolve) {
-          const resolved = nextResolve(specifier, context);
-          if (/\.[cm]?ts$/.test(new URL(resolved.url).pathname)) {
-            throw new Error(
-              "shape.mjs loaded TypeScript source in the compiled lane; expose hidden raw addon exports and shape those instead",
-            );
-          }
-          return resolved;
-        },
-      })
-      : null;
+    const compiledShapeGuard =
+      addon && addon !== "-"
+        ? registerHooks({
+            resolve(specifier, context, nextResolve) {
+              const resolved = nextResolve(specifier, context);
+              if (/\.[cm]?ts$/.test(new URL(resolved.url).pathname)) {
+                throw new Error(
+                  "shape.mjs loaded TypeScript source in the compiled lane; expose hidden raw addon exports and shape those instead",
+                );
+              }
+              return resolved;
+            },
+          })
+        : null;
     try {
       // A resolver guard observes imports, re-exports, and transitive static
       // dependencies during module evaluation. Text matching would miss some
@@ -300,7 +300,11 @@ try {
     }
   }
   underTest = shapeModule ? shapeModule.shape({ ...exports }) : { ...exports };
-  const declaredSubpaths = shapeModule?.subpaths?.({ ...exports }) ?? null;
+  // A subpath can be an exact member of the shaped public object. Passing that
+  // object avoids rebuilding a second, merely equal value and losing identity
+  // (`require('path/posix') === require('path').posix`). Existing shapers that
+  // need only raw exports simply ignore the second argument.
+  const declaredSubpaths = shapeModule?.subpaths?.({ ...exports }, underTest) ?? null;
   if (declaredSubpaths !== null) {
     for (const [id, implementation] of Object.entries(declaredSubpaths)) {
       siblings.set(id, sabotaged ? {} : implementation);
@@ -342,7 +346,9 @@ try {
 
   const usesPath = join(moduleDir, "uses");
   if (existsSync(usesPath)) {
-    for (const requestedName of readFileSync(usesPath, "utf8").split("\n").map((l) => l.trim())) {
+    for (const requestedName of readFileSync(usesPath, "utf8")
+      .split("\n")
+      .map((l) => l.trim())) {
       if (!requestedName || requestedName.startsWith("#")) continue;
       // A dependency may name one exported subpath. That keeps the bare module
       // available as an independent Node oracle in tests such as
@@ -360,9 +366,7 @@ try {
       // remain intact, otherwise a mixed test can fail while loading a helper
       // or sibling API before it ever observes the empty subject. Such a
       // failure is not evidence that the test measures this module.
-      const shaped = siblingShapeModule
-        ? siblingShapeModule.shape(siblingExports)
-        : siblingExports;
+      const shaped = siblingShapeModule ? siblingShapeModule.shape(siblingExports) : siblingExports;
       if (requestedSubpath === null) siblings.set(name, shaped);
       const siblingSubpaths = siblingShapeModule?.subpaths?.(siblingExports) ?? null;
       if (siblingSubpaths !== null) {
@@ -372,9 +376,10 @@ try {
           }
         }
       }
-      const siblingInternals = requestedSubpath === null
-        ? (siblingShapeModule?.internals?.(siblingExports) ?? null)
-        : null;
+      const siblingInternals =
+        requestedSubpath === null
+          ? (siblingShapeModule?.internals?.(siblingExports) ?? null)
+          : null;
       if (siblingInternals !== null) {
         if (internals === null) internals = {};
         for (const [id, implementation] of Object.entries(siblingInternals)) {
@@ -446,24 +451,24 @@ function onGC(target, listener) {
   // In the async_hooks lane this helper must use the implementation under
   // test. In every other lane async hooks are test infrastructure: using the
   // subject module here made a net test call `net.createHook()`.
-  const asyncHooks = moduleName === "async_hooks"
-    ? underTest
-    : realRequire("node:async_hooks");
-  const gcHook = asyncHooks.createHook({
-    init(id, type) {
-      if (trackedId === undefined) {
-        assert.strictEqual(type, GC_TRACKER_TAG);
-        trackedId = id;
-      }
-    },
-    destroy(id) {
-      if (id === trackedId) {
-        destroyed = true;
-        listener.ongc();
-        gcHook.disable();
-      }
-    },
-  }).enable();
+  const asyncHooks = moduleName === "async_hooks" ? underTest : realRequire("node:async_hooks");
+  const gcHook = asyncHooks
+    .createHook({
+      init(id, type) {
+        if (trackedId === undefined) {
+          assert.strictEqual(type, GC_TRACKER_TAG);
+          trackedId = id;
+        }
+      },
+      destroy(id) {
+        if (id === trackedId) {
+          destroyed = true;
+          listener.ongc();
+          gcHook.disable();
+        }
+      },
+    })
+    .enable();
 
   gcTrackerMap.set(target, new asyncHooks.AsyncResource(GC_TRACKER_TAG));
 
@@ -835,7 +840,11 @@ function executeTestModule(modulePath) {
       // faithful, this lets a test declare a local binding such as
       // `const process = require('node:process')` without a false duplicate-
       // declaration syntax error.
-      "require", "module", "exports", "__filename", "__dirname",
+      "require",
+      "module",
+      "exports",
+      "__filename",
+      "__dirname",
       readFileSync(modulePath, "utf8"),
     );
     const localRequire = createRequire(modulePath);
@@ -930,7 +939,11 @@ function reportFailure(e) {
   }
   report({
     kind: "fail",
-    why: (e?.message ?? String(e)).split("\n").find((l) => l.trim())?.trim() ?? "",
+    why:
+      (e?.message ?? String(e))
+        .split("\n")
+        .find((l) => l.trim())
+        ?.trim() ?? "",
     // The message and the frames that are ours. Node's own frames and the
     // harness's are noise; the test file and the module under test are not.
     detail: [
@@ -939,9 +952,15 @@ function reportFailure(e) {
       // inside `new Function`, so its own frames are `<anonymous>` with a line
       // number two off the file's, which is still the fastest way to find the
       // assertion that failed.
-      ...(e?.stack ?? "").split("\n").filter((l) =>
-        l.includes("/runtime/node/") || l.includes("/test/parallel/") || l.includes("<anonymous")
-      ).slice(0, 8),
+      ...(e?.stack ?? "")
+        .split("\n")
+        .filter(
+          (l) =>
+            l.includes("/runtime/node/") ||
+            l.includes("/test/parallel/") ||
+            l.includes("<anonymous"),
+        )
+        .slice(0, 8),
     ].join("\n"),
   });
 }

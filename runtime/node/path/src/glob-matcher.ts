@@ -61,8 +61,13 @@ export class CompiledGlobPattern {
 }
 
 function isExtglobOperator(character: string): boolean {
-  return character === "?" || character === "*" || character === "+" ||
-    character === "@" || character === "!";
+  return (
+    character === "?" ||
+    character === "*" ||
+    character === "+" ||
+    character === "@" ||
+    character === "!"
+  );
 }
 
 function containsOnlyStars(pattern: string): boolean {
@@ -74,10 +79,18 @@ function containsOnlyStars(pattern: string): boolean {
 }
 
 function regexpEscape(character: string): string {
-  if (character === "\\" || character === "^" || character === "$" ||
-      character === "." || character === "+" || character === "(" ||
-      character === ")" || character === "|" || character === "{" ||
-      character === "}") {
+  if (
+    character === "\\" ||
+    character === "^" ||
+    character === "$" ||
+    character === "." ||
+    character === "+" ||
+    character === "(" ||
+    character === ")" ||
+    character === "|" ||
+    character === "{" ||
+    character === "}"
+  ) {
     return `\\${character}`;
   }
   return character;
@@ -102,11 +115,7 @@ function findClosingParenthesis(pattern: string, open: number, end: number): num
   return -1;
 }
 
-function splitExtglobAlternatives(
-  pattern: string,
-  start: number,
-  end: number,
-): string[] {
+function splitExtglobAlternatives(pattern: string, start: number, end: number): string[] {
   const alternatives: string[] = [];
   let depth = 0;
   let inClass = false;
@@ -220,8 +229,12 @@ function compileSequence(pattern: string, start: number, end: number): string {
 }
 
 function classIsOnlyDot(pattern: string): boolean {
-  return pattern.length >= 3 && pattern.charAt(0) === "[" &&
-    pattern.charAt(1) === "." && pattern.charAt(2) === "]";
+  return (
+    pattern.length >= 3 &&
+    pattern.charAt(0) === "[" &&
+    pattern.charAt(1) === "." &&
+    pattern.charAt(2) === "]"
+  );
 }
 
 function startsWithExplicitDot(pattern: string): boolean {
@@ -410,15 +423,17 @@ function splitPattern(pattern: string, windows: boolean): string[] {
   let start = 0;
   for (let index = 0; index <= pattern.length; index++) {
     const character = pattern.charAt(index);
-    const separator = index === pattern.length || character === "/" ||
-      (windows && character === "\\");
+    const separator =
+      index === pattern.length || character === "/" || (windows && character === "\\");
     if (!separator) continue;
     if (index !== start || start === 0 || index === pattern.length) {
       parts.push(pattern.slice(start, index));
     }
-    while (index + 1 < pattern.length &&
-      (pattern.charAt(index + 1) === "/" ||
-       (windows && pattern.charAt(index + 1) === "\\"))) index++;
+    while (
+      index + 1 < pattern.length &&
+      (pattern.charAt(index + 1) === "/" || (windows && pattern.charAt(index + 1) === "\\"))
+    )
+      index++;
     start = index + 1;
   }
   return parts;
@@ -446,9 +461,17 @@ function preprocessPatternParts(initial: string[]): string[][] {
         const next = parts[globstar + 1];
         const afterParent = parts[globstar + 2];
         const following = parts[globstar + 3];
-        if (next !== ".." || afterParent === undefined || afterParent === "" ||
-            afterParent === "." || afterParent === ".." || following === undefined ||
-            following === "" || following === "." || following === "..") {
+        if (
+          next !== ".." ||
+          afterParent === undefined ||
+          afterParent === "" ||
+          afterParent === "." ||
+          afterParent === ".." ||
+          following === undefined ||
+          following === "" ||
+          following === "." ||
+          following === ".."
+        ) {
           continue;
         }
 
@@ -471,8 +494,7 @@ function preprocessPatternParts(initial: string[]): string[][] {
           changed = true;
         }
       }
-      if (parts[0] === "." && parts.length === 2 &&
-          (parts[1] === "." || parts[1] === "")) {
+      if (parts[0] === "." && parts.length === 2 && (parts[1] === "." || parts[1] === "")) {
         parts.pop();
         changed = true;
       }
@@ -480,8 +502,13 @@ function preprocessPatternParts(initial: string[]): string[][] {
       let parent = 0;
       while ((parent = parts.indexOf("..", parent + 1)) !== -1) {
         const previous = parts[parent - 1];
-        if (previous !== undefined && previous !== "" && previous !== "." &&
-            previous !== ".." && previous !== "**") {
+        if (
+          previous !== undefined &&
+          previous !== "" &&
+          previous !== "." &&
+          previous !== ".." &&
+          previous !== "**"
+        ) {
           const keepDot = parent === 1 && parts[parent + 1] === "**";
           if (keepDot) parts.splice(parent - 1, 2, ".");
           else parts.splice(parent - 1, 2);
@@ -526,13 +553,14 @@ function splitValue(path: string, windows: boolean): string[] {
   let start = 0;
   for (let index = 0; index <= path.length; index++) {
     const character = path.charAt(index);
-    const separator = index === path.length || character === "/" ||
-      (windows && character === "\\");
+    const separator = index === path.length || character === "/" || (windows && character === "\\");
     if (!separator) continue;
     parts.push(path.slice(start, index));
-    while (index + 1 < path.length &&
-      (path.charAt(index + 1) === "/" ||
-       (windows && path.charAt(index + 1) === "\\"))) index++;
+    while (
+      index + 1 < path.length &&
+      (path.charAt(index + 1) === "/" || (windows && path.charAt(index + 1) === "\\"))
+    )
+      index++;
     start = index + 1;
   }
   const optimized: string[] = [];
@@ -572,7 +600,8 @@ function patternMatches(parts: GlobPart[], values: string[]): boolean {
 
     let matches: boolean;
     if (patternIndex === parts.length) {
-      matches = valueIndex === values.length ||
+      matches =
+        valueIndex === values.length ||
         (valueIndex + 1 === values.length && values[valueIndex] === "");
     } else {
       const part = parts[patternIndex];
@@ -584,21 +613,25 @@ function patternMatches(parts: GlobPart[], values: string[]): boolean {
           matches = valueIndex < values.length;
           for (let index = valueIndex; matches && index < values.length; index++) {
             const value = values[index];
-            matches = value !== undefined &&
+            matches =
+              value !== undefined &&
               (value === "" || (value !== "." && value !== ".." && value.charAt(0) !== "."));
           }
         } else {
           matches = visit(patternIndex + 1, valueIndex);
           if (!matches && valueIndex < values.length) {
             const value = values[valueIndex];
-            matches = value !== undefined &&
+            matches =
+              value !== undefined &&
               (value === "" || (value !== "." && value !== ".." && value.charAt(0) !== ".")) &&
               visit(patternIndex, valueIndex + 1);
           }
         }
       } else if (part !== undefined && valueIndex < values.length) {
         const value = values[valueIndex];
-        matches = value !== undefined && partMatches(part, value) &&
+        matches =
+          value !== undefined &&
+          partMatches(part, value) &&
           visit(patternIndex + 1, valueIndex + 1);
       } else {
         matches = false;
@@ -612,11 +645,7 @@ function patternMatches(parts: GlobPart[], values: string[]): boolean {
 }
 
 /** The fixed-option matcher used by Node v24's `path.matchesGlob`. */
-export function matchesGlobPattern(
-  path: string,
-  pattern: string,
-  windows: boolean,
-): boolean {
+export function matchesGlobPattern(path: string, pattern: string, windows: boolean): boolean {
   const alternatives = compileGlobPatterns(pattern, windows);
   return matchesCompiledGlobPatterns(path, alternatives, windows);
 }

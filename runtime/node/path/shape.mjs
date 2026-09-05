@@ -12,9 +12,7 @@ export function shape(exports) {
   const { posix: _posix, win32: win32Exports, ...flat } = exports;
 
   const posix = { ...flat, sep: "/", delimiter: ":" };
-  const win32 = win32Exports
-    ? { ...win32Exports, sep: "\\", delimiter: ";" }
-    : undefined;
+  const win32 = win32Exports ? { ...win32Exports, sep: "\\", delimiter: ";" } : undefined;
 
   posix.posix = posix;
   posix.win32 = win32;
@@ -23,4 +21,12 @@ export function shape(exports) {
     win32.posix = posix;
   }
   return posix;
+}
+
+/** The two documented module subpaths are the exact shaped namespace values. */
+export function subpaths(_exports, shaped) {
+  return {
+    "path/posix": shaped.posix,
+    "path/win32": shaped.win32,
+  };
 }

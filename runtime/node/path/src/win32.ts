@@ -58,11 +58,34 @@ function isPosixPathSeparator(code: number): boolean {
 }
 
 const WINDOWS_RESERVED_NAMES = [
-  "CON", "PRN", "AUX", "NUL",
-  "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-  "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-  "COM\xb9", "COM\xb2", "COM\xb3",
-  "LPT\xb9", "LPT\xb2", "LPT\xb3",
+  "CON",
+  "PRN",
+  "AUX",
+  "NUL",
+  "COM1",
+  "COM2",
+  "COM3",
+  "COM4",
+  "COM5",
+  "COM6",
+  "COM7",
+  "COM8",
+  "COM9",
+  "LPT1",
+  "LPT2",
+  "LPT3",
+  "LPT4",
+  "LPT5",
+  "LPT6",
+  "LPT7",
+  "LPT8",
+  "LPT9",
+  "COM\xb9",
+  "COM\xb2",
+  "COM\xb3",
+  "LPT\xb9",
+  "LPT\xb2",
+  "LPT\xb3",
 ];
 
 function isWindowsReservedName(path: string, colonIndex: number): boolean {
@@ -101,8 +124,8 @@ export function format(pathObject: FormatInputPathObject): string {
  * @returns {string}
  */
 export function resolve(...args: string[]): string {
-  let resolvedDevice = '';
-  let resolvedTail = '';
+  let resolvedDevice = "";
+  let resolvedTail = "";
   let resolvedAbsolute = false;
 
   for (let i = args.length - 1; i >= -1; i--) {
@@ -119,8 +142,12 @@ export function resolve(...args: string[]): string {
     } else if (resolvedDevice.length === 0) {
       path = nts_process_cwd();
       // Fast path for current directory
-      if (args.length === 0 || ((args.length === 1 && (args[0] === '' || args[0] === '.')) &&
-          isPathSeparator(path.charCodeAt(0)))) {
+      if (
+        args.length === 0 ||
+        (args.length === 1 &&
+          (args[0] === "" || args[0] === ".") &&
+          isPathSeparator(path.charCodeAt(0)))
+      ) {
         if (!isWindows) {
           path = toBackslashes(path);
         }
@@ -146,7 +173,7 @@ export function resolve(...args: string[]): string {
 
     const len = path.length;
     let rootEnd = 0;
-    let device = '';
+    let device = "";
     let isAbsolute = false;
     const code = path.charCodeAt(0);
 
@@ -169,8 +196,7 @@ export function resolve(...args: string[]): string {
         let j = 2;
         let last = j;
         // Match 1 or more non-path separators
-        while (j < len &&
-               !isPathSeparator(path.charCodeAt(j))) {
+        while (j < len && !isPathSeparator(path.charCodeAt(j))) {
           j++;
         }
         if (j < len && j !== last) {
@@ -178,23 +204,20 @@ export function resolve(...args: string[]): string {
           // Matched!
           last = j;
           // Match 1 or more path separators
-          while (j < len &&
-                 isPathSeparator(path.charCodeAt(j))) {
+          while (j < len && isPathSeparator(path.charCodeAt(j))) {
             j++;
           }
           if (j < len && j !== last) {
             // Matched!
             last = j;
             // Match 1 or more non-path separators
-            while (j < len &&
-                   !isPathSeparator(path.charCodeAt(j))) {
+            while (j < len && !isPathSeparator(path.charCodeAt(j))) {
               j++;
             }
             if (j === len || j !== last) {
-              if (firstPart !== '.' && firstPart !== '?') {
+              if (firstPart !== "." && firstPart !== "?") {
                 // We matched a UNC root
-                device =
-                  `\\\\${firstPart}\\${path.slice(last, j)}`;
+                device = `\\\\${firstPart}\\${path.slice(last, j)}`;
                 rootEnd = j;
               } else {
                 // We matched a device root (e.g. \\\\.\\PHYSICALDRIVE0)
@@ -207,8 +230,7 @@ export function resolve(...args: string[]): string {
       } else {
         rootEnd = 1;
       }
-    } else if (isWindowsDeviceRoot(code) &&
-                path.charCodeAt(1) === CHAR_COLON) {
+    } else if (isWindowsDeviceRoot(code) && path.charCodeAt(1) === CHAR_COLON) {
       // Possible device root
       device = path.slice(0, 2);
       rootEnd = 2;
@@ -222,8 +244,7 @@ export function resolve(...args: string[]): string {
 
     if (device.length > 0) {
       if (resolvedDevice.length > 0) {
-        if (device.toLowerCase() !==
-            resolvedDevice.toLowerCase())
+        if (device.toLowerCase() !== resolvedDevice.toLowerCase())
           // This path points to another device so it is not applicable
           continue;
       } else {
@@ -232,11 +253,9 @@ export function resolve(...args: string[]): string {
     }
 
     if (resolvedAbsolute) {
-      if (resolvedDevice.length > 0)
-        break;
+      if (resolvedDevice.length > 0) break;
     } else {
-      resolvedTail =
-        `${path.slice(rootEnd)}\\${resolvedTail}`;
+      resolvedTail = `${path.slice(rootEnd)}\\${resolvedTail}`;
       resolvedAbsolute = isAbsolute;
       if (isAbsolute && resolvedDevice.length > 0) {
         break;
@@ -249,12 +268,11 @@ export function resolve(...args: string[]): string {
   // fails)
 
   // Normalize the tail path
-  resolvedTail = normalizeString(resolvedTail, !resolvedAbsolute, '\\',
-                                 isPathSeparator);
+  resolvedTail = normalizeString(resolvedTail, !resolvedAbsolute, "\\", isPathSeparator);
 
-  return resolvedAbsolute ?
-    `${resolvedDevice}\\${resolvedTail}` :
-    `${resolvedDevice}${resolvedTail}` || '.';
+  return resolvedAbsolute
+    ? `${resolvedDevice}\\${resolvedTail}`
+    : `${resolvedDevice}${resolvedTail}` || ".";
 }
 
 /**
@@ -262,10 +280,9 @@ export function resolve(...args: string[]): string {
  * @returns {string}
  */
 export function normalize(path: string): string {
-  validateString(path, 'path');
+  validateString(path, "path");
   const len = path.length;
-  if (len === 0)
-    return '.';
+  if (len === 0) return ".";
   let rootEnd = 0;
   let device;
   let isAbsolute = false;
@@ -275,7 +292,7 @@ export function normalize(path: string): string {
   if (len === 1) {
     // `path` contains just a single char, exit early to avoid
     // unnecessary work
-    return isPosixPathSeparator(code) ? '\\' : path;
+    return isPosixPathSeparator(code) ? "\\" : path;
   }
   if (isPathSeparator(code)) {
     // Possible UNC root
@@ -289,8 +306,7 @@ export function normalize(path: string): string {
       let j = 2;
       let last = j;
       // Match 1 or more non-path separators
-      while (j < len &&
-             !isPathSeparator(path.charCodeAt(j))) {
+      while (j < len && !isPathSeparator(path.charCodeAt(j))) {
         j++;
       }
       if (j < len && j !== last) {
@@ -298,24 +314,22 @@ export function normalize(path: string): string {
         // Matched!
         last = j;
         // Match 1 or more path separators
-        while (j < len &&
-               isPathSeparator(path.charCodeAt(j))) {
+        while (j < len && isPathSeparator(path.charCodeAt(j))) {
           j++;
         }
         if (j < len && j !== last) {
           // Matched!
           last = j;
           // Match 1 or more non-path separators
-          while (j < len &&
-                 !isPathSeparator(path.charCodeAt(j))) {
+          while (j < len && !isPathSeparator(path.charCodeAt(j))) {
             j++;
           }
           if (j === len || j !== last) {
-            if (firstPart === '.' || firstPart === '?') {
+            if (firstPart === "." || firstPart === "?") {
               // We matched a device root (e.g. \\\\.\\PHYSICALDRIVE0)
               device = `\\\\${firstPart}`;
               rootEnd = 4;
-              const colonIndex = path.indexOf(':');
+              const colonIndex = path.indexOf(":");
               // Special case: handle \\?\COM1: or similar reserved device paths
               const possibleDevice = path.slice(4, colonIndex + 1);
               if (isWindowsReservedName(possibleDevice, possibleDevice.length - 1)) {
@@ -329,8 +343,7 @@ export function normalize(path: string): string {
               return `\\\\${firstPart}\\${path.slice(last)}\\`;
             } else {
               // We matched a UNC root with leftovers
-              device =
-                `\\\\${firstPart}\\${path.slice(last, j)}`;
+              device = `\\\\${firstPart}\\${path.slice(last, j)}`;
               rootEnd = j;
             }
           }
@@ -340,7 +353,7 @@ export function normalize(path: string): string {
       rootEnd = 1;
     }
   } else {
-    const colonIndex = path.indexOf(':');
+    const colonIndex = path.indexOf(":");
     if (colonIndex > 0) {
       if (isWindowsDeviceRoot(code) && colonIndex === 1) {
         device = path.slice(0, 2);
@@ -352,41 +365,37 @@ export function normalize(path: string): string {
       } else if (isWindowsReservedName(path, colonIndex)) {
         device = path.slice(0, colonIndex + 1);
         rootEnd = colonIndex + 1;
-
       }
     }
   }
 
-  let tail = rootEnd < len ?
-    normalizeString(path.slice(rootEnd),
-                    !isAbsolute, '\\', isPathSeparator) :
-    '';
-  if (tail.length === 0 && !isAbsolute)
-    tail = '.';
-  if (tail.length > 0 &&
-      isPathSeparator(path.charCodeAt(len - 1)))
-    tail += '\\';
-  if (!isAbsolute && device === undefined && path.includes(':')) {
+  let tail =
+    rootEnd < len ? normalizeString(path.slice(rootEnd), !isAbsolute, "\\", isPathSeparator) : "";
+  if (tail.length === 0 && !isAbsolute) tail = ".";
+  if (tail.length > 0 && isPathSeparator(path.charCodeAt(len - 1))) tail += "\\";
+  if (!isAbsolute && device === undefined && path.includes(":")) {
     // If the original path was not absolute and if we have not been able to
     // resolve it relative to a particular device, we need to ensure that the
     // `tail` has not become something that Windows might interpret as an
     // absolute path. See CVE-2024-36139.
-    if (tail.length >= 2 &&
-        isWindowsDeviceRoot(tail.charCodeAt(0)) &&
-        tail.charCodeAt(1) === CHAR_COLON) {
+    if (
+      tail.length >= 2 &&
+      isWindowsDeviceRoot(tail.charCodeAt(0)) &&
+      tail.charCodeAt(1) === CHAR_COLON
+    ) {
       return `.\\${tail}`;
     }
-    let index = path.indexOf(':');
+    let index = path.indexOf(":");
 
     do {
       if (index === len - 1 || isPathSeparator(path.charCodeAt(index + 1))) {
         return `.\\${tail}`;
       }
-    } while ((index = path.indexOf(':', index + 1)) !== -1);
+    } while ((index = path.indexOf(":", index + 1)) !== -1);
   }
-  const colonIndex = path.indexOf(':');
+  const colonIndex = path.indexOf(":");
   if (isWindowsReservedName(path, colonIndex)) {
-    return `.\\${device ?? ''}${tail}`;
+    return `.\\${device ?? ""}${tail}`;
   }
   if (device === undefined) {
     return isAbsolute ? `\\${tail}` : tail;
@@ -399,18 +408,19 @@ export function normalize(path: string): string {
  * @returns {boolean}
  */
 export function isAbsolute(path: string): boolean {
-  validateString(path, 'path');
+  validateString(path, "path");
   const len = path.length;
-  if (len === 0)
-    return false;
+  if (len === 0) return false;
 
   const code = path.charCodeAt(0);
-  return isPathSeparator(code) ||
+  return (
+    isPathSeparator(code) ||
     // Possible device root
     (len > 2 &&
-    isWindowsDeviceRoot(code) &&
-    path.charCodeAt(1) === CHAR_COLON &&
-    isPathSeparator(path.charCodeAt(2)));
+      isWindowsDeviceRoot(code) &&
+      path.charCodeAt(1) === CHAR_COLON &&
+      isPathSeparator(path.charCodeAt(2)))
+  );
 }
 
 /**
@@ -418,24 +428,22 @@ export function isAbsolute(path: string): boolean {
  * @returns {string}
  */
 export function join(...args: string[]): string {
-  if (args.length === 0)
-    return '.';
+  if (args.length === 0) return ".";
 
   const path: string[] = [];
   for (let i = 0; i < args.length; ++i) {
     const arg = args[i];
-    validateString(arg, 'path');
+    validateString(arg, "path");
     if (arg.length > 0) {
       path.push(arg);
     }
   }
 
-  if (path.length === 0)
-    return '.';
+  if (path.length === 0) return ".";
 
   const firstPart = path[0];
   if (firstPart === undefined) throw new Error("path join lost its first component");
-  let joined = path.join('\\');
+  let joined = path.join("\\");
 
   // Make sure that the joined path doesn't start with two slashes, because
   // normalize() will mistake it for a UNC path then.
@@ -455,12 +463,10 @@ export function join(...args: string[]): string {
   if (isPathSeparator(firstPart.charCodeAt(0))) {
     ++slashCount;
     const firstLen = firstPart.length;
-    if (firstLen > 1 &&
-        isPathSeparator(firstPart.charCodeAt(1))) {
+    if (firstLen > 1 && isPathSeparator(firstPart.charCodeAt(1))) {
       ++slashCount;
       if (firstLen > 2) {
-        if (isPathSeparator(firstPart.charCodeAt(2)))
-          ++slashCount;
+        if (isPathSeparator(firstPart.charCodeAt(2))) ++slashCount;
         else {
           // We matched a UNC path in the first part
           needsReplace = false;
@@ -470,26 +476,24 @@ export function join(...args: string[]): string {
   }
   if (needsReplace) {
     // Find any more consecutive slashes we need to replace
-    while (slashCount < joined.length &&
-           isPathSeparator(joined.charCodeAt(slashCount))) {
+    while (slashCount < joined.length && isPathSeparator(joined.charCodeAt(slashCount))) {
       slashCount++;
     }
 
     // Replace the slashes if needed
-    if (slashCount >= 2)
-      joined = `\\${joined.slice(slashCount)}`;
+    if (slashCount >= 2) joined = `\\${joined.slice(slashCount)}`;
   }
 
   // Skip normalization when reserved device names are present
   const parts = [];
-  let part = '';
+  let part = "";
 
   for (let i = 0; i < joined.length; i++) {
-    if (joined[i] === '\\') {
+    if (joined[i] === "\\") {
       if (part) parts.push(part);
-      part = '';
+      part = "";
       // Skip consecutive backslashes
-      while (i + 1 < joined.length && joined[i + 1] === '\\') i++;
+      while (i + 1 < joined.length && joined[i + 1] === "\\") i++;
     } else {
       part += joined[i];
     }
@@ -498,14 +502,16 @@ export function join(...args: string[]): string {
   if (part) parts.push(part);
 
   // Check if any part has a Windows reserved name
-  if (parts.some((p) => {
-    const colonIndex = p.indexOf(':');
-    return colonIndex !== -1 && isWindowsReservedName(p, colonIndex);
-  })) {
+  if (
+    parts.some((p) => {
+      const colonIndex = p.indexOf(":");
+      return colonIndex !== -1 && isWindowsReservedName(p, colonIndex);
+    })
+  ) {
     // Replace forward slashes with backslashes
-    let result = '';
+    let result = "";
     for (let i = 0; i < joined.length; i++) {
-      result += joined[i] === '/' ? '\\' : joined[i];
+      result += joined[i] === "/" ? "\\" : joined[i];
     }
     return result;
   }
@@ -523,31 +529,28 @@ export function join(...args: string[]): string {
  * @returns {string}
  */
 export function relative(from: string, to: string): string {
-  validateString(from, 'from');
-  validateString(to, 'to');
+  validateString(from, "from");
+  validateString(to, "to");
 
-  if (from === to)
-    return '';
+  if (from === to) return "";
 
   const fromOrig = resolve(from);
   const toOrig = resolve(to);
 
-  if (fromOrig === toOrig)
-    return '';
+  if (fromOrig === toOrig) return "";
 
   from = fromOrig.toLowerCase();
   to = toOrig.toLowerCase();
 
-  if (from === to)
-    return '';
+  if (from === to) return "";
 
   if (fromOrig.length !== from.length || toOrig.length !== to.length) {
-    const fromSplit = fromOrig.split('\\');
-    const toSplit = toOrig.split('\\');
-    if (fromSplit[fromSplit.length - 1] === '') {
+    const fromSplit = fromOrig.split("\\");
+    const toSplit = toOrig.split("\\");
+    if (fromSplit[fromSplit.length - 1] === "") {
       fromSplit.pop();
     }
-    if (toSplit[toSplit.length - 1] === '') {
+    if (toSplit[toSplit.length - 1] === "") {
       toSplit.pop();
     }
 
@@ -571,43 +574,37 @@ export function relative(from: string, to: string): string {
       return toOrig;
     } else if (i === length) {
       if (toLen > length) {
-        return toSplit.slice(i).join('\\');
+        return toSplit.slice(i).join("\\");
       }
       if (fromLen > length) {
-        return ('..\\').repeat(fromLen - 1 - i) + '..';
+        return "..\\".repeat(fromLen - 1 - i) + "..";
       }
-      return '';
+      return "";
     }
 
-    return ('..\\').repeat(fromLen - i) + toSplit.slice(i).join('\\');
+    return "..\\".repeat(fromLen - i) + toSplit.slice(i).join("\\");
   }
 
   // Trim any leading backslashes
   let fromStart = 0;
-  while (fromStart < from.length &&
-         from.charCodeAt(fromStart) === CHAR_BACKWARD_SLASH) {
+  while (fromStart < from.length && from.charCodeAt(fromStart) === CHAR_BACKWARD_SLASH) {
     fromStart++;
   }
   // Trim trailing backslashes (applicable to UNC paths only)
   let fromEnd = from.length;
-  while (
-    fromEnd - 1 > fromStart &&
-    from.charCodeAt(fromEnd - 1) === CHAR_BACKWARD_SLASH
-  ) {
+  while (fromEnd - 1 > fromStart && from.charCodeAt(fromEnd - 1) === CHAR_BACKWARD_SLASH) {
     fromEnd--;
   }
   const fromLen = fromEnd - fromStart;
 
   // Trim any leading backslashes
   let toStart = 0;
-  while (toStart < to.length &&
-         to.charCodeAt(toStart) === CHAR_BACKWARD_SLASH) {
+  while (toStart < to.length && to.charCodeAt(toStart) === CHAR_BACKWARD_SLASH) {
     toStart++;
   }
   // Trim trailing backslashes (applicable to UNC paths only)
   let toEnd = to.length;
-  while (toEnd - 1 > toStart &&
-         to.charCodeAt(toEnd - 1) === CHAR_BACKWARD_SLASH) {
+  while (toEnd - 1 > toStart && to.charCodeAt(toEnd - 1) === CHAR_BACKWARD_SLASH) {
     toEnd--;
   }
   const toLen = toEnd - toStart;
@@ -618,21 +615,17 @@ export function relative(from: string, to: string): string {
   let i = 0;
   for (; i < length; i++) {
     const fromCode = from.charCodeAt(fromStart + i);
-    if (fromCode !== to.charCodeAt(toStart + i))
-      break;
-    else if (fromCode === CHAR_BACKWARD_SLASH)
-      lastCommonSep = i;
+    if (fromCode !== to.charCodeAt(toStart + i)) break;
+    else if (fromCode === CHAR_BACKWARD_SLASH) lastCommonSep = i;
   }
 
   // We found a mismatch before the first common path separator was seen, so
   // return the original `to`.
   if (i !== length) {
-    if (lastCommonSep === -1)
-      return toOrig;
+    if (lastCommonSep === -1) return toOrig;
   } else {
     if (toLen > length) {
-      if (to.charCodeAt(toStart + i) ===
-          CHAR_BACKWARD_SLASH) {
+      if (to.charCodeAt(toStart + i) === CHAR_BACKWARD_SLASH) {
         // We get here if `from` is the exact base path for `to`.
         // For example: from='C:\\foo\\bar'; to='C:\\foo\\bar\\baz'
         return toOrig.slice(toStart + i + 1);
@@ -644,8 +637,7 @@ export function relative(from: string, to: string): string {
       }
     }
     if (fromLen > length) {
-      if (from.charCodeAt(fromStart + i) ===
-          CHAR_BACKWARD_SLASH) {
+      if (from.charCodeAt(fromStart + i) === CHAR_BACKWARD_SLASH) {
         // We get here if `to` is the exact base path for `from`.
         // For example: from='C:\\foo\\bar'; to='C:\\foo'
         lastCommonSep = i;
@@ -655,17 +647,15 @@ export function relative(from: string, to: string): string {
         lastCommonSep = 3;
       }
     }
-    if (lastCommonSep === -1)
-      lastCommonSep = 0;
+    if (lastCommonSep === -1) lastCommonSep = 0;
   }
 
-  let out = '';
+  let out = "";
   // Generate the relative path based on the path difference between `to` and
   // `from`
   for (i = fromStart + lastCommonSep + 1; i <= fromEnd; ++i) {
-    if (i === fromEnd ||
-        from.charCodeAt(i) === CHAR_BACKWARD_SLASH) {
-      out += out.length === 0 ? '..' : '\\..';
+    if (i === fromEnd || from.charCodeAt(i) === CHAR_BACKWARD_SLASH) {
+      out += out.length === 0 ? ".." : "\\..";
     }
   }
 
@@ -673,11 +663,9 @@ export function relative(from: string, to: string): string {
 
   // Lastly, append the rest of the destination (`to`) path that comes after
   // the common path parts
-  if (out.length > 0)
-    return `${out}${toOrig.slice(toStart, toEnd)}`;
+  if (out.length > 0) return `${out}${toOrig.slice(toStart, toEnd)}`;
 
-  if (toOrig.charCodeAt(toStart) === CHAR_BACKWARD_SLASH)
-    ++toStart;
+  if (toOrig.charCodeAt(toStart) === CHAR_BACKWARD_SLASH) ++toStart;
   return toOrig.slice(toStart, toEnd);
 }
 
@@ -687,13 +675,11 @@ export function relative(from: string, to: string): string {
  */
 export function toNamespacedPath(path: string): string {
   // Note: this will *probably* throw somewhere.
-  if (typeof path !== 'string' || path.length === 0)
-    return path;
+  if (typeof path !== "string" || path.length === 0) return path;
 
   const resolvedPath = resolve(path);
 
-  if (resolvedPath.length <= 2)
-    return path;
+  if (resolvedPath.length <= 2) return path;
 
   if (resolvedPath.charCodeAt(0) === CHAR_BACKWARD_SLASH) {
     // Possible UNC root
@@ -716,15 +702,17 @@ export function toNamespacedPath(path: string): string {
   return resolvedPath;
 }
 
+/** Pinned Node's docs-deprecated DEP0080 alias. */
+export const _makeLong = toNamespacedPath;
+
 /**
  * @param {string} path
  * @returns {string}
  */
 export function dirname(path: string): string {
-  validateString(path, 'path');
+  validateString(path, "path");
   const len = path.length;
-  if (len === 0)
-    return '.';
+  if (len === 0) return ".";
   let rootEnd = -1;
   let offset = 0;
   const code = path.charCodeAt(0);
@@ -732,7 +720,7 @@ export function dirname(path: string): string {
   if (len === 1) {
     // `path` contains just a path separator, exit early to avoid
     // unnecessary work or a dot.
-    return isPathSeparator(code) ? path : '.';
+    return isPathSeparator(code) ? path : ".";
   }
 
   // Try to match a root
@@ -746,24 +734,21 @@ export function dirname(path: string): string {
       let j = 2;
       let last = j;
       // Match 1 or more non-path separators
-      while (j < len &&
-             !isPathSeparator(path.charCodeAt(j))) {
+      while (j < len && !isPathSeparator(path.charCodeAt(j))) {
         j++;
       }
       if (j < len && j !== last) {
         // Matched!
         last = j;
         // Match 1 or more path separators
-        while (j < len &&
-               isPathSeparator(path.charCodeAt(j))) {
+        while (j < len && isPathSeparator(path.charCodeAt(j))) {
           j++;
         }
         if (j < len && j !== last) {
           // Matched!
           last = j;
           // Match 1 or more non-path separators
-          while (j < len &&
-                 !isPathSeparator(path.charCodeAt(j))) {
+          while (j < len && !isPathSeparator(path.charCodeAt(j))) {
             j++;
           }
           if (j === len) {
@@ -780,11 +765,9 @@ export function dirname(path: string): string {
         }
       }
     }
-  // Possible device root
-  } else if (isWindowsDeviceRoot(code) &&
-             path.charCodeAt(1) === CHAR_COLON) {
-    rootEnd =
-      len > 2 && isPathSeparator(path.charCodeAt(2)) ? 3 : 2;
+    // Possible device root
+  } else if (isWindowsDeviceRoot(code) && path.charCodeAt(1) === CHAR_COLON) {
+    rootEnd = len > 2 && isPathSeparator(path.charCodeAt(2)) ? 3 : 2;
     offset = rootEnd;
   }
 
@@ -803,8 +786,7 @@ export function dirname(path: string): string {
   }
 
   if (end === -1) {
-    if (rootEnd === -1)
-      return '.';
+    if (rootEnd === -1) return ".";
 
     end = rootEnd;
   }
@@ -817,9 +799,8 @@ export function dirname(path: string): string {
  * @returns {string}
  */
 export function basename(path: string, suffix?: string): string {
-  if (suffix !== undefined)
-    validateString(suffix, 'suffix');
-  validateString(path, 'path');
+  if (suffix !== undefined) validateString(suffix, "suffix");
+  validateString(path, "path");
   let start = 0;
   let end = -1;
   let matchedSlash = true;
@@ -827,15 +808,16 @@ export function basename(path: string, suffix?: string): string {
   // Check for a drive letter prefix so as not to mistake the following
   // path separator as an extra separator at the end of the path that can be
   // disregarded
-  if (path.length >= 2 &&
-      isWindowsDeviceRoot(path.charCodeAt(0)) &&
-      path.charCodeAt(1) === CHAR_COLON) {
+  if (
+    path.length >= 2 &&
+    isWindowsDeviceRoot(path.charCodeAt(0)) &&
+    path.charCodeAt(1) === CHAR_COLON
+  ) {
     start = 2;
   }
 
   if (suffix !== undefined && suffix.length > 0 && suffix.length <= path.length) {
-    if (suffix === path)
-      return '';
+    if (suffix === path) return "";
     let extIdx = suffix.length - 1;
     let firstNonSlashEnd = -1;
     for (let i = path.length - 1; i >= start; --i) {
@@ -872,10 +854,8 @@ export function basename(path: string, suffix?: string): string {
       }
     }
 
-    if (start === end)
-      end = firstNonSlashEnd;
-    else if (end === -1)
-      end = path.length;
+    if (start === end) end = firstNonSlashEnd;
+    else if (end === -1) end = path.length;
     return path.slice(start, end);
   }
   for (let i = path.length - 1; i >= start; --i) {
@@ -894,8 +874,7 @@ export function basename(path: string, suffix?: string): string {
     }
   }
 
-  if (end === -1)
-    return '';
+  if (end === -1) return "";
   return path.slice(start, end);
 }
 
@@ -904,7 +883,7 @@ export function basename(path: string, suffix?: string): string {
  * @returns {string}
  */
 export function extname(path: string): string {
-  validateString(path, 'path');
+  validateString(path, "path");
   let start = 0;
   let startDot = -1;
   let startPart = 0;
@@ -918,9 +897,11 @@ export function extname(path: string): string {
   // path separator as an extra separator at the end of the path that can be
   // disregarded
 
-  if (path.length >= 2 &&
-      path.charCodeAt(1) === CHAR_COLON &&
-      isWindowsDeviceRoot(path.charCodeAt(0))) {
+  if (
+    path.length >= 2 &&
+    path.charCodeAt(1) === CHAR_COLON &&
+    isWindowsDeviceRoot(path.charCodeAt(0))
+  ) {
     start = startPart = 2;
   }
 
@@ -943,10 +924,8 @@ export function extname(path: string): string {
     }
     if (code === CHAR_DOT) {
       // If this is our first dot, mark it as the start of our extension
-      if (startDot === -1)
-        startDot = i;
-      else if (preDotState !== 1)
-        preDotState = 1;
+      if (startDot === -1) startDot = i;
+      else if (preDotState !== 1) preDotState = 1;
     } else if (startDot !== -1) {
       // We saw a non-dot and non-path separator before our dot, so we should
       // have a good chance at having a non-empty extension
@@ -954,28 +933,25 @@ export function extname(path: string): string {
     }
   }
 
-  if (startDot === -1 ||
-      end === -1 ||
-      // We saw a non-dot character immediately before the dot
-      preDotState === 0 ||
-      // The (right-most) trimmed path component is exactly '..'
-      (preDotState === 1 &&
-       startDot === end - 1 &&
-       startDot === startPart + 1)) {
-    return '';
+  if (
+    startDot === -1 ||
+    end === -1 ||
+    // We saw a non-dot character immediately before the dot
+    preDotState === 0 ||
+    // The (right-most) trimmed path component is exactly '..'
+    (preDotState === 1 && startDot === end - 1 && startDot === startPart + 1)
+  ) {
+    return "";
   }
   return path.slice(startDot, end);
 }
 
-
-
 /** Upstream `lib/path.js:1064`. */
 export function parse(path: string): ParsedPath {
-  validateString(path, 'path');
+  validateString(path, "path");
 
   const ret: ParsedPath = { root: "", dir: "", base: "", ext: "", name: "" };
-  if (path.length === 0)
-    return ret;
+  if (path.length === 0) return ret;
 
   const len = path.length;
   let rootEnd = 0;
@@ -1001,24 +977,21 @@ export function parse(path: string): ParsedPath {
       let j = 2;
       let last = j;
       // Match 1 or more non-path separators
-      while (j < len &&
-             !isPathSeparator(path.charCodeAt(j))) {
+      while (j < len && !isPathSeparator(path.charCodeAt(j))) {
         j++;
       }
       if (j < len && j !== last) {
         // Matched!
         last = j;
         // Match 1 or more path separators
-        while (j < len &&
-               isPathSeparator(path.charCodeAt(j))) {
+        while (j < len && isPathSeparator(path.charCodeAt(j))) {
           j++;
         }
         if (j < len && j !== last) {
           // Matched!
           last = j;
           // Match 1 or more non-path separators
-          while (j < len &&
-                 !isPathSeparator(path.charCodeAt(j))) {
+          while (j < len && !isPathSeparator(path.charCodeAt(j))) {
             j++;
           }
           if (j === len) {
@@ -1031,8 +1004,7 @@ export function parse(path: string): ParsedPath {
         }
       }
     }
-  } else if (isWindowsDeviceRoot(code) &&
-             path.charCodeAt(1) === CHAR_COLON) {
+  } else if (isWindowsDeviceRoot(code) && path.charCodeAt(1) === CHAR_COLON) {
     // Possible device root
     if (len <= 2) {
       // `path` contains just a drive root, exit early to avoid
@@ -1051,8 +1023,7 @@ export function parse(path: string): ParsedPath {
       rootEnd = 3;
     }
   }
-  if (rootEnd > 0)
-    ret.root = path.slice(0, rootEnd);
+  if (rootEnd > 0) ret.root = path.slice(0, rootEnd);
 
   let startDot = -1;
   let startPart = rootEnd;
@@ -1084,10 +1055,8 @@ export function parse(path: string): ParsedPath {
     }
     if (code === CHAR_DOT) {
       // If this is our first dot, mark it as the start of our extension
-      if (startDot === -1)
-        startDot = i;
-      else if (preDotState !== 1)
-        preDotState = 1;
+      if (startDot === -1) startDot = i;
+      else if (preDotState !== 1) preDotState = 1;
     } else if (startDot !== -1) {
       // We saw a non-dot and non-path separator before our dot, so we should
       // have a good chance at having a non-empty extension
@@ -1096,13 +1065,13 @@ export function parse(path: string): ParsedPath {
   }
 
   if (end !== -1) {
-    if (startDot === -1 ||
-        // We saw a non-dot character immediately before the dot
-        preDotState === 0 ||
-        // The (right-most) trimmed path component is exactly '..'
-        (preDotState === 1 &&
-         startDot === end - 1 &&
-         startDot === startPart + 1)) {
+    if (
+      startDot === -1 ||
+      // We saw a non-dot character immediately before the dot
+      preDotState === 0 ||
+      // The (right-most) trimmed path component is exactly '..'
+      (preDotState === 1 && startDot === end - 1 && startDot === startPart + 1)
+    ) {
       ret.base = ret.name = path.slice(startPart, end);
     } else {
       ret.name = path.slice(startPart, startDot);
@@ -1114,10 +1083,8 @@ export function parse(path: string): ParsedPath {
   // If the directory is the root, use the entire root as the `dir` including
   // the trailing slash if any (`C:\abc` -> `C:\`). Otherwise, strip out the
   // trailing slash (`C:\abc\def` -> `C:\abc`).
-  if (startPart > 0 && startPart !== rootEnd)
-    ret.dir = path.slice(0, startPart - 1);
-  else
-    ret.dir = ret.root;
+  if (startPart > 0 && startPart !== rootEnd) ret.dir = path.slice(0, startPart - 1);
+  else ret.dir = ret.root;
 
   return ret;
 }

@@ -11,10 +11,7 @@
 // program that reassigns `String.prototype.slice`; a compiled program has no
 // such prototype to reassign, so the indirection buys nothing here.
 
-import {
-  CHAR_DOT,
-  CHAR_FORWARD_SLASH,
-} from "../../internal/constants.ts";
+import { CHAR_DOT, CHAR_FORWARD_SLASH } from "../../internal/constants.ts";
 import { validateString } from "../../internal/validators.ts";
 import {
   format as formatWithSep,
@@ -206,6 +203,9 @@ export function relative(from: string, to: string): string {
 export function toNamespacedPath(path: string): string {
   return path;
 }
+
+/** Pinned Node's docs-deprecated DEP0080 alias. */
+export const _makeLong = toNamespacedPath;
 
 /** Upstream `lib/path.js:1441`. */
 export function dirname(path: string): string {

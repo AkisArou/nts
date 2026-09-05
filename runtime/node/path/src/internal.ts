@@ -117,8 +117,7 @@ function formatExt(ext: string | undefined): string {
 export function format(sep: string, pathObject: FormatInputPathObject): string {
   validateObject(pathObject, "pathObject");
   const dir = pathObject.dir || pathObject.root;
-  const base =
-    pathObject.base || `${pathObject.name || ""}${formatExt(pathObject.ext)}`;
+  const base = pathObject.base || `${pathObject.name || ""}${formatExt(pathObject.ext)}`;
   if (!dir) {
     return base;
   }
