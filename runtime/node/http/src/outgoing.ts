@@ -728,9 +728,7 @@ export class OutgoingMessage extends EventEmitter {
     }
 
     if (this.#ended) {
-      const error = this.destroyed
-        ? new ERR_STREAM_DESTROYED("write")
-        : new ERR_STREAM_WRITE_AFTER_END();
+      const error = new ERR_STREAM_WRITE_AFTER_END();
       nextTick(() => {
         if (callback !== undefined) callback(error);
         if (!this.destroyed) this.emit("error", error);
