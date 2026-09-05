@@ -5,5 +5,8 @@ test-timers-timeout-promisified.js: language non-goal (§13); util.promisify.cus
 test-timers-interval-promisified.js: language non-goal (§13); util.promisify.custom is stored as a dynamic function property; supported direct promise behavior is covered by local/promises-direct.js
 test-timers-immediate-promisified.js: language non-goal (§13); util.promisify.custom is stored as a dynamic function property; supported direct promise behavior is covered by local/promises-direct.js
 test-timers-async-store-leak.js: cross-module integration; spawns uninjected child processes and inspects async_hooks/AsyncLocalStorage internals; direct timer callback and argument release is covered by local/cleanup-direct.js
+test-timers-nan-duration-warning.js: binary/process oracle; the parent only spawns fresh uninjected Node processes and asserts their warning output; direct NaN warning behavior is covered by test-timers-nan-duration-warning-promises.js
+test-timers-negative-duration-warning.js: binary/process oracle; the parent only spawns fresh uninjected Node processes and asserts their warning output; direct negative-duration warning behavior is covered by test-timers-negative-duration-warning-emit-once-per-process.js
 test-timers-immediate-queue-throw.js: cross-module integration; node:domain captures one asynchronous throw; queue continuation after a throw is covered by test-timers-uncaught-exception.js
 test-timers-reset-process-domain-on-throw.js: cross-module integration; asserts node:domain state, which is outside the supported profile
+test-timers-socket-timeout-removes-other-socket-unref-timer.js: cross-module integration; exercises the uninjected built-in net.Socket#setTimeout implementation and never calls the timers module or installed timer globals
