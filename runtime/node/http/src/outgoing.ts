@@ -133,6 +133,7 @@ const TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
  */
 const STRICT_HEADER_CHAR = /[^\t\x20-\x7e\x80-\xff]/;
 const LENIENT_HEADER_CHAR = /[\x00\x0a\x0d]|[^\x00-\xff]/;
+const CHUNKED_TOKEN = /(?:^|\W)chunked(?:$|\W)/i;
 const RESPONSE_VERSION = "HTTP/1.1";
 
 function stringIsAscii(value: string): boolean {
@@ -140,6 +141,17 @@ function stringIsAscii(value: string): boolean {
     if (value.charCodeAt(index) > 0x7f) return false;
   }
   return true;
+}
+
+function headerContainsChunked(value: string | string[] | undefined): boolean {
+  if (value === undefined) return false;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (CHUNKED_TOKEN.test(entry)) return true;
+    }
+    return false;
+  }
+  return CHUNKED_TOKEN.test(value);
 }
 
 export type OutgoingHeaderValue = string | number | readonly string[];
@@ -1111,11 +1123,12 @@ export class ServerResponse extends OutgoingMessage {
   constructor(request: IncomingMessage, options: OutgoingMessageOptions = {}) {
     super(options);
     this.req = request;
-    // HTTP/1.0 has no chunked encoding, so a response with no declared length
-    // has to be delimited by closing the connection.
+    // HTTP/1.0 did not define chunked encoding, but Node may use it when the
+    // peer explicitly advertises support through TE. Without that framing, a
+    // response body has to be delimited by closing the connection.
     this.useChunkedEncodingByDefault =
-      request.httpVersionMajor > 1 ||
-      (request.httpVersionMajor === 1 && request.httpVersionMinor >= 1);
+      (request.httpVersionMajor >= 1 && request.httpVersionMinor >= 1) ||
+      headerContainsChunked(request.headers.te);
     this.hasBody = request.method !== "HEAD";
     this.sendDate = true;
   }
