@@ -13,37 +13,51 @@
 // not a default. That matters for the test order: `Circle` and `Square` both
 // extend `Shape`, so asking about `Shape` first would swallow all three.
 //
-// The fields are `int` because the source stays inside int32, and each subclass
-// adds its own on top of the base's, which is what `Layout.base` records and
-// what makes `super_class` real here rather than a prefix coincidence.
+// **The fields are `double`, and that is checked rather than assumed.** `javap`
+// on what this backend emits says `nts.gen.Shape.size`, `Circle.radius` and
+// `Square.side` are all `D`: the source never masks, so specialization has
+// nothing to prove an i32 from and the fields stay f64. An `int` here would
+// hand the reference a narrowing this compiler did not make, which is the
+// "no field narrower than the f64 a TypeScript `number` is" rule -- and it
+// would do it in the direction that makes *us* look worse, so it was not going
+// to be caught by anyone checking for flattery.
+//
+// The sibling case `upcast` masks with `| 0` and `& 0xffff`, specialization
+// takes it, and `javap` there says `I`. Its reference uses `int` for the same
+// reason this one does not. The rule is not "always f64"; it is "whatever the
+// subject actually carries", and the only way to know is to look.
+//
+// Each subclass adds its own field on top of the base's, which is what
+// `Layout.base` records and what makes `super_class` real here rather than a
+// prefix coincidence.
 final class Ref {
     static class Shape {
-        int size;
+        double size;
 
-        Shape(int size) {
+        Shape(double size) {
             this.size = size;
         }
     }
 
     static final class Circle extends Shape {
-        int radius;
+        double radius;
 
-        Circle(int size) {
+        Circle(double size) {
             super(size);
             this.radius = size + 1;
         }
     }
 
     static final class Square extends Shape {
-        int side;
+        double side;
 
-        Square(int size) {
+        Square(double size) {
             super(size);
             this.side = size + 2;
         }
     }
 
-    private static Shape shape(int i) {
+    private static Shape shape(double i) {
         if (i % 3 == 0) {
             return new Circle(i);
         }

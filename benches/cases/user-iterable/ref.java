@@ -1,35 +1,53 @@
-// What a Java programmer writes for a user-defined iterable: `Iterable` and
-// `Iterator`, driven by a for-each.
+// What a Java programmer writes for a user-defined iterable, under the two
+// rules a reference here has to keep -- and this file broke both, in opposite
+// directions, before the numbers were in.
 //
-// **The two protocols are not the same shape, and the difference is the row.**
-// JavaScript's iterator returns a fresh `{ value, done }` object per step, so
-// the TypeScript allocates once per element by construction. Java's returns the
-// value and answers `hasNext()` separately, so it allocates nothing per step --
-// except that `Iterator<Integer>` boxes, and `Integer.valueOf` caches only
-// -128..127 while these values run 0..255. So roughly half the steps allocate
-// here and all of them allocate there.
+// **No `Iterator<T>` where the subject boxes nothing.** The first version used
+// `Iterator<Integer>`, on the argument that `for (int v : series)` is what a
+// person writes and that wanting a for-each is what commits you to `Iterable`
+// and its box. That is true and it is not the test: `bytes/op` says this lane
+// allocates **zero** per step, so a boxing reference is measuring `Integer`
+// against our codegen. A hand-rolled primitive iterator is the honest analogue,
+// and it costs the reference its for-each loop, which is a fair price for
+// comparing the same work.
 //
-// A reference using a hand-rolled `interface IntSteps { boolean hasNext(); int
-// next(); }` would avoid the boxing entirely and would also stop being what a
-// person writes -- `for (int v : series)` does not exist for a custom type, and
-// the moment you want a for-each you have taken `Iterable<T>` and its box. The
-// idiomatic version is the honest one, and the comment is here so the ratio is
-// not read as a claim about iteration protocols in the abstract.
+// **No field narrower than the f64 a TypeScript `number` is.** The first
+// version gave `Steps` `int at` and `int seed`. TypeScript says `number`, and
+// field specialization does not narrow it, so this lane carries doubles and
+// calls `NtsRuntime.toInt` twice per step for the two `| 0`s. A reference with
+// `int` fields gets the narrowing for free and is measuring a proof this
+// compiler has not made rather than the code it emitted.
 //
-// The seed sequence is identical to the TypeScript's. `hasNext()` is `at > 0`,
-// so `next()` yields exactly `rounds` values for `at` running from `rounds - 1`
-// down to 0 -- the same values, in the same order, as the for-of loop that stops
-// when `done` first goes true. The TypeScript makes one further `next()` call to
-// observe `done`, which advances its seed once more; that value is never added
-// and the checksum confirms the two totals agree.
-import java.util.Iterator;
-
+// The two corrections pull opposite ways -- dropping the box makes the
+// reference faster, widening the fields makes it slower -- and both are
+// required, which is the point of having the rules written down rather than
+// deciding per row.
+//
+// **`(int)` on a double is not `| 0`, and here the difference is live.** A cast
+// saturates where `ToInt32` wraps, and `seed` is not bounded: only the value
+// *returned* is masked to 255, while the field itself is a full int32, so
+// `seed * 31` reaches 2^36 and wraps every step. `(int) (long) x` truncates
+// modulo 2^32 for anything inside `long`, which is `ToInt32` on this range.
+//
+// The first draft of this file asserted the two agreed "because `seed` is
+// masked" -- reading the mask on the return as though it were on the field --
+// and the checksum caught it immediately. Which is the argument for the f64
+// field rule doing more than fairness: with `int` fields the wrap is the
+// hardware's and the mistake is unavailable, so the reference cannot show you
+// that this compiler is calling `NtsRuntime.toInt` twice a step to get it.
 final class Ref {
-    static final class Steps implements Iterator<Integer> {
-        int at;
-        int seed;
+    // The primitive analogue of the JS iterator protocol: a value and a
+    // question, no wrapper object per step and no box.
+    interface Steps {
+        boolean hasNext();
+        double next();
+    }
 
-        Steps(int at) {
+    static final class Counting implements Steps {
+        double at;
+        double seed;
+
+        Counting(double at) {
             this.at = at;
             this.seed = 1;
         }
@@ -40,38 +58,37 @@ final class Ref {
         }
 
         @Override
-        public Integer next() {
+        public double next() {
             at = at - 1;
-            seed = seed * 31 + at;
-            return seed & 255;
+            seed = (int) (long) (seed * 31 + at);
+            return (int) (long) seed & 255;
         }
     }
 
-    static final class Series implements Iterable<Integer> {
-        final int from;
+    static final class Series {
+        final double from;
 
-        Series(int from) {
+        Series(double from) {
             this.from = from;
         }
 
-        @Override
-        public Iterator<Integer> iterator() {
-            return new Steps(from);
+        Steps iterator() {
+            return new Counting(from);
         }
     }
 
     // `volatile` so the trip count is not a compile-time constant.
     private static volatile double rounds = 100000;
 
-    static int run(int rounds) {
-        int total = 0;
-        for (int v : new Series(rounds)) {
-            total = total + v;
+    static double run(double rounds) {
+        double total = 0;
+        for (Steps it = new Series(rounds).iterator(); it.hasNext(); ) {
+            total = (int) (long) (total + it.next());
         }
         return total;
     }
 
     static double benchRun() {
-        return run((int) rounds);
+        return run(rounds);
     }
 }
