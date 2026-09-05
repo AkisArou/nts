@@ -27,6 +27,7 @@ import {
 import type { ParserError } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { parseUniqueHeadersOption, ServerResponse } from "./outgoing.ts";
+import type { HTTPDuplex } from "./outgoing.ts";
 import { clearInterval, setInterval } from "../../timers/src/main.ts";
 import type { Timeout } from "../../timers/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
@@ -75,7 +76,7 @@ function upgradeWhenObserved(this: Server, _request: IncomingMessage): boolean {
 }
 
 interface ConnectionDeadline {
-  socket: Socket;
+  socket: HTTPDuplex;
   headersStartedAt: number;
   requestStartedAt: number;
   requestStarted: boolean;
@@ -145,7 +146,7 @@ export class Server extends NetServer {
    * only stopped accepting would wait for clients that may never speak again
    * -- which reads as a process that will not exit.
    */
-  #connections = new Set<Socket>();
+  #connections = new Set<HTTPDuplex>();
 
   /**
    * Connections that have finished a response and are waiting for the next
@@ -157,8 +158,8 @@ export class Server extends NetServer {
    * Idle means the server has done what was asked and the client has not asked
    * again, which is the state a graceful shutdown is allowed to end.
    */
-  #idle = new Set<Socket>();
-  #deadlines = new Map<Socket, ConnectionDeadline>();
+  #idle = new Set<HTTPDuplex>();
+  #deadlines = new Map<HTTPDuplex, ConnectionDeadline>();
 
   #maxHeaderSize: number;
   #IncomingMessage: typeof IncomingMessage;
@@ -260,7 +261,7 @@ export class Server extends NetServer {
     this.#lenientParsing = httpValidation === "insecure" || insecureHTTPParser === true;
 
     if (handler) this.on("request", handler);
-    this.on("connection", (socket: Socket) => this.#serve(socket));
+    this.on("connection", (socket: HTTPDuplex) => this.#serve(socket));
     this.on("listening", () => this.#startConnectionsChecker());
   }
 
@@ -354,7 +355,7 @@ export class Server extends NetServer {
     deadline.requestComplete = false;
   }
 
-  #serve(socket: Socket): void {
+  #serve(socket: HTTPDuplex): void {
     this.#connections.add(socket);
 
     const now = Date.now();
@@ -376,7 +377,7 @@ export class Server extends NetServer {
     parser.initialize(
       REQUEST,
       this.#maxHeaderSize,
-      socket.asyncId(),
+      socket.asyncId?.(),
       this.#lenientHeaderValues,
       this.#lenientParsing,
     );
@@ -427,7 +428,7 @@ export class Server extends NetServer {
       if (!requestHandled && !responseHandled && !serverHandled) socket.destroy();
     };
 
-    if (this.timeout > 0) socket.setTimeout(this.timeout);
+    if (this.timeout > 0) socket.setTimeout?.(this.timeout);
     socket.on("timeout", onSocketTimeout);
 
     const advanceResponseQueue = (): void => {
@@ -457,7 +458,7 @@ export class Server extends NetServer {
         Number.isFinite(this.keepAliveTimeoutBuffer) && this.keepAliveTimeoutBuffer >= 0
           ? this.keepAliveTimeoutBuffer
           : 1000;
-      if (keepAliveTimeout > 0) {
+      if (keepAliveTimeout > 0 && socket.setTimeout !== undefined) {
         socket.setTimeout(keepAliveTimeout + keepAliveTimeoutBuffer);
         keepAliveTimeoutSet = true;
       }
@@ -468,7 +469,7 @@ export class Server extends NetServer {
       if (deadline.requestComplete) this.#awaitRequest(deadline);
       socket.resume();
       this.#idle.add(socket);
-      socket.unref();
+      socket.unref?.();
     };
 
     const ignoreSocketError = (_error: unknown): void => {};
@@ -567,7 +568,7 @@ export class Server extends NetServer {
         throw new Error("request parser produced response metadata");
       }
       if (keepAliveTimeoutSet) {
-        socket.setTimeout(this.timeout);
+        socket.setTimeout?.(this.timeout);
         keepAliveTimeoutSet = false;
       }
       deadline.headersComplete = true;
@@ -613,7 +614,7 @@ export class Server extends NetServer {
 
       // A request has arrived, so this connection matters again until it is
       // answered, and it is no longer idle.
-      socket.ref();
+      socket.ref?.();
       this.#idle.delete(socket);
 
       const finished = response;
@@ -763,7 +764,7 @@ export class Server extends NetServer {
    * message that was never sent.
    */
   #afterResponse(
-    socket: Socket,
+    socket: HTTPDuplex,
     parser: HTTPParser,
     message: IncomingMessage,
     response: ServerResponse,

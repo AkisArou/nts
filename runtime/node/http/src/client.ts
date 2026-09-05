@@ -13,7 +13,6 @@
 // ends rather than only when a message does.
 
 import { Buffer } from "../../buffer/src/main.ts";
-import { Socket } from "../../net/src/main.ts";
 import type { LookupFunction } from "../../net/src/main.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
 import { addAbortSignal } from "../../stream/src/add-abort-signal.ts";
@@ -32,7 +31,7 @@ import { validateBoolean, validateInteger, validateOneOf } from "../../internal/
 import { acquireHTTPParser, HTTPParseError, RESPONSE } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { checkIsHttpToken, OutgoingMessage, parseUniqueHeadersOption } from "./outgoing.ts";
-import type { OutgoingHeaders, OutgoingHeaderValue } from "./outgoing.ts";
+import type { HTTPDuplex, OutgoingHeaders, OutgoingHeaderValue } from "./outgoing.ts";
 import { Agent, globalAgent } from "./agent.ts";
 import type { AgentConnectionOptions } from "./agent.ts";
 
@@ -62,9 +61,9 @@ export interface RequestOptions {
   insecureHTTPParser?: boolean | undefined;
   createConnection?:
     | ((
-        options: RequestOptions,
-        callback: (error: unknown, socket?: Socket) => void,
-      ) => Socket | undefined)
+        options: AgentConnectionOptions,
+        callback: (error: unknown, socket?: HTTPDuplex) => void,
+      ) => HTTPDuplex | undefined)
     | undefined;
   lookup?: LookupFunction | undefined;
   localAddress?: string | undefined;
@@ -167,7 +166,7 @@ function applyRequestHeaderArray(
   return pairs;
 }
 
-export class ClientRequest extends OutgoingMessage {
+export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
   method: string;
   host: string;
   protocol: string;
@@ -367,7 +366,7 @@ export class ClientRequest extends OutgoingMessage {
         nextTick(() => this.onSocket(socket));
       } else {
         let completed = false;
-        const onCreated = (error: unknown, socket?: Socket): void => {
+        const onCreated = (error: unknown, socket?: HTTPDuplex): void => {
           if (completed) return;
           completed = true;
           if (error !== null && error !== undefined) {
@@ -378,12 +377,14 @@ export class ClientRequest extends OutgoingMessage {
             this.onSocket(socket);
           }
         };
+        let socket: HTTPDuplex | undefined;
         try {
-          const socket = createConnection(opts, onCreated);
-          if (socket !== undefined) onCreated(null, socket);
+          socket = createConnection(connectionOptions, onCreated);
         } catch (error) {
           onCreated(error);
+          return;
         }
+        if (socket !== undefined) onCreated(null, socket);
       }
     }
 
@@ -399,7 +400,7 @@ export class ClientRequest extends OutgoingMessage {
   }
 
   /** Given a connection by the agent, or made one. Everything starts here. */
-  onSocket(socket: Socket | null, error?: unknown): void {
+  onSocket(socket: HTTPDuplex | null, error?: unknown): void {
     let onEarlyError: ((error: unknown) => void) | undefined;
     if (socket !== null && error === undefined) {
       onEarlyError = (socketError: unknown): void => this.#fail(socketError, true);
@@ -409,7 +410,7 @@ export class ClientRequest extends OutgoingMessage {
   }
 
   #activateSocket(
-    socket: Socket | null,
+    socket: HTTPDuplex | null,
     error: unknown,
     onEarlyError: ((error: unknown) => void) | undefined,
   ): void {
@@ -723,9 +724,9 @@ export class ClientRequest extends OutgoingMessage {
     this.#pendingSocketTimeout = undefined;
     if (pendingSocketTimeout !== undefined) {
       if (socket.connecting) {
-        socket.once("connect", () => socket.setTimeout(pendingSocketTimeout));
+        socket.once("connect", () => socket.setTimeout?.(pendingSocketTimeout));
       } else {
-        socket.setTimeout(pendingSocketTimeout);
+        socket.setTimeout?.(pendingSocketTimeout);
       }
     }
 
@@ -740,7 +741,7 @@ export class ClientRequest extends OutgoingMessage {
     this.emit("socket", socket);
   }
 
-  #finishResponse(socket: Socket, response: IncomingMessage): void {
+  #finishResponse(socket: HTTPDuplex, response: IncomingMessage): void {
     if (!this.writableFinished) {
       // A server may answer before it has read the request body. Such a socket
       // is still carrying outbound bytes and cannot be handed to another
@@ -768,7 +769,7 @@ export class ClientRequest extends OutgoingMessage {
     );
   }
 
-  #releaseSocket(socket: Socket, reusable: boolean, keepAliveHint?: string): void {
+  #releaseSocket(socket: HTTPDuplex, reusable: boolean, keepAliveHint?: string): void {
     const agent = this.agent;
     if (agent instanceof Agent) {
       agent.release(
@@ -779,11 +780,13 @@ export class ClientRequest extends OutgoingMessage {
       );
       return;
     }
-    if (agent !== null && reusable) {
+    if (reusable) {
+      // A custom connection has no built-in pool, but its owner may reuse it
+      // by observing Node's public `free` event. This is also how two requests
+      // can deliberately share the same generic Duplex.
       socket.emit("free");
       return;
     }
-    // A custom connection without an agent has no pool to own an idle socket.
     socket.destroy();
   }
 
@@ -837,8 +840,11 @@ export class ClientRequest extends OutgoingMessage {
       this.#pendingSocketTimeout = duration;
     } else {
       if (this.timeoutCb !== null) socket.removeListener("timeout", this.timeoutCb);
-      if (socket.connecting === true) socket.once("connect", () => socket.setTimeout(duration));
-      else socket.setTimeout(duration);
+      if (socket.connecting === true) {
+        socket.once("connect", () => socket.setTimeout?.(duration));
+      } else {
+        socket.setTimeout?.(duration);
+      }
       this.timeoutCb = () => {
         this.emit("timeout");
       };
@@ -853,11 +859,11 @@ export class ClientRequest extends OutgoingMessage {
 
   /** Disable Nagle on the underlying socket once there is one. */
   setNoDelay(enable = true): void {
-    this.socket?.setNoDelay(enable);
+    this.socket?.setNoDelay?.(enable);
   }
 
   setSocketKeepAlive(enable = true, initialDelay = 0): void {
-    this.socket?.setKeepAlive(enable, initialDelay);
+    this.socket?.setKeepAlive?.(enable, initialDelay);
   }
 }
 

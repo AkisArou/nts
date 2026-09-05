@@ -21,6 +21,7 @@ import type { ConnectOptions } from "../../net/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
 import { AsyncResource } from "../../async_hooks/src/resource.ts";
 import { validateNumberRange, validateOneOf } from "../../internal/validators.ts";
+import type { HTTPDuplex } from "./outgoing.ts";
 
 export interface AgentConnectionOptions extends ConnectOptions {
   socketPath?: string | undefined;
@@ -30,10 +31,10 @@ interface SocketReceiver {
   readonly destroyed: boolean;
   reusedSocket: boolean;
   timeout?: number | undefined;
-  onSocket(socket: Socket | null, error?: unknown): void;
+  onSocket(socket: HTTPDuplex | null, error?: unknown): void;
 }
 
-type CreateSocketCallback = (error: unknown | null, socket?: Socket) => void;
+type CreateSocketCallback = (error: unknown | null, socket?: HTTPDuplex) => void;
 
 export interface AgentOptions extends AgentConnectionOptions {
   /** Port used when a request through this agent does not name one. */
@@ -81,22 +82,22 @@ export class Agent extends EventEmitter {
   options: AgentOptions;
 
   /** In use, by `host:port`. */
-  sockets: Record<string, Socket[]> = {};
+  sockets: Record<string, HTTPDuplex[]> = {};
   /** Idle and reusable, by the same key. */
-  freeSockets: Record<string, Socket[]> = {};
+  freeSockets: Record<string, HTTPDuplex[]> = {};
   /** Waiting for a socket because the host is at `maxSockets`. */
   requests: Record<string, Pending[]> = {};
 
   /** The error guard installed only while a socket is idle in the pool. */
-  #freeSocketErrors = new Map<Socket, SocketErrorListener>();
+  #freeSocketErrors = new Map<HTTPDuplex, SocketErrorListener>();
   /** Every live socket created by this agent, independent of pool state. */
-  #ownedSockets = new Set<Socket>();
+  #ownedSockets = new Set<HTTPDuplex>();
   /** Connection identity retained while a socket moves between pool states. */
-  #socketOptions = new Map<Socket, AgentConnectionOptions>();
+  #socketOptions = new Map<HTTPDuplex, AgentConnectionOptions>();
   /** Server keep-alive hints waiting to be applied as a socket turns idle. */
-  #keepAliveHints = new Map<Socket, string>();
+  #keepAliveHints = new Map<HTTPDuplex, string>();
   /** Pool lifecycle listeners, retained so an upgraded socket can detach. */
-  #socketListeners = new Map<Socket, ManagedSocketListeners>();
+  #socketListeners = new Map<HTTPDuplex, ManagedSocketListeners>();
 
   constructor(options: AgentOptions = {}) {
     super();
@@ -141,7 +142,7 @@ export class Agent extends EventEmitter {
     return merged;
   }
 
-  createConnection(options: AgentConnectionOptions, callback?: CreateSocketCallback): Socket {
+  createConnection(options: AgentConnectionOptions, callback?: CreateSocketCallback): HTTPDuplex {
     const socket = netConnect(options);
     if (callback !== undefined) socket.once("connect", () => callback(null, socket));
     return socket;
@@ -180,12 +181,17 @@ export class Agent extends EventEmitter {
       }
     };
 
+    let socket: HTTPDuplex | undefined;
     try {
-      const socket: Socket | undefined = this.createConnection(connectionOptions, onCreated);
-      if (socket !== undefined) onCreated(null, socket);
+      socket = this.createConnection(connectionOptions, onCreated);
     } catch (error) {
       onCreated(error);
+      return;
     }
+    // Completion belongs outside the construction catch. If the consumer's
+    // callback rejects an otherwise valid transport, that exception is not a
+    // second connection error and must never be swallowed here.
+    if (socket !== undefined) onCreated(null, socket);
   }
 
   /** Give `request` a socket, now or when one comes free. */
@@ -264,11 +270,11 @@ export class Agent extends EventEmitter {
    * otherwise closed. A socket that is kept must be *idle* -- nothing left
    * unread -- which the caller decides, not this.
    */
-  keepSocketAlive(socket: Socket): boolean {
-    socket.setKeepAlive(true, this.keepAliveMsecs);
+  keepSocketAlive(socket: HTTPDuplex): boolean {
+    socket.setKeepAlive?.(true, this.keepAliveMsecs);
     // Unrefed while idle: a pooled connection should not be the reason a
     // program cannot exit.
-    socket.unref();
+    socket.unref?.();
 
     let timeout = this.options.timeout ?? 0;
     const keepAlive = this.#keepAliveHints.get(socket);
@@ -281,23 +287,23 @@ export class Agent extends EventEmitter {
         if (safeTimeout < timeout) timeout = safeTimeout;
       }
     }
-    if (socket.timeout !== timeout) socket.setTimeout(timeout);
+    if (socket.setTimeout !== undefined && socket.timeout !== timeout) socket.setTimeout(timeout);
     return true;
   }
 
-  reuseSocket(socket: Socket, request: SocketReceiver): void {
+  reuseSocket(socket: HTTPDuplex, request: SocketReceiver): void {
     this.#removeFreeSocketError(socket);
     if (socket instanceof Socket) socket.setIdleReadGuard(false);
-    socket.ref();
+    socket.ref?.();
     request.reusedSocket = true;
   }
 
-  release(name: string, socket: Socket, reusable: boolean, keepAliveHint?: string): void {
+  release(name: string, socket: HTTPDuplex, reusable: boolean, keepAliveHint?: string): void {
     if (keepAliveHint !== undefined) this.#keepAliveHints.set(socket, keepAliveHint);
     this.#release(name, socket, reusable);
   }
 
-  #release(name: string, socket: Socket, reusable: boolean): void {
+  #release(name: string, socket: HTTPDuplex, reusable: boolean): void {
     if (!this.#owns(socket)) return;
     const inUse = this.sockets[name];
     if (inUse) {
@@ -387,7 +393,7 @@ export class Agent extends EventEmitter {
 
   #assignCreatedSocket(
     name: string,
-    socket: Socket,
+    socket: HTTPDuplex,
     request: SocketReceiver,
     options: AgentConnectionOptions,
   ): void {
@@ -395,7 +401,7 @@ export class Agent extends EventEmitter {
     this.#socketOptions.set(socket, options);
     this.totalSocketCount++;
     (this.sockets[name] ??= []).push(socket);
-    socket.setTimeout(request.timeout || this.options.timeout || 0);
+    socket.setTimeout?.(request.timeout || this.options.timeout || 0);
 
     const listeners: ManagedSocketListeners = {
       close: () => this.#socketClosed(name, socket),
@@ -418,7 +424,7 @@ export class Agent extends EventEmitter {
     });
   }
 
-  #forgetSocket(name: string, socket: Socket): boolean {
+  #forgetSocket(name: string, socket: HTTPDuplex): boolean {
     this.#removeFromPool(this.sockets, name, socket);
     this.#removeFromPool(this.freeSockets, name, socket);
     this.#removeFreeSocketError(socket);
@@ -440,11 +446,11 @@ export class Agent extends EventEmitter {
     return true;
   }
 
-  #owns(socket: Socket): boolean {
+  #owns(socket: HTTPDuplex): boolean {
     return this.#ownedSockets.has(socket);
   }
 
-  #removeFromPool(pool: Record<string, Socket[]>, name: string, socket: Socket): void {
+  #removeFromPool(pool: Record<string, HTTPDuplex[]>, name: string, socket: HTTPDuplex): void {
     const sockets = pool[name];
     if (sockets === undefined) return;
     const index = sockets.indexOf(socket);
@@ -452,7 +458,7 @@ export class Agent extends EventEmitter {
     if (sockets.length === 0) delete pool[name];
   }
 
-  #installFreeSocketError(socket: Socket): void {
+  #installFreeSocketError(socket: HTTPDuplex): void {
     // This callback is already handling the emitted error. Destroying with
     // that same error would schedule a second `error` after this once-listener
     // has removed itself, turning an idle reset into an unhandled exception.
@@ -461,14 +467,14 @@ export class Agent extends EventEmitter {
     socket.once("error", onError);
   }
 
-  #removeFreeSocketError(socket: Socket): void {
+  #removeFreeSocketError(socket: HTTPDuplex): void {
     const onError = this.#freeSocketErrors.get(socket);
     if (onError === undefined) return;
     this.#freeSocketErrors.delete(socket);
     socket.removeListener("error", onError);
   }
 
-  #emitFree(socket: Socket): void {
+  #emitFree(socket: HTTPDuplex): void {
     socket.emit("free");
     this.emit("free", socket, this.#socketOptions.get(socket));
   }
@@ -481,10 +487,10 @@ export class Agent extends EventEmitter {
   }
 
   /** Restore a request-specific timeout after an idle socket is reused. */
-  #setRequestSocketTimeout(socket: Socket, request: SocketReceiver): void {
+  #setRequestSocketTimeout(socket: HTTPDuplex, request: SocketReceiver): void {
     const agentTimeout = this.options.timeout ?? 0;
     if (request.timeout !== undefined && request.timeout !== agentTimeout) {
-      socket.setTimeout(request.timeout);
+      socket.setTimeout?.(request.timeout);
     }
   }
 
@@ -530,11 +536,11 @@ export class Agent extends EventEmitter {
     return undefined;
   }
 
-  #socketClosed(name: string, socket: Socket): void {
+  #socketClosed(name: string, socket: HTTPDuplex): void {
     if (this.#forgetSocket(name, socket)) this.#openPending(name);
   }
 
-  #socketRemoved(name: string, socket: Socket): void {
+  #socketRemoved(name: string, socket: HTTPDuplex): void {
     if (this.#forgetSocket(name, socket)) this.#openPending(name);
   }
 

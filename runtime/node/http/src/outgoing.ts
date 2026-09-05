@@ -70,9 +70,9 @@ export interface OutgoingSocket {
     event: string | symbol,
     listener: (...args: Args) => unknown,
   ): unknown;
-  setTimeout(msecs: number, callback?: () => void): unknown;
-  setNoDelay(enable?: boolean): unknown;
-  setKeepAlive(enable?: boolean, initialDelay?: number): unknown;
+  setTimeout?(msecs: number, callback?: () => void): unknown;
+  setNoDelay?(enable?: boolean): unknown;
+  setKeepAlive?(enable?: boolean, initialDelay?: number): unknown;
   cork?(): void;
   uncork?(): void;
   readonly connecting?: boolean;
@@ -81,6 +81,26 @@ export interface OutgoingSocket {
   readonly writableCorked?: number;
   readonly writableHighWaterMark?: number;
   readonly writableLength?: number;
+}
+
+/**
+ * A full-duplex transport returned by `Agent.createConnection()`.
+ *
+ * Node deliberately accepts a generic stream Duplex here, not only a TCP
+ * Socket. TCP tuning methods therefore remain optional while the readable,
+ * writable, and event capabilities HTTP itself needs are explicit.
+ */
+export interface HTTPDuplex extends OutgoingSocket {
+  readonly destroyed: boolean;
+  readonly writableLength: number;
+  readableFlowing: boolean | null;
+  emit<Args extends unknown[]>(event: string | symbol, ...args: Args): boolean;
+  pause(): unknown;
+  resume(): unknown;
+  ref?(): unknown;
+  unref?(): unknown;
+  asyncId?(): number;
+  timeout?: number | undefined;
 }
 
 type WriteCallback = (error?: unknown) => void;
@@ -241,8 +261,10 @@ function destroyOnRejection(this: OutgoingMessage, error: unknown): void {
   this.destroy(error);
 }
 
-export class OutgoingMessage extends EventEmitter {
-  #socket: OutgoingSocket | null = null;
+export class OutgoingMessage<
+  SocketType extends OutgoingSocket = OutgoingSocket,
+> extends EventEmitter {
+  #socket: SocketType | null = null;
   #lenientHeaderValues = false;
   /** Fixed typed representation of node's private `kHighWaterMark` slot. */
   readonly _highWaterMark: number;
@@ -287,11 +309,11 @@ export class OutgoingMessage extends EventEmitter {
   #pending: PendingWrite[] = [];
   #pendingSize = 0;
 
-  get socket(): OutgoingSocket | null {
+  get socket(): SocketType | null {
     return this.#socket;
   }
 
-  set socket(value: OutgoingSocket | null) {
+  set socket(value: SocketType | null) {
     const previous = this.#socket;
     if (previous === value) return;
     if (previous !== null) {
@@ -318,7 +340,7 @@ export class OutgoingMessage extends EventEmitter {
     }
   }
 
-  #removeSocketLifecycle(socket: OutgoingSocket): void {
+  #removeSocketLifecycle(socket: SocketType): void {
     if (typeof socket.removeListener === "function") {
       socket.removeListener("drain", this.#onSocketDrain);
       socket.removeListener("close", this.#onSocketClose);
@@ -330,18 +352,18 @@ export class OutgoingMessage extends EventEmitter {
    * reference. Upgrade consumers receive that same socket, but from this
    * point its data, errors, and backpressure belong to the new protocol.
    */
-  protected _handoffSocket(socket: OutgoingSocket): void {
+  protected _handoffSocket(socket: SocketType): void {
     if (this.#socket !== socket) return;
     this.#removeSocketLifecycle(socket);
     for (let index = 0; index < this.#corked; index++) socket.uncork?.();
     this.#corked = 0;
   }
 
-  get connection(): OutgoingSocket | null {
+  get connection(): SocketType | null {
     return this.socket;
   }
 
-  set connection(value: OutgoingSocket | null) {
+  set connection(value: SocketType | null) {
     this.socket = value;
   }
 
@@ -962,9 +984,9 @@ export class OutgoingMessage extends EventEmitter {
     if (callback !== undefined) this.on("timeout", callback);
     const socket = this.socket;
     if (socket === null) {
-      this.once("socket", (connected: OutgoingSocket) => connected.setTimeout(msecs));
+      this.once("socket", (connected: SocketType) => connected.setTimeout?.(msecs));
     } else {
-      socket.setTimeout(msecs);
+      socket.setTimeout?.(msecs);
     }
     return this;
   }
