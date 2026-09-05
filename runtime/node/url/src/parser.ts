@@ -618,18 +618,6 @@ export type StateOverride =
   | "scheme" | "username" | "password" | "hostname" | "port"
   | "pathname" | "search" | "hash" | "host";
 
-const overrideStates: Record<StateOverride, State> = {
-  scheme: State.SchemeStart,
-  username: State.Authority,
-  password: State.Authority,
-  host: State.Host,
-  hostname: State.Host,
-  port: State.Port,
-  pathname: State.PathStart,
-  search: State.Query,
-  hash: State.Fragment,
-};
-
 function newRecord(): UrlRecord {
   return {
     scheme: "",
@@ -683,7 +671,32 @@ export function basicUrlParse(
   // Tabs and newlines are removed wherever they appear, in both cases.
   input = input.replace(TAB_OR_NEWLINE, "");
 
-  let state: State = isOverride ? overrideStates[stateOverride] : State.SchemeStart;
+  let state: State = State.SchemeStart;
+  switch (stateOverride) {
+    case "scheme":
+      state = State.SchemeStart;
+      break;
+    case "username":
+    case "password":
+      state = State.Authority;
+      break;
+    case "host":
+    case "hostname":
+      state = State.Host;
+      break;
+    case "port":
+      state = State.Port;
+      break;
+    case "pathname":
+      state = State.PathStart;
+      break;
+    case "search":
+      state = State.Query;
+      break;
+    case "hash":
+      state = State.Fragment;
+      break;
+  }
   let buffer = "";
   let atSignSeen = false;
   let insideBrackets = false;
