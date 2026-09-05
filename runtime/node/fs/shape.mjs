@@ -12,7 +12,6 @@ export function shape(exports) {
   delete module._realpathNative;
   delete module._realpathSyncNative;
   delete module._BigIntStats;
-  delete module._toUnixTimestamp;
   delete module._validateRmOptionsSync;
   delete module.flagsOf;
   return module;
