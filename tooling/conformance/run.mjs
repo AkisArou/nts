@@ -58,6 +58,7 @@ const verbose = argv.includes("--verbose");
  */
 const sabotage = argv.includes("--sabotage");
 const asJson = argv.includes("--json");
+const RESULT_PREFIX = "NTS_CONFORMANCE_RESULT ";
 
 if (!moduleName) {
   console.error(
@@ -248,16 +249,26 @@ for (const test of tests) {
         env: { ...process.env, NTS_CONFORMANCE_SABOTAGE: sabotage ? "1" : "" },
       },
     );
-    const line = out.trim().split("\n").filter((l) => l.startsWith("{")).pop();
-    result = line ? JSON.parse(line) : { kind: "fail", why: "no result from the child" };
+    const line = out
+      .trim()
+      .split("\n")
+      .filter((candidate) => candidate.startsWith(RESULT_PREFIX))
+      .pop();
+    result = line
+      ? JSON.parse(line.slice(RESULT_PREFIX.length))
+      : { kind: "fail", why: "no result from the child" };
   } catch (e) {
     // A non-zero exit *after* a result was reported means an exit handler
     // threw. Many of node's tests do their real assertion in
     // `process.on('exit')`, so this is a failure the child could not know
     // about when it printed.
-    const printed = (e.stdout ?? "").trim().split("\n").filter((l) => l.startsWith("{")).pop();
+    const printed = (e.stdout ?? "")
+      .trim()
+      .split("\n")
+      .filter((candidate) => candidate.startsWith(RESULT_PREFIX))
+      .pop();
     if (printed) {
-      const reported = JSON.parse(printed);
+      const reported = JSON.parse(printed.slice(RESULT_PREFIX.length));
       const why = (e.stderr ?? "").split("\n").find((l) => l.includes("Error") || l.includes("Assertion"));
       rows.push(
         reported.kind === "pass"

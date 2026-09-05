@@ -22,6 +22,12 @@ import fixtures from "./fixtures.mjs";
 import * as hijackstdio from "./hijackstdio.mjs";
 
 const [, , moduleName, file, addon] = process.argv;
+const RESULT_PREFIX = "NTS_CONFORMANCE_RESULT ";
+
+// Node launches each fixture as the program, so its private harness arguments
+// are not visible through `process.argv`. Leaving ours in positions 2–4 changes
+// tests that accept optional command-line inputs before the subject is reached.
+process.argv = [process.execPath, file];
 
 // Node's own scheduling, captured before anything can replace it.
 //
@@ -73,7 +79,7 @@ function report(result) {
   reported = true;
   // Bound at load: node's console tests replace `process.stdout.write`, and
   // the report must reach the parent whatever the test did to the stream.
-  const line = `${JSON.stringify(result)}\n`;
+  const line = `\n${RESULT_PREFIX}${JSON.stringify(result)}\n`;
   if (sabotaged && result.kind === "fail") {
     // A sabotaged test has served its only purpose as soon as it proves that
     // the empty module fails. It may have opened a child process or interval
