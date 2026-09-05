@@ -1,14 +1,14 @@
-# Tests that need V8's natives syntax (`%OptimizeFunctionOnNextCall`), which
-# requires `--allow-natives-syntax`. They exercise how V8 compiles node's own
-# fast paths, which is a question about V8 rather than about `node:buffer`.
+# Each exclusion names the semantic or implementation boundary it exercises.
+# The harness already supplies Node-only execution flags such as
+# `--allow-natives-syntax`; needing such a flag is not itself an exclusion.
 test-blob.js: language/runtime non-goals (typescript.md section 13); the broad file mixes supported bytes, slicing, conversion, and streaming with descriptor/symbol-hook inspection, arbitrary receivers, structured cloning and MessageChannel transfer; statically typed Blob behavior is retained in local/blob-static.js
 test-file.js: language/runtime non-goals (typescript.md section 13); the broad file mixes supported File data with prototype/descriptor inspection, Symbol.toPrimitive coercion, arbitrary receivers, and structured cloning; typed File inheritance and fields are retained in local/blob-static.js
 test-btoa-atob.js: language non-goal (typescript.md section 13); mixes typed base64 behavior with arbitrary object/Symbol.toPrimitive ToString hooks and observable identity with host-global function objects; typed string cases are retained in local/web-encoding-static.js
 test-blob-createobjecturl.js: language non-goal (typescript.md section 13); the functional registry test also requires `.constructor` class-object identity and arbitrary object-to-string conversion; typed create, resolve, copy, revoke, invalid-value, and UUID behavior is retained in local/object-url-static.js
 test-blob-file-backed.js: temporary cross-module implementation gap; fs.openAsBlob and a file-backed Blob source are absent, including immutable-stat verification, slicing, repeated reads, and lazy Web-stream delivery; the in-memory typed Blob is covered by local/blob-static.js
 test-blob-stream-gc.js: runtime implementation-detail test; requires exposed host GC, precise ArrayBuffer retention accounting, and V8's concurrent-sweeping flag rather than asserting observable Blob results
-test-buffer-isutf8-isascii-fast.js: needs --allow-natives-syntax (a V8 fast-path test)
-test-buffer-swap-fast.js: needs --allow-natives-syntax (a V8 fast-path test)
+test-buffer-isutf8-isascii-fast.js: implementation-specific V8 optimization-tier test; uses eval with native optimization intrinsics and optional debug-binding fast-call counters to inspect how V8 compiles Node's built-ins rather than asserting additional isAscii/isUtf8 behavior
+test-buffer-swap-fast.js: implementation-specific V8 optimization-tier test; uses eval with native optimization intrinsics to force and inspect compilation of Buffer.prototype methods rather than asserting additional swap16/swap32/swap64 behavior
 test-buffer-write-fast.js: language/runtime non-goal (typescript.md section 13); uses eval with V8 native optimization intrinsics on Node's internal utf8Write binding, so it measures V8's built-in fast path rather than our Buffer.write algorithm
 test-buffer-alloc-unsafe-is-initialized-with-zero-fill-flag.js: implementation-internal Node allocator test; requires a debug Node build and reads V8 ArrayBuffer allocator counters rather than observable Buffer API behavior
 test-buffer-alloc-unsafe-is-uninitialized.js: implementation-internal Node allocator test; requires a debug Node build and reads V8 ArrayBuffer allocator counters rather than observable Buffer API behavior
