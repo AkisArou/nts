@@ -6,7 +6,15 @@
 // and reads it from the other sees two different answers.
 
 export function shape(exports) {
-  return exports.default ?? exports.process;
+  const instance = exports.default ?? exports.process;
+
+  // These operations are implemented and typed in resources.ts. Only their
+  // unusual CommonJS location -- a property of another function -- belongs in
+  // this public-object shape layer.
+  instance.hrtime.bigint = exports._hrtimeBigInt;
+  instance.memoryUsage.rss = exports._memoryUsageRss;
+
+  return instance;
 }
 
 export function installGlobals(underTest) {

@@ -14,6 +14,11 @@ const elapsed = process.hrtime(start);
 assert(elapsed[0] >= 0);
 assert(elapsed[1] >= 0 && elapsed[1] < 1e9);
 
+const bigintStart = process.hrtime.bigint();
+const bigintEnd = process.hrtime.bigint();
+assert.strictEqual(typeof bigintStart, 'bigint');
+assert(bigintEnd - bigintStart >= 0n);
+
 for (const key of ['node', 'uv', 'v8', 'modules', 'napi']) {
   assert.strictEqual(typeof process.versions[key], 'string', key);
   assert(process.versions[key].length > 0, key);

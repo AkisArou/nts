@@ -1,10 +1,11 @@
 'use strict';
 
 // Extracted from upstream test-memory-usage.js and test-resource-usage.js.
-// Node's memory test also requires `process.memoryUsage.rss`, a property on a
-// function object, and V8's separate ArrayBuffer/external-memory accounting.
-// Neither exists in NTS's static object model, but the ordinary record returned
-// by memoryUsage and the libuv resource record remain public supported behavior.
+// Node's full memory test also requires V8's separate ArrayBuffer/external-
+// memory accounting. NTS accounts its managed heap directly, but the ordinary
+// record returned by memoryUsage and the libuv resource record remain public
+// supported behavior. The separately implemented `memoryUsage.rss` operation
+// is exercised by the untouched upstream EMFILE fixture.
 require('../common');
 const assert = require('assert');
 

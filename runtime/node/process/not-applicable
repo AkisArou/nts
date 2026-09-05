@@ -72,7 +72,7 @@ test-process-env-allowed-flags.js: mixes flag membership/iteration with Object.f
 test-process-env-allowed-flags-are-documented.js: validates Node's generated CLI documentation, which is absent from the pinned source-only checkout; runtime membership is covered by local/allowed-flags.js
 test-process-ref-unref.js: mixes legacy ref()/unref() with runtime Symbol-based dispatch; see local/ref-unref-legacy.js
 test-process-hrtime.js: mixes public timing behavior with eval/V8 optimization intrinsics and internalBinding; see local/time-and-versions.js
-test-process-hrtime-bigint.js: requires a callable object property (`hrtime.bigint`) plus eval/V8 intrinsics; function objects and eval are §13 non-goals
+test-process-hrtime-bigint.js: mixes supported `hrtime.bigint` behavior with eval/V8 optimization intrinsics and internalBinding; see local/time-and-versions.js
 test-process-versions.js: asserts property descriptors for every version entry, a §13 non-goal; see local/time-and-versions.js
 
 # The CommonJS substitution runner cannot interpose on ESM dynamic import, and
@@ -97,8 +97,7 @@ test-process-threadCpuUsage-worker-threads.js: worker copies use host node:proce
 
 # These public process tests live outside the test-process-* naming family.
 # The applicable nextTick/resource tests are enumerated in extra-tests. These
-# four cannot provide a non-hollow verdict against the supported static API.
-test-memory-usage.js: requires the callable `memoryUsage.rss` function property and V8-specific external/ArrayBuffer heap accounting; the supported allocation record is isolated in local/resource-accounting.js
-test-memory-usage-emfile.js: exclusively calls the unsupported `memoryUsage.rss` function property after exhausting host file descriptors
+# three cannot provide a non-hollow verdict against the supported static API.
+test-memory-usage.js: requires V8-specific external/ArrayBuffer heap accounting; the supported NTS allocation record is isolated in local/resource-accounting.js, while `memoryUsage.rss` is covered by the applicable EMFILE fixture
 test-next-tick-domain.js: only proves that loading host node:domain does not replace a function; an absent nextTick passes unchanged under sabotage
 test-next-tick-when-exiting.js: calls process.exit, which terminates the conformance child before it can report a verdict

@@ -22,7 +22,9 @@ import {
   constrainedMemory,
   cpuUsage,
   hrtime,
+  hrtimeBigInt,
   memoryUsage,
+  memoryUsageRss,
   resourceUsage,
   threadCpuUsage,
   uptime,
@@ -560,4 +562,8 @@ nts_process_on_exit((code) => {
 
 export default process;
 export { process, Process };
-export { env };
+export {
+  env,
+  hrtimeBigInt as _hrtimeBigInt,
+  memoryUsageRss as _memoryUsageRss,
+};
