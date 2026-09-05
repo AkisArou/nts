@@ -586,7 +586,7 @@ impl Emitter<'_> {
                 self.array_operation(code, pool, &op.kind, &op.ty, &origin)?
             }
             OpKind::Erase { .. } | OpKind::TagOf { .. } | OpKind::Unerase { .. } => {
-                self.erasure(code, pool, &op.kind, &op.ty, &origin)?
+                self.erasure(code, pool, value, &op.kind, &op.ty, &origin)?
             }
             // `let` read before its declaration ran, inside a closure that
             // captured it. One predictable branch on the cells that have the
@@ -705,7 +705,7 @@ impl Emitter<'_> {
                 // every test false, every `else` taken, and a plausible number
                 // out the end. The benchmark's cross-variant checksum caught
                 // it; nothing in the emitter did.
-                if *self.ty(*value) == HirType::Erased {
+                if *self.ty(*value) == HirType::Erased && !self.unboxed.contains(value) {
                     code.get_field(
                         &origin,
                         pool,
@@ -991,8 +991,10 @@ impl Emitter<'_> {
                 return Err(refuse(self.func, "an `instanceof` against an unknown class"));
             };
             self.load(code, pool, value)?;
-            // Unbox before asking for a class; see the single-class arm.
-            if *self.ty(value) == HirType::Erased {
+            // Unbox before asking for a class; see the single-class arm. A
+            // value `unbox` kept as a bare reference is already the thing to
+            // ask, and has no field to read.
+            if *self.ty(value) == HirType::Erased && !self.unboxed.contains(&value) {
                 code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
             }
             code.instance_of(origin, pool, &types::class_name(layout));
@@ -1081,7 +1083,7 @@ impl Emitter<'_> {
         if *self.ty(value) == HirType::Erased {
             return self.load(code, pool, value);
         }
-        self.erase(code, pool, value, origin)?;
+        self.erase(code, pool, None, value, origin)?;
         Ok(())
     }
 
@@ -1146,17 +1148,27 @@ impl Emitter<'_> {
         &mut self,
         code: &mut Code,
         pool: &mut Pool,
+        result: ValueId,
         kind: &OpKind,
         ty: &HirType,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         match kind {
-            OpKind::Erase { value } => self.erase(code, pool, *value, origin),
+            OpKind::Erase { value } => self.erase(code, pool, Some(result), *value, origin),
                 // A `Void` erases to `undefined` and has nothing to load.
             OpKind::TagOf { value } => {
                 self.load(code, pool, *value)?;
                 code.get_field(origin, pool, types::VALUE, "tag", "I");
                 self.adapt(code, Kind::Int, ty, origin)?;
+                Ok(Placed::OnStack)
+            }
+            OpKind::Unerase { value } if self.unboxed.contains(value) => {
+                // The reference is already the value; the narrowing the middle
+                // end proved still has to be spelled for the verifier.
+                self.load(code, pool, *value)?;
+                if let Some(want) = types::descriptor(self.shape, ty) {
+                    code.check_cast(origin, pool, &want);
+                }
                 Ok(Placed::OnStack)
             }
             OpKind::Unerase { value } => {
@@ -1213,6 +1225,10 @@ impl Emitter<'_> {
         &mut self,
         code: &mut Code,
         pool: &mut Pool,
+        // The value this erasure defines, where it defines one. `None` at a
+        // site that erases on the fly for an argument, which always needs the
+        // box because nothing names the result to decide otherwise.
+        result: Option<ValueId>,
         value: ValueId,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
@@ -1248,6 +1264,13 @@ impl Emitter<'_> {
                 );
                 return Ok(Placed::OnStack);
             }
+        }
+        // An erased value a bare reference can carry: the reference is the
+        // value, and `ofObject` would only wrap it to be unwrapped again. See
+        // `unbox`, and record 0108 for what the wrapper costs.
+        if result.is_some_and(|it| self.unboxed.contains(&it)) {
+            self.load(code, pool, value)?;
+            return Ok(Placed::OnStack);
         }
         self.load(code, pool, value)?;
         let (name, signature) = match &from {

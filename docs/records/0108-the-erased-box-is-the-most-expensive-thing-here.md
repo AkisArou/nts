@@ -87,3 +87,47 @@ scalar-replaced"* -- and this program has a three-armed ternary, exactly that
 shape. But the reference has the same three-armed merge and is scalar-replaced
 completely. So the merge is not what defeats it here; **the box is**, and the
 merge hypothesis would have sent me to the wrong fix.
+
+## Fixed: 15.48us to 1.44us, and 212,944 bytes to zero
+
+`compiler/codegen/jvm/src/unbox.rs`. A union whose arms are all objects is held
+as a bare `java/lang/Object`.
+
+| | ns/op | bytes/op | vs Java |
+| --- | ---: | ---: | ---: |
+| before | 15.48 us | 212,944 | 10.87x |
+| **after** | **1.44 us** | **0.0** | **1.01x** |
+| hand-written Java | 1.42 us | 0.0 | 1.00x |
+
+**A 10.75x speedup on the row**, and it is now faster than both native
+backends -- the C lane is 1.49us and LLVM 1.56us on the same program.
+
+The allocation going to *zero* rather than to the shape's own bytes is the
+predicted second-order effect arriving: with the box gone the shape stops
+escaping, so C2 scalar-replaces it as well. Removing one allocation removed
+two.
+
+`erasure-typed`, `erasure-unknown`, `erasure-stored-typed` and `instanceof` are
+unchanged to three digits, which is what the analysis being conservative is
+supposed to look like: it declines every value it cannot prove, so a row it
+does not apply to cannot move.
+
+### What the analysis requires
+
+Every definition erases a `Managed(Object(_))`; every use is `InstanceOf` or an
+`Unerase` to an object; anything else disqualifies the class, including every
+operation this backend has not considered. Values are joined by
+block-parameter edges before the decision, for the reason `hir::specialize`
+joins them -- a parameter and its arguments are one storage location seen from
+different edges, and deciding them apart would let a loop header hold a bare
+reference while a back edge hands it a box.
+
+### The bug it produced, and what caught it
+
+The single-class `instanceof` path was guarded and the multi-class one was not,
+so a bare reference reached a `getfield` on `NtsValue`. `java -Xverify:all`
+refused the class at load rather than letting it read a field off the wrong
+object, and the differential reported *"aborted for a reason that is not the
+program correctly declining its input"* rather than counting seventeen quiet
+declines -- the classifier added earlier the same day, catching its author for
+the second time.

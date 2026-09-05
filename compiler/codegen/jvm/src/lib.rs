@@ -44,6 +44,7 @@ pub mod body;
 pub mod hierarchy;
 pub mod ops;
 pub mod types;
+mod unbox;
 
 use nts_core::hir::Program;
 use nts_diagnostics::Diagnostic;

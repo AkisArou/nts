@@ -89,6 +89,8 @@ pub struct Emitter<'a> {
     pub(crate) max_locals: u16,
     /// One `int` slot for a materialized comparison, allocated only if used.
     pub(crate) scratch: Option<u16>,
+    /// Erased values held as a bare reference rather than an `NtsValue`.
+    pub(crate) unboxed: rustc_hash::FxHashSet<ValueId>,
     /// Scratch for a parallel-copy cycle, one per `(temp, kind)` actually used.
     pub(crate) temps: FxHashMap<(u32, u8), u16>,
     pub(crate) labels: FxHashMap<BlockId, Label>,
@@ -125,6 +127,10 @@ impl<'a> Emitter<'a> {
         // Parameters occupy the first slots, in order, whether or not the body
         // reads them: the JVM places arguments there and a gap would shift
         // every later one.
+        // Erased values a bare `java/lang/Object` can carry; see `unbox`.
+        // Computed before slots so the decision and the slot type cannot
+        // disagree -- there is one answer and both read it.
+        let unboxed = crate::unbox::unboxable(func);
         let mut param_slot = Vec::with_capacity(func.params.len());
         for param in &func.params {
             let Some(vtype) = types::vtype(types::Shape::of(program), &param.ty) else {
@@ -165,7 +171,8 @@ impl<'a> Emitter<'a> {
             if rematerialised(func, value) {
                 continue;
             }
-            let Some(vtype) = types::vtype(types::Shape::of(program), ty) else {
+            let held = crate::unbox::held_as(&unboxed, value);
+            let Some(vtype) = held.or_else(|| types::vtype(types::Shape::of(program), ty)) else {
                 return Err(refuse(
                     func,
                     &format!("a value of unrepresentable type: {}", types::describe(ty)),
@@ -217,6 +224,7 @@ impl<'a> Emitter<'a> {
             locals,
             max_locals: u16::try_from(next).unwrap_or(u16::MAX),
             scratch: None,
+            unboxed,
             temps: FxHashMap::default(),
             labels: FxHashMap::default(),
             uses,
