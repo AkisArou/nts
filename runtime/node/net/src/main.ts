@@ -459,6 +459,14 @@ export class BoundSocket {
     if (errno < 0) throw uvException(errno, "close");
   }
 
+  [Symbol.dispose](): void {
+    const state = boundSocketStates.get(this);
+    if (state === undefined || !state.active) return;
+    state.active = false;
+    const errno = nts_net_bound_close(state.handle);
+    if (errno < 0) throw uvException(errno, "close");
+  }
+
   get isPipe(): boolean {
     return boundSocketState(this).pipe;
   }
@@ -1857,13 +1865,13 @@ export class Server extends EventEmitter {
     return this;
   }
 
-  address(): AddressInfo | Record<string, never> | string {
-    if (this._handle === null) return {};
+  address(): AddressInfo | string | null {
+    if (this._handle === null) return null;
     const address = nts_net_server_address_text(this._handle);
     const numbers = nts_net_server_address_numbers(this._handle);
     // A unix socket has no family/port columns; its address is its path.
-    if (numbers.length === 0) return address.length === 0 ? {} : address;
-    return makeAddress(address, numbers) ?? {};
+    if (numbers.length === 0) return address.length === 0 ? null : address;
+    return makeAddress(address, numbers) ?? null;
   }
 
   getConnections(callback: (error: unknown, count: number) => void): this {
@@ -1903,6 +1911,16 @@ export class Server extends EventEmitter {
       });
     }
     return this;
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (this._handle === null) return;
+    await new Promise<void>((resolve, reject) => {
+      this.close((error) => {
+        if (error === undefined) resolve();
+        else reject(error);
+      });
+    });
   }
 
   #maybeEmitClose(): void {

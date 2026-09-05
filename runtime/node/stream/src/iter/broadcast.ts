@@ -272,6 +272,10 @@ export class BroadcastController {
     this.#cachedMinCursorConsumers = 0;
   }
 
+  [Symbol.dispose](): void {
+    this.cancel();
+  }
+
   writeBatch(batch: ByteBatch): boolean {
     if (this.#ended || this.#cancelled) return false;
     const size = batchByteSize(batch);
@@ -604,6 +608,15 @@ export class BroadcastWriter {
     this.#rejectPendingWrites(error);
     this.#rejectPendingDrains(error);
     this.#broadcast.abort(error);
+  }
+
+  [Symbol.asyncDispose](): Promise<void> {
+    this.fail();
+    return resolvedVoid;
+  }
+
+  [Symbol.dispose](): void {
+    this.fail();
   }
 
   cancelPending(): void {

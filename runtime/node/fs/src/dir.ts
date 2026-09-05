@@ -274,6 +274,16 @@ export class Dir {
     if (result < 0) throw uvException(result, "closedir", this.#path);
   }
 
+  [Symbol.dispose](): void {
+    if (this.#closed) return;
+    this.closeSync();
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (this.#closed) return;
+    await this.close();
+  }
+
   async *[Symbol.asyncIterator](): AsyncGenerator<
     DirectoryEntry,
     void,

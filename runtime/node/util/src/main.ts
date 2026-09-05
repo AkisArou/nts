@@ -129,8 +129,8 @@ export function toUSVString(str: string): string {
  * A callback-taking function as a promise-returning one, upstream
  * `lib/internal/util.js`.
  *
- * Needs promises, which the runtime does not have yet; the shape is here so it
- * arrives complete rather than as an afterthought.
+ * The callback is appended after the caller's arguments and settles one
+ * promise, preserving the original receiver.
  */
 type CallbackTakingFunction = (
   this: unknown,

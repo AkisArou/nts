@@ -164,10 +164,15 @@ class NodeEnvironmentFlagsSet extends Set<string> {
   }
 }
 
-/** The statically expressible half of Node's refable protocol. */
-interface LegacyRefable {
-  ref?: () => unknown;
-  unref?: () => unknown;
+const refSymbol: unique symbol = Symbol.for("nodejs.ref");
+const unrefSymbol: unique symbol = Symbol.for("nodejs.unref");
+
+/** The current symbol protocol and its legacy string-named fallback. */
+interface Refable {
+  [refSymbol]?: ((this: Refable) => unknown) | undefined;
+  [unrefSymbol]?: ((this: Refable) => unknown) | undefined;
+  ref?: ((this: Refable) => unknown) | undefined;
+  unref?: ((this: Refable) => unknown) | undefined;
 }
 
 /**
@@ -289,7 +294,6 @@ class Process extends EventEmitter {
   kill(pid: number, signal?: string | number): boolean {
     // `!=` on purpose: node accepts a numeric string here, and the check is
     // "does this round-trip through a 32-bit integer", not "is this a number".
-    // eslint-disable-next-line eqeqeq
     if (pid != (pid | 0)) {
       throw new ERR_INVALID_ARG_TYPE("pid", "number", pid);
     }
@@ -376,14 +380,18 @@ class Process extends EventEmitter {
     return nts_process_active_requests();
   }
 
-  /** Keep a legacy refable resource alive, when it exposes `ref()`. */
-  ref(resource: LegacyRefable | null | undefined): void {
-    if (typeof resource?.ref === "function") resource.ref();
+  /** Keep a resource alive through Node's symbol protocol or legacy method. */
+  ref(resource: Refable | null | undefined): void {
+    if (resource == null) return;
+    const ref = resource[refSymbol] ?? resource.ref;
+    if (typeof ref === "function") ref.call(resource);
   }
 
-  /** Stop a legacy refable resource keeping the loop alive. */
-  unref(resource: LegacyRefable | null | undefined): void {
-    if (typeof resource?.unref === "function") resource.unref();
+  /** Release a resource through Node's symbol protocol or legacy method. */
+  unref(resource: Refable | null | undefined): void {
+    if (resource == null) return;
+    const unref = resource[unrefSymbol] ?? resource.unref;
+    if (typeof unref === "function") unref.call(resource);
   }
 
   /**

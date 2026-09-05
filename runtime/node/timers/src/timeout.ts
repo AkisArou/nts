@@ -225,6 +225,10 @@ export class Timeout<Args extends unknown[] = []> implements TimeoutHandle {
     clearTimeout(this);
     return this;
   }
+
+  [Symbol.dispose](): void {
+    clearTimeout(this);
+  }
 }
 
 /**

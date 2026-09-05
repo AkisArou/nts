@@ -69,6 +69,9 @@ export class DuplexChannel {
     if (iterator?.return !== undefined) await iterator.return();
   }
 
+  [Symbol.asyncDispose](): Promise<void> {
+    return this.close();
+  }
 }
 
 export function duplex(options: DuplexOptions = {}): [DuplexChannel, DuplexChannel] {

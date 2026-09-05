@@ -22,9 +22,8 @@ import { pipeline, pipelineImpl } from "./pipeline.ts";
 import * as promises from "./promises.ts";
 import * as consumers from "./consumers.ts";
 import * as iter from "./iter/main.ts";
-// Imported for its side effect: it fills the hole `Duplex.from` calls
-// through, which it cannot do by being imported *by* `duplex.ts` without a
-// cycle.
+// This side effect installs `Duplex.from` after the stream class graph has
+// initialized. See the TDZ boundary documented in `duplex.ts`.
 import "./duplexify.ts";
 import { compose } from "./compose.ts";
 import { duplexPair } from "./duplexpair.ts";
@@ -36,8 +35,8 @@ import type {
   WebDuplexPair,
 } from "./web-adapters.ts";
 
-// `Readable.prototype.compose` calls through this, which `readable.ts` cannot
-// import directly: `compose` builds a `Duplex`, which extends `Readable`.
+// Install only after the stream class graph has initialized; see the TDZ
+// boundary documented beside `setCompose` in `readable.ts`.
 setCompose(compose);
 
 export function duplexFromWeb(

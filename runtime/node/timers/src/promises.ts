@@ -10,16 +10,8 @@
 // remove the listener -- otherwise a long-lived signal accumulates one
 // listener per elapsed wait, which is a leak that only shows up under load.
 //
-// One thing here is node's and cannot be reproduced: node passes a private
-// symbol to `addEventListener` that makes its abort listener survive
-// `stopPropagation` from another listener on the same signal. The symbol
-// belongs to node's `EventTarget` implementation, which this profile does not
-// have, so a program that calls `stopPropagation` in an abort listener
-// registered before ours will see the wait hang rather than reject. That is
-// the only difference, and it is a property of the event target rather than of
-// these functions.
-
 import { AbortError, ERR_ILLEGAL_CONSTRUCTOR, ERR_INVALID_THIS } from "../../internal/errors.ts";
+import type { AbortSignalLike } from "../../internal/abort.ts";
 import {
   validateAbortSignal,
   validateBoolean,
@@ -29,29 +21,9 @@ import {
 import { Immediate, clearImmediate } from "./immediate.ts";
 import { Timeout, clearTimeout, insert } from "./timeout.ts";
 
-/**
- * As much of an `AbortSignal` as a wait touches.
- *
- * Declared here rather than taken from a DOM library because that is exactly
- * what `validateAbortSignal` accepts: anything with an `aborted` property. A
- * signal from a worker, a different realm, or a polyfill is a working signal,
- * and naming the concrete class in the type would be a stricter claim than the
- * code makes.
- */
-export interface AbortSignal {
-  readonly aborted: boolean;
-  readonly reason: unknown;
-  addEventListener(
-    type: "abort",
-    listener: () => void,
-    options?: { once?: boolean },
-  ): void;
-  removeEventListener(type: "abort", listener: () => void): void;
-}
-
 export interface TimerOptions {
   /** Cancels the wait, rejecting with an `AbortError`. */
-  signal?: AbortSignal | undefined;
+  signal?: AbortSignalLike | undefined;
   /** Whether the pending wait should hold the process open. Default true. */
   ref?: boolean | undefined;
 }
@@ -75,7 +47,7 @@ function withCancellation<T, Handle extends Cancellable>(
   handle: Handle,
   cancel: (handle: Handle) => void,
   reject: (reason: unknown) => void,
-  signal: AbortSignal | undefined,
+  signal: AbortSignalLike | undefined,
 ): Promise<T> {
   if (signal === undefined) return promise;
 

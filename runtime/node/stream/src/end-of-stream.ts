@@ -23,6 +23,7 @@ import {
   ERR_STREAM_PREMATURE_CLOSE,
 } from "../../internal/errors.ts";
 import { nextTick } from "../../internal/tick.ts";
+import type { AbortSignalLike } from "../../internal/abort.ts";
 import {
   validateAbortSignal,
   validateBoolean,
@@ -63,13 +64,7 @@ export interface EndOfStreamOptions {
   [kSynchronousCallback]?: boolean | undefined;
 }
 
-/** As much of an `AbortSignal` as this file uses. See `process/src/promises`. */
-export interface AbortSignalLike {
-  readonly aborted: boolean;
-  readonly reason: unknown;
-  addEventListener(type: "abort", listener: () => void, options?: { once?: boolean }): void;
-  removeEventListener(type: "abort", listener: () => void): void;
-}
+export type { AbortSignalLike } from "../../internal/abort.ts";
 
 export type EndOfStreamCallback = (error?: unknown) => void;
 

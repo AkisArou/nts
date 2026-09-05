@@ -1,9 +1,10 @@
-// `process.nextTick`, without `node:process`.
+// The shared implementation behind `process.nextTick` and internal users.
 //
 // A callback that must run after the current operation finishes but before any
 // I/O. Node keeps its own queue, drained between phases of the event loop;
-// until `node:process` exists this is the one binding that stands for it, and
-// this file goes away when it does.
+// keeping that queue below `node:process` avoids making every core module depend
+// on the public Process object and prevents an events/process initialization
+// cycle. The public method delegates here, so there is still exactly one queue.
 
 import { AsyncContextFrame } from "./async-context.ts";
 import {

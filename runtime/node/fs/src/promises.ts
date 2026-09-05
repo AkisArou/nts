@@ -87,7 +87,13 @@ import {
   type WatchSignal,
 } from "./watchers.ts";
 import { bufferLengths, flattenBuffers } from "./vector-io.ts";
-import type { FileStreamOptions, ReadStream, WriteStream } from "./streams.ts";
+import {
+  createReadStream,
+  createWriteStream,
+  type FileStreamOptions,
+  type ReadStream,
+  type WriteStream,
+} from "./streams.ts";
 import {
   Dir,
   opendir as opendirCallback,
@@ -111,32 +117,6 @@ declare function nts_fs_writev(
 ): number;
 declare function nts_fs_close(fd: number): number;
 declare function nts_errno(): number;
-
-/**
- * The file streams, filled in by `main.ts`.
- *
- * A hole rather than an import: `streams.ts` imports this file for the
- * operations it drives, so importing it back would be a cycle.
- */
-type ReadStreamFactory = (path: string | null, options?: FileStreamOptions) => ReadStream;
-type WriteStreamFactory = (path: string | null, options?: FileStreamOptions) => WriteStream;
-
-let createReadStreamImpl: ReadStreamFactory =
-  () => {
-    throw new Error("fs/streams has not been loaded");
-  };
-let createWriteStreamImpl: WriteStreamFactory =
-  () => {
-    throw new Error("fs/streams has not been loaded");
-  };
-
-export function setStreamFactories(
-  read: ReadStreamFactory,
-  write: WriteStreamFactory,
-): void {
-  createReadStreamImpl = read;
-  createWriteStreamImpl = write;
-}
 
 /** A value-producing callback operation as a promise-returning one. */
 function promisifyValue<A extends unknown[], T>(
@@ -1009,11 +989,11 @@ export class FileHandle extends EventEmitter {
    * whatever the operating system next handed out.
    */
   createReadStream(options: FileStreamOptions = {}): ReadStream {
-    return createReadStreamImpl(null, { ...options, fd: this });
+    return createReadStream(null, { ...options, fd: this });
   }
 
   createWriteStream(options: FileStreamOptions = {}): WriteStream {
-    return createWriteStreamImpl(null, { ...options, fd: this });
+    return createWriteStream(null, { ...options, fd: this });
   }
 
   stat(options: StatOptions & { bigint: true }): Promise<BigIntStats>;
@@ -1069,6 +1049,10 @@ export class FileHandle extends EventEmitter {
    */
   close(): Promise<void> {
     return this.#beginClose(false);
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    await this.close();
   }
 
   #beginClose(synchronous: boolean): Promise<void> {
@@ -1279,7 +1263,7 @@ class FileHandleSyncSource implements SyncByteStream, Iterator<ByteBatch, undefi
   }
 }
 
-/** The ordinary, statically callable surface of FileHandle.writer(). */
+/** The typed public surface of `FileHandle.writer()`. */
 export interface FileHandleWriter {
   write(
     chunk: FileHandleWriterChunk,
@@ -1294,6 +1278,8 @@ export interface FileHandleWriter {
   end(options?: FileHandleWriterOperationOptions): Promise<number>;
   endSync(): number;
   fail(reason?: unknown): void;
+  [Symbol.asyncDispose](): Promise<void>;
+  [Symbol.dispose](): void;
 }
 
 /**
@@ -1482,6 +1468,18 @@ class FileHandleWriterImplementation implements FileHandleWriter {
     this.#error = reason ?? new ERR_INVALID_STATE("Failed");
     this.#closed = true;
     this.#handle._finishOperationSync(this.#autoClose);
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (this.#closing) {
+      await (this.#pendingEnd ?? Promise.resolve());
+      return;
+    }
+    if (!this.#closed && this.#error === undefined) this.fail();
+  }
+
+  [Symbol.dispose](): void {
+    this.fail();
   }
 
   async #writeAll(
@@ -1777,10 +1775,11 @@ export function mkdtemp(
   });
 }
 
-/** The statically representable portion of a disposable temp directory. */
+/** A disposable temporary directory. */
 export interface DisposableTempDirectory {
   readonly path: string;
   readonly remove: () => Promise<void>;
+  [Symbol.asyncDispose](): Promise<void>;
 }
 
 class DisposableTempDirectoryValue implements DisposableTempDirectory {
@@ -1790,6 +1789,10 @@ class DisposableTempDirectoryValue implements DisposableTempDirectory {
   constructor(path: string, fullPath: string) {
     this.path = path;
     this.remove = () => rm(fullPath, { force: true, recursive: true });
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    await this.remove();
   }
 }
 

@@ -50,6 +50,10 @@ export class RunScope {
     this.#disposed = true;
     this.#restore();
   }
+
+  [Symbol.dispose](): void {
+    this.dispose();
+  }
 }
 
 interface StoredContext<T> {

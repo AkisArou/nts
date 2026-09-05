@@ -939,9 +939,9 @@ const ioMaxLength = 2 ** 31 - 1;
  * here also limits each regular-file read to 512 KiB, so one large file cannot
  * occupy a worker for an unbounded operation.
  *
- * Unknown-sized inputs use an explicitly grown fixed-capacity chunk table.
- * This avoids selecting NTS's growable-array representation merely because a
- * pipe or device needs more than one read.
+ * Unknown-sized inputs accumulate complete chunks and concatenate once at
+ * EOF. That keeps every read bounded and avoids repeatedly copying the prefix
+ * already received from a pipe or device.
  */
 class ReadFileContext {
   #path: string | undefined;
@@ -959,8 +959,7 @@ class ReadFileContext {
   #bufferByteLengthName = "options.buffer.byteLength";
   #overflowBuffer: Buffer | undefined;
   #checkOverflow = false;
-  #chunks = new Array<Buffer | undefined>(4);
-  #chunkCount = 0;
+  #chunks: Buffer[] = [];
   #pendingError: unknown = null;
 
   constructor(source: string | number, options: ReadFileOptions, callback: ReadFileCallback) {
@@ -1156,13 +1155,7 @@ class ReadFileContext {
   }
 
   #appendChunk(chunk: Buffer): void {
-    if (this.#chunkCount === this.#chunks.length) {
-      const chunks = new Array<Buffer | undefined>(this.#chunks.length * 2);
-      for (let i = 0; i < this.#chunkCount; i++) chunks[i] = this.#chunks[i];
-      this.#chunks = chunks;
-    }
-    this.#chunks[this.#chunkCount] = chunk;
-    this.#chunkCount += 1;
+    this.#chunks.push(chunk);
   }
 
   #close(error: unknown): void {
@@ -1199,13 +1192,7 @@ class ReadFileContext {
         ? buffer.subarray(0, this.#position)
         : buffer;
     } else {
-      result = Buffer.allocUnsafe(this.#position);
-      let offset = 0;
-      for (let i = 0; i < this.#chunkCount; i++) {
-        const chunk = this.#chunks[i];
-        if (chunk === undefined) continue;
-        offset += chunk.copy(result, offset);
-      }
+      result = Buffer.concat(this.#chunks, this.#position);
     }
 
     this.#callback(

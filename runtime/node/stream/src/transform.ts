@@ -75,12 +75,7 @@ export class Transform extends Duplex {
     // Through `prefinish` rather than by relying on `_final`, because some
     // transforms in the wild implement `_final` themselves, and overriding it
     // would silently replace theirs.
-    if (typeof options?.final === "function") {
-      // Capture the statically known transform. EventEmitter's dynamic
-      // listener receiver is not part of NTS's function model, and this
-      // internal listener has no reason to depend on it.
-      this.on("prefinish", () => transformFinal(this));
-    }
+    if (typeof options?.final === "function") this.on("prefinish", prefinish);
   }
 
   /** What the stream does to each chunk. A subclass must provide one. */
@@ -166,4 +161,9 @@ function transformFinal(transform: Transform, callback?: WriteCallback): void {
     transform.push(null);
     if (callback) callback();
   }
+}
+
+/** Flush after a caller-provided `_final`, with the emitter as the receiver. */
+function prefinish(this: Transform): void {
+  transformFinal(this);
 }

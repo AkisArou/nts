@@ -174,14 +174,6 @@ export interface WriteOptions {
   position?: number | null | undefined;
 }
 
-import { createReadStream as makeReadStream, createWriteStream as makeWriteStream } from "./streams.ts";
-import { setStreamFactories } from "./promises.ts";
-
-// `FileHandle.createReadStream` calls through this, which `promises.ts` cannot
-// import: `streams.ts` already imports `promises.ts` for the operations it
-// drives.
-setStreamFactories(makeReadStream, makeWriteStream);
-
 // -------------------------------------------------------------- the bindings
 
 declare function nts_fs_statfs(path: string): number[];
@@ -1064,10 +1056,11 @@ export function mkdtempSync(
   return encodeFileBytes(made, settings.encoding);
 }
 
-/** The statically representable portion of Node's disposable temp directory. */
+/** A disposable temporary directory. */
 export interface DisposableTempDirectorySync {
   readonly path: string;
   readonly remove: () => void;
+  [Symbol.dispose](): void;
 }
 
 class DisposableTempDirectorySyncValue implements DisposableTempDirectorySync {
@@ -1078,13 +1071,13 @@ class DisposableTempDirectorySyncValue implements DisposableTempDirectorySync {
     this.path = path;
     this.remove = () => rmSync(fullPath, { force: true, recursive: true });
   }
+
+  [Symbol.dispose](): void {
+    this.remove();
+  }
 }
 
-/**
- * Create a temp directory whose explicit cleanup remains correct after chdir.
- * Symbol.dispose belongs to the profile's runtime-Symbol non-goals; `remove`
- * is the ordinary typed cleanup operation.
- */
+/** Create a disposable temp directory whose cleanup remains correct after chdir. */
 export function mkdtempDisposableSync(
   prefix: BytePathLike,
   options?: string | FileOptions | null,

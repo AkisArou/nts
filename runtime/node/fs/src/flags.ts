@@ -1,15 +1,9 @@
 // Turning an open mode into flags, from node v24.20.0 `lib/fs.js`.
 //
-// Its own file for a structural reason rather than a tidiness one. `async.ts`
-// and `streams.ts` both need it, and taking it from `main.ts` -- which imports
-// both of them -- put a cycle in the module graph. Node tolerates the cycle
-// because a hoisted `function` is callable before its module has finished
-// evaluating; a compiler with no temporal dead zone cannot make that promise,
-// so it refuses the whole module initializer rather than guess.
-//
-// The cycle was incidental: this is a pure function over a string, it depends
-// on nothing but the constants, and it was only in `main.ts` because that is
-// where it was first written.
+// This is the same shared boundary as Node's `lib/internal/fs/utils.js`:
+// callbacks, promises, streams, and the synchronous surface all accept the
+// same flag spellings, so they use one pure conversion rather than carrying
+// copies that can drift.
 
 import { ERR_INVALID_ARG_VALUE } from "../../internal/errors.ts";
 import { validateInteger } from "../../internal/validators.ts";

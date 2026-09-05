@@ -79,40 +79,6 @@ function noop(): void {}
 
 function noopLabel(_label?: string): void {}
 
-class CollectedValue {
-  readonly value: unknown;
-  next: CollectedValue | null = null;
-
-  constructor(value: unknown) {
-    this.value = value;
-  }
-}
-
-/** Materialize an iterator once without selecting growable array storage. */
-function collectIterable(iterable: Iterable<unknown>): unknown[] {
-  let head: CollectedValue | null = null;
-  let tail: CollectedValue | null = null;
-  let length = 0;
-
-  for (const value of iterable) {
-    const node = new CollectedValue(value);
-    if (tail === null) head = node;
-    else tail.next = node;
-    tail = node;
-    length++;
-  }
-
-  const values = new Array<unknown>(length);
-  let node = head;
-  let index = 0;
-  while (node !== null) {
-    values[index] = node.value;
-    node = node.next;
-    index++;
-  }
-  return values;
-}
-
 type Target = "stdout" | "stderr";
 
 /**
@@ -479,7 +445,7 @@ export class Console {
     let isKeyValue = false;
     if (isMapIterator(data)) {
       // A map iterator yields entries, and the pairs are what to tabulate.
-      const entries = collectIterable(data);
+      const entries = Array.from(data);
       fromMapIterator = true;
       isKeyValue = entries.every(isPair);
       data = entries;
@@ -516,7 +482,7 @@ export class Console {
     let fromSetIterator = false;
     if (isSetIterator(data)) {
       fromSetIterator = true;
-      data = collectIterable(data);
+      data = Array.from(data);
     }
 
     if ((fromSetIterator || fromMapIterator) && Array.isArray(data)) {

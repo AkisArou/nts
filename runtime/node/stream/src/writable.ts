@@ -23,6 +23,7 @@
 import { Buffer } from "../../buffer/src/main.ts";
 import { normalizeEncodingSpelling, type Encoding } from "../../buffer/src/encodings.ts";
 import {
+  AbortError,
   ERR_INVALID_ARG_TYPE,
   ERR_METHOD_NOT_IMPLEMENTED,
   ERR_MULTIPLE_CALLBACK,
@@ -39,7 +40,7 @@ import { getDefaultHighWaterMark, getHighWaterMark } from "./state.ts";
 import { construct, destroy, errorOrDestroy, undestroy } from "./destroy.ts";
 import type { DestroyableStream } from "./destroy.ts";
 import { addAbortSignalNoValidate } from "./add-abort-signal.ts";
-import type { AbortSignalLike } from "./end-of-stream.ts";
+import { eos, type AbortSignalLike } from "./end-of-stream.ts";
 import { captureRejectionSymbol } from "../../events/src/main.ts";
 import { newWritableFromWeb, newWritableToWeb } from "./web-adapters.ts";
 import type {
@@ -296,6 +297,18 @@ export class Writable extends Stream {
     }
   }
 
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (!this.destroyed) {
+      this.destroy(this.writableFinished ? null : new AbortError());
+    }
+    await new Promise<void>((resolve, reject) => {
+      eos(this, (error) => {
+        if (error && !isAbortError(error)) reject(error);
+        else resolve();
+      });
+    });
+  }
+
   /**
    * A `Writable` is not a source, so piping *from* one is a mistake.
    *
@@ -534,6 +547,10 @@ export class Writable extends Stream {
     return newWritableToWeb(stream);
   }
 
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 /**

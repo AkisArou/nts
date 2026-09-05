@@ -486,7 +486,6 @@ export class Assert {
     const actual = args[0];
     const expected = args[1];
     const message = args[2];
-    // eslint-disable-next-line eqeqeq
     if (actual != expected && (!Number.isNaN(actual) || !Number.isNaN(expected))) {
       innerFail({
         actual, expected, message,
@@ -504,7 +503,6 @@ export class Assert {
     const actual = args[0];
     const expected = args[1];
     const message = args[2];
-    // eslint-disable-next-line eqeqeq
     if (actual == expected || (Number.isNaN(actual) && Number.isNaN(expected))) {
       innerFail({
         actual, expected, message,

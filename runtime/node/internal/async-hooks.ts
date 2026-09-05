@@ -170,9 +170,9 @@ export function defaultTriggerAsyncIdScope<A extends unknown[], R>(
  * The execution stack, kept in fixed-capacity storage.
  *
  * This is entered for every asynchronous callback. Parallel primitive arrays
- * avoid allocating a frame object on that hot path, while explicit doubling
- * keeps ordinary arrays fixed-size for NTS instead of selecting the growable
- * array representation for the whole program.
+ * avoid allocating a frame object on that hot path. Explicit capacity growth
+ * keeps the common push and pop to indexed stores while making the uncommon
+ * allocation point visible and shared across all three columns.
  */
 let executionAsyncIds = new Float64Array(16);
 let executionTriggerIds = new Float64Array(16);

@@ -481,6 +481,6 @@ function joinPair(pair: { readable?: unknown; writable?: unknown }): Duplex {
   return d;
 }
 
-// Fills the hole `Duplex.from` calls through, which cannot import this file
-// directly because this file builds `Duplex` instances.
+// Install only after this module and the adapter graph above have evaluated;
+// see the TDZ boundary documented beside `setDuplexify`.
 setDuplexify(duplexify);

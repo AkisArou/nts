@@ -70,7 +70,6 @@ test-process-load-env-file.js: four cases spawn host Node and the remaining dire
 # excluded metaobject behavior.
 test-process-env-allowed-flags.js: mixes flag membership/iteration with Object.freeze and direct Set.prototype mutation; see local/allowed-flags.js
 test-process-env-allowed-flags-are-documented.js: validates Node's generated CLI documentation, which is absent from the pinned source-only checkout; runtime membership is covered by local/allowed-flags.js
-test-process-ref-unref.js: mixes legacy ref()/unref() with runtime Symbol-based dispatch; see local/ref-unref-legacy.js
 test-process-hrtime.js: mixes public timing behavior with eval/V8 optimization intrinsics and internalBinding; see local/time-and-versions.js
 test-process-hrtime-bigint.js: mixes supported `hrtime.bigint` behavior with eval/V8 optimization intrinsics and internalBinding; see local/time-and-versions.js
 test-process-versions.js: asserts property descriptors for every version entry, a §13 non-goal; see local/time-and-versions.js

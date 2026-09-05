@@ -311,8 +311,6 @@ export class Duplex extends Readable {
   }
 
   static override from(body: unknown): Duplex {
-    // Assigned by `duplexify.ts` once it is loaded, to avoid a cycle: making
-    // a duplex out of arbitrary things needs `Duplex` itself.
     return duplexifyImpl(body, "body");
   }
 
@@ -321,11 +319,13 @@ export class Duplex extends Readable {
 function ignoreWrite(): void {}
 
 /**
- * `Duplex.from`, supplied by `duplexify.ts`.
+ * `Duplex.from`, installed by `duplexify.ts` after `Duplex` is initialized.
  *
- * A function-valued hole rather than an import, because `duplexify` builds
- * `Duplex` instances and importing it here would be a cycle. `duplexify.ts`
- * fills it when it is loaded.
+ * This is an ECMAScript initialization boundary, not a compiler-cycle
+ * workaround. `duplexify.ts` imports adapters whose module graph reaches
+ * classes derived from `Duplex`; importing that graph here would evaluate one
+ * of those classes while this `Duplex` binding is still in its TDZ. The public
+ * `node:stream` entry loads `duplexify.ts` before callers can invoke `from`.
  */
 let duplexifyImpl: (body: unknown, name: string) => Duplex = () => {
   throw new Error("stream/duplexify has not been loaded");

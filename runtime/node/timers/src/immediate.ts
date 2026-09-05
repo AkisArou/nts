@@ -108,6 +108,10 @@ export class Immediate<Args extends unknown[] = []> implements ImmediateHandle {
   hasRef(): boolean {
     return Boolean(this[kRefed]);
   }
+
+  [Symbol.dispose](): void {
+    clearImmediate(this);
+  }
 }
 
 class ImmediateList {

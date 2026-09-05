@@ -27,6 +27,9 @@ import { Buffer } from "../../buffer/src/main.ts";
 import { fileURLToPath } from "../../url/src/fileurl.ts";
 import { URL } from "../../url/src/url.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
+import type { AbortSignalLike } from "../../internal/abort.ts";
+
+export type { AbortSignalLike } from "../../internal/abort.ts";
 
 /** Whether the active binding layer already emits mkdtemp's public warning. */
 declare function nts_fs_binding_warns_on_mkdtemp(): boolean;
@@ -98,12 +101,6 @@ export type FileResultEncoding = Encoding | "buffer";
 
 /** A filesystem name returned either as decoded text or as bytes. */
 export type EncodedFileName = string | Buffer;
-
-/** The fixed surface `readFile` needs from a DOM or Node abort signal. */
-export interface AbortSignalLike {
-  readonly aborted: boolean;
-  readonly reason?: unknown;
-}
 
 /** Path spellings that this profile can preserve across its native ABI. */
 export type PathLike = string | URL;

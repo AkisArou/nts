@@ -264,23 +264,6 @@ globalThis.nts_fs_mkdtemp_bytes = (template) =>
   );
 
 
-// libuv's wording, for the codes `fs` actually raises. `getSystemErrorMessage`
-// is newer than the node this targets, so this is the fallback.
-const MESSAGES = {
-  "-2": "no such file or directory",
-  "-13": "permission denied",
-  "-17": "file already exists",
-  "-20": "not a directory",
-  "-21": "illegal operation on a directory",
-  "-22": "invalid argument",
-  "-39": "directory not empty",
-  "-9": "bad file descriptor",
-  "-1": "operation not permitted",
-};
-function messageFor(code) {
-  return MESSAGES[String(code)] ?? "unknown error";
-}
-
 // ------------------------------------------------------- the callback surface
 //
 // Each of these is the same libuv call as its synchronous twin, dispatched to

@@ -992,6 +992,11 @@ export class Socket extends EventEmitter {
     return this;
   }
 
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (this.#handle === null) return;
+    await new Promise<void>((resolve) => this.close(resolve));
+  }
+
   address(): AddressInfo {
     const handle = this.#healthCheck();
     return addressInfo(nts_udp_address(handle, false), "getsockname");

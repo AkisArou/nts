@@ -23,6 +23,7 @@ import type { Encoding } from "../../buffer/src/encodings.ts";
 import { StringDecoder } from "../../string_decoder/src/main.ts";
 import { validateAbortSignal, validateObject } from "../../internal/validators.ts";
 import {
+  AbortError,
   aggregateTwoErrors,
   ERR_INVALID_ARG_TYPE,
   ERR_METHOD_NOT_IMPLEMENTED,
@@ -312,6 +313,20 @@ export class Readable extends Stream {
   destroy(error?: unknown, callback?: (error?: unknown) => void): this {
     destroy(this, error, callback);
     return this;
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    let disposalError: unknown;
+    if (!this.destroyed) {
+      disposalError = this.readableEnded ? null : new AbortError();
+      this.destroy(disposalError);
+    }
+    await new Promise<void>((resolve, reject) => {
+      eos(this, (error) => {
+        if (error && error !== disposalError) reject(error);
+        else resolve();
+      });
+    });
   }
 
   _undestroy(): void {
@@ -914,8 +929,10 @@ export class Readable extends Stream {
   /**
    * This stream followed by another, as one stream.
    *
-   * Filled in by `main.ts`, because composing needs `compose`, which builds a
-   * `Duplex`, which is built on this class.
+   * Installed by `main.ts` after this class has initialized. Composing builds
+   * a `Duplex`, and `Duplex` derives from this class, so evaluating that module
+   * graph from here would read `Readable` while its ECMAScript binding is still
+   * in the TDZ.
    */
   compose(stream: unknown, options?: { signal?: AbortSignalLike }): unknown {
     if (options != null) validateObject(options, "options");
@@ -1053,10 +1070,12 @@ export function onReadableConstructed(stream: Readable): void {
 }
 
 /**
- * `compose`, supplied by `main.ts`.
+ * `compose`, installed by `main.ts` after `Readable` is initialized.
  *
- * A hole rather than an import: `compose` builds a `Duplex`, which extends
- * this class, so importing it here would be a cycle.
+ * This indirection preserves ECMAScript module initialization order; it is not
+ * a substitute for unsupported compiler cycles. `compose` constructs a
+ * `Duplex`, which extends this class, so a direct import would evaluate a
+ * derived class while its base binding is still in the TDZ.
  */
 let composeImpl: (a: unknown, b: unknown) => unknown = () => {
   throw new Error("stream/compose has not been loaded");

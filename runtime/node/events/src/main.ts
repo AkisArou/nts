@@ -37,6 +37,8 @@ import {
 import { emitProcessWarning } from "../../internal/process-warning.ts";
 import { inspect } from "../../util/src/inspect.ts";
 
+declare function nts_enqueue_microtask(callback: () => void): void;
+
 export type Listener = (...args: unknown[]) => unknown;
 export type EventName = string | symbol;
 
@@ -57,6 +59,10 @@ export interface EventTargetLike {
 }
 
 export type EventSource = EventEmitter | EventTargetLike;
+
+export interface Disposable {
+  [Symbol.dispose](): void;
+}
 
 interface MaxListenerTarget {
   setMaxListeners(value: number): unknown;
@@ -123,9 +129,7 @@ const eventTargetMaxListeners = new Map<EventTargetLike, number>();
  * `events.captureRejectionSymbol`. An emitter that defines a method under this
  * key handles its own rejections instead of having them turned into `error`.
  */
-declare const captureRejectionSymbolType: unique symbol;
-export const captureRejectionSymbol: typeof captureRejectionSymbolType =
-  Symbol.for("nodejs.rejection") as typeof captureRejectionSymbolType;
+export const captureRejectionSymbol: unique symbol = Symbol.for("nodejs.rejection");
 
 /** The value a new emitter takes when its options say nothing. */
 let captureRejectionsDefault = false;
@@ -1129,6 +1133,42 @@ export function addTrackedAbortListener(
   };
 }
 
+class AbortListenerDisposable implements Disposable {
+  #remove: (() => void) | undefined;
+
+  constructor(remove?: () => void) {
+    this.#remove = remove;
+  }
+
+  [Symbol.dispose](): void {
+    const remove = this.#remove;
+    this.#remove = undefined;
+    if (remove !== undefined) remove();
+  }
+}
+
+/** Install the listener returned by `events.addAbortListener`. */
+export function addAbortListener(signal: unknown, listener: unknown): Disposable {
+  if (signal === undefined) {
+    throw new ERR_INVALID_ARG_TYPE("signal", "AbortSignal", signal);
+  }
+  validateAbortSignal(signal, "signal");
+  validateFunction(listener, "listener");
+  if (!isEventTargetLike(signal)) {
+    throw new ERR_INVALID_ARG_TYPE("signal", "AbortSignal", signal);
+  }
+
+  if (signal.aborted) {
+    nts_enqueue_microtask(listener);
+    return new AbortListenerDisposable();
+  }
+
+  signal.addEventListener("abort", listener, { once: true });
+  return new AbortListenerDisposable(() => {
+    signal.removeEventListener("abort", listener);
+  });
+}
+
 function addEventSourceListener(
   source: EventSource,
   type: EventName,
@@ -1270,9 +1310,7 @@ export const kFirstEventParam: unique symbol = Symbol("nodejs.kFirstEventParam")
  * anything that wants to see whether an iterator is holding events back has to
  * be able to name the slot without importing this module.
  */
-declare const kWatermarkDataType: unique symbol;
-export const kWatermarkData: typeof kWatermarkDataType =
-  Symbol.for("nodejs.watermarkData") as typeof kWatermarkDataType;
+export const kWatermarkData: unique symbol = Symbol.for("nodejs.watermarkData");
 
 export interface OnOptions {
   signal?: AbortSignalLike | undefined;
