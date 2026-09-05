@@ -68,6 +68,7 @@ fn the_compiler_and_the_runtime_number_the_tags_alike() {
         ("NTS_TAG_NUMBER", tags::NUMBER),
         ("NTS_TAG_STRING", tags::STRING),
         ("NTS_TAG_FUNCTION", tags::FUNCTION),
+        ("NTS_TAG_SYMBOL", tags::SYMBOL),
         ("NTS_TAG_OBJECT", tags::OBJECT),
         ("NTS_TAG_NULL", tags::NULL),
     ];

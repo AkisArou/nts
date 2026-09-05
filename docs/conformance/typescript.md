@@ -334,21 +334,45 @@ struct with four fields. A property map would have separated the two halves;
 they do not separate. `tooling/memory/cases/symbol-keys` is the same claim on
 the other axis, at ideal 0 and allocated 0.
 
-What is *not* there is the `symbol` type as a runtime value, and its price is
-the largest single number in the profile:
+The `symbol` type as a runtime value is **there now**, and it was the largest
+single number in the profile — the paragraph this replaces predicted the design
+exactly and it is the design that landed: a tag beside `NTS_TAG_OBJECT` and an
+interned cell whose address is its identity, after which `string | symbol` is
+an ordinary erased union.
 
-    a union of `string | symbol` in a parameter        292
-    a property of type `string | symbol`                25
-    a function returning `symbol`                       21
-    `string | symbol | undefined` in a parameter        17
+`NTS_TAG_SYMBOL` sits between `FUNCTION` and `OBJECT`, which is the only slot
+the two orderings allow: outside `tag >= OBJECT`, or `typeof sym` answers
+`"object"`, and inside the contiguous reference range `STRING ..= OBJECT`,
+because a symbol *is* a reference. Both are now compile-time assertions beside
+the table rather than prose beside it.
 
-`PropertyKey` is `string | number | symbol`, so it appears wherever node's
-sources touch a key generically. Representing it needs a symbol to *be*
-something at run time — a tag beside `NTS_TAG_OBJECT` and an interned cell
-whose address is its identity — and then `string | symbol` is an ordinary
-erased union. That is a feature rather than a gap, and it is the one the queue
-would reach next if symbols were ranked by refusal count rather than by what the
-language rests on.
+**The map needed no code at all.** `nts_hash_key` already hashed an
+unrecognised reference by its pointer and `nts_key_eq` already compared one by
+its pointer, and for a symbol that is exactly right rather than merely adequate.
+Two fallbacks written to be general, load-bearing for a type that postdates
+them.
+
+What it was worth, measured: **2170 → 2043** distinct refusal sites, and the
+category it was aimed at fell 393 → 82. Of those 393, **318 were one property**
+— `EventEmitter._events`, whose type is `Map<string | symbol, Registered |
+undefined> | undefined` and which every class extending `EventEmitter`
+inherits. The key was the sole blocker, checked rather than assumed:
+`Map<string, A | B>` and `Map<string | number, V>` both lowered before this.
+
+| | |
+|---|---|
+| ✅ | `Symbol()`, with a description or without — every call a fresh identity, because `Symbol("a") === Symbol("a")` is false |
+| ✅ | `Symbol.for` and `Symbol.keyFor` — one symbol per key for the life of the runtime. The registry's strong reference is the specification's rule rather than a leak, and is the whole difference from `Symbol()` |
+| ✅ | `typeof` answering `"symbol"`, `===` by address, a symbol in a field, and `Map`/`Set` keyed by one or by `string \| symbol` |
+| ✗ | a **well-known** symbol as a value — `Symbol.iterator`, `Symbol.asyncIterator`. They are declared in `lib.d.ts` as `unique symbol` properties of `SymbolConstructor` rather than calls, so they need a static singleton per name rather than the two entry points above |
+| ✗ | `sym.description` and `sym.toString()` as member reads — `nts_symbol_description` and `nts_symbol_to_string` exist and are tested, and nothing lowers a member access to them yet |
+
+And a symbol as a **member name** is still a field. That is the shipped
+`symbol-keys` row above, and giving symbols a runtime representation must not
+turn it into a map lookup: the uniqueness of a `unique symbol` is a *type-level*
+fact the checker uses to tell one member name from another, and it says nothing
+about the machine value. `compiler/core/tests/symbol_values.rs` guards it, and
+that guard is checked by pointing it at a fixture that does make symbols.
 
 
 ### A class's identity is the layout's, and that is right until it is not

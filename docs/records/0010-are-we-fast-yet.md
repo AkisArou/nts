@@ -21,6 +21,11 @@ Three defences, and the first is the one that matters:
 
 - **`benches/awfy/fidelity.mjs`** runs the upstream `.js` and our `.ts` on the
   same engine and compares. All seven agree.
+
+  *(2026-09-05: deleted, because nothing ran it — no gate step, no test, no CI.
+  It was true when written and stopped being load-bearing without anyone
+  noticing, which is the failure this record's own subject is about. Left in
+  place rather than rewritten: a record says what was true then.)*
 - **`verifyResult`** is the suite's own check, against the constant it recorded.
   That catches every implementation being wrong together, which cross-variant
   agreement cannot.

@@ -256,13 +256,49 @@ fn a_typeof_comparison_is_folded_to_an_integer_compare() {
     assert!(reads > 0, "the tag is still what the comparison asks about");
 }
 
+/// A tsconfig for a directory that has none, written beside the test's output.
+///
+/// An absolute `include` works from anywhere, which is what lets a benchmark
+/// case keep no configuration of its own.
+fn written_for(directory: &camino::Utf8Path) -> Option<camino::Utf8PathBuf> {
+    let fixtures = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tsconfig.fixtures.json")
+        .canonicalize_utf8()
+        .ok()?;
+    let out = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
+        .ok()?
+        .join(format!("nts-erased-{}", std::process::id()));
+    std::fs::create_dir_all(&out).ok()?;
+    let tsconfig = out.join("tsconfig.json");
+    std::fs::write(
+        &tsconfig,
+        format!(
+            "{{\"extends\": \"{fixtures}\", \"include\": [\"{directory}/**/*.ts\"]}}"
+        ),
+    )
+    .ok()?;
+    Some(tsconfig)
+}
+
 fn prepared_at(relative: &str) -> Option<nts_core::hir::Prepared> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
-    let tsconfig = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+    let directory = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(relative)
-        .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("{relative} is checked in"));
+    let tsconfig = if directory.join("tsconfig.json").exists() {
+        directory.join("tsconfig.json")
+    } else {
+        // A benchmark case, which as of the 2026-09-05 restructure is exactly
+        // `case.ts`, `ref.cpp` and `ref.java` with nothing generated into it.
+        //
+        // Written here rather than forking the program into `tests/programs/`.
+        // The tie to the measured row is the point of the test below -- an
+        // erased array cost 11% against a typed one, and this asserts the pass
+        // that closed it still fires on *that* program. A copy would answer the
+        // same question about a different file and would drift in silence.
+        written_for(&directory)?
+    };
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");

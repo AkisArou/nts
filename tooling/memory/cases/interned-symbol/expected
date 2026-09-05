@@ -1,0 +1,38 @@
+ideal 18
+allocated 18
+because a symbol is one cell, and the case is that it is only that.
+because
+because Allocations: eighteen. Seventeen made in the loop and one before it,
+because and **nothing else** -- no description string, because `Symbol()` with
+because no argument has none and the absent description is an ordinary null
+because pointer rather than an empty string; no registry entry, because
+because `Symbol()` does not intern; and no table, because identity is the
+because address and there is nothing to hash.
+because
+because That list is the claim. An implementation that gave every symbol a
+because description, or that interned by description the way `Symbol.for`
+because does, or that carried a per-symbol table for property lookup, would
+because answer every program identically and show up here as thirty-five, or
+because as eighteen plus a table.
+because
+because Operations: eighteen, one release each. A symbol arrives owned --
+because `nts_symbol_new` returns a count of one, and `produces_owned` in
+because `hir::own` says a call yields an owned reference -- so there is no
+because retain, and each cell is given back where its binding ends. The
+because comparison reads two pointers and takes nothing.
+because
+because What is **not** measured here is `Symbol.for`, and the reason is worth
+because writing down rather than leaving as a gap. Seventeen calls to
+because `Symbol.for("k")` allocate nothing at all in the measured run, because
+because the registry was written during the harness's warm-up call and a
+because registered symbol is reachable for the life of the runtime by the
+because specification's own rule. But each call still hands back an owned
+because reference that is retained and released -- five operations an
+because iteration, against zero allocations -- and this suite refuses that
+because combination, correctly: *0 allocations cannot need 1 operations*.
+because
+because So the interning claim is measured where it can be, in
+because `runtime/c/tests/symbols.c`: seventeen acquire-and-release cycles free
+because nothing and leak nothing, checked in both directions. Eliding the
+because count on a value the registry pins is named work, and it is what a
+because `Symbol.for` case would need before it could be written here.

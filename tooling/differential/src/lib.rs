@@ -234,6 +234,10 @@ fn inputs(ty: &HirType, known: Facts) -> Vec<f64> {
 fn c_type(ty: &HirType) -> &'static str {
     match ty {
         HirType::Managed(nts_core::hir::ManagedType::String) => "NtsString *",
+        // Same as the map below: the harness generates calls from scalar
+        // signatures and cannot make a symbol, so this is here to be right
+        // rather than to be reached.
+        HirType::Managed(nts_core::hir::ManagedType::Symbol) => "NtsSymbol *",
         // As with the promise below: the harness never drives one, because it
         // generates calls from scalar signatures, so this is here to be right
         // rather than to be reached.
@@ -879,7 +883,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
             if !baselined {
                 baselined = true;
                 main.push_str(
-                    "#ifdef NTS_PROVIDER_RC\n                     \x20   nts_collect_cycles();\n                     \x20   fprintf(stderr, \"nts-live-first %zu\\n\", nts_live_count());\n                     #endif\n",
+                    "#ifdef NTS_PROVIDER_RC\n                     \x20   nts_collect_cycles();\n                     \x20   fprintf(stderr, \"nts-live-first %zu\\n\", nts_live_count() - nts_permanent_count());\n                     #endif\n",
                 );
             }
         }
@@ -897,7 +901,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
     // collection is forced at each point so that what is merely awaiting the
     // cycle collector is not counted as held.
     main.push_str(
-        "#ifdef NTS_PROVIDER_RC\n         \x20   nts_test_host_drain();\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count());\n         #endif\n         \x20   return 0;\n}\n",
+        "#ifdef NTS_PROVIDER_RC\n         \x20   nts_test_host_drain();\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count() - nts_permanent_count());\n         #endif\n         \x20   return 0;\n}\n",
     );
     main
 }

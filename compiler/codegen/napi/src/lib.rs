@@ -67,6 +67,11 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         HirType::Bool => Some(Cross::Bool),
         HirType::Float { .. } | HirType::Int { .. } => Some(Cross::Number),
         HirType::Managed(ManagedType::String) => Some(Cross::Str),
+        // A symbol's identity is the address of a cell in *this* runtime, so
+        // handing one across the boundary would hand out an address whose
+        // meaning the other side cannot reproduce -- `Symbol.for` on the far
+        // side is a different registry. Refused rather than marshalled.
+        HirType::Managed(ManagedType::Symbol) => None,
         // HIR currently does not retain the distinction between a declared
         // `string[]` parameter and a `...strings: string[]` rest parameter.
         // Treating both as rest made an ordinary array parameter receive all
@@ -145,6 +150,7 @@ fn spell(ty: &HirType) -> String {
         HirType::Int { bits, signed } => format!("{}{bits}", if *signed { 'i' } else { 'u' }),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "string".to_owned(),
+        HirType::Managed(ManagedType::Symbol) => "symbol".to_owned(),
         HirType::Managed(ManagedType::Array(e)) => format!("{}[]", spell(e)),
         HirType::Managed(ManagedType::Object(id)) if hir::is_closure_type(*id) => {
             "a function".to_owned()
@@ -186,6 +192,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         HirType::Erased => "NtsValue".to_owned(),
         HirType::BigInt => "__int128".to_owned(),
         HirType::Managed(ManagedType::String) => "NtsString *".to_owned(),
+        HirType::Managed(ManagedType::Symbol) => "NtsSymbol *".to_owned(),
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *".to_owned(),
         // The fixed runtime layout, not a generated struct: the payload's
         // representation is in the type for the compiler's benefit, and the C

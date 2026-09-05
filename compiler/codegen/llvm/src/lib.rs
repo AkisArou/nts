@@ -378,6 +378,13 @@ fn tag_of(ty: &HirType) -> Option<u32> {
         {
             tags::FUNCTION
         }
+        // And a symbol answers `"symbol"`, for the same reason and with the
+        // same failure mode: it fell into `OBJECT` below, `examples/symbol-values`
+        // disagreed with node on this lane and agreed on the C one, and the
+        // comment above about closures had already described the shape. The
+        // second time a wildcard over `Managed` has answered for a newcomer
+        // here.
+        HirType::Managed(nts_core::hir::ManagedType::Symbol) => tags::SYMBOL,
         HirType::Managed(_) => tags::OBJECT,
         HirType::Void => tags::UNDEFINED,
         _ => return None,

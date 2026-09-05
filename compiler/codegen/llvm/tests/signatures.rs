@@ -82,10 +82,23 @@ fn tidy(text: &str) -> String {
 /// Reference every runtime function so clang has to declare it, then read the
 /// declarations back.
 fn from_clang(root: &std::path::Path) -> Option<Vec<Declared>> {
+    // **Both** headers. `nts_unicode.h` declares `nts_str_to_lower_case` and
+    // `nts_str_to_upper_case`, and reading only `nts_runtime.h` made this
+    // generator delete them on every run -- they had been added to the table by
+    // hand, which is what the sortedness test above already records as having
+    // cost "the LLVM column of a whole benchmark row, with a refusal message
+    // pointing at the wrong file".
+    //
+    // It cost it a second time on 2026-09-05, to `examples/strings`, because
+    // regenerating for an unrelated addition silently dropped both. A generator
+    // whose source of truth is narrower than the table it generates is a trap
+    // that springs on whoever next has a reason to run it.
     let header = root.join("runtime/c/nts_runtime.h");
+    let unicode = root.join("runtime/c/nts_unicode.h");
     let text = std::fs::read_to_string(&header).ok()?;
+    let unicode_text = std::fs::read_to_string(&unicode).ok()?;
     let mut names: Vec<String> = Vec::new();
-    for line in text.lines() {
+    for line in text.lines().chain(unicode_text.lines()) {
         // A declaration, not a `static inline` definition: the second has no
         // symbol for anything to link against, which is the whole distinction
         // this table exists to respect.
@@ -123,7 +136,10 @@ fn from_clang(root: &std::path::Path) -> Option<Vec<Declared>> {
     let dir = std::env::temp_dir().join(format!("nts-sigs-{}", std::process::id()));
     std::fs::create_dir_all(&dir).ok()?;
     std::fs::copy(&header, dir.join("nts_runtime.h")).ok()?;
-    let mut source = String::from("#include \"nts_runtime.h\"\nvoid *nts_all[] = {\n");
+    std::fs::copy(&unicode, dir.join("nts_unicode.h")).ok()?;
+    let mut source = String::from(
+        "#include \"nts_runtime.h\"\n#include \"nts_unicode.h\"\nvoid *nts_all[] = {\n",
+    );
     for name in &names {
         let _ = writeln!(source, "  (void *){name},");
     }

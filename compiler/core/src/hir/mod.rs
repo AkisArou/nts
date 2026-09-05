@@ -185,6 +185,20 @@ pub enum ManagedType {
     Map(Box<HirType>, Box<HirType>),
     /// A `Set`: the same table, with no values stored at all.
     Set(Box<HirType>),
+    /// A symbol: an interned cell whose **address is its identity**.
+    ///
+    /// Carrying nothing, because there is nothing to carry. A symbol has no
+    /// element type, no payload representation and no layout that varies —
+    /// every symbol is one `NtsSymbol`, and the description it holds is for
+    /// printing and takes no part in what a symbol *is*.
+    ///
+    /// A distinct managed type for the reason [`ManagedType::Promise`] gives:
+    /// its C type is a fixed runtime struct rather than a generated one, so an
+    /// object with a provided layout would be a shape with fields nothing may
+    /// read. Unlike `Promise` and `Map` it is not even parameterised, which
+    /// makes it the simplest member of this enum and the one whose whole
+    /// content is its tag.
+    Symbol,
 }
 
 impl HirType {

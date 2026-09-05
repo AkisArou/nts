@@ -3156,6 +3156,17 @@ fn representation_of(
         TypeKind::String | TypeKind::Literal(LiteralValue::String(_)) => {
             HirType::Managed(ManagedType::String)
         }
+        // Every symbol has one representation, including a `unique symbol`.
+        // The uniqueness is a *type-level* fact -- it is what lets the checker
+        // tell `kRefed` from `kOther` when both are `unique symbol` -- and it
+        // says nothing about the machine value, which is a pointer to an
+        // interned cell either way.
+        //
+        // A `unique symbol` used as a **member name** never reaches here: the
+        // lowering resolves it to a field name at compile time, which is what
+        // makes `[kRefed]` an ordinary field rather than a map lookup. This is
+        // for a symbol used as a *value*.
+        TypeKind::Symbol => HirType::Managed(ManagedType::Symbol),
         TypeKind::Array(element) => {
             let element = representation_within(snapshot, *element, path, subst)?;
             HirType::Managed(ManagedType::Array(Box::new(element)))
@@ -5800,6 +5811,7 @@ impl<'a> FuncBuilder<'a> {
                 TypeKind::String | TypeKind::Literal(LiteralValue::String(_)) => Some("string"),
                 TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => Some("boolean"),
                 TypeKind::BigInt => Some("bigint"),
+                TypeKind::Symbol => Some("symbol"),
                 _ => None,
             })
             .ok_or_else(|| {
@@ -8085,6 +8097,16 @@ impl<'a> FuncBuilder<'a> {
                 id,
                 "an `Array.from` with a mapping callback, or over an array-like",
             ))),
+            // `Symbol.for(key)`: the one symbol for this key in this runtime.
+            //
+            // The registry is a *strong* reference and that is the
+            // specification's own rule rather than an oversight -- a registered
+            // symbol is reachable for the life of the runtime, which is exactly
+            // what distinguishes `Symbol.for("a")` from `Symbol("a")`.
+            ("Symbol", "for", [argument]) => Some(self.lower_symbol_for(id, *argument)),
+            // `Symbol.keyFor(sym)`: the key a registered symbol was made under,
+            // and `undefined` for one that was not registered.
+            ("Symbol", "keyFor", [argument]) => Some(self.lower_symbol_key_for(id, *argument)),
             ("Object", "keys", [argument]) => Some(self.decide_object_keys(id, *argument)),
             ("Object", "hasOwn", [argument, key]) => Some(self.decide_has_own(id, *argument, *key)),
             // `BigInt.asIntN(64, v)`, which is how the profile reads a signed
@@ -9364,6 +9386,94 @@ impl<'a> FuncBuilder<'a> {
         };
         let signature = self.snapshot.signatures.get(signature.0 as usize)?;
         self.represent(signature.return_type)
+    }
+
+    /// `Symbol()` and `Symbol(description)`: a fresh identity every call.
+    ///
+    /// The description is optional and takes no part in what a symbol *is* --
+    /// `Symbol("a") === Symbol("a")` is **false**, because each call allocates
+    /// a cell and a symbol's identity is its address. So this is one
+    /// allocation and nothing else, and the null description is the ordinary
+    /// absent pointer rather than a second entry point.
+    fn lower_symbol_new(
+        &mut self,
+        id: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let description = match arguments {
+            [] => self.push(
+                OpKind::ConstNull,
+                HirType::Managed(ManagedType::String),
+                origin.clone(),
+            ),
+            [only] => {
+                let value = self.lower_expression(*only)?;
+                if !matches!(
+                    self.values[value.0 as usize].ty,
+                    HirType::Managed(ManagedType::String)
+                ) {
+                    return Err(self.unsupported(
+                        id,
+                        "a `Symbol` description that is not a string",
+                    ));
+                }
+                value
+            }
+            _ => {
+                return Err(self.unsupported(id, "a `Symbol` of more than one argument"));
+            }
+        };
+        Ok(self.call_runtime(
+            "nts_symbol_new",
+            vec![description],
+            HirType::Managed(ManagedType::Symbol),
+            &origin,
+        ))
+    }
+
+    /// `Symbol.for(key)`, which is the interning half of the feature.
+    fn lower_symbol_for(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
+        let key = self.lower_expression(argument)?;
+        if !matches!(
+            self.values[key.0 as usize].ty,
+            HirType::Managed(ManagedType::String)
+        ) {
+            return Err(self.unsupported(id, "a `Symbol.for` key that is not a string"));
+        }
+        let origin = self.origin(id);
+        Ok(self.call_runtime(
+            "nts_symbol_for",
+            vec![key],
+            HirType::Managed(ManagedType::Symbol),
+            &origin,
+        ))
+    }
+
+    /// `Symbol.keyFor(sym)`, whose answer is a string or `undefined`.
+    ///
+    /// The runtime answers with a null `NtsString *` for an unregistered
+    /// symbol, which is the representation `string | undefined` already has --
+    /// a pointer with one absent value -- so nothing is erased here.
+    fn lower_symbol_key_for(
+        &mut self,
+        id: NodeId,
+        argument: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let symbol = self.lower_expression(argument)?;
+        if !matches!(
+            self.values[symbol.0 as usize].ty,
+            HirType::Managed(ManagedType::Symbol)
+        ) {
+            return Err(self.unsupported(id, "a `Symbol.keyFor` of something that is not a symbol"));
+        }
+        let origin = self.origin(id);
+        Ok(self.call_runtime(
+            "nts_symbol_key_for",
+            vec![symbol],
+            HirType::Managed(ManagedType::String),
+            &origin,
+        ))
     }
 
     /// A call to an external runtime function.
@@ -15806,6 +15916,16 @@ impl<'a> FuncBuilder<'a> {
             }
             _ => {}
         }
+        // `Symbol()` and `Symbol(description)`. The one builtin here that takes
+        // *no* argument as well as one, so it is read before the single
+        // argument is destructured below.
+        //
+        // Called rather than `new`-ed: `new Symbol()` is a TypeError in
+        // JavaScript, and the checker rejects it, so there is no constructor
+        // form to handle.
+        if name == "Symbol" {
+            return Some(self.lower_symbol_new(id, arguments));
+        }
         let [argument] = arguments else {
             return None;
         };
@@ -18341,8 +18461,14 @@ const fn spelling_of(ty: &HirType) -> Option<&'static str> {
         HirType::Int { .. } | HirType::Float { .. } => "number",
         HirType::BigInt => "bigint",
         HirType::Managed(ManagedType::String) => "string",
-        // A closure is the one reference `typeof` does not call an object.
+        // A closure is not the only reference `typeof` declines to call an
+        // object: a symbol answers `"symbol"`. The wildcard below used to
+        // catch it and answer `"object"`, which is the failure
+        // `tooling/differential`'s own `c_type` comment describes -- a default
+        // that is right for its neighbours is wrong for the newcomer, and the
+        // newcomer is what nobody is looking at. 56 cases disagreed with node.
         HirType::Managed(ManagedType::Object(id)) if super::is_closure_type(*id) => "function",
+        HirType::Managed(ManagedType::Symbol) => "symbol",
         HirType::Managed(_) => "object",
         HirType::Erased | HirType::Void | HirType::Never => return None,
     })

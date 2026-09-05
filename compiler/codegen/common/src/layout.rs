@@ -115,6 +115,7 @@ pub fn shape_of(ty: &HirType) -> Option<Shape> {
         // type has no layout be emitted opaque and still be placed exactly.
         HirType::Managed(
             ManagedType::String
+            | ManagedType::Symbol
             | ManagedType::Object(_)
             | ManagedType::Array(_)
             | ManagedType::Promise(_)

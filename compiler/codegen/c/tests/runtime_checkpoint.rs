@@ -218,6 +218,28 @@ fn a_grown_array_gives_its_elements_back() {
     );
 }
 
+/// A symbol, whose identity is the address of its cell.
+#[test]
+fn a_symbol_is_the_address_of_its_own_cell() {
+    // Reference counting, because the interesting half is what the registry
+    // holds: a registered symbol is reachable for the life of the runtime by
+    // the specification's own rule, which is the whole difference between
+    // `Symbol.for("a")` and `Symbol("a")`.
+    //
+    // The map cases are the point. `Map<string | symbol, V>` is what
+    // `EventEmitter._events` is and what 318 refusal sites in `runtime/node`
+    // are waiting on, and it passes with **no symbol-specific code in the map**
+    // -- `nts_hash_key` already hashes an unrecognised reference by its pointer
+    // and `nts_key_eq` already compares one by its pointer. Two fallbacks
+    // written to be general, now load-bearing for a type they predate.
+    let report = run_suite("symbols", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 20,
+        "expected at least 20 symbol checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}
+
 #[test]
 fn the_map_table_agrees_with_node() {
     // Reference counting: half the suite is what the table retains and gives

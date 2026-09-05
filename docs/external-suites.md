@@ -194,7 +194,14 @@ Three defences:
 
 1. **Run both on node and compare.** The original `.js` and the ported `.ts`
    should produce identical checksums under the same engine. That is a direct
-   test of fidelity and it costs one script.
+   test of fidelity and it costs one script — and the script existed,
+   `benches/awfy/fidelity.mjs`, and was **deleted on 2026-09-05 because nothing
+   ran it.** No gate step, no test, no CI; `bootstrap.sh` called it "the
+   benchmark fidelity gate" in its help text and that was the only mention
+   outside these docs. A check that does not run is worse than one that does not
+   exist, because it reads as coverage — the same reason `-Xverify:all` on a
+   class with no methods is not evidence. The defence above is still the right
+   one; what is gone is the claim that it was in place.
 2. **Keep the object orientation.** AWFY uses classes, inheritance and closures
    deliberately, because dispatch and allocation are things it means to measure.
    Flattening the `Benchmark` hierarchy into free functions would produce a

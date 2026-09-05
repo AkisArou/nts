@@ -78,6 +78,20 @@ static size_t nts_reclaimed = 0;
 
 size_t nts_live_count(void) { return nts_allocated - nts_reclaimed; }
 
+/* Allocations the runtime holds for the life of the process **by design**.
+ *
+ * One thing is in here and it is the `Symbol.for` registry: the specification
+ * says a registered symbol is never collected, which is the entire difference
+ * between `Symbol.for("a")` and `Symbol("a")`. It is not a leak and it is not
+ * reclaimable, and a leak check that cannot tell the two apart reports the
+ * feature working as the feature failing.
+ *
+ * Separate from `nts_live_count` rather than subtracted inside it, because that
+ * count is answering "what is still held" and the honest answer includes these.
+ * What a *leak* check wants is the growth that is not this. */
+static size_t nts_permanent = 0;
+size_t nts_permanent_count(void) { return nts_permanent; }
+
 /* The same allocations again, in a window a measurement can zero.
  *
  * `nts_allocated` cannot be zeroed: `nts_live_count` is the difference between
@@ -2951,6 +2965,8 @@ NtsString *nts_tag_name(uint32_t tag) {
     return nts_string_from_utf8("string", 6);
   case NTS_TAG_FUNCTION:
     return nts_string_from_utf8("function", 8);
+  case NTS_TAG_SYMBOL:
+    return nts_string_from_utf8("symbol", 6);
   case NTS_TAG_OBJECT:
   /* `typeof null` is `"object"`. A famous wart, and the specification's, so
    * the two tags answer with one spelling. */
@@ -3629,6 +3645,131 @@ static NtsMap *nts_map_alloc(uint32_t kind, bool holds_values) {
    * that a map nothing is ever put into costs one header. */
   map->values = 0;
   return map;
+}
+
+/* Symbols.
+ *
+ * A symbol is a header and a description pointer, and its identity is its
+ * address. Everything JavaScript asks of symbols follows from that without
+ * comparing anything else:
+ *
+ *   Symbol("a") === Symbol("a")          false -- two allocations
+ *   Symbol.for("a") === Symbol.for("a")  true  -- one registry entry
+ *
+ * The description takes no part in either, which is why it can be null.
+ *
+ * `references` is 1 with an offset table naming the description, so the
+ * collector walks it like any other object field. `cyclic` is 0 and that is a
+ * statement rather than an omission: a symbol's only reference is a string,
+ * and a string holds no references, so no symbol can reach itself. */
+static const uint32_t nts_refs_symbol[] = {
+    (uint32_t)offsetof(NtsSymbol, description)};
+static const NtsDescriptor nts_desc_symbol = {
+    NTS_KIND_SYMBOL,
+    (uint32_t)sizeof(NtsSymbol),
+    1u,
+    0u,
+    nts_refs_symbol,
+    0,
+    "Symbol",
+    0u,
+    0,
+};
+
+/* The `Symbol.for` registry: keys to the symbols made for them.
+ *
+ * A strong reference on purpose, and the specification's own rule -- a
+ * registered symbol is reachable from the registry for the life of the runtime,
+ * which is exactly the difference between `Symbol.for("a")` and `Symbol("a")`.
+ * So it is not a leak; it is the semantics. */
+static NtsMap *nts_symbol_registry = 0;
+
+NtsSymbol *nts_symbol_new(NtsString *description) {
+  NtsSymbol *symbol = (NtsSymbol *)nts_alloc(sizeof(NtsSymbol));
+  symbol->header.descriptor = &nts_desc_symbol;
+  symbol->header.reserved = 1;
+  symbol->header.flags = 0;
+  symbol->header.length = 0;
+  symbol->description = description;
+  if (description) {
+    nts_retain((NtsHeader *)description);
+  }
+  nts_note_allocation();
+  return symbol;
+}
+
+NtsSymbol *nts_symbol_for(NtsString *key) {
+  if (!nts_symbol_registry) {
+    nts_symbol_registry = nts_map_alloc(NTS_KEY_STRING, true);
+    /* The map header. Its key block is counted where it is allocated, in
+     * `nts_map_rehash`, and is accounted for on the first insertion below. */
+    nts_permanent++;
+  }
+  NtsValue slot = nts_value_of_reference((NtsHeader *)key, NTS_TAG_STRING);
+  NtsValue found = nts_map_get(nts_symbol_registry, slot);
+  if (nts_value_tag(found) == NTS_TAG_SYMBOL) {
+    /* Owned already: `nts_map_get` retains what it hands back, which is this
+     * file's convention throughout -- `nts_map_key_at` and `nts_map_value_at`
+     * do the same, and `produces_owned` in `hir::own` says a call yields an
+     * owned reference with no exception for helpers.
+     *
+     * **Retaining again here is a leak**, and I wrote one. The reasoning that
+     * produced it was that the registry owns the cell so the caller must be
+     * given a second reference -- true, and the second reference had already
+     * been given. The tell was in the numbers: seventeen calls left the count
+     * at twenty rather than at one. */
+    return (NtsSymbol *)nts_value_reference(found);
+  }
+  size_t before = nts_live_count();
+  NtsSymbol *symbol = nts_symbol_new(key);
+  nts_map_set(nts_symbol_registry, slot,
+              nts_value_of_reference((NtsHeader *)symbol, NTS_TAG_SYMBOL));
+  /* Whatever that took: the symbol, the key the registry now holds, and the
+   * table's block the first time it grows. Measured rather than enumerated,
+   * because enumerating it would be a second copy of the map's own growth rule
+   * and would be wrong the first time that rule changed. */
+  nts_permanent += nts_live_count() - before;
+  return symbol;
+}
+
+NtsString *nts_symbol_key_for(const NtsSymbol *symbol) {
+  if (!symbol || !nts_symbol_registry) {
+    return 0;
+  }
+  /* Walked rather than looked up, because the registry maps key to symbol and
+   * this asks the other way. `Symbol.keyFor` is rare and a second index would
+   * cost every `Symbol.for` a write to keep it. */
+  /* `used` rather than `header.length`: the registry never deletes, so the two
+   * are equal, and `used` is what indexes the entry array. */
+  for (uint32_t at = 0; at < nts_symbol_registry->used; at++) {
+    NtsValue value = nts_map_value_at(nts_symbol_registry, (double)at);
+    if (nts_value_tag(value) == NTS_TAG_SYMBOL &&
+        (const NtsSymbol *)nts_value_reference(value) == symbol) {
+      NtsValue key = nts_map_key_at(nts_symbol_registry, (double)at);
+      /* Owned already: `nts_map_key_at` retains before it returns. */
+      return (NtsString *)nts_value_reference(key);
+    }
+  }
+  return 0;
+}
+
+NtsString *nts_symbol_description(const NtsSymbol *symbol) {
+  NtsString *description = symbol ? symbol->description : 0;
+  /* Owned, like every other reference handed out of this file. The symbol holds
+   * one and the caller is given another. */
+  if (description) {
+    nts_retain((NtsHeader *)description);
+  }
+  return description;
+}
+
+NtsString *nts_symbol_to_string(const NtsSymbol *symbol) {
+  NtsString *open = nts_string_from_utf8("Symbol(", 7);
+  NtsString *close = nts_string_from_utf8(")", 1);
+  const NtsString *inside =
+      symbol && symbol->description ? symbol->description : 0;
+  NtsString *head = inside ? nts_concat(open, inside) : open;
+  return nts_concat(head, close);
 }
 
 NtsMap *nts_map_new(double kind) { return nts_map_alloc((uint32_t)kind, true); }
@@ -4403,8 +4544,18 @@ uint32_t nts_tag_of_reference(const NtsHeader *object) {
   if (!object) {
     return NTS_TAG_OBJECT;
   }
-  return object->descriptor->kind == NTS_KIND_STRING ? NTS_TAG_STRING
-                                                     : NTS_TAG_OBJECT;
+  switch (object->descriptor->kind) {
+  case NTS_KIND_STRING:
+    return NTS_TAG_STRING;
+  case NTS_KIND_SYMBOL:
+    return NTS_TAG_SYMBOL;
+  default:
+    /* A closure answers `"function"` and is not distinguishable here: its kind
+     * is `NTS_KIND_OBJECT` like any other, and the tag it carries comes from
+     * the compiler, which knows. This function is for the values that arrive
+     * without one. */
+    return NTS_TAG_OBJECT;
+  }
 }
 
 /* Every fulfilment is the same store. The helpers differ only in the tag they

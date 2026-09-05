@@ -20,14 +20,19 @@ pub const STRING: u32 = 3;
 /// own — and it sits *below* [`OBJECT`] because "object" is the range test
 /// `tag >= OBJECT` and a function must fall outside it.
 pub const FUNCTION: u32 = 4;
-pub const OBJECT: u32 = 5;
+/// A symbol. `typeof` answers `"symbol"`, so it sits *below* [`OBJECT`] for the
+/// same reason [`FUNCTION`] does — the range test `tag >= OBJECT` must not
+/// admit it — and inside the reference range, because a symbol is one: its
+/// identity is the address of an interned cell.
+pub const SYMBOL: u32 = 5;
+pub const OBJECT: u32 = 6;
 /// `null`, which is a different *value* from `undefined` and needs a tag to say
 /// so — `null === undefined` is false.
 ///
 /// Last, and adjacent to [`OBJECT`], on purpose: `typeof null` is `"object"`,
 /// so the two tags share a spelling and `typeof x === "object"` stays the one
 /// comparison `tag >= OBJECT` instead of becoming a pair.
-pub const NULL: u32 = 6;
+pub const NULL: u32 = 7;
 
 /// The orderings the numbering above rests on, checked where it is written.
 ///
@@ -53,7 +58,7 @@ const _: () = assert!(
 /// `NTS_TAG_IS_REFERENCE` tests and what the tracer, retain, release and both
 /// emitters read.
 const _: () = assert!(
-    STRING < FUNCTION && FUNCTION < OBJECT,
+    STRING < FUNCTION && FUNCTION < SYMBOL && SYMBOL < OBJECT,
     "the reference tags are the contiguous range STRING ..= OBJECT"
 );
 const _: () = assert!(

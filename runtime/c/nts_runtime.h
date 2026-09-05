@@ -37,6 +37,7 @@
 #define NTS_KIND_STRING 1u
 #define NTS_KIND_OBJECT 2u
 #define NTS_KIND_MAP 3u
+#define NTS_KIND_SYMBOL 4u
 
 typedef struct NtsDescriptor {
   uint32_t kind;
@@ -118,6 +119,27 @@ typedef struct NtsHeader {
 
 typedef NtsHeader NtsString;
 
+/* A symbol: an interned cell whose **address is its identity**.
+ *
+ * That is the whole representation, and it is what makes the two things
+ * JavaScript asks of symbols fall out of pointer comparison alone:
+ * `Symbol("a") !== Symbol("a")` because each call allocates a cell, and
+ * `Symbol.for("a") === Symbol.for("a")` because the registry hands back the
+ * one it already made. Nothing compares descriptions, and nothing needs to --
+ * the description is for `toString` and is not part of identity.
+ *
+ * So a `Map` keyed by symbols needs no code at all: `nts_hash_key` already
+ * hashes an unrecognised reference by its pointer and `nts_key_eq` already
+ * compares one by its pointer, which for a symbol is exactly right rather
+ * than merely adequate. */
+typedef struct NtsSymbol {
+  NtsHeader header;
+  /* `Symbol()` with no argument has none, which is a different value from
+   * `Symbol("")` -- `String(Symbol())` is "Symbol()" and `String(Symbol(""))`
+   * is "Symbol()" too, but `.description` is `undefined` against `""`. */
+  NtsString *description;
+} NtsSymbol;
+
 /* An array is a header, a capacity, and a pointer to its elements.
  *
  * RFC 8.2 said an array and a string differ by descriptor rather than by shape,
@@ -174,10 +196,16 @@ _Static_assert(sizeof(NtsArray) % 16u == 0u,
  * The order is not arbitrary. `NTS_TAG_OBJECT` and `NTS_TAG_NULL` are adjacent
  * and last, which makes `typeof x === "object"` the single comparison
  * `tag >= NTS_TAG_OBJECT` rather than a pair, and is what the peephole in
- * `hir::tags` emits. `NTS_TAG_FUNCTION` sits *below* them for the same reason
- * inverted: a closure answers `"function"`, so it has to fall outside that
- * range. A closure is still a reference, which is why the macro below is a
- * range over the middle three rather than a pair of equalities.
+ * `hir::tags` emits. `NTS_TAG_FUNCTION` and `NTS_TAG_SYMBOL` sit *below* them
+ * for the same reason inverted: a closure answers `"function"` and a symbol
+ * answers `"symbol"`, so both have to fall outside that range. Both are still
+ * references, which is why the macro below is a range over the middle four
+ * rather than a set of equalities.
+ *
+ * `NTS_TAG_SYMBOL` is a reference because a symbol *is* one: its identity is
+ * the address of an interned cell, which is what makes `Symbol("a") !==
+ * Symbol("a")` and `Symbol.for("a") === Symbol.for("a")` both come out right
+ * without comparing anything but pointers.
  *
  * `null` needs a tag of its own at all because `null` and `undefined` are
  * *different values* -- `null === undefined` is false -- and an erased slot is
@@ -189,8 +217,9 @@ typedef enum NtsTag {
   NTS_TAG_NUMBER = 2,
   NTS_TAG_STRING = 3,
   NTS_TAG_FUNCTION = 4,
-  NTS_TAG_OBJECT = 5,
-  NTS_TAG_NULL = 6
+  NTS_TAG_SYMBOL = 5,
+  NTS_TAG_OBJECT = 6,
+  NTS_TAG_NULL = 7
 } NtsTag;
 
 /* The representation is *behind accessors*, and every reader in the runtime,
@@ -608,6 +637,11 @@ size_t nts_cycle_candidates(void);
  * time, so they could carry this; they do not, because it measured as worth
  * nothing and every promise added is surface for getting one wrong.
  *
+ * `nts_symbol_for` is the second family and the sharper case: it *interns*, so
+ * every call after the first hands back the registry's own pointer. A function
+ * that exists to return the same object twice is the one place this attribute
+ * can never go.
+ *
  * That distinction was checked rather than assumed, and the first version of
  * this comment had it wrong twice: it claimed `nts_str_slice` may hand back its
  * argument, which it never does, and that `nts_tag_name` returns one of seven
@@ -631,6 +665,11 @@ void nts_retain(NtsHeader *object);
  * without bound under NoGC, and the difference is visible from inside the
  * program rather than inferred from its memory use. */
 size_t nts_live_count(void);
+/* Of those, how many the runtime holds for the life of the process by design.
+ *
+ * The `Symbol.for` registry, and nothing else so far. A leak check subtracts
+ * this; a "what is still held" question does not. */
+size_t nts_permanent_count(void);
 /* Calls to `nts_retain` and `nts_release`, counted on arrival rather than by
  * effect -- a retain of a null returns immediately and is still a call the
  * compiler emitted. This is what an elision pass is trying to make smaller, so
@@ -652,6 +691,28 @@ NTS_ALLOCATES NtsArray *
 nts_array_new_uninitialized(const NtsDescriptor *descriptor, double length);
 NTS_ALLOCATES NtsHeader *nts_object_new(const NtsDescriptor *descriptor);
 void nts_bounds(double index, uint32_t length);
+/* A fresh symbol. Every call makes a new identity, however equal the
+ * descriptions: `Symbol("a") === Symbol("a")` is false in JavaScript. */
+NTS_ALLOCATES NtsSymbol *nts_symbol_new(NtsString *description);
+/* `Symbol.for(key)`: the one symbol for this key in this runtime, made on the
+ * first call and handed back on every one after. The registry is a strong
+ * reference by design -- the specification says a registered symbol is never
+ * collected, which is the difference between it and `Symbol()`.
+ *
+ * **Deliberately not `NTS_ALLOCATES`**, and for the reason the comment above
+ * that macro gives about the `_into` family: on every call after the first this
+ * returns a pointer the *registry* already holds, which is exactly what
+ * `malloc` promises cannot happen. Interning and that attribute are opposites.
+ * It carried it for about an hour. */
+NtsSymbol *nts_symbol_for(NtsString *key);
+/* `Symbol.keyFor(sym)`: the key a registered symbol was made under, or null
+ * for one that was not. */
+NtsString *nts_symbol_key_for(const NtsSymbol *symbol);
+/* `sym.description`, which is null where the symbol was made without one. */
+NtsString *nts_symbol_description(const NtsSymbol *symbol);
+/* `String(sym)` and `sym.toString()`: "Symbol(" + description + ")". */
+NTS_ALLOCATES NtsString *nts_symbol_to_string(const NtsSymbol *symbol);
+
 NTS_ALLOCATES NtsString *nts_concat(const NtsString *a, const NtsString *b);
 bool nts_string_eq(const NtsString *a, const NtsString *b);
 
