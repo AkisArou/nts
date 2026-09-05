@@ -13,30 +13,9 @@ import type { WritableLike } from "./stdio.ts";
 
 const ESCAPE = "\u001b";
 
-/**
- * Build a Control Sequence Introducer sequence: ESC, `[`, and the body.
- *
- * A template tag, which is node's shape and worth keeping: the sequences are
- * written as ``CSI`${row};${col}H` `` at the point of use, so the escape and
- * the bracket appear once here rather than in every caller, and what is left
- * at each call site is the part that differs.
- *
- * Node hangs constants off the function object. NTS has no function-object
- * property map, so typed code exports them as ordinary constants; the
- * Node-only readline shape restores the legacy facade for JavaScript tests.
- */
-export function csi(
-  strings: TemplateStringsArray | readonly string[],
-  ...args: unknown[]
-): string {
-  let ret = `${ESCAPE}[`;
-  for (let n = 0; n < strings.length; n++) {
-    ret += strings[n];
-    if (n < args.length) ret += String(args[n]);
-  }
-  return ret;
-}
-
+// Node exposes these through a private callable `CSI` function object. The
+// runtime uses ordinary typed constants: the function's property bag is an
+// internal compatibility detail and a function-metaobject non-goal.
 export const kEscape = ESCAPE;
 export const kClearToLineBeginning = `${ESCAPE}[1K`;
 export const kClearToLineEnd = `${ESCAPE}[0K`;

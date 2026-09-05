@@ -22,6 +22,7 @@
 import { EventEmitter, kFirstEventParam, on as onEvent } from "../../events/src/main.ts";
 import { StringDecoder } from "../../string_decoder/src/main.ts";
 import type { Buffer } from "../../buffer/src/main.ts";
+import { inspect } from "../../util/src/inspect.ts";
 import { getStringWidth } from "../../util/src/width.ts";
 import { stripVTControlCharacters } from "../../util/src/main.ts";
 import {
@@ -1046,7 +1047,7 @@ export class InterfaceBase extends EventEmitter {
       settled = true;
       this.resume();
       if (err) {
-        this.#writeToOutput(`Tab completion error: ${String(err)}`);
+        this.#writeToOutput(`Tab completion error: ${inspect(err)}`);
       } else if (value !== undefined) {
         this.#tabCompleter(lastKeypressWasTab, value);
       }

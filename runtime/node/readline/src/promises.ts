@@ -34,12 +34,11 @@ import {
 
 const CSI_ = "\u001b[";
 
-interface WritableLike {
+interface ReadlineWritable {
   write(chunk: string, callback?: (error?: Error | null) => void): unknown;
-  writable?: boolean;
 }
 
-function isWritable(stream: unknown): stream is WritableLike {
+function isWritable(stream: unknown): stream is ReadlineWritable {
   return (
     typeof stream === "object" &&
     stream !== null &&
@@ -69,11 +68,11 @@ export interface ReadlineOptions {
  * reads as one statement and reaches the terminal as one write.
  */
 export class Readline {
-  #stream: WritableLike;
+  #stream: ReadlineWritable;
   #todo: string[] = [];
   #autoCommit = false;
 
-  constructor(stream: WritableLike, options?: ReadlineOptions) {
+  constructor(stream: ReadlineWritable, options?: ReadlineOptions) {
     if (!isWritable(stream)) throw new ERR_INVALID_ARG_TYPE("stream", "Writable", stream);
     this.#stream = stream;
     if (options?.autoCommit != null) {

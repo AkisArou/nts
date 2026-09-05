@@ -23,7 +23,6 @@ import {
 } from "../../internal/readline-callbacks.ts";
 import {
   Interface as InterfaceClass,
-  kQuestionPromise,
   type Completer,
   type InputStream,
   type InterfaceOptions,
@@ -45,7 +44,7 @@ export type { InterfaceOptions, Completer, InputStream, OutputStream };
 // Node's historical constructor is also callable without `new`. A class is
 // the statically typed form of that constructor; the callable facade requires
 // function/prototype metaobjects and is intentionally outside §13.
-export { InterfaceClass as Interface, kQuestionPromise };
+export { InterfaceClass as Interface };
 
 /**
  * Build an interface.

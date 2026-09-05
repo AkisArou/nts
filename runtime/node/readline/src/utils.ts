@@ -110,62 +110,6 @@ interface KeypressTarget {
 }
 
 /**
- * Named keys, by the escape sequence that produces them.
- *
- * A table rather than node's `switch`, because every arm is data -- one
- * terminal's spelling of one key -- and none of them does anything. The
- * `shift` and `ctrl` entries are the terminals that encode a modifier in the
- * sequence itself rather than in the numeric modifier field.
- */
-const NAMED: Record<string, { name: string; shift?: boolean; ctrl?: boolean }> = {
-  // xterm/gnome ESC [ letter, with modifier
-  "[P": { name: "f1" }, "[Q": { name: "f2" }, "[R": { name: "f3" }, "[S": { name: "f4" },
-  // xterm/gnome ESC O letter, without modifier
-  "OP": { name: "f1" }, "OQ": { name: "f2" }, "OR": { name: "f3" }, "OS": { name: "f4" },
-  // xterm/rxvt ESC [ number ~
-  "[11~": { name: "f1" }, "[12~": { name: "f2" }, "[13~": { name: "f3" }, "[14~": { name: "f4" },
-  // paste bracket mode
-  "[200~": { name: "paste-start" }, "[201~": { name: "paste-end" },
-  // from Cygwin, and used by libuv
-  "[[A": { name: "f1" }, "[[B": { name: "f2" }, "[[C": { name: "f3" },
-  "[[D": { name: "f4" }, "[[E": { name: "f5" },
-  // common
-  "[15~": { name: "f5" }, "[17~": { name: "f6" }, "[18~": { name: "f7" },
-  "[19~": { name: "f8" }, "[20~": { name: "f9" }, "[21~": { name: "f10" },
-  "[23~": { name: "f11" }, "[24~": { name: "f12" },
-  // xterm ESC [ letter
-  "[A": { name: "up" }, "[B": { name: "down" }, "[C": { name: "right" },
-  "[D": { name: "left" }, "[E": { name: "clear" }, "[F": { name: "end" },
-  "[H": { name: "home" },
-  // xterm/gnome ESC O letter
-  "OA": { name: "up" }, "OB": { name: "down" }, "OC": { name: "right" },
-  "OD": { name: "left" }, "OE": { name: "clear" }, "OF": { name: "end" },
-  "OH": { name: "home" },
-  // xterm/rxvt ESC [ number ~
-  "[1~": { name: "home" }, "[2~": { name: "insert" }, "[3~": { name: "delete" },
-  "[4~": { name: "end" }, "[5~": { name: "pageup" }, "[6~": { name: "pagedown" },
-  // putty
-  "[[5~": { name: "pageup" }, "[[6~": { name: "pagedown" },
-  // rxvt
-  "[7~": { name: "home" }, "[8~": { name: "end" },
-  // rxvt, with the modifier in the sequence
-  "[a": { name: "up", shift: true }, "[b": { name: "down", shift: true },
-  "[c": { name: "right", shift: true }, "[d": { name: "left", shift: true },
-  "[e": { name: "clear", shift: true },
-  "[2$": { name: "insert", shift: true }, "[3$": { name: "delete", shift: true },
-  "[5$": { name: "pageup", shift: true }, "[6$": { name: "pagedown", shift: true },
-  "[7$": { name: "home", shift: true }, "[8$": { name: "end", shift: true },
-  "Oa": { name: "up", ctrl: true }, "Ob": { name: "down", ctrl: true },
-  "Oc": { name: "right", ctrl: true }, "Od": { name: "left", ctrl: true },
-  "Oe": { name: "clear", ctrl: true },
-  "[2^": { name: "insert", ctrl: true }, "[3^": { name: "delete", ctrl: true },
-  "[5^": { name: "pageup", ctrl: true }, "[6^": { name: "pagedown", ctrl: true },
-  "[7^": { name: "home", ctrl: true }, "[8^": { name: "end", ctrl: true },
-  // misc.
-  "[Z": { name: "tab", shift: true },
-};
-
-/**
  * Decode keys from a stream of characters, forever.
  *
  * Driven by `emitKeypressEvents`: each `next(ch)` hands over one character and
@@ -271,13 +215,109 @@ export function* emitKeys(stream: KeypressTarget): Generator<void, void, string>
       key.shift = !!(modifier & 1);
       key.code = code;
 
-      const named = NAMED[code];
-      if (named === undefined) {
-        key.name = "undefined";
-      } else {
-        key.name = named.name;
-        if (named.shift) key.shift = true;
-        if (named.ctrl) key.ctrl = true;
+      // Pinned upstream's static switch. Besides matching Node directly, this
+      // avoids allocating a dictionary and one object per entry at module
+      // initialization merely to perform a fixed finite lookup.
+      switch (code) {
+        // xterm/gnome ESC [ letter, with modifier
+        case "[P": key.name = "f1"; break;
+        case "[Q": key.name = "f2"; break;
+        case "[R": key.name = "f3"; break;
+        case "[S": key.name = "f4"; break;
+
+        // xterm/gnome ESC O letter, without modifier
+        case "OP": key.name = "f1"; break;
+        case "OQ": key.name = "f2"; break;
+        case "OR": key.name = "f3"; break;
+        case "OS": key.name = "f4"; break;
+
+        // xterm/rxvt ESC [ number ~
+        case "[11~": key.name = "f1"; break;
+        case "[12~": key.name = "f2"; break;
+        case "[13~": key.name = "f3"; break;
+        case "[14~": key.name = "f4"; break;
+
+        // Paste bracket mode
+        case "[200~": key.name = "paste-start"; break;
+        case "[201~": key.name = "paste-end"; break;
+
+        // Cygwin, also used by libuv
+        case "[[A": key.name = "f1"; break;
+        case "[[B": key.name = "f2"; break;
+        case "[[C": key.name = "f3"; break;
+        case "[[D": key.name = "f4"; break;
+        case "[[E": key.name = "f5"; break;
+
+        // Common function-key spellings
+        case "[15~": key.name = "f5"; break;
+        case "[17~": key.name = "f6"; break;
+        case "[18~": key.name = "f7"; break;
+        case "[19~": key.name = "f8"; break;
+        case "[20~": key.name = "f9"; break;
+        case "[21~": key.name = "f10"; break;
+        case "[23~": key.name = "f11"; break;
+        case "[24~": key.name = "f12"; break;
+
+        // xterm ESC [ letter
+        case "[A": key.name = "up"; break;
+        case "[B": key.name = "down"; break;
+        case "[C": key.name = "right"; break;
+        case "[D": key.name = "left"; break;
+        case "[E": key.name = "clear"; break;
+        case "[F": key.name = "end"; break;
+        case "[H": key.name = "home"; break;
+
+        // xterm/gnome ESC O letter
+        case "OA": key.name = "up"; break;
+        case "OB": key.name = "down"; break;
+        case "OC": key.name = "right"; break;
+        case "OD": key.name = "left"; break;
+        case "OE": key.name = "clear"; break;
+        case "OF": key.name = "end"; break;
+        case "OH": key.name = "home"; break;
+
+        // xterm/rxvt ESC [ number ~
+        case "[1~": key.name = "home"; break;
+        case "[2~": key.name = "insert"; break;
+        case "[3~": key.name = "delete"; break;
+        case "[4~": key.name = "end"; break;
+        case "[5~": key.name = "pageup"; break;
+        case "[6~": key.name = "pagedown"; break;
+
+        // PuTTY
+        case "[[5~": key.name = "pageup"; break;
+        case "[[6~": key.name = "pagedown"; break;
+
+        // rxvt
+        case "[7~": key.name = "home"; break;
+        case "[8~": key.name = "end"; break;
+
+        // rxvt carries these modifiers in the sequence itself.
+        case "[a": key.name = "up"; key.shift = true; break;
+        case "[b": key.name = "down"; key.shift = true; break;
+        case "[c": key.name = "right"; key.shift = true; break;
+        case "[d": key.name = "left"; key.shift = true; break;
+        case "[e": key.name = "clear"; key.shift = true; break;
+        case "[2$": key.name = "insert"; key.shift = true; break;
+        case "[3$": key.name = "delete"; key.shift = true; break;
+        case "[5$": key.name = "pageup"; key.shift = true; break;
+        case "[6$": key.name = "pagedown"; key.shift = true; break;
+        case "[7$": key.name = "home"; key.shift = true; break;
+        case "[8$": key.name = "end"; key.shift = true; break;
+        case "Oa": key.name = "up"; key.ctrl = true; break;
+        case "Ob": key.name = "down"; key.ctrl = true; break;
+        case "Oc": key.name = "right"; key.ctrl = true; break;
+        case "Od": key.name = "left"; key.ctrl = true; break;
+        case "Oe": key.name = "clear"; key.ctrl = true; break;
+        case "[2^": key.name = "insert"; key.ctrl = true; break;
+        case "[3^": key.name = "delete"; key.ctrl = true; break;
+        case "[5^": key.name = "pageup"; key.ctrl = true; break;
+        case "[6^": key.name = "pagedown"; key.ctrl = true; break;
+        case "[7^": key.name = "home"; key.ctrl = true; break;
+        case "[8^": key.name = "end"; key.ctrl = true; break;
+
+        case "[Z": key.name = "tab"; key.shift = true; break;
+        default: key.name = "undefined";
       }
     } else if (ch === "\r") {
       key.name = "return";
