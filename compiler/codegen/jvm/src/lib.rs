@@ -45,6 +45,7 @@ pub mod hierarchy;
 pub mod ops;
 pub mod types;
 mod unbox;
+pub mod widen;
 
 use nts_core::hir::Program;
 use nts_diagnostics::Diagnostic;
@@ -189,6 +190,12 @@ pub fn emit(program: &Program) -> Emitted {
         ));
     }
 
+    // One decision for the whole program: a field and the values that flow
+
+    // through it are widened together or not at all. See `widen`.
+
+    let plan = widen::plan(program);
+
     for func in &program.funcs {
         // An abstract declaration is carried in `program.funcs` so that a call
         // through the slot can take its descriptor from somewhere, and that is
@@ -205,7 +212,7 @@ pub fn emit(program: &Program) -> Emitted {
         if func.abstract_declaration {
             continue;
         }
-        match render(program, func, &mut pool) {
+        match render(program, func, &plan, &mut pool) {
             Ok((name, signature, rendered)) => {
                 builder.method(
                     access::PUBLIC | access::STATIC,
@@ -220,7 +227,7 @@ pub fn emit(program: &Program) -> Emitted {
 
     let mut classes = Vec::new();
     for layout in &program.layouts {
-        match object_class(program, layout) {
+        match object_class(program, layout, &plan) {
             Ok(Some(class)) => classes.push(class),
             Ok(None) => {}
             Err(diagnostic) => diagnostics.push(diagnostic),
@@ -253,7 +260,11 @@ pub fn emit(program: &Program) -> Emitted {
 /// `IllegalAccessError`. Inlining the constructor body into `<init>` would buy
 /// the flag and cost the verifier's `uninitializedThis` state; it is a later
 /// step and only worth taking if `benches/cases/objects` says the JIT cares.
-fn object_class(program: &Program, layout: &nts_core::hir::Layout) -> Result<Option<Class>, Diagnostic> {
+fn object_class(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    plan: &widen::Plan,
+) -> Result<Option<Class>, Diagnostic> {
     let origin = program_origin(program);
     let mut pool = Pool::new();
     let name = types::class_name(layout);
@@ -286,6 +297,15 @@ fn object_class(program: &Program, layout: &nts_core::hir::Layout) -> Result<Opt
                 ),
                 origin.location,
             ));
+        };
+        // A field this backend holds as a `double`; see `widen`. The
+        // declaration and every access ask the same plan with the same key, so
+        // they cannot disagree about the descriptor.
+        let descriptor = if plan.field(&types::class_name(layout), &field.name) {
+            types::descriptor(types::Shape::of(program), &nts_core::hir::HirType::Float { bits: 64 })
+                .unwrap_or(descriptor)
+        } else {
+            descriptor
         };
         builder.field(access::PUBLIC, body::method_name(&field.name), descriptor);
     }
@@ -382,9 +402,10 @@ fn object_class(program: &Program, layout: &nts_core::hir::Layout) -> Result<Opt
 fn render(
     program: &Program,
     func: &nts_core::hir::Func,
+    plan: &widen::Plan,
     pool: &mut Pool,
 ) -> Result<(String, String, nts_jvm_emitter::Body), Diagnostic> {
-    let emitter = body::Emitter::new(program, func)?;
+    let emitter = body::Emitter::new(program, func, plan)?;
     let signature = body::signature(program, func)
         .ok_or_else(|| body::refuse(func, "a signature with no representation"))?;
     let rendered = emitter.emit(pool)?;

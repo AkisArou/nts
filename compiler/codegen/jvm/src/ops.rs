@@ -610,13 +610,10 @@ impl Emitter<'_> {
             OpKind::ConstNull | OpKind::ConstUndefined => {
                 self.absence(code, pool, &op.kind, &op.ty, &origin)?
             }
-            OpKind::Binary { op: bin, lhs, rhs } => self.binary(code, pool, &op.ty, *bin, *lhs, *rhs)?,
+            OpKind::Binary { op: bin, lhs, rhs } => self.binary(code, pool, value, *bin, *lhs, *rhs)?,
             OpKind::Unary { op: un, operand } => self.unary(code, pool, &op.ty, *un, *operand)?,
             OpKind::Convert(operand) => {
-                self.load(code, pool, *operand)?;
-                let from = self.ty(*operand).clone();
-                self.convert(code, pool, &from, &op.ty, &origin)?;
-                Placed::OnStack
+                self.conversion(code, pool, value, *operand, &op.ty, &origin)?
             }
 
             OpKind::GlobalGet(_) | OpKind::GlobalSet { .. } => {
@@ -1825,7 +1822,15 @@ impl Emitter<'_> {
         // came from `Shape` is a `NoSuchFieldError` at link time rather than
         // anything the verifier catches.
         let owner = crate::hierarchy::declares_field(self.program, layout, field as usize);
-        let Some(descriptor) = types::descriptor(self.shape, &entry.ty) else {
+        // A field this backend holds as a `double`; see `widen`. Keyed by the
+        // *declaring* class and the field's name, which is the one identity the
+        // declaration in `object_class` and this access can both compute.
+        let held = if self.widened_fields.contains(&(types::class_name(owner), entry.name.clone())) {
+            HirType::Float { bits: 64 }
+        } else {
+            entry.ty.clone()
+        };
+        let Some(descriptor) = types::descriptor(self.shape, &held) else {
             return Err(refuse(
                 self.func,
                 &format!("a field of unrepresentable type: {}", types::describe(&entry.ty)),
@@ -1955,11 +1960,35 @@ impl Emitter<'_> {
         Ok(Placed::OnStack)
     }
 
+    /// A `Convert`, which a widened operand makes into nothing at all.
+    ///
+    /// This is the instruction `widen` exists to delete: an `i32` held in a
+    /// `double` slot is already the double the result wants, so there is
+    /// nothing to widen. `generator`'s inner loop had two of these and they
+    /// were the whole of its 3.41x.
+    fn conversion(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+        operand: ValueId,
+        result: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        self.load(code, pool, operand)?;
+        if self.widened.contains(&operand) && self.kind_of(value)? == Kind::Double {
+            return Ok(Placed::OnStack);
+        }
+        let from = self.ty(operand).clone();
+        self.convert(code, pool, &from, result, origin)?;
+        Ok(Placed::OnStack)
+    }
+
     fn binary(
         &mut self,
         code: &mut Code,
         pool: &mut Pool,
-        result: &HirType,
+        value: ValueId,
         op: BinOp,
         lhs: ValueId,
         rhs: ValueId,
@@ -1972,8 +2001,10 @@ impl Emitter<'_> {
             return self.materialize_comparison(code, pool, compare, lhs, rhs);
         }
 
-        let kind = types::kind(result)
-            .ok_or_else(|| refuse(self.func, "an arithmetic result of unrepresentable type"))?;
+        // From `kind_of`, not from the type: a widened `i32` is a `double`
+        // here, and reading the HIR type would emit `iadd` against two operands
+        // the loader just pushed as doubles.
+        let kind = self.kind_of(value)?;
         // The opcode and its stack effect come from the *result*, and the
         // operands are loaded by their own kinds. Those agree in every prepared
         // HIR seen so far -- and where they did not, the symptom was a stack
