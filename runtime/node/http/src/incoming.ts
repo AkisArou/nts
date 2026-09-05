@@ -14,6 +14,7 @@
 
 import { Readable } from "../../stream/src/main.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
+import { nextTick } from "../../internal/tick.ts";
 
 /** The public part of the host AbortSignal exposed by IncomingMessage. */
 export interface IncomingAbortSignal extends AbortSignalLike {
@@ -389,6 +390,7 @@ export class IncomingMessage extends Readable {
   }
 
   override _destroy(error: unknown, callback: (error?: unknown) => void): void {
+    const destroySocket = this.#destroySocketOnDestroy;
     if (!this.readableEnded || !this.complete) {
       // Destroyed mid-message: the connection cannot be reused, because the
       // rest of this message is still coming and would be read as the next
@@ -396,11 +398,19 @@ export class IncomingMessage extends Readable {
       this.aborted = true;
       this.emit("aborted");
       this.#abortSignal();
-      if (this.#destroySocketOnDestroy) this.socket?.destroy(error);
     }
-    // Keep IncomingMessage's compatibility rule: unlike a generic Readable,
-    // a premature peer close must not turn into an uncaught exception merely
-    // because the consumer listened for `aborted` but not `error`.
-    callback(this.listenerCount("error") === 0 ? undefined : error);
+    // IncomingMessage keeps its historical rule: its own error is reported
+    // only when observed. An explicit client-side destroy still sends that
+    // error through the socket to the owning ClientRequest.
+    const finish = (): void => callback(this.listenerCount("error") === 0 ? undefined : error);
+    const socket = this.socket;
+    if (destroySocket && this.aborted && socket != null && !socket.destroyed) {
+      // `closed` belongs to completion of `_destroy`, not its start. The
+      // response therefore remains visibly open until its transport closes.
+      socket.once("close", () => nextTick(finish));
+      socket.destroy(error);
+      return;
+    }
+    nextTick(finish);
   }
 }
