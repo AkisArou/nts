@@ -244,5 +244,10 @@ export function internals(exports) {
       _checkInvalidHeaderChar: exports.checkInvalidHeaderChar,
       _checkIsHttpToken: exports.checkIsHttpToken,
     },
+    "internal/options": {
+      getOptionValue(name) {
+        return name === "--max-http-header-size" ? exports.maxHeaderSize : undefined;
+      },
+    },
   };
 }

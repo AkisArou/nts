@@ -28,7 +28,7 @@ import {
   ERR_INVALID_URL,
   ERR_UNESCAPED_CHARACTERS,
 } from "../../internal/errors.ts";
-import { validateBoolean, validateOneOf } from "../../internal/validators.ts";
+import { validateBoolean, validateInteger, validateOneOf } from "../../internal/validators.ts";
 import { HTTPParseError, HTTPParser, RESPONSE } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { checkIsHttpToken, OutgoingMessage, parseUniqueHeadersOption } from "./outgoing.ts";
@@ -228,6 +228,8 @@ export class ClientRequest extends OutgoingMessage {
     const timeoutOption: unknown = opts.timeout;
     this.timeout =
       timeoutOption === undefined ? undefined : getTimerDuration(timeoutOption, "timeout");
+    const maxHeaderSize: unknown = opts.maxHeaderSize;
+    if (maxHeaderSize !== undefined) validateInteger(maxHeaderSize, "maxHeaderSize", 0);
 
     const httpValidation: unknown = opts.httpValidation;
     const insecureHTTPParser: unknown = opts.insecureHTTPParser;

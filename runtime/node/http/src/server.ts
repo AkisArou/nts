@@ -14,7 +14,7 @@
 import { Buffer } from "../../buffer/src/main.ts";
 import { Server as NetServer, Socket } from "../../net/src/main.ts";
 import type { ServerOptions as NetServerOptions } from "../../net/src/main.ts";
-import { HTTPParseError, HTTPParser, REQUEST, methods } from "./parser.ts";
+import { DEFAULT_MAX_HEADER_SIZE, HTTPParseError, HTTPParser, REQUEST, methods } from "./parser.ts";
 import type { ParserError } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { parseUniqueHeadersOption, ServerResponse } from "./outgoing.ts";
@@ -158,7 +158,7 @@ export class Server extends NetServer {
     const keepAliveTimeout = opts.keepAliveTimeout ?? 5000;
     const keepAliveTimeoutBuffer = opts.keepAliveTimeoutBuffer ?? 1000;
     const connectionsCheckingInterval = opts.connectionsCheckingInterval ?? 30000;
-    const maxHeaderSize = opts.maxHeaderSize ?? 80 * 1024;
+    const maxHeaderSize = opts.maxHeaderSize ?? DEFAULT_MAX_HEADER_SIZE;
     const httpValidation: unknown = opts.httpValidation;
     const insecureHTTPParser: unknown = opts.insecureHTTPParser;
     const requireHostHeader = opts.requireHostHeader ?? true;

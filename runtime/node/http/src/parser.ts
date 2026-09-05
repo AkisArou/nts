@@ -279,7 +279,58 @@ function isValidFieldValue(value: string, lenient: boolean): boolean {
   return true;
 }
 
+/** Length after HTTP optional whitespace, without allocating a substring. */
+function fieldValueLength(line: string, colon: number): number {
+  let start = colon + 1;
+  while (start < line.length) {
+    const byte = line.charCodeAt(start);
+    if (byte !== SP && byte !== HTAB) break;
+    start += 1;
+  }
+
+  let end = line.length;
+  while (end > start) {
+    const byte = line.charCodeAt(end - 1);
+    if (byte !== SP && byte !== HTAB) break;
+    end -= 1;
+  }
+  return end - start;
+}
+
+/** Bytes delivered to llhttp's chunk-extension name/value callbacks. */
+function chunkExtensionDataLength(line: string, semicolon: number): number {
+  let length = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = semicolon + 1; index < line.length; index++) {
+    const byte = line.charCodeAt(index);
+    if (quoted) {
+      length += 1;
+      if (escaped) {
+        escaped = false;
+      } else if (byte === 0x5c) {
+        escaped = true;
+      } else if (byte === 0x22) {
+        quoted = false;
+      }
+      continue;
+    }
+
+    if (byte === 0x22) {
+      quoted = true;
+      length += 1;
+    } else if (byte !== 0x3b && byte !== 0x3d && byte !== SP && byte !== HTAB) {
+      length += 1;
+    }
+  }
+  return length;
+}
+
 const HTTP_PARSER_TYPES = ["HTTPINCOMINGMESSAGE", "HTTPCLIENTREQUEST"] as const;
+
+/** Node v24.20.0's process-wide HTTP/1 head limit. */
+export const DEFAULT_MAX_HEADER_SIZE = 16 * 1024;
+const MAX_CHUNK_EXTENSIONS_SIZE = 16 * 1024;
 
 interface ParserCallbackScope {
   asyncId: number;
@@ -306,7 +357,7 @@ export class HTTPParser {
   #partial = "";
   #headers: string[] = [];
   #headerBytes = 0;
-  #maxHeaderSize = 80 * 1024;
+  #maxHeaderSize = DEFAULT_MAX_HEADER_SIZE;
   #lenientHeaderValues = false;
   #lenientTransferEncoding = false;
 
@@ -342,7 +393,8 @@ export class HTTPParser {
     lenientTransferEncoding = false,
   ): void {
     this.#type = type;
-    this.#maxHeaderSize = maxHeaderSize ?? 80 * 1024;
+    this.#maxHeaderSize =
+      maxHeaderSize === undefined || maxHeaderSize === 0 ? DEFAULT_MAX_HEADER_SIZE : maxHeaderSize;
     this.#lenientHeaderValues = lenientHeaderValues;
     this.#lenientTransferEncoding = lenientTransferEncoding;
 
@@ -539,14 +591,11 @@ export class HTTPParser {
       const lineEnd = indexOfLF(data, offset);
       if (lineEnd === -1) {
         // No complete line: keep what is here and wait for more.
-        const remaining = data.length - offset;
         this.#partial += decode(data.subarray(offset));
         offset = data.length;
         this.#bytesParsed = offset;
-        this.#headerBytes += remaining;
-        if (this.#headerBytes > this.#maxHeaderSize) {
-          return this.#fail("HPE_HEADER_OVERFLOW", "Header overflow");
-        }
+        const limitResult = this.#checkLineLimits(this.#partial, false);
+        if (limitResult < 0) return limitResult;
         const partialResult = this.#validatePartialStartLine();
         if (partialResult < 0) return partialResult;
         break;
@@ -556,17 +605,13 @@ export class HTTPParser {
       const lineStartOffset = offset;
       const line = this.#partial + decode(data.subarray(offset, lineEnd));
       this.#partial = "";
-      this.#headerBytes += lineEnd - offset + 1;
       offset = lineEnd + 1;
       this.#bytesParsed = offset;
 
-      // Only the line-oriented states reach here, so this bounds the headers
-      // and the chunk framing but never the body.
-      if (this.#headerBytes > this.#maxHeaderSize) {
-        return this.#fail("HPE_HEADER_OVERFLOW", "Header overflow");
-      }
-
-      const result = this.#readLine(stripCR(line), lineStartOffset, priorLineBytes);
+      const parsedLine = stripCR(line);
+      const limitResult = this.#checkLineLimits(parsedLine, true);
+      if (limitResult < 0) return limitResult;
+      const result = this.#readLine(parsedLine, lineStartOffset, priorLineBytes);
       if (result < 0) return result;
     }
 
@@ -624,6 +669,43 @@ export class HTTPParser {
       default:
         return this.#fail("HPE_INVALID_CONSTANT", "Unexpected line");
     }
+  }
+
+  /** Match the native parser's semantic head and chunk-extension counters. */
+  #checkLineLimits(line: string, complete: boolean): number {
+    if (this.#state === State.ChunkSize) {
+      const semicolon = line.indexOf(";");
+      const extensionBytes = semicolon === -1 ? 0 : chunkExtensionDataLength(line, semicolon);
+      return extensionBytes > MAX_CHUNK_EXTENSIONS_SIZE
+        ? this.#fail("HPE_CHUNK_EXTENSIONS_OVERFLOW", "Chunk extensions overflow")
+        : 0;
+    }
+
+    let lineBytes = 0;
+    if (this.#state === State.StartLine) {
+      if (this.#type === REQUEST) {
+        const firstSpace = line.indexOf(" ");
+        if (firstSpace !== -1) {
+          const secondSpace = line.indexOf(" ", firstSpace + 1);
+          lineBytes = (secondSpace === -1 ? line.length : secondSpace) - firstSpace - 1;
+        }
+      } else {
+        const firstSpace = line.indexOf(" ");
+        const secondSpace = firstSpace === -1 ? -1 : line.indexOf(" ", firstSpace + 1);
+        if (secondSpace !== -1) lineBytes = line.length - secondSpace - 1;
+      }
+    } else if (this.#state === State.Header || this.#state === State.Trailer) {
+      const colon = line.indexOf(":");
+      lineBytes = colon === -1 ? line.length : colon + fieldValueLength(line, colon);
+    } else {
+      return 0;
+    }
+
+    if (this.#headerBytes + lineBytes >= this.#maxHeaderSize) {
+      return this.#fail("HPE_HEADER_OVERFLOW", "Header overflow");
+    }
+    if (complete) this.#headerBytes += lineBytes;
+    return 0;
   }
 
   #readStartLine(line: string, lineStartOffset: number, priorLineBytes: number): number {
@@ -897,6 +979,10 @@ export class HTTPParser {
             shouldKeepAlive: this.#shouldKeepAlive,
           };
     this.#headers = [];
+
+    // Node starts a fresh counter after the head; trailers are bounded as a
+    // separate header block rather than inheriting the request/response total.
+    this.#headerBytes = 0;
 
     // The callback may say "no body" -- that is how a client tells the parser
     // this is the response to a HEAD.

@@ -5,7 +5,7 @@
 // one. That makes this the module whose conformance numbers say the most: a
 // passing test is this code parsing and framing, not somebody else's.
 
-import { HTTPParser, METHODS, methods } from "./parser.ts";
+import { DEFAULT_MAX_HEADER_SIZE, HTTPParser, METHODS, methods } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import {
   checkInvalidHeaderChar,
@@ -39,7 +39,5 @@ export {
   request,
   validateHeaderName,
   validateHeaderValue,
+  DEFAULT_MAX_HEADER_SIZE as maxHeaderSize,
 };
-
-/** The maximum size of a request head, in bytes, unless a server overrides it. */
-export const maxHeaderSize = 80 * 1024;
