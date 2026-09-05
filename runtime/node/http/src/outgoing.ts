@@ -112,6 +112,13 @@ const STRICT_HEADER_CHAR = /[^\t\x20-\x7e\x80-\xff]/;
 const LENIENT_HEADER_CHAR = /[\x00\x0a\x0d]|[^\x00-\xff]/;
 const RESPONSE_VERSION = "HTTP/1.1";
 
+function stringIsAscii(value: string): boolean {
+  for (let index = 0; index < value.length; index++) {
+    if (value.charCodeAt(index) > 0x7f) return false;
+  }
+  return true;
+}
+
 export type OutgoingHeaderValue = string | number | readonly string[];
 export type OutgoingHeaders = Record<string, OutgoingHeaderValue>;
 export type OutgoingHeaderPair = readonly [string, OutgoingHeaderValue];
@@ -378,9 +385,12 @@ export class OutgoingMessage extends EventEmitter {
     if (!this.#headerFlushed) {
       this.#headerFlushed = true;
       const head = this.#head;
+      // Header strings represent Latin-1 bytes. They can share a body string's
+      // encoder only when every header byte is ASCII, where UTF-8 and Latin-1 agree.
       if (
         head !== null &&
         typeof chunk === "string" &&
+        stringIsAscii(head) &&
         (encoding === undefined ||
           encoding === null ||
           encoding === "utf8" ||
