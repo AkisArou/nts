@@ -23,6 +23,7 @@
 
 import { ERR_INVALID_URL } from "../../internal/errors.ts";
 import { decodeIn } from "../../buffer/src/encodings.ts";
+import { domainToASCII } from "./idna.ts";
 
 export function isSpecialScheme(scheme: string): boolean {
   switch (scheme) {
@@ -156,6 +157,20 @@ function isAllAsciiDigits(input: string): boolean {
   return true;
 }
 
+function codePointLength(input: string): number {
+  let length = 0;
+  for (const _codePoint of input) length++;
+  return length;
+}
+
+/** Materialize code points in fixed storage for the parser's rewindable cursor. */
+function splitCodePoints(input: string): string[] {
+  const codePoints = new Array<string>(codePointLength(input));
+  let index = 0;
+  for (const codePoint of input) codePoints[index++] = codePoint;
+  return codePoints;
+}
+
 /** `C:` or `C|` — the shape that makes a Windows drive letter. */
 function isWindowsDriveLetter(s: string): boolean {
   return s.length === 2 && isAsciiAlpha(s.charCodeAt(0)) &&
@@ -192,29 +207,70 @@ function isDoubleDot(segment: string): boolean {
  * character outside the Basic Multilingual Plane becomes four escapes, not
  * one.
  */
-function percentEncode(codePoint: string): string {
-  let out = "";
-  for (const byte of utf8Bytes(codePoint)) {
-    out += `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;
-  }
-  return out;
+function percentEncode(character: string): string {
+  return percentEncodeScalar(character.codePointAt(0) ?? 0);
 }
 
-function utf8Bytes(str: string): number[] {
-  const out: number[] = [];
+/** Percent-encoded UTF-8 bytes for one Unicode scalar value. */
+export function percentEncodeScalar(codePoint: number): string {
+  if (codePoint < 0x80) {
+    return percentEncodedByte(codePoint);
+  }
+  if (codePoint < 0x800) {
+    return percentEncodedByte(0xc0 | (codePoint >> 6)) +
+      percentEncodedByte(0x80 | (codePoint & 0x3f));
+  }
+  if (codePoint < 0x10000) {
+    return percentEncodedByte(0xe0 | (codePoint >> 12)) +
+      percentEncodedByte(0x80 | ((codePoint >> 6) & 0x3f)) +
+      percentEncodedByte(0x80 | (codePoint & 0x3f));
+  }
+  return percentEncodedByte(0xf0 | (codePoint >> 18)) +
+    percentEncodedByte(0x80 | ((codePoint >> 12) & 0x3f)) +
+    percentEncodedByte(0x80 | ((codePoint >> 6) & 0x3f)) +
+    percentEncodedByte(0x80 | (codePoint & 0x3f));
+}
+
+function upperHexDigit(value: number): string {
+  return String.fromCharCode(value < 10 ? 0x30 + value : 0x41 + value - 10);
+}
+
+function percentEncodedByte(byte: number): string {
+  return `%${upperHexDigit(byte >> 4)}${upperHexDigit(byte & 0x0f)}`;
+}
+
+function lowerHexDigit(value: number): string {
+  return String.fromCharCode(value < 10 ? 0x30 + value : 0x61 + value - 10);
+}
+
+function utf8ByteLength(str: string): number {
+  let length = 0;
+  for (const ch of str) {
+    const c = ch.codePointAt(0) ?? 0;
+    length += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+  }
+  return length;
+}
+
+function utf8Bytes(str: string): Uint8Array {
+  const out = new Uint8Array(utf8ByteLength(str));
+  let offset = 0;
   for (const ch of str) {
     const c = ch.codePointAt(0) ?? 0;
     if (c < 0x80) {
-      out.push(c);
+      out[offset++] = c;
     } else if (c < 0x800) {
-      out.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
+      out[offset++] = 0xc0 | (c >> 6);
+      out[offset++] = 0x80 | (c & 0x3f);
     } else if (c < 0x10000) {
-      out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+      out[offset++] = 0xe0 | (c >> 12);
+      out[offset++] = 0x80 | ((c >> 6) & 0x3f);
+      out[offset++] = 0x80 | (c & 0x3f);
     } else {
-      out.push(
-        0xf0 | (c >> 18), 0x80 | ((c >> 12) & 0x3f),
-        0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f),
-      );
+      out[offset++] = 0xf0 | (c >> 18);
+      out[offset++] = 0x80 | ((c >> 12) & 0x3f);
+      out[offset++] = 0x80 | ((c >> 6) & 0x3f);
+      out[offset++] = 0x80 | (c & 0x3f);
     }
   }
   return out;
@@ -300,22 +356,35 @@ function utf8PercentEncodeString(input: string, inSet: EncodeSet): string {
 
 /** `%41` back to `A`, leaving a malformed escape alone. */
 export function percentDecodeBytes(input: string): Uint8Array {
-  const bytes: number[] = [];
   const raw = utf8Bytes(input);
+  let decodedLength = raw.length;
+  for (let i = 0; i < raw.length; i++) {
+    const byte = raw[i];
+    const firstHex = raw[i + 1];
+    const secondHex = raw[i + 2];
+    if (byte === 0x25 && firstHex !== undefined && secondHex !== undefined &&
+        isAsciiHexDigit(firstHex) && isAsciiHexDigit(secondHex)) {
+      decodedLength -= 2;
+      i += 2;
+    }
+  }
+
+  const bytes = new Uint8Array(decodedLength);
+  let output = 0;
   for (let i = 0; i < raw.length; i++) {
     const byte = raw[i];
     if (byte === undefined) break;
     const firstHex = raw[i + 1];
     const secondHex = raw[i + 2];
-    if (byte !== 0x25 || firstHex === undefined || secondHex === undefined ||
-        !isAsciiHexDigit(firstHex) || !isAsciiHexDigit(secondHex)) {
-      bytes.push(byte);
-      continue;
+    if (byte === 0x25 && firstHex !== undefined && secondHex !== undefined &&
+        isAsciiHexDigit(firstHex) && isAsciiHexDigit(secondHex)) {
+      bytes[output++] = asciiDigitValue(firstHex) * 16 + asciiDigitValue(secondHex);
+      i += 2;
+    } else {
+      bytes[output++] = byte;
     }
-    bytes.push(Number.parseInt(String.fromCharCode(firstHex, secondHex), 16));
-    i += 2;
   }
-  return new Uint8Array(bytes);
+  return bytes;
 }
 
 export function percentDecodeString(input: string): string {
@@ -331,19 +400,39 @@ export function percentDecodeString(input: string): string {
  * A non-special scheme does not have a *domain*, only a string, so no IDNA and
  * no IPv4 shorthand. `web+demo://%zz` keeps its `%zz`.
  */
-const FORBIDDEN_HOST = new Set([
-  0x00, 0x09, 0x0a, 0x0d, 0x20, 0x23, 0x2f, 0x3a, 0x3c, 0x3e, 0x3f,
-  0x40, 0x5b, 0x5c, 0x5d, 0x5e, 0x7c,
-]);
+function isForbiddenHostCodePoint(c: number): boolean {
+  switch (c) {
+    case 0x00:
+    case 0x09:
+    case 0x0a:
+    case 0x0d:
+    case 0x20:
+    case 0x23:
+    case 0x2f:
+    case 0x3a:
+    case 0x3c:
+    case 0x3e:
+    case 0x3f:
+    case 0x40:
+    case 0x5b:
+    case 0x5c:
+    case 0x5d:
+    case 0x5e:
+    case 0x7c:
+      return true;
+    default:
+      return false;
+  }
+}
 
 /** The domain set adds `%`, since a domain is percent-decoded before parsing. */
 function isForbiddenDomainCodePoint(c: number): boolean {
-  return FORBIDDEN_HOST.has(c) || c <= 0x1f || c === 0x25 || c === 0x7f;
+  return isForbiddenHostCodePoint(c) || c <= 0x1f || c === 0x25 || c === 0x7f;
 }
 
 function parseOpaqueHost(input: string): string | null {
   for (const ch of input) {
-    if (FORBIDDEN_HOST.has(ch.codePointAt(0) ?? 0)) {
+    if (isForbiddenHostCodePoint(ch.codePointAt(0) ?? 0)) {
       return null;
     }
   }
@@ -397,11 +486,12 @@ function parseIPv4Number(input: string): { value: number; validationError: boole
  */
 function endsInANumber(input: string): boolean {
   const parts = input.split(".");
+  let partCount = parts.length;
   if (parts[parts.length - 1] === "" && parts.length > 1) {
-    parts.pop();
+    partCount--;
   }
-  if (parts.length === 0) return false;
-  const last = parts[parts.length - 1];
+  if (partCount === 0) return false;
+  const last = parts[partCount - 1];
   if (last === undefined) return false;
   if (isAllAsciiDigits(last)) return true;
   return parseIPv4Number(last) !== null;
@@ -410,23 +500,24 @@ function endsInANumber(input: string): boolean {
 /** Only called when `endsInANumber`, so anything short of an address fails. */
 function parseIPv4(input: string): number | false {
   const parts = input.split(".");
+  let partCount = parts.length;
   // A trailing dot is allowed and ignored: `1.2.3.4.` is `1.2.3.4`.
   if (parts.length > 1 && parts[parts.length - 1] === "") {
-    parts.pop();
+    partCount--;
   }
-  if (parts.length > 4) return false;
+  if (partCount > 4) return false;
 
   let address = 0;
-  for (let index = 0; index < parts.length; index++) {
+  for (let index = 0; index < partCount; index++) {
     const part = parts[index];
     if (part === undefined) return false;
     const parsed = parseIPv4Number(part);
     if (parsed === null) return false;
-    const isLast = index === parts.length - 1;
+    const isLast = index === partCount - 1;
     if (isLast) {
       // The last part fills every byte left in the address:
       // `1.2.65534` is `1.2.255.254`.
-      if (parsed.value >= 256 ** (5 - parts.length)) return false;
+      if (parsed.value >= 256 ** (5 - partCount)) return false;
       address += parsed.value;
     } else {
       if (parsed.value > 255) return false;
@@ -452,20 +543,18 @@ function parseIPv6(input: string): number[] | null {
   const address = [0, 0, 0, 0, 0, 0, 0, 0];
   let pieceIndex = 0;
   let compress: number | null = null;
-  const chars = [...input];
   let pointer = 0;
-  const c = (): string | undefined => chars[pointer];
 
-  if (c() === ":") {
-    if (chars[pointer + 1] !== ":") return null;
+  if (input[pointer] === ":") {
+    if (input[pointer + 1] !== ":") return null;
     pointer += 2;
     pieceIndex++;
     compress = pieceIndex;
   }
 
-  while (pointer < chars.length) {
+  while (pointer < input.length) {
     if (pieceIndex === 8) return null;
-    if (c() === ":") {
+    if (input[pointer] === ":") {
       if (compress !== null) return null;
       pointer++;
       pieceIndex++;
@@ -474,32 +563,32 @@ function parseIPv6(input: string): number[] | null {
     }
     let value = 0;
     let length = 0;
-    let current = c();
+    let current = input[pointer];
     while (length < 4 && current !== undefined && isAsciiHexDigit(current.charCodeAt(0))) {
-      value = value * 16 + Number.parseInt(current, 16);
+      value = value * 16 + asciiDigitValue(current.charCodeAt(0));
       pointer++;
       length++;
-      current = c();
+      current = input[pointer];
     }
-    if (c() === ".") {
+    if (input[pointer] === ".") {
       // An IPv4 address in the last two pieces: `::ffff:192.0.2.1`.
       if (length === 0) return null;
       pointer -= length;
       if (pieceIndex > 6) return null;
       let numbersSeen = 0;
-      while (c() !== undefined) {
+      while (input[pointer] !== undefined) {
         let ipv4Piece: number | null = null;
         if (numbersSeen > 0) {
-          if (c() === "." && numbersSeen < 4) {
+          if (input[pointer] === "." && numbersSeen < 4) {
             pointer++;
           } else {
             return null;
           }
         }
-        current = c();
+        current = input[pointer];
         if (current === undefined || !isAsciiDigit(current.charCodeAt(0))) return null;
         while (current !== undefined && isAsciiDigit(current.charCodeAt(0))) {
-          const number = Number(current);
+          const number = current.charCodeAt(0) - 0x30;
           if (ipv4Piece === null) {
             ipv4Piece = number;
           } else if (ipv4Piece === 0) {
@@ -509,7 +598,7 @@ function parseIPv6(input: string): number[] | null {
           }
           if (ipv4Piece > 255) return null;
           pointer++;
-          current = c();
+          current = input[pointer];
         }
         if (ipv4Piece === null) return null;
         address[pieceIndex] = (address[pieceIndex] ?? 0) * 256 + ipv4Piece;
@@ -518,10 +607,10 @@ function parseIPv6(input: string): number[] | null {
       }
       if (numbersSeen !== 4) return null;
       break;
-    } else if (c() === ":") {
+    } else if (input[pointer] === ":") {
       pointer++;
-      if (c() === undefined) return null;
-    } else if (c() !== undefined) {
+      if (input[pointer] === undefined) return null;
+    } else if (input[pointer] !== undefined) {
       return null;
     }
     address[pieceIndex] = value;
@@ -580,24 +669,21 @@ function serializeIPv6(address: readonly number[]): string {
       ignore0 = true;
       continue;
     }
-    out += (address[pieceIndex] ?? 0).toString(16);
+    out += unsignedHex(address[pieceIndex] ?? 0);
     if (pieceIndex !== 7) out += ":";
   }
   return out;
 }
 
-/** IDNA, as far as it goes without ICU: `toASCII` from punycode. */
-export type DomainToAscii = (domain: string) => string | null;
-
-let domainToAsciiImpl: DomainToAscii = (domain) => domain;
-
-/**
- * Supplied by the module rather than imported, so this file has no dependency
- * on `node:punycode` -- IDNA is one substitutable step of host parsing, and
- * an ICU-backed implementation would replace it here.
- */
-export function setDomainToAscii(fn: DomainToAscii): void {
-  domainToAsciiImpl = fn;
+function unsignedHex(value: number): string {
+  if (value === 0) return "0";
+  let out = "";
+  let remaining = value;
+  while (remaining > 0) {
+    out = lowerHexDigit(remaining % 16) + out;
+    remaining = Math.floor(remaining / 16);
+  }
+  return out;
 }
 
 /** https://url.spec.whatwg.org/#concept-host-parser */
@@ -614,7 +700,7 @@ export function parseHost(input: string, isNotSpecial: boolean): string | null {
   if (input === "") return null;
 
   const domain = percentDecodeString(input);
-  const ascii = domainToAsciiImpl(domain);
+  const ascii = domainToASCII(domain);
   // An input that maps to nothing -- a lone soft hyphen -- is a failure, not
   // an empty host.
   if (ascii === null || ascii === "") return null;
@@ -751,7 +837,7 @@ export function basicUrlParse(
   let passwordTokenSeen = false;
   let pointer = 0;
 
-  const chars = [...input];
+  const chars = splitCodePoints(input);
   const len = chars.length;
   // `undefined` stands for the standard's EOF, which several states test for.
   const at = (i: number): string | undefined => chars[i];
@@ -948,7 +1034,7 @@ export function basicUrlParse(
           (isSpecialScheme(url.scheme) && c === "\\")
         ) {
           if (atSignSeen && buffer === "") return fail();
-          pointer -= [...buffer].length + 1;
+          pointer -= codePointLength(buffer) + 1;
           buffer = "";
           state = State.Host;
           break;
@@ -1257,7 +1343,11 @@ export function serializeHost(url: UrlRecord): string {
 export function serializePath(url: UrlRecord): string {
   const path = url.path;
   if (typeof path === "string") return path;
-  return path.map((segment) => `/${segment}`).join("");
+  let out = "";
+  for (let index = 0; index < path.length; index++) {
+    out += `/${path[index] ?? ""}`;
+  }
+  return out;
 }
 
 /**

@@ -16,13 +16,18 @@ import { join, resolve } from "node:path";
 const ROOT = resolve(import.meta.dirname, "../..");
 const from = (relative) => join(ROOT, relative);
 await import(from("runtime/node/punycode/bindings.node.mjs"));
-const { domainToASCII } = await import(from("runtime/node/url/src/idna.ts"));
 const P = await import(from("runtime/node/url/src/parser.ts"));
 
-P.setDomainToAscii(domainToASCII);
-
-const data = JSON.parse(readFileSync(
-  from("third_party/node/test/fixtures/wpt/url/resources/urltestdata.json"), "utf8"));
+const data = [
+  ...JSON.parse(readFileSync(
+    from("third_party/node/test/fixtures/wpt/url/resources/urltestdata.json"),
+    "utf8",
+  )),
+  ...JSON.parse(readFileSync(
+    from("third_party/node/test/fixtures/wpt/url/resources/urltestdata-javascript-only.json"),
+    "utf8",
+  )),
+];
 
 let pass = 0, fail = 0, failures = [];
 for (const c of data) {
@@ -30,9 +35,11 @@ for (const c of data) {
   if (c.base === null && c.input === undefined) continue;
   let record = null, threw = false;
   try {
-    const base = c.base == null ? null : P.basicUrlParse(c.base);
+    // `basicUrlParse` receives a scalar-value string in the URL Standard. The
+    // public Web IDL boundary performs this conversion before entering it.
+    const base = c.base == null ? null : P.basicUrlParse(c.base.toWellFormed());
     if (c.base != null && base === null) { threw = true; }
-    else record = P.basicUrlParse(c.input, base);
+    else record = P.basicUrlParse(c.input.toWellFormed(), base);
     if (record === null) threw = true;
   } catch { threw = true; }
 

@@ -11,22 +11,14 @@
 //
 // Where node hands `URL` to a C++ parser (`ada`), ours is TypeScript written
 // from https://url.spec.whatwg.org/. It passes the Web Platform Tests corpus
-// node checks itself against: 891 of 891 parses, 278 of 278 setter cases.
+// node checks itself against: 892 of 892 parses, 278 of 278 setter cases.
 
-import { setDomainToAscii } from "./parser.ts";
 import { domainToASCII, domainToUnicode } from "./idna.ts";
-
-// The parser takes its IDNA step from here rather than importing it, so that
-// an ICU-backed implementation could replace it without the parser changing.
-setDomainToAscii(domainToASCII);
 
 export { URL, isURL } from "./url.ts";
 export { URLSearchParams } from "./searchparams.ts";
 export { fileURLToPath, pathToFileURL, urlToHttpOptions } from "./fileurl.ts";
 export { domainToASCII, domainToUnicode };
-import { setDomainConversions } from "./legacy.ts";
-
-setDomainConversions(domainToASCII, domainToUnicode);
 
 export {
   Url, parse, format, resolve, resolveObject,

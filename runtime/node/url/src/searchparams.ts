@@ -14,7 +14,7 @@ import {
   ERR_ARG_NOT_ITERABLE, ERR_INVALID_THIS, ERR_INVALID_TUPLE, ERR_MISSING_ARGS,
 } from "../../internal/errors.ts";
 import { validateFunction } from "../../internal/validators.ts";
-import { inUrlencodedPercentEncodeSet } from "./parser.ts";
+import { inUrlencodedPercentEncodeSet, percentEncodeScalar } from "./parser.ts";
 import { unescape } from "../../querystring/src/main.ts";
 import { customInspectSymbol, inspect, type InspectOptions } from "../../util/src/inspect.ts";
 
@@ -34,10 +34,18 @@ export interface SearchParamsOwner {
  * reuse the percent-decoder.
  */
 export function parseUrlencoded(input: string): Array<[string, string]> {
-  const output: Array<[string, string]> = [];
-  if (input === "") return output;
-  for (const sequence of input.split("&")) {
-    if (sequence === "") continue;
+  if (input === "") return [];
+  const sequences = input.split("&");
+  let pairCount = 0;
+  for (let index = 0; index < sequences.length; index++) {
+    if (sequences[index] !== "") pairCount++;
+  }
+
+  const output = new Array<[string, string]>(pairCount);
+  let outputIndex = 0;
+  for (let index = 0; index < sequences.length; index++) {
+    const sequence = sequences[index];
+    if (sequence === undefined || sequence === "") continue;
     let name: string;
     let value: string;
     const at = sequence.indexOf("=");
@@ -48,10 +56,10 @@ export function parseUrlencoded(input: string): Array<[string, string]> {
       name = sequence.slice(0, at);
       value = sequence.slice(at + 1);
     }
-    output.push([
+    output[outputIndex++] = [
       decodeFormComponent(name),
       decodeFormComponent(value),
-    ]);
+    ];
   }
   return output;
 }
@@ -89,52 +97,34 @@ function isAsciiHexCode(code: number): boolean {
     (code >= 0x61 && code <= 0x66);
 }
 
-function serializeUrlencodedByte(str: string): string {
+function serializeFormComponent(str: string): string {
   let out = "";
   for (const ch of str) {
-    const c = ch.codePointAt(0) ?? 0;
+    let c = ch.codePointAt(0) ?? 0;
+    if (c >= 0xd800 && c <= 0xdfff) c = 0xfffd;
     if (c === 0x20) {
       // A space is `+` here, again for HTML forms.
       out += "+";
     } else if (!inUrlencodedPercentEncodeSet(c)) {
       out += ch;
     } else {
-      for (const byte of utf8(ch)) {
-        out += `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;
-      }
-    }
-  }
-  return out;
-}
-
-/**
- * UTF-8 bytes, with a lone surrogate replaced.
- *
- * These values are USVStrings: a surrogate that is not part of a pair does not
- * name a character, and the standard says to substitute U+FFFD rather than
- * encode it. Encoding it produces bytes no decoder will accept.
- */
-function utf8(str: string): number[] {
-  const out: number[] = [];
-  for (const ch of str) {
-    let c = ch.codePointAt(0) ?? 0;
-    if (c >= 0xd800 && c <= 0xdfff) {
-      c = 0xfffd;
-    }
-    if (c < 0x80) out.push(c);
-    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
-    else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
-    else {
-      out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 0x3f), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+      out += percentEncodeScalar(c);
     }
   }
   return out;
 }
 
 export function serializeUrlencoded(list: ReadonlyArray<readonly [string, string]>): string {
-  return list
-    .map(([name, value]) => `${serializeUrlencodedByte(name)}=${serializeUrlencodedByte(value)}`)
-    .join("&");
+  let out = "";
+  let first = true;
+  for (let index = 0; index < list.length; index++) {
+    const pair = list[index];
+    if (pair === undefined) continue;
+    if (!first) out += "&";
+    first = false;
+    out += `${serializeFormComponent(pair[0])}=${serializeFormComponent(pair[1])}`;
+  }
+  return out;
 }
 
 export type SearchParamsInit =
@@ -154,6 +144,10 @@ function isIterable(value: unknown): value is Iterable<unknown> {
     (typeof value === "object" || typeof value === "function") &&
     Symbol.iterator in value &&
     typeof value[Symbol.iterator] === "function";
+}
+
+function isUnknownArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
 }
 
 function isPropertyRecord(value: unknown): value is Record<string, unknown> {
@@ -177,9 +171,13 @@ export class URLSearchParams {
       return;
     }
     if (init instanceof URLSearchParams) {
-      for (const pair of init.#list) {
-        this.#list.push([pair[0], pair[1]]);
+      const source = init.#list;
+      const copy = new Array<[string, string]>(source.length);
+      for (let index = 0; index < source.length; index++) {
+        const pair = source[index];
+        if (pair !== undefined) copy[index] = [pair[0], pair[1]];
       }
+      this.#list = copy;
       return;
     }
     // A function counts as an object here: an iterable may be one, and node's
@@ -195,14 +193,29 @@ export class URLSearchParams {
         throw new ERR_ARG_NOT_ITERABLE("Query pairs");
       }
       for (const pair of init) {
+        if (isUnknownArray(pair)) {
+          if (pair.length !== 2) {
+            throw new ERR_INVALID_TUPLE("query pair", "an iterable [name, value] tuple");
+          }
+          this.#list.push([toUSVString(pair[0]), toUSVString(pair[1])]);
+          continue;
+        }
         if (!isIterable(pair)) {
           throw new ERR_INVALID_TUPLE("query pair", "an iterable [name, value] tuple");
         }
-        const asList = [...pair];
-        if (asList.length !== 2) {
+        let length = 0;
+        let name = "";
+        let value = "";
+        for (const element of pair) {
+          const converted = toUSVString(element);
+          if (length === 0) name = converted;
+          if (length === 1) value = converted;
+          length++;
+        }
+        if (length !== 2) {
           throw new ERR_INVALID_TUPLE("query pair", "an iterable [name, value] tuple");
         }
-        this.#list.push([toUSVString(asList[0]), toUSVString(asList[1])]);
+        this.#list.push([name, value]);
       }
       return;
     }
@@ -238,7 +251,10 @@ export class URLSearchParams {
     const owner = this.#owner;
     if (owner === null) return;
     const query = owner.currentQuery();
-    this.#list = query === null ? [] : parseUrlencoded(query);
+    replaceListContents(
+      this.#list,
+      query === null ? [] : parseUrlencoded(query),
+    );
   }
 
   #update(): void {
@@ -290,12 +306,28 @@ export class URLSearchParams {
       throw new ERR_MISSING_ARGS("name");
     }
     const wanted = toUSVString(name);
+    const list = this.#list;
+    const length = list.length;
+    let write = 0;
     if (value !== undefined) {
       const wantedValue = toUSVString(value);
-      this.#list = this.#list.filter((p) => !(p[0] === wanted && p[1] === wantedValue));
+      for (let index = 0; index < length; index++) {
+        const pair = list[index];
+        if (pair === undefined) continue;
+        if (pair[0] === wanted && pair[1] === wantedValue) continue;
+        if (write !== index) list[write] = pair;
+        write++;
+      }
     } else {
-      this.#list = this.#list.filter((p) => p[0] !== wanted);
+      for (let index = 0; index < length; index++) {
+        const pair = list[index];
+        if (pair === undefined) continue;
+        if (pair[0] === wanted) continue;
+        if (write !== index) list[write] = pair;
+        write++;
+      }
     }
+    if (write !== length) list.length = write;
     this.#update();
   }
 
@@ -317,7 +349,18 @@ export class URLSearchParams {
       throw new ERR_MISSING_ARGS("name");
     }
     const wanted = toUSVString(name);
-    return this.#list.filter((p) => p[0] === wanted).map((p) => p[1]);
+    let count = 0;
+    for (let index = 0; index < this.#list.length; index++) {
+      const pair = this.#list[index];
+      if (pair !== undefined && pair[0] === wanted) count++;
+    }
+    const values = new Array<string>(count);
+    let output = 0;
+    for (let index = 0; index < this.#list.length; index++) {
+      const pair = this.#list[index];
+      if (pair !== undefined && pair[0] === wanted) values[output++] = pair[1];
+    }
+    return values;
   }
 
   has(name: string, value?: string): boolean {
@@ -328,9 +371,19 @@ export class URLSearchParams {
     const wanted = toUSVString(name);
     if (value !== undefined) {
       const wantedValue = toUSVString(value);
-      return this.#list.some((p) => p[0] === wanted && p[1] === wantedValue);
+      for (let index = 0; index < this.#list.length; index++) {
+        const pair = this.#list[index];
+        if (pair !== undefined && pair[0] === wanted && pair[1] === wantedValue) {
+          return true;
+        }
+      }
+      return false;
     }
-    return this.#list.some((p) => p[0] === wanted);
+    for (let index = 0; index < this.#list.length; index++) {
+      const pair = this.#list[index];
+      if (pair !== undefined && pair[0] === wanted) return true;
+    }
+    return false;
   }
 
   /**
@@ -347,22 +400,32 @@ export class URLSearchParams {
     }
     const wanted = toUSVString(name);
     const wantedValue = toUSVString(value);
+    const list = this.#list;
+    const length = list.length;
     let found = false;
-    const next: Array<[string, string]> = [];
-    for (const pair of this.#list) {
+    let write = 0;
+    for (let index = 0; index < length; index++) {
+      const pair = list[index];
+      if (pair === undefined) continue;
+      let keep = true;
       if (pair[0] !== wanted) {
-        next.push(pair);
-        continue;
-      }
-      if (!found) {
+        if (write !== index) list[write] = pair;
+      } else if (!found) {
+        pair[1] = wantedValue;
+        if (write !== index) list[write] = pair;
         found = true;
-        next.push([wanted, wantedValue]);
+      } else {
+        keep = false;
+      }
+      if (keep) {
+        write++;
       }
     }
-    if (!found) {
-      next.push([wanted, wantedValue]);
+    if (found) {
+      if (write !== length) list.length = write;
+    } else {
+      list.push([wanted, wantedValue]);
     }
-    this.#list = next;
     this.#update();
   }
 
@@ -375,7 +438,7 @@ export class URLSearchParams {
    */
   sort(): void {
     URLSearchParams.#brandCheck(this);
-    this.#list.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    stableSort(this.#list);
     this.#update();
   }
 
@@ -455,6 +518,85 @@ export class URLSearchParams {
       return `URLSearchParams {\n  ${entries.join(",\n  ")} }`;
     }
     return `URLSearchParams { ${inline} }`;
+  }
+}
+
+function replaceListContents(
+  target: Array<[string, string]>,
+  source: Array<[string, string]>,
+): void {
+  target.length = source.length;
+  for (let index = 0; index < source.length; index++) {
+    const pair = source[index];
+    if (pair !== undefined) target[index] = pair;
+  }
+}
+
+/** Stable code-unit ordering, following pinned Node's callback-free sort. */
+function stableSort(list: Array<[string, string]>): void {
+  const length = list.length;
+  if (length < 2) return;
+
+  // Node uses insertion sort below fifty pairs: setup is cheaper than a merge
+  // buffer and URL query strings are normally far smaller than this.
+  if (length < 50) {
+    for (let index = 1; index < length; index++) {
+      const current = list[index];
+      if (current === undefined) continue;
+      let priorIndex = index - 1;
+      while (priorIndex >= 0) {
+        const prior = list[priorIndex];
+        if (prior === undefined || prior[0] <= current[0]) break;
+        list[priorIndex + 1] = prior;
+        priorIndex--;
+      }
+      list[priorIndex + 1] = current;
+    }
+    return;
+  }
+
+  let source = list;
+  let target = new Array<[string, string]>(length);
+  for (let width = 1; width < length; width *= 2) {
+    for (let start = 0; start < length; start += width * 2) {
+      const middle = Math.min(start + width, length);
+      const end = Math.min(start + width * 2, length);
+      let left = start;
+      let right = middle;
+      let output = start;
+      while (left < middle && right < end) {
+        const leftPair = source[left];
+        const rightPair = source[right];
+        if (leftPair === undefined || rightPair === undefined) break;
+        // Equal names come from the left run first, which preserves insertion
+        // order across every merge level.
+        if (leftPair[0] <= rightPair[0]) {
+          target[output++] = leftPair;
+          left++;
+        } else {
+          target[output++] = rightPair;
+          right++;
+        }
+      }
+      while (left < middle) {
+        const pair = source[left++];
+        if (pair !== undefined) target[output++] = pair;
+      }
+      while (right < end) {
+        const pair = source[right++];
+        if (pair !== undefined) target[output++] = pair;
+      }
+    }
+    const previousSource = source;
+    source = target;
+    target = previousSource;
+  }
+
+  if (source !== list) {
+    for (let index = 0; index < length; index++) {
+      const pair = source[index];
+      if (pair !== undefined) list[index] = pair;
+    }
   }
 }
 
@@ -539,7 +681,7 @@ function inspectIterator(
   kind: IteratorKind,
   options: InspectOptions,
 ): string {
-  const entries: string[] = [];
+  const entries = new Array<string>(Math.max(0, list.length - start));
   for (let i = start; i < list.length; i++) {
     const pair = list[i];
     if (pair === undefined) continue;
@@ -548,7 +690,7 @@ function inspectIterator(
       : kind === "value"
       ? pair[1]
       : [pair[0], pair[1]];
-    entries.push(inspect(value, options));
+    entries[i - start] = inspect(value, options);
   }
   const inline = entries.join(", ");
   const body = inline.length > (options.breakLength ?? 80)

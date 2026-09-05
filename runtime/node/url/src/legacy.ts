@@ -15,11 +15,16 @@
 // look like premature optimisation and are not: `url.parse` is on the hot path
 // of every HTTP server written before 2018.
 
-import { ERR_INVALID_ARG_TYPE, ERR_INVALID_URL } from "../../internal/errors.ts";
+import {
+  ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_URI,
+  ERR_INVALID_URL,
+} from "../../internal/errors.ts";
 import { validateObject, validateString } from "../../internal/validators.ts";
 import { parse as parseQuery, stringify as stringifyQuery } from "../../querystring/src/main.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
 import { URL } from "./url.ts";
+import { domainToASCII, domainToUnicode } from "./idna.ts";
 
 const CHAR_TAB = 9;
 const CHAR_LINE_FEED = 10;
@@ -47,22 +52,112 @@ const CHAR_RIGHT_CURLY_BRACKET = 125;
 const CHAR_NO_BREAK_SPACE = 160;
 const CHAR_ZERO_WIDTH_NOBREAK_SPACE = 0xfeff;
 
-const protocolPattern = /^[a-z0-9.+-]+:/i;
-const portPattern = /:[0-9]*$/;
-const hostPattern = /^\/\/[^@/]+@[^@/]+/;
+function isAsciiProtocolCode(code: number): boolean {
+  return (code >= 0x30 && code <= 0x39) ||
+    (code >= 0x41 && code <= 0x5a) ||
+    (code >= 0x61 && code <= 0x7a) ||
+    code === 0x2b || code === 0x2d || code === 0x2e;
+}
+
+function leadingProtocol(input: string): string | null {
+  let end = 0;
+  while (end < input.length && isAsciiProtocolCode(input.charCodeAt(end))) end++;
+  return end > 0 && input.charCodeAt(end) === CHAR_COLON
+    ? input.slice(0, end + 1)
+    : null;
+}
+
+/** Whether `//user@host` has non-empty text on both sides of the first `@`. */
+function startsWithCredentialHost(input: string): boolean {
+  if (input.charCodeAt(0) !== CHAR_FORWARD_SLASH ||
+      input.charCodeAt(1) !== CHAR_FORWARD_SLASH) {
+    return false;
+  }
+
+  let index = 2;
+  const authStart = index;
+  while (index < input.length && input[index] !== "@" && input[index] !== "/") index++;
+  if (index === authStart || input[index] !== "@") return false;
+
+  index++;
+  const hostStart = index;
+  while (index < input.length && input[index] !== "@" && input[index] !== "/") index++;
+  return index > hostStart;
+}
+
+function isEcmaWhitespace(code: number): boolean {
+  return (code >= 0x09 && code <= 0x0d) ||
+    code === 0x20 || code === 0xa0 || code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a) ||
+    code === 0x2028 || code === 0x2029 || code === 0x202f ||
+    code === 0x205f || code === 0x3000 || code === 0xfeff;
+}
+
+interface SimplePath {
+  pathname: string;
+  search: string | null;
+}
+
 /** A path with no scheme, host or fragment: the common case, taken whole. */
-const simplePathPattern = /^(\/\/?(?!\/)[^?\s]*)(\?[^\s]*)?$/;
+function parseSimplePath(input: string): SimplePath | null {
+  if (input.charCodeAt(0) !== CHAR_FORWARD_SLASH ||
+      (input.charCodeAt(1) === CHAR_FORWARD_SLASH &&
+       input.charCodeAt(2) === CHAR_FORWARD_SLASH)) {
+    return null;
+  }
+
+  let question = -1;
+  for (let index = 0; index < input.length; index++) {
+    const code = input.charCodeAt(index);
+    if (isEcmaWhitespace(code)) return null;
+    if (question === -1 && code === CHAR_QUESTION_MARK) question = index;
+  }
+  return question === -1
+    ? { pathname: input, search: null }
+    : { pathname: input.slice(0, question), search: input.slice(question) };
+}
+
+function trailingPort(host: string): string | null {
+  let colon = host.length - 1;
+  while (colon >= 0) {
+    const code = host.charCodeAt(colon);
+    if (code < 0x30 || code > 0x39) break;
+    colon--;
+  }
+  return colon >= 0 && host.charCodeAt(colon) === CHAR_COLON
+    ? host.slice(colon)
+    : null;
+}
 
 const hostnameMaxLen = 255;
 
 /** `javascript:` is never given a host, and never auto-escaped. */
-const unsafeProtocol = new Set(["javascript", "javascript:"]);
-const hostlessProtocol = new Set(["javascript", "javascript:"]);
+function isJavascriptProtocol(protocol: string): boolean {
+  return protocol === "javascript" || protocol === "javascript:";
+}
+
 /** The schemes that always carry `//`, so `mailto:` and `xmpp:` do not. */
-const slashedProtocol = new Set([
-  "http", "http:", "https", "https:", "ftp", "ftp:", "gopher", "gopher:",
-  "file", "file:", "ws", "ws:", "wss", "wss:",
-]);
+function isSlashedProtocol(protocol: string): boolean {
+  switch (protocol) {
+    case "http":
+    case "http:":
+    case "https":
+    case "https:":
+    case "ftp":
+    case "ftp:":
+    case "gopher":
+    case "gopher:":
+    case "file":
+    case "file:":
+    case "ws":
+    case "ws:":
+    case "wss":
+    case "wss:":
+      return true;
+    default:
+      return false;
+  }
+}
 
 /**
  * The characters that must never reach a hostname, whatever IDNA does with it.
@@ -72,9 +167,34 @@ const slashedProtocol = new Set([
  * hostname spoof a scheme, `@` would let part of it be read as credentials,
  * and `[`/`]` would let a name be mistaken for an IPv6 literal.
  */
-const forbiddenHostChars = /[\0\t\n\r #%/:<>?@[\\\]^|]/;
-/** The same for a bracketed IPv6 literal, which needs `[`, `]` and `:`. */
-const forbiddenHostCharsIpv6 = /[\0\t\n\r #%/<>?@\\^|]/;
+function containsForbiddenHostChar(hostname: string, ipv6: boolean): boolean {
+  for (let index = 0; index < hostname.length; index++) {
+    switch (hostname.charCodeAt(index)) {
+      case 0x00:
+      case CHAR_TAB:
+      case CHAR_LINE_FEED:
+      case CHAR_CARRIAGE_RETURN:
+      case CHAR_SPACE:
+      case CHAR_HASH:
+      case CHAR_PERCENT:
+      case CHAR_FORWARD_SLASH:
+      case CHAR_LEFT_ANGLE_BRACKET:
+      case CHAR_RIGHT_ANGLE_BRACKET:
+      case CHAR_QUESTION_MARK:
+      case CHAR_AT:
+      case CHAR_BACKWARD_SLASH:
+      case CHAR_CIRCUMFLEX_ACCENT:
+      case CHAR_VERTICAL_LINE:
+        return true;
+      case CHAR_COLON:
+      case CHAR_LEFT_SQUARE_BRACKET:
+      case CHAR_RIGHT_SQUARE_BRACKET:
+        if (!ipv6) return true;
+        break;
+    }
+  }
+  return false;
+}
 
 export type LegacyQuery = string | Record<string, string | string[]> | null;
 
@@ -192,13 +312,13 @@ export class Url {
     }
 
     if (!slashesDenoteHost && !hasHash && !hasAt) {
-      const simplePath = simplePathPattern.exec(rest);
+      const simplePath = parseSimplePath(rest);
       if (simplePath) {
         this.path = rest;
         this.href = rest;
-        this.pathname = simplePath[1] ?? "";
-        if (simplePath[2]) {
-          this.search = simplePath[2];
+        this.pathname = simplePath.pathname;
+        if (simplePath.search !== null) {
+          this.search = simplePath.search;
           this.query = parseQueryString
             ? parseQuery(this.search.slice(1))
             : this.search.slice(1);
@@ -212,7 +332,7 @@ export class Url {
       }
     }
 
-    let proto = protocolPattern.exec(rest)?.[0];
+    const proto = leadingProtocol(rest);
     let lowerProto: string | undefined;
     if (proto) {
       lowerProto = proto.toLowerCase();
@@ -223,18 +343,18 @@ export class Url {
     // `user@server` is always a hostname, and `//foo/bar` is always host `foo`
     // -- that is how a browser resolves a protocol-relative reference.
     let slashes = false;
-    if (slashesDenoteHost || proto || hostPattern.test(rest)) {
+    if (slashesDenoteHost || proto || startsWithCredentialHost(rest)) {
       slashes = rest.charCodeAt(0) === CHAR_FORWARD_SLASH &&
         rest.charCodeAt(1) === CHAR_FORWARD_SLASH;
-      if (slashes && !(proto && hostlessProtocol.has(lowerProto ?? ""))) {
+      if (slashes && !(proto && isJavascriptProtocol(lowerProto ?? ""))) {
         rest = rest.slice(2);
         this.slashes = true;
       }
     }
 
     if (
-      !hostlessProtocol.has(lowerProto ?? "") &&
-      (slashes || (proto && !slashedProtocol.has(proto)))
+      !isJavascriptProtocol(lowerProto ?? "") &&
+      (slashes || (proto && !isSlashedProtocol(proto)))
     ) {
       // The host ends at the first `/`, `?`, `;` or `#`. An `@` moves that
       // boundary: everything before the *last* `@` is credentials, and so may
@@ -314,18 +434,18 @@ export class Url {
 
       if (hostname !== "") {
         if (ipv6Hostname) {
-          if (forbiddenHostCharsIpv6.test(hostname)) {
+          if (containsForbiddenHostChar(hostname, true)) {
             throw new ERR_INVALID_URL(url);
           }
         } else {
-          hostname = asciiOf(hostname) ?? "";
+          hostname = domainToASCII(hostname) ?? "";
 
           // Two spoofing routes, both closed here rather than corrected.
           // An empty hostname now must have been emptied by the IDNA step,
           // since it was non-empty above; a forbidden character now must have
           // been introduced by it, since the loop would have rejected one.
           // Either is severe enough to throw rather than repair.
-          if (hostname === "" || forbiddenHostChars.test(hostname)) {
+          if (hostname === "" || containsForbiddenHostChar(hostname, false)) {
             throw new ERR_INVALID_URL(url);
           }
         }
@@ -346,7 +466,7 @@ export class Url {
       }
     }
 
-    if (!unsafeProtocol.has(lowerProto ?? "")) {
+    if (!isJavascriptProtocol(lowerProto ?? "")) {
       // Delimiters and RFC 2396's "unwise" characters, escaped even where
       // `encodeURIComponent` would leave them -- including the single quote,
       // which would otherwise close an attribute in generated HTML.
@@ -387,7 +507,7 @@ export class Url {
     } else if (firstIdx > 0) {
       this.pathname = rest.slice(0, firstIdx);
     }
-    if (slashedProtocol.has(lowerProto ?? "") && this.hostname && !this.pathname) {
+    if (isSlashedProtocol(lowerProto ?? "") && this.hostname && !this.pathname) {
       this.pathname = "/";
     }
 
@@ -430,7 +550,7 @@ export class Url {
     if (relative.slashes && !relative.protocol) {
       copyUrl(result, relative, false);
 
-      if (slashedProtocol.has(result.protocol ?? "") && result.hostname && !result.pathname) {
+      if (isSlashedProtocol(result.protocol ?? "") && result.hostname && !result.pathname) {
         result.path = result.pathname = "/";
       }
 
@@ -442,7 +562,7 @@ export class Url {
       // Changing the scheme changes the rules. An unknown scheme is taken
       // whole; a known one must have a host, and the first path segment
       // becomes it when there is none.
-      if (!slashedProtocol.has(relative.protocol)) {
+      if (!isSlashedProtocol(relative.protocol)) {
         copyUrl(result, relative);
         result.href = result.format();
         return result;
@@ -451,8 +571,8 @@ export class Url {
       result.protocol = relative.protocol;
       if (
         !relative.host &&
-        !/^file:?$/.test(relative.protocol) &&
-        !hostlessProtocol.has(relative.protocol)
+        relative.protocol !== "file" && relative.protocol !== "file:" &&
+        !isJavascriptProtocol(relative.protocol)
       ) {
         const relPath = (relative.pathname || "").split("/");
         while (relPath.length && !(relative.host = relPath.shift() ?? null));
@@ -486,7 +606,7 @@ export class Url {
     const removeAllDots = mustEndAbs;
     let srcPath = (result.pathname && result.pathname.split("/")) || [];
     const relPath = (relative.pathname && relative.pathname.split("/")) || [];
-    const noLeadingSlashes = Boolean(result.protocol && !slashedProtocol.has(result.protocol));
+    const noLeadingSlashes = Boolean(result.protocol && !isSlashedProtocol(result.protocol));
 
     // For a scheme with no `//`, `../..` may climb past what would elsewhere
     // be the host, so the host is folded into the path for the walk below and
@@ -638,7 +758,7 @@ export class Url {
 
   parseHost(): void {
     let host = this.host ?? "";
-    const port = portPattern.exec(host)?.[0];
+    const port = trailingPort(host);
     if (port) {
       if (port !== ":") {
         this.port = port.slice(1);
@@ -702,7 +822,7 @@ function formatLegacyUrl(url: LegacyUrlLike): string {
     pathname = escapedPathname;
   }
 
-  if (url.slashes || slashedProtocol.has(protocol)) {
+  if (url.slashes || isSlashedProtocol(protocol)) {
     if (url.slashes || host) {
       if (pathname && pathname.charCodeAt(0) !== CHAR_FORWARD_SLASH) {
         pathname = `/${pathname}`;
@@ -805,21 +925,22 @@ function autoEscapeStr(rest: string): string {
  * The characters that survive unescaped in the credentials:
  * `! - . _ ~ ' ( ) * :` and the alphanumerics.
  */
-const noEscapeAuth = new Int8Array([
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x00 - 0x0F
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x10 - 0x1F
-  0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0, // 0x20 - 0x2F
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, // 0x30 - 0x3F
-  0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x40 - 0x4F
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, // 0x50 - 0x5F
-  0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x60 - 0x6F
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, // 0x70 - 0x7F
-]);
+function isUnescapedAuthCode(code: number): boolean {
+  return (code >= 0x30 && code <= 0x39) ||
+    (code >= 0x41 && code <= 0x5a) ||
+    (code >= 0x61 && code <= 0x7a) ||
+    code === 0x21 || (code >= 0x27 && code <= 0x2a) ||
+    code === 0x2d || code === 0x2e || code === 0x3a ||
+    code === 0x5f || code === 0x7e;
+}
 
-const hexTable: string[] = Array.from(
-  { length: 256 },
-  (_, i) => `%${i.toString(16).toUpperCase().padStart(2, "0")}`,
-);
+function upperHexDigit(code: number): string {
+  return String.fromCharCode(code < 10 ? 0x30 + code : 0x41 + code - 10);
+}
+
+function percentEncodedByte(byte: number): string {
+  return `%${upperHexDigit(byte >> 4)}${upperHexDigit(byte & 0x0f)}`;
+}
 
 /** `encodeStr` from `internal/querystring`, with the credentials table. */
 function encodeAuth(str: string): string {
@@ -829,10 +950,10 @@ function encodeAuth(str: string): string {
     let c = str.charCodeAt(i);
 
     if (c < 0x80) {
-      if (noEscapeAuth[c] === 1) continue;
+      if (isUnescapedAuthCode(c)) continue;
       if (lastPos < i) out += str.slice(lastPos, i);
       lastPos = i + 1;
-      out += hexTable[c];
+      out += percentEncodedByte(c);
       continue;
     }
 
@@ -840,29 +961,29 @@ function encodeAuth(str: string): string {
 
     if (c < 0x800) {
       lastPos = i + 1;
-      out += (hexTable[0xc0 | (c >> 6)] ?? "") +
-        (hexTable[0x80 | (c & 0x3f)] ?? "");
+      out += percentEncodedByte(0xc0 | (c >> 6)) +
+        percentEncodedByte(0x80 | (c & 0x3f));
       continue;
     }
     if (c < 0xd800 || c >= 0xe000) {
       lastPos = i + 1;
-      out += (hexTable[0xe0 | (c >> 12)] ?? "") +
-        (hexTable[0x80 | ((c >> 6) & 0x3f)] ?? "") +
-        (hexTable[0x80 | (c & 0x3f)] ?? "");
+      out += percentEncodedByte(0xe0 | (c >> 12)) +
+        percentEncodedByte(0x80 | ((c >> 6) & 0x3f)) +
+        percentEncodedByte(0x80 | (c & 0x3f));
       continue;
     }
     // A surrogate pair, which is one code point in two units.
     ++i;
     if (i >= str.length) {
-      throw new ERR_INVALID_URL(str);
+      throw new ERR_INVALID_URI();
     }
     const c2 = str.charCodeAt(i) & 0x3ff;
     lastPos = i + 1;
     c = 0x10000 + (((c & 0x3ff) << 10) | c2);
-    out += (hexTable[0xf0 | (c >> 18)] ?? "") +
-      (hexTable[0x80 | ((c >> 12) & 0x3f)] ?? "") +
-      (hexTable[0x80 | ((c >> 6) & 0x3f)] ?? "") +
-      (hexTable[0x80 | (c & 0x3f)] ?? "");
+    out += percentEncodedByte(0xf0 | (c >> 18)) +
+      percentEncodedByte(0x80 | ((c >> 12) & 0x3f)) +
+      percentEncodedByte(0x80 | ((c >> 6) & 0x3f)) +
+      percentEncodedByte(0x80 | (c & 0x3f));
   }
   if (lastPos === 0) return str;
   if (lastPos < str.length) return out + str.slice(lastPos);
@@ -972,25 +1093,7 @@ function formatWhatwg(
 function domainToUnicodeHost(host: string): string {
   // Only a Punycode label has anything to decode; anything else comes back
   // unchanged, so this is safe to apply unconditionally.
-  return host.startsWith("[") ? host : (unicodeOf(host) || host);
-}
-
-let unicodeOf: (host: string) => string = (host) => host;
-let asciiOf: (domain: string) => string | null = (domain) => domain;
-
-/**
- * The IDNA steps, supplied by the module rather than imported.
- *
- * The legacy parser and the standard one use the same conversion and neither
- * should have to know where it comes from -- an ICU-backed implementation
- * would replace it in one place.
- */
-export function setDomainConversions(
-  toAscii: (domain: string) => string | null,
-  toUnicode: (host: string) => string,
-): void {
-  asciiOf = toAscii;
-  unicodeOf = toUnicode;
+  return host.startsWith("[") ? host : (domainToUnicode(host) || host);
 }
 
 export function resolve(source: string, relative: string): string {

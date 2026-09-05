@@ -15,9 +15,6 @@ import { join, resolve } from "node:path";
 const ROOT = resolve(import.meta.dirname, "../..");
 const from = (relative) => join(ROOT, relative);
 await import(from("runtime/node/punycode/bindings.node.mjs"));
-const { domainToASCII } = await import(from("runtime/node/url/src/idna.ts"));
-const P = await import(from("runtime/node/url/src/parser.ts"));
-P.setDomainToAscii(domainToASCII);
 const { URL } = await import(from("runtime/node/url/src/url.ts"));
 
 const data = JSON.parse(readFileSync(

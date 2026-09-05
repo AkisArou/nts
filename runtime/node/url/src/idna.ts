@@ -31,16 +31,24 @@ import { toASCII as punycodeToASCII, toUnicode as punycodeToUnicode } from "../.
  * that look identical resolve differently -- which is the attack the mapping
  * exists to prevent.
  */
-const IGNORED = new Set([
-  0x00ad, // SOFT HYPHEN
-  0x200b, // ZERO WIDTH SPACE
-  0x200c, // ZERO WIDTH NON-JOINER
-  0x200d, // ZERO WIDTH JOINER
-  0x2060, // WORD JOINER
-  0x2064, // INVISIBLE PLUS
-  0xfeff, // ZERO WIDTH NO-BREAK SPACE
-  0x1bca0, 0x1bca1, 0x1bca2, 0x1bca3, // SHORTHAND FORMAT controls
-]);
+function isIgnoredCodePoint(codePoint: number): boolean {
+  switch (codePoint) {
+    case 0x00ad: // SOFT HYPHEN
+    case 0x200b: // ZERO WIDTH SPACE
+    case 0x200c: // ZERO WIDTH NON-JOINER
+    case 0x200d: // ZERO WIDTH JOINER
+    case 0x2060: // WORD JOINER
+    case 0x2064: // INVISIBLE PLUS
+    case 0xfeff: // ZERO WIDTH NO-BREAK SPACE
+    case 0x1bca0:
+    case 0x1bca1:
+    case 0x1bca2:
+    case 0x1bca3: // SHORTHAND FORMAT controls
+      return true;
+    default:
+      return false;
+  }
+}
 
 /**
  * A code point no domain may contain.
@@ -66,7 +74,7 @@ function map(domain: string): string | null {
   let out = "";
   for (const ch of domain) {
     const c = ch.codePointAt(0) ?? 0;
-    if (IGNORED.has(c)) continue;
+    if (isIgnoredCodePoint(c)) continue;
     if (isDisallowed(c)) return null;
     out += ch;
   }
