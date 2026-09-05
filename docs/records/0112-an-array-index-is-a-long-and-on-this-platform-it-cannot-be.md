@@ -149,3 +149,46 @@ vectorization, and nbody has no vectorizable loop to lose.
 
 A one-variable A/B is not sound merely because it moves one variable. It also
 has to be run on a case where the thing being priced can *happen*.
+
+## The 2x2 above was wrong, and the discipline that was supposed to prevent it is what failed
+
+The "int, check" cell called `bounds(int length, long index)` with an `int i`.
+**Java widens implicitly**, so that cell routed its index through a long and was
+measuring both variables at once. It was labelled as the isolating cell and was
+not one.
+
+With a real `boundsInt(int, int)`, matching the `(II)I` overload this backend
+already emits for an `i32` index:
+
+    int,  no check       59.2 us     --
+    long, no check      498.5 us    8.42x
+    int,  check          91.5 us    1.54x
+    long, check         701.6 us   11.85x   <- what this backend emits
+
+**Every conclusion drawn from the previous table is retracted.** The two effects
+are not co-equal blockers. The index is 8.42x and the explicit check is 1.54x,
+so:
+
+- Narrowing the index alone is worth **7.67x** (701.6 / 91.5), not nothing.
+- The claim that "narrowing the index alone buys nothing" was the exact
+  opposite of the truth, and it was sent upstream as guidance not to land the
+  change without mine.
+
+Predicted, before the change exists: `elementwise` at 468.47 us against Java's
+58.94 goes to about **61 us, roughly 1.04x**, on one constant.
+
+## What actually failed here
+
+The 2x2 existed *because* record 0106 taught that moving two variables at once
+costs a revert. The discipline was applied. The implementation of it moved two
+variables anyway, through an implicit widening in a helper I wrote myself.
+
+That is worse than not running the 2x2, and the reason is social rather than
+technical: **a 2x2 is trusted in a way a single A/B is not.** A confounded A/B
+gets a second look. A confounded 2x2 gets believed, written into a record, and
+sent to another session as a warning not to do the right thing.
+
+The check that would have caught it is the same one that has caught everything
+else this week and it takes one command: `javap -c` the experiment and look at
+whether the cell that says `int` contains an `i2l`. I decompiled the *subject*
+four times today and never once decompiled the *instrument*.
