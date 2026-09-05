@@ -1,0 +1,27 @@
+ideal 17
+allocated 17
+because a date is one allocation, and the case is that it is only one.
+because
+because Allocations: seventeen, one per iteration, and **nothing else**. No
+because string, because the time value is a double and nothing formats it
+because here; no table; and no reference field, so a date is outside the cycle
+because collector for the same reason a string is.
+because
+because That list is the claim rather than the count. An implementation that
+because kept a formatted form beside the number -- a plausible design, since
+because `toISOString` would then be a field read rather than a calendar --
+because would answer every program identically and show up here as
+because thirty-four.
+because
+because The `Stat` holding it does **not** allocate: it does not escape, so
+because escape analysis puts it in a frame slot, which is why seventeen and
+because not thirty-four. The date inside it is a separate object with its own
+because header, and `ObjectNew` carries a `frame` flag where the runtime's
+because fixed structs do not -- `nts_date_new` is a call to an allocator
+because whatever the caller does with the result.
+because
+because Operations: seventeen, one release each. A date arrives owned --
+because `nts_date_new` returns a count of one, and `produces_owned` says a
+because call yields an owned reference -- so there is no retain, and each is
+because given back where the `Stat` holding it dies. Reading `getTime` takes
+because nothing: it is a load of a double out of a reference the frame holds.

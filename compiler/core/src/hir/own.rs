@@ -1453,6 +1453,15 @@ fn mutating(
                     callee: super::Callee::Virtual { slot, .. },
                     ..
                 } => slots.contains(slot),
+                // A helper the runtime marks `NTS_READS_ONLY` stores nothing,
+                // which is the whole of what a borrow needs to survive it. The
+                // comment above `mutating` named this as the coarse case and
+                // said where the fact should live; `hir::runtime` carries it
+                // now, checked against the header.
+                OpKind::Call {
+                    callee: super::Callee::External(name),
+                    ..
+                } => !super::runtime::reads_only(name),
                 OpKind::Call { .. } => true,
                 _ => false,
             });
@@ -1695,6 +1704,16 @@ fn quiet(kind: &OpKind) -> bool {
         // Concatenation allocates. Every other binary is arithmetic or a
         // comparison.
         OpKind::Binary { op, .. } => !matches!(op, super::BinOp::Concat),
+        // A helper the runtime marks `NTS_READS_ONLY` is a call and is none of
+        // the four things this asks about: it reads through its arguments and
+        // returns. `Stat.accessed` reads `this.atime` and hands it to
+        // `nts_date_value`, which loads a double -- and that call alone made
+        // the whole function not inert, so the borrow became a retain and a
+        // release. 34 of `tooling/memory/cases/dates`' 51 operations.
+        OpKind::Call {
+            callee: super::Callee::External(name),
+            ..
+        } => super::runtime::reads_only(name),
         // Everything else stores, calls, allocates, or suspends. `Erase` is
         // here for being a boxing operation rather than for being unsafe.
         _ => false,

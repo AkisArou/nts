@@ -1724,6 +1724,8 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
         // the same reason a closure does, and the reason both sit below the
         // object range rather than inside it.
         HirType::Managed(ManagedType::Symbol) => Some(("NTS_TAG_SYMBOL", "reference")),
+        // A date answers `"object"` to `typeof`, like any other object.
+        HirType::Managed(ManagedType::Date) => Some(("NTS_TAG_OBJECT", "reference")),
         // Every object shares one tag. `typeof` cannot tell two classes apart
         // -- it answers "object" for both -- and which class it is comes from
         // the header the payload points at, which is where the collector and
@@ -1803,6 +1805,7 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *",
         HirType::Managed(ManagedType::String) => "NtsString *",
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *",
+        HirType::Managed(ManagedType::Date) => "NtsDate *",
         // One runtime type whatever it carries. The payload's representation is
         // in the HIR type for the compiler's sake -- it says which
         // `nts_promise_fulfill_*` to emit -- and the C sees a tagged union, so

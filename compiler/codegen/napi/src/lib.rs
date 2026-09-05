@@ -72,6 +72,10 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // meaning the other side cannot reproduce -- `Symbol.for` on the far
         // side is a different registry. Refused rather than marshalled.
         HirType::Managed(ManagedType::Symbol) => None,
+        // A `Date` crossing the boundary would have to become a JavaScript
+        // `Date`, which is a construction on the other side rather than a
+        // handle to this one. Refused rather than marshalled as its number.
+        HirType::Managed(ManagedType::Date) => None,
         // HIR currently does not retain the distinction between a declared
         // `string[]` parameter and a `...strings: string[]` rest parameter.
         // Treating both as rest made an ordinary array parameter receive all
@@ -151,6 +155,7 @@ fn spell(ty: &HirType) -> String {
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "string".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "symbol".to_owned(),
+        HirType::Managed(ManagedType::Date) => "Date".to_owned(),
         HirType::Managed(ManagedType::Array(e)) => format!("{}[]", spell(e)),
         HirType::Managed(ManagedType::Object(id)) if hir::is_closure_type(*id) => {
             "a function".to_owned()
@@ -193,6 +198,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         HirType::BigInt => "__int128".to_owned(),
         HirType::Managed(ManagedType::String) => "NtsString *".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *".to_owned(),
+        HirType::Managed(ManagedType::Date) => "NtsDate *".to_owned(),
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *".to_owned(),
         // The fixed runtime layout, not a generated struct: the payload's
         // representation is in the type for the compiler's benefit, and the C

@@ -3647,6 +3647,55 @@ static NtsMap *nts_map_alloc(uint32_t kind, bool holds_values) {
   return map;
 }
 
+/* Dates.
+ *
+ * A date is a double and a header. Every accessor JavaScript defines is
+ * arithmetic on that double, so there is nothing else to store -- and the
+ * descriptor says no references, which keeps it out of the cycle collector for
+ * the same reason a string is out of it.
+ *
+ * The whole of the specification's `Date` that this compiler provides is
+ * construction from a number and reading the number back. `Date.now()` and
+ * `new Date()` are refused at the lowering, because they read a clock this
+ * runtime does not have and because no differential could check them: node
+ * would answer with its instant and we with ours. */
+static const NtsDescriptor nts_desc_date = {
+    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsDate), 0u, 0u, 0, 0, "Date", 0u, 0,
+};
+
+/* The specification's `TimeClip`: truncate toward zero, and reject a magnitude
+ * beyond 100,000,000 days either side of the epoch.
+ *
+ * Both halves are observable. `new Date(1.5).getTime()` is 1, and
+ * `new Date(8.64e15 + 1).getTime()` is NaN rather than a large number. */
+static double nts_time_clip(double ms) {
+  if (!(ms >= -8.64e15 && ms <= 8.64e15)) {
+    return (double)NAN;
+  }
+  const double whole = ms < 0 ? -floor(-ms) : floor(ms);
+  /* `+0` and not `-0`. The specification routes through
+   * `ToIntegerOrInfinity`, which maps `-0` to `+0`, and node agrees:
+   * `Object.is(new Date(-0).getTime(), -0)` is false. Truncation alone leaves
+   * the sign, and `1 / t` is the only thing that can tell -- which is exactly
+   * the sort of difference that never shows until something divides by it. */
+  return whole == 0.0 ? 0.0 : whole;
+}
+
+NtsDate *nts_date_new(double ms) {
+  NtsDate *date = (NtsDate *)nts_alloc(sizeof(NtsDate));
+  date->header.descriptor = &nts_desc_date;
+  date->header.reserved = 1;
+  date->header.flags = 0;
+  date->header.length = 0;
+  date->ms = nts_time_clip(ms);
+  nts_note_allocation();
+  return date;
+}
+
+double nts_date_value(const NtsDate *date) {
+  return date ? date->ms : (double)NAN;
+}
+
 /* Symbols.
  *
  * A symbol is a header and a description pointer, and its identity is its

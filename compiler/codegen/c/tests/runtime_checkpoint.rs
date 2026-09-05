@@ -218,6 +218,26 @@ fn a_grown_array_gives_its_elements_back() {
     );
 }
 
+/// A date, whose whole content is a time value.
+#[test]
+fn a_date_normalises_its_argument() {
+    // `TimeClip` is the whole of what a `Date` does to its argument, and every
+    // expected value was read off node. Both halves are observable: truncation
+    // toward zero makes `new Date(1.5).getTime()` 1, and the range check makes
+    // `new Date(8.64e15 + 1).getTime()` NaN rather than a large number.
+    //
+    // One of those expectations was wrong when written -- I put `1900-03-01`
+    // where node says `1900-02-28`, from memory, in a file whose own comment
+    // claimed the values came from the oracle. The implementation had agreed
+    // with node all along.
+    let report = run_suite("dates", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 11,
+        "expected at least 11 date checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}
+
 /// A symbol, whose identity is the address of its cell.
 #[test]
 fn a_symbol_is_the_address_of_its_own_cell() {

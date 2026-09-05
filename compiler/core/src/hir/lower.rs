@@ -3129,6 +3129,87 @@ fn tuple_representation(
     Some(HirType::Managed(ManagedType::Array(Box::new(shared?))))
 }
 
+/// The types the runtime provides, rather than the program.
+///
+/// `Promise`, `Map`, `Set` and `Date` are one family by the standard this
+/// module already applies: each has a fixed C struct rather than a generated
+/// layout, so giving one an object layout would be a shape with fields nothing
+/// may read. Grouped here because they are decided the same way — by the
+/// declared name — and because `representation_of` is a single `match` that
+/// this had grown past a hundred lines.
+fn provided_representation(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    path: &mut Vec<TypeId>,
+    subst: &Substitution,
+) -> Option<HirType> {
+    let record = snapshot.types.get(ty.0 as usize)?;
+    if !matches!(
+        record.kind,
+        TypeKind::Object { .. } | TypeKind::Structured { .. }
+    ) {
+        return None;
+    }
+        // declared its own `Promise` would be mis-read, and the principled
+        // version is `docs/any-unknown.md`'s profiles, which tie a trusted
+    // A `Date` carries nothing: the specification's "time value" is the whole
+    // of its contents, so there are no arguments to read and no payload
+    // representation to decide. First, because it is the only one of these
+    // that reads nothing further.
+    if named(snapshot, ty) == Some("Date") {
+        return Some(HirType::Managed(ManagedType::Date));
+    }
+
+    // The payload comes from the checker's type arguments rather than from the
+    // return annotation, so an inferred `Promise<number>` works as well as a
+    // written one. `Promise` with no argument is `Promise<void>`, which is what
+    // an `async` function with no `return` has.
+    if named(snapshot, ty) == Some("Promise") {
+        // No recorded argument is *not* `Promise<void>`. `Promise<void>` has
+        // one argument and it is `void`; none at all means the frontend did not
+        // get them -- it stops at the library boundary, and a file large enough
+        // to exhaust its type budget stops earlier still.
+        //
+        // Defaulting to `void` was a guess that reads as an answer: every
+        // payload became nothing, the settle discarded the value, and the
+        // resumption read a slot that was never filled. Refusing says so.
+        let argument = *snapshot
+            .type_arguments
+            .get(&ty)
+            .and_then(|arguments| arguments.first())?;
+        let payload = representation_within(snapshot, argument, path, subst)?;
+        return Some(HirType::Managed(ManagedType::Promise(Box::new(payload))));
+    }
+
+    // `Map<K, V>` and `Set<T>`, recognized the same way and stopping at the
+    // library boundary for the same reason -- decomposing one would pull in
+    // `forEach`, `entries` and the rest of a type this compiler represents
+    // itself. `ReadonlyMap` and `ReadonlySet` are the same table in a narrower
+    // type: readonly is a type-level fact and does not change storage.
+    //
+    // Both arguments are required, and a missing one refuses rather than
+    // defaulting, exactly as the promise above does. A `Map` whose key
+    // representation was guessed would hash with the wrong function and find
+    // nothing, which is the kind of wrong that looks like an empty table rather
+    // than like a bug.
+    if matches!(named(snapshot, ty), Some("Map" | "ReadonlyMap")) {
+        let arguments = snapshot.type_arguments.get(&ty)?;
+        let key = representation_within(snapshot, *arguments.first()?, path, subst)?;
+        let value = representation_within(snapshot, *arguments.get(1)?, path, subst)?;
+        return Some(HirType::Managed(ManagedType::Map(
+            Box::new(key),
+            Box::new(value),
+        )));
+    }
+    if matches!(named(snapshot, ty), Some("Set" | "ReadonlySet")) {
+        let arguments = snapshot.type_arguments.get(&ty)?;
+        let element = representation_within(snapshot, *arguments.first()?, path, subst)?;
+        return Some(HirType::Managed(ManagedType::Set(Box::new(element))));
+    }
+
+    None
+}
+
 fn representation_of(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
@@ -3184,57 +3265,8 @@ fn representation_of(
         // belongs to the closure's own class, which has this one as its base.
         // `Promise<T>`, recognized by name the way the rest of the provided
         // surface is. The same caveat applies as for `Math`: a program that
-        // declared its own `Promise` would be mis-read, and the principled
-        // version is `docs/any-unknown.md`'s profiles, which tie a trusted
-        // *declaration identity* to compiler-owned semantics.
-        //
-        // The payload comes from the checker's type arguments rather than from
-        // the return annotation, so an inferred `Promise<number>` works as well
-        // as a written one. `Promise` with no argument is `Promise<void>`,
-        // which is what an `async` function with no `return` has.
-        TypeKind::Object { .. } | TypeKind::Structured { .. }
-            if named(snapshot, ty) == Some("Promise") =>
-        {
-            // No recorded argument is *not* `Promise<void>`. `Promise<void>`
-            // has one argument and it is `void`; none at all means the
-            // frontend did not get them -- it stops at the library boundary,
-            // and a file large enough to exhaust its type budget stops
-            // earlier still.
-            //
-            // Defaulting to `void` was a guess that reads as an answer: every
-            // payload became nothing, the settle discarded the value, and the
-            // resumption read a slot that was never filled. Refusing says so.
-            let argument = *snapshot
-                .type_arguments
-                .get(&ty)
-                .and_then(|arguments| arguments.first())?;
-            let payload = representation_within(snapshot, argument, path, subst)?;
-            HirType::Managed(ManagedType::Promise(Box::new(payload)))
-        }
-        // `Map<K, V>` and `Set<T>`, recognized the same way and stopping at the
-        // library boundary for the same reason -- decomposing one would pull in
-        // `forEach`, `entries` and the rest of a type this compiler represents
-        // itself.
-        //
-        // Both arguments are required, and a missing one refuses rather than
-        // defaulting, exactly as the promise above does. A `Map` whose key
-        // representation was guessed would hash with the wrong function and
-        // find nothing, which is the kind of wrong that looks like an empty
-        // table rather than like a bug.
-        TypeKind::Object { .. } | TypeKind::Structured { .. }
-            if matches!(named(snapshot, ty), Some("Map" | "ReadonlyMap")) =>
-        {
-            let arguments = snapshot.type_arguments.get(&ty)?;
-            let key = representation_within(snapshot, *arguments.first()?, path, subst)?;
-            let value = representation_within(snapshot, *arguments.get(1)?, path, subst)?;
-            HirType::Managed(ManagedType::Map(Box::new(key), Box::new(value)))
-        }
-        TypeKind::Object { .. } | TypeKind::Structured { .. }
-            if matches!(named(snapshot, ty), Some("Set" | "ReadonlySet")) =>
-        {
-            let arguments = snapshot.type_arguments.get(&ty)?;
-            let element = representation_within(snapshot, *arguments.first()?, path, subst)?;
-            HirType::Managed(ManagedType::Set(Box::new(element)))
+        _ if let Some(provided) = provided_representation(snapshot, ty, path, subst) => {
+            provided
         }
         // A class that extends a typed array and adds no storage of its own
         // *is* that typed array. `Buffer extends Uint8Array` is the whole of
@@ -13411,8 +13443,42 @@ impl<'a> FuncBuilder<'a> {
                 let payload = payload.as_ref().clone();
                 Some(self.lower_new_promise(id, ty, &payload))
             }
+            HirType::Managed(ManagedType::Date) => Some(self.lower_new_date(id)),
             _ => None,
         }
+    }
+
+    /// `new Date(ms)`.
+    ///
+    /// One argument and one allocation. The normalisation the specification
+    /// calls `TimeClip` -- truncate toward zero, NaN outside +/-8.64e15 -- is
+    /// the runtime's, done once at construction rather than at every read,
+    /// because it is observable: `new Date(1.5).getTime()` is 1.
+    ///
+    /// **`new Date()` with no argument is refused**, and so is `Date.now()`.
+    /// Both read a wall clock this runtime has no capability for, and neither
+    /// could be checked if it did: the differential compares against node, and
+    /// node would answer with its instant and this with a later one. That is
+    /// the same reason `Math.random` is absent -- "the one member of the family
+    /// no differential can check".
+    fn lower_new_date(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let arguments = self.arguments_of(id);
+        let [only] = arguments.as_slice() else {
+            return Err(self.unsupported(
+                id,
+                "a `new Date` with no argument, which reads a clock this compiler has no \
+                 capability for and no differential could check",
+            ));
+        };
+        let ms = self.lower_expression(*only)?;
+        let ms = self.coerce(ms, &HirType::NUMBER, id)?;
+        let origin = self.origin(id);
+        Ok(self.call_runtime(
+            "nts_date_new",
+            vec![ms],
+            HirType::Managed(ManagedType::Date),
+            &origin,
+        ))
     }
 
     /// `new Promise<T>(executor)`.
@@ -15418,12 +15484,86 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_table_method(id, receiver, &table, *member, arguments);
         }
 
+        if matches!(
+            self.values[receiver.0 as usize].ty,
+            HirType::Managed(ManagedType::Date)
+        ) {
+            return self.lower_date_method(id, receiver, *member, arguments);
+        }
+
         let HirType::Managed(ManagedType::Object(type_id)) =
             self.values[receiver.0 as usize].ty.clone()
         else {
             return Err(self.unsupported(id, "a method call on something without methods"));
         };
         self.lower_object_method(id, receiver, type_id, *member, arguments)
+    }
+
+    /// A method on a `Date`.
+    ///
+    /// Three of them, and two are one operation: `getTime` and `valueOf` both
+    /// answer the time value, which is the whole of what a date holds.
+    /// `toISOString` is the only one that is a calendar.
+    ///
+    /// Everything else is refused **by name**, which is the point of listing
+    /// them rather than falling through to "a method call on something without
+    /// methods". `getFullYear` and its family read a *local* calendar, which
+    /// needs a timezone database this compiler does not carry and which would
+    /// make the same program answer differently on two machines -- so it is a
+    /// refusal with a reason rather than a gap.
+    fn lower_date_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let name = self
+            .literal_name(member)
+            .ok_or_else(|| self.unsupported(id, "a `Date` member the program computes"))?;
+        if !arguments.is_empty() {
+            return Err(self.unsupported(id, &format!("a `Date.{name}` with arguments")));
+        }
+        let origin = self.origin(id);
+        match name.as_str() {
+            "getTime" | "valueOf" => Ok(self.call_runtime(
+                "nts_date_value",
+                vec![receiver],
+                HirType::NUMBER,
+                &origin,
+            )),
+            // Refused, and the reason is the oracle rather than the calendar.
+            // `new Date(NaN).toISOString()` **throws a RangeError** in node,
+            // and this compiler has no throw to give from a runtime helper --
+            // so it would answer with a string where node raises, and the
+            // differential cannot see that: it scores node's throw as a case
+            // not reached rather than as a disagreement. A silent divergence
+            // the oracle is blind to is the worst outcome available, so this is
+            // refused until a helper can throw.
+            //
+            // Both call sites in `runtime/node` already guard it --
+            // `Number.isNaN(d.getTime()) ? "Invalid Date" : d.toISOString()` --
+            // and the guard is on the *value*, which the lowering cannot see.
+            "toISOString" => Err(self.unsupported(
+                id,
+                "`Date.toISOString`, which throws a RangeError on an invalid date -- a \
+                 runtime helper here has no way to throw, and answering with a string \
+                 instead is a divergence the differential cannot see",
+            )),
+            // Named individually so the message says which family it is in.
+            "getFullYear" | "getMonth" | "getDate" | "getHours" | "getMinutes"
+            | "getSeconds" | "getMilliseconds" | "getDay" | "getTimezoneOffset" => {
+                Err(self.unsupported(
+                    id,
+                    &format!(
+                        "`Date.{name}`, which reads a *local* calendar -- that needs a timezone \
+                         database this compiler does not carry, and would make one program \
+                         answer differently on two machines"
+                    ),
+                ))
+            }
+            _ => Err(self.unsupported(id, &format!("`Date.{name}`"))),
+        }
     }
 
     fn lower_call(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {

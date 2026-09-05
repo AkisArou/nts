@@ -842,6 +842,7 @@ fn render(ty: &HirType) -> String {
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "managed<str>".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "managed<sym>".to_owned(),
+        HirType::Managed(ManagedType::Date) => "managed<date>".to_owned(),
         // Named by the part of the synthetic space it is in. Every one of them
         // printed as `closure#N` before, which is the one thing an `async`
         // frame and a generator's frame are not -- and this dump is where a

@@ -120,3 +120,58 @@ fn the_table_still_matches_the_header() {
     eprintln!("checked {checked} helpers against the header");
     assert!(checked > 80, "only {checked} helpers checked; the parse is wrong");
 }
+
+/// `runtime::READS_ONLY` names exactly the helpers the header marks.
+///
+/// Two lists again, and the failure this prevents is the quiet one: a helper
+/// that loses `NTS_READS_ONLY` in the header while staying on this list makes
+/// `own::quiet` answer that a call which *can* store is one a borrow survives —
+/// and the result is a use after free that no answer would differ over, because
+/// the object is usually still there.
+///
+/// The other direction is only a missed elision, which is why the message says
+/// which way it went.
+#[test]
+fn the_read_only_helpers_are_the_ones_the_header_marks() {
+    let header = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../runtime/c/nts_runtime.h");
+    let Ok(text) = std::fs::read_to_string(header) else {
+        return;
+    };
+    let mut marked: Vec<&str> = Vec::new();
+    for line in text.lines() {
+        let Some(rest) = line.trim_start().strip_prefix("NTS_READS_ONLY ") else {
+            continue;
+        };
+        // The declaration's name is the token before the parameter list.
+        let Some(open) = rest.find('(') else { continue };
+        let before = &rest[..open];
+        let name = before
+            .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .next()
+            .unwrap_or("");
+        if name.starts_with("nts_") {
+            marked.push(name);
+        }
+    }
+    marked.sort_unstable();
+
+    let mut ours: Vec<&str> = runtime::READS_ONLY.to_vec();
+    ours.sort_unstable();
+
+    for name in &ours {
+        assert!(
+            marked.contains(name),
+            "`{name}` is on `runtime::READS_ONLY` and the header does not mark it \
+             `NTS_READS_ONLY` -- a borrow is being kept across a call that may store"
+        );
+    }
+    for name in &marked {
+        assert!(
+            ours.contains(name),
+            "the header marks `{name}` `NTS_READS_ONLY` and `runtime::READS_ONLY` \
+             does not list it -- a missed elision rather than a hazard, but the two \
+             lists are meant to be one fact"
+        );
+    }
+}

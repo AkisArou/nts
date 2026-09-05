@@ -83,6 +83,8 @@ static SIGNATURES: &[Declared] = &[
     ("nts_check_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Int { bits: 32, signed: false })),
     ("nts_clear_timeout", &[Some(HirType::Float { bits: 64 })], None),
     ("nts_cycle_candidates", &[], Some(HirType::Int { bits: 64, signed: false })),
+    ("nts_date_new", &[Some(HirType::Float { bits: 64 })], None),
+    ("nts_date_value", &[None], Some(HirType::Float { bits: 64 })),
     ("nts_delay", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_has_pending_work", &[], Some(HirType::Bool)),
     ("nts_index", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 32, signed: false })),
@@ -274,6 +276,65 @@ pub fn into_form(target: &str) -> String {
     } else {
         format!("{into}_fn")
     }
+}
+
+/// Runtime helpers that **read and do not store**.
+///
+/// The header marks them `NTS_READS_ONLY`, which is `__attribute__((pure))`,
+/// and `tests/runtime_signatures.rs` checks this list against it — so a helper
+/// that gains or loses the attribute cannot leave the two disagreeing.
+///
+/// # What reads it
+///
+/// `own::mutating`, which decides whether a borrow survives a call. Its own
+/// comment named this gap: *"An external call has no body in this program, so
+/// it mutates too. That second one is coarser than it needs to be… Until it
+/// does, an external call ends a borrow."*
+///
+/// The cost of that coarseness, measured on `tooling/memory/cases/dates`:
+/// reading `this.atime` to hand to `nts_date_value` — a helper that loads a
+/// double and returns it — took a retain and a release per iteration, **34 of
+/// that case's 51 operations**.
+///
+/// `nts_date_value` is how it was found and is one of twenty-eight. The header
+/// has marked the rest of them for a long time and nothing on this side read
+/// it, so every `xs.indexOf`, `s.startsWith`, `m.has` and `xs.at` ended a
+/// borrow it had no way to invalidate.
+pub const READS_ONLY: &[&str] = &[
+    "nts_array_at",
+    "nts_array_at_ref",
+    "nts_array_at_value",
+    "nts_array_includes",
+    "nts_array_includes_ref",
+    "nts_array_includes_str",
+    "nts_array_index_of",
+    "nts_array_index_of_ref",
+    "nts_array_index_of_str",
+    "nts_array_last_index_of",
+    "nts_date_value",
+    "nts_is_class",
+    "nts_map_has",
+    "nts_map_next",
+    "nts_str_char_code_at_fn",
+    "nts_str_char_code_at_int_fn",
+    "nts_str_code_point_at",
+    "nts_str_ends_with",
+    "nts_str_includes",
+    "nts_str_index_of",
+    "nts_str_last_index_of",
+    "nts_str_point_width",
+    "nts_str_starts_with",
+    "nts_string_truthy",
+    "nts_unit_fn",
+    "nts_value_eq_boolean_fn",
+    "nts_value_eq_number_fn",
+    "nts_value_truthy_fn",
+];
+
+/// Whether a runtime helper is one a borrow survives.
+#[must_use]
+pub fn reads_only(name: &str) -> bool {
+    READS_ONLY.contains(&name)
 }
 
 #[cfg(test)]

@@ -33,6 +33,25 @@
  * as bytes per element and takes its count from the header; a fixed one reads
  * it as the whole object. Without the tag the same field would mean two things
  * and nothing would say which. */
+/* The two attribute macros, **defined before anything can use them.**
+ *
+ * They lived beside the prose that argues for them, four hundred lines down,
+ * and a declaration written above that point does not fail at the definition --
+ * it fails as `unknown type name 'NTS_ALLOCATES'` at the *use*, which reads
+ * like a broken declaration rather than a macro out of order. That happened
+ * twice in one day, once for each macro, and the second time it broke the
+ * benchmark harness for another session mid-measurement.
+ *
+ * The arguments for each are still where they were; only the definitions moved.
+ */
+#if defined(__GNUC__) || defined(__clang__)
+#define NTS_ALLOCATES __attribute__((malloc, returns_nonnull))
+#define NTS_READS_ONLY __attribute__((pure))
+#else
+#define NTS_ALLOCATES
+#define NTS_READS_ONLY
+#endif
+
 #define NTS_KIND_ARRAY 0u
 #define NTS_KIND_STRING 1u
 #define NTS_KIND_OBJECT 2u
@@ -132,6 +151,23 @@ typedef NtsHeader NtsString;
  * hashes an unrecognised reference by its pointer and `nts_key_eq` already
  * compares one by its pointer, which for a symbol is exactly right rather
  * than merely adequate. */
+/* A date: a millisecond offset from the epoch, and nothing else.
+ *
+ * That is what a JavaScript `Date` *is* -- the specification calls it a
+ * "time value" and every accessor is arithmetic on it -- so the object is a
+ * header and a double. It holds no references, which is why its descriptor
+ * says none and why it cannot take part in a cycle.
+ *
+ * The value is kept normalised the way the constructor normalises it: an
+ * integral number of milliseconds, or NaN for a date outside the representable
+ * range. `new Date(1.5).getTime()` is 1 and `new Date(1e16).getTime()` is NaN,
+ * and both are observable, so the normalisation happens once at construction
+ * rather than at every read. */
+typedef struct NtsDate {
+  NtsHeader header;
+  double ms;
+} NtsDate;
+
 typedef struct NtsSymbol {
   NtsHeader header;
   /* `Symbol()` with no argument has none, which is a different value from
@@ -649,11 +685,7 @@ size_t nts_cycle_candidates(void);
  * nearly true is worse than no promise -- the same reason `NTS_READS_ONLY` had
  * to come off the bounds checks -- and so is a reason for one that was never
  * read. */
-#if defined(__GNUC__) || defined(__clang__)
-#define NTS_ALLOCATES __attribute__((malloc, returns_nonnull))
-#else
-#define NTS_ALLOCATES
-#endif
+/* Defined at the top of this header; see there for what it promises. */
 
 NTS_ALLOCATES void *nts_alloc(size_t bytes);
 size_t nts_live_bytes(void);
@@ -713,6 +745,13 @@ NtsString *nts_symbol_description(const NtsSymbol *symbol);
 /* `String(sym)` and `sym.toString()`: "Symbol(" + description + ")". */
 NTS_ALLOCATES NtsString *nts_symbol_to_string(const NtsSymbol *symbol);
 
+/* `new Date(ms)`. The argument is normalised here: truncated toward zero, and
+ * NaN for anything outside +/-8.64e15, which is the range the specification
+ * gives -- 100,000,000 days either side of the epoch. */
+NTS_ALLOCATES NtsDate *nts_date_new(double ms);
+/* `getTime()` and `valueOf()`, which are the same operation under two names. */
+NTS_READS_ONLY double nts_date_value(const NtsDate *date);
+
 NTS_ALLOCATES NtsString *nts_concat(const NtsString *a, const NtsString *b);
 bool nts_string_eq(const NtsString *a, const NtsString *b);
 
@@ -761,11 +800,7 @@ int nts_string_cmp(const NtsString *a, const NtsString *b);
  * `pure` rather than `const`: these read through their pointers, so two calls
  * are only equal while the memory between them is unchanged, which is exactly
  * what `pure` promises. */
-#if defined(__GNUC__) || defined(__clang__)
-#define NTS_READS_ONLY __attribute__((pure))
-#else
-#define NTS_READS_ONLY
-#endif
+/* Defined at the top of this header; see there for why it is `pure`. */
 
 /* Kept out of its caller. For a cold path inside a hot one -- growing an array
  * inside an append -- where inlining puts the rare half's code in the common

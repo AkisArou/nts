@@ -238,6 +238,7 @@ fn c_type(ty: &HirType) -> &'static str {
         // signatures and cannot make a symbol, so this is here to be right
         // rather than to be reached.
         HirType::Managed(nts_core::hir::ManagedType::Symbol) => "NtsSymbol *",
+        HirType::Managed(nts_core::hir::ManagedType::Date) => "NtsDate *",
         // As with the promise below: the harness never drives one, because it
         // generates calls from scalar signatures, so this is here to be right
         // rather than to be reached.

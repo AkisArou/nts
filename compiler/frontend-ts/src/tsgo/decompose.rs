@@ -883,6 +883,11 @@ impl<'a> Decomposer<'a> {
                         | "Set"
                         | "ReadonlySet"
                         | "Generator"
+                        // A `Date` is a double. Decomposing `lib.d.ts`'s
+                        // interface would pull in forty accessors to describe
+                        // an object this compiler represents as a header and a
+                        // number.
+                        | "Date"
                 )
             })
     }

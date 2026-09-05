@@ -365,6 +365,10 @@ inherits. The key was the sole blocker, checked rather than assumed:
 | ✅ | `Symbol()`, with a description or without — every call a fresh identity, because `Symbol("a") === Symbol("a")` is false |
 | ✅ | `Symbol.for` and `Symbol.keyFor` — one symbol per key for the life of the runtime. The registry's strong reference is the specification's rule rather than a leak, and is the whole difference from `Symbol()` |
 | ✅ | `typeof` answering `"symbol"`, `===` by address, a symbol in a field, and `Map`/`Set` keyed by one or by `string \| symbol` |
+| ✅ | **`Date`** — a millisecond offset from the epoch and nothing else, which is what the specification's *time value* is. `new Date(ms)`, `getTime` and `valueOf`, and the `TimeClip` normalisation the constructor applies: truncated toward zero, NaN outside ±8.64e15, and `-0` normalised to `+0`. **55 refusal sites in `runtime/node`, all of them `fs.Stats.atime` and its three siblings** |
+| ✗ | `Date.now()` and `new Date()` with no argument | they read a wall clock this runtime has no capability for — and **no differential could check them if it had one**, because node would answer with its instant and this with a later one. The same reason `Math.random` is absent |
+| ✗ | `Date.toISOString` | it throws a `RangeError` on an invalid date, and a runtime helper here has no way to throw. Answering with a string instead is a divergence the differential **cannot see**: it scores node's throw as a case not reached rather than as a disagreement. Both call sites in `runtime/node` guard it with `Number.isNaN(d.getTime())`, and the guard is on the value, which the lowering cannot see. The calendar is not carried unreached — it was written, tested against node across leap years and both era boundaries, and removed |
+| ✗ | the `getFullYear` family | they read a **local** calendar, which needs a timezone database this compiler does not carry and would make one program answer differently on two machines |
 | ✅ | `ReadonlyMap` and `ReadonlySet` — the same runtime table in a narrower type. Readonly-ness is a *type-level* fact, the one this document already records as not changing storage, so representing them as the table they are is right rather than a convenience. Leaving them out stopped them at the frontend's library boundary and left every property holding one unrepresentable: `#uniqueHeaders` alone was **89 of `http`'s 154** local refusals |
 | ✗ | a **well-known** symbol as a value — `Symbol.iterator`, `Symbol.asyncIterator`. They are declared in `lib.d.ts` as `unique symbol` properties of `SymbolConstructor` rather than calls, so they need a static singleton per name rather than the two entry points above |
 | ✗ | `sym.description` and `sym.toString()` as member reads — `nts_symbol_description` and `nts_symbol_to_string` exist and are tested, and nothing lowers a member access to them yet |
@@ -1530,7 +1534,7 @@ The whole global object, host additions excluded. `∅` rows are §13, not backl
 | function properties | `isNaN`, `isFinite` | `parseInt`, `parseFloat`, `encodeURI(Component)`, `decodeURI(Component)` | `eval` |
 | fundamental | `String` (as a function), `Number` | `Object` ◐, `Boolean`, `Symbol` | `Function`, `Proxy`, `Reflect` |
 | errors | `Error`, `TypeError`, `RangeError`, `URIError` | `ReferenceError`, `SyntaxError`, `EvalError`, `AggregateError`, `SuppressedError` | |
-| numbers, dates | `Math` ◐, `Number` ◐ | `BigInt`, `Date` | |
+| numbers, dates | `Math` ◐, `Number` ◐, `Date` ◐ | `BigInt` | |
 | text | `String.prototype` ◐ | `RegExp` | |
 | indexed | `Array` ◐, eight typed arrays ◐ | `Array` statics, `Uint8ClampedArray`, `Float16Array`, `BigInt64Array`, `BigUint64Array` | |
 | keyed | | `Map`, `Set`, `WeakMap`, `WeakSet` | |

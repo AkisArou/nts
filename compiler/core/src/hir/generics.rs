@@ -368,6 +368,7 @@ fn spell(ty: &super::HirType) -> String {
         }
         HirType::Managed(ManagedType::String) => "str".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "sym".to_owned(),
+        HirType::Managed(ManagedType::Date) => "date".to_owned(),
         HirType::Managed(ManagedType::Array(element)) => format!("[{}]", spell(element)),
         HirType::Managed(ManagedType::Object(id)) => format!("obj{}", id.0),
         HirType::Managed(ManagedType::Promise(payload)) => {

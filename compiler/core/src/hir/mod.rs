@@ -185,6 +185,18 @@ pub enum ManagedType {
     Map(Box<HirType>, Box<HirType>),
     /// A `Set`: the same table, with no values stored at all.
     Set(Box<HirType>),
+    /// A date: a millisecond offset from the epoch, and nothing else.
+    ///
+    /// Carrying nothing, for the reason [`ManagedType::Symbol`] carries
+    /// nothing: a `Date` has no element type and no layout that varies. The
+    /// specification calls its contents a *time value* and defines every
+    /// accessor as arithmetic on it, so the object is a header and a double.
+    ///
+    /// A distinct managed type rather than a provided class, on the standard
+    /// this enum already applies: its C type is a fixed runtime struct rather
+    /// than a generated one, so a layout for it would have a field nothing may
+    /// read.
+    Date,
     /// A symbol: an interned cell whose **address is its identity**.
     ///
     /// Carrying nothing, because there is nothing to carry. A symbol has no
