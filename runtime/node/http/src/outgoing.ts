@@ -788,10 +788,20 @@ export class OutgoingMessage<
 
   flushHeaders(): void {
     this.prepareHeaders();
-    if (this.#headerFlushed) return;
+    this.#flushPreparedHead();
+  }
+
+  /** Send an already prepared head, optionally completing with its write. */
+  #flushPreparedHead(callback?: WriteCallback): boolean {
+    if (this.#headerFlushed) return false;
     const head = this.#head;
     this.#headerFlushed = true;
-    if (head !== null) this._writeRaw(head, "latin1");
+    if (head === null) {
+      if (callback !== undefined) nextTick(callback);
+    } else {
+      this._writeRaw(head, "latin1", callback);
+    }
+    return true;
   }
 
   write(
@@ -939,8 +949,22 @@ export class OutgoingMessage<
 
     if (callback !== undefined) this.#endCallbacks.push(callback);
 
-    if (body !== undefined) this.write(body, encodingName);
-    else this.flushHeaders();
+    this.prepareHeaders();
+    const bodyHasBytes =
+      body !== undefined &&
+      (typeof body === "string"
+        ? Buffer.byteLength(body, encodingName ?? "utf8") > 0
+        : body.byteLength > 0);
+    let flushCompletesWithBody = false;
+    if (this.chunkedEncoding) {
+      if (bodyHasBytes && body !== undefined) this.write(body, encodingName);
+      else this.flushHeaders();
+    } else if (this.hasBody && bodyHasBytes && body !== undefined) {
+      flushCompletesWithBody = true;
+      this.write(body, encodingName, this.#onFlushed);
+    } else if (!this.hasBody && body !== undefined && this.#rejectNonStandardBodyWrites) {
+      throw new ERR_HTTP_BODY_NOT_ALLOWED();
+    }
 
     if (this.strictContentLength) {
       const declared = this.#declaredContentLength();
@@ -961,10 +985,12 @@ export class OutgoingMessage<
     if (this.chunkedEncoding) {
       const tail = `0\r\n${this.#trailer}\r\n`;
       this._writeRaw(tail, "latin1", this.#onFlushed);
-    } else {
+    } else if (!flushCompletesWithBody && !this.#flushPreparedHead(this.#onFlushed)) {
       // A zero-byte write is an ordering sentinel. Its callback runs only
       // after every preceding head/body write has completed, so `finish` and
       // the end callback cannot make an undrained socket eligible for reuse.
+      // A fresh head or final body carries this callback itself; the sentinel
+      // is only needed when an earlier call already flushed all real bytes.
       this._writeRaw("", undefined, this.#onFlushed);
     }
 
