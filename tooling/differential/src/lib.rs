@@ -1157,6 +1157,63 @@ fn stopped(signal: Option<i32>, complaint: &str) -> Stopped {
     }) {
         return Stopped::Defect(line.trim().to_owned());
     }
+    // An uncaught `Throwable` prints a stack trace, and `Check.java` prints one
+    // only for that: a refusal is an `NtsRefusal` and goes out as a `nts:`
+    // line. So a stack frame is a defect, whatever threw it.
+    //
+    // The list above catches the errors that mean *the class is wrong*. It
+    // cannot catch the ones that mean the *code* is wrong, because those are
+    // ordinary runtime exceptions with no fixed name -- and a `java` process
+    // that throws exits with a status rather than a signal, so the
+    // signal-based rule below never sees them either. Both gaps meet at
+    // `Declined`.
+    //
+    // Measured, on a generated `<init>` that left an optional reference field
+    // as `null` where `undefined` was meant: the same program reported
+    // **"checked 4 of 174 cases"** followed by **"agreed on every case"**,
+    // because a hundred and seventy `NullPointerException`s were each counted
+    // as the program declining its input. With this rule it is one defect and
+    // a red run.
+    if let Some(line) = complaint
+        .lines()
+        .find(|line| line.trim_start().starts_with("at ") && line.contains('('))
+    {
+        // Two throwables are not defects, and both were found by this rule
+        // being wrong about them first.
+        //
+        // `NtsRefusal` is the program keeping the promise its `!` made. It has
+        // its own arm in `Check.java` -- and that arm is **dead** when the entry
+        // point is called reflectively, because reflection wraps it in an
+        // `InvocationTargetException` and only the `Throwable` catch-all sees
+        // it. So a real refusal arrives here with a stack trace attached, and
+        // the old fallthrough filed it correctly for the wrong reason.
+        //
+        // `OutOfMemoryError` is this lane's `nts: out of memory`: the pool asks
+        // for a loop bound of nine quadrillion and the program does exactly
+        // what that asks. Not reached, not a verdict -- the same as `EXHAUSTED`
+        // above, which the C lane recognises by its own message.
+        let thrown_is_expected = complaint.lines().any(|line| {
+            line.contains("NtsRefusal") || line.contains("OutOfMemoryError")
+        });
+        if thrown_is_expected {
+            return Stopped::Declined;
+        }
+        // The *last* `Caused by:` where there is one. `Check.java` calls the
+        // generated entry point reflectively, so the outermost throwable is
+        // always `InvocationTargetException` and says nothing -- the cause is
+        // the `NullPointerException` or the `ClassCastException` that names
+        // what actually went wrong.
+        let thrown = complaint
+            .lines()
+            .rfind(|line| line.trim_start().starts_with("Caused by: "))
+            .map(|line| line.trim().trim_start_matches("Caused by: "))
+            .or_else(|| complaint.lines().next())
+            .unwrap_or(line)
+            .trim();
+        return Stopped::Defect(format!(
+            "the program threw rather than refusing: {thrown}"
+        ));
+    }
     let said_something = complaint
         .lines()
         .any(|line| line.starts_with(REFUSED) || line.starts_with(EXHAUSTED));
@@ -1971,5 +2028,101 @@ mod tests {
             stopped(None, "nts: `x` was read before its declaration ran\n"),
             Stopped::Defect(_)
         ));
+    }
+
+    /// A program that *threw* is a defect, and this is the gap it closes.
+    ///
+    /// `Check.java` runs the generated entry point reflectively and catches
+    /// `Throwable`, printing a stack trace and exiting 1. Exiting is not a
+    /// signal, and an ordinary runtime exception has no fixed name the list of
+    /// link-time errors could hold — so both rules above missed it and the
+    /// fallthrough filed it as the program declining its input.
+    ///
+    /// Measured, on a generated `<init>` leaving an optional reference field
+    /// `null` where `undefined` was meant: **"checked 4 of 174 cases"**
+    /// followed by **"agreed on every case"**, with a hundred and seventy
+    /// `NullPointerException`s counted as declines. The example that would
+    /// have caught the defect could not, because the harness turned its
+    /// failures into skips.
+    #[test]
+    fn a_thrown_exception_is_a_defect_and_names_its_cause() {
+        let trace = [
+            "java.lang.reflect.InvocationTargetException",
+            "\tat java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(X.java:118)",
+            "Caused by: java.lang.NullPointerException: Cannot read field \"tag\" because \"<local3>\" is null",
+            "\tat nts.gen.Program.unassignedRef(Program.java)",
+        ]
+        .join("\n");
+        let Stopped::Defect(said) = stopped(None, &trace) else {
+            panic!("a thrown exception is not a declined case");
+        };
+        // The *cause*, not the reflective wrapper. `InvocationTargetException`
+        // is what `Check.java`'s reflection always reports and says nothing
+        // about which field of which method was wrong.
+        assert!(
+            said.contains("NullPointerException") && said.contains("tag"),
+            "the cause should be named, not the wrapper: {said}",
+        );
+        assert!(
+            !said.contains("InvocationTargetException"),
+            "the wrapper should not be what is reported: {said}",
+        );
+    }
+
+    /// A refusal that arrives *as* a throwable is still a refusal.
+    ///
+    /// `Check.java` has a `catch (NtsRefusal)` arm, and it is **dead**: the
+    /// entry point is called reflectively, so reflection wraps the refusal in
+    /// an `InvocationTargetException` and only the `Throwable` catch-all sees
+    /// it. A real bounds refusal therefore arrives with a stack trace attached.
+    ///
+    /// Found by the gate: the first version of the stack-frame rule turned nine
+    /// passing examples into failures, and `examples/arrays` was refusing
+    /// `index -0.5 is outside [0, 3)` exactly as it should.
+    #[test]
+    fn a_refusal_wrapped_by_reflection_is_still_a_refusal() {
+        let trace = [
+            "java.lang.reflect.InvocationTargetException",
+            "\tat java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(X.java:118)",
+            "Caused by: nts.rt.NtsRefusal: nts: refused: index -0.500000 is outside [0, 3)",
+            "\tat nts.rt.Check.bounds(Check.java:64)",
+        ]
+        .join("\n");
+        assert_eq!(stopped(None, &trace), Stopped::Declined);
+    }
+
+    /// And running out of heap is not reached, not a verdict.
+    ///
+    /// The pool asks for a loop bound of nine quadrillion and a program that
+    /// allocates per iteration does what that asks. The C lane recognises its
+    /// own `nts: out of memory`; this is the same fact in the JVM's words, and
+    /// it arrives as a throwable with a trace like any other.
+    #[test]
+    fn running_out_of_heap_is_not_a_defect() {
+        let trace = [
+            "java.lang.OutOfMemoryError: Java heap space",
+            "\tat nts.gen.Program.build(Program.java)",
+        ]
+        .join("\n");
+        assert_eq!(stopped(None, &trace), Stopped::Declined);
+    }
+
+    /// And a refusal that happens to mention a frame is still a refusal.
+    ///
+    /// The half a naive rule breaks: searching for the word `at` anywhere, or
+    /// for `Exception`, would file a bounds check that printed a path
+    /// containing `at ` as a defect. The rule is a *stack frame* — a line whose
+    /// first token is `at` and which carries a parenthesised location — and a
+    /// refusal is recognised before it is reached.
+    #[test]
+    fn a_refusal_is_not_a_stack_trace() {
+        assert_eq!(
+            stopped(
+                Some(6),
+                "nts: refused: index 9 is outside [0, 3) at /var/cat(1)/x
+"
+            ),
+            Stopped::Declined,
+        );
     }
 }

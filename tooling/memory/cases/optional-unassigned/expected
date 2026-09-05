@@ -1,0 +1,21 @@
+ideal 0
+allocated 0
+because Argued before measuring.
+because
+because Allocations: none. One `Slot` per iteration, and it dies with the
+because iteration -- nothing stores it, nothing returns it -- so escape
+because analysis puts it in the frame. `Inner` is never constructed at all:
+because `s.ref` is the absence, and `?.` reads a tag rather than following a
+because pointer.
+because
+because The claim worth holding is that **the absence is free**. An optional
+because field's storage is an erased slot, and an unwritten one is the zero the
+because allocator already left; a lowering that materialized an `undefined`
+because somewhere to compare against, or boxed the read before testing it,
+because would show up here and nowhere else, because every answer would stay
+because right.
+because
+because Operations: none, by the rule `closure-capture` states -- an allocation
+because floor of zero forces an operation floor of zero. The tag says the slot
+because holds nothing, so there is no reference to take or give back, and the
+because two present values in the sum are numbers.
