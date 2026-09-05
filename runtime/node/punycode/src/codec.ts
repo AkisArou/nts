@@ -260,7 +260,7 @@ export function toASCII(input: string): string {
   return mapDomain(input, (label) => (hasNonASCII(label) ? `xn--${encode(label)}` : label));
 }
 
-/** U+007F is excluded too: the RFC's "basic" range stops below it. */
+/** Node's basic range includes U+007F; only larger code units need encoding. */
 function hasNonASCII(str: string): boolean {
   for (let i = 0; i < str.length; i++) {
     const c = str.charCodeAt(i);
