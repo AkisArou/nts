@@ -152,7 +152,6 @@ function applyRequestHeaderArray(
 
 export class ClientRequest extends OutgoingMessage {
   method: string;
-  path: string;
   host: string;
   protocol: string;
   agent: Agent | null;
@@ -170,6 +169,19 @@ export class ClientRequest extends OutgoingMessage {
   #port: number;
   #errorEmitted = false;
   #joinDuplicateHeaders = false;
+  #path = "";
+
+  get path(): string {
+    return this.#path;
+  }
+
+  set path(value: string) {
+    const path = String(value);
+    if (INVALID_PATH.test(path)) {
+      throw new ERR_UNESCAPED_CHARACTERS("Request path");
+    }
+    this.#path = path;
+  }
 
   constructor(options: RequestOptions | string, callback?: ResponseListener) {
     super();
@@ -197,9 +209,6 @@ export class ClientRequest extends OutgoingMessage {
 
     this.method = method.toUpperCase();
     this.path = opts.path || "/";
-    if (INVALID_PATH.test(this.path)) {
-      throw new ERR_UNESCAPED_CHARACTERS("Request path");
-    }
     this.host =
       validateRequestHost(opts.hostname, "hostname") ||
       validateRequestHost(opts.host, "host") ||
@@ -296,8 +305,10 @@ export class ClientRequest extends OutgoingMessage {
       this.setHeader("Authorization", `Basic ${Buffer.from(opts.auth).toString("base64")}`);
     }
 
-    this.statusLine = `${this.method} ${this.path} HTTP/1.1`;
-    if (rawHeaderPairs !== undefined) this._storeRawHeaderPairs(rawHeaderPairs);
+    if (rawHeaderPairs !== undefined) {
+      this.statusLine = `${this.method} ${this.path} HTTP/1.1`;
+      this._storeRawHeaderPairs(rawHeaderPairs);
+    }
     this._setUniqueHeaders(parseUniqueHeadersOption(opts.uniqueHeaders));
 
     this.agent = selectedAgent;
@@ -756,7 +767,7 @@ export class ClientRequest extends OutgoingMessage {
     // nobody. Drain them without delivering more `data` to user code while
     // the socket teardown completes.
     this.res?._dump();
-    if (this.socket === null && !this.aborted && !this.#errorEmitted) {
+    if (this.socket === null && this.agent !== null && !this.aborted && !this.#errorEmitted) {
       const failure = error ?? new ConnResetException("socket hang up");
       nextTick(() => {
         if (this.#errorEmitted || this.aborted) return;
