@@ -34,6 +34,7 @@ import { IncomingMessage } from "./incoming.ts";
 import { checkIsHttpToken, OutgoingMessage, parseUniqueHeadersOption } from "./outgoing.ts";
 import type { OutgoingHeaders, OutgoingHeaderValue } from "./outgoing.ts";
 import { Agent, globalAgent } from "./agent.ts";
+import type { AgentConnectionOptions } from "./agent.ts";
 
 export type RequestHeaderPair = readonly [string, OutgoingHeaderValue];
 export type RequestHeaderArray = readonly (string | RequestHeaderPair)[];
@@ -77,6 +78,16 @@ export interface RequestOptions {
   maxHeaderSize?: number | undefined;
 }
 
+/** The public structural contract accepted by Node's `options.agent`. */
+interface RequestAgent {
+  readonly protocol?: string | undefined;
+  readonly defaultPort?: number | undefined;
+  readonly keepAlive?: boolean | undefined;
+  readonly maxSockets?: number | undefined;
+  readonly options?: { readonly timeout?: number | undefined } | undefined;
+  addRequest(request: ClientRequest, options: AgentConnectionOptions): void;
+}
+
 export type ResponseListener = (response: IncomingMessage) => void;
 
 interface PendingResponseChunk {
@@ -105,6 +116,11 @@ function validateRequestHost(value: unknown, name: "host" | "hostname"): string 
     throw new ERR_INVALID_ARG_TYPE(`options.${name}`, ["string", "undefined", "null"], value);
   }
   return value;
+}
+
+function isRequestAgent(value: unknown): value is RequestAgent {
+  if (value === null || typeof value !== "object" || !("addRequest" in value)) return false;
+  return typeof value.addRequest === "function";
 }
 
 function applyRequestHeaderArray(
@@ -155,7 +171,7 @@ export class ClientRequest extends OutgoingMessage {
   method: string;
   host: string;
   protocol: string;
-  agent: Agent | null;
+  agent: RequestAgent | null;
 
   aborted = false;
   reusedSocket = false;
@@ -215,10 +231,21 @@ export class ClientRequest extends OutgoingMessage {
       validateRequestHost(opts.host, "host") ||
       "localhost";
 
-    const selectedAgent =
-      opts.agent === false || (opts.agent === undefined && opts.createConnection !== undefined)
-        ? null
-        : (opts.agent ?? globalAgent);
+    const agentOption: unknown = opts.agent;
+    let selectedAgent: RequestAgent | null;
+    if (agentOption === false) {
+      selectedAgent = new Agent();
+    } else if (agentOption === null || agentOption === undefined) {
+      selectedAgent = opts.createConnection === undefined ? globalAgent : null;
+    } else if (isRequestAgent(agentOption)) {
+      selectedAgent = agentOption;
+    } else {
+      throw new ERR_INVALID_ARG_TYPE(
+        "options.agent",
+        ["Agent-like Object", "undefined", "false"],
+        agentOption,
+      );
+    }
     this.protocol = opts.protocol ?? selectedAgent?.protocol ?? "http:";
     const expectedProtocol = selectedAgent?.protocol ?? globalAgent.protocol;
     if (this.protocol !== expectedProtocol) {
@@ -268,7 +295,9 @@ export class ClientRequest extends OutgoingMessage {
     this.hasBody = true;
     this.useChunkedEncodingByDefault = !BODILESS.has(this.method);
     this.keepAliveWithoutFramingWhenEmpty = BODILESS.has(this.method);
-    this.shouldKeepAlive = selectedAgent !== null;
+    this.shouldKeepAlive =
+      selectedAgent !== null &&
+      (selectedAgent.keepAlive === true || Number.isFinite(selectedAgent.maxSockets));
     this._removedConnection = opts.setDefaultHeaders === false;
     this._removedContLen = opts.setDefaultHeaders === false;
     this._removedTE = opts.setDefaultHeaders === false;
@@ -392,11 +421,7 @@ export class ClientRequest extends OutgoingMessage {
       if (socket !== null) {
         if (error === undefined && this.agent !== null && !socket.destroyed) {
           if (onEarlyError !== undefined) socket.removeListener("error", onEarlyError);
-          this.agent.release(
-            this.agent.getName({ host: this.host, port: this.#port }),
-            socket,
-            true,
-          );
+          this.#releaseSocket(socket, true);
         } else {
           if (onEarlyError !== undefined) {
             socket.once("close", () => socket.removeListener("error", onEarlyError));
@@ -702,7 +727,7 @@ export class ClientRequest extends OutgoingMessage {
       }
     }
 
-    const timeout = this.timeout ?? this.agent?.options.timeout;
+    const timeout = this.timeout ?? this.agent?.options?.timeout;
     if (timeout !== undefined) {
       this.timeoutCb = () => {
         this.emit("timeout");
@@ -732,22 +757,31 @@ export class ClientRequest extends OutgoingMessage {
     }
     const reusable = this.shouldKeepAlive && response.keepAlive && !this.destroyed;
     this._emitClose();
-    if (this.agent) {
-      this.agent.release(
-        this.agent.getName({ host: this.host, port: this.#port }),
+    this.#releaseSocket(
+      socket,
+      reusable,
+      typeof response.headers["keep-alive"] === "string"
+        ? response.headers["keep-alive"]
+        : undefined,
+    );
+  }
+
+  #releaseSocket(socket: Socket, reusable: boolean, keepAliveHint?: string): void {
+    const agent = this.agent;
+    if (agent instanceof Agent) {
+      agent.release(
+        agent.getName({ host: this.host, port: this.#port }),
         socket,
         reusable,
-        typeof response.headers["keep-alive"] === "string"
-          ? response.headers["keep-alive"]
-          : undefined,
+        keepAliveHint,
       );
       return;
     }
-    // No agent means nothing owns this socket. Keeping it open because both
-    // ends agreed to keep-alive would leave it open forever with nobody to
-    // reuse it -- and, because a socket holds the loop, would stop the process
-    // from ever exiting. `agent: false` means "this connection is mine and it
-    // ends with this request".
+    if (agent !== null && reusable) {
+      socket.emit("free");
+      return;
+    }
+    // A custom connection without an agent has no pool to own an idle socket.
     socket.destroy();
   }
 
