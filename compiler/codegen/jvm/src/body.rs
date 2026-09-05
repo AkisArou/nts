@@ -48,6 +48,108 @@ pub fn refuse(func: &Func, what: &str) -> Diagnostic {
     )
 }
 
+/// Refuse a signature this slice has no representation for, before any storage
+/// is laid out.
+///
+/// Separate from the body walk because a signature is refusable on its own
+/// terms: a parameter type with no descriptor is a refusal whatever the body
+/// does, and saying so here keeps the slot allocation below about slots.
+fn check_signature(program: &Program, func: &Func) -> Result<(), Diagnostic> {
+    for param in &func.params {
+        if types::descriptor(types::Shape::of(program), &param.ty).is_none() {
+            return Err(refuse(
+                func,
+                &format!("a parameter of unrepresentable type: {}", types::describe(&param.ty)),
+            ));
+        }
+    }
+    if types::descriptor(types::Shape::of(program), &func.return_type).is_none() {
+        return Err(refuse(
+            func,
+            &format!(
+                "a return type with no representation: {}",
+                types::describe(&func.return_type)
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// The values whose slots need a declared verification type.
+///
+/// A slot needs a declared verification type only where a frame can see
+/// it undefined; everywhere else it is `Top` and costs no
+/// definite-assignment store in the prologue. Frames sit at block heads
+/// -- and, the part that cost two attempts, *inside* a block too:
+/// `materializes` says out loud that turning a comparison into a 0 or a
+/// 1 is "the only thing that puts a label inside a block". A value
+/// defined and read within one block still crosses a frame if a
+/// comparison materializes between the two.
+///
+/// So the question is asked per op index rather than per block: a value
+/// is `Top` only if every read of it is in its own block with no label
+/// in between. Fusion is ignored -- a fused comparison emits no label,
+/// so counting it costs a slot its `Top` and never soundness.
+fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
+    let puts_label = |value: ValueId| match &func.values[value.0 as usize].kind {
+        OpKind::Binary { op, .. } => comparison(*op).is_some(),
+        OpKind::Unary { op: UnOp::Truthy, operand } => {
+            !matches!(func.values[operand.0 as usize].ty, HirType::Bool)
+        }
+        _ => false,
+    };
+    let mut defined_at: Vec<Option<(usize, usize)>> = vec![None; func.values.len()];
+    for (block_at, block) in func.blocks.iter().enumerate() {
+        for (index, value) in block.ops.iter().enumerate() {
+            defined_at[value.0 as usize] = Some((block_at, index));
+        }
+    }
+    let mut crosses: rustc_hash::FxHashSet<ValueId> = rustc_hash::FxHashSet::default();
+    for (block_at, block) in func.blocks.iter().enumerate() {
+        // A block parameter is written by predecessors, so its slot is
+        // always live across this block's own frame.
+        crosses.extend(block.params.iter().copied());
+        let labels: Vec<usize> = block
+            .ops
+            .iter()
+            .enumerate()
+            .filter(|&(_, &value)| puts_label(value))
+            .map(|(index, _)| index)
+            .collect();
+        let reads = block
+            .ops
+            .iter()
+            .enumerate()
+            .flat_map(|(index, value)| {
+                nts_core::hir::operands_of(&func.values[value.0 as usize].kind)
+                    .into_iter()
+                    .map(move |operand| (operand, index))
+            })
+            .chain(
+                nts_core::hir::operands_of_terminator(&block.terminator)
+                    .into_iter()
+                    .map(|operand| (operand, block.ops.len())),
+            );
+        for (operand, read_at) in reads {
+            match defined_at[operand.0 as usize] {
+                Some((defined_block, defined_index)) if defined_block == block_at => {
+                    if labels
+                        .iter()
+                        .any(|&label| label > defined_index && label < read_at)
+                    {
+                        crosses.insert(operand);
+                    }
+                }
+                // Defined in another block, or nowhere this walk can see.
+                _ => {
+                    crosses.insert(operand);
+                }
+            }
+        }
+    }
+    crosses
+}
+
 /// A constant this backend re-emits at each use rather than storing once.
 ///
 /// The JVM is a stack machine and a constant is one instruction that cannot
@@ -101,25 +203,11 @@ pub struct Emitter<'a> {
 impl<'a> Emitter<'a> {
     /// Lay out storage, or refuse a type this slice has no representation for.
     pub fn new(program: &'a Program, func: &'a Func) -> Result<Self, Diagnostic> {
-        for param in &func.params {
-            if types::descriptor(types::Shape::of(program), &param.ty).is_none() {
-                return Err(refuse(
-                    func,
-                    &format!("a parameter of unrepresentable type: {}", types::describe(&param.ty)),
-                ));
-            }
-        }
-        if types::descriptor(types::Shape::of(program), &func.return_type).is_none() {
-            return Err(refuse(
-                func,
-                &format!(
-                    "a return type with no representation: {}",
-                    types::describe(&func.return_type)
-                ),
-            ));
-        }
+        check_signature(program, func)?;
 
         let order = block_order(func);
+
+        let crosses = crossing_values(func);
         let mut slots = vec![None; func.values.len()];
         let mut locals = Vec::new();
         let mut next = 0u32;
@@ -183,7 +271,11 @@ impl<'a> Emitter<'a> {
             };
             slots[at] = Some(slot);
             next += u32::from(vtype.slots());
-            locals.push(vtype);
+            locals.push(if crosses.contains(&value) || vtype.slots() == 2 {
+                vtype
+            } else {
+                VType::Top
+            });
         }
 
         // Whose answer this is matters. `hir::operands_of` says out loud that

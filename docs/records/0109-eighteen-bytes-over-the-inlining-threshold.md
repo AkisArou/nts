@@ -109,3 +109,109 @@ What this cost is one build and one gate, and what it bought is knowing that
 `hir::liveness`'s answer and the emitted frames' requirement are not the same
 question -- which is the thing to establish before the second attempt rather
 than after it.
+
+## The second attempt, which was closer and wrong in a more interesting way
+
+If `hir::liveness` answers a different question, ask the emitter's question
+directly. A frame sits at every block head, so a slot needs a declared type
+there only if a later instruction can read it without this block having written
+it: the value is a block parameter, or it is read in some block other than the
+one defining it. Computed from `func.blocks` in twenty lines, no dependency on
+what `live_in` means.
+
+`Ball$bounce` went **330 → 261** (last bci), `bitwise` and `awfy-bounce` both
+verified under `-Xverify:all`, and `examples/nullish` failed to verify:
+
+    nts/gen/Program.erasedFallback(D)D @69: iload
+    Reason: Type top (current frame, locals[6]) is not assignable to integer
+
+**A near-miss is the dangerous shape.** A wrong premise that breaks everything
+announces itself. One that breaks a handful looks like a list of special cases
+-- and a list of special cases is what a wrong general rule produces, so the
+temptation is to find them and add guards. Two rounds of reasoning about which
+values cross had produced two wrong answers, so the third round was a `javap`
+dump instead:
+
+    46:  iload  11        <- block head, frame here
+    48:  istore 6         <- slot 6 written
+    53:  if_icmpeq  62    <- a comparison materialises
+    62:  iconst_1
+    63:  istore 11
+    65:  iload  11        <- branch target, FRAME HERE
+    67:  istore 7
+    69:  iload  6         <- slot 6 read, across that frame
+
+Four instructions, and the premise is gone. **A frame does not sit only at
+block heads.** Turning a comparison into a 0 or a 1 branches *inside* a block,
+so a value defined and read within one HIR block can still cross a frame.
+
+The emitter had already written this down. `materializes()` describes its own
+subject as
+
+> the only thing that needs a scratch slot and **the only thing that puts a
+> label inside a block**.
+
+That comment is load-bearing and I had read it while extending the function
+beside it. Two hypotheses about which values cross a frame were formed without
+consulting the one sentence in the file that says where frames are.
+
+## What worked
+
+The question is asked per **op index** rather than per block: a value is `Top`
+only if every read of it is in its own block with no materialising op between
+the definition and the read. Fusion is ignored deliberately -- a fused
+comparison emits no label, so counting one costs a slot its `Top` and never
+costs soundness. It lives in `crossing_values`, beside `unbox.rs`, because an
+analysis with a wrong premise twice should be a named function with the premise
+in its doc comment rather than twenty lines inside `Emitter::new`.
+
+`bounce` **330 → 261** -- the whole of the coarse version's win, because an
+arithmetic method materialises few comparisons.
+
+## The order the three attempts should have gone in
+
+1. `javap` the frames.
+2. Form the premise from what the frames do.
+3. Build.
+
+They went 3, 3, 1. The first two attempts cost a build and a gate each and the
+dump that settled it took under a minute. **The failure was not the wrong
+premise; it was two premises formed without looking, when looking was cheap.**
+`-Xverify:all` caught both, which is the argument for it being in the loop
+always -- but the verifier tells you a frame is wrong, not why, and the why was
+one command away the whole time.
+
+## The gate numbers in this record were measuring the wrong binary
+
+Written down because it nearly cost more than the wrong premises did.
+
+`tooling/gate/all.sh:320` runs `"${NTS_BIN:-./target/release/nts}"`. This lane
+builds with `CARGO_TARGET_DIR=target-jvm`, and `NTS_GATE_STEPS="jvm"` skips the
+`build` step -- so without `NTS_BIN` the gate drives `target/release/nts`, which
+in a checkout shared by three sessions is **whatever another session last built,
+from a working tree containing this session's uncommitted edits at that
+session's build time.**
+
+The tell was a third run reporting 88 of 100 with twelve examples "not
+agreeing", every one of which passed `nts check` and `-Xverify:all` against the
+binary this session had actually built.
+
+So it is not a stale constant. It is a number that *moves when you change
+things*, in roughly the direction you expect, while measuring something else. A
+frozen number would have been caught immediately.
+
+**"It responds to my edits" is much weaker evidence of measuring my edits than
+it feels like** -- and it is the same failure as the near-miss above, one level
+down: a result plausible enough not to look at.
+
+What survives is what was established without the gate. Both `VerifyError`s were
+reproduced by hand, with `-Xverify:all` on this session's own binary, and their
+frames read in `javap`. That is the whole reason the two refutations above are
+still refutations rather than a second thing to redo. The floor numbers quoted
+in the two attempts are not evidence of anything and are left in place only as
+the story of how the instrument was caught.
+
+The plan already said this, in a section about three sessions sharing a
+checkout: *"a hard-coded path can measure someone else's binary and report a
+floor for code nobody is looking at."* It was read and not applied, which is the
+third time in this record that a written-down fact was walked past.
