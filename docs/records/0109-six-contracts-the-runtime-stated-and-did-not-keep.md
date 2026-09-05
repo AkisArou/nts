@@ -147,6 +147,49 @@ not.
   than hand-edited and hoped for.
 - No new example: none of the six is reachable from TypeScript in a way a
   differential could observe, which is the finding above rather than a gap.
-- No benchmark row: these are correctness repairs, and the one performance
-  candidate the audit measured is opt-in and regressed GCC's common-range case.
-  Not taken.
+- No benchmark row: these are correctness repairs. The audit's one performance
+  candidate is evaluated below and not taken.
+
+## The performance candidate, measured here and declined
+
+The audit also proposes replacing `nts_to_uint32`'s `fmod` fallback with the
+bit-based reduction `nts_to_int32` already has, and reports 3x to 12x on
+out-of-range inputs with a ~30% GCC regression on in-range ones. It marks the
+change opt-in for that reason and says to re-evaluate under this project's own
+flags and input mix. That is the right instruction and it is what decided it.
+
+**Correct**: 226,786 binary64 bit patterns — every exponent with five mantissas
+and both signs, every power of two with both neighbours, the int32 and uint32
+endpoints, and 200,000 random words — through both variants on clang and gcc,
+against node's `>>> 0`. **Zero mismatches, all four combinations**, UBSan clean.
+
+**And worth nothing here.** The first comparison said every row improved 5–9%,
+which is what a full-suite run 25 minutes after another looks like on a machine
+that has cooled. Interleaved, five rounds each, with `closures` as a control
+that cannot reach `ToUint32` at all:
+
+    bytes         434.19 us -> 456.51 us    +5.1%
+    node-utf8      34.85 us ->  36.66 us    +5.2%
+    elementwise   132.58 us -> 133.45 us    +0.7%
+    closures        1.14 us ->   1.18 us    +3.5%   <- control
+
+The control moved 3.5%. Nothing here is a signal.
+
+**Why, exactly.** Counting the two arms of the function across the benchmark
+workloads that call it:
+
+    node-utf8     2,585,600 in range     0 out of range
+    bytes           163,840 in range     0 out of range
+    checksum, awfy-sieve, substrings           0 calls
+
+**2.75 million calls and not one takes the branch the change replaces.** The
+in-range fast path is byte-identical in both variants, so there was nothing for
+this suite to measure. The audit's out-of-range numbers are real and describe a
+workload this project does not currently have.
+
+Not taken, and the condition for revisiting is a measurement rather than a
+rewrite: a workload that converts *out-of-range* doubles — hashing, bit
+manipulation, `x >>> 0` over arbitrary values, which `runtime/node`'s `url` and
+`buffer` do. If one of those becomes a benchmark row, this is the first thing to
+try, and the corpus above is checked in as `tests/` in the audit kit rather than
+needing to be built again.
