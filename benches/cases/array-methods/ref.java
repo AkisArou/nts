@@ -13,6 +13,14 @@
 // Both end up doing the same linear scans over the same sixteen `int`s, which
 // is what makes the ratio meaningful.
 //
+// `int[]` rather than `double[]` is the same deliberate choice `arrays` makes:
+// sixteen `int`s are one cache line and sixteen `double`s are two, and the
+// compare is `if_icmpeq` against `dcmpl`. The TypeScript is `number[]` and the
+// lane prepares `managed<[f64]>`, so the reference is scanning half the bytes.
+// That is this lane's element-width gap rather than a translation liberty, and
+// the row is here to show it -- the helpers themselves are the same hand loops,
+// `NtsArrayD.indexOf` against the one below, so nothing else separates them.
+//
 // `xs.at(-1)` is `xs[xs.length - 1]`; the negative index is JavaScript's
 // spelling of the same read and there is nothing to translate. `reverse` is in
 // place in both languages, which matters because the array's order carries from

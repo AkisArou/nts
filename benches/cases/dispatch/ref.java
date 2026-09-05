@@ -7,14 +7,21 @@
 // has to get it right as much as a chain of tests does. javac warns about
 // nothing here and the checksum is the proof it was preserved.
 //
-// `int[]` rather than `double[]`, and this one is worth flagging as a place the
-// reference is currently *harder* than the compiled program rather than easier.
-// The TypeScript says `new Array<number>(length)` and stores `state & 7`, so a
-// person reading it knows the elements are small integers; `hir::elements` does
-// not yet prove it, so this lane emits a `double[]` and pays a `d2i` per
-// dispatch. That gap is real, it is upstream of this backend, and the row
-// should show it rather than a reference written around it -- the same call
-// made on `awfy-queens`, where the element width is worth 1.14x.
+// `int[]` rather than `double[]`, and this row is the one where that costs
+// nothing: the TypeScript says `new Array<number>(length)` and stores
+// `state & 7`, and the prepared IR types it `managed<[i32]>`, so both lanes
+// index a 32-bit array and the comparison is even.
+//
+// This comment used to say the opposite -- that the lane emitted a `double[]`
+// and paid a `d2i` per dispatch, and that the reference was deliberately the
+// harder one so the row would show the gap. That was true when it was written
+// and is not true now; `nts hir --prepared` says `[i32]` twice and nothing
+// else. It is left visible rather than deleted because a reference whose
+// comment argues for a gap that has closed is worth more as a correction than
+// as a clean line.
+//
+// The rows where the gap is still open are `arrays`, `array-methods`,
+// `array-from` and `array-predicates`, all of which prepare as `[f64]`.
 //
 // `state * 1309 + 13849` fits an `int` and is masked to 16 bits, so the
 // multiply cannot reach the 2^53 rounding the TypeScript comment warns about;

@@ -41,6 +41,10 @@ const _: () = assert!(
     nts_core::hir::tags::FUNCTION < nts_core::hir::tags::OBJECT,
     "a closure must fall outside `tag >= OBJECT`, or `typeof f` answers \"object\""
 );
+const _: () = assert!(
+    nts_core::hir::tags::SYMBOL < nts_core::hir::tags::OBJECT,
+    "a symbol must fall outside `tag >= OBJECT`, or `typeof sym` answers \"object\""
+);
 
 /// The erased value: a tag beside a payload, mirroring the C struct.
 pub const VALUE: &str = "nts/rt/NtsValue";
@@ -216,7 +220,11 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // and adding a variant upstream is a compile error rather than a
         // silent refusal. `never` reaching a value position means control got
         // somewhere the type system said it could not.
-        HirType::Never => return None,
+        //
+        // A symbol is refused here for an unrelated reason and shares the arm
+        // because the answer is the same: it is a runtime value on the C lane
+        // and not yet on this one, so it has no class to name.
+        HirType::Never | HirType::Managed(ManagedType::Symbol) => return None,
     })
 }
 
@@ -229,6 +237,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
         | HirType::Managed(
             ManagedType::Object(_)
             | ManagedType::String
+            | ManagedType::Symbol
             | ManagedType::Array(_)
             | ManagedType::Map(..)
             | ManagedType::Set(_)
@@ -293,6 +302,7 @@ pub fn describe(ty: &HirType) -> String {
         HirType::BigInt => "a bigint".to_owned(),
         HirType::Erased => "an erased value".to_owned(),
         HirType::Managed(ManagedType::String) => "a string".to_owned(),
+        HirType::Managed(ManagedType::Symbol) => "a symbol".to_owned(),
         // The element, because the one message that most needs this is two
         // arrays that differ only in it -- `an array` twice says nothing about
         // why the two would not agree.

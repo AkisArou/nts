@@ -15,6 +15,18 @@
 //
 // `Set<Integer>` boxes, as `map-and-set/ref.java` does and for the same reason:
 // the JDK has no primitive set.
+//
+// `int[]` rather than `double[]`, which is the deliberate harder reference
+// `arrays` and `array-predicates` also write, and it is worth naming here
+// because on this row it is most of the number. The TypeScript is `number[]`,
+// so the lane prepares `managed<[f64]>` and copies eight bytes an element where
+// this copies four. Measured rather than assumed: **8,280,888 bytes/op against
+// the reference's 4,176,848**, a factor of 1.98 on a row whose whole subject is
+// two copies.
+//
+// So the gap is element width and the row should show it. `hir::elements`
+// proving these are int32 is what closes it, and `dispatch` -- which already
+// prepares as `[i32]` -- is what that looks like when it has happened.
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;

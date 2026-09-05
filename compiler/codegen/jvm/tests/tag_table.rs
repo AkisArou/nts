@@ -52,6 +52,7 @@ fn the_three_tag_tables_agree() {
         ("NUMBER", nts_core::hir::tags::NUMBER),
         ("STRING", nts_core::hir::tags::STRING),
         ("FUNCTION", nts_core::hir::tags::FUNCTION),
+        ("SYMBOL", nts_core::hir::tags::SYMBOL),
         ("OBJECT", nts_core::hir::tags::OBJECT),
         ("NULL", nts_core::hir::tags::NULL),
     ];
@@ -77,3 +78,20 @@ fn the_three_tag_tables_agree() {
 // The ordering `typeof` depends on is checked at *compile* time, in
 // `codegen/jvm/src/types.rs`: it is a fact about two constants, so a test that
 // runs is a weaker statement than a `const` assertion that does not build.
+//
+// # This list is a fourth copy, and it drifted before the third one did
+//
+// The point of this test is that `hir::tags`, `nts_runtime.h` and
+// `NtsValue.java` are three copies of one table and the third must not drift.
+// `SYMBOL` arrived in `hir::tags`, and what failed first was **this list** --
+// hand-written here, naming each constant so the *order* is asserted and not
+// just the set, which is what the compile-time checks in `types.rs` cannot do
+// from two constants alone.
+//
+// So the drift detector has a copy of its own. That is not an accident to be
+// tidied away: the names have to be written somewhere for the order to be
+// checkable, and writing them here is what makes the failure say
+// `("OBJECT", 6)` against `("OBJECT", 5)` instead of "something moved". The
+// cost is one edit per tag, and the edit is forced -- which is the whole
+// bargain, and worth stating so the next person does not try to derive the
+// list and lose the ordering check with it.

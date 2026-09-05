@@ -107,3 +107,33 @@ is the same finding as record 0099 seen through a different instrument.
 spreads look like. The stable rows top out at 1.021 and the modal ones start at
 1.151. **1.10 separates them with room on both sides**, and it is now a
 calibrated threshold rather than a guess.
+
+## A sixth measurement, and the contradiction it dissolves
+
+The finding above that the compilation log is identical between a fast run and a
+slow one sat awkwardly beside the modes being real. `-XX:+PrintAssembly` on the
+C2 body of `run$whole`, six runs, addresses stripped and reduced to the opcode
+sequence:
+
+    280, 284, 289, 284, 289, 284 instructions -- six distinct hashes
+
+**C2 emits different machine code for the same method on every run.**
+
+`PrintCompilation` answers *what was compiled* -- which methods, which tiers, in
+what order, entered at which bci. It does not answer *what code came out*. I
+read the first as though it were the second, which is the same error as the
+`rem` dump in record 0133: a correct answer to an adjacent question.
+
+So "not a compilation decision" stands as written and means less than it looked
+like it meant. The decisions are identical and the output is not.
+
+**This is suggestive and not settled, for a reason that matters.**
+`PrintAssembly` runs the case at 84 us against 18-34, so it changes the timing,
+so it changes the profile C2 compiles from -- which is plausibly the very thing
+that varies. The measurement may be of a configuration with more nondeterminism
+than the one being asked about.
+
+The clean test is `-Xbatch`: compilation synchronous, no race between the
+compiler thread and the running loop. If the modes collapse under it,
+profile-dependent codegen is the answer. It is a diagnostic only -- a number
+that needs `-Xbatch` to be good is a number about `-Xbatch`.

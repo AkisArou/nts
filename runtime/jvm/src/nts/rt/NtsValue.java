@@ -7,8 +7,11 @@ public final class NtsValue {
     public static final int NUMBER = 2;
     public static final int STRING = 3;
     public static final int FUNCTION = 4;
-    public static final int OBJECT = 5;
-    public static final int NULL = 6;
+    // Below OBJECT, because `typeof` answers "symbol" and the object test is the
+    // range comparison `tag >= OBJECT`, which must not admit one.
+    public static final int SYMBOL = 5;
+    public static final int OBJECT = 6;
+    public static final int NULL = 7;
     public final int tag;
     public final double num;
     public final Object ref;
@@ -47,6 +50,7 @@ public final class NtsValue {
             case NUMBER: return "number";
             case STRING: return "string";
             case FUNCTION: return "function";
+            case SYMBOL: return "symbol";
             default: return "object";
         }
     }
