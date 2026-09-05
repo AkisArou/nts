@@ -29,11 +29,34 @@ public final class Check {
         }
         long from = argv.length > 1 ? Long.parseLong(argv[1]) : 0L;
         try { run(argv[0], from); }
-        catch (NtsRefusal refusal) {
-            System.out.flush(); System.err.println(refusal.getMessage()); System.exit(1);
-        } catch (Throwable failure) {
-            System.out.flush(); failure.printStackTrace(); System.exit(1);
+        catch (Throwable failure) {
+            System.out.flush();
+            Throwable cause = unwrap(failure);
+            // A refusal is the program correctly declining its input and goes
+            // out as its `nts:` line. Anything else is a defect and goes out as
+            // a stack trace, which is what the differential looks for.
+            if (cause instanceof NtsRefusal) { System.err.println(cause.getMessage()); }
+            else { cause.printStackTrace(); }
+            System.exit(1);
         }
+    }
+    /**
+     * The throwable the program actually raised.
+     *
+     * <p>Every entry point here is called reflectively, so anything it throws
+     * arrives wrapped in an {@code InvocationTargetException} whose own type
+     * says nothing. A {@code catch (NtsRefusal)} arm beside the catch-all was
+     * therefore unreachable, and every legitimate bounds refusal on this lane
+     * went out as a stack trace rather than as its {@code nts:} line -- which
+     * read as a crash to anything classifying the output.
+     */
+    private static Throwable unwrap(Throwable failure) {
+        Throwable cause = failure;
+        while (cause instanceof java.lang.reflect.InvocationTargetException
+                && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
     }
     private static void run(String file, long from) throws Exception {
         Class<?> program = Class.forName(PROGRAM);

@@ -866,6 +866,77 @@ impl Emitter<'_> {
     /// from the same evidence. On ART, whose escape analysis is much weaker,
     /// honouring it may be worth something -- a measurement for when a DEX
     /// pipeline exists, not a guess now.
+    /// Reconcile a call's declared return with the type the middle end proved.
+    ///
+    /// Two different things wear the same shape here and only one of them is a
+    /// cast.
+    ///
+    /// **A supertype.** A helper taking an array of references declares
+    /// `Object[]`, so its result comes back `Object[]` where a `Foo[]` was
+    /// proved. The value *is* a `Foo[]`; only the descriptor forgot, and a
+    /// `checkcast` is exactly right.
+    ///
+    /// **A wrapper.** A helper answering "the element, or nothing" returns an
+    /// `NtsValue`, which is not a supertype of anything -- it *contains* the
+    /// reference. Casting it is a `ClassCastException` at the first call, and
+    /// it was: `NtsArrayL.atValue` returning an `NtsValue` followed by
+    /// `checkcast java/lang/String`, seventeen times in `examples/callbacks`.
+    ///
+    /// The unboxing here is the same sequence `Unerase` already emits for a
+    /// boxed value, which is the argument for it being right: the two paths
+    /// disagreed about the same representation, and only one of them had been
+    /// asked to run.
+    fn narrow_result(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        result: &HirType,
+        returns: &str,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        let Some(want) = types::descriptor(self.shape, result) else {
+            return Ok(());
+        };
+        if want == returns {
+            return Ok(());
+        }
+        if returns == types::VALUE_DESCRIPTOR {
+            return match result {
+                HirType::Bool => {
+                    code.invoke_static(origin, pool, types::VALUE, "asBoolean", "(Lnts/rt/NtsValue;)Z");
+                    Ok(())
+                }
+                HirType::Int { .. } | HirType::Float { .. } => {
+                    code.get_field(origin, pool, types::VALUE, "num", "D");
+                    let target = types::kind(result)
+                        .ok_or_else(|| refuse(self.func, "narrowing to an unrepresentable number"))?;
+                    if target != Kind::Double {
+                        let opcode = match target {
+                            Kind::Long => insn::D2L,
+                            Kind::Float => insn::D2F,
+                            _ => insn::D2I,
+                        };
+                        code.convert(origin, opcode, Kind::Double, target);
+                    }
+                    Ok(())
+                }
+                HirType::Managed(_) => {
+                    code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+                    code.check_cast(origin, pool, &want);
+                    Ok(())
+                }
+                other => Err(refuse(
+                    self.func,
+                    &format!("a helper answering `NtsValue` where {} was proved", types::describe(other)),
+                )),
+            };
+        }
+        if types::kind(result) == Some(Kind::Ref) {
+            code.check_cast(origin, pool, &want);
+        }
+        Ok(())
+    }
+
     fn object_new(
         &mut self,
         code: &mut Code,
@@ -2562,12 +2633,7 @@ impl Emitter<'_> {
                 // `Object[]` and the slot it is stored into is a `Foo[]`. The
                 // narrowing the middle end already proved has to be spelled for
                 // the verifier, which knows only what the descriptor said.
-                if let Some(want) = types::descriptor(self.shape, result)
-                    && want != returns
-                    && types::kind(result) == Some(Kind::Ref)
-                {
-                    code.check_cast(origin, pool, &want);
-                }
+                self.narrow_result(code, pool, result, returns, origin)?;
                 return Ok(Placed::OnStack);
             }
             // `invokevirtual` on the receiver's *static* class, by name. The
@@ -2683,12 +2749,7 @@ impl Emitter<'_> {
                     }
                     return Ok(Placed::Stored);
                 }
-                if let Some(want) = types::descriptor(self.shape, result)
-                    && want != returns
-                    && types::kind(result) == Some(Kind::Ref)
-                {
-                    code.check_cast(origin, pool, &want);
-                }
+                self.narrow_result(code, pool, result, returns, origin)?;
                 Ok(Placed::OnStack)
             }
         }
