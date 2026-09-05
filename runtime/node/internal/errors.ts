@@ -766,6 +766,19 @@ export class ERR_INVALID_URL extends NodeTypeError {
   }
 }
 
+/** The URL or Agent selected a protocol this client cannot speak. */
+export class ERR_INVALID_PROTOCOL extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_INVALID_PROTOCOL";
+
+  constructor(actual: string, expected: string) {
+    super(`Protocol "${actual}" not supported. Expected "${expected}"`);
+    this.name = "TypeError";
+  }
+}
+
 /** `File URL host must be "localhost" or empty on linux`. */
 export class ERR_INVALID_FILE_URL_HOST extends NodeTypeError {
   override get ["constructor"](): unknown {

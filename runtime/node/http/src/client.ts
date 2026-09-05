@@ -24,6 +24,8 @@ import {
   ERR_INVALID_ARG_VALUE,
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_HTTP_TOKEN,
+  ERR_INVALID_PROTOCOL,
+  ERR_INVALID_URL,
   ERR_UNESCAPED_CHARACTERS,
 } from "../../internal/errors.ts";
 import { validateBoolean, validateOneOf } from "../../internal/validators.ts";
@@ -208,6 +210,10 @@ export class ClientRequest extends OutgoingMessage {
         ? null
         : (opts.agent ?? globalAgent);
     this.protocol = opts.protocol ?? selectedAgent?.protocol ?? "http:";
+    const expectedProtocol = selectedAgent?.protocol ?? globalAgent.protocol;
+    if (this.protocol !== expectedProtocol) {
+      throw new ERR_INVALID_PROTOCOL(this.protocol, expectedProtocol);
+    }
     const defaultPort = opts.defaultPort || selectedAgent?.defaultPort;
     this.#port = Number(opts.port || defaultPort || 80);
     const timeoutOption: unknown = opts.timeout;
@@ -797,9 +803,14 @@ export class ClientRequest extends OutgoingMessage {
 
 /** `http.request("http://host/path")`, taken apart. */
 function parseUrlish(url: string): RequestOptions {
-  const match = /^https?:\/\/([^/:?#]+)(?::(\d+))?([^#]*)?$/.exec(url);
-  if (!match) throw new ERR_INVALID_ARG_TYPE("url", "a valid URL", url);
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*:)/.exec(url)?.[1]?.toLowerCase();
+  if (scheme !== undefined && scheme !== "http:" && scheme !== "https:") {
+    return { protocol: scheme };
+  }
+  const match = /^https?:\/\/([^/:?#]+)(?::(\d+))?([^#]*)?$/i.exec(url);
+  if (!match) throw new ERR_INVALID_URL(url);
   return {
+    protocol: scheme,
     hostname: match[1],
     port: match[2] ? Number(match[2]) : 80,
     path: match[3] || "/",
