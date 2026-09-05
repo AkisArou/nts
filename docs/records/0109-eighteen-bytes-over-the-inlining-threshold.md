@@ -73,3 +73,39 @@ against it.
 number needing a flag is a number about the flag, and this backend ships on
 whatever JVM it is handed -- including ART, whose thresholds are its own. The
 fix is to emit a method that fits.
+
+## The first attempt at the byte budget, and why it was reverted
+
+The prologue is the cheapest ~57 bytes, so: declare a slot `Top` when its value
+never crosses a block boundary, on the reasoning that the verifier reads such a
+slot's type from the store preceding every use inside the block, and a frame
+never has to name it. `VType::Top` already exists for exactly this and
+`initialize_locals` already skips it.
+
+It worked on the metric it targeted. `Ball$bounce` went **343 → ~256 bytes**,
+prologue stores **19 → 1**, comfortably under 325.
+
+**And the gate fell from 96 to 35.**
+
+    nts/gen/Program.addWrapsAtInt32$whole(I)I @37: iload
+    Reason: Type top (current frame, locals[7]) is not assignable to integer
+    locals: { integer, integer, integer, top, top, top, top, top, top, top }
+
+An `iload` of a slot the frame declares `top`, with no store before it in that
+block -- so the value *was* written in an earlier block and read in a later
+one, which is precisely the case the liveness query was supposed to exclude.
+The premise is sound and the set computed from `live_in`/`live_out` does not
+match the emitted frames. Reverted rather than patched: the idea needs the
+right liveness question, not a guard on the wrong one.
+
+Worth separating two things the failure does **not** touch:
+
+- The diagnosis stands. `FreqInlineSize=400` takes this row from 1.65x to
+  1.06x, which is a measurement of the JVM's behaviour and not of this change.
+- The direction stands. The prologue is still ~57 free-to-execute bytes on the
+  wrong side of a threshold, and it is still the cheapest thing to remove.
+
+What this cost is one build and one gate, and what it bought is knowing that
+`hir::liveness`'s answer and the emitted frames' requirement are not the same
+question -- which is the thing to establish before the second attempt rather
+than after it.
