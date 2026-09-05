@@ -968,7 +968,8 @@ fn jvm_case(
         hir::Provider::ReferenceCounting | hir::Provider::NoGc => hir::Provider::NoGc,
     };
 
-    let (callee, arguments) = workload(case)?;
+    let supplied = case.join("driver.java");
+    let workload = if supplied.exists() { None } else { Some(workload(case)?) };
     let program = prepared_program(tsconfig, entry, true, provider)?;
     let emitted = nts_codegen_jvm::emit(&program);
     if !emitted.is_complete() {
@@ -999,14 +1000,13 @@ fn jvm_case(
     // Verbatim rather than templated. A driver is twenty lines of Java that
     // belongs next to the case it drives, and inventing a substitution language
     // for the two cases that need one would be the larger mistake.
-    let supplied = case.join("driver.java");
-    if supplied.exists() {
+    let Some((callee, arguments)) = workload else {
         let text = std::fs::read_to_string(&supplied)
             .with_context(|| format!("reading {supplied}"))?;
         let driver_path = dir.join("Case.java");
         std::fs::write(&driver_path, text)?;
         return run_driver(root, &dir, &jar, &driver_path);
-    }
+    };
     // The driver, from the workload the C shim already declares. Every input is
     // a `volatile` field for the reason the C shim makes them `volatile`: a
     // loop-invariant argument lets the JIT hoist the whole call out of the timed

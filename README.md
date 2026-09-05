@@ -33,52 +33,54 @@ see [`benches/README.md`](benches/README.md) for what each row is made of.
 <!-- benchmarks:start -->
 | case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | V8 | Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| absences | 196.2 ns | 197.1 ns | **197.8 ns** | 558.8 ns | -- | 844.3 ns | 681.8 ns | 1.01x | 0.23x | 0.29x | -- |
-| accumulate | 1.14 us | 1.54 us | **1.13 us** | 2.19 us | -- | 2.92 us | 22.07 us | 0.99x | 0.39x | 0.05x | -- |
-| array-methods | 2.77 us | 1.35 us | **1.34 us** | 3.49 us | -- | 5.91 us | 8.25 us | 0.48x | 0.23x | 0.16x | -- |
-| array-mutations (rc) | 592.5 ns | 631.9 ns | **642.2 ns** | refused | -- | 1.66 us | 3.62 us | 1.08x | 0.39x | 0.18x | -- |
-| array-predicates (rc) | 2.54 us | 2.24 us | **2.84 us** | refused | -- | 4.77 us | 5.42 us | 1.12x | 0.59x | 0.52x | -- |
-| arrays | 1.38 us | 1.46 us | **1.46 us** | 1.42 us | -- | 2.57 us | 2.16 us | 1.06x | 0.57x | 0.68x | -- |
-| awfy-bounce | 4.33 us | 6.24 us | **6.13 us** | 7.29 us | 4.54 us | 12.57 us | 11.34 us | 1.42x | 0.49x | 0.54x | 1.60x |
-| awfy-list | 7.63 us | 7.64 us | **7.70 us** | 8.10 us | 8.73 us | 16.62 us | 13.54 us | 1.01x | 0.46x | 0.57x | 0.93x |
-| awfy-mandelbrot | 23.73 ms | 23.66 ms | **23.62 ms** | 23.05 ms | 27.54 ms | 23.09 ms | 23.06 ms | 1.00x | 1.02x | 1.02x | 0.84x |
-| awfy-nbody | 7.31 ms | 6.77 ms | **8.22 ms** | 39.28 ms | 7.97 ms | 80.97 ms | 14.65 ms | 1.12x | 0.10x | 0.56x | 4.93x |
-| awfy-permute | 9.75 us | 10.60 us | **10.53 us** | 11.38 us | 17.15 us | 21.52 us | 17.05 us | 1.08x | 0.49x | 0.62x | 0.66x |
-| awfy-queens | 4.80 us | 7.27 us | **7.11 us** | 10.99 us | 8.87 us | 17.29 us | 14.72 us | 1.48x | 0.41x | 0.48x | 1.24x |
-| awfy-sieve | 3.88 us | 7.07 us | **5.23 us** | 4.34 us | 4.63 us | 10.25 us | 10.04 us | 1.35x | 0.51x | 0.52x | 0.94x |
-| awfy-towers | 12.98 us | 22.44 us | **18.75 us** | 18.20 us | 19.41 us | 32.79 us | 21.07 us | 1.44x | 0.57x | 0.89x | 0.94x |
-| bigint | 352.6 ns | 348.1 ns | **351.0 ns** | 5.33 us | -- | 3.77 us | 3.75 us | 1.00x | 0.09x | 0.09x | -- |
-| bytes | 446.48 us | 456.18 us | **452.47 us** | 688.12 us | -- | 535.68 us | 761.36 us | 1.01x | 0.84x | 0.59x | -- |
-| case-convert (rc) | 6.30 us | 2.59 us | **2.55 us** | refused | -- | 3.11 us | 3.52 us | 0.40x | 0.82x | 0.72x | -- |
-| checksum | 5.03 us | 5.03 us | **5.03 us** | 5.04 us | -- | 5.76 us | 23.99 us | 1.00x | 0.87x | 0.21x | -- |
-| closures | 1.17 us | 1.19 us | **1.18 us** | 2.45 us | -- | 3.09 us | 19.60 us | 1.01x | 0.38x | 0.06x | -- |
-| dispatch | 29.30 us | 23.43 us | **29.03 us** | 28.24 us | -- | 41.09 us | 14.18 us | 0.99x | 0.71x | 2.05x | -- |
-| elementwise | 154.34 us | 133.09 us | **127.07 us** | no driver | -- | 937.81 us | 609.51 us | 0.82x | 0.14x | 0.21x | -- |
-| erasure-stored-typed | 70.70 us | 74.00 us | **74.55 us** | 71.83 us | -- | 112.00 us | 72.39 us | 1.05x | 0.67x | 1.03x | -- |
-| erasure-stored-unknown | 70.72 us | 74.13 us | **74.10 us** | 71.66 us | -- | 90.76 us | 72.16 us | 1.05x | 0.82x | 1.03x | -- |
-| erasure-typed | 140.74 us | 140.77 us | **140.77 us** | 140.80 us | -- | 140.79 us | 86.79 us | 1.00x | 1.00x | 1.62x | -- |
-| erasure-unknown | 140.77 us | 140.78 us | **140.77 us** | 140.82 us | -- | 140.78 us | 86.47 us | 1.00x | 1.00x | 1.63x | -- |
-| exceptions | 21.91 us | 35.17 us | **35.17 us** | 35.20 us | -- | 14.80 ms | 2.40 ms | 1.61x | 0.00x | 0.01x | -- |
-| fib | 316.29 us | 512.18 us | **512.16 us** | 504.87 us | -- | 1.02 ms | 667.97 us | 1.62x | 0.50x | 0.77x | -- |
-| growth-fixed | 159.12 us | 162.51 us | **162.62 us** | 174.00 us | -- | 319.98 us | 276.22 us | 1.02x | 0.51x | 0.59x | -- |
-| growth-grown | 159.71 us | 654.14 us | **653.23 us** | 176.22 us | -- | 322.70 us | 277.62 us | 4.09x | 2.02x | 2.35x | -- |
-| in-narrowing | 1.49 us | 1.49 us | **1.56 us** | 15.46 us | -- | 10.42 us | 9.99 us | 1.04x | 0.15x | 0.16x | -- |
-| instanceof | 72.77 us | 46.99 us | **47.02 us** | 43.95 us | -- | 978.85 us | 214.20 us | 0.65x | 0.05x | 0.22x | -- |
-| logical-assignment | 52.12 us | 64.61 us | **53.31 us** | 57.71 us | -- | 363.63 us | 71.87 us | 1.02x | 0.15x | 0.74x | -- |
-| loop | 687.7 ns | 683.5 ns | **683.5 ns** | 1.32 us | -- | 701.1 ns | 699.0 ns | 0.99x | 0.97x | 0.98x | -- |
-| map-and-set (rc) | 9.83 us | 5.27 us | **5.27 us** | refused | -- | 7.15 us | 5.58 us | 0.54x | 0.74x | 0.95x | -- |
-| module-closures | 2.39 us | 2.42 us | **2.39 us** | 4.70 us | -- | 5.45 us | 35.71 us | 1.00x | 0.44x | 0.07x | -- |
-| node-utf8 (rc) | -- | 30.36 us | **34.99 us** | refused | -- | 38.11 us | 33.99 us | -- | 0.92x | 1.03x | -- |
-| number-format (rc) | 874.4 ns | 664.6 ns | **670.1 ns** | 1.27 us | -- | 1.46 us | 853.6 ns | 0.77x | 0.46x | 0.78x | -- |
-| number-format-double (rc) | -- | 4.72 us | **4.73 us** | 41.20 us | -- | 9.26 us | 5.55 us | -- | 0.51x | 0.85x | -- |
-| objects (rc) | 1.59 us | 1.58 us | **1.57 us** | 5.75 us | -- | 1.89 us | 1.48 us | 0.99x | 0.83x | 1.06x | -- |
-| optional-chain | 10.15 us | 87.98 us | **87.97 us** | no driver | -- | 363.94 us | 188.00 us | 8.67x | 0.24x | 0.47x | -- |
-| pipeline (rc) | 30.13 us | 28.13 us | **28.13 us** | refused | -- | 121.05 us | 125.39 us | 0.93x | 0.23x | 0.22x | -- |
-| strings | 349.3 ns | 221.8 ns | **224.4 ns** | 1.62 us | -- | 2.50 us | 2.56 us | 0.64x | 0.09x | 0.09x | -- |
-| substrings (rc) | 1.78 us | 1.98 us | **1.64 us** | 5.16 us | -- | 6.84 us | 25.05 us | 0.92x | 0.24x | 0.07x | -- |
-| symbol-keys | 320.0 ns | 323.0 ns | **324.4 ns** | 339.7 ns | -- | 1.69 us | 497.8 ns | 1.01x | 0.19x | 0.65x | -- |
-| upcast | 4.15 us | 5.61 us | **4.34 us** | 15.74 us | -- | 9.82 us | 10.65 us | 1.05x | 0.44x | 0.41x | -- |
-| user-iterable | 31.16 us | 688.42 us | **663.92 us** | 1.45 ms | -- | 422.35 us | 666.24 us | 21.31x | 1.57x | 1.00x | -- |
+| absences | 196.1 ns | 197.2 ns | **197.9 ns** | 553.5 ns | 447.0 ns | 826.8 ns | 674.2 ns | 1.01x | 0.24x | 0.29x | 1.24x |
+| accumulate | 1.14 us | 1.54 us | **1.13 us** | 2.20 us | 2.19 us | 2.92 us | 22.07 us | 0.99x | 0.39x | 0.05x | 1.00x |
+| array-from (rc) | 537.69 us | 1.88 ms | **1.89 ms** | 2.08 ms | 845.54 us | 490.53 us | 1.24 ms | 3.51x | 3.84x | 1.52x | 2.46x |
+| array-methods | 2.60 us | 1.34 us | **1.33 us** | 1.72 us | 1.04 us | 5.92 us | 8.32 us | 0.51x | 0.23x | 0.16x | 1.66x |
+| array-mutations (rc) | 593.8 ns | 629.9 ns | **627.1 ns** | 1.72 us | 1.47 us | 1.66 us | 3.61 us | 1.06x | 0.38x | 0.17x | 1.17x |
+| array-predicates (rc) | 2.53 us | 2.24 us | **2.84 us** | 16.20 us | 7.45 us | 4.74 us | 5.43 us | 1.12x | 0.60x | 0.52x | 2.17x |
+| arrays | 1.38 us | 1.46 us | **1.46 us** | 1.42 us | 1.05 us | 2.59 us | 2.16 us | 1.06x | 0.56x | 0.68x | 1.35x |
+| awfy-bounce | 4.24 us | 6.20 us | **6.18 us** | 4.37 us | 4.59 us | 13.34 us | 11.36 us | 1.46x | 0.46x | 0.54x | 0.95x |
+| awfy-list | 7.66 us | 7.73 us | **7.71 us** | 8.09 us | 8.74 us | 16.57 us | 13.41 us | 1.01x | 0.47x | 0.58x | 0.92x |
+| awfy-mandelbrot | 23.75 ms | 23.65 ms | **23.64 ms** | 22.76 ms | 27.52 ms | 23.08 ms | 23.07 ms | 1.00x | 1.02x | 1.02x | 0.83x |
+| awfy-nbody | 7.31 ms | 6.77 ms | **8.22 ms** | 8.62 ms | 7.97 ms | 80.10 ms | 14.69 ms | 1.12x | 0.10x | 0.56x | 1.08x |
+| awfy-permute | 9.69 us | 10.63 us | **10.62 us** | 11.38 us | 17.14 us | 21.57 us | 17.01 us | 1.10x | 0.49x | 0.62x | 0.66x |
+| awfy-queens | 4.82 us | 7.28 us | **7.14 us** | 11.00 us | 8.84 us | 17.31 us | 14.69 us | 1.48x | 0.41x | 0.49x | 1.25x |
+| awfy-sieve | 3.91 us | 7.05 us | **5.32 us** | 4.52 us | 4.68 us | 10.27 us | 9.52 us | 1.36x | 0.52x | 0.56x | 0.97x |
+| awfy-towers | 13.37 us | 22.65 us | **18.74 us** | 18.25 us | 19.39 us | 32.81 us | 21.05 us | 1.40x | 0.57x | 0.89x | 0.94x |
+| bigint | 352.7 ns | 348.2 ns | **350.9 ns** | 638.4 ns | 3.79 us | 3.80 us | 3.71 us | 0.99x | 0.09x | 0.09x | 0.17x |
+| bytes | 445.79 us | 456.53 us | **453.03 us** | 696.33 us | 688.87 us | 535.68 us | 759.90 us | 1.02x | 0.85x | 0.60x | 1.01x |
+| case-convert (rc) | 6.30 us | 2.69 us | **2.55 us** | 3.27 us | 3.48 us | 3.11 us | 3.46 us | 0.40x | 0.82x | 0.74x | 0.94x |
+| checksum | 5.03 us | 5.03 us | **5.03 us** | 5.04 us | 5.04 us | 5.76 us | 24.00 us | 1.00x | 0.87x | 0.21x | 1.00x |
+| closures | 1.17 us | 1.19 us | **1.18 us** | 2.69 us | 2.34 us | 3.09 us | 19.20 us | 1.01x | 0.38x | 0.06x | 1.15x |
+| dispatch | 29.33 us | 23.36 us | **29.35 us** | 17.96 us | 26.16 us | 40.98 us | 14.18 us | 1.00x | 0.72x | 2.07x | 0.69x |
+| elementwise | 157.12 us | 133.46 us | **134.32 us** | no driver | 58.95 us | 932.74 us | 609.67 us | 0.85x | 0.14x | 0.22x | -- |
+| erasure-stored-typed | 70.73 us | 74.37 us | **74.62 us** | 72.19 us | 72.94 us | 118.17 us | 72.23 us | 1.06x | 0.63x | 1.03x | 0.99x |
+| erasure-stored-unknown | 70.73 us | 73.86 us | **74.11 us** | 71.60 us | 74.74 us | 90.74 us | 72.49 us | 1.05x | 0.82x | 1.02x | 0.96x |
+| erasure-typed | 140.78 us | 140.79 us | **140.79 us** | 140.80 us | 140.79 us | 140.81 us | 86.56 us | 1.00x | 1.00x | 1.63x | 1.00x |
+| erasure-unknown | 140.78 us | 140.80 us | **140.76 us** | 140.81 us | 140.76 us | 140.78 us | 86.61 us | 1.00x | 1.00x | 1.63x | 1.00x |
+| exceptions | 21.89 us | 35.18 us | **35.18 us** | 35.20 us | 3.52 ms | 14.80 ms | 2.52 ms | 1.61x | 0.00x | 0.01x | 0.01x |
+| fib | 316.62 us | 512.72 us | **512.34 us** | 505.59 us | 489.19 us | 1.02 ms | 665.11 us | 1.62x | 0.50x | 0.77x | 1.03x |
+| generator | 170.18 us | 180.29 us | **181.06 us** | 588.71 us | 175.88 us | 3.28 ms | 3.17 ms | 1.06x | 0.06x | 0.06x | 3.35x |
+| growth-fixed | 159.14 us | 163.00 us | **162.76 us** | 174.15 us | 174.12 us | 334.57 us | 277.18 us | 1.02x | 0.49x | 0.59x | 1.00x |
+| growth-grown | 159.72 us | 654.66 us | **655.46 us** | 177.05 us | 174.68 us | 322.71 us | 279.42 us | 4.10x | 2.03x | 2.35x | 1.01x |
+| in-narrowing | 1.49 us | 1.49 us | **1.56 us** | 1.43 us | 1.42 us | 10.53 us | 9.96 us | 1.04x | 0.15x | 0.16x | 1.00x |
+| instanceof | 72.89 us | 47.03 us | **47.02 us** | 50.14 us | 46.52 us | 980.83 us | 214.50 us | 0.65x | 0.05x | 0.22x | 1.08x |
+| logical-assignment | 52.13 us | 62.35 us | **53.21 us** | 58.44 us | 61.53 us | 363.72 us | 71.89 us | 1.02x | 0.15x | 0.74x | 0.95x |
+| loop | 687.9 ns | 683.6 ns | **683.6 ns** | 1.32 us | 1.56 us | 700.9 ns | 699.0 ns | 0.99x | 0.98x | 0.98x | 0.85x |
+| map-and-set (rc) | 9.79 us | 5.32 us | **5.29 us** | 10.15 us | 4.64 us | 7.14 us | 5.52 us | 0.54x | 0.74x | 0.96x | 2.19x |
+| module-closures | 2.41 us | 2.41 us | **2.40 us** | 4.69 us | 4.42 us | 5.45 us | 36.79 us | 0.99x | 0.44x | 0.07x | 1.06x |
+| node-utf8 (rc) | -- | 30.30 us | **35.00 us** | 93.57 us | 6.89 us | 37.99 us | 33.74 us | -- | 0.92x | 1.04x | 13.59x |
+| number-format (rc) | 867.7 ns | 672.2 ns | **669.6 ns** | 1.26 us | 906.0 ns | 1.48 us | 854.9 ns | 0.77x | 0.45x | 0.78x | 1.39x |
+| number-format-double (rc) | -- | 4.75 us | **4.91 us** | 38.21 us | 5.06 us | 9.42 us | 5.63 us | -- | 0.52x | 0.87x | 7.56x |
+| objects (rc) | 1.59 us | 1.58 us | **1.58 us** | 2.18 us | 2.12 us | 1.90 us | 1.49 us | 1.00x | 0.83x | 1.07x | 1.03x |
+| optional-chain | 10.03 us | 87.98 us | **87.98 us** | 120.75 us | 35.21 us | 367.14 us | 193.08 us | 8.77x | 0.24x | 0.46x | 3.43x |
+| pipeline (rc) | 30.17 us | 28.13 us | **28.14 us** | 57.98 us | 67.48 us | 122.10 us | 128.44 us | 0.93x | 0.23x | 0.22x | 0.86x |
+| strings | 349.4 ns | 221.8 ns | **224.3 ns** | 1.62 us | 1.56 us | 2.46 us | 2.61 us | 0.64x | 0.09x | 0.09x | 1.04x |
+| substrings (rc) | 1.75 us | 1.98 us | **1.63 us** | 5.16 us | 5.32 us | 6.93 us | 25.64 us | 0.93x | 0.24x | 0.06x | 0.97x |
+| symbol-keys | 316.7 ns | 323.1 ns | **324.5 ns** | 334.7 ns | 321.4 ns | 1.69 us | 499.4 ns | 1.02x | 0.19x | 0.65x | 1.04x |
+| upcast | 4.21 us | 5.80 us | **4.43 us** | 8.10 us | 7.72 us | 9.91 us | 10.26 us | 1.05x | 0.45x | 0.43x | 1.05x |
+| user-iterable | 31.16 us | 688.36 us | **666.47 us** | 432.37 us | 57.30 us | 422.12 us | 667.11 us | 21.39x | 1.58x | 1.00x | 7.55x |
 
 Every ratio is nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and `nts/Bun` under 1.00 beat those engines.
 
@@ -100,7 +102,7 @@ The suite also measures the same TypeScript with number specialization switched 
 
 `V8` is node and `Bun` is JavaScriptCore, both running the *same* TypeScript source the compiler consumes — the harness imports the `.ts` directly, so there is no second copy of the program to drift. Both are timed inside their own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in either column, and both must produce the same checksum as everything else. Bun is skipped where it is not installed.
 
-Measured at `6d1da49`, one case at a time, on cores pinned away from the other sessions sharing this checkout, with the benchmark lock held so nothing else was running.
+Measured at `509f37c`, one case at a time, on cores pinned away from the other sessions sharing this checkout, with the benchmark lock held so nothing else was running.
 <!-- benchmarks:end -->
 
 ### What it can compile
