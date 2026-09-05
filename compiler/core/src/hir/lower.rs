@@ -6578,33 +6578,26 @@ impl<'a> FuncBuilder<'a> {
     /// argument expression rather than the callee's binding, and evaluating it
     /// twice is a different program whenever it has an effect. Naming the
     /// parameter it reads is worth more than saying it is complicated.
-    fn reads_a_parameter(&self, expr: NodeId, declaration: NodeId) -> Option<String> {
-        let params: rustc_hash::FxHashSet<u32> = self
-            .children(declaration)
+    /// The symbol of each declared parameter, in order.
+    ///
+    /// `None` for one whose name is a pattern rather than an identifier: a
+    /// destructured parameter has no single symbol to bind, and a default that
+    /// read one would find nothing here and be refused as an unbound name --
+    /// which is the honest answer rather than a wrong binding.
+    fn parameter_symbols(&self, declaration: NodeId) -> Vec<Option<u32>> {
+        self.children(declaration)
             .into_iter()
             .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
-            .filter_map(|param| {
+            .map(|param| {
                 self.children(param)
                     .into_iter()
                     .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+                    .and_then(|name| self.node(name).symbol)
+                    .map(|symbol| symbol.0)
             })
-            .filter_map(|name| self.node(name).symbol)
-            .map(|symbol| symbol.0)
-            .collect();
-        let mut stack = vec![expr];
-        while let Some(at) = stack.pop() {
-            if self.kind_of(at) == Some(syntax::IDENTIFIER)
-                && self
-                    .node(at)
-                    .symbol
-                    .is_some_and(|symbol| params.contains(&symbol.0))
-            {
-                return self.node(at).text.clone();
-            }
-            stack.extend(self.children(at));
-        }
-        None
+            .collect()
     }
+
 
     /// The arguments a call passes, with the defaults it leaves to the callee.
     ///
@@ -6649,10 +6642,39 @@ impl<'a> FuncBuilder<'a> {
             args.push(gathered);
             return Ok(args);
         }
-        for omitted in self.omitted_after(call, arguments.len())? {
+        for omitted in self.omitted_after(call, arguments.len()) {
             let value = match omitted {
-                Omitted::Default(node) => {
-                    let value = self.lower_expression(node)?;
+                Omitted::Default(node, callee) => {
+                    // The parameters before this one, bound to what the call
+                    // already computed for them.
+                    //
+                    // `f(a, b = a + 1)` called as `f(2)` has to evaluate `a + 1`
+                    // with `a` meaning *the callee's* `a`, which is the value
+                    // sitting in `args[0]`. This used to be refused as "a
+                    // parameter default that reads `a`, another parameter",
+                    // which is 77 distinct sites in `runtime/node` -- and the
+                    // caller had the value the whole time.
+                    //
+                    // Saved and restored rather than inserted and dropped,
+                    // because a *recursive* call is the one case where the
+                    // caller has its own binding for the same symbol: `f`
+                    // calling `f(2)` would otherwise leave its own `a` pointing
+                    // at the argument it just passed.
+                    let names = self.parameter_symbols(callee);
+                    let mut shadowed = Vec::new();
+                    for (at, symbol) in names.iter().enumerate().take(args.len()) {
+                        let Some(symbol) = symbol else { continue };
+                        shadowed.push((*symbol, self.bindings.get(symbol).copied()));
+                        self.bindings.insert(*symbol, args[at]);
+                    }
+                    let lowered = self.lower_expression(node);
+                    for (symbol, before) in shadowed {
+                        match before {
+                            Some(value) => self.bindings.insert(symbol, value),
+                            None => self.bindings.remove(&symbol),
+                        };
+                    }
+                    let value = lowered?;
                     self.coerce_to_parameter(call, args.len(), value, node)?
                 }
                 Omitted::Absent => self.absent_argument(call, args.len())?,
@@ -6768,12 +6790,12 @@ impl<'a> FuncBuilder<'a> {
     /// call would otherwise fail here on the *parameter name*, reporting `a` as
     /// a name from an enclosing scope, which is true of the expression as this
     /// site sees it and says nothing about the cause.
-    fn omitted_after(&self, call: NodeId, provided: usize) -> Result<Vec<Omitted>, Diagnostic> {
+    fn omitted_after(&self, call: NodeId, provided: usize) -> Vec<Omitted> {
         let Some(target) = self.snapshot.call_targets.get(&call) else {
-            return Ok(Vec::new());
+            return Vec::new();
         };
         let Some(signature) = self.snapshot.signatures.get(target.signature.0 as usize) else {
-            return Ok(Vec::new());
+            return Vec::new();
         };
         // The declaration's parameter list, where there is one. The signature
         // is what the verifier counts against, but the *default expression*
@@ -6804,13 +6826,7 @@ impl<'a> FuncBuilder<'a> {
             let declaration = declared.get(at).copied();
             if let Some(default) = declaration.and_then(|param| self.default_of(param)) {
                 let callee = target.callee.unwrap_or(call);
-                if let Some(read) = self.reads_a_parameter(default, callee) {
-                    return Err(self.unsupported(
-                        call,
-                        &format!("a parameter default that reads `{read}`, another parameter"),
-                    ));
-                }
-                omitted.push(Omitted::Default(default));
+                omitted.push(Omitted::Default(default, callee));
                 continue;
             }
             // Only where the declaration agrees there is a parameter here. An
@@ -6821,7 +6837,7 @@ impl<'a> FuncBuilder<'a> {
                 omitted.push(Omitted::Absent);
             }
         }
-        Ok(omitted)
+        omitted
     }
 
     /// `constructor(private x: number)`: the store the modifier implies.
@@ -6956,18 +6972,14 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         // A default is supplied by the calls that omit it, which is where
-        // JavaScript evaluates it. What that cannot reach is the callee's own
-        // scope, so a default that reads another parameter is refused here
-        // rather than mis-lowered there.
-        if let Some(default) = self.default_of(id)
-            && let Some(parent) = self.node(id).parent
-            && let Some(read) = self.reads_a_parameter(default, parent)
-        {
-            return Err(self.unsupported(
-                id,
-                &format!("a parameter default that reads `{read}`, another parameter"),
-            ));
-        }
+        // JavaScript evaluates it. Reading an *earlier parameter* used to be
+        // refused here, on the grounds that the call site cannot reach the
+        // callee's scope -- and it does not have to: it has already computed
+        // those arguments, and `lower_arguments` binds the callee's names to
+        // them for exactly as long as the default is being lowered.
+        //
+        // Reading a *later* parameter is a different thing and TypeScript
+        // refuses it itself (TS2372), so nothing here has to.
 
         let name = self
             .node(name_node)
@@ -18607,8 +18619,15 @@ enum Intrinsic {
 /// has nothing written down at all, and the value is `undefined`.
 #[derive(Debug, Clone, Copy)]
 enum Omitted {
-    /// The declaration's initializer, evaluated at this call.
-    Default(NodeId),
+    /// The declaration's initializer, evaluated at this call, and the
+    /// declaration it came from.
+    ///
+    /// The declaration is carried because the initializer may *read the
+    /// parameters before it* -- `f(a, b = a + 1)` -- and those names belong to
+    /// the callee. Evaluating the default here is right, and it is where
+    /// JavaScript evaluates one; what the caller has to do is bind the callee's
+    /// names to the values it has already computed for them.
+    Default(NodeId, NodeId),
     /// `undefined`, in whatever representation the parameter has.
     Absent,
 }

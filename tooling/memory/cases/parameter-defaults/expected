@@ -1,0 +1,28 @@
+ideal 0
+allocated 0
+because Argued before measuring, and rewritten once because the first version
+because was not about its own subject.
+because
+because Allocations: none. Every value here is a number and no object is built,
+because so the only thing that could allocate is the mechanism under test.
+because
+because The claim worth holding is that **binding a name costs nothing**. The
+because caller binds the callee's `from` to the value it already computed, for
+because exactly as long as it takes to lower `from + 1`, and then puts back
+because whatever that name meant before. A lowering that materialized something
+because to bind -- a cell, a tuple of the arguments so far, a closure over them
+because -- would show up here and nowhere else, because every answer would stay
+because right.
+because
+because Three call sites at three arities, so the case covers a default that is
+because taken, one that is written over, and one whose own default reads the
+because argument the call supplied rather than the default before it.
+because
+because The first version of this case defaulted a `string` parameter and
+because measured 34 allocations against an argued floor of zero -- because the
+because concatenation in its body is a real string, which is true and has
+because nothing to do with parameter defaults. A case whose floor is dominated
+because by something other than its subject cannot fail for the right reason.
+because
+because Operations: none, by the rule `closure-capture` states -- an allocation
+because floor of zero forces an operation floor of zero.

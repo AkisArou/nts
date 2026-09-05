@@ -137,7 +137,7 @@ counter, not by reading the emitted C.
 | ✅ | declarations, arrow functions (both body forms), IIFE |
 | ✅ | a function declared **inside a body**, including one called above its own declaration and two that call each other — the walk visits every declaration in the file, so hoisting falls out rather than being arranged. One that reads a local of the function around it is a closure, and is refused by name |
 | ✗ | a nested function whose name is already taken at the top level — the namespace is flat, so both are refused. The name is not qualified by the function it is written in |
-| ✅ | optional parameters, default parameters |
+| ✅ | optional parameters, default parameters | including a default that **reads the parameters before it**. JavaScript evaluates a default in the callee's scope and this compiler evaluates it at the call, which is the same moment and a different scope — so the caller binds the callee's names to the arguments it has already computed, for the length of one expression, and puts them back after. A default reading a *later* parameter is TS2372 and never arrives. Record 0116 |
 | ✅ | overload signatures |
 | ✅ | generics, including constrained; monomorphized per instantiation |
 | ✅ | higher-order functions and closures that only *read* what they capture |

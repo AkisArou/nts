@@ -20,14 +20,6 @@ export function hasForIn(xs: number[]): number {
   return count;
 }
 
-// A default is filled in at the call, which is where JavaScript evaluates it.
-// This one reads `a`, which at the call site is the caller's argument
-// expression rather than the callee's binding -- so filling it would evaluate
-// `a` twice, and twice is a different program whenever it has an effect.
-export function hasADefaultReadingAParameter(a: number, b: number = a * 2): number {
-  return a + b;
-}
-
 // `Error` here is a message and a name (`hir::builtin`). `stack` is a record of
 // frames a compiled binary does not keep and `toString` is a method no class in
 // the hierarchy declares -- both refuse, and each says which it is rather than
