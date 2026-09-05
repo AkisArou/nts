@@ -531,7 +531,6 @@ export class Server extends NetServer {
       const error = new HTTPParseError(parserError, rawPacket, packetOffset);
       suppressFurtherSocketErrors();
       if (this.emit("clientError", error, socket)) {
-        socket.destroy(error);
         return;
       }
       if (socket.writable) {
@@ -786,7 +785,10 @@ export class Server extends NetServer {
       // A parser error has already been delivered with the packet that caused
       // it. EOF is transport completion, not a second occurrence of the same
       // protocol error.
-      if (parseErrorSeen) return;
+      if (parseErrorSeen) {
+        if (!this.httpAllowHalfOpen) socket.end();
+        return;
+      }
       if (parser.finish() < 0) {
         const error = parser.error;
         if (error === null) throw new Error("HTTP parser failed without an error");
