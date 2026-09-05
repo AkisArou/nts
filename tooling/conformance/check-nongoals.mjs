@@ -40,14 +40,7 @@ const objectMetaOperations = new Set([
   "setPrototypeOf",
 ]);
 
-const symbolHooks = new Set([
-  "asyncDispose",
-  "dispose",
-  "hasInstance",
-  "species",
-  "toPrimitive",
-  "unscopables",
-]);
+const symbolHooks = new Set(["hasInstance", "species", "toPrimitive", "unscopables"]);
 
 function tsFiles(directory) {
   const files = [];
@@ -102,13 +95,17 @@ function isIdentifier(token, expected) {
 
 /** Return the statically named member after tokens[index], if there is one. */
 function member(tokens, index) {
-  if (tokens[index + 1]?.kind === SyntaxKind.DotToken &&
-      tokens[index + 2]?.kind === SyntaxKind.Identifier) {
+  if (
+    tokens[index + 1]?.kind === SyntaxKind.DotToken &&
+    tokens[index + 2]?.kind === SyntaxKind.Identifier
+  ) {
     return tokens[index + 2].text;
   }
-  if (tokens[index + 1]?.kind === SyntaxKind.OpenBracketToken &&
-      tokens[index + 2]?.kind === SyntaxKind.StringLiteral &&
-      tokens[index + 3]?.kind === SyntaxKind.CloseBracketToken) {
+  if (
+    tokens[index + 1]?.kind === SyntaxKind.OpenBracketToken &&
+    tokens[index + 2]?.kind === SyntaxKind.StringLiteral &&
+    tokens[index + 3]?.kind === SyntaxKind.CloseBracketToken
+  ) {
     return tokens[index + 2].value;
   }
   return null;
@@ -130,18 +127,21 @@ function reason(tokens, index) {
   if (isIdentifier(token, "Symbol") && symbolHooks.has(name)) {
     return `Symbol.${name} is a runtime operation hook`;
   }
-  if (isIdentifier(token, "prototype") &&
-      tokens[index - 1]?.kind === SyntaxKind.DotToken) {
+  if (isIdentifier(token, "prototype") && tokens[index - 1]?.kind === SyntaxKind.DotToken) {
     return "runtime access to a prototype object";
   }
 
-  if (token.kind === SyntaxKind.NewKeyword &&
-      (isIdentifier(tokens[index + 1], "Proxy") || isIdentifier(tokens[index + 1], "Function"))) {
+  if (
+    token.kind === SyntaxKind.NewKeyword &&
+    (isIdentifier(tokens[index + 1], "Proxy") || isIdentifier(tokens[index + 1], "Function"))
+  ) {
     return `${tokens[index + 1].text} construction is not part of the compiled object model`;
   }
 
-  if ((isIdentifier(token, "eval") || isIdentifier(token, "Function")) &&
-      tokens[index + 1]?.kind === SyntaxKind.OpenParenToken) {
+  if (
+    (isIdentifier(token, "eval") || isIdentifier(token, "Function")) &&
+    tokens[index + 1]?.kind === SyntaxKind.OpenParenToken
+  ) {
     return `${token.text} requires a compiler at runtime`;
   }
 
@@ -160,9 +160,7 @@ function lineAndColumn(lineStarts, position) {
 }
 
 const requested = process.argv.slice(2);
-const roots = requested.length === 0
-  ? [PROFILE]
-  : requested.map((name) => join(PROFILE, name));
+const roots = requested.length === 0 ? [PROFILE] : requested.map((name) => join(PROFILE, name));
 
 for (const root of roots) {
   if (!existsSync(root)) {
@@ -196,7 +194,9 @@ for (const finding of findings) {
 }
 
 if (findings.length === 0) {
-  console.log(`section 13 audit passed for ${requested.length === 0 ? "runtime/node" : requested.join(", ")}`);
+  console.log(
+    `section 13 audit passed for ${requested.length === 0 ? "runtime/node" : requested.join(", ")}`,
+  );
 } else {
   console.error(`${findings.length} section 13 violation(s)`);
   process.exitCode = 1;

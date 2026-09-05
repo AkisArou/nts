@@ -1,1 +1,1 @@
-^test-stream[0-9]*(-.*)?\.js$
+^test-stream[0-9]*(-.*)?\.(?:js|mjs)$

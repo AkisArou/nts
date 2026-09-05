@@ -1,1 +1,1 @@
-^test-querystring(-.*)?\.js$
+^test-querystring(-.*)?\.(?:js|mjs)$

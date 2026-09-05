@@ -1,1 +1,1 @@
-^test-readline(-.*)?\.js$
+^test-readline(-.*)?\.(?:js|mjs)$

@@ -1,1 +1,1 @@
-^test-dgram(-.*)?\.js$
+^test-dgram(-.*)?\.(?:js|mjs)$

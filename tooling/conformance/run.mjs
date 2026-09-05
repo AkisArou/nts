@@ -120,7 +120,7 @@ const extra = [...readList(extraPath).keys()];
 const patternPath = join(moduleDir, "test-pattern");
 const pattern = existsSync(patternPath)
   ? new RegExp(readFileSync(patternPath, "utf8").trim())
-  : new RegExp(`^test-${moduleName}(-.*)?\\.js$`);
+  : new RegExp(`^test-${moduleName}(-.*)?\\.m?js$`);
 
 const upstream = [
   ...readdirSync(PARALLEL_SUITE)
@@ -162,12 +162,15 @@ upstream.sort((left, right) => left.name.localeCompare(right.name));
 // upstream files. Each such test must name its upstream source in a comment.
 const localDir = join(moduleDir, "test");
 const local = existsSync(localDir)
-  ? readdirSync(localDir).filter((f) => f.endsWith(".js")).sort()
+  ? readdirSync(localDir)
+      .filter((f) => f.endsWith(".js"))
+      .sort()
   : [];
 
 const allTests = [
-  ...upstream.filter((test, index, all) =>
-    all.findIndex((candidate) => candidate.name === test.name) === index),
+  ...upstream.filter(
+    (test, index, all) => all.findIndex((candidate) => candidate.name === test.name) === index,
+  ),
   ...local.map((fileName) => ({ name: `local/${fileName}`, path: join(localDir, fileName) })),
 ];
 
@@ -213,22 +216,28 @@ const PASSED_THROUGH_FLAGS = new Set([
 function nodeFlags(path) {
   // Node's standard licence header already occupies more than twenty lines;
   // flagged tests commonly place metadata immediately after it.
-  const first = readFileSync(path, "utf8").split("\n", 64).find((l) => l.startsWith("// Flags:"));
+  const first = readFileSync(path, "utf8")
+    .split("\n", 64)
+    .find((l) => l.startsWith("// Flags:"));
   if (!first) return [];
-  return first
-    .slice("// Flags:".length)
-    .trim()
-    .split(/\s+/)
-    // V8's flags take either spelling and node's own harness passes the line
-    // through untouched, so `--expose_gc` and `--expose-gc` are one flag.
-    // Matching only the hyphen spelling silently dropped it for four files,
-    // which then failed on `globalThis.gc is not a function` -- a statement
-    // about how they were run, not about the module.
-    .map((f) => f.replaceAll("_", "-"))
-    .filter((f) =>
-      PASSED_THROUGH_FLAGS.has(f) ||
-      f.startsWith("--title=") ||
-      f.startsWith("--network-family-autoselection-attempt-timeout="));
+  return (
+    first
+      .slice("// Flags:".length)
+      .trim()
+      .split(/\s+/)
+      // V8's flags take either spelling and node's own harness passes the line
+      // through untouched, so `--expose_gc` and `--expose-gc` are one flag.
+      // Matching only the hyphen spelling silently dropped it for four files,
+      // which then failed on `globalThis.gc is not a function` -- a statement
+      // about how they were run, not about the module.
+      .map((f) => f.replaceAll("_", "-"))
+      .filter(
+        (f) =>
+          PASSED_THROUGH_FLAGS.has(f) ||
+          f.startsWith("--title=") ||
+          f.startsWith("--network-family-autoselection-attempt-timeout="),
+      )
+  );
 }
 
 const rows = [];
@@ -236,8 +245,8 @@ for (const test of tests) {
   const { name } = test;
   let result;
   const shortName = name.split("/").pop();
-  const notApplicableReason = notApplicable.get(name) ??
-    (shortName === undefined ? undefined : notApplicable.get(shortName));
+  const notApplicableReason =
+    notApplicable.get(name) ?? (shortName === undefined ? undefined : notApplicable.get(shortName));
   if (notApplicableReason !== undefined) {
     rows.push({ name, kind: "n/a", why: notApplicableReason });
     continue;
@@ -283,10 +292,17 @@ for (const test of tests) {
       .pop();
     if (printed) {
       const reported = JSON.parse(printed.slice(RESULT_PREFIX.length));
-      const why = (e.stderr ?? "").split("\n").find((l) => l.includes("Error") || l.includes("Assertion"));
+      const why = (e.stderr ?? "")
+        .split("\n")
+        .find((l) => l.includes("Error") || l.includes("Assertion"));
       rows.push(
         reported.kind === "pass"
-          ? { name, kind: "fail", why: (why ?? "an exit handler failed").trim().slice(0, 110), detail: e.stderr }
+          ? {
+              name,
+              kind: "fail",
+              why: (why ?? "an exit handler failed").trim().slice(0, 110),
+              detail: e.stderr,
+            }
           : { name, ...reported },
       );
       continue;
@@ -294,7 +310,9 @@ for (const test of tests) {
     // A child that died rather than reported: a crash, a timeout, or a
     // `process.exit` inside the test. All are failures, and saying which
     // matters more than the exit code.
-    const why = e.killed ? "timed out" : (e.stderr || e.message || "").split("\n").find((l) => l.trim()) ?? "child died";
+    const why = e.killed
+      ? "timed out"
+      : ((e.stderr || e.message || "").split("\n").find((l) => l.trim()) ?? "child died");
     result = { kind: "fail", why: why.trim().slice(0, 120) };
   }
   rows.push({ name, ...result });
@@ -312,7 +330,12 @@ if (asJson) {
     const mark = { pass: "pass", fail: "FAIL", skip: "skip", "n/a": " n/a" }[row.kind];
     console.log(`  ${mark}  ${row.name}${row.why ? `\n          ${row.why}` : ""}`);
     if (verbose && row.detail) {
-      console.log(row.detail.split("\n").map((l) => `        ${l}`).join("\n"));
+      console.log(
+        row.detail
+          .split("\n")
+          .map((l) => `        ${l}`)
+          .join("\n"),
+      );
     }
   }
   console.log(

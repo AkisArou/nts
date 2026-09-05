@@ -1,1 +1,1 @@
-^test-net(-.*)?\.js$
+^test-net(-.*)?\.(?:js|mjs)$

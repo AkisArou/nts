@@ -1,1 +1,1 @@
-^test-process(-.*)?\.js$
+^test-process(-.*)?\.(?:js|mjs)$
