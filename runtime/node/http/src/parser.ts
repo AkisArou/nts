@@ -375,6 +375,7 @@ const HTTP_PARSER_TYPES = ["HTTPINCOMINGMESSAGE", "HTTPCLIENTREQUEST"] as const;
 
 /** Node v24.20.0's process-wide HTTP/1 head limit. */
 export const DEFAULT_MAX_HEADER_SIZE = 16 * 1024;
+const DEFAULT_MAX_HEADER_PAIRS = 2000;
 const MAX_CHUNK_EXTENSIONS_SIZE = 16 * 1024;
 
 interface ParserCallbackScope {
@@ -393,6 +394,8 @@ export class HTTPParser {
   onHeadersComplete: ((this: HTTPParser, info: HeadersComplete) => number | void) | null = null;
   onBody: ((this: HTTPParser, chunk: Uint8Array) => void) | null = null;
   onMessageComplete: ((this: HTTPParser) => void) | null = null;
+  /** Alternating name/value entries, matching Node's native parser surface. */
+  maxHeaderPairs = DEFAULT_MAX_HEADER_PAIRS;
 
   #type: number = REQUEST;
   #state: State = State.StartLine;
@@ -402,6 +405,7 @@ export class HTTPParser {
   #partial = "";
   #headers: string[] = [];
   #headerBytes = 0;
+  #headerPairs = 0;
   #maxHeaderSize = DEFAULT_MAX_HEADER_SIZE;
   #lenientHeaderValues = false;
   #lenientTransferEncoding = false;
@@ -563,6 +567,7 @@ export class HTTPParser {
     this.#partial = "";
     this.#headers = [];
     this.#headerBytes = 0;
+    this.#headerPairs = 0;
     this.#method = 0;
     this.#url = "";
     this.#statusCode = 0;
@@ -904,6 +909,13 @@ export class HTTPParser {
       return this.#fail("HPE_INVALID_HEADER_TOKEN", "Invalid header value");
     }
 
+    if (this.#type === REQUEST) {
+      this.#headerPairs += 2;
+      if (this.maxHeaderPairs > 0 && this.#headerPairs > this.maxHeaderPairs) {
+        return this.#fail("HPE_HEADER_OVERFLOW", "Header overflow");
+      }
+    }
+
     this.#headers.push(name, value);
     return this.#noteHeader(lower(name), value);
   }
@@ -1042,6 +1054,7 @@ export class HTTPParser {
     // Node starts a fresh counter after the head; trailers are bounded as a
     // separate header block rather than inheriting the request/response total.
     this.#headerBytes = 0;
+    this.#headerPairs = 0;
 
     // The callback may say "no body" -- that is how a client tells the parser
     // this is the response to a HEAD.

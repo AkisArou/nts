@@ -158,6 +158,7 @@ export class ClientRequest extends OutgoingMessage {
 
   aborted = false;
   reusedSocket = false;
+  maxHeadersCount: number | null = null;
   timeout: number | undefined;
   timeoutCb: (() => void) | null = null;
   #pendingSocketTimeout: number | undefined;
@@ -416,6 +417,10 @@ export class ClientRequest extends OutgoingMessage {
         this.#options.insecureHTTPParser === true,
       this.#options.httpValidation === "insecure" || this.#options.insecureHTTPParser === true,
     );
+    if (typeof this.maxHeadersCount === "number") {
+      parser.maxHeaderPairs = this.maxHeadersCount << 1;
+    }
+    const maxResponseHeaderEntries = parser.maxHeaderPairs > 0 ? parser.maxHeaderPairs : undefined;
 
     let response: IncomingMessage | null = null;
     let upgradeResponse: IncomingMessage | null = null;
@@ -595,7 +600,7 @@ export class ClientRequest extends OutgoingMessage {
       message.statusCode = info.statusCode;
       message.statusMessage = info.statusMessage;
       message.keepAlive = info.shouldKeepAlive;
-      message._addHeaders(info.headers);
+      message._addHeaders(info.headers, maxResponseHeaderEntries);
       message.setSource(() => socket.resume());
 
       if (info.upgrade || this.method === "CONNECT") {
@@ -649,7 +654,7 @@ export class ClientRequest extends OutgoingMessage {
     parser.onHeaders = (headers) => {
       if (response === null) return;
       response._beginTrailers();
-      response._addHeaders(headers);
+      response._addHeaders(headers, maxResponseHeaderEntries);
     };
 
     parser.onMessageComplete = () => {

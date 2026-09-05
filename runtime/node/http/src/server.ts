@@ -303,6 +303,9 @@ export class Server extends NetServer {
       this.#lenientHeaderValues,
       this.#lenientTransferEncoding,
     );
+    if (typeof this.maxHeadersCount === "number") {
+      parser.maxHeaderPairs = this.maxHeadersCount << 1;
+    }
 
     let incoming: IncomingMessage | null = null;
     let response: ServerResponse | null = null;

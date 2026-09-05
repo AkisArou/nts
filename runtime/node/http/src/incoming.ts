@@ -320,11 +320,12 @@ export class IncomingMessage extends Readable {
   }
 
   /** Called by the parser's `kOnHeadersComplete` equivalent. */
-  _addHeaders(raw: string[]): void {
+  _addHeaders(raw: string[], maxEntries?: number): void {
     const target = this.#inTrailers ? this.trailers : this.headers;
     const distinctTarget = this.#inTrailers ? this.#trailersDistinct : this.#headersDistinct;
     const rawTarget = this.#inTrailers ? this.rawTrailers : this.rawHeaders;
-    for (let i = 0; i < raw.length; i += 2) {
+    const length = maxEntries === undefined ? raw.length : Math.min(raw.length, maxEntries);
+    for (let i = 0; i < length; i += 2) {
       const name = raw[i];
       const value = raw[i + 1];
       if (name === undefined || value === undefined) {
