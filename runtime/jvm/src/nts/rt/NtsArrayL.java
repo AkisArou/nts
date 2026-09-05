@@ -32,7 +32,13 @@ public final class NtsArrayL {
      * Bounding by {@code a.length} answers both.
      */
     public static Object get(NtsArrayL a, double at) {
-        return a.items[NtsRuntime.bounds(a.length, at)];
+        // The `(int, int)` overload, not the `(int, double)` one: this
+        // subscript is emitted `checked: false`, so the middle end already
+        // proved the index integral and only its *range* is in question.
+        // The double form re-proves integrality with a `(double)(int)`
+        // round trip per element, which cost `growth-grown` 26% -- 1.01x to
+        // 1.28x -- for a test whose answer is a precondition here.
+        return a.items[NtsRuntime.bounds(a.length, (int) at)];
     }
 
     public static void set(NtsArrayL a, double at, Object value) {
