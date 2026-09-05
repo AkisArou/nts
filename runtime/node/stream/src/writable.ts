@@ -131,6 +131,13 @@ export interface WritableOptions {
   construct?: (callback: WriteCallback) => void;
 }
 
+interface AfterWriteTickInfo {
+  readonly stream: WritableImplementation;
+  readonly state: WritableState;
+  count: number;
+  readonly callback: WriteCallback;
+}
+
 export class WritableState {
   objectMode: boolean;
   highWaterMark: number;
@@ -182,7 +189,7 @@ export class WritableState {
   /** Callbacks registered by `end(cb)` while the stream was still going. */
   onfinishCallbacks: WriteCallback[] | null = null;
   /** Coalesces the common case of many writes sharing one callback. */
-  afterWriteTickInfo: { count: number; cb: WriteCallback } | null = null;
+  afterWriteTickInfo: AfterWriteTickInfo | null = null;
   afterWritePending = false;
 
   readonly onwrite: (error?: unknown) => void;
@@ -777,11 +784,12 @@ function onwrite(stream: WritableImplementation, error?: unknown): void {
       state.pendingcb--;
       if (state.ending) finishMaybe(stream, state, true);
     }
-  } else if (state.afterWriteTickInfo && state.afterWriteTickInfo.cb === callback) {
+  } else if (state.afterWriteTickInfo && state.afterWriteTickInfo.callback === callback) {
     state.afterWriteTickInfo.count++;
   } else if (needTick) {
-    state.afterWriteTickInfo = { count: 1, cb: callback };
-    nextTick(afterWriteTick, stream, state);
+    const info: AfterWriteTickInfo = { stream, state, count: 1, callback };
+    state.afterWriteTickInfo = info;
+    nextTick(afterWriteTick, info);
     state.afterWritePending = true;
   } else {
     state.pendingcb--;
@@ -789,10 +797,10 @@ function onwrite(stream: WritableImplementation, error?: unknown): void {
   }
 }
 
-function afterWriteTick(stream: WritableImplementation, state: WritableState): void {
-  const info = state.afterWriteTickInfo;
-  state.afterWriteTickInfo = null;
-  if (info) afterWrite(stream, state, info.count, info.cb);
+function afterWriteTick(info: AfterWriteTickInfo): void {
+  const { stream, state } = info;
+  if (state.afterWriteTickInfo === info) state.afterWriteTickInfo = null;
+  afterWrite(stream, state, info.count, info.callback);
 }
 
 function afterWrite(
