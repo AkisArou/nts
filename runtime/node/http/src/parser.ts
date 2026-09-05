@@ -408,7 +408,7 @@ export class HTTPParser {
   #headerPairs = 0;
   #maxHeaderSize = DEFAULT_MAX_HEADER_SIZE;
   #lenientHeaderValues = false;
-  #lenientTransferEncoding = false;
+  #lenientParsing = false;
 
   #method = 0;
   #url = "";
@@ -439,13 +439,13 @@ export class HTTPParser {
     maxHeaderSize?: number,
     triggerAsyncId?: number,
     lenientHeaderValues = false,
-    lenientTransferEncoding = false,
+    lenientParsing = false,
   ): void {
     this.#type = type;
     this.#maxHeaderSize =
       maxHeaderSize === undefined || maxHeaderSize === 0 ? DEFAULT_MAX_HEADER_SIZE : maxHeaderSize;
     this.#lenientHeaderValues = lenientHeaderValues;
-    this.#lenientTransferEncoding = lenientTransferEncoding;
+    this.#lenientParsing = lenientParsing;
 
     // A parser is an asynchronous resource, and which one depends on what it
     // is parsing: node calls a request parser an HTTPINCOMINGMESSAGE and a
@@ -646,6 +646,8 @@ export class HTTPParser {
         this.#bytesParsed = offset;
         const limitResult = this.#checkLineLimits(this.#partial, false);
         if (limitResult < 0) return limitResult;
+        const endingResult = this.#checkLineEnding(this.#partial, false);
+        if (endingResult < 0) return endingResult;
         const partialResult = this.#validatePartialStartLine();
         if (partialResult < 0) return partialResult;
         break;
@@ -661,12 +663,37 @@ export class HTTPParser {
       const parsedLine = stripCR(line);
       const limitResult = this.#checkLineLimits(parsedLine, true);
       if (limitResult < 0) return limitResult;
+      const endingResult = this.#checkLineEnding(line, true);
+      if (endingResult < 0) return endingResult;
       const result = this.#readLine(parsedLine, lineStartOffset, priorLineBytes);
       if (result < 0) return result;
     }
 
     this.#bytesParsed = offset;
     return offset;
+  }
+
+  /** Enforce CRLF before treating LF as a protocol delimiter. */
+  #checkLineEnding(line: string, complete: boolean): number {
+    const carriageReturn = line.indexOf("\r");
+    if (carriageReturn !== -1 && carriageReturn !== line.length - 1) {
+      if (this.#state === State.ChunkSize || this.#state === State.ChunkDataEnd) {
+        return this.#fail("HPE_STRICT", "Expected LF after chunk size");
+      }
+      return this.#fail("HPE_LF_EXPECTED", "Missing expected LF after header value");
+    }
+
+    if (!complete || this.#lenientParsing || carriageReturn !== -1) return 0;
+    if (this.#state === State.StartLine) {
+      return this.#fail("HPE_INVALID_VERSION", "Expected CRLF after version");
+    }
+    if ((this.#state === State.Header || this.#state === State.Trailer) && line.length === 0) {
+      return this.#fail("HPE_INVALID_HEADER_TOKEN", "Invalid header field char");
+    }
+    if (this.#state === State.ChunkSize || this.#state === State.ChunkDataEnd) {
+      return this.#fail("HPE_STRICT", "Expected CR after chunk size");
+    }
+    return this.#fail("HPE_CR_EXPECTED", "Missing expected CR after header value");
   }
 
   /** Tell the parser the connection ended, which can complete a message. */
@@ -887,7 +914,36 @@ export class HTTPParser {
     // different intermediaries -- another smuggling shape.
     const first = line.charCodeAt(0);
     if (first === SP || first === HTAB) {
-      return this.#fail("HPE_INVALID_HEADER_TOKEN", "Obsolete line folding");
+      if (!this.#lenientParsing) {
+        return this.#fail("HPE_INVALID_HEADER_TOKEN", "Obsolete line folding");
+      }
+      const name = this.#headers[this.#headers.length - 2];
+      const value = this.#headers[this.#headers.length - 1];
+      if (name === undefined || value === undefined) {
+        return this.#fail("HPE_INVALID_HEADER_TOKEN", "Invalid header folding");
+      }
+      const folded = `${value} ${line.trim()}`;
+      this.#headers[this.#headers.length - 1] = folded;
+
+      switch (lower(name)) {
+        case "content-length":
+          return this.#fail("HPE_UNEXPECTED_CONTENT_LENGTH", "Duplicate Content-Length");
+        case "transfer-encoding":
+          if (classifyTransferEncoding(folded) !== TransferEncoding.NoChunked) {
+            this.#framing = Framing.Chunked;
+          }
+          break;
+        case "connection": {
+          const tokens = folded.split(",").map((token) => lower(token.trim()));
+          if (tokens.includes("close")) this.#shouldKeepAlive = false;
+          else if (tokens.includes("keep-alive")) this.#shouldKeepAlive = true;
+          if (tokens.includes("upgrade")) this.#connectionUpgrade = true;
+          break;
+        }
+        default:
+          break;
+      }
+      return 0;
     }
 
     const colon = line.indexOf(":");
@@ -929,7 +985,7 @@ export class HTTPParser {
           // them differently, so llhttp rejects every repeated field.
           return this.#fail("HPE_UNEXPECTED_CONTENT_LENGTH", "Duplicate Content-Length");
         }
-        if (this.#sawTransferEncoding && !this.#lenientTransferEncoding) {
+        if (this.#sawTransferEncoding && !this.#lenientParsing) {
           return this.#fail(
             "HPE_INVALID_CONTENT_LENGTH",
             "Content-Length can't be present with Transfer-Encoding",
@@ -943,7 +999,7 @@ export class HTTPParser {
         break;
       }
       case "transfer-encoding": {
-        if (this.#sawContentLength && !this.#lenientTransferEncoding) {
+        if (this.#sawContentLength && !this.#lenientParsing) {
           return this.#fail(
             "HPE_INVALID_TRANSFER_ENCODING",
             "Transfer-Encoding can't be present with Content-Length",
@@ -955,7 +1011,7 @@ export class HTTPParser {
 
         const encoding = classifyTransferEncoding(value);
         if (
-          !this.#lenientTransferEncoding &&
+          !this.#lenientParsing &&
           (this.#framing === Framing.Chunked || encoding === TransferEncoding.ChunkedBeforeFinal)
         ) {
           return this.#fail(
@@ -1084,7 +1140,7 @@ export class HTTPParser {
       this.#type === REQUEST &&
       this.#sawTransferEncoding &&
       this.#framing !== Framing.Chunked &&
-      !this.#lenientTransferEncoding
+      !this.#lenientParsing
     ) {
       return this.#fail("HPE_INVALID_TRANSFER_ENCODING", "Request has invalid `Transfer-Encoding`");
     }

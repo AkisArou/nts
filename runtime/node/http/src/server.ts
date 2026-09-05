@@ -137,7 +137,7 @@ export class Server extends NetServer {
   #ServerResponse: typeof ServerResponse;
   #connectionsChecker: Timeout | undefined;
   #lenientHeaderValues: boolean;
-  #lenientTransferEncoding: boolean;
+  #lenientParsing: boolean;
   #uniqueHeaders: ReadonlySet<string> | null;
   #joinDuplicateHeaders: boolean;
 
@@ -216,7 +216,7 @@ export class Server extends NetServer {
     this.shouldUpgradeCallback = opts.shouldUpgradeCallback ?? upgradeWhenObserved;
     this.#lenientHeaderValues =
       httpValidation === "relaxed" || httpValidation === "insecure" || insecureHTTPParser === true;
-    this.#lenientTransferEncoding = httpValidation === "insecure" || insecureHTTPParser === true;
+    this.#lenientParsing = httpValidation === "insecure" || insecureHTTPParser === true;
 
     if (handler) this.on("request", handler);
     this.on("connection", (socket: Socket) => this.#serve(socket));
@@ -301,7 +301,7 @@ export class Server extends NetServer {
       this.#maxHeaderSize,
       socket.asyncId(),
       this.#lenientHeaderValues,
-      this.#lenientTransferEncoding,
+      this.#lenientParsing,
     );
     if (typeof this.maxHeadersCount === "number") {
       parser.maxHeaderPairs = this.maxHeadersCount << 1;
