@@ -6,12 +6,6 @@
 // anything, and it stays explicit so that a name added later has to be added
 // here too.
 
-import * as utils from "./src/utils.ts";
-import * as callbacks from "../internal/readline-callbacks.ts";
-import { getStringWidth } from "../util/src/width.ts";
-import { inspect } from "../util/src/inspect.ts";
-import { stripVTControlCharacters } from "../util/src/main.ts";
-
 export function shape(exports) {
   return {
     Interface: exports.Interface,
@@ -39,15 +33,15 @@ export function subpaths(exports) {
  * the same file owns the escape sequences, even though ours live one directory
  * up so that `console.clear()` can have them without a line editor.
  */
-export function internals() {
+export function internals(exports) {
   return {
     "internal/readline/utils": {
-      charLengthAt: utils.charLengthAt,
-      charLengthLeft: utils.charLengthLeft,
-      commonPrefix: utils.commonPrefix,
-      emitKeys: utils.emitKeys,
-      reverseString: utils.reverseString,
-      kSubstringSearch: utils.kSubstringSearch,
+      charLengthAt: exports.charLengthAt,
+      charLengthLeft: exports.charLengthLeft,
+      commonPrefix: exports.commonPrefix,
+      emitKeys: exports.emitKeys,
+      reverseString: exports.reverseString,
+      kSubstringSearch: exports.kSubstringSearch,
     },
     // Four of node's readline tests measure the width of what they expect to
     // be on screen, and reach for the same helper `Interface` uses to decide
@@ -55,15 +49,15 @@ export function internals() {
     // difference between the test checking our arithmetic and checking that
     // two copies of node's agree.
     "internal/util/inspect": {
-      getStringWidth,
-      stripVTControlCharacters,
-      inspect,
+      getStringWidth: exports.getStringWidth,
+      stripVTControlCharacters: exports.stripVTControlCharacters,
+      inspect: exports.inspect,
     },
     "internal/readline/callbacks": {
-      clearLine: callbacks.clearLine,
-      clearScreenDown: callbacks.clearScreenDown,
-      cursorTo: callbacks.cursorTo,
-      moveCursor: callbacks.moveCursor,
+      clearLine: exports.clearLine,
+      clearScreenDown: exports.clearScreenDown,
+      cursorTo: exports.cursorTo,
+      moveCursor: exports.moveCursor,
     },
   };
 }

@@ -46,6 +46,22 @@ export type { InterfaceOptions, Completer, InputStream, OutputStream };
 // function/prototype metaobjects and is intentionally outside §13.
 export { InterfaceClass as Interface };
 
+// Raw implementation exports for the conformance harness's node-internal
+// facades. The public shape deliberately omits these names. Direct re-exports
+// preserve the original functions without adding forwarding calls, and keep
+// the compiled lane from importing TypeScript helpers beside its addon.
+export {
+  charLengthAt,
+  charLengthLeft,
+  commonPrefix,
+  emitKeys,
+  kSubstringSearch,
+  reverseString,
+} from "./utils.ts";
+export { getStringWidth } from "../../util/src/width.ts";
+export { inspect } from "../../util/src/inspect.ts";
+export { stripVTControlCharacters } from "../../util/src/main.ts";
+
 /**
  * Build an interface.
  *
