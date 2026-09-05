@@ -115,6 +115,28 @@ function optionsSupplyUrlLocation(options) {
   );
 }
 
+function supplyGlobalAgent(options, globalAgent) {
+  if (options === null || typeof options !== "object") return;
+  if (
+    (options.agent === undefined || options.agent === null) &&
+    options.createConnection === undefined
+  ) {
+    options.agent = globalAgent;
+  }
+}
+
+function requestWithGlobalAgent(request, globalAgent, options, optionsOrCallback, callback) {
+  const preserveUrlLocation = optionsSupplyUrlLocation(options);
+  const first = requestOptions(options);
+  const second = requestOptions(optionsOrCallback, preserveUrlLocation);
+  if (typeof first === "string" && (second === undefined || typeof second === "function")) {
+    return request(first, { agent: globalAgent }, typeof second === "function" ? second : callback);
+  }
+  if (typeof first === "string") supplyGlobalAgent(second, globalAgent);
+  else supplyGlobalAgent(first, globalAgent);
+  return request(first, second, callback);
+}
+
 function requestConstructor(Class) {
   const shaped = function (options, callback) {
     const target = new.target === shaped ? Class : new.target;
@@ -140,6 +162,17 @@ export function shape(exports) {
   nullPrototypeResult(exports.OutgoingMessage, "getHeaders");
   const http = { ...exports };
   delete http.default;
+  let globalAgent = exports.globalAgent;
+  Object.defineProperty(http, "globalAgent", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return globalAgent;
+    },
+    set(value) {
+      globalAgent = value;
+    },
+  });
   http.Agent = callableConstructor(exports.Agent, "Agent");
   http.ClientRequest = requestConstructor(exports.ClientRequest);
   http.Server = callableConstructor(exports.Server, "Server");
@@ -148,20 +181,16 @@ export function shape(exports) {
     maxIdleHTTPParsers = max;
   };
   http.request = (options, optionsOrCallback, callback) => {
-    const preserveUrlLocation = optionsSupplyUrlLocation(options);
-    return exports.request(
-      requestOptions(options),
-      requestOptions(optionsOrCallback, preserveUrlLocation),
+    return requestWithGlobalAgent(
+      exports.request,
+      globalAgent,
+      options,
+      optionsOrCallback,
       callback,
     );
   };
   http.get = (options, optionsOrCallback, callback) => {
-    const preserveUrlLocation = optionsSupplyUrlLocation(options);
-    return exports.get(
-      requestOptions(options),
-      requestOptions(optionsOrCallback, preserveUrlLocation),
-      callback,
-    );
+    return requestWithGlobalAgent(exports.get, globalAgent, options, optionsOrCallback, callback);
   };
   return http;
 }
