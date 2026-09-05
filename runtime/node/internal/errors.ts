@@ -1381,6 +1381,19 @@ export class ERR_HTTP_INVALID_HEADER_VALUE extends NodeTypeError {
   }
 }
 
+/** A transport cannot carry two server responses at the same time. */
+export class ERR_HTTP_SOCKET_ASSIGNED extends NodeError {
+  override get ["constructor"](): unknown {
+    return Error;
+  }
+  override readonly code = "ERR_HTTP_SOCKET_ASSIGNED";
+
+  constructor() {
+    super("ServerResponse has an already assigned socket");
+    this.name = "Error";
+  }
+}
+
 /** HTTP parses bytes itself, so its transport cannot decode them into strings. */
 export class ERR_HTTP_SOCKET_ENCODING extends NodeError {
   override get ["constructor"](): unknown {

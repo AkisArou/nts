@@ -28,6 +28,7 @@ import {
   ERR_HTTP_HEADERS_SENT,
   ERR_HTTP_INVALID_HEADER_VALUE,
   ERR_HTTP_INVALID_STATUS_CODE,
+  ERR_HTTP_SOCKET_ASSIGNED,
   ERR_HTTP_TRAILER_INVALID,
   ERR_INVALID_CHAR,
   ERR_INVALID_ARG_TYPE,
@@ -373,7 +374,26 @@ export class OutgoingMessage extends EventEmitter {
     callback?: WriteCallback,
     _byteLength?: number,
   ): boolean {
-    this.flushHeaders();
+    this.prepareHeaders();
+    if (!this.#headerFlushed) {
+      this.#headerFlushed = true;
+      const head = this.#head;
+      if (
+        head !== null &&
+        typeof chunk === "string" &&
+        (encoding === undefined ||
+          encoding === null ||
+          encoding === "utf8" ||
+          encoding === "latin1")
+      ) {
+        return this._writeRaw(head + chunk, encoding ?? undefined, callback);
+      }
+      if (head !== null) {
+        const headAccepted = this._writeRaw(head, "latin1");
+        const chunkAccepted = this._writeRaw(chunk, encoding ?? undefined, callback);
+        return headAccepted && chunkAccepted;
+      }
+    }
     return this._writeRaw(chunk, encoding ?? undefined, callback);
   }
 
@@ -766,12 +786,9 @@ export class OutgoingMessage extends EventEmitter {
       return true;
     }
 
-    const buffer =
-      typeof chunk === "string"
-        ? Buffer.from(chunk, encodingName ?? "utf8")
-        : chunk instanceof Buffer
-          ? chunk
-          : Buffer.from(chunk);
+    const data =
+      typeof chunk === "string" ? chunk : chunk instanceof Buffer ? chunk : Buffer.from(chunk);
+    const buffer = typeof data === "string" ? Buffer.from(data, encodingName ?? "utf8") : data;
 
     if (buffer.length === 0) {
       // A zero-length chunk is not "nothing" in chunked encoding -- it is the
@@ -783,7 +800,7 @@ export class OutgoingMessage extends EventEmitter {
     }
 
     this.#bodyWriteStarted = true;
-    this.flushHeaders();
+    this.prepareHeaders();
 
     if (this.strictContentLength) {
       const declared = this.#declaredContentLength();
@@ -800,7 +817,7 @@ export class OutgoingMessage extends EventEmitter {
 
     let ok: boolean;
     if (this.chunkedEncoding) {
-      ok = this._writeRaw(`${buffer.length.toString(16)}\r\n`, "latin1");
+      ok = this._send(`${buffer.length.toString(16)}\r\n`, "latin1");
       if (!this._writeRaw(buffer)) ok = false;
       // Completion belongs to the complete framed chunk, not merely to the
       // act of queueing its payload. In particular, a callback that destroys
@@ -808,7 +825,7 @@ export class OutgoingMessage extends EventEmitter {
       // write queue.
       if (!this._writeRaw("\r\n", "latin1", callback)) ok = false;
     } else {
-      ok = this._writeRaw(buffer, undefined, callback);
+      ok = this._send(data, encodingName, callback);
     }
     if (!ok) this.#needDrain = true;
     return ok;
@@ -1001,6 +1018,11 @@ export class OutgoingMessage extends EventEmitter {
   }
 }
 
+// Node stores this ownership on `socket._httpMessage`. A typed side table keeps
+// the same one-response-per-transport invariant without adding a dynamic field
+// to an arbitrary Writable supplied by the caller.
+const assignedResponses = new WeakMap<OutgoingSocket, ServerResponse>();
+
 export class ServerResponse extends OutgoingMessage {
   statusCode = 200;
   statusMessage: string | undefined;
@@ -1126,13 +1148,17 @@ export class ServerResponse extends OutgoingMessage {
 
   /** Attach the connection currently carrying this response. */
   assignSocket(socket: OutgoingSocket): void {
+    if (assignedResponses.has(socket)) throw new ERR_HTTP_SOCKET_ASSIGNED();
+    assignedResponses.set(socket, this);
     this.socket = socket;
     this.emit("socket", socket);
   }
 
   /** Release a completed response from the connection that carried it. */
   detachSocket(socket: OutgoingSocket): void {
-    if (this.socket === socket) this.socket = null;
+    if (assignedResponses.get(socket) !== this) return;
+    assignedResponses.delete(socket);
+    this.socket = null;
   }
 
   /** Complete the response-side close lifecycle after it has been detached. */
