@@ -35,6 +35,29 @@ import { AsyncLocalStorage, RunScope } from "./local-storage.ts";
 
 export { AsyncResource, AsyncLocalStorage, RunScope };
 export { executionAsyncId, triggerAsyncId, executionAsyncResource };
+// Raw implementation exports for the conformance harness's node-internal
+// facade. `shape.mjs` deliberately omits them from the public module object.
+// Keeping the facade on this same export set prevents the compiled lane from
+// importing TypeScript helpers beside the addon it is meant to measure.
+export {
+  afterHooksExist,
+  defaultTriggerAsyncIdScope,
+  destroyHooksExist,
+  emitAfter,
+  emitBefore,
+  emitDestroy,
+  emitInit,
+  enabledHooksExist,
+  getDefaultTriggerAsyncId,
+  getOrSetAsyncId,
+  hasAsyncIdStack,
+  initHooksExist,
+  newAsyncId,
+  popAsyncContext,
+  promiseResolveHooksExist,
+  pushAsyncContext,
+  registerDestroyHook,
+} from "../../internal/async-hooks.ts";
 export type { AsyncLocalStorageOptions } from "./local-storage.ts";
 export type { AsyncResourceOptions } from "./resource.ts";
 export type { HookCallbacks };

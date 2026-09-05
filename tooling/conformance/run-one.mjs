@@ -272,7 +272,30 @@ try {
     exports = await import(join(moduleDir, "src/main.ts"));
   }
   const shapePath = join(moduleDir, "shape.mjs");
-  const shapeModule = existsSync(shapePath) ? await import(shapePath) : null;
+  let shapeModule = null;
+  if (existsSync(shapePath)) {
+    const compiledShapeGuard = addon && addon !== "-"
+      ? registerHooks({
+        resolve(specifier, context, nextResolve) {
+          const resolved = nextResolve(specifier, context);
+          if (/\.[cm]?ts$/.test(new URL(resolved.url).pathname)) {
+            throw new Error(
+              "shape.mjs loaded TypeScript source in the compiled lane; expose hidden raw addon exports and shape those instead",
+            );
+          }
+          return resolved;
+        },
+      })
+      : null;
+    try {
+      // A resolver guard observes imports, re-exports, and transitive static
+      // dependencies during module evaluation. Text matching would miss some
+      // of those forms and could mistake comments or strings for imports.
+      shapeModule = await import(shapePath);
+    } finally {
+      compiledShapeGuard?.deregister();
+    }
+  }
   underTest = shapeModule ? shapeModule.shape({ ...exports }) : { ...exports };
   const declaredSubpaths = shapeModule?.subpaths?.({ ...exports }) ?? null;
   if (declaredSubpaths !== null) {

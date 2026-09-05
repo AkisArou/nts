@@ -5,8 +5,6 @@
 // but cannot name -- so the extras are dropped here rather than left to be
 // noticed by a test that enumerates the module.
 
-import * as hooks from "../internal/async-hooks.ts";
-
 export function shape(exports) {
   return {
     AsyncLocalStorage: exports.AsyncLocalStorage,
@@ -32,7 +30,7 @@ export function installGlobals(_underTest, rawExports) {
  * dynamic property map and are outside the NTS object model, so this shape does
  * not advertise them.
  */
-export function internals() {
+export function internals(exports) {
   return {
     // Node's GC regression test only asks which of its two implementations is
     // active so it can perform the matching cleanup. This profile always uses
@@ -41,25 +39,25 @@ export function internals() {
       enabled: true,
     },
     "internal/async_hooks": {
-      enabledHooksExist: hooks.enabledHooksExist,
-      initHooksExist: hooks.initHooksExist,
-      afterHooksExist: hooks.afterHooksExist,
-      destroyHooksExist: hooks.destroyHooksExist,
-      promiseResolveHooksExist: hooks.promiseResolveHooksExist,
-      newAsyncId: hooks.newAsyncId,
-      getOrSetAsyncId: hooks.getOrSetAsyncId,
-      getDefaultTriggerAsyncId: hooks.getDefaultTriggerAsyncId,
-      defaultTriggerAsyncIdScope: hooks.defaultTriggerAsyncIdScope,
-      emitInit: hooks.emitInit,
-      emitBefore: hooks.emitBefore,
-      emitAfter: hooks.emitAfter,
-      emitDestroy: hooks.emitDestroy,
-      hasAsyncIdStack: hooks.hasAsyncIdStack,
-      pushAsyncContext: hooks.pushAsyncContext,
-      popAsyncContext: hooks.popAsyncContext,
-      executionAsyncId: hooks.executionAsyncId,
-      triggerAsyncId: hooks.triggerAsyncId,
-      registerDestroyHook: hooks.registerDestroyHook,
+      enabledHooksExist: exports.enabledHooksExist,
+      initHooksExist: exports.initHooksExist,
+      afterHooksExist: exports.afterHooksExist,
+      destroyHooksExist: exports.destroyHooksExist,
+      promiseResolveHooksExist: exports.promiseResolveHooksExist,
+      newAsyncId: exports.newAsyncId,
+      getOrSetAsyncId: exports.getOrSetAsyncId,
+      getDefaultTriggerAsyncId: exports.getDefaultTriggerAsyncId,
+      defaultTriggerAsyncIdScope: exports.defaultTriggerAsyncIdScope,
+      emitInit: exports.emitInit,
+      emitBefore: exports.emitBefore,
+      emitAfter: exports.emitAfter,
+      emitDestroy: exports.emitDestroy,
+      hasAsyncIdStack: exports.hasAsyncIdStack,
+      pushAsyncContext: exports.pushAsyncContext,
+      popAsyncContext: exports.popAsyncContext,
+      executionAsyncId: exports.executionAsyncId,
+      triggerAsyncId: exports.triggerAsyncId,
+      registerDestroyHook: exports.registerDestroyHook,
     },
   };
 }
