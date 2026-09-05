@@ -69,3 +69,36 @@ look like the same shrug.
 answers and what the hand-written Java reference committed today answers. It was
 not producing a wrong number before; it was producing no number, which is how it
 survived.
+
+## The other two blanks, and what each one was
+
+Three cells in the `nts (JVM)` column were empty. Following all three, rather
+than the one that looked most interesting, is what made the triage worth
+recording: they were three unrelated facts wearing the same mark.
+
+**`node-utf8` — a real refusal.** `NTS4001: a call to nts_concat, which needs a
+runtime this slice has not built`. The one string operation the lane had never
+needed, because no earlier case concatenated. `NtsRuntime.concat` is `a + b`,
+which under `--release 8` compiles to `StringBuilder` rather than
+`invokedynamic makeConcatWithConstants` -- so the no-`invokedynamic` ratchet
+holds, and `nothing_in_the_runtime_needs_a_feature_android_lacks` passed on the
+regenerated jar without being touched. The case now agrees with node.
+
+**`elementwise` — a limit of this harness, not of the compiler.** `workload`
+recovers the call from `nts.cpp`'s `volatile` inputs, and this case passes an
+*array*: the same buffer to every call, mutated in place, refilled at the top of
+`bench_run` so the contents do not compound and the checksum does not depend on
+how many times the harness called it. There is no expression to synthesise and
+no way to reset state through an argument list. A case may now carry its own
+`driver.java`, used verbatim; the generated path and the supplied one share
+`run_driver`, so the two cannot drift apart on the JVM flags -- a row whose
+number came from different flags would quietly mean something other than the
+rest of the column.
+
+**`optional-chain` — the crash above.**
+
+A refusal, a harness limit, and a defect. **The one that was a bug in this
+compiler was the one whose blank looked least like a bug** -- the case emitted,
+verified under `-Xverify:all`, and passed `nts check`. Had the column rendered a
+bare `--` for all three, the two that were not this backend's fault would have
+been the natural place to stop looking.

@@ -164,6 +164,23 @@ public final class NtsRuntime {
         appendPad(out, pad, want - s.length());
         return out.toString();
     }
+    /**
+     * Two strings joined, which on this platform is what {@code +} already is.
+     *
+     * <p>A static here rather than a {@code String.concat} emitted at the call
+     * site: the external table maps every {@code nts_} name to a static on this
+     * class, and one entry spelled differently is the asymmetry that goes wrong
+     * the next time somebody adds a name.
+     *
+     * <p>{@code --release 8} compiles {@code +} to a {@code StringBuilder}
+     * rather than to {@code invokedynamic makeConcatWithConstants}, which is
+     * what keeps the no-{@code invokedynamic} ratchet, and with it the Android
+     * API 26 floor.
+     */
+    public static String concat(String a, String b) {
+        return a + b;
+    }
+
     public static String strSubstring(String s, double from, double to) {
         int start = clamp(from, s.length(), false), end = clamp(to, s.length(), false);
         return start <= end ? s.substring(start, end) : s.substring(end, start);

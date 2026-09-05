@@ -171,6 +171,28 @@ const JAVA_REFERENCES: &[(&str, &str, Option<f64>)] = &[
     ("awfy-towers", "Towers", None),
 ];
 
+/// Cases where the two hand-written references legitimately differ by more than
+/// the guard below tolerates, each with the reason it is real.
+///
+/// The guard exists because a reference running the wrong iteration count is
+/// invisible to the checksum, and it is right about numeric kernels: Java beats
+/// C++ on rows here and cannot beat it by an order of magnitude. But a *language
+/// level* difference in the cost of one operation is not a mistake, and refusing
+/// to print it would make a real 150x gap look exactly like a broken reference
+/// -- which is the thing this repository refuses to let happen to a refusal and
+/// an absence, and the same argument applies here.
+///
+/// So the escape is per case and carries its reason in the table rather than in
+/// a threshold. Adding a row is a claim that the gap was investigated.
+const WIDE_REFERENCE_GAPS: &[(&str, &str)] = &[(
+    "exceptions",
+    "`new RuntimeException` calls `fillInStackTrace`, which walks the stack and \
+     allocates a `StackTraceElement[]`, 12,500 times per operation. C++ pays \
+     nothing to construct a thrown value. The two references do the same work \
+     and the operation itself costs two orders of magnitude more in one of \
+     them, which is what this row exists to report.",
+)];
+
 fn main() -> Result<()> {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -374,15 +396,7 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         } else {
             String::new()
         };
-        // `refused`, not `--`. Every case is attempted on every backend, so a
-        // missing JVM number is always a construct the lane declines by name
-        // -- and a reader cannot tell that from a blank, which is what a
-        // reference nobody wrote looks like one column over.
-        let jvm = match (row.jvm, row.jvm_absence) {
-            (Some(time), _) => human(time),
-            (None, Some(JvmAbsence::NoDriver)) => "no driver".to_owned(),
-            (None, _) => "refused".to_owned(),
-        };
+        let jvm = jvm_cell(row.jvm, row.jvm_absence);
         let _ = writeln!(
             table,
             "| {} | {} | {} | **{}** | {jvm} | {} | {} |{bun} {} | {} |{against_bun} {} |",
@@ -750,7 +764,18 @@ fn finish_row(
     if let (Some(cpp), Some(java)) = (row.cpp, row.java)
         && (java * 20.0 < cpp || cpp * 20.0 < java)
     {
+        if let Some((_, why)) = WIDE_REFERENCE_GAPS
+            .iter()
+            .find(|(which, _)| *which == row.case)
         {
+            eprintln!(
+                "note: {} -- Java {} against C++ {} -- {}",
+                row.case,
+                human(java),
+                human(cpp),
+                why
+            );
+        } else {
             bail!(
                 "the Java reference for {} ran in {} against {} for the C++ \
                  reference -- that is not a codegen difference, it is the two \
@@ -768,7 +793,7 @@ fn finish_row(
         row.cpp.map_or_else(|| "--".to_owned(), human),
         human(row.nts),
         row.llvm.map_or_else(|| "--".to_owned(), human),
-        row.jvm.map_or_else(|| "--".to_owned(), human),
+        jvm_cell(row.jvm, row.jvm_absence),
         row.java.map_or_else(|| "--".to_owned(), human),
         human(row.unspecialized),
         human(row.node),
@@ -850,6 +875,26 @@ fn bun_binary() -> Option<Utf8PathBuf> {
 ///
 /// The parse is narrow on purpose. Thirty-nine cases share one shape, and a
 /// case that does not match is refused rather than guessed at.
+/// The `nts (JVM)` cell, which says *which kind* of missing it is.
+///
+/// `refused` is a construct this lane declines by name and is the compiler's;
+/// `no driver` is this harness being unable to *call* the program and is not.
+/// Only the first is a gap in the backend.
+///
+/// One function because the console and the README are two renderings of one
+/// table, and they had drifted: the README distinguished the two states and the
+/// console printed `--` for both. Three blanks in that column once turned out to
+/// be a refusal, a harness limit, and a `NullPointerException`, and the one that
+/// was a bug looked exactly like the two that were not -- so the triage started
+/// from the rendering that had thrown the distinction away.
+fn jvm_cell(time: Option<f64>, absence: Option<JvmAbsence>) -> String {
+    match (time, absence) {
+        (Some(time), _) => human(time),
+        (None, Some(JvmAbsence::NoDriver)) => "no driver".to_owned(),
+        (None, _) => "refused".to_owned(),
+    }
+}
+
 fn workload(case: &Utf8Path) -> Result<(String, Vec<String>)> {
     let source = std::fs::read_to_string(case.join("nts.cpp"))
         .with_context(|| format!("reading {case}/nts.cpp"))?;
@@ -941,6 +986,27 @@ fn jvm_case(
     let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref())?;
 
+    // A case whose workload cannot be recovered from `nts.cpp` writes its own
+    // driver instead.
+    //
+    // `workload` reads `bench_run` and requires every argument to be a
+    // `volatile` scalar, which is true of every case but the ones that pass an
+    // array: `elementwise` hands the same buffer to each call and refills it, so
+    // there is no expression to synthesise and the state has to be reset between
+    // runs or the contents compound and the checksum depends on how many times
+    // the harness happened to call it.
+    //
+    // Verbatim rather than templated. A driver is twenty lines of Java that
+    // belongs next to the case it drives, and inventing a substitution language
+    // for the two cases that need one would be the larger mistake.
+    let supplied = case.join("driver.java");
+    if supplied.exists() {
+        let text = std::fs::read_to_string(&supplied)
+            .with_context(|| format!("reading {supplied}"))?;
+        let driver_path = dir.join("Case.java");
+        std::fs::write(&driver_path, text)?;
+        return run_driver(root, &dir, &jar, &driver_path);
+    }
     // The driver, from the workload the C shim already declares. Every input is
     // a `volatile` field for the reason the C shim makes them `volatile`: a
     // loop-invariant argument lets the JIT hoist the whole call out of the timed
@@ -964,14 +1030,28 @@ fn jvm_case(
     let driver_path = dir.join("Case.java");
     std::fs::write(&driver_path, driver)?;
 
+    run_driver(root, &dir, &jar, &driver_path)
+}
+
+/// Compile a driver against the emitted classes and time it.
+///
+/// Shared by the generated driver and a case's own, so the two cannot drift
+/// apart on the flags -- which would make one row's number mean something
+/// slightly different from the rest of the column.
+fn run_driver(
+    root: &Utf8Path,
+    dir: &Utf8Path,
+    jar: &Utf8Path,
+    driver_path: &Utf8Path,
+) -> Result<Measured> {
     let javac = java_tool("javac");
     let built = std::process::Command::new(javac)
         .arg("-cp")
-        .arg(&dir)
+        .arg(dir)
         .arg("-d")
-        .arg(&dir)
+        .arg(dir)
         .arg(root.join("benches/common/Bench.java"))
-        .arg(&driver_path)
+        .arg(driver_path)
         .output()
         .context("running javac")?;
     if !built.status.success() {

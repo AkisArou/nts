@@ -244,6 +244,8 @@ const MAP_AT_TO_VALUE: &str = "(Lnts/rt/NtsMap;D)Lnts/rt/NtsValue;";
 const BIGINT_BINARY: &str = "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
 const BIGINT_BITS: &str = "(DLnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
 const STRING_STRING_TO_D: &str = "(Ljava/lang/String;Ljava/lang/String;)D";
+const STRING_STRING_TO_STRING: &str =
+    "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;";
 const STRING_STRING_TO_Z: &str = "(Ljava/lang/String;Ljava/lang/String;)Z";
 const STRING_DD_TO_STRING: &str = "(Ljava/lang/String;DD)Ljava/lang/String;";
 const STRING_STRING_STRING_TO_STRING: &str =
@@ -343,6 +345,7 @@ fn math_external(name: &str) -> Option<(&'static str, &'static str, &'static str
 /// something written out because Java's answer is not JavaScript's.
 fn string_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match name {
+        "nts_concat" => (RUNTIME, "concat", STRING_STRING_TO_STRING),
         "nts_str_index_of" => (RUNTIME, "strIndexOf", STRING_STRING_TO_D),
         "nts_str_last_index_of" => (RUNTIME, "strLastIndexOf", STRING_STRING_TO_D),
         "nts_str_includes" => (RUNTIME, "strIncludes", STRING_STRING_TO_Z),
