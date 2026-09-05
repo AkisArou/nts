@@ -144,7 +144,7 @@ counter, not by reading the emitted C.
 | ✅ | a **named function used as a value** — one static instance, so identity holds |
 | ✅ | a function held in a **field**, on a class or an object literal, called through it. `f(x): number` is a method the dispatch table holds and `f: (x) => number` is storage; the checker says which, and asking the *type* instead cannot tell them apart |
 | ✅ | recursion |
-| ✅ | `async`/`await` — under both providers |
+| ✅ | `async`/`await` — under both providers, on a **function or a method**, instance or static | a method's receiver is a parameter, so it goes into the suspended frame beside the others and comes back on resumption. Methods were refused for a reason that had stopped being true — *"`Promise<T>` has no representation"* — at **161 occurrences, 63 distinct sites** in `runtime/node`, the largest single language refusal there. Record 0120 |
 | ✅ | `new Promise(executor)` where the executor is an arrow written at the call: it runs synchronously, so its body is lowered where the promise is built and `resolve(v)` *is* the fulfil. No closure, nothing captured |
 | ✅ | a `throw` in an `async` function rejects the promise it owns, the way its `return` settles it |
 | ✗ | an executor that is not an arrow written at the call, or a `resolve` used as a value rather than called (`new Promise(r => { saved = r })`) — both need a real closure over the promise |

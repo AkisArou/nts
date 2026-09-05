@@ -4802,11 +4802,6 @@ impl<'a> FuncBuilder<'a> {
         // a static method, because a call site names the class it is written on.
         let modifiers = self.node(member).modifiers;
         let is_static = modifiers.contains(nts_semantic_schema::DeclarationModifiers::STATIC);
-        // As for a function: `Promise<T>` has no representation, so an `async`
-        // method resolved to `-> void` and returned an `f64` from it anyway.
-        if modifiers.contains(nts_semantic_schema::DeclarationModifiers::ASYNC) {
-            return Err(self.unsupported(member, "an `async` method"));
-        }
         // An `abstract` method declares a dispatch slot and nothing else. It is
         // lowered rather than refused because the *signature* is needed: a call
         // through `Shape#area` on a `Shape` receiver is an indirect call, and
@@ -4935,10 +4930,11 @@ impl<'a> FuncBuilder<'a> {
         };
         self.materialize(member, &return_type)?;
 
+        let asynchronous = self.begin_async(member, &return_type)?;
         self.returns = return_type.clone();
         if let Some(body) = body {
             self.lower_block(body)?;
-            self.close_body(&return_type);
+            self.end_method_body(member, asynchronous.as_ref(), &return_type)?;
         }
 
         // A method is reachable from outside exactly when its class is, so the
@@ -6007,6 +6003,47 @@ impl<'a> FuncBuilder<'a> {
             .modifiers
             .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
         Ok(self.finish(name, params, return_type, origin, exported))
+    }
+
+    /// End a method's body: settle its promise where it is `async`.
+    ///
+    /// An `async` method allocates its promise before the body runs, exactly as
+    /// an `async` function does, and for the same two reasons: every `return`
+    /// needs one to settle, and the allocation belongs on the one path in
+    /// rather than on each path out. Falling off the end resolves it with
+    /// `undefined`, which is what `return;` does, so the two are one path.
+    ///
+    /// This was refused -- *"`Promise<T>` has no representation, so an `async`
+    /// method resolved to `-> void` and returned an `f64` from it anyway"*.
+    /// `ManagedType::Promise` has existed for some time and `async` *functions*
+    /// worked throughout; the refusal outlived its reason by long enough to be
+    /// **161 occurrences at 63 distinct sites** in `runtime/node`, the largest
+    /// single language refusal there.
+    ///
+    /// Nothing here is new machinery. `begin_async` is the call
+    /// `lower_function` makes, `hir::suspend` splits the result by the same
+    /// rule, and a method's receiver is a parameter like any other -- so it
+    /// goes in the frame beside the rest and comes back on resumption.
+    ///
+    /// Its own function because the caller was one line over clippy's limit
+    /// with it inline, which is a poor reason and produced a good split: this
+    /// is the only part of `lower_method_of` that is about `async` at all.
+    fn end_method_body(
+        &mut self,
+        member: NodeId,
+        asynchronous: Option<&AsyncResult>,
+        return_type: &HirType,
+    ) -> Result<(), Diagnostic> {
+        match asynchronous {
+            Some(result) => {
+                if !self.is_terminated() {
+                    let result = result.clone();
+                    self.settle_and_return(member, &result, None)?;
+                }
+            }
+            None => self.close_body(return_type),
+        }
+        Ok(())
     }
 
     /// Reserve the frame a `function*` yields into, if this is one.

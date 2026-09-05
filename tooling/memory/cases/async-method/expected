@@ -1,0 +1,38 @@
+ideal 35
+allocated 7
+because Allocations: seven, and the decomposition is exact.
+because
+because   1  the `Counter`
+because   2  a promise for each `accumulate`, which every `async` call makes
+because   2  a frame for each `accumulate`, which is the only body that awaits
+because   2  a promise for each `scaled`
+because
+because `scaled` allocates no frame. It is `async` and never awaits, so
+because `hir::suspend` leaves it whole -- the promise prologue stays and there
+because is no state machine. A split that fired on every `async` body rather
+because than on every *suspending* one would show two more.
+because
+because **Argued at thirteen before measuring and it is seven**: I counted a
+because frame for `scaled` and a promise for `work`, and `work` is not async
+because here on purpose. The over-count was in the direction that would have
+because hidden a real regression, which is the wrong direction to be wrong in.
+because
+because Being a method costs nothing of its own. The receiver is a parameter,
+because so it takes a frame slot beside the others rather than a box -- and a
+because lowering that boxed `this` to carry it across the suspension would add
+because two allocations no answer here would notice.
+because
+because Operations: thirty-five, against a naive thirty-nine. **This is a
+because measurement rather than an argument, and it is the weakest line in this
+because file.** Five counted operations per object is high for a program where
+because every promise and every frame is handed on rather than shared, and I
+because cannot derive thirty-five from the ownership graph. It is written down
+because so the next person has a number to beat rather than a blank, and the
+because 10% the elision achieves against naive is the part that is doing work.
+because
+because This case exists at all because the harness could not run one before
+because it: an `async` body's cleanup is in its resumption, which runs on the
+because loop, and the harness measured before draining. Every promise and every
+because frame read as leaked -- one `async` function with no `await` at all,
+because one allocation, one leaked. `drain()` in `harness.c` is that fix, and
+because this is the first case in the suite to exercise `async`.

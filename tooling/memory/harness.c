@@ -36,11 +36,28 @@ double work(double iterations);
  * needed it, and the first one that did read a null array and segfaulted. */
 __attribute__((weak)) void module__init(void);
 
+/* Run the loop until it is quiet.
+ *
+ * `nts_checkpoint` is the whole checkpoint rather than a tick drain -- see the
+ * comment on it -- so this is the explicit form for a caller that means it, and
+ * the loop around it is because one checkpoint can post more work.
+ *
+ * Bounded, because a program that reposts for ever is a program this harness
+ * cannot measure, and hanging is a worse way to say so than stopping. Nothing
+ * in `cases/` comes close: the deepest is a chain of four.
+ */
+static void drain(void) {
+  for (int rounds = 0; rounds < 1024 && nts_has_pending_work(); rounds++) {
+    nts_checkpoint();
+  }
+}
+
 int main(void) {
   if (module__init) {
     module__init();
   }
   double settled = work(1);
+  drain();
   nts_collect_cycles();
   size_t before = nts_live_count();
 
@@ -50,6 +67,19 @@ int main(void) {
      a delta rather than a reading. */
   size_t candidates_before = nts_cycle_candidates();
   double answer = work(1);
+  /* Whatever the program left on the queues, before anything is counted.
+   *
+   * An `async` body's cleanup is in its *resumption*, which runs on the loop --
+   * so a case that starts asynchronous work and returns had released nothing by
+   * the time the counters were read, and every promise and every frame it made
+   * read as leaked. The smallest possible program said so: one `async` function
+   * with no `await` at all, one allocation, one leaked.
+   *
+   * That is the harness measuring an unfinished program rather than the
+   * compiler losing an object, and the difference is one call. Draining is part
+   * of what the program costs, so it happens before the counters are read
+   * rather than after. */
+  drain();
   /* Read before collecting. The collector releases as it works, and charging
      the program for that would measure the runtime rather than the code the
      compiler emitted -- it put thirty two operations on this case's bill the
