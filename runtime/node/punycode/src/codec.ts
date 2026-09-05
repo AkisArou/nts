@@ -24,6 +24,7 @@ const delimiter = "-";
 const baseMinusTMin = base - tMin;
 
 type ErrorType = "overflow" | "not-basic" | "invalid-input";
+type DomainMapping = "to-ascii" | "to-unicode";
 
 function error(type: ErrorType): never {
   switch (type) {
@@ -37,28 +38,39 @@ function error(type: ErrorType): never {
 }
 
 /** The separators RFC 3490 treats as a dot, including the CJK full-width ones. */
-function splitLabels(domain: string): string[] {
-  let normalized = "";
-  for (let i = 0; i < domain.length; i++) {
-    const c = domain.charCodeAt(i);
-    normalized +=
-      c === 0x2e || c === 0x3002 || c === 0xff0e || c === 0xff61
-        ? "."
-        : String.fromCharCode(c);
-  }
-  return normalized.split(".");
+function isLabelSeparator(codeUnit: number): boolean {
+  return codeUnit === 0x2e || codeUnit === 0x3002 || codeUnit === 0xff0e || codeUnit === 0xff61;
 }
 
 /** In an email address only the domain is encoded; the local part is left alone. */
-function mapDomain(domain: string, callback: (label: string) => string): string {
-  let result = "";
+function mapDomain(domain: string, mapping: DomainMapping): string {
   const firstAt = domain.indexOf("@");
+  let domainStart = 0;
+  let domainEnd = domain.length;
+  let result = "";
   if (firstAt !== -1) {
-    result = `${domain.slice(0, firstAt)}@`;
+    domainStart = firstAt + 1;
+    result = domain.slice(0, domainStart);
     const secondAt = domain.indexOf("@", firstAt + 1);
-    domain = domain.slice(firstAt + 1, secondAt === -1 ? domain.length : secondAt);
+    if (secondAt !== -1) domainEnd = secondAt;
   }
-  return result + splitLabels(domain).map(callback).join(".");
+
+  let labelStart = domainStart;
+  for (let index = domainStart; index <= domainEnd; index++) {
+    const atEnd = index === domainEnd;
+    if (!atEnd && !isLabelSeparator(domain.charCodeAt(index))) continue;
+
+    const label = domain.slice(labelStart, index);
+    if (mapping === "to-ascii") {
+      result += hasNonASCII(label) ? `xn--${encode(label)}` : label;
+    } else {
+      result += label.startsWith("xn--") ? decode(label.slice(4).toLowerCase()) : label;
+    }
+    if (!atEnd) result += ".";
+    labelStart = index + 1;
+  }
+
+  return result;
 }
 
 /**
@@ -68,27 +80,42 @@ function mapDomain(domain: string, callback: (label: string) => string): string 
  * that the following unit still gets its chance to be a pair's first half.
  */
 export function ucs2decode(str: string): number[] {
-  const output: number[] = [];
+  // A surrogate pair can only make the result shorter than the UTF-16 input.
+  // Fill that fixed upper bound once and copy only when a pair was combined.
+  const output = new Array<number>(str.length);
+  let outputIndex = 0;
   let counter = 0;
   while (counter < str.length) {
     const value = str.charCodeAt(counter++);
     if (value >= 0xd800 && value <= 0xdbff && counter < str.length) {
       const extra = str.charCodeAt(counter++);
       if ((extra & 0xfc00) === 0xdc00) {
-        output.push(((value & 0x3ff) << 10) + (extra & 0x3ff) + 0x10000);
+        output[outputIndex++] = ((value & 0x3ff) << 10) + (extra & 0x3ff) + 0x10000;
       } else {
-        output.push(value);
+        output[outputIndex++] = value;
         counter--;
       }
     } else {
-      output.push(value);
+      output[outputIndex++] = value;
     }
   }
-  return output;
+  return outputIndex === output.length ? output : output.slice(0, outputIndex);
 }
 
-export function ucs2encode(codePoints: number[]): string {
-  return String.fromCodePoint(...codePoints);
+export function ucs2encode(codePoints: readonly number[]): string {
+  return codePointsToString(codePoints, codePoints.length);
+}
+
+function codePointsToString(codePoints: readonly number[], length: number): string {
+  let result = "";
+  for (let index = 0; index < length; index++) {
+    const codePoint = codePoints[index];
+    if (codePoint === undefined) {
+      throw new RangeError("Invalid code point NaN");
+    }
+    result += String.fromCodePoint(codePoint);
+  }
+  return result;
 }
 
 /** A basic code point to its digit value, or `base` when it is not a digit. */
@@ -117,8 +144,11 @@ function adapt(delta: number, numPoints: number, firstTime: boolean): number {
 
 /** Punycode to Unicode, RFC 3492 §6.2. */
 export function decode(input: string): string {
-  const output: number[] = [];
   const inputLength = input.length;
+  // Every decoded point consumes at least one input code unit, so the input
+  // length is an exact upper bound and insertion never needs to grow storage.
+  const output = new Array<number>(inputLength);
+  let outputLength = 0;
   let i = 0;
   let n = initialN;
   let bias = initialBias;
@@ -133,10 +163,10 @@ export function decode(input: string): string {
     if (input.charCodeAt(j) >= 0x80) {
       error("not-basic");
     }
-    output.push(input.charCodeAt(j));
+    output[outputLength++] = input.charCodeAt(j);
   }
 
-  for (let index = basic > 0 ? basic + 1 : 0; index < inputLength; ) {
+  for (let index = basic > 0 ? basic + 1 : 0; index < inputLength;) {
     // A generalised variable-length integer, decoded most-significant last.
     const oldi = i;
     for (let w = 1, k = base; ; k += base) {
@@ -162,7 +192,7 @@ export function decode(input: string): string {
       w *= baseMinusT;
     }
 
-    const out = output.length + 1;
+    const out = outputLength + 1;
     bias = adapt(i - oldi, out, oldi === 0);
 
     // `i` was a delta over the whole output; fold the overflow into `n`.
@@ -172,15 +202,20 @@ export function decode(input: string): string {
     n += Math.floor(i / out);
     i %= out;
 
-    output.splice(i++, 0, n);
+    for (let index = outputLength; index > i; index--) {
+      // Positions below outputLength are initialized by construction.
+      output[index] = output[index - 1]!;
+    }
+    output[i++] = n;
+    outputLength = out;
   }
 
-  return String.fromCodePoint(...output);
+  return codePointsToString(output, outputLength);
 }
 
 /** Unicode to Punycode, RFC 3492 §6.3. */
 export function encode(input: string): string {
-  const output: string[] = [];
+  let output = "";
   const codePoints = ucs2decode(input);
   const inputLength = codePoints.length;
 
@@ -190,7 +225,7 @@ export function encode(input: string): string {
 
   for (const value of codePoints) {
     if (value < 0x80) {
-      output.push(String.fromCharCode(value));
+      output += String.fromCharCode(value);
     }
   }
 
@@ -198,7 +233,7 @@ export function encode(input: string): string {
   let handledCPCount = basicLength;
 
   if (basicLength) {
-    output.push(delimiter);
+    output += delimiter;
   }
 
   while (handledCPCount < inputLength) {
@@ -231,10 +266,10 @@ export function encode(input: string): string {
           }
           const qMinusT = q - t;
           const baseMinusT = base - t;
-          output.push(String.fromCharCode(digitToBasic(t + (qMinusT % baseMinusT), 0)));
+          output += String.fromCharCode(digitToBasic(t + (qMinusT % baseMinusT), 0));
           q = Math.floor(qMinusT / baseMinusT);
         }
-        output.push(String.fromCharCode(digitToBasic(q, 0)));
+        output += String.fromCharCode(digitToBasic(q, 0));
         bias = adapt(delta, handledCPCountPlusOne, handledCPCount === basicLength);
         delta = 0;
         ++handledCPCount;
@@ -245,19 +280,17 @@ export function encode(input: string): string {
     ++n;
   }
 
-  return output.join("");
+  return output;
 }
 
 /** Decode every `xn--` label of a domain or email address. */
 export function toUnicode(input: string): string {
-  return mapDomain(input, (label) =>
-    label.startsWith("xn--") ? decode(label.slice(4).toLowerCase()) : label,
-  );
+  return mapDomain(input, "to-unicode");
 }
 
 /** Encode every non-ASCII label of a domain or email address. */
 export function toASCII(input: string): string {
-  return mapDomain(input, (label) => (hasNonASCII(label) ? `xn--${encode(label)}` : label));
+  return mapDomain(input, "to-ascii");
 }
 
 /** Node's basic range includes U+007F; only larger code units need encoding. */

@@ -17,12 +17,10 @@ emitWarning(
 );
 
 // Aliases, not wrappers: the public entry point adds no call on top of the RFC
-// codec and `ucs2.decode === ucs2decode` remains true.
+// codec, and the methods in `ucs2` are the same function values.
 export const decode = codec.decode;
 export const encode = codec.encode;
 export const toASCII = codec.toASCII;
 export const toUnicode = codec.toUnicode;
-export const ucs2decode = codec.ucs2decode;
-export const ucs2encode = codec.ucs2encode;
 export const version = codec.version;
-export const ucs2 = { decode: ucs2decode, encode: ucs2encode };
+export const ucs2 = { decode: codec.ucs2decode, encode: codec.ucs2encode };
