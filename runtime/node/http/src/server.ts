@@ -52,6 +52,7 @@ export interface HttpServerOptions extends NetServerOptions {
   uniqueHeaders?: readonly string[] | undefined;
   joinDuplicateHeaders?: boolean | undefined;
   rejectNonStandardBodyWrites?: boolean | undefined;
+  optimizeEmptyRequests?: boolean | undefined;
   shouldUpgradeCallback?: ShouldUpgradeCallback | undefined;
   IncomingMessage?: typeof IncomingMessage | undefined;
   ServerResponse?: typeof ServerResponse | undefined;
@@ -150,6 +151,7 @@ export class Server extends NetServer {
   #lenientParsing: boolean;
   #uniqueHeaders: ReadonlySet<string> | null;
   #joinDuplicateHeaders: boolean;
+  #optimizeEmptyRequests: boolean;
 
   constructor(options?: HttpServerOptions | RequestListener, listener?: RequestListener) {
     let opts: HttpServerOptions = {};
@@ -205,6 +207,9 @@ export class Server extends NetServer {
     if (opts.rejectNonStandardBodyWrites !== undefined) {
       validateBoolean(opts.rejectNonStandardBodyWrites, "options.rejectNonStandardBodyWrites");
     }
+    if (opts.optimizeEmptyRequests !== undefined) {
+      validateBoolean(opts.optimizeEmptyRequests, "options.optimizeEmptyRequests");
+    }
     if (opts.shouldUpgradeCallback !== undefined) {
       validateFunction(opts.shouldUpgradeCallback, "options.shouldUpgradeCallback");
     }
@@ -231,6 +236,7 @@ export class Server extends NetServer {
     this.requireHostHeader = requireHostHeader;
     this.#uniqueHeaders = parseUniqueHeadersOption(opts.uniqueHeaders);
     this.#joinDuplicateHeaders = opts.joinDuplicateHeaders ?? false;
+    this.#optimizeEmptyRequests = opts.optimizeEmptyRequests ?? false;
     this.shouldUpgradeCallback = opts.shouldUpgradeCallback ?? upgradeWhenObserved;
     this.#lenientHeaderValues =
       httpValidation === "relaxed" || httpValidation === "insecure" || insecureHTTPParser === true;
@@ -568,6 +574,15 @@ export class Server extends NetServer {
         nextTick(() => finished._closeAfterFinish());
         this.#afterResponse(socket, parser, message, finished, advanceResponseQueue);
       });
+
+      if (
+        this.#optimizeEmptyRequests &&
+        message.headers["content-length"] === undefined &&
+        message.headers["transfer-encoding"] === undefined
+      ) {
+        message._dumpAndCloseReadable();
+        message._read();
+      }
 
       // RFC 9112 section 3.2 requires exactly one authority for HTTP/1.1.
       // Node preserves its historical first-wins handling for duplicates, but

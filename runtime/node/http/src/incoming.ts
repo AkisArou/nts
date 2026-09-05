@@ -255,6 +255,24 @@ export class IncomingMessage extends Readable {
     this.resume();
   }
 
+  /**
+   * Mark a known-empty request as consumed without scheduling stream events.
+   *
+   * This is the opt-in fast path behind `server.optimizeEmptyRequests`. The
+   * parser still owns the transport and must keep reading, but no body exists
+   * for user code to observe, so constructing the usual end/close lifecycle
+   * would be pure overhead.
+   */
+  _dumpAndCloseReadable(): void {
+    const state = this._readableState;
+    this._dumped = true;
+    state.ended = true;
+    state.endEmitted = true;
+    state.destroyed = true;
+    state.closed = true;
+    state.closeEmitted = true;
+  }
+
   #resumeSource: (() => void) | null = null;
 
   /** Told by whoever is feeding it how to ask for more. */
