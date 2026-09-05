@@ -189,7 +189,18 @@ export class Agent extends EventEmitter {
   }
 
   /** Give `request` a socket, now or when one comes free. */
-  addRequest(request: SocketReceiver, options: AgentConnectionOptions): void {
+  addRequest(request: SocketReceiver, options: AgentConnectionOptions): void;
+  addRequest(request: SocketReceiver, host: string, port?: number, localAddress?: string): void;
+  addRequest(
+    request: SocketReceiver,
+    optionsOrHost: AgentConnectionOptions | string,
+    port?: number,
+    localAddress?: string,
+  ): void {
+    const options: AgentConnectionOptions =
+      typeof optionsOrHost === "string"
+        ? { host: optionsOrHost, port, localAddress }
+        : optionsOrHost;
     const connectionOptions = this.#connectionOptions(options);
     const name = this.getName(connectionOptions);
 
