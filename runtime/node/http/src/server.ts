@@ -409,23 +409,25 @@ export class Server extends NetServer {
       queuedResponseIndex = 0;
     };
 
-    const outputBackpressured = (): boolean =>
+    const shouldPauseForOutput = (): boolean =>
       socket.writableNeedDrain || outgoingData >= socket.writableHighWaterMark;
+
+    const outputStillBackpressured = (): boolean =>
+      socket.writableNeedDrain || outgoingData > socket.writableHighWaterMark;
 
     const retainPendingInput = (input: Buffer): void => {
       if (input.length === 0) return;
       pendingInput = pendingInput === null ? input : Buffer.concat([pendingInput, input]);
     };
 
-    const pauseParsing = (remaining: Buffer): void => {
-      retainPendingInput(remaining);
+    const pauseParsing = (): void => {
       if (parsingPaused) return;
       parsingPaused = true;
       socket.pause();
     };
 
     const resumeParsing = (): void => {
-      if (connectionClosed || !parsingPaused || outputBackpressured()) return;
+      if (connectionClosed || !parsingPaused || outputStillBackpressured()) return;
       parsingPaused = false;
       const input = pendingInput;
       pendingInput = null;
@@ -584,10 +586,6 @@ export class Server extends NetServer {
           handoffUpgrade(acceptedUpgrade, view.subarray(consumed));
           return;
         }
-        if (outputBackpressured()) {
-          pauseParsing(view.subarray(consumed));
-          return;
-        }
         // A message ended part-way through this buffer: the rest is the next
         // request on the same connection, and must not be lost.
         if (consumed < view.length) {
@@ -634,6 +632,12 @@ export class Server extends NetServer {
           return 2;
         }
       }
+
+      // Stop future transport reads before handing this request to user code,
+      // but finish parsing the bytes already delivered in this data chunk.
+      // Node's native parser has the same boundary: requests already read may
+      // run after flood prevention activates; later kernel reads wait.
+      if (shouldPauseForOutput()) pauseParsing();
 
       response = new this.#ServerResponse(message, {
         highWaterMark: socket.writableHighWaterMark,
