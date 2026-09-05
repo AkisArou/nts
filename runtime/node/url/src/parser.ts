@@ -91,10 +91,6 @@ function opaquePath(url: UrlRecord): string {
 
 // ------------------------------------------------------------- code points
 
-const TAB_OR_NEWLINE = /[\t\n\r]/g;
-/** C0 controls and space, which are stripped from both ends of the input. */
-const LEADING_TRAILING_C0_OR_SPACE = /^[\u0000-\u0020]+|[\u0000-\u0020]+$/g;
-
 function isAsciiDigit(c: number): boolean {
   return c >= 0x30 && c <= 0x39;
 }
@@ -109,6 +105,55 @@ function isAsciiAlphanumeric(c: number): boolean {
 
 function isAsciiHexDigit(c: number): boolean {
   return isAsciiDigit(c) || (c >= 0x41 && c <= 0x46) || (c >= 0x61 && c <= 0x66);
+}
+
+/** C0 controls and space are stripped only from the two ends. */
+function trimC0ControlOrSpace(input: string): string {
+  let start = 0;
+  while (start < input.length && input.charCodeAt(start) <= 0x20) start++;
+
+  let end = input.length;
+  while (end > start && input.charCodeAt(end - 1) <= 0x20) end--;
+  return start === 0 && end === input.length ? input : input.slice(start, end);
+}
+
+/** Tabs, LF, and CR are removed wherever the parser sees them. */
+function removeTabsAndNewlines(input: string): string {
+  let first = -1;
+  for (let index = 0; index < input.length; index++) {
+    const code = input.charCodeAt(index);
+    if (code === 0x09 || code === 0x0a || code === 0x0d) {
+      first = index;
+      break;
+    }
+  }
+  if (first < 0) return input;
+
+  let output = input.slice(0, first);
+  let textStart = first + 1;
+  for (let index = textStart; index < input.length; index++) {
+    const code = input.charCodeAt(index);
+    if (code === 0x09 || code === 0x0a || code === 0x0d) {
+      output += input.slice(textStart, index);
+      textStart = index + 1;
+    }
+  }
+  return output + input.slice(textStart);
+}
+
+function asciiDigitValue(code: number): number {
+  if (isAsciiDigit(code)) return code - 0x30;
+  if (code >= 0x41 && code <= 0x46) return code - 0x41 + 10;
+  if (code >= 0x61 && code <= 0x66) return code - 0x61 + 10;
+  return -1;
+}
+
+function isAllAsciiDigits(input: string): boolean {
+  if (input.length === 0) return false;
+  for (let index = 0; index < input.length; index++) {
+    if (!isAsciiDigit(input.charCodeAt(index))) return false;
+  }
+  return true;
 }
 
 /** `C:` or `C|` — the shape that makes a Windows drive letter. */
@@ -332,10 +377,13 @@ function parseIPv4Number(input: string): { value: number; validationError: boole
 
   if (rest === "") return { value: 0, validationError: true };
 
-  const digits = radix === 10 ? /^[0-9]+$/ : radix === 16 ? /^[0-9a-fA-F]+$/ : /^[0-7]+$/;
-  if (!digits.test(rest)) return null;
-
-  return { value: Number.parseInt(rest, radix), validationError };
+  let value = 0;
+  for (let index = 0; index < rest.length; index++) {
+    const digit = asciiDigitValue(rest.charCodeAt(index));
+    if (digit < 0 || digit >= radix) return null;
+    value = value * radix + digit;
+  }
+  return { value, validationError };
 }
 
 /**
@@ -355,7 +403,7 @@ function endsInANumber(input: string): boolean {
   if (parts.length === 0) return false;
   const last = parts[parts.length - 1];
   if (last === undefined) return false;
-  if (last !== "" && /^[0-9]+$/.test(last)) return true;
+  if (isAllAsciiDigits(last)) return true;
   return parseIPv4Number(last) !== null;
 }
 
@@ -666,10 +714,10 @@ export function basicUrlParse(
   if (url === undefined) {
     url = newRecord();
     // Only on a fresh parse: a setter's input is not trimmed.
-    input = input.replace(LEADING_TRAILING_C0_OR_SPACE, "");
+    input = trimC0ControlOrSpace(input);
   }
   // Tabs and newlines are removed wherever they appear, in both cases.
-  input = input.replace(TAB_OR_NEWLINE, "");
+  input = removeTabsAndNewlines(input);
 
   let state: State = State.SchemeStart;
   switch (stateOverride) {
