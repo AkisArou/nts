@@ -555,7 +555,7 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
       parser.finish();
       if (response === null) {
         cleanupSocketListeners();
-        this.#failWithoutSocketError(new ConnResetException("socket hang up"));
+        this.#failWithoutSocketError(new ConnResetException("socket hang up"), true);
       } else {
         abortResponse();
       }
@@ -564,17 +564,18 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
     const onError = (error: unknown): void => {
       parserLease.release();
       cleanupSocketListeners();
-      this.#fail(error);
+      this.#fail(error, true);
     };
 
     const onClose = (): void => {
       cleanupSocketListeners();
       // The response parser is finished with the connection.
       parserLease.release();
-      if (!this.res && !this.aborted) {
+      if (!this.res) {
         // The connection went before any response arrived, which is the one
-        // case a client cannot recover from on its own.
-        this.#fail(new ConnResetException("socket hang up"));
+        // case a client cannot recover from on its own. `abort()` reports its
+        // own event, but does not suppress this first transport outcome.
+        this.#fail(new ConnResetException("socket hang up"), true);
       } else {
         abortResponse();
       }
@@ -809,8 +810,8 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
   }
 
   /** Report a protocol failure without emitting that request-owned error on the transport. */
-  #failWithoutSocketError(error: unknown): void {
-    if (this.aborted || this.#errorEmitted) return;
+  #failWithoutSocketError(error: unknown, allowAfterAbort = false): void {
+    if ((!allowAfterAbort && this.aborted) || this.#errorEmitted) return;
     this.#errorEmitted = true;
     this.emit("error", error);
     super.destroy();
