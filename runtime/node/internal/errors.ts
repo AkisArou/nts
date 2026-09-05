@@ -398,13 +398,25 @@ export class ERR_OUT_OF_RANGE extends NodeRangeError {
  * failed a range check is a number, a bigint, or something simple enough to
  * name.
  */
-export function inspectValue(value: unknown): string {
+function inspectString(value: string): string {
+  const encoded = JSON.stringify(value)
+    .slice(1, -1)
+    .replaceAll("\\u0000", "\\x00")
+    .replaceAll("'", "\\'");
+  return `'${encoded}'`;
+}
+
+function inspectPropertyName(name: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : inspectString(name);
+}
+
+function isStringKeyedObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function inspectValueWithin(value: unknown, ancestors: Set<object>): string {
   if (typeof value === "string") {
-    const encoded = JSON.stringify(value)
-      .slice(1, -1)
-      .replaceAll("\\u0000", "\\x00")
-      .replaceAll("'", "\\'");
-    return `'${encoded}'`;
+    return inspectString(value);
   }
   if (typeof value === "bigint") {
     return `${value}n`;
@@ -419,7 +431,14 @@ export function inspectValue(value: unknown): string {
     return "undefined";
   }
   if (Array.isArray(value)) {
-    return `[ ${value.map(inspectValue).join(", ")} ]`;
+    if (ancestors.has(value)) return "[Circular]";
+    ancestors.add(value);
+    const items = new Array<string>(value.length);
+    for (let index = 0; index < value.length; index++) {
+      items[index] = inspectValueWithin(value[index], ancestors);
+    }
+    ancestors.delete(value);
+    return `[ ${items.join(", ")} ]`;
   }
   if (typeof value === "function") {
     return "[Function]";
@@ -435,7 +454,27 @@ export function inspectValue(value: unknown): string {
   if (value instanceof Error) {
     return `${value.name}: ${value.message}`;
   }
+
+  if (isStringKeyedObject(value)) {
+    if (ancestors.has(value)) return "[Circular]";
+    ancestors.add(value);
+    const keys = Object.keys(value);
+    const entries = new Array<string>(keys.length);
+    for (let index = 0; index < keys.length; index++) {
+      const key = keys[index];
+      if (key === undefined) {
+        throw new Error(`inspected object is missing key ${index}`);
+      }
+      entries[index] = `${inspectPropertyName(key)}: ${inspectValueWithin(value[key], ancestors)}`;
+    }
+    ancestors.delete(value);
+    return entries.length === 0 ? "{}" : `{ ${entries.join(", ")} }`;
+  }
   return "[Object]";
+}
+
+export function inspectValue(value: unknown): string {
+  return inspectValueWithin(value, new Set<object>());
 }
 
 /** `The "ext" argument must be of type string. Received ...` for a value. */
