@@ -9,10 +9,26 @@
 // the copy and is not what anybody writes -- it is four lines of setup and a
 // `CoderResult` to interpret.
 //
-// So this reference pays an allocation per round that we do not, and the row
-// should be read with that in mind: a win here is partly the API and not only
-// the codec. The copy is kept rather than dropped because dropping it would
-// stop the reference from filling the buffer the case is about.
+// So this reference pays an allocation and a copy per round that we do not --
+// and the row still came back **13.59x against us**, 93.57 us to 6.89 us, which
+// is the opposite of the direction this comment first predicted.
+//
+// The allocation is real and it is nowhere near the story. `String.getBytes`
+// and `new String(bytes, UTF_8)` are HotSpot *intrinsics*: the JDK's UTF-8
+// coder is hand-vectorized, with an ASCII fast path that moves bytes a machine
+// word at a time. We run `runtime/node/internal/utf8.ts` compiled -- a code
+// point at a time through a state machine, which is what the TypeScript says.
+//
+// That makes the comparison fair and unflattering at once, which is the useful
+// combination: a Java programmer writes `getBytes` and gets the intrinsic, so
+// the reference is what a person writes, and the gap is the cost of us
+// implementing a codec the platform already has. Whether this lane should call
+// the platform's is a real question -- it would be the one place a `runtime/`
+// module was replaced wholesale rather than compiled -- and it is not answered
+// by pretending the row is close.
+//
+// The copy is kept rather than dropped because dropping it would stop the
+// reference from filling the buffer the case is about.
 //
 // The text covers every arm the decoder branches on -- ASCII, two-byte
 // Latin-1, three-byte CJK, and astral code points that are four bytes in UTF-8
