@@ -26,3 +26,24 @@ assert.throws(
     return true;
   },
 );
+
+assert.throws(
+  () => new EventEmitter().emit('error', 'Accepts a string'),
+  {
+    code: 'ERR_UNHANDLED_ERROR',
+    name: 'Error',
+    message: "Unhandled error. ('Accepts a string')",
+  },
+);
+
+const context = { message: 'Error!' };
+assert.throws(
+  () => new EventEmitter().emit('error', context),
+  (error) => {
+    assert.strictEqual(error.code, 'ERR_UNHANDLED_ERROR');
+    assert.strictEqual(error.name, 'Error');
+    assert.strictEqual(error.message, "Unhandled error. ({ message: 'Error!' })");
+    assert.strictEqual(error.context, context);
+    return true;
+  },
+);
