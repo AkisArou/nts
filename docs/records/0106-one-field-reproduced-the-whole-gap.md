@@ -1,9 +1,10 @@
 # 0106 — One field reproduced the whole gap
 
-> **Refuted.** The conversion this record identifies was removed upstream and
-> the row did not move: `generator` was 3.42x before and 3.42x after, verified
-> by `javap -c` showing `getfield yielded:D; dadd` with no `i2d`. The mechanism
-> is real and it is not the cause. See the section at the end.
+> **Refuted, then restored, and the middle correction was the wrong one.** The
+> conversion is the cause. It is the **counter's**, at the comparison -- which
+> is what this record's first version said -- not the accumulator's, which is
+> what I corrected it to. Widening `yielded` upstream moved nothing because the
+> counter swamps it. See the 2x2 at the end.
 
 
 `benches/cases/generator`, 3.41x hand-written Java. The cause is an
@@ -182,3 +183,44 @@ which machine instruction it becomes, and whether its destination is broken
 first, is C2's register allocation. **This lane cannot emit the fix even where
 the conversion is the cost**, which is why the IR fix mattered here and not
 there.
+
+## The 2x2 that should have come first
+
+Four corners of the reference, one variable each:
+
+| | `double yielded` | `int yielded` |
+| --- | ---: | ---: |
+| **`double i`** | **172.5 us** | 255.5 us |
+| **`int i`** | **588.7 us** | 589.6 us |
+| nts (JVM) | | **590.1 us** |
+
+**`int i` alone gives 588.7, within 0.3% of ours, whatever `yielded` is.**
+`int yielded` alone is worth 1.48x. So the counter's conversion swamps the
+accumulator's, and widening `yielded` upstream correctly moved nothing.
+
+### The error, which is not the one the refutation named
+
+`Ref6` changed `i` to `int` **and left `yielded` a double**. It reproduced our
+number, and I read that as "the mixed-width pair is the cause" and then went
+looking in the disassembly for where the pair converts. I found an `i2d` on the
+accumulator path, reported it, and corrected a right answer into a wrong one.
+
+Two variables moved in one experiment and I attributed the result to whichever
+one I found first in the assembly. The fix is the 2x2 above, which costs four
+runs instead of one and answers a question one run cannot.
+
+nts-69 built and reverted a change on that wrong correction. Their revert was
+right on its own evidence -- widening `yielded` moves nothing -- and their
+conclusion that the conversion is not the cause was one step too far, for the
+same reason my correction was: neither of us had separated the two fields.
+
+Their *first* control measured `held0` wide against narrow and found 30% on the
+C lane. I told them that was the wrong field. It was the right one.
+
+### What stands
+
+The mechanism, unchanged: `cvtsi2sd` merges into its destination register, so a
+conversion on a loop-carried chain serialises it. The asymmetry, unchanged:
+clang emits `xorps` before every one and C2 does not, which is 30% on that lane
+against 3.4x on this one. And this lane cannot emit the fix -- `i2d` is one
+bytecode and the register is C2's.
