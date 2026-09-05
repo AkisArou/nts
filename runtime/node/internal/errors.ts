@@ -827,6 +827,20 @@ export class AbortError extends Error {
   }
 }
 
+/** A peer closed an established connection before its message completed. */
+export class ConnResetException extends Error {
+  readonly code = "ECONNRESET";
+
+  override get ["constructor"](): unknown {
+    return Error;
+  }
+
+  constructor(message: string) {
+    super(message);
+    this.name = "Error";
+  }
+}
+
 /**
  * A class the program is given an instance of but may not construct.
  *

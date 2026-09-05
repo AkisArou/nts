@@ -8,6 +8,7 @@
 // removed when the stream ends, which is what `eos` is for here.
 
 import { AbortError, ERR_INVALID_ARG_TYPE } from "../../internal/errors.ts";
+import { addTrackedAbortListener } from "../../events/src/main.ts";
 import { isNodeStream, isWebStream, kControllerErrorFunction } from "./utils.ts";
 import { eos } from "./end-of-stream.ts";
 import type { AbortSignalLike } from "./end-of-stream.ts";
@@ -86,10 +87,10 @@ export function addAbortSignalNoValidate<T>(signal: AbortSignalLike, stream: T):
   if (signal.aborted) {
     onAbort();
   } else {
-    signal.addEventListener("abort", onAbort, { once: true });
+    const removeAbortListener = addTrackedAbortListener(signal, onAbort);
     // Dropped when the stream is finished, so a long-lived signal does not
     // accumulate a listener per stream it ever cancelled.
-    eos(stream, () => signal.removeEventListener("abort", onAbort));
+    eos(stream, removeAbortListener);
   }
 
   return stream;

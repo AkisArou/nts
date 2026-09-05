@@ -27,7 +27,11 @@ import {
   validateObject,
   validateOneOf,
 } from "../../internal/validators.ts";
-import { ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
+import {
+  ConnResetException,
+  ERR_INVALID_ARG_VALUE,
+  ERR_OUT_OF_RANGE,
+} from "../../internal/errors.ts";
 
 export interface HttpServerOptions extends NetServerOptions {
   /** How long a connection may sit idle between requests. */
@@ -268,16 +272,6 @@ export class Server extends NetServer {
       this.#lenientTransferEncoding,
     );
 
-    socket.once("close", () => {
-      this.#connections.delete(socket);
-      this.#idle.delete(socket);
-      this.#deadlines.delete(socket);
-      // The parser belongs to the connection, not to a message: on a
-      // keep-alive socket it survives between requests, so the connection
-      // ending is the only moment it is finished.
-      parser.free();
-    });
-
     let incoming: IncomingMessage | null = null;
     let response: ServerResponse | null = null;
     let activeResponse: ServerResponse | null = null;
@@ -285,6 +279,26 @@ export class Server extends NetServer {
     let queuedResponseIndex = 0;
     /** Bytes that arrived after a message ended, belonging to the next one. */
     let pending: Buffer | null = null;
+
+    socket.once("close", () => {
+      this.#connections.delete(socket);
+      this.#idle.delete(socket);
+      this.#deadlines.delete(socket);
+
+      const reset = new ConnResetException("aborted");
+      if (incoming !== null && !incoming.destroyed) incoming._destroyFromSocket(reset);
+      for (let index = queuedResponseIndex; index < queuedResponses.length; index++) {
+        const queued = queuedResponses[index];
+        if (queued !== undefined && !queued.destroyed) queued.destroy(reset);
+      }
+      queuedResponses = [];
+      queuedResponseIndex = 0;
+
+      // The parser belongs to the connection, not to a message: on a
+      // keep-alive socket it survives between requests, so the connection
+      // ending is the only moment it is finished.
+      parser.free();
+    });
 
     const advanceResponseQueue = (): void => {
       const next = queuedResponses[queuedResponseIndex];
@@ -388,6 +402,7 @@ export class Server extends NetServer {
 
       const finished = response;
       finished.once("finish", () => {
+        message._detachAbortSignal();
         if (activeResponse !== finished) {
           throw new Error("HTTP response queue completed out of order");
         }

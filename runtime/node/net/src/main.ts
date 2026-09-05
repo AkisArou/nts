@@ -14,11 +14,7 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import { Duplex } from "../../stream/src/duplex.ts";
-import {
-  addTrackedAbortListener,
-  EventEmitter,
-  removeTrackedAbortListener,
-} from "../../events/src/main.ts";
+import { addTrackedAbortListener, EventEmitter } from "../../events/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
   dnsException,
@@ -536,8 +532,7 @@ export class Socket extends Duplex {
   #triggerAsyncId = 0;
   #contextFrame: AsyncContextFrame | undefined = undefined;
   #provider: SocketProvider = "TCPWRAP";
-  #abortSignal: AbortSignalLike | undefined;
-  #abortListener: (() => void) | undefined;
+  #abortCleanup: (() => void) | undefined;
 
   constructor(options: SocketOptions = {}) {
     super({
@@ -1496,17 +1491,12 @@ export class Socket extends Duplex {
       nextTick(onAbort);
       return;
     }
-    this.#abortSignal = signal;
-    this.#abortListener = onAbort;
-    addTrackedAbortListener(signal, onAbort);
+    this.#abortCleanup = addTrackedAbortListener(signal, onAbort);
   }
 
   #clearAbort(): void {
-    if (this.#abortSignal !== undefined && this.#abortListener !== undefined) {
-      removeTrackedAbortListener(this.#abortSignal, this.#abortListener);
-    }
-    this.#abortSignal = undefined;
-    this.#abortListener = undefined;
+    this.#abortCleanup?.();
+    this.#abortCleanup = undefined;
   }
 
   static #onReadableEnd(this: Socket): void {
@@ -1611,8 +1601,7 @@ export class Server extends EventEmitter {
   #triggerAsyncId = 0;
   #contextFrame: AsyncContextFrame | undefined;
   #keepProcessAlive = true;
-  #abortSignal: AbortSignalLike | undefined;
-  #abortListener: (() => void) | undefined;
+  #abortCleanup: (() => void) | undefined;
 
   constructor(
     options?: ServerOptions | ((socket: Socket) => void),
@@ -1843,17 +1832,12 @@ export class Server extends EventEmitter {
       nextTick(onAbort);
       return;
     }
-    this.#abortSignal = signal;
-    this.#abortListener = onAbort;
-    addTrackedAbortListener(signal, onAbort);
+    this.#abortCleanup = addTrackedAbortListener(signal, onAbort);
   }
 
   #clearAbort(): void {
-    if (this.#abortSignal !== undefined && this.#abortListener !== undefined) {
-      removeTrackedAbortListener(this.#abortSignal, this.#abortListener);
-    }
-    this.#abortSignal = undefined;
-    this.#abortListener = undefined;
+    this.#abortCleanup?.();
+    this.#abortCleanup = undefined;
   }
 
   ref(): this {

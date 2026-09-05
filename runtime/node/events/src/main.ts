@@ -1110,18 +1110,23 @@ function untrackEventTargetListener(
 export function addTrackedAbortListener(
   signal: AbortSignalLike,
   listener: () => void,
-): void {
-  signal.addEventListener("abort", listener, { once: true });
-  trackEventTargetListener(signal, "abort", listener);
-}
+): () => void {
+  let active = true;
+  const onAbort = (): void => {
+    if (!active) return;
+    active = false;
+    untrackEventTargetListener(signal, "abort", listener);
+    listener();
+  };
 
-/** Remove a listener installed by `addTrackedAbortListener`. */
-export function removeTrackedAbortListener(
-  signal: AbortSignalLike,
-  listener: () => void,
-): void {
-  signal.removeEventListener("abort", listener);
-  untrackEventTargetListener(signal, "abort", listener);
+  signal.addEventListener("abort", onAbort, { once: true });
+  trackEventTargetListener(signal, "abort", listener);
+  return (): void => {
+    if (!active) return;
+    active = false;
+    signal.removeEventListener("abort", onAbort);
+    untrackEventTargetListener(signal, "abort", listener);
+  };
 }
 
 function addEventSourceListener(

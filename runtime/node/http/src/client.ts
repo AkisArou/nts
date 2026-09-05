@@ -16,8 +16,10 @@ import { Buffer } from "../../buffer/src/main.ts";
 import { Socket } from "../../net/src/main.ts";
 import type { LookupFunction } from "../../net/src/main.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
+import { addAbortSignal } from "../../stream/src/add-abort-signal.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
+  ConnResetException,
   ERR_INVALID_ARG_VALUE,
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_HTTP_TOKEN,
@@ -117,10 +119,6 @@ function applyRequestHeaderArray(request: OutgoingMessage, headers: RequestHeade
     }
     request.appendHeader(name, value);
   }
-}
-
-function connectionResetError(message: string): Error & { code: string } {
-  return Object.assign(new Error(message), { code: "ECONNRESET" });
 }
 
 export class ClientRequest extends OutgoingMessage {
@@ -249,8 +247,9 @@ export class ClientRequest extends OutgoingMessage {
       family: opts.family,
       hints: opts.hints,
       path: opts.socketPath,
-      signal: opts.signal,
     };
+    if (opts.signal !== undefined) addAbortSignal(opts.signal, this);
+    if (this.destroyed) return;
     if (this.agent) {
       this.agent.addRequest(this, connectionOptions);
     } else {
@@ -293,14 +292,42 @@ export class ClientRequest extends OutgoingMessage {
 
   /** Given a connection by the agent, or made one. Everything starts here. */
   onSocket(socket: Socket | null, error?: unknown): void {
-    if (this.destroyed) {
-      socket?.destroy();
+    let onEarlyError: ((error: unknown) => void) | undefined;
+    if (socket !== null && error === undefined) {
+      onEarlyError = (socketError: unknown): void => this.#fail(socketError, true);
+      socket.on("error", onEarlyError);
+    }
+    nextTick(() => this.#activateSocket(socket, error, onEarlyError));
+  }
+
+  #activateSocket(
+    socket: Socket | null,
+    error: unknown,
+    onEarlyError: ((error: unknown) => void) | undefined,
+  ): void {
+    if (this.destroyed || error !== undefined || socket === null) {
+      if (error !== undefined) this.#fail(error, true);
+      else if (socket === null && !this.destroyed) {
+        this.#fail(new Error("Agent did not provide a socket"));
+      }
+      if (socket !== null) {
+        if (error === undefined && this.agent !== null && !socket.destroyed) {
+          if (onEarlyError !== undefined) socket.removeListener("error", onEarlyError);
+          this.agent.release(
+            this.agent.getName({ host: this.host, port: this.#port }),
+            socket,
+            true,
+          );
+        } else {
+          if (onEarlyError !== undefined) {
+            socket.once("close", () => socket.removeListener("error", onEarlyError));
+          }
+          if (!socket.destroyed) socket.destroy(error);
+        }
+      }
       return;
     }
-    if (error !== undefined || socket === null) {
-      this.#fail(error ?? new Error("Agent did not provide a socket"));
-      return;
-    }
+    if (onEarlyError !== undefined) socket.removeListener("error", onEarlyError);
 
     const parser = new HTTPParser();
     parser.initialize(
@@ -317,7 +344,7 @@ export class ClientRequest extends OutgoingMessage {
 
     const abortResponse = (): void => {
       if (response === null || response.complete || response.destroyed) return;
-      const error = connectionResetError("aborted");
+      const error = new ConnResetException("aborted");
       response._destroyFromSocket(error);
     };
 
@@ -358,7 +385,7 @@ export class ClientRequest extends OutgoingMessage {
       if (!this.res && !this.aborted) {
         // The connection went before any response arrived, which is the one
         // case a client cannot recover from on its own.
-        this.#fail(connectionResetError("socket hang up"));
+        this.#fail(new ConnResetException("socket hang up"));
       } else {
         abortResponse();
       }
@@ -410,6 +437,7 @@ export class ClientRequest extends OutgoingMessage {
       response = message;
       this.res = message;
       message.once("end", () => {
+        message._detachAbortSignal();
         // Registered before the response is exposed, so this schedules the
         // pool transition before next-tick work queued by user `end`
         // listeners. The transition itself is still deferred, which means
@@ -503,8 +531,8 @@ export class ClientRequest extends OutgoingMessage {
     socket.destroy();
   }
 
-  #fail(error: unknown): void {
-    if (this.aborted || this.#errorEmitted) return;
+  #fail(error: unknown, allowAfterAbort = false): void {
+    if ((!allowAfterAbort && this.aborted) || this.#errorEmitted) return;
     this.#errorEmitted = true;
     this.emit("error", error);
     super.destroy(error);
@@ -514,14 +542,18 @@ export class ClientRequest extends OutgoingMessage {
   abort(): void {
     if (this.aborted) return;
     this.aborted = true;
-    this.emit("abort");
+    nextTick(() => this.emit("abort"));
     this.destroy();
   }
 
   override destroy(error?: unknown): this {
     if (this.destroyed) return this;
+    // Once the request is abandoned, remaining response bytes belong to
+    // nobody. Drain them without delivering more `data` to user code while
+    // the socket teardown completes.
+    this.res?._dump();
     if (this.socket === null && !this.aborted && !this.#errorEmitted) {
-      const failure = error ?? connectionResetError("socket hang up");
+      const failure = error ?? new ConnResetException("socket hang up");
       nextTick(() => {
         if (this.#errorEmitted || this.aborted) return;
         this.#errorEmitted = true;

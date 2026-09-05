@@ -13,6 +13,21 @@
 // here because they are the rules, not an implementation.
 
 import { Readable } from "../../stream/src/main.ts";
+import type { AbortSignalLike } from "../../internal/abort.ts";
+
+/** The public part of the host AbortSignal exposed by IncomingMessage. */
+export interface IncomingAbortSignal extends AbortSignalLike {
+  onabort: ((event: unknown) => void) | null;
+}
+
+interface IncomingAbortController {
+  readonly signal: IncomingAbortSignal;
+  abort(reason?: unknown): void;
+}
+
+declare const AbortController: {
+  new (): IncomingAbortController;
+};
 
 /**
  * Fields that keep only the first value, silently.
@@ -43,9 +58,12 @@ const firstWins = new Set([
 ]);
 
 export interface IncomingSocket {
+  readonly destroyed: boolean;
   remoteAddress?: string | undefined;
   remotePort?: number | undefined;
   destroy(error?: unknown, callback?: (error?: unknown) => void): unknown;
+  once(event: "close", listener: () => void): unknown;
+  removeListener(event: "close", listener: () => void): unknown;
   setTimeout?(msecs: number, callback?: () => void): unknown;
 }
 
@@ -69,7 +87,7 @@ export class IncomingMessage extends Readable {
   statusCode: number | null = null;
   statusMessage: string | null = null;
 
-  socket: IncomingSocket | null;
+  socket: IncomingSocket | null | undefined;
   complete = false;
 
   /**
@@ -89,19 +107,88 @@ export class IncomingMessage extends Readable {
   #keepAlive = true;
   #inTrailers = false;
   #destroySocketOnDestroy = true;
+  #abortController: IncomingAbortController | null = null;
+  #abortSignalSocket: IncomingSocket | null = null;
+  #abortSignalListener: (() => void) | null = null;
+  #abortSignalDetached = false;
 
-  constructor(socket?: IncomingSocket) {
+  constructor(socket?: IncomingSocket | null) {
     // The stream's own defaults, which is what node uses here. `autoDestroy`
     // in particular: a message that has been read to the end is finished, and
     // destroying it is what emits `close`. Programs listen for that to learn
     // that a request is over -- including that a client hung up mid-request --
     // so suppressing it removes the event most servers rely on.
     super();
-    this.socket = socket ?? null;
+    this.socket = socket;
   }
 
-  get connection(): IncomingSocket | null {
+  get connection(): IncomingSocket | null | undefined {
     return this.socket;
+  }
+
+  set connection(socket: IncomingSocket | null | undefined) {
+    this.socket = socket;
+  }
+
+  /**
+   * Cancellation for the lifetime of this individual HTTP message.
+   *
+   * The host controller is allocated only when observed. A normally completed
+   * message detaches before its keep-alive socket can be reused; a premature
+   * socket close aborts exactly this message's stable signal.
+   */
+  get signal(): IncomingAbortSignal {
+    if (this.#abortController === null) {
+      const controller = new AbortController();
+      this.#abortController = controller;
+      if (this.destroyed && (!this.readableEnded || !this.complete)) {
+        controller.abort();
+      } else {
+        this.#attachAbortSignal();
+      }
+    }
+    return this.#abortController.signal;
+  }
+
+  #attachAbortSignal(): void {
+    const controller = this.#abortController;
+    if (
+      controller === null ||
+      controller.signal.aborted ||
+      this.#abortSignalDetached ||
+      this.#abortSignalListener !== null
+    ) {
+      return;
+    }
+
+    const socket = this.socket;
+    if (socket == null) return;
+    if (socket.destroyed) {
+      this.#abortSignal();
+      return;
+    }
+
+    const onClose = (): void => this.#abortSignal();
+    this.#abortSignalSocket = socket;
+    this.#abortSignalListener = onClose;
+    socket.once("close", onClose);
+  }
+
+  /** Stop observing the transport after this message completes normally. */
+  _detachAbortSignal(): void {
+    const socket = this.#abortSignalSocket;
+    const listener = this.#abortSignalListener;
+    this.#abortSignalDetached = true;
+    this.#abortSignalSocket = null;
+    this.#abortSignalListener = null;
+    if (socket !== null && listener !== null) {
+      socket.removeListener("close", listener);
+    }
+  }
+
+  #abortSignal(): void {
+    this._detachAbortSignal();
+    this.#abortController?.abort();
   }
 
   /**
@@ -229,6 +316,7 @@ export class IncomingMessage extends Readable {
       // one.
       this.aborted = true;
       this.emit("aborted");
+      this.#abortSignal();
       if (this.#destroySocketOnDestroy) this.socket?.destroy(error);
     }
     // Keep IncomingMessage's compatibility rule: unlike a generic Readable,

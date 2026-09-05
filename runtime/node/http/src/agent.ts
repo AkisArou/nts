@@ -27,6 +27,7 @@ export interface AgentConnectionOptions extends ConnectOptions {
 }
 
 interface SocketReceiver {
+  readonly destroyed: boolean;
   reusedSocket: boolean;
   timeout?: number | undefined;
   onSocket(socket: Socket | null, error?: unknown): void;
@@ -212,7 +213,7 @@ export class Agent extends EventEmitter {
         if (socket instanceof Socket) socket.asyncReset();
         this.reuseSocket(socket, request);
         (this.sockets[name] ??= []).push(socket);
-        nextTick(() => request.onSocket(socket));
+        request.onSocket(socket);
         return;
       }
     }
@@ -293,7 +294,7 @@ export class Agent extends EventEmitter {
 
     // Somebody is waiting: hand it straight on rather than putting it in the
     // free list and taking it out again.
-    const waiting = this.requests[name];
+    const waiting = this.#pruneDestroyedRequests(name);
     if (waiting && waiting.length > 0 && reusable && !socket.destroyed) {
       const next = waiting.shift();
       if (next === undefined) return;
@@ -303,7 +304,7 @@ export class Agent extends EventEmitter {
           if (socket instanceof Socket) socket.asyncReset();
           (this.sockets[name] ??= []).push(socket);
           this.reuseSocket(socket, next.request);
-          nextTick(() => next.request.onSocket(socket));
+          next.request.onSocket(socket);
         });
       } finally {
         next.resource.emitDestroy();
@@ -392,12 +393,12 @@ export class Agent extends EventEmitter {
     socket.on("timeout", listeners.timeout);
     socket.once("agentRemove", listeners.remove);
 
+    request.onSocket(socket);
+    // Request observers must see the connection as agent-owned while their
+    // close/error handling runs. Register the accounting listener after the
+    // request's own next-tick activation has installed its socket listeners,
+    // so it runs later in that same close emission.
     nextTick(() => {
-      request.onSocket(socket);
-      // Request observers must see the connection as agent-owned while their
-      // close/error handling runs. Register the accounting listener after the
-      // request installed its socket listeners so it runs later in that same
-      // close emission.
       if (this.#owns(socket)) socket.once("close", listeners.close);
     });
   }
@@ -459,14 +460,31 @@ export class Agent extends EventEmitter {
 
   #hasWaitingOriginOtherThan(name: string): boolean {
     for (const key of Object.keys(this.requests)) {
-      if (key !== name && (this.requests[key]?.length ?? 0) > 0) return true;
+      if (key !== name && this.#pruneDestroyedRequests(key) !== undefined) return true;
     }
     return false;
   }
 
+  /** Drop requests cancelled while they waited for an Agent socket. */
+  #pruneDestroyedRequests(name: string): Pending[] | undefined {
+    const requests = this.requests[name];
+    if (requests === undefined) return undefined;
+    while (requests.length > 0) {
+      const first = requests[0];
+      if (first === undefined) {
+        throw new Error("non-empty HTTP agent queue had no first request");
+      }
+      if (!first.request.destroyed) return requests;
+      requests.shift();
+      first.resource.emitDestroy();
+    }
+    delete this.requests[name];
+    return undefined;
+  }
+
   #takePending(preferredName: string): { name: string; pending: Pending } | undefined {
-    const preferred = this.requests[preferredName];
-    if (preferred !== undefined && preferred.length > 0) {
+    const preferred = this.#pruneDestroyedRequests(preferredName);
+    if (preferred !== undefined) {
       const preferredPending = preferred.shift();
       if (preferredPending === undefined) {
         throw new Error("non-empty HTTP agent queue had no first request");
@@ -477,8 +495,8 @@ export class Agent extends EventEmitter {
 
     for (const name of Object.keys(this.requests)) {
       if ((this.sockets[name]?.length ?? 0) >= this.maxSockets) continue;
-      const requests = this.requests[name];
-      if (requests === undefined || requests.length === 0) continue;
+      const requests = this.#pruneDestroyedRequests(name);
+      if (requests === undefined) continue;
       const pending = requests.shift();
       if (pending === undefined) {
         throw new Error("non-empty HTTP agent queue had no first request");
