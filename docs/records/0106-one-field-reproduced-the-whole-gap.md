@@ -1,5 +1,11 @@
 # 0106 — One field reproduced the whole gap
 
+> **Refuted.** The conversion this record identifies was removed upstream and
+> the row did not move: `generator` was 3.42x before and 3.42x after, verified
+> by `javap -c` showing `getfield yielded:D; dadd` with no `i2d`. The mechanism
+> is real and it is not the cause. See the section at the end.
+
+
 `benches/cases/generator`, 3.41x hand-written Java. The cause is an
 `int` → `double` conversion per element, and the proof is that changing one
 field in the reference reproduces our time to within 0.2%:
@@ -131,3 +137,48 @@ the false dependency -- but the register is C2's to allocate, not ours, and
 emitting `i2d` differently does not change that the value has the wrong type.
 Widening `limit` once outside the loop is wrong: `limit` is a `double` because
 the program's arithmetic produced one.
+
+## Refuted, and the trap is worse than a wrong hypothesis
+
+nts-69 built the rule this record asked for. The conversion left the emitted
+bytecode -- `getfield upTo$frame.yielded:D` straight into `dadd`, no `i2d`,
+confirmed by reading the class rather than by trusting the change. Their lane
+was 1.06x before and after, as predicted. **This lane was 3.42x before and
+3.42x after**, which was not. The change is reverted: it moved no number on
+either backend and widened a frame field from four bytes to eight.
+
+So `i2d` on the accumulator's loop-carried chain is not the 3.4x.
+
+### Why this is worse than being wrong
+
+Everything about the diagnosis looked confirmed. A mechanism (`vcvtsi2sd`
+merging into its destination), an instruction visible in the disassembly, a
+dependency chain that explains identical branch counts with triple the cycles,
+and **a reference edited by one field that reproduced our time to 0.2%**.
+
+That last one is the trap: *a reference that reproduces a number is not thereby
+a reference that explains it.* `double i` → `int i` in the reference produced
+588.8us against our 590.2us, and it did so by some route that removing the
+conversion does not disturb. Two programs can agree on a number for different
+reasons, and the closer the agreement the more convincing the coincidence.
+
+### What is left to separate
+
+- The reference's `int` counter is a **local**; ours is a **field on a heap
+  frame**. If C2 scalar-replaces one and not the other, `int` versus `double`
+  may be a proxy for whether the frame survives at all.
+- `held0` is still an `i32` and still converted **at the comparison**. Only
+  `yielded` was widened. That conversion is worth 30% on the C lane, so the
+  counter is the remaining candidate and the one the first message named.
+- The `int i` result may be confounded by something the reference changes
+  alongside the type.
+
+### What stands
+
+The backend asymmetry is independent of the cause and remains measured: clang
+emits `xorps` before every `cvtsi2sd` and C2 does not, so the same conversion
+is 6% on one lane and expensive on the other. And `i2d` is a single bytecode --
+which machine instruction it becomes, and whether its destination is broken
+first, is C2's register allocation. **This lane cannot emit the fix even where
+the conversion is the cost**, which is why the IR fix mattered here and not
+there.
