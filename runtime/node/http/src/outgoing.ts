@@ -104,11 +104,15 @@ const STRICT_HEADER_CHAR = /[^\t\x20-\x7e\x80-\xff]/;
 const LENIENT_HEADER_CHAR = /[\x00\x0a\x0d]|[^\x00-\xff]/;
 const RESPONSE_VERSION = "HTTP/1.1";
 
-export type OutgoingHeaderValue = string | number | string[];
+export type OutgoingHeaderValue = string | number | readonly string[];
 export type OutgoingHeaders = Record<string, OutgoingHeaderValue>;
 export type OutgoingHeaderPair = readonly [string, OutgoingHeaderValue];
 export type OutgoingHeaderArray = readonly (OutgoingHeaderValue | OutgoingHeaderPair)[];
 export type ResponseHeaders = OutgoingHeaders | OutgoingHeaderArray;
+export interface OutgoingHeaderCollection extends Iterable<readonly [string, OutgoingHeaderValue]> {
+  keys(): Iterable<string>;
+  get(name: string): OutgoingHeaderValue | null | undefined;
+}
 export type InformationHeaderValue = OutgoingHeaderValue | null | undefined;
 export type InformationHeaderPair = readonly [string, InformationHeaderValue];
 export type InformationHeaders =
@@ -128,6 +132,18 @@ function isHeaderPair(value: unknown): value is readonly [unknown, unknown] {
 
 function responseHeadersAreArray(headers: ResponseHeaders): headers is OutgoingHeaderArray {
   return Array.isArray(headers);
+}
+
+function isOutgoingHeaderCollection(value: unknown): value is OutgoingHeaderCollection {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  return (
+    "keys" in value &&
+    typeof value.keys === "function" &&
+    "get" in value &&
+    typeof value.get === "function" &&
+    Symbol.iterator in value &&
+    typeof value[Symbol.iterator] === "function"
+  );
 }
 
 function validateOutgoingHeaderValue(
@@ -451,6 +467,30 @@ export class OutgoingMessage extends EventEmitter {
     validateHeaderName(name);
     validateHeaderValue(name, value, this.#lenientHeaderValues);
     this.headersMap.set(name.toLowerCase(), [name, value]);
+    return this;
+  }
+
+  /** Replace fields from a WHATWG Headers or Map collection. */
+  setHeaders(headers: OutgoingHeaderCollection): this {
+    if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("set");
+    if (!isOutgoingHeaderCollection(headers)) {
+      throw new ERR_INVALID_ARG_TYPE("headers", ["Headers", "Map"], headers);
+    }
+
+    let cookies: string[] | null = null;
+    for (const [name, value] of headers) {
+      if (name === "set-cookie") {
+        if (cookies === null) cookies = [];
+        if (Array.isArray(value)) {
+          for (const cookie of value) cookies.push(cookie);
+        } else {
+          cookies.push(String(value));
+        }
+      } else {
+        this.setHeader(name, value);
+      }
+    }
+    if (cookies !== null) this.setHeader("set-cookie", cookies);
     return this;
   }
 
