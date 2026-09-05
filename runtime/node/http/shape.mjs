@@ -56,6 +56,65 @@ function nullPrototypeResult(Class, name) {
   });
 }
 
+const requestOptionNames = [
+  "href",
+  "host",
+  "hostname",
+  "port",
+  "path",
+  "protocol",
+  "method",
+  "headers",
+  "auth",
+  "agent",
+  "defaultPort",
+  "timeout",
+  "setHost",
+  "setDefaultHeaders",
+  "uniqueHeaders",
+  "joinDuplicateHeaders",
+  "httpValidation",
+  "insecureHTTPParser",
+  "createConnection",
+  "lookup",
+  "localAddress",
+  "localPort",
+  "family",
+  "hints",
+  "socketPath",
+  "signal",
+  "maxHeaderSize",
+];
+
+function requestOptions(options) {
+  if (options === null || typeof options !== "object") return options;
+  const shaped = Object.assign(Object.create(null), options);
+  if (options instanceof URL) shaped.href = options.href;
+  const derivesLocationFromHref = typeof shaped.href === "string";
+  for (const name of requestOptionNames) {
+    if (name in shaped) continue;
+    if (
+      derivesLocationFromHref &&
+      (name === "host" || name === "hostname" || name === "port" || name === "path")
+    ) {
+      continue;
+    }
+    shaped[name] = undefined;
+  }
+  return shaped;
+}
+
+function requestConstructor(Class) {
+  const shaped = function (options, callback) {
+    const target = new.target === shaped ? Class : new.target;
+    return Reflect.construct(Class, [requestOptions(options), callback], target);
+  };
+  Object.setPrototypeOf(shaped, Class);
+  shaped.prototype = Class.prototype;
+  Object.defineProperty(shaped, "name", { value: "ClientRequest" });
+  return shaped;
+}
+
 export function shape(exports) {
   nullPrototypeProperty(exports.IncomingMessage, "headersDistinct", "rawHeaders");
   nullPrototypeProperty(exports.IncomingMessage, "trailersDistinct", "rawTrailers");
@@ -63,7 +122,12 @@ export function shape(exports) {
   const http = { ...exports };
   delete http.default;
   http.Agent = callableConstructor(exports.Agent, "Agent");
+  http.ClientRequest = requestConstructor(exports.ClientRequest);
   http.Server = callableConstructor(exports.Server, "Server");
+  http.request = (options, optionsOrCallback, callback) =>
+    exports.request(requestOptions(options), requestOptions(optionsOrCallback), callback);
+  http.get = (options, optionsOrCallback, callback) =>
+    exports.get(requestOptions(options), requestOptions(optionsOrCallback), callback);
   return http;
 }
 
