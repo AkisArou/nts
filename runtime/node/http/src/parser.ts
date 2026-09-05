@@ -281,6 +281,8 @@ export class HTTPParser {
   #contentLength = -1;
   #remaining = 0;
   #chunkRemaining = 0;
+  #connectionUpgrade = false;
+  #sawUpgrade = false;
   #upgrade = false;
   #shouldKeepAlive = true;
   #skipBody = false;
@@ -434,6 +436,8 @@ export class HTTPParser {
     this.#contentLength = -1;
     this.#remaining = 0;
     this.#chunkRemaining = 0;
+    this.#connectionUpgrade = false;
+    this.#sawUpgrade = false;
     this.#upgrade = false;
     this.#shouldKeepAlive = true;
     this.#skipBody = false;
@@ -536,7 +540,7 @@ export class HTTPParser {
       return 0;
     }
     if (this.#state === State.StartLine && this.#partial === "") return 0;
-    if (this.#state === State.Complete) return 0;
+    if (this.#state === State.Complete || this.#state === State.Upgraded) return 0;
     return this.#fail("HPE_INVALID_EOF_STATE", "Invalid EOF state");
   }
 
@@ -722,11 +726,13 @@ export class HTTPParser {
         const tokens = value.split(",").map((t) => lower(t.trim()));
         if (tokens.includes("close")) this.#shouldKeepAlive = false;
         else if (tokens.includes("keep-alive")) this.#shouldKeepAlive = true;
-        if (tokens.includes("upgrade")) this.#upgrade = true;
+        if (tokens.includes("upgrade")) this.#connectionUpgrade = true;
         break;
       }
       case "upgrade":
-        // Only meaningful with `Connection: upgrade`, which may come after.
+        // Only meaningful together with `Connection: upgrade`, which may
+        // appear before or after this field.
+        this.#sawUpgrade = true;
         break;
       default:
         break;
@@ -764,6 +770,14 @@ export class HTTPParser {
       }
     }
 
+    // `Upgrade` is a two-field negotiation, not a property of either header
+    // in isolation. CONNECT is the one exception: its successful response
+    // turns the same connection into a tunnel without Upgrade fields.
+    this.#upgrade =
+      this.#type === REQUEST
+        ? methods[this.#method] === "CONNECT" || (this.#connectionUpgrade && this.#sawUpgrade)
+        : this.#statusCode === 101 && this.#connectionUpgrade && this.#sawUpgrade;
+
     const info: HeadersComplete =
       this.#type === RESPONSE
         ? {
@@ -795,9 +809,14 @@ export class HTTPParser {
     // The callback may say "no body" -- that is how a client tells the parser
     // this is the response to a HEAD.
     const answer = this.#callHeadersComplete(info);
-    const skip = this.#skipBody || answer === 1 || answer === 2;
+    const skip = this.#skipBody || answer === 1;
 
-    if (this.#upgrade) {
+    // The protocol owner makes the final decision. A server may decline an
+    // advertised upgrade through `shouldUpgradeCallback`; a client promotes
+    // every response to CONNECT even though that response has no Upgrade
+    // headers. Both decisions are expressed by the native parser's return-2
+    // convention.
+    if (answer === 2) {
       this.#state = State.Upgraded;
       this.#callMessageComplete();
       return 0;

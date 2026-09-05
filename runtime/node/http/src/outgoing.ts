@@ -193,10 +193,7 @@ export class OutgoingMessage extends EventEmitter {
     const previous = this.#socket;
     if (previous === value) return;
     if (previous !== null) {
-      if (typeof previous.removeListener === "function") {
-        previous.removeListener("drain", this.#onSocketDrain);
-        previous.removeListener("close", this.#onSocketClose);
-      }
+      this.#removeSocketLifecycle(previous);
       for (let index = 0; index < this.#corked; index++) previous.uncork?.();
     }
 
@@ -217,6 +214,25 @@ export class OutgoingMessage extends EventEmitter {
         }
       }
     }
+  }
+
+  #removeSocketLifecycle(socket: OutgoingSocket): void {
+    if (typeof socket.removeListener === "function") {
+      socket.removeListener("drain", this.#onSocketDrain);
+      socket.removeListener("close", this.#onSocketClose);
+    }
+  }
+
+  /**
+   * Release HTTP's transport listeners while retaining the public socket
+   * reference. Upgrade consumers receive that same socket, but from this
+   * point its data, errors, and backpressure belong to the new protocol.
+   */
+  protected _handoffSocket(socket: OutgoingSocket): void {
+    if (this.#socket !== socket) return;
+    this.#removeSocketLifecycle(socket);
+    for (let index = 0; index < this.#corked; index++) socket.uncork?.();
+    this.#corked = 0;
   }
 
   get connection(): OutgoingSocket | null {
@@ -782,10 +798,7 @@ export class OutgoingMessage extends EventEmitter {
     this._closed = true;
     this.destroyed = true;
     const socket = this.#socket;
-    if (socket !== null && typeof socket.removeListener === "function") {
-      socket.removeListener("drain", this.#onSocketDrain);
-      socket.removeListener("close", this.#onSocketClose);
-    }
+    if (socket !== null) this.#removeSocketLifecycle(socket);
     if (!this.writableFinished && this.#endCallbacks.length > 0) {
       this.#completeFlush(this.#flushError ?? new ERR_STREAM_DESTROYED("end"));
     }

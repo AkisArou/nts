@@ -77,6 +77,10 @@ export type ResponseListener = (response: IncomingMessage) => void;
 const BODILESS = new Set(["GET", "HEAD", "DELETE", "OPTIONS", "TRACE", "CONNECT"]);
 const INVALID_PATH = /[^\u0021-\u00ff]/;
 
+function statusIsInformational(statusCode: number): boolean {
+  return statusCode >= 100 && statusCode < 200 && statusCode !== 101;
+}
+
 function requestHeadersAreArray(headers: RequestHeaders): headers is RequestHeaderArray {
   return Array.isArray(headers);
 }
@@ -347,6 +351,7 @@ export class ClientRequest extends OutgoingMessage {
     );
 
     let response: IncomingMessage | null = null;
+    let upgradeResponse: IncomingMessage | null = null;
 
     const abortResponse = (): void => {
       if (response === null || response.complete || response.destroyed) return;
@@ -369,6 +374,12 @@ export class ClientRequest extends OutgoingMessage {
             bytesParsed: error?.bytesParsed,
           }),
         );
+        return;
+      }
+      const acceptedUpgrade = upgradeResponse;
+      if (acceptedUpgrade !== null) {
+        upgradeResponse = null;
+        handoffUpgrade(acceptedUpgrade, chunk.subarray(consumed));
       }
     };
 
@@ -404,15 +415,41 @@ export class ClientRequest extends OutgoingMessage {
     };
 
     const cleanupSocketListeners = (): void => {
-      socket.removeListener("data", onData);
-      socket.removeListener("end", onEnd);
+      detachParserListeners();
       socket.removeListener("error", onError);
       socket.removeListener("close", onClose);
+    };
+
+    const detachParserListeners = (): void => {
+      socket.removeListener("data", onData);
+      socket.removeListener("end", onEnd);
       socket.removeListener("timeout", onResponseTimeout);
       if (this.timeoutCb !== null) {
         socket.removeListener("timeout", this.timeoutCb);
         this.timeoutCb = null;
       }
+    };
+
+    const handoffUpgrade = (message: IncomingMessage, head: Buffer): void => {
+      detachParserListeners();
+      parser.finish();
+      parser.free();
+
+      const eventName = this.method === "CONNECT" ? "connect" : "upgrade";
+      if (this.listenerCount(eventName) === 0) {
+        socket.destroy();
+        return;
+      }
+
+      // Agent and OutgoingMessage ownership are independent. Drop both before
+      // the callback, while keeping req.socket/res.socket equal to the raw
+      // transport as Node's public API promises.
+      socket.emit("agentRemove");
+      cleanupSocketListeners();
+      this._handoffSocket(socket);
+      socket.readableFlowing = null;
+      this.emit(eventName, message, socket, head);
+      this._emitClose();
     };
 
     parser.onHeadersComplete = (info) => {
@@ -429,10 +466,17 @@ export class ClientRequest extends OutgoingMessage {
       message._addHeaders(info.headers);
       message.setSource(() => socket.resume());
 
+      if (info.upgrade || this.method === "CONNECT") {
+        response = message;
+        this.res = message;
+        upgradeResponse = message;
+        return 2;
+      }
+
       // An informational response is not *the* response: the real one follows
       // on the same connection, so the parser has to carry on rather than
       // treat this as the message.
-      if (info.statusCode >= 100 && info.statusCode < 200) {
+      if (statusIsInformational(info.statusCode)) {
         if (info.statusCode === 100) this.emit("continue");
         this.emit("information", {
           httpVersion: message.httpVersion,
@@ -470,6 +514,10 @@ export class ClientRequest extends OutgoingMessage {
     };
 
     parser.onMessageComplete = () => {
+      if (upgradeResponse !== null) {
+        upgradeResponse.complete = true;
+        return;
+      }
       if (!response) {
         // Informational responses complete their own parser message, but not
         // this ClientRequest. Reset synchronously so a final response already

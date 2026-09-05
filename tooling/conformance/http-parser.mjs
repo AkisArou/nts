@@ -24,6 +24,11 @@
 // completed message, 19; one that never reports headers, 18. A suite that a
 // no-op implementation can satisfy is measuring the harness.
 
+// The parser participates in async_hooks even though its protocol work is
+// pure TypeScript. The ordinary module harness loads this binding entrypoint
+// before source modules; the standalone verifier must establish the same
+// node-side declare-function stand-ins itself.
+await import("../../runtime/node/http/bindings.node.mjs");
 
 const { HTTPParser, REQUEST, RESPONSE } = await import(
   new URL("../../runtime/node/http/src/parser.ts", import.meta.url).pathname,

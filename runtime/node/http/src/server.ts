@@ -23,6 +23,7 @@ import type { Timeout } from "../../timers/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
   validateBoolean,
+  validateFunction,
   validateInteger,
   validateObject,
   validateOneOf,
@@ -46,11 +47,17 @@ export interface HttpServerOptions extends NetServerOptions {
   httpValidation?: "strict" | "relaxed" | "insecure" | undefined;
   insecureHTTPParser?: boolean | undefined;
   requireHostHeader?: boolean | undefined;
+  shouldUpgradeCallback?: ShouldUpgradeCallback | undefined;
   IncomingMessage?: typeof IncomingMessage | undefined;
   ServerResponse?: typeof ServerResponse | undefined;
 }
 
 export type RequestListener = (request: IncomingMessage, response: ServerResponse) => void;
+export type ShouldUpgradeCallback = (this: Server, request: IncomingMessage) => boolean;
+
+function upgradeWhenObserved(this: Server, _request: IncomingMessage): boolean {
+  return this.listenerCount("upgrade") > 0;
+}
 
 interface ConnectionDeadline {
   socket: Socket;
@@ -110,6 +117,7 @@ export class Server extends NetServer {
   maxHeadersCount: number | null = null;
   maxRequestsPerSocket = 0;
   requireHostHeader: boolean;
+  shouldUpgradeCallback: ShouldUpgradeCallback;
 
   /**
    * Every accepted connection, so `close` can end the idle ones.
@@ -180,6 +188,9 @@ export class Server extends NetServer {
     if (opts.requireHostHeader !== undefined) {
       validateBoolean(opts.requireHostHeader, "options.requireHostHeader");
     }
+    if (opts.shouldUpgradeCallback !== undefined) {
+      validateFunction(opts.shouldUpgradeCallback, "options.shouldUpgradeCallback");
+    }
     if (httpValidation !== undefined && insecureHTTPParser !== undefined) {
       throw new ERR_INVALID_ARG_VALUE(
         "options.httpValidation",
@@ -200,6 +211,7 @@ export class Server extends NetServer {
     this.requestTimeout = requestTimeout;
     this.connectionsCheckingInterval = connectionsCheckingInterval;
     this.requireHostHeader = requireHostHeader;
+    this.shouldUpgradeCallback = opts.shouldUpgradeCallback ?? upgradeWhenObserved;
     this.#lenientHeaderValues =
       httpValidation === "relaxed" || httpValidation === "insecure" || insecureHTTPParser === true;
     this.#lenientTransferEncoding = httpValidation === "insecure" || insecureHTTPParser === true;
@@ -296,28 +308,31 @@ export class Server extends NetServer {
     let queuedResponses: ServerResponse[] = [];
     let queuedResponseIndex = 0;
     let keepAliveTimeoutSet = false;
-    /** Bytes that arrived after a message ended, belonging to the next one. */
-    let pending: Buffer | null = null;
+    let upgradeRequest: IncomingMessage | null = null;
 
-    socket.once("close", () => {
+    const abortQueuedResponses = (error: unknown): void => {
+      for (let index = queuedResponseIndex; index < queuedResponses.length; index++) {
+        const queued = queuedResponses[index];
+        if (queued !== undefined && !queued.destroyed) queued.destroy(error);
+      }
+      queuedResponses = [];
+      queuedResponseIndex = 0;
+    };
+
+    const onSocketClose = (): void => {
       this.#connections.delete(socket);
       this.#idle.delete(socket);
       this.#deadlines.delete(socket);
 
       const reset = new ConnResetException("aborted");
       if (incoming !== null && !incoming.destroyed) incoming._destroyFromSocket(reset);
-      for (let index = queuedResponseIndex; index < queuedResponses.length; index++) {
-        const queued = queuedResponses[index];
-        if (queued !== undefined && !queued.destroyed) queued.destroy(reset);
-      }
-      queuedResponses = [];
-      queuedResponseIndex = 0;
+      abortQueuedResponses(reset);
 
       // The parser belongs to the connection, not to a message: on a
       // keep-alive socket it survives between requests, so the connection
       // ending is the only moment it is finished.
       parser.free();
-    });
+    };
 
     const onSocketTimeout = (): void => {
       const requestHandled =
@@ -331,6 +346,12 @@ export class Server extends NetServer {
     socket.on("timeout", onSocketTimeout);
 
     const advanceResponseQueue = (): void => {
+      if (socket.writable === false) {
+        abortQueuedResponses(new ConnResetException("aborted"));
+        activeResponse = null;
+        return;
+      }
+
       const next = queuedResponses[queuedResponseIndex];
       if (next !== undefined) {
         queuedResponseIndex += 1;
@@ -389,15 +410,45 @@ export class Server extends NetServer {
       }
     };
 
+    const handoffUpgrade = (message: IncomingMessage, head: Buffer): void => {
+      // The new protocol owns this transport now. HTTP must leave neither a
+      // parser nor a timeout/error/close listener that could consume data or
+      // destroy the socket behind its new owner's back.
+      this.#connections.delete(socket);
+      this.#idle.delete(socket);
+      this.#deadlines.delete(socket);
+      socket.removeListener("close", onSocketClose);
+      socket.removeListener("timeout", onSocketTimeout);
+      socket.removeListener("error", onSocketError);
+      socket.removeListener("data", onSocketData);
+      socket.removeListener("end", onSocketEnd);
+      parser.finish();
+      parser.free();
+      socket.readableFlowing = null;
+
+      const eventName = message.method === "CONNECT" ? "connect" : "upgrade";
+      if (this.listenerCount(eventName) > 0) {
+        this.emit(eventName, message, socket, head);
+      } else {
+        socket.destroy();
+      }
+    };
+
     const feed = (data: Buffer): void => {
       if (!deadline.requestStarted) this.#beginRequest(deadline);
-      let view: Uint8Array = data;
+      let view = data;
       for (;;) {
         const consumed = parser.execute(view);
         if (consumed < 0) {
           const error = parser.error;
           if (error === null) throw new Error("HTTP parser failed without an error");
           handleParseError(error, data);
+          return;
+        }
+        const acceptedUpgrade = upgradeRequest;
+        if (acceptedUpgrade !== null) {
+          upgradeRequest = null;
+          handoffUpgrade(acceptedUpgrade, view.subarray(consumed));
           return;
         }
         // A message ended part-way through this buffer: the rest is the next
@@ -409,7 +460,6 @@ export class Server extends NetServer {
             this.#beginRequest(deadline);
             continue;
           }
-          pending = Buffer.from(view);
         }
         return;
       }
@@ -436,6 +486,16 @@ export class Server extends NetServer {
       message.setSource(() => socket.resume());
 
       incoming = message;
+
+      if (message.method === "CONNECT" || info.upgrade) {
+        const accepted =
+          message.method === "CONNECT" || Boolean(this.shouldUpgradeCallback(message));
+        if (accepted) {
+          upgradeRequest = message;
+          return 2;
+        }
+      }
+
       response = new this.#ServerResponse(message);
       response._setHeaderValidation(this.#lenientHeaderValues);
       response.shouldKeepAlive = info.shouldKeepAlive;
@@ -505,12 +565,13 @@ export class Server extends NetServer {
       if (!incoming) return;
       deadline.requestComplete = true;
       incoming.complete = true;
+      if (upgradeRequest !== null) return;
       incoming.push(null);
     };
 
     socket.on("error", onSocketError);
 
-    socket.on("data", (chunk: unknown) => {
+    const onSocketData = (chunk: unknown): void => {
       if (chunk instanceof Buffer) {
         feed(chunk);
       } else if (typeof chunk === "string" || chunk instanceof Uint8Array) {
@@ -518,17 +579,19 @@ export class Server extends NetServer {
       } else {
         throw new TypeError("HTTP socket produced a non-byte data chunk");
       }
-    });
+    };
 
-    socket.on("end", () => {
+    const onSocketEnd = (): void => {
       if (parser.finish() < 0) {
         const error = parser.error;
         if (error === null) throw new Error("HTTP parser failed without an error");
         handleParseError(error, Buffer.alloc(0));
       }
-    });
+    };
 
-    void pending;
+    socket.once("close", onSocketClose);
+    socket.on("data", onSocketData);
+    socket.on("end", onSocketEnd);
   }
 
   /**
