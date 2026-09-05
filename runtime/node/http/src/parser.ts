@@ -215,6 +215,51 @@ function lower(value: string): string {
   return value.toLowerCase();
 }
 
+const TransferEncoding = {
+  NoChunked: 0,
+  ChunkedFinal: 1,
+  ChunkedBeforeFinal: 2,
+} as const;
+
+type TransferEncoding = (typeof TransferEncoding)[keyof typeof TransferEncoding];
+
+/** Whether one comma-delimited transfer coding is exactly `chunked`. */
+function isChunkedCoding(value: string, start: number, end: number): boolean {
+  while (start < end && (value.charCodeAt(start) === SP || value.charCodeAt(start) === HTAB)) {
+    start += 1;
+  }
+  while (end > start && (value.charCodeAt(end - 1) === SP || value.charCodeAt(end - 1) === HTAB)) {
+    end -= 1;
+  }
+  if (end - start !== 7) return false;
+  return (
+    (value.charCodeAt(start) | 0x20) === 0x63 &&
+    (value.charCodeAt(start + 1) | 0x20) === 0x68 &&
+    (value.charCodeAt(start + 2) | 0x20) === 0x75 &&
+    (value.charCodeAt(start + 3) | 0x20) === 0x6e &&
+    (value.charCodeAt(start + 4) | 0x20) === 0x6b &&
+    (value.charCodeAt(start + 5) | 0x20) === 0x65 &&
+    (value.charCodeAt(start + 6) | 0x20) === 0x64
+  );
+}
+
+/** Classify `chunked` without allocating an array on the parser hot path. */
+function classifyTransferEncoding(value: string): TransferEncoding {
+  let start = 0;
+  let foundFinal = false;
+  let foundBeforeFinal = false;
+  for (let index = 0; index <= value.length; index++) {
+    if (index !== value.length && value.charCodeAt(index) !== 0x2c) continue;
+    if (isChunkedCoding(value, start, index)) {
+      if (index === value.length) foundFinal = true;
+      else foundBeforeFinal = true;
+    }
+    start = index + 1;
+  }
+  if (foundBeforeFinal) return TransferEncoding.ChunkedBeforeFinal;
+  return foundFinal ? TransferEncoding.ChunkedFinal : TransferEncoding.NoChunked;
+}
+
 /** Whether a token is a valid field name: RFC 9110's `tchar`, and nothing else. */
 function isValidFieldName(name: string): boolean {
   if (name.length === 0) return false;
@@ -867,9 +912,16 @@ export class HTTPParser {
   #noteHeader(name: string, value: string): number {
     switch (name) {
       case "content-length": {
-        if (this.#sawContentLength && this.#contentLength !== Number(value)) {
-          // Two different lengths is unresolvable and dangerous.
+        if (this.#sawContentLength) {
+          // Even two equal values are ambiguous once intermediaries normalize
+          // them differently, so llhttp rejects every repeated field.
           return this.#fail("HPE_UNEXPECTED_CONTENT_LENGTH", "Duplicate Content-Length");
+        }
+        if (this.#sawTransferEncoding && !this.#lenientTransferEncoding) {
+          return this.#fail(
+            "HPE_INVALID_CONTENT_LENGTH",
+            "Content-Length can't be present with Transfer-Encoding",
+          );
         }
         if (!/^\d+$/.test(value)) {
           return this.#fail("HPE_INVALID_CONTENT_LENGTH", "Invalid Content-Length");
@@ -879,20 +931,32 @@ export class HTTPParser {
         break;
       }
       case "transfer-encoding": {
-        if (this.#sawTransferEncoding && !this.#lenientTransferEncoding) {
+        if (this.#sawContentLength && !this.#lenientTransferEncoding) {
+          return this.#fail(
+            "HPE_INVALID_TRANSFER_ENCODING",
+            "Transfer-Encoding can't be present with Content-Length",
+          );
+        }
+        if (value.length === 0) {
+          return this.#fail("HPE_INVALID_TRANSFER_ENCODING", "Empty Transfer-Encoding");
+        }
+
+        const encoding = classifyTransferEncoding(value);
+        if (
+          !this.#lenientTransferEncoding &&
+          (this.#framing === Framing.Chunked || encoding === TransferEncoding.ChunkedBeforeFinal)
+        ) {
           return this.#fail(
             "HPE_INVALID_TRANSFER_ENCODING",
             "Invalid `Transfer-Encoding` header value",
           );
         }
         this.#sawTransferEncoding = true;
-        const encodings = value.split(",").map((e) => lower(e.trim()));
-        // Only a final `chunked` gives a framing. Anything else leaves the
-        // message unframed, which for a request is unacceptable.
-        if (encodings[encodings.length - 1] === "chunked") {
+        // Strict parsing requires `chunked` to be final. In insecure mode
+        // llhttp deliberately accepts a later coding but still uses chunked
+        // framing, which is why enabling it carries a smuggling warning.
+        if (encoding !== TransferEncoding.NoChunked) {
           this.#framing = Framing.Chunked;
-        } else if (this.#type === REQUEST) {
-          return this.#fail("HPE_INVALID_TRANSFER_ENCODING", "Unsupported Transfer-Encoding");
         }
         break;
       }
@@ -915,18 +979,13 @@ export class HTTPParser {
   }
 
   #endOfHeaders(): number {
-    // RFC 9112 §6.1: if both framings are present the length must be rejected.
-    // A proxy that trusts one and an origin that trusts the other can be made
-    // to disagree about where a message ends, which is request smuggling.
-    if (this.#sawTransferEncoding && this.#sawContentLength) {
-      return this.#fail(
-        "HPE_INVALID_TRANSFER_ENCODING",
-        "Transfer-Encoding can't be present with Content-Length",
-      );
-    }
-
     if (this.#framing !== Framing.Chunked) {
-      if (this.#sawContentLength) {
+      if (this.#sawTransferEncoding) {
+        if (this.#type === RESPONSE) {
+          this.#framing = Framing.UntilClose;
+          this.#shouldKeepAlive = false;
+        }
+      } else if (this.#sawContentLength) {
         this.#framing = Framing.ContentLength;
         this.#remaining = this.#contentLength;
       } else if (this.#type === RESPONSE) {
@@ -1000,8 +1059,32 @@ export class HTTPParser {
       return 0;
     }
 
+    if (skip) {
+      this.#complete();
+      return 0;
+    }
+
+    // llhttp exposes the request at headers-complete, then rejects an
+    // unframed Transfer-Encoding at that same boundary. This ordering lets
+    // applications observe the request but never exposes ambiguous body data.
     if (
-      skip ||
+      this.#type === REQUEST &&
+      this.#sawTransferEncoding &&
+      this.#framing !== Framing.Chunked &&
+      !this.#lenientTransferEncoding
+    ) {
+      return this.#fail("HPE_INVALID_TRANSFER_ENCODING", "Request has invalid `Transfer-Encoding`");
+    }
+
+    if (this.#type === REQUEST && this.#sawTransferEncoding && this.#framing !== Framing.Chunked) {
+      // Insecure mode follows llhttp's explicitly dangerous compatibility
+      // behavior: a non-final coding makes even a request body run to EOF.
+      this.#framing = Framing.UntilClose;
+      this.#state = State.Body;
+      return 0;
+    }
+
+    if (
       this.#framing === Framing.None ||
       (this.#framing === Framing.ContentLength && this.#remaining === 0)
     ) {
