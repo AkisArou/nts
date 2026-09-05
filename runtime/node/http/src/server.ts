@@ -390,6 +390,10 @@ export class Server extends NetServer {
     let activeResponse: ServerResponse | null = null;
     let queuedResponses: ServerResponse[] = [];
     let queuedResponseIndex = 0;
+    let outgoingData = 0;
+    let parsingPaused = false;
+    let pendingInput: Buffer | null = null;
+    let connectionClosed = false;
     let keepAliveTimeoutSet = false;
     let upgradeRequest: IncomingMessage | null = null;
     let parseErrorSeen = false;
@@ -405,7 +409,38 @@ export class Server extends NetServer {
       queuedResponseIndex = 0;
     };
 
+    const outputBackpressured = (): boolean =>
+      socket.writableNeedDrain || outgoingData >= socket.writableHighWaterMark;
+
+    const retainPendingInput = (input: Buffer): void => {
+      if (input.length === 0) return;
+      pendingInput = pendingInput === null ? input : Buffer.concat([pendingInput, input]);
+    };
+
+    const pauseParsing = (remaining: Buffer): void => {
+      retainPendingInput(remaining);
+      if (parsingPaused) return;
+      parsingPaused = true;
+      socket.pause();
+    };
+
+    const resumeParsing = (): void => {
+      if (connectionClosed || !parsingPaused || outputBackpressured()) return;
+      parsingPaused = false;
+      const input = pendingInput;
+      pendingInput = null;
+      if (input !== null) feed(input);
+      if (!parsingPaused) socket.resume();
+    };
+
+    const updateOutgoingData = (delta: number): void => {
+      outgoingData += delta;
+      resumeParsing();
+    };
+
     const onSocketClose = (): void => {
+      connectionClosed = true;
+      socket.removeListener("drain", resumeParsing);
       this.#connections.delete(socket);
       this.#idle.delete(socket);
       this.#deadlines.delete(socket);
@@ -517,7 +552,9 @@ export class Server extends NetServer {
       socket.removeListener("timeout", onSocketTimeout);
       socket.removeListener("error", onSocketError);
       socket.removeListener("data", onSocketData);
+      socket.removeListener("drain", resumeParsing);
       socket.removeListener("end", onSocketEnd);
+      connectionClosed = true;
       parser.finish();
       parserLease.release();
       socket.readableFlowing = null;
@@ -546,6 +583,10 @@ export class Server extends NetServer {
         if (acceptedUpgrade !== null) {
           upgradeRequest = null;
           handoffUpgrade(acceptedUpgrade, view.subarray(consumed));
+          return;
+        }
+        if (outputBackpressured()) {
+          pauseParsing(view.subarray(consumed));
           return;
         }
         // A message ended part-way through this buffer: the rest is the next
@@ -601,6 +642,7 @@ export class Server extends NetServer {
       });
       response._setHeaderValidation(this.#lenientHeaderValues);
       response._setUniqueHeaders(this.#uniqueHeaders);
+      response._setPendingDataObserver(updateOutgoingData);
       response.shouldKeepAlive = info.shouldKeepAlive;
       response._keepAliveTimeout = this.keepAliveTimeout;
       response._maxRequestsPerSocket = this.maxRequestsPerSocket;
@@ -725,15 +767,19 @@ export class Server extends NetServer {
     };
 
     socket.on("error", onSocketError);
+    socket.on("drain", resumeParsing);
 
     const onSocketData = (chunk: unknown): void => {
+      let bytes: Buffer;
       if (chunk instanceof Buffer) {
-        feed(chunk);
+        bytes = chunk;
       } else if (typeof chunk === "string" || chunk instanceof Uint8Array) {
-        feed(Buffer.from(chunk));
+        bytes = Buffer.from(chunk);
       } else {
         throw new TypeError("HTTP socket produced a non-byte data chunk");
       }
+      if (parsingPaused) retainPendingInput(bytes);
+      else feed(bytes);
     };
 
     const onSocketEnd = (): void => {

@@ -92,7 +92,9 @@ export interface OutgoingSocket {
  */
 export interface HTTPDuplex extends OutgoingSocket {
   readonly destroyed: boolean;
+  readonly writableHighWaterMark: number;
   readonly writableLength: number;
+  readonly writableNeedDrain: boolean;
   readableFlowing: boolean | null;
   emit<Args extends unknown[]>(event: string | symbol, ...args: Args): boolean;
   pause(): unknown;
@@ -308,6 +310,7 @@ export class OutgoingMessage<
    */
   #pending: PendingWrite[] = [];
   #pendingSize = 0;
+  #pendingDataObserver: ((delta: number) => void) | undefined;
 
   get socket(): SocketType | null {
     return this.#socket;
@@ -330,6 +333,7 @@ export class OutgoingMessage<
 
     if (this.#pending.length > 0) {
       const queued = this.#pending;
+      const queuedSize = this.#pendingSize;
       this.#pending = [];
       this.#pendingSize = 0;
       for (const write of queued) {
@@ -337,6 +341,7 @@ export class OutgoingMessage<
           this.#needDrain = true;
         }
       }
+      if (queuedSize > 0) this.#pendingDataObserver?.(-queuedSize);
     }
   }
 
@@ -381,6 +386,11 @@ export class OutgoingMessage<
     this.#uniqueHeaders = headers;
   }
 
+  /** Report bytes retained while this message waits for its connection turn. */
+  _setPendingDataObserver(observer: ((delta: number) => void) | undefined): void {
+    this.#pendingDataObserver = observer;
+  }
+
   /** Write, or hold it until there is somewhere to write it. */
   protected _writeRaw(
     chunk: Buffer | string,
@@ -388,9 +398,11 @@ export class OutgoingMessage<
     callback?: WriteCallback,
   ): boolean {
     if (this.#socket === null) {
-      this.#pending.push({ chunk, encoding, callback });
-      this.#pendingSize +=
+      const size =
         typeof chunk === "string" ? Buffer.byteLength(chunk, encoding ?? "utf8") : chunk.length;
+      this.#pending.push({ chunk, encoding, callback });
+      this.#pendingSize += size;
+      if (size > 0) this.#pendingDataObserver?.(size);
       return this.#pendingSize < this._highWaterMark;
     }
     return this.#socket.write(chunk, encoding, callback) !== false;
@@ -969,8 +981,10 @@ export class OutgoingMessage<
     } else {
       const finalError = error ?? new ERR_STREAM_DESTROYED("write");
       const pending = this.#pending;
+      const pendingSize = this.#pendingSize;
       this.#pending = [];
       this.#pendingSize = 0;
+      if (pendingSize > 0) this.#pendingDataObserver?.(-pendingSize);
       for (const write of pending) {
         if (write.callback !== undefined) nextTick(write.callback, finalError);
       }
