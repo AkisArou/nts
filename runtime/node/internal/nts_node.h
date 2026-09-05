@@ -23,7 +23,8 @@ double nts_debug_write(NtsString *text);
 bool nts_stdout_is_tty(void);
 bool nts_stderr_is_tty(void);
 void nts_process_really_exit(double code);
+struct NtsObj_Error;
 void nts_process_emit_warning_object(NtsString *message, NtsString *name,
-                                     void *warning);
+                                     struct NtsObj_Error *warning);
 
 #endif

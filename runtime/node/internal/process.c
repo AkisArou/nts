@@ -170,7 +170,7 @@ void nts_process_really_exit(double code) { _Exit((int)code); }
  * exact object. A native diagnostic stream has no object receiver, so only its
  * already-extracted name and message are written here. */
 void nts_process_emit_warning_object(NtsString *message, NtsString *name,
-                                     void *warning) {
+                                     struct NtsObj_Error *warning) {
     (void)warning;
     char *message_text = native_string(message);
     char *name_text = native_string(name);
