@@ -240,6 +240,27 @@ function isValidFieldName(name: string): boolean {
   return true;
 }
 
+/** Bytes llhttp can consume before an unknown request method diverges. */
+function invalidMethodOffset(method: string): number {
+  let longestPrefix = 0;
+  for (let methodIndex = 0; methodIndex < methods.length; methodIndex++) {
+    const knownMethod = methods[methodIndex];
+    if (knownMethod === undefined) continue;
+    const comparableLength = Math.min(method.length, knownMethod.length);
+    let prefixLength = 0;
+    while (
+      prefixLength < comparableLength &&
+      method.charCodeAt(prefixLength) === knownMethod.charCodeAt(prefixLength)
+    ) {
+      prefixLength += 1;
+    }
+    if (prefixLength > longestPrefix) longestPrefix = prefixLength;
+  }
+  // llhttp consumes one method byte before it can reject an otherwise
+  // unknown token, while preserving the longer prefix for near misses.
+  return Math.min(method.length, Math.max(1, longestPrefix));
+}
+
 /**
  * Whether a field value is free of control characters.
  *
@@ -531,6 +552,8 @@ export class HTTPParser {
         break;
       }
 
+      const priorLineBytes = this.#partial.length;
+      const lineStartOffset = offset;
       const line = this.#partial + decode(data.subarray(offset, lineEnd));
       this.#partial = "";
       this.#headerBytes += lineEnd - offset + 1;
@@ -543,7 +566,7 @@ export class HTTPParser {
         return this.#fail("HPE_HEADER_OVERFLOW", "Header overflow");
       }
 
-      const result = this.#readLine(stripCR(line));
+      const result = this.#readLine(stripCR(line), lineStartOffset, priorLineBytes);
       if (result < 0) return result;
     }
 
@@ -562,14 +585,14 @@ export class HTTPParser {
     return this.#fail("HPE_INVALID_EOF_STATE", "Invalid EOF state");
   }
 
-  #readLine(line: string): number {
+  #readLine(line: string, lineStartOffset: number, priorLineBytes: number): number {
     switch (this.#state) {
       case State.StartLine:
         // A blank line before the start line is tolerated: RFC 9112 §2.2 says
         // a robust parser should ignore at least one empty line, because some
         // clients send a stray CRLF after a previous message.
         if (line === "") return 0;
-        return this.#readStartLine(line);
+        return this.#readStartLine(line, lineStartOffset, priorLineBytes);
 
       case State.Header:
         if (line === "") return this.#endOfHeaders();
@@ -603,7 +626,7 @@ export class HTTPParser {
     }
   }
 
-  #readStartLine(line: string): number {
+  #readStartLine(line: string, lineStartOffset: number, priorLineBytes: number): number {
     this.#callMessageBegin();
 
     if (this.#type === RESPONSE) {
@@ -633,12 +656,12 @@ export class HTTPParser {
       // method SP request-target SP HTTP-version
       const firstSpace = line.indexOf(" ");
       if (firstSpace === -1) {
-        return this.#fail("HPE_INVALID_METHOD", "Invalid method encountered");
+        return this.#failInvalidMethod(line, lineStartOffset, priorLineBytes);
       }
       const method = line.slice(0, firstSpace);
       const index = methods.indexOf(method);
       if (index === -1) {
-        return this.#fail("HPE_INVALID_METHOD", "Invalid method encountered");
+        return this.#failInvalidMethod(method, lineStartOffset, priorLineBytes);
       }
       this.#method = index;
 
@@ -658,6 +681,17 @@ export class HTTPParser {
       this.#versionMajor > 1 || (this.#versionMajor === 1 && this.#versionMinor >= 1);
     this.#state = State.Header;
     return 0;
+  }
+
+  #failInvalidMethod(method: string, lineStartOffset: number, priorLineBytes: number): number {
+    const offset = invalidMethodOffset(method);
+    const bytesParsed = lineStartOffset + Math.max(0, offset - priorLineBytes);
+    this.#error = {
+      code: "HPE_INVALID_METHOD",
+      reason: "Invalid method encountered",
+      bytesParsed,
+    };
+    return -1;
   }
 
   #validatePartialStartLine(): number {
