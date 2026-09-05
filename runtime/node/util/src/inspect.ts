@@ -51,10 +51,10 @@ export const customInspectSymbol = Symbol.for("nodejs.util.inspect.custom");
 /**
  * The style names `inspect` asks for, and the colour each maps to.
  *
- * Two tables rather than one because both are public and mutable: a program
- * can rename a style's colour (`util.inspect.styles.string = 'cyan'`) or add a
- * colour of its own (`util.inspect.colors.orange = [38, 39]`), and node's own
- * tests do both.
+ * Two tables rather than one because both are public and mutable. The fields
+ * Node defines are explicit, fixed-layout fields here: mutating one is visible
+ * to the next `inspect` call without pretending the compiled object has an
+ * arbitrary string-key property map.
  */
 export type StyleType =
   | "special"
@@ -70,7 +70,7 @@ export type StyleType =
   | "module"
   | "name";
 
-export const inspectStyles: Record<string, string | undefined> = {
+export const inspectStyles = {
   special: "cyan",
   number: "yellow",
   bigint: "yellow",
@@ -90,7 +90,68 @@ export const inspectStyles: Record<string, string | undefined> = {
  * `[31, 39]` for red -- because a nested style has to restore the outer one
  * rather than reset everything.
  */
-export const inspectColors: Record<string, [number, number] | undefined> = {
+export type InspectColor = [number, number];
+
+interface InspectColors {
+  reset: InspectColor;
+  bold: InspectColor;
+  dim: InspectColor;
+  italic: InspectColor;
+  underline: InspectColor;
+  blink: InspectColor;
+  inverse: InspectColor;
+  hidden: InspectColor;
+  strikethrough: InspectColor;
+  doubleunderline: InspectColor;
+  black: InspectColor;
+  red: InspectColor;
+  green: InspectColor;
+  yellow: InspectColor;
+  blue: InspectColor;
+  magenta: InspectColor;
+  cyan: InspectColor;
+  white: InspectColor;
+  bgBlack: InspectColor;
+  bgRed: InspectColor;
+  bgGreen: InspectColor;
+  bgYellow: InspectColor;
+  bgBlue: InspectColor;
+  bgMagenta: InspectColor;
+  bgCyan: InspectColor;
+  bgWhite: InspectColor;
+  framed: InspectColor;
+  overlined: InspectColor;
+  gray: InspectColor;
+  grey: InspectColor;
+  blackBright: InspectColor;
+  redBright: InspectColor;
+  greenBright: InspectColor;
+  yellowBright: InspectColor;
+  blueBright: InspectColor;
+  magentaBright: InspectColor;
+  cyanBright: InspectColor;
+  whiteBright: InspectColor;
+  bgGray: InspectColor;
+  bgGrey: InspectColor;
+  bgBlackBright: InspectColor;
+  bgRedBright: InspectColor;
+  bgGreenBright: InspectColor;
+  bgYellowBright: InspectColor;
+  bgBlueBright: InspectColor;
+  bgMagentaBright: InspectColor;
+  bgCyanBright: InspectColor;
+  bgWhiteBright: InspectColor;
+  faint: InspectColor;
+  crossedout: InspectColor;
+  strikeThrough: InspectColor;
+  crossedOut: InspectColor;
+  conceal: InspectColor;
+  swapColors: InspectColor;
+  swapcolors: InspectColor;
+  doubleUnderline: InspectColor;
+}
+
+export const inspectColors: InspectColors = {
   reset: [0, 0],
   bold: [1, 22],
   dim: [2, 22],
@@ -149,6 +210,108 @@ export const inspectColors: Record<string, [number, number] | undefined> = {
   doubleUnderline: [21, 24],
 };
 
+/** Every public color name Node defines, including its non-enumerable aliases. */
+export const inspectColorNames: readonly string[] = [
+  "reset", "bold", "dim", "italic", "underline", "blink", "inverse",
+  "hidden", "strikethrough", "doubleunderline", "black", "red", "green",
+  "yellow", "blue", "magenta", "cyan", "white", "bgBlack", "bgRed",
+  "bgGreen", "bgYellow", "bgBlue", "bgMagenta", "bgCyan", "bgWhite",
+  "framed", "overlined", "gray", "grey", "blackBright", "redBright",
+  "greenBright", "yellowBright", "blueBright", "magentaBright",
+  "cyanBright", "whiteBright", "bgGray", "bgGrey", "bgBlackBright",
+  "bgRedBright", "bgGreenBright", "bgYellowBright", "bgBlueBright",
+  "bgMagentaBright", "bgCyanBright", "bgWhiteBright", "faint",
+  "crossedout", "strikeThrough", "crossedOut", "conceal", "swapColors",
+  "swapcolors", "doubleUnderline",
+];
+
+/**
+ * Fixed-layout lookup for Node's known color names.
+ *
+ * Each branch reads the live public field, so assigning a different pair to a
+ * known name remains observable. An unknown name cannot be represented as a
+ * field in NTS and therefore deliberately returns `undefined`.
+ */
+export function inspectColorCodes(name: string): InspectColor | undefined {
+  switch (name) {
+    case "reset": return inspectColors.reset;
+    case "bold": return inspectColors.bold;
+    case "dim": return inspectColors.dim;
+    case "italic": return inspectColors.italic;
+    case "underline": return inspectColors.underline;
+    case "blink": return inspectColors.blink;
+    case "inverse": return inspectColors.inverse;
+    case "hidden": return inspectColors.hidden;
+    case "strikethrough": return inspectColors.strikethrough;
+    case "doubleunderline": return inspectColors.doubleunderline;
+    case "black": return inspectColors.black;
+    case "red": return inspectColors.red;
+    case "green": return inspectColors.green;
+    case "yellow": return inspectColors.yellow;
+    case "blue": return inspectColors.blue;
+    case "magenta": return inspectColors.magenta;
+    case "cyan": return inspectColors.cyan;
+    case "white": return inspectColors.white;
+    case "bgBlack": return inspectColors.bgBlack;
+    case "bgRed": return inspectColors.bgRed;
+    case "bgGreen": return inspectColors.bgGreen;
+    case "bgYellow": return inspectColors.bgYellow;
+    case "bgBlue": return inspectColors.bgBlue;
+    case "bgMagenta": return inspectColors.bgMagenta;
+    case "bgCyan": return inspectColors.bgCyan;
+    case "bgWhite": return inspectColors.bgWhite;
+    case "framed": return inspectColors.framed;
+    case "overlined": return inspectColors.overlined;
+    case "gray": return inspectColors.gray;
+    case "grey": return inspectColors.gray;
+    case "blackBright": return inspectColors.gray;
+    case "redBright": return inspectColors.redBright;
+    case "greenBright": return inspectColors.greenBright;
+    case "yellowBright": return inspectColors.yellowBright;
+    case "blueBright": return inspectColors.blueBright;
+    case "magentaBright": return inspectColors.magentaBright;
+    case "cyanBright": return inspectColors.cyanBright;
+    case "whiteBright": return inspectColors.whiteBright;
+    case "bgGray": return inspectColors.bgGray;
+    case "bgGrey": return inspectColors.bgGray;
+    case "bgBlackBright": return inspectColors.bgGray;
+    case "bgRedBright": return inspectColors.bgRedBright;
+    case "bgGreenBright": return inspectColors.bgGreenBright;
+    case "bgYellowBright": return inspectColors.bgYellowBright;
+    case "bgBlueBright": return inspectColors.bgBlueBright;
+    case "bgMagentaBright": return inspectColors.bgMagentaBright;
+    case "bgCyanBright": return inspectColors.bgCyanBright;
+    case "bgWhiteBright": return inspectColors.bgWhiteBright;
+    case "faint": return inspectColors.dim;
+    case "crossedout": return inspectColors.strikethrough;
+    case "strikeThrough": return inspectColors.strikethrough;
+    case "crossedOut": return inspectColors.strikethrough;
+    case "conceal": return inspectColors.hidden;
+    case "swapColors": return inspectColors.inverse;
+    case "swapcolors": return inspectColors.inverse;
+    case "doubleUnderline": return inspectColors.doubleunderline;
+    default: return undefined;
+  }
+}
+
+/** Read a live, statically declared `inspect.styles` field. */
+function inspectStyleName(styleType: StyleType): string | undefined {
+  switch (styleType) {
+    case "special": return inspectStyles.special;
+    case "number": return inspectStyles.number;
+    case "bigint": return inspectStyles.bigint;
+    case "boolean": return inspectStyles.boolean;
+    case "undefined": return inspectStyles.undefined;
+    case "null": return inspectStyles.null;
+    case "string": return inspectStyles.string;
+    case "symbol": return inspectStyles.symbol;
+    case "date": return inspectStyles.date;
+    case "regexp": return inspectStyles.regexp;
+    case "module": return inspectStyles.module;
+    case "name": return undefined;
+  }
+}
+
 /** What every piece of output goes through. The colourless one is the default. */
 export type Stylize = (str: string, styleType: StyleType) => string;
 
@@ -157,9 +320,9 @@ export function stylizeNoColor(str: string): string {
 }
 
 export function stylizeWithColor(str: string, styleType: StyleType): string {
-  const style = inspectStyles[styleType];
+  const style = inspectStyleName(styleType);
   if (style !== undefined) {
-    const color = inspectColors[style];
+    const color = inspectColorCodes(style);
     if (color !== undefined) {
       return `\u001b[${color[0]}m${str}\u001b[${color[1]}m`;
     }
@@ -193,6 +356,8 @@ interface Context extends ResolvedInspectOptions {
   indentationLvl: number;
   seen: object[];
   circular: Map<object, number>;
+  /** Rendered bytes per indentation level, for Node's runaway-output guard. */
+  budget: number[];
   /** The deepest recursion reached so far, for the `compact` rule below. */
   currentDepth: number;
   /** Colour, or the identity. Chosen once per `inspect` call. */
@@ -237,6 +402,7 @@ export function inspect(value: unknown, options?: InspectOptions | boolean): str
     indentationLvl: 0,
     seen: [],
     circular: new Map(),
+    budget: [],
     currentDepth: 0,
     // Chosen once, so that every piece of output goes through the same
     // function and a nested value cannot end up coloured differently from the
@@ -488,11 +654,26 @@ function formatObject(ctx: Context, value: InspectableObject, recurseTimes: numb
   // `[Object]` never recursed, so it must not count towards how deep this
   // subtree goes. Counting it would push every parent onto multiple lines.
   ctx.currentDepth = recurseTimes;
+  let result: string;
   try {
-    return formatByShape(ctx, value, recurseTimes);
+    result = formatByShape(ctx, value, recurseTimes);
   } finally {
     ctx.seen.pop();
   }
+
+  // Pinned upstream `formatValue`: once one nesting level has produced more
+  // than 2^27 characters, later siblings render only their depth marker. This
+  // is a work bound as well as a string-size bound; without it a wide graph of
+  // shared subtrees can occupy the event loop long after the useful output is
+  // already enormous. An array indexed by static indentation depth replaces
+  // upstream's dynamically keyed budget object.
+  const budgetIndex = Math.floor(ctx.indentationLvl / 2);
+  const newLength = (ctx.budget[budgetIndex] ?? 0) + result.length;
+  ctx.budget[budgetIndex] = newLength;
+  if (newLength > 2 ** 27) {
+    ctx.depth = -1;
+  }
+  return result;
 }
 
 function typedArrayName(value: TypedArray): string {

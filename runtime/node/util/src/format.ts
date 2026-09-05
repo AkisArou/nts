@@ -4,38 +4,19 @@
 // in the first argument, then append whatever is left over.
 
 import { formatBigInt, formatNumber, inspect, inspectDefaultOptions, type InspectOptions } from "./inspect.ts";
-import {
-  isArrayBufferView,
-  isBoxedPrimitive,
-  isDate,
-  isNativeError,
-} from "./types.ts";
 
 /**
- * `%s` uses a value's typed string conversion when it says something useful,
- * and inspection for containers whose built-in conversion loses structure.
+ * `%s` inspects objects whose string conversion is not statically known.
  *
- * Node discovers the owner of `toString` and `Symbol.toPrimitive` by walking
- * the prototype chain. NTS deliberately has neither that chain nor the symbol
- * hook. Converting once and recognizing the uninformative `[object Kind]`
- * result preserves the useful behavior without a runtime metaobject model.
+ * Node decides whether to call `toString` / `Symbol.toPrimitive` by walking the
+ * prototype chain. Letting the host's `String(value)` perform that discovery
+ * would make the TypeScript test lane implement behavior the compiled runtime
+ * intentionally cannot observe. Statically known primitive conversions stay
+ * in the caller; every object and function takes the deterministic inspect
+ * path here.
  */
-function formatStringValue(value: object, options: InspectOptions): string {
-  if (
-    Array.isArray(value) || isArrayBufferView(value) || isBoxedPrimitive(value) ||
-    isDate(value) || isNativeError(value)
-  ) {
-    return inspect(value, { ...options, depth: 0, colors: false, compact: 3 });
-  }
-
-  try {
-    const converted = String(value);
-    return converted.startsWith("[object ") && converted.endsWith("]")
-      ? inspect(value, { ...options, depth: 0, colors: false, compact: 3 })
-      : converted;
-  } catch {
-    return inspect(value, { ...options, depth: 0, colors: false, compact: 3 });
-  }
+function formatStringValue(value: unknown, options: InspectOptions): string {
+  return inspect(value, { ...options, depth: 0, colors: false, compact: 3 });
 }
 
 /** `%j`, which has to survive a cycle rather than throwing. */
@@ -82,10 +63,10 @@ export function formatWithOptions(options: InspectOptions, ...args: unknown[]): 
         case 115: { // s
           const value = args[a];
           if (typeof value === "bigint") replacement = formatBigInt(value, options.numericSeparator ?? false);
-          // An object that defines its own `toString` is asking to be printed
-          // that way; only one still using `Object.prototype`'s gets inspected,
-          // since `[object Object]` tells a reader nothing.
-          else if (typeof value === "object" && value !== null)
+          else if (
+            (typeof value === "object" && value !== null) ||
+            typeof value === "function"
+          )
             replacement = formatStringValue(value, options);
           // A number goes through `formatNumber` so that `-0` keeps its sign
           // and `numericSeparator` applies, which `String` does neither of.

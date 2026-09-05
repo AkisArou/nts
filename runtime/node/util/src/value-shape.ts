@@ -22,7 +22,6 @@ export function isArrayIndexKey(key: string): boolean {
  * object with a coincidental `href` field is not treated as one.
  */
 export interface URLValue {
-  readonly [key: string]: unknown;
   readonly href: string;
   readonly origin: string;
   toJSON(): string;

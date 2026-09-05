@@ -110,40 +110,42 @@ export function isBoxedPrimitive(value: unknown): value is BoxedPrimitive {
   );
 }
 
-export function isGeneratorFunction(_value: unknown): boolean {
-  // Generator functions are an intentionally unsupported source-language
-  // kind, and function-name/constructor inspection is a metaobject operation.
+export function isGeneratorFunction(_value: unknown): _value is GeneratorFunction {
+  // Generators are supported language values. What is missing here is a
+  // runtime function-kind tag that survives after a function becomes an
+  // erased value; source text or constructor/prototype inspection is not an
+  // acceptable substitute.
   return false;
 }
 
 export function isAsyncFunction(_value: unknown): boolean {
-  // An async function is callable; observing that it was declared `async`
-  // requires function-object metadata the compiled representation omits.
+  // Async functions are supported. This predicate needs the same erased
+  // function-kind tag as `isGeneratorFunction`.
   return false;
 }
 
-interface GeneratorLike {
-  next: CallableFunction;
-  throw: CallableFunction;
-}
-
-export function isGeneratorObject(value: unknown): value is GeneratorLike {
-  return (
-    value !== null && typeof value === "object" &&
-    "next" in value && typeof value.next === "function" &&
-    "throw" in value && typeof value.throw === "function"
-  );
+export function isGeneratorObject(_value: unknown): _value is Generator {
+  // `next` and `throw` only describe a structural iterator. Node asks V8 for
+  // the generator brand, so accepting an arbitrary object with those methods
+  // would be a false positive. The compiler needs a typed generator-kind test
+  // before this can answer true honestly.
+  return false;
 }
 
 export function isArgumentsObject(_value: unknown): boolean {
   return false;
 }
 
-export function isMapIterator(_value: unknown): _value is Iterable<unknown> {
+export function isMapIterator(_value: unknown): boolean {
+  // Iteration itself is supported. Recognizing the origin of an erased
+  // iterator needs a runtime kind tag; inspecting its shape would accept user
+  // iterators incorrectly.
   return false;
 }
 
-export function isSetIterator(_value: unknown): _value is Iterable<unknown> {
+export function isSetIterator(_value: unknown): boolean {
+  // See `isMapIterator`: this is a kind-observation gap, not an iteration
+  // non-goal.
   return false;
 }
 

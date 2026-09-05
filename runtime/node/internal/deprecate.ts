@@ -9,6 +9,9 @@
 import { ERR_INVALID_ARG_TYPE } from "./errors.ts";
 import { emitWarning } from "./process-warning.ts";
 
+/** Node emits a coded deprecation once per process, not once per wrapper. */
+const warnedCodes = new Set<string>();
+
 /**
  * Wrap `fn` so that calling it warns once.
  *
@@ -27,7 +30,12 @@ export function deprecate<This, Args extends unknown[], Result>(
   return function deprecated(this: This, ...args: Args): Result {
     if (!warned) {
       warned = true;
-      emitWarning(message, "DeprecationWarning", code ?? "");
+      if (code === undefined) {
+        emitWarning(message, "DeprecationWarning", "");
+      } else if (!warnedCodes.has(code)) {
+        warnedCodes.add(code);
+        emitWarning(message, "DeprecationWarning", code);
+      }
     }
     return fn.apply(this, args);
   };

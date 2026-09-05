@@ -6,6 +6,8 @@
 
 import {
   inspect,
+  inspectColorCodes,
+  inspectColorNames,
   inspectColors,
   inspectDefaultOptions,
   inspectStyles,
@@ -234,12 +236,13 @@ export default {
 
 
 /**
- * `util.inspect.colors`, re-exported. One table, so that a program that adds a
- * colour can use it both in `styleText` and in a custom `inspect` style.
+ * `util.inspect.colors`, re-exported. Known names are fixed-layout fields, and
+ * assigning one remains visible to both `styleText` and colored inspection.
+ * Adding arbitrary names would require the §13 property map NTS omits.
  */
-export const colors: Record<string, [number, number] | undefined> = inspectColors;
+export const colors = inspectColors;
 /** Internal handoff to `shape.mjs`; removed from the public module there. */
-export const styles: Record<string, string | undefined> = inspectStyles;
+export const styles = inspectStyles;
 
 /**
  * Turn this style back on wherever the inner text turned it off, upstream
@@ -358,6 +361,24 @@ export function styleText(
 ): string {
   const validateStream = options?.validateStream ?? true;
 
+  // Upstream's common path: no stream query, no temporary format array, and
+  // one fixed-layout color lookup.
+  if (!validateStream && typeof format === "string" && typeof text === "string") {
+    if (format === "none") return text;
+    const color = inspectColorCodes(format);
+    if (color !== undefined) {
+      const { openSeq, closeSeq, keepClose } = codesToStyle(color);
+      const processed = replaceCloseCode(text, closeSeq, openSeq, keepClose);
+      return openSeq + processed + closeSeq;
+    }
+    if (format[0] === "#" && hexColorPattern.test(format)) {
+      const [r, g, b] = hexToRgb(format);
+      const openSeq = kEscape + rgbToAnsi24Bit(r, g, b) + kEscapeEnd;
+      const processed = replaceCloseCode(text, kHexCloseSeq, openSeq, false);
+      return openSeq + processed + kHexCloseSeq;
+    }
+  }
+
   validateString(text, "text");
   if (options !== undefined) {
     validateObject(options, "options");
@@ -380,7 +401,7 @@ export function styleText(
     skipColorize = !shouldColorize(stream);
   }
 
-  const allowedFormats = Object.keys(colors);
+  const allowedFormats = inspectColorNames;
   let formats: readonly unknown[];
   if (typeof format === "string") {
     formats = [format];
@@ -415,7 +436,7 @@ export function styleText(
       continue;
     }
 
-    const codes = typeof key === "string" ? colors[key] : undefined;
+    const codes = typeof key === "string" ? inspectColorCodes(key) : undefined;
     if (!codes) {
       // Through `validateOneOf` so the message lists what is allowed, and over
       // the same explicit static table used for lookup, so aliases count.
