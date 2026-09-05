@@ -242,16 +242,22 @@ export function hasSubscribers(name: string | symbol): boolean {
 
 /** The five moments a traced call passes through. */
 type TraceEvent = "start" | "end" | "asyncStart" | "asyncEnd" | "error";
-const traceEvents: readonly TraceEvent[] = [
-  "start",
-  "end",
-  "asyncStart",
-  "asyncEnd",
-  "error",
-];
 
-export type TracingChannelSubscribers = Partial<Record<TraceEvent, Subscriber>>;
-export type TracingChannels = Record<TraceEvent, Channel>;
+export interface TracingChannelSubscribers {
+  start?: Subscriber | undefined;
+  end?: Subscriber | undefined;
+  asyncStart?: Subscriber | undefined;
+  asyncEnd?: Subscriber | undefined;
+  error?: Subscriber | undefined;
+}
+
+export interface TracingChannels {
+  start: Channel;
+  end: Channel;
+  asyncStart: Channel;
+  asyncEnd: Channel;
+  error: Channel;
+}
 
 function assertChannel(value: unknown, name: string): asserts value is Channel {
   // Node's excluded Symbol.hasInstance hook calls Object.getPrototypeOf first,
@@ -274,7 +280,14 @@ function tracingChannelFrom(
   }
 
   if (typeof nameOrChannels === "object" && nameOrChannels !== null) {
-    const found = nameOrChannels[name];
+    let found: Channel | undefined;
+    switch (name) {
+      case "start": found = nameOrChannels.start; break;
+      case "end": found = nameOrChannels.end; break;
+      case "asyncStart": found = nameOrChannels.asyncStart; break;
+      case "asyncEnd": found = nameOrChannels.asyncEnd; break;
+      case "error": found = nameOrChannels.error; break;
+    }
     assertChannel(found, `nameOrChannels.${name}`);
     return found;
   }
@@ -316,22 +329,20 @@ export class TracingChannel {
   }
 
   subscribe(handlers: TracingChannelSubscribers): void {
-    for (const name of traceEvents) {
-      const handler = handlers[name];
-      if (!handler) continue;
-      this[name].subscribe(handler);
-    }
+    if (handlers.start) this.start.subscribe(handlers.start);
+    if (handlers.end) this.end.subscribe(handlers.end);
+    if (handlers.asyncStart) this.asyncStart.subscribe(handlers.asyncStart);
+    if (handlers.asyncEnd) this.asyncEnd.subscribe(handlers.asyncEnd);
+    if (handlers.error) this.error.subscribe(handlers.error);
   }
 
   unsubscribe(handlers: TracingChannelSubscribers): boolean {
     let done = true;
-    for (const name of traceEvents) {
-      const handler = handlers[name];
-      if (!handler) continue;
-      if (!this[name].unsubscribe(handler)) {
-        done = false;
-      }
-    }
+    if (handlers.start && !this.start.unsubscribe(handlers.start)) done = false;
+    if (handlers.end && !this.end.unsubscribe(handlers.end)) done = false;
+    if (handlers.asyncStart && !this.asyncStart.unsubscribe(handlers.asyncStart)) done = false;
+    if (handlers.asyncEnd && !this.asyncEnd.unsubscribe(handlers.asyncEnd)) done = false;
+    if (handlers.error && !this.error.unsubscribe(handlers.error)) done = false;
     return done;
   }
 
@@ -426,7 +437,7 @@ export class TracingChannel {
     ...args: A
   ): T;
   traceCallback(
-    fn: Function,
+    fn: (...args: unknown[]) => unknown,
     position = -1,
     context: Record<string, unknown> = {},
     thisArg?: unknown,
