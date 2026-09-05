@@ -17,7 +17,7 @@
 // `charAt` rather than `codePointAt`, because `charCodeAt` is a code *unit* and
 // `codePointAt` would combine a surrogate pair. This text is ASCII so the two
 // agree, and the one that agrees for the right reason is written.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the loop is not a compile-time constant: `text` is a
     // literal and everything else derives from the seed.
     private static volatile double seed = 3;
@@ -41,7 +41,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return scan((int) seed);
     }
 }

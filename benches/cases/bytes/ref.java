@@ -16,7 +16,7 @@
 // The inner loop is Adler-32 and `a` and `b` stay under 65521, so `int`
 // arithmetic is exact and the `%` never sees a negative dividend -- which is
 // the one input where Java's `%` and a modulus would part company.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the buffer's contents are not compile-time constants.
     private static volatile double seed = 7;
 
@@ -43,7 +43,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return run((int) seed);
     }
 }

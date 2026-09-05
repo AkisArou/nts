@@ -25,7 +25,7 @@
 // spelling of the same read and there is nothing to translate. `reverse` is in
 // place in both languages, which matters because the array's order carries from
 // one round to the next.
-final class Ref {
+final class Ref extends Bench.Work {
     private static int indexOf(int[] xs, int value) {
         for (int i = 0; i < xs.length; i++) {
             if (xs[i] == value) {
@@ -70,7 +70,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return work((int) seed);
     }
 }

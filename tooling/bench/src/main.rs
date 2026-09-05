@@ -111,12 +111,12 @@ struct Variant {
 const VARIANTS: &[Variant] = &[
     Variant {
         label: "nts",
-        source: "nts.cpp",
+        source: "case.ts",
         generated: Generated::Specialized,
     },
     Variant {
         label: "nts f64",
-        source: "nts.cpp",
+        source: "case.ts",
         generated: Generated::Unspecialized,
     },
     Variant {
@@ -126,52 +126,21 @@ const VARIANTS: &[Variant] = &[
     },
     Variant {
         label: "nts (llvm)",
-        source: "nts.cpp",
+        source: "case.ts",
         generated: Generated::Llvm,
     },
     Variant {
         label: "nts (jvm)",
-        source: "nts.cpp",
+        source: "case.ts",
         generated: Generated::Jvm,
     },
     Variant {
         label: "Java",
-        source: "nts.cpp",
+        source: "ref.java",
         generated: Generated::JavaReference,
     },
 ];
 
-/// Which of Are We Fast Yet's Java classes a case is a port of, and how many
-/// inner iterations to ask it for.
-///
-/// Written out rather than derived from the case name, because `awfy-nbody` is
-/// `NBody` and a capitalisation rule that works for seven and not the eighth is
-/// worse than a list of eight.
-///
-/// `None` means "whatever the case's own workload passes", which is right when
-/// both ports hold the problem size in the same place. `nbody` is the exception
-/// and the reason the third column exists: **Are We Fast Yet's ports do not
-/// agree about where the size lives.** Theirs takes 250,000 advances as
-/// `innerBenchmarkLoop`'s argument; ours keeps it as a constant inside the
-/// benchmark and passes 1, the way every other case here holds its size, and
-/// `ref.cpp` passes 250000 to match theirs.
-///
-/// Passing our 1 to their Java ran **one** advance and reported 59.5ns against
-/// 7.36ms for the same work in C++ -- and the cross-variant checksum check
-/// passed, because their `verifyResult` carries an explicit
-/// `innerIterations == 1` branch that returns true. A guard that was satisfied
-/// by a special case in somebody else's code, which is the same failure as a
-/// gate assertion satisfied by node being unable to parse a file.
-const JAVA_REFERENCES: &[(&str, &str, Option<f64>)] = &[
-    ("awfy-bounce", "Bounce", None),
-    ("awfy-list", "List", None),
-    ("awfy-mandelbrot", "Mandelbrot", None),
-    ("awfy-nbody", "NBody", Some(250_000.0)),
-    ("awfy-permute", "Permute", None),
-    ("awfy-queens", "Queens", None),
-    ("awfy-sieve", "Sieve", None),
-    ("awfy-towers", "Towers", None),
-];
 
 /// Cases where the two hand-written references legitimately differ by more than
 /// the guard below tolerates, each with the reason it is real.
@@ -573,7 +542,7 @@ fn reaches_unicode(source: &str) -> bool {
 
 fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     let name = case.file_name().context("a case needs a name")?;
-    let tsconfig = case.join("tsconfig.json");
+    let tsconfig = case_tsconfig(case, out, name)?;
 
     // A case that allocates per iteration has to say so. Under NoGC it would
     // never free, so a run calibrated to a hundred milliseconds would measure
@@ -595,6 +564,10 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     let entry = entry_points(case)?;
     let specialized_text = emit(&tsconfig, &entry, true, provider, false)?;
     let needs_unicode = reaches_unicode(&specialized_text);
+    // Whether the program has top-level code to evaluate. `module__init` is
+    // emitted only when it does, and calling a function that was never emitted
+    // is a link error -- which is `standalone_main`'s own rule, applied here.
+    let initializes = specialized_text.contains("void module__init(void)");
     std::fs::write(&specialized, &specialized_text)
         .with_context(|| format!("writing {specialized}"))?;
     std::fs::write(&plain, emit(&tsconfig, &entry, false, provider, false)?)
@@ -607,8 +580,8 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     };
 
     let (results, jvm_absence) = variants(root, case, out, name, &tsconfig, &entry, provider, defines,
-        &specialized, &plain, &rendered, renderable, needs_unicode)?;
-    finish_row(case, &shown, &results, jvm_absence)
+        &specialized, &plain, &rendered, renderable, initializes, needs_unicode)?;
+    finish_row(case, out, name, &shown, &results, jvm_absence)
 }
 
 /// Every variant of one case, built and measured in the order `VARIANTS` gives.
@@ -631,12 +604,14 @@ fn variants(
     plain: &Utf8Path,
     rendered: &Utf8Path,
     renderable: bool,
+    initializes: bool,
     needs_unicode: bool,
 ) -> Result<(Vec<Option<Measured>>, Option<JvmAbsence>)> {
     let mut results: Vec<Option<Measured>> = Vec::new();
     // Why the JVM column is empty, where it is. Two different absences that a
     // single blank -- or a single `refused` -- would flatten into one.
     let mut jvm_absence: Option<JvmAbsence> = None;
+    let driver = native_driver(case, out, name, initializes)?;
     for variant in VARIANTS {
         let binary = out.join(format!(
             "{name}.{}",
@@ -652,7 +627,12 @@ fn variants(
             results.push(None);
             continue;
         }
-        let cpp = vec![source, root.join("benches/common/main.cpp")];
+        let front = if variant.generated == Generated::None {
+            source
+        } else {
+            driver.clone()
+        };
+        let cpp = vec![front, root.join("benches/common/main.cpp")];
         let mut c = runtime_sources(out, needs_unicode);
         match variant.generated {
             // Not a C++ file linked against a generated object, so it leaves
@@ -707,13 +687,96 @@ fn variants(
 /// Split from [`variants`] because they answer different questions: one builds
 /// this compiler's output, the other asks what everybody else got and whether
 /// the answers match.
+/// Every lane in a family compiles the same work, so none may be an order of
+/// magnitude from another.
+fn work_agrees(row: &Row) -> Result<()> {
+    // A reference and a subject that disagree about how much work to do are not
+    // comparable, and the checksum cannot say so: every AWFY case answers 1 or
+    // 0, and `nbody`'s `verifyResult` returns *true* for one iteration as
+    // happily as for 250,000. Before this guard existed that row reported
+    // **59.5ns against 7.36ms** for the same work and passed every check.
+    //
+    // # Why it is per family and not against the row
+    //
+    // The obvious generalisation -- flag any lane far from the row's median --
+    // is wrong, because a large gap between *families* is frequently the point.
+    // `exceptions` has Java 153x C++ because `fillInStackTrace` walks the
+    // stack; `optional-chain` has node 37x C++ because one is a JIT and the
+    // other is a native binary. Those are the findings, not defects.
+    //
+    // What must agree is work, and work is identical only *within* a family:
+    //
+    //   references      `ref.cpp` and `ref.java` -- two people, one problem
+    //   this compiler   C, LLVM and JVM -- one program, three backends
+    //   engines         node and bun -- one file, two engines
+    //
+    // `nts f64` is deliberately excluded. It is the same program compiled with
+    // specialization off, and being much slower is the entire reason the column
+    // exists: `closures` is 26x there and that is the measurement.
+    //
+    // Twenty times is far outside any codegen difference. Java can beat C++ on
+    // a row and does; it cannot beat it by an order of magnitude on a numeric
+    // kernel, so a gap that size means one of them is doing different work.
+    for (family, lanes) in [
+    ("hand-written references", vec![("C++", row.cpp), ("Java", row.java)]),
+    (
+        "this compiler's backends",
+        vec![("nts C", Some(row.nts)), ("nts LLVM", row.llvm), ("nts JVM", row.jvm)],
+    ),
+    ("engines", vec![("node", Some(row.node)), ("bun", row.bun)]),
+    ] {
+    let ran: Vec<(&str, f64)> =
+        lanes.into_iter().filter_map(|(l, t)| t.map(|t| (l, t))).collect();
+    let Some((slow, slowest)) = ran
+        .iter()
+        .copied()
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+    else {
+        continue;
+    };
+    let Some((fast, fastest)) = ran.iter().copied().min_by(|a, b| a.1.total_cmp(&b.1)) else {
+        continue;
+    };
+    if fastest * 20.0 >= slowest {
+        continue;
+    }
+    if let Some((_, why)) = WIDE_REFERENCE_GAPS
+        .iter()
+        .find(|(which, _)| *which == row.case)
+    {
+        eprintln!(
+            "note: {} -- {slow} {} against {fast} {} -- {}",
+            row.case,
+            human(slowest),
+            human(fastest),
+            why
+        );
+    } else {
+        bail!(
+            "on {}, {slow} ran in {} against {} for {} -- both are {family}, \
+             so they compile the same work and cannot differ by that much. \
+             One of them is doing a different amount of it: check the \
+             problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s \
+             `volatile`, and `ref.java`'s.",
+            row.case,
+            human(slowest),
+            human(fastest),
+            fast
+        );
+    }
+}
+    Ok(())
+}
+
 fn finish_row(
     case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
     shown: &str,
     results: &[Option<Measured>],
     jvm_absence: Option<JvmAbsence>,
 ) -> Result<Row> {
-    let harness = case.join("bench.mjs");
+    let harness = node_harness(case, out, name)?;
     let node = measure(std::process::Command::new("node").arg(&harness))?;
     // The same source on the other engine. Bun runs `.ts` natively too, so it
     // imports the identical file rather than a copy that could drift.
@@ -772,41 +835,8 @@ fn finish_row(
         }
     }
 
-    // A reference and a subject that disagree about how much work to do are not
-    // comparable, and the checksum cannot say so: every AWFY case answers 1 or
-    // 0, and `nbody`'s `verifyResult` returns *true* for one iteration as
-    // happily as for 250,000. So the guard is on the magnitude, against the
-    // other hand-written reference for the same program.
-    //
-    // Twenty times is far outside any codegen difference. Java can beat C++ on
-    // a row and does; it cannot beat it by an order of magnitude on a numeric
-    // kernel, so a gap that size means one of them is doing different work.
-    if let (Some(cpp), Some(java)) = (row.cpp, row.java)
-        && (java * 20.0 < cpp || cpp * 20.0 < java)
-    {
-        if let Some((_, why)) = WIDE_REFERENCE_GAPS
-            .iter()
-            .find(|(which, _)| *which == row.case)
-        {
-            eprintln!(
-                "note: {} -- Java {} against C++ {} -- {}",
-                row.case,
-                human(java),
-                human(cpp),
-                why
-            );
-        } else {
-            bail!(
-                "the Java reference for {} ran in {} against {} for the C++ \
-                 reference -- that is not a codegen difference, it is the two \
-                 references doing different amounts of work. Check the \
-                 iteration count in JAVA_REFERENCES.",
-                row.case,
-                human(java),
-                human(cpp)
-            );
-        }
-    }
+    work_agrees(&row)?;
+
     println!(
         "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9}",
         row.case,
@@ -876,22 +906,26 @@ fn bun_binary() -> Option<Utf8PathBuf> {
     installed.is_file().then_some(installed)
 }
 
-/// What the C harness calls, read off the harness.
+/// What the harnesses call, read off the case itself.
 ///
 /// A benchmark is an executable and its entry points are exactly the functions
-/// `nts.cpp` declares -- it is the only caller the compiled program has. Taking
-/// them from the file rather than fixing a name keeps a case free to call its
-/// workload whatever the workload is.
-/// What `bench_run` actually calls, read out of the one place it is written.
+/// its `case.ts` exports. Taking them from the file rather than fixing a name
+/// keeps a case free to call its workload whatever the workload is.
+/// What to call and with what, read out of the one place it is written.
 ///
-/// # Why this is parsed rather than declared again
+/// # Why every driver is generated rather than written
 ///
-/// Every case states its workload once, in `nts.cpp`: a `volatile` input at the
-/// call site and one call taking it. A hand-written `Case.java` beside it would
-/// be a second statement of the same thing, free to drift -- and a JVM column
-/// measuring a different workload than the C column would be a ratio about the
-/// harnesses. So the JVM lane reads the C shim rather than duplicating it, and
-/// the workload is the same by construction instead of by inspection.
+/// Every case states its workload once, in `case.ts`: the exported function is
+/// what to call and `export const seed` is the argument. Every lane's driver --
+/// the native `bench_run`, the JVM `Case.java`, the node harness -- comes from
+/// those two facts, so a column cannot measure a different workload than the
+/// column beside it. The workload is the same by construction rather than by
+/// inspection.
+///
+/// This used to read `nts.cpp`, which made the *JVM* lane's driver a product of
+/// parsing C++: the inputs had to be `volatile` scalars on their own lines and
+/// the call a single-line `return`. Two lanes coupled through a text format
+/// neither cared about, and a JVM number that moved if the C++ was reformatted.
 ///
 /// The parse is narrow on purpose. Thirty-nine cases share one shape, and a
 /// case that does not match is refused rather than guessed at.
@@ -916,41 +950,180 @@ fn jvm_cell(time: Option<f64>, absence: Option<JvmAbsence>) -> String {
 }
 
 fn workload(case: &Utf8Path) -> Result<(String, Vec<String>)> {
-    let source = std::fs::read_to_string(case.join("nts.cpp"))
-        .with_context(|| format!("reading {case}/nts.cpp"))?;
-    let body = source
-        .split_once("double bench_run(void) {")
-        .context("no `bench_run` to read a workload from")?
-        .1;
-    let mut inputs: Vec<(String, String)> = Vec::new();
-    for line in body.lines().map(str::trim) {
-        if let Some(rest) = line.strip_prefix("volatile ")
-            && let Some((declaration, value)) = rest.split_once('=')
-            && let Some(name) = declaration.split_whitespace().last()
-        {
-            inputs.push((name.to_owned(), value.trim_end_matches(';').trim().to_owned()));
-        }
-        if let Some(call) = line.strip_prefix("return ")
-            && let Some(open) = call.find('(')
-        {
-            let callee = call[..open].trim().to_owned();
-            let arguments = call[open + 1..]
-                .rsplit_once(')')
-                .context("an unterminated call in `bench_run`")?
-                .0;
-            let mut resolved = Vec::new();
-            for argument in arguments.split(',').map(str::trim).filter(|a| !a.is_empty()) {
-                let value = inputs
-                    .iter()
-                    .find(|(name, _)| name == argument)
-                    .map(|(_, value)| value.clone())
-                    .with_context(|| format!("`{argument}` is not a `volatile` input"))?;
-                resolved.push(value);
-            }
-            return Ok((callee, resolved));
-        }
+    let source = std::fs::read_to_string(case.join("case.ts"))
+        .with_context(|| format!("reading {case}/case.ts"))?;
+    let callee = exported_functions(&source)
+        .into_iter()
+        .next()
+        .with_context(|| format!("{case}/case.ts exports no function to call"))?;
+    let seed = source
+        .lines()
+        .find_map(|line| {
+            let rest = line.trim().strip_prefix("export const seed = ")?;
+            Some(rest.trim_end_matches(';').trim().to_owned())
+        })
+        .with_context(|| {
+            format!("{case}/case.ts declares no `export const seed` and supplies no driver")
+        })?;
+    Ok((callee, vec![seed]))
+}
+
+/// How to compile a case, which is the same answer for all of them.
+///
+/// A `tsconfig.json` beside a case is still honoured, so one that needs
+/// something the shared fixture config does not give can say so. None does
+/// today.
+///
+/// Three used to, for `noUncheckedIndexedAccess`, and the comment in them said
+/// it could not move to the shared file without breaking the forty-six cases
+/// that did not ask for it. That was asserted and never measured, and it was
+/// wrong twice: **all fifty cases typecheck with the flag on**, and the three
+/// that carried it typecheck *without* it and produce byte-identical prepared
+/// IR. It was doing nothing. So the answer was neither "move it to the shared
+/// file" nor "keep three special cases" -- it was that there was no fact there
+/// to place.
+fn case_tsconfig(case: &Utf8Path, out: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
+    let supplied = case.join("tsconfig.json");
+    if supplied.exists() {
+        return Ok(supplied);
     }
-    bail!("{case}/nts.cpp has no `return <call>` in `bench_run`")
+    let root = case
+        .parent()
+        .and_then(Utf8Path::parent)
+        .and_then(Utf8Path::parent)
+        .context("a case sits three levels below the repository root")?;
+    let path = out.join(format!("{name}.tsconfig.json"));
+    let text = format!(
+        "{{\n  \"//\": \"Generated by tooling/bench. The case keeps no config of its own.\",\n  \"extends\": \"{root}/tsconfig.fixtures.json\",\n  \"include\": [\"{case}\"]\n}}\n"
+    );
+    std::fs::write(&path, text).with_context(|| format!("writing {path}"))?;
+    Ok(path)
+}
+
+/// The node and bun harness, generated from the same workload.
+///
+/// Node 24 strips TypeScript types natively, so this imports the case's own
+/// `.ts` rather than a hand-maintained JavaScript copy -- there is no second
+/// version of the program to drift. Bun runs the identical file.
+///
+/// Written into `target/` and importing the case by absolute path, so the case
+/// directory holds no generated file at all. Node resolves an absolute
+/// specifier, which is what makes that possible -- a relative one would have to
+/// resolve from where the importer sits.
+fn node_harness(case: &Utf8Path, out: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
+    let supplied = case.join("driver.mjs");
+    if supplied.exists() {
+        return Ok(supplied);
+    }
+    let (callee, arguments) = workload(case)?;
+    let seed = arguments
+        .first()
+        .cloned()
+        .with_context(|| format!("{case}/case.ts declares no `export const seed`"))?;
+    let common = case
+        .parent()
+        .and_then(Utf8Path::parent)
+        .context("a case sits two levels below `benches`")?
+        .join("common/bench.mjs");
+    let path = out.join(format!("{name}.bench.mjs"));
+    // The seed arrives through `process.argv`, not by importing the `const`.
+    //
+    // This is the `volatile` the other two lanes spell with a keyword. An
+    // imported module-level constant is exactly the loop-invariant argument the
+    // native and JVM drivers go out of their way to hide: V8 folds it into the
+    // call, specialises on it, and the row stops measuring the general program.
+    // `argv` is opaque to the optimiser and free, and it is what this harness
+    // did before the drivers were generated.
+    let text = format!(
+        "// Generated from `case.ts`. Edit that, or add a `driver.mjs` beside it.\n\
+         import {{ measure }} from \"{common}\";\n\
+         import {{ {callee} }} from \"{case}/case.ts\";\n\n\
+         const seed = Number(process.argv[2] ?? {seed});\n\
+         measure(() => {callee}(seed));\n"
+    );
+    std::fs::write(&path, &text).with_context(|| format!("writing {path}"))?;
+    Ok(path)
+}
+
+/// The `bench_run` the native harness calls, generated from the workload.
+///
+/// A case used to write this by hand as `nts.cpp`, forty-nine times, and
+/// forty-eight of them were the same eleven lines with a different name and
+/// number in them. The one that was not -- `elementwise`, which passes an array
+/// and has to build one -- writes a `driver.cpp` instead, which is the same
+/// escape hatch `driver.java` already is on the other lane.
+///
+/// `volatile` is not decoration. A loop-invariant argument lets the optimiser
+/// hoist the whole call out of the timed region, and the benchmark then reports
+/// an impressive zero.
+fn native_driver(
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+    initializes: bool,
+) -> Result<Utf8PathBuf> {
+    use std::fmt::Write as _;
+
+    let supplied = case.join("driver.cpp");
+    if supplied.exists() {
+        return Ok(supplied);
+    }
+    let (callee, arguments) = workload(case)?;
+    let mut text = String::from(
+        "// Generated from `case.ts`. Edit that, or add a `driver.cpp` here.\n\
+         #include \"harness.h\"\n\n\
+         // The generated program is C, so its symbols are C.\n\
+         extern \"C\" {\n",
+    );
+    let _ = writeln!(
+        text,
+        "    double {callee}({});",
+        vec!["double"; arguments.len()].join(", ")
+    );
+    if initializes {
+        let _ = writeln!(text, "    void module__init(void);");
+    }
+    let _ = writeln!(text, "}}\n\ndouble bench_run(void) {{");
+    // Module-level state is initialised by `module__init`, and a benchmark that
+    // never calls it runs against whatever the loader left in those globals --
+    // which for a `const` at module scope is null.
+    //
+    // The differential has always called it. No benchmark ever did, and for
+    // forty-nine cases that was invisible because none of them had module-level
+    // state whose initialisation mattered. `symbol-keyed-map` is the first, and
+    // it surfaced as a *wrong answer* rather than a crash: its five symbols were
+    // all null, so five distinct keys collapsed to one and every lookup hit it.
+    //
+    // Once, not per call: this is module evaluation, and it is not the workload.
+    if initializes {
+        let _ = writeln!(text, "    static int ready = 0;");
+        let _ = writeln!(text, "    if (!ready) {{ ready = 1; module__init(); }}");
+    }
+    let mut passed = Vec::new();
+    for (at, value) in arguments.iter().enumerate() {
+        let _ = writeln!(text, "    volatile double in{at} = {value};");
+        passed.push(format!("in{at}"));
+    }
+    let _ = writeln!(text, "    return {callee}({});\n}}", passed.join(", "));
+    let path = out.join(format!("{name}.driver.cpp"));
+    std::fs::write(&path, text).with_context(|| format!("writing {path}"))?;
+    Ok(path)
+}
+
+/// The functions a case exports, which are its entry points.
+///
+/// The compiler is told to keep these alive; anything else is reachable from
+/// them or is not needed. This replaces reading the `extern "C"` block of a
+/// hand-written C++ shim, which stated the same fact one language further away.
+fn exported_functions(source: &str) -> Vec<String> {
+    source
+        .lines()
+        .filter_map(|line| {
+            let rest = line.trim().strip_prefix("export function ")?;
+            let name = rest.split('(').next()?.trim();
+            (!name.is_empty()).then(|| name.to_owned())
+        })
+        .collect()
 }
 
 /// One case through the JVM backend: classes, the runtime jar, a generated
@@ -1007,12 +1180,12 @@ fn jvm_case(
     let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref())?;
 
-    // A case whose workload cannot be recovered from `nts.cpp` writes its own
-    // driver instead.
+    // A case whose workload cannot be written as one call with one scalar
+    // supplies its own driver instead.
     //
-    // `workload` reads `bench_run` and requires every argument to be a
-    // `volatile` scalar, which is true of every case but the ones that pass an
-    // array: `elementwise` hands the same buffer to each call and refills it, so
+    // `workload` reads `export const seed`, which every case has but the ones
+    // that pass an array: `elementwise` hands the same buffer to each call and
+    // refills it, so
     // there is no expression to synthesise and the state has to be reset between
     // runs or the contents compound and the checksum depends on how many times
     // the harness happened to call it.
@@ -1122,17 +1295,42 @@ fn handwritten_java(
 
     let dir = out.join(format!("{name}.javaref"));
     std::fs::create_dir_all(&dir)?;
+    // `Ref` *is* the `Bench.Work`, rather than something a `Bench.Work` calls.
+    //
+    // The wrapper was not free. `awfy-sieve`'s reference measured 4.7us with
+    // the workload inline in `run()` and **5.5us behind one extra static call**
+    // -- 18%, on a row whose whole body is a sieve over 5000 flags. The call
+    // itself is nothing; what it costs is inlining, because AWFY's benchmarks
+    // are already three deep before the harness adds a fourth.
+    //
+    // An 18% tax on the *reference* lane makes this compiler look better, which
+    // is the one direction a harness must never be wrong in.
     let mut driver = String::from("public final class Case {\n");
     let _ = writeln!(driver, "    public static void main(String[] argv) {{");
-    let _ = writeln!(driver, "        Bench.measure(new Bench.Work() {{");
-    let _ = writeln!(driver, "            @Override public double run() {{");
-    let _ = writeln!(driver, "                return Ref.benchRun();");
-    let _ = writeln!(driver, "            }}\n        }});\n    }}\n}}");
+    let _ = writeln!(driver, "        Bench.measure(new Ref());");
+    let _ = writeln!(driver, "    }}\n}}");
     let driver_path = dir.join("Case.java");
     std::fs::write(&driver_path, driver)?;
 
-    let compiled = std::process::Command::new(java_tool("javac"))
-        .arg("-nowarn")
+    // Are We Fast Yet's own classes, on the classpath, when the clone is there.
+    //
+    // This is what `ref.cpp` does with their headers: the eight `awfy-*` cases
+    // have a `ref.java` that constructs one of their classes and calls
+    // `innerBenchmarkLoop`, and the class stays theirs. It is unconditional
+    // rather than per-case because a classpath entry that nothing imports costs
+    // nothing, and the alternative is a list of which cases are allowed to see
+    // it -- which is the table this replaced.
+    let awfy = awfy_classes(root, out)?;
+    let mut classpath = dir.to_string();
+    if let Some(ref classes) = awfy {
+        classpath = format!("{classes}:{classpath}");
+    }
+    let mut javac = std::process::Command::new(java_tool("javac"));
+    javac.arg("-nowarn");
+    if let Some(ref classes) = awfy {
+        javac.arg("-cp").arg(classes.as_str());
+    }
+    let compiled = javac
         .arg("-d")
         .arg(dir.as_str())
         .arg(case.join("ref.java").as_str())
@@ -1148,117 +1346,64 @@ fn handwritten_java(
         std::process::Command::new(java_tool("java"))
             .args(["-XX:+UseG1GC", "-Xms512m", "-Xmx512m", "-XX:-UsePerfData"])
             .arg("-cp")
-            .arg(dir.as_str())
+            .arg(&classpath)
             .arg("Case"),
     )
 }
 
+/// Are We Fast Yet's Java sources, compiled once and shared by every case.
+///
+/// `Ok(None)` where the suite is not cloned, which is the same bargain the C++
+/// column keeps: the reference is absent and the cell renders `--`, rather than
+/// the run failing.
+fn awfy_classes(root: &Utf8Path, out: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
+    let sources = root.join("third_party/are-we-fast-yet/benchmarks/Java/src");
+    if !sources.exists() {
+        return Ok(None);
+    }
+    // Keyed on a marker file rather than on the directory existing, so a build
+    // that died halfway is rebuilt rather than reused.
+    let built = out.join("awfy-java");
+    if built.join(".complete").exists() {
+        return Ok(Some(built));
+    }
+    std::fs::create_dir_all(&built)?;
+    let mut listing = Vec::new();
+    collect_java(&sources, &mut listing)?;
+    let compiled = std::process::Command::new(java_tool("javac"))
+        .arg("-nowarn")
+        .arg("-d")
+        .arg(built.as_str())
+        .args(listing.iter().map(|path| path.as_str()))
+        .output()
+        .context("running javac over the Are We Fast Yet Java sources")?;
+    if !compiled.status.success() {
+        bail!("javac: {}", String::from_utf8_lossy(&compiled.stderr));
+    }
+    std::fs::write(built.join(".complete"), b"")?;
+    Ok(Some(built))
+}
+
+/// The `Java` column for one case: its `ref.java`, or nothing.
+///
+/// There used to be a second path here. The eight `awfy-*` cases had no
+/// `ref.java` and were served instead by a table mapping case name to one of
+/// Are We Fast Yet's class names, plus a synthesised driver -- which was
+/// `ref.cpp` written in Rust rather than by a person, and it made those eight
+/// rows the only ones whose Java reference could not be read beside the case.
+/// They have a `ref.java` now and the table is gone.
 fn java_reference(
     root: &Utf8Path,
     case: &Utf8Path,
     out: &Utf8Path,
     name: &str,
 ) -> Result<Option<Measured>> {
-    use std::fmt::Write as _;
-
-    // A hand-written Java implementation beside the case, which is the Java
-    // analogue of `ref.cpp` and takes precedence over the Are We Fast Yet
-    // lookup below.
-    //
-    // Without this the `Java` column could only exist for the eight cases that
-    // are ports of somebody else's suite, and the one ratio in this table that
-    // divides the runtime out -- our JVM output against a person's Java, on the
-    // same JVM in the same run -- was unavailable for every case this project
-    // wrote itself. `generator` is the first: a 3.2x against the LLVM backend
-    // says nothing about codegen, because it compares a JIT to a native binary.
-    if case.join("ref.java").exists() {
-        return handwritten_java(root, case, out, name).map(Some);
-    }
-
-    let Some((_, class, override_iterations)) =
-        JAVA_REFERENCES.iter().find(|(which, _, _)| *which == name)
-    else {
-        return Ok(None);
-    };
-    let sources = root.join("third_party/are-we-fast-yet/benchmarks/Java/src");
-    if !sources.exists() {
-        // The suite is cloned, not vendored, exactly as the C++ column's is.
+    if !case.join("ref.java").exists() {
         return Ok(None);
     }
-
-    // One build of their tree for every case, since it is the same tree. Keyed
-    // on a marker file rather than on the directory existing, so a build that
-    // died halfway is rebuilt rather than reused.
-    let built = out.join("awfy-java");
-    if !built.join(".complete").exists() {
-        std::fs::create_dir_all(&built)?;
-        let mut listing = Vec::new();
-        collect_java(&sources, &mut listing)?;
-        let compiled = std::process::Command::new(java_tool("javac"))
-            .arg("-nowarn")
-            .arg("-d")
-            .arg(built.as_str())
-            .args(listing.iter().map(|path| path.as_str()))
-            .output()
-            .context("running javac over the Are We Fast Yet Java sources")?;
-        if !compiled.status.success() {
-            bail!("javac: {}", String::from_utf8_lossy(&compiled.stderr));
-        }
-        std::fs::write(built.join(".complete"), b"")?;
-    }
-
-    let (_, arguments) = workload(case)?;
-    let iterations = match override_iterations {
-        Some(count) => count.to_string(),
-        None => arguments
-            .first()
-            .cloned()
-            .with_context(|| format!("{name} has no workload argument"))?,
-    };
-
-    let dir = out.join(format!("{name}.javaref"));
-    std::fs::create_dir_all(&dir)?;
-    let mut driver = String::from("public final class Case {\n");
-    // `volatile` for the reason the generated driver's inputs are: a
-    // loop-invariant argument lets the JIT hoist the whole call out of the
-    // timed loop and report an impressive zero.
-    let _ = writeln!(driver, "    private static volatile double in0 = {iterations};");
-    let _ = writeln!(driver, "    public static void main(String[] argv) {{");
-    let _ = writeln!(driver, "        Bench.measure(new Bench.Work() {{");
-    let _ = writeln!(driver, "            @Override public double run() {{");
-    let _ = writeln!(
-        driver,
-        "                return new {class}().innerBenchmarkLoop((int) in0) ? 1 : 0;"
-    );
-    let _ = writeln!(driver, "            }}\n        }});\n    }}\n}}");
-    let driver_path = dir.join("Case.java");
-    std::fs::write(&driver_path, driver)?;
-
-    let compiled = std::process::Command::new(java_tool("javac"))
-        .arg("-nowarn")
-        .arg("-cp")
-        .arg(built.as_str())
-        .arg("-d")
-        .arg(dir.as_str())
-        .arg(root.join("benches/common/Bench.java").as_str())
-        .arg(driver_path.as_str())
-        .output()
-        .context("running javac on the reference driver")?;
-    if !compiled.status.success() {
-        bail!("javac: {}", String::from_utf8_lossy(&compiled.stderr));
-    }
-
-    measure(
-        std::process::Command::new(java_tool("java"))
-            .args(["-XX:+UseG1GC", "-Xms512m", "-Xmx512m", "-XX:-UsePerfData"])
-            .arg("-cp")
-            .arg(format!("{dir}:{built}"))
-            .arg("Case"),
-    )
-    .map(Some)
+    handwritten_java(root, case, out, name).map(Some)
 }
 
-/// Every `.java` under a directory, recursively.
 fn collect_java(dir: &Utf8Path, into: &mut Vec<Utf8PathBuf>) -> Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let path = Utf8PathBuf::from_path_buf(entry?.path())
@@ -1288,32 +1433,22 @@ fn java_tool(name: &str) -> Utf8PathBuf {
 }
 
 fn entry_points(case: &Utf8Path) -> Result<Vec<String>> {
-    let source = std::fs::read_to_string(case.join("nts.cpp"))
-        .with_context(|| format!("reading {case}/nts.cpp"))?;
-    let mut names = Vec::new();
-    let mut inside = false;
-    for line in source.lines() {
-        let line = line.trim();
-        if line.starts_with("extern \"C\"") {
-            inside = true;
-            continue;
-        }
-        if inside && line == "}" {
-            inside = false;
-            continue;
-        }
-        // `double scan(double seed);` -- the name is what precedes the paren.
-        if let Some(open) = line.find('(')
-            && inside
-            && line.ends_with(");")
-            && let Some(name) = line[..open].split_whitespace().last()
-        {
-            names.push(name.trim_start_matches('*').to_owned());
-        }
-    }
+    let source = std::fs::read_to_string(case.join("case.ts"))
+        .with_context(|| format!("reading {case}/case.ts"))?;
+    let mut names = exported_functions(&source);
     if names.is_empty() {
-        bail!("{case}/nts.cpp declares no entry point");
+        bail!("{case}/case.ts exports no function");
     }
+    // Module evaluation is a root in the same sense the entry point is: nothing
+    // *calls* it, and the program is wrong without it.
+    //
+    // `Roots::Entry` is right that an executable's exports are not roots, and
+    // it dropped this with them. For forty-nine cases that was invisible --
+    // none had module-level state whose initialisation mattered. The fiftieth
+    // did, and it surfaced as a wrong *answer* rather than a link error: five
+    // `const` symbols stayed null, so five distinct map keys collapsed into
+    // one and every lookup hit it.
+    names.push(hir::lower::MODULE_INIT.to_owned());
     Ok(names)
 }
 

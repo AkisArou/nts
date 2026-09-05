@@ -47,11 +47,22 @@ count=0
 for case in benches/cases/*/; do
   name=$(basename "$case")
   [ -n "$only" ] && [ "$only" != "$name" ] && continue
-  [ -f "$case/tsconfig.json" ] || continue
+  [ -f "$case/case.ts" ] || continue
   count=$((count + 1))
 
   out="$work/$name"
-  if ! ./target/release/nts emit-c "$case/tsconfig.json" --out "$out" >"$work/log" 2>&1; then
+  mkdir -p "$out"
+  # A case keeps a `tsconfig.json` only where it needs something the shared
+  # fixture config does not give; none does today, and `tooling/bench`
+  # generates one per case for the same reason this does.
+  if [ -f "$case/tsconfig.json" ]; then
+    project="$case/tsconfig.json"
+  else
+    project="$out/tsconfig.json"
+    printf '{ "extends": "%s/tsconfig.fixtures.json", "include": ["%s/%s"] }\n' \
+      "$root" "$root" "$case" > "$project"
+  fi
+  if ! ./target/release/nts emit-c "$project" --out "$out" >"$work/log" 2>&1; then
     printf '  %-22s emit-c refused\n' "$name"
     [ -n "$only" ] && cat "$work/log"
     fail=1
@@ -66,7 +77,7 @@ for case in benches/cases/*/; do
     continue
   fi
 
-  if ! ./target/release/nts emit-llvm "$case/tsconfig.json" >"$out/program.ll" 2>"$work/log"; then
+  if ! ./target/release/nts emit-llvm "$project" >"$out/program.ll" 2>"$work/log"; then
     printf '  %-22s emit-llvm refused\n' "$name"
     [ -n "$only" ] && cat "$work/log"
     fail=1
@@ -83,6 +94,16 @@ done
 
 if [ "$fail" -ne 0 ]; then
   echo "  $count case(s) checked, at least one did not build"
+  exit 1
+fi
+# A step that can find nothing to do will do it again the next time the layout
+# moves, and it reports the silence as success. This one already did: the guard
+# above was `[ -f "$case/tsconfig.json" ]`, the per-case configs were deleted,
+# and it skipped all fifty cases and exited green in **zero seconds** -- while
+# being the only thing in the gate that compiles `benches/cases` at all.
+if [ "$count" -eq 0 ]; then
+  printf '  no benchmark cases found -- this step compiles nothing and is not\n'
+  printf '  passing. `benches/cases/*/case.ts` is what it looks for.\n'
   exit 1
 fi
 echo "  $count benchmark case(s) compile, both backends"

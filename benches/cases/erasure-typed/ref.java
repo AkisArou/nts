@@ -9,7 +9,7 @@
 // `kindOf` returns a literal 1 because `typeof v === "number"` on a `double` is
 // trivially true and that is what a person writes. The compiled control folds
 // it the same way; the point of a control is to be the easy program.
-final class Ref {
+final class Ref extends Bench.Work {
     private static double widen(double value) {
         return value;
     }
@@ -34,7 +34,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return erasureTyped(seed);
     }
 }

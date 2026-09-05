@@ -25,7 +25,7 @@
 // whatever was thrown, and `Error` in Java means something a program is not
 // supposed to catch. The name in the TypeScript is JavaScript's `Error`, whose
 // Java analogue is `RuntimeException`.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the trip count is not a compile-time constant.
     private static volatile double rounds = 100000;
 
@@ -44,7 +44,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return run((int) rounds);
     }
 }

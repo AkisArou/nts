@@ -15,7 +15,7 @@
 // `xs.length` is read in the condition rather than hoisted, as the TypeScript
 // does. C2 hoists it; writing the hoist by hand would be optimising the
 // reference past what a person writes.
-final class Ref {
+final class Ref extends Bench.Work {
     private static final int[] XS = {
         0, 37, 74, 10, 47, 84, 20, 57, 94, 30, 67, 3, 40, 77, 13, 50,
         87, 23, 60, 97, 33, 70, 6, 43, 80, 16, 53, 90, 26, 63, 100, 36,
@@ -35,7 +35,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return convolve((int) seed);
     }
 }

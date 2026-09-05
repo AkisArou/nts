@@ -17,7 +17,7 @@
 // `LambdaMetafactory` is the wrong tool even before Android's API 26 floor --
 // so a `static final` singleton here is the matching shape rather than a
 // fresh capture per assignment.
-final class Ref {
+final class Ref extends Bench.Work {
     interface Fn {
         double apply(double x);
     }
@@ -47,7 +47,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return run((int) rounds);
     }
 }

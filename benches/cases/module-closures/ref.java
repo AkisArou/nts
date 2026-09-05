@@ -22,7 +22,7 @@
 // `0x9E3779B1` rather than `2654435761`, and `int` arithmetic throughout: for
 // `x < 4096` the true product is under 2^43 and exact in a double, so `ToInt32`
 // of it is the product modulo 2^32 -- which is Java's `int` multiply.
-final class Ref {
+final class Ref extends Bench.Work {
     interface IntFn {
         int apply(int x);
     }
@@ -62,7 +62,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return work((int) seed);
     }
 }

@@ -1,9 +1,0 @@
-{
-  "extends": "../../../tsconfig.fixtures.json",
-  "compilerOptions": {
-    "noUncheckedIndexedAccess": true
-  },
-  "include": [
-    "src"
-  ]
-}

@@ -22,7 +22,7 @@
 //
 // Differs from `erasure-typed/ref.java` in `double` versus `Object` and in
 // nothing else, because the pair is the measurement.
-final class Ref {
+final class Ref extends Bench.Work {
     private static Object widen(Object value) {
         return value;
     }
@@ -47,7 +47,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return erasureUnknown(seed);
     }
 }

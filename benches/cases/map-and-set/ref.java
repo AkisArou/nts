@@ -26,7 +26,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the trip count and the keys are not compile-time constants.
     private static volatile double seed = 3;
 
@@ -59,7 +59,7 @@ final class Ref {
         return total + seen.size() + marks.size();
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return table((int) seed);
     }
 }

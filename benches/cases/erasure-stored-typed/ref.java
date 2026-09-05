@@ -2,7 +2,7 @@
 // type says what is in it and nothing needs asking.
 //
 // Differs from its pair in `double[]` versus `Object[]` and in nothing else.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the array's contents are not compile-time constants.
     private static volatile double seed = 12345;
 
@@ -20,7 +20,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return erasureStoredTyped(seed);
     }
 }

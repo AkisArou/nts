@@ -105,7 +105,7 @@ if [ "$all" = false ]; then
   echo "  Corpora skipped by --minimal. Re-run without it for:"
   echo "    third_party/node               the Node compatibility profile and conformance"
   echo "    third_party/test262            the numeric conformance slice"
-  echo "    third_party/are-we-fast-yet    the benchmark fidelity gate"
+  echo "    third_party/are-we-fast-yet    the C++ and Java reference columns"
   exit 0
 fi
 
@@ -139,10 +139,18 @@ else
   git clone --depth 1 --filter=blob:none https://github.com/tc39/test262.git third_party/test262
 fi
 
-# The fidelity gate -- running their `.js` and our `.ts` on node and comparing
-# -- plus the reference C++ column.
+# The `C++` and `Java` columns of the benchmark table: their own hand-written
+# implementations of the same programs, built and timed by our harness.
+#
+# `benchmarks/JavaScript` was cloned for a `fidelity.mjs` that ran their `.js`
+# beside our `.ts` on node, to check the *port* rather than the result. Nothing
+# ever ran it -- no gate step, no test, no CI -- and a check that does not run
+# is worse than one that does not exist, because it reads as coverage. It is
+# gone, and so is the directory it lived in: the ported benchmarks are now
+# inlined into the cases that use them. The two reference columns are what this
+# clone is for.
 say "third_party/are-we-fast-yet"
 clone_sparse third_party/are-we-fast-yet https://github.com/smarr/are-we-fast-yet "" \
-  benchmarks/JavaScript 'benchmarks/C++' benchmarks/Java docs
+  'benchmarks/C++' benchmarks/Java docs
 
 say "done"

@@ -26,7 +26,7 @@
 // `Double.toString`: the fix-up that suffices for a benchmark does not suffice
 // for a language, and the row prices our formatter against the platform's plus
 // the cheapest correction that makes them comparable.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the digits are not compile-time constants.
     private static volatile double seed = 3;
 
@@ -63,7 +63,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return format(seed);
     }
 }

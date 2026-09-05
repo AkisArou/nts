@@ -22,7 +22,7 @@
 // beside `ref.cpp` under the same name. Java requires a *public* class to live
 // in a file named after it; a package-private one may live anywhere, and the
 // generated driver is compiled into the same (default) package.
-final class Ref {
+final class Ref extends Bench.Work {
     static final class UpTo {
         double limit;
         double i;
@@ -55,7 +55,7 @@ final class Ref {
     // impressive zero.
     private static volatile double seed = 5;
 
-    static double benchRun() {
+    @Override public double run() {
         double total = 0;
         for (int round = 0; round < 2000; round++) {
             UpTo walk = new UpTo(seed + 200);

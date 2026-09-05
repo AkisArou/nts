@@ -16,7 +16,7 @@
 // The fill is written as a counted loop rather than an append, which is the
 // same reason: appending in Java means a `List`, and the row is not about
 // lists.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the contents are not compile-time constants.
     private static volatile double seed = 3;
 
@@ -38,7 +38,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return scan((int) seed);
     }
 }

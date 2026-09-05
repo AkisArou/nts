@@ -711,7 +711,7 @@ fn print_program(program: &hir::Program) {
 ///
 /// Empty means every export, which is what a *library* is. An executable has
 /// one entry and so does a benchmark: `tooling/bench` roots at whatever its
-/// `nts.cpp` declares `extern "C"`.
+/// `case.ts` exports.
 ///
 /// It matters more than a flag usually does. Without it this printed a
 /// different program than the benchmark builds -- every export is a root, a
@@ -841,6 +841,7 @@ fn render(ty: &HirType) -> String {
         HirType::Int { bits, signed } => format!("{}{bits}", if *signed { 'i' } else { 'u' }),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "managed<str>".to_owned(),
+        HirType::Managed(ManagedType::Symbol) => "managed<sym>".to_owned(),
         // Named by the part of the synthetic space it is in. Every one of them
         // printed as `closure#N` before, which is the one thing an `async`
         // frame and a generator's frame are not -- and this dump is where a

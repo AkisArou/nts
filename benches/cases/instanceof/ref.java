@@ -41,7 +41,7 @@
 // Each subclass adds its own field on top of the base's, which is what
 // `Layout.base` records and what makes `super_class` real here rather than a
 // prefix coincidence.
-final class Ref {
+final class Ref extends Bench.Work {
     static class Shape {
         double size;
 
@@ -96,7 +96,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return run((int) rounds);
     }
 }

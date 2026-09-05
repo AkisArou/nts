@@ -1,0 +1,9 @@
+{
+  "//": "For editors and for `tsc`, not for the benchmark runner. Every case is a program of its own, so `tooling/bench` generates a `tsconfig.json` per case with that case as its `include` -- compiling fifty cases as one program would make every export a root of every other. This file exists so that opening a `case.ts` in an editor typechecks it, which nothing did once the per-case configs went away.",
+  "//options": "None of its own. Both this and the generated ones extend `tsconfig.fixtures.json`, so the compiler options are stated once and the two cannot disagree about anything but which files they look at.",
+  "extends": "../tsconfig.fixtures.json",
+  "include": [
+    "cases",
+    "common"
+  ]
+}

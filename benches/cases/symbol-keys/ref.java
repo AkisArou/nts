@@ -30,7 +30,7 @@
 // after 512 rounds. A harness agreeing on a value that had no way to disagree
 // is not evidence, and the check that produced the evidence belongs next to the
 // code rather than in a transcript.
-final class Ref {
+final class Ref extends Bench.Work {
     static final class Cell {
         int count;
         boolean flag;
@@ -62,7 +62,7 @@ final class Ref {
         return total + (cell.flag ? 1 : 0) + (cell.plainFlag ? 2 : 0);
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return keys((int) seed);
     }
 }

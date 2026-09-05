@@ -19,7 +19,7 @@
 // it is declined: it allocates an array as well as the strings, and it is not
 // the program the TypeScript describes. The hand-written scan is what the
 // TypeScript says, and the checksum agrees.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the sentence-scan is not a compile-time constant.
     private static volatile double seed = 3;
 
@@ -45,7 +45,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return work((int) seed);
     }
 }

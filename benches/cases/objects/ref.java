@@ -22,7 +22,7 @@
 // favour and is left there on purpose -- the flag is a real thing a person
 // writing this by hand gets, and a reference that gave it up to match our
 // constraint would be measuring our constraint instead of our codegen.
-final class Ref {
+final class Ref extends Bench.Work {
     static final class Vec2 {
         final double x;
         final double y;
@@ -51,7 +51,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return simulate(seed);
     }
 }

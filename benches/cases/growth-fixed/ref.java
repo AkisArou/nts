@@ -13,7 +13,7 @@
 //
 // `new double[n]` rather than a literal, as the TypeScript does, so the fill
 // loop is really measured.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the contents are not compile-time constants.
     private static volatile double seed = 3;
 
@@ -35,7 +35,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return scan((int) seed);
     }
 }

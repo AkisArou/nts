@@ -11,7 +11,7 @@
 // question -- 512 passes over 4096 doubles with a loop-invariant multiplier is
 // exactly the shape both are supposed to vectorise -- so if the numbers differ
 // it is about whether the loop was recognised, not about the arithmetic.
-final class Ref {
+final class Ref extends Bench.Work {
     private static final int N = 4096;
     private static final double[] XS = new double[N];
 
@@ -28,7 +28,7 @@ final class Ref {
         return xs[0] + xs[xs.length - 1];
     }
 
-    static double benchRun() {
+    @Override public double run() {
         for (int i = 0; i < N; i++) {
             XS[i] = 1.0;
         }

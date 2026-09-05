@@ -31,7 +31,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the contents are not compile-time constants.
     private static volatile double seed = 5;
 
@@ -55,7 +55,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return work((int) seed);
     }
 }

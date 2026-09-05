@@ -32,7 +32,7 @@
 // checksum agrees for the wrong reason.
 //
 // `int` accumulation throughout: every step in the TypeScript ends in `| 0`.
-final class Ref {
+final class Ref extends Bench.Work {
     private static final int NUMBER = 0;
     private static final int NIL = 1;
     private static final int UNDEFINED = 2;
@@ -66,7 +66,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return absences((int) seed);
     }
 }

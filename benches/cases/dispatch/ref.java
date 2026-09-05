@@ -26,7 +26,7 @@
 // `state * 1309 + 13849` fits an `int` and is masked to 16 bits, so the
 // multiply cannot reach the 2^53 rounding the TypeScript comment warns about;
 // `int` arithmetic here is the same function, not a near one.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the program array is not a compile-time constant: every
     // opcode derives from the seed, and a known seed lets the JIT constant-fold
     // 32,768 dispatches.
@@ -76,7 +76,7 @@ final class Ref {
         return acc + count;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return run((int) seed);
     }
 }

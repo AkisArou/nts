@@ -10,7 +10,7 @@
 // No `volatile` guard on `n` and none in `ref.cpp` either: the recursion is not
 // something a JIT folds at a constant argument, and `fib` is the one case here
 // whose cost is the calls themselves.
-final class Ref {
+final class Ref extends Bench.Work {
     static int fib(int n) {
         if (n < 2) {
             return n;
@@ -18,7 +18,7 @@ final class Ref {
         return fib(n - 1) + fib(n - 2);
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return fib(27);
     }
 }

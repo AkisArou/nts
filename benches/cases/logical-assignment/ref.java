@@ -11,7 +11,7 @@
 // `(total + cached) | 0` and the sum passes 2^31 well before 100,000 rounds, so
 // both sides wrap at 32 bits and agree because they wrap the same way. A `long`
 // accumulator would be a different program and the checksum would say so.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the trip count is not a compile-time constant.
     private static volatile double rounds = 100000;
 
@@ -30,7 +30,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return run((int) rounds);
     }
 }

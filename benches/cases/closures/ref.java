@@ -21,7 +21,7 @@
 //
 // `0x9E3779B1` rather than `2654435761`, because the decimal does not fit an
 // `int` literal and a `long` would change the arithmetic.
-final class Ref {
+final class Ref extends Bench.Work {
     interface IntFn {
         int apply(int x);
     }
@@ -53,7 +53,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return work((int) seed);
     }
 }

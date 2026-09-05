@@ -35,7 +35,7 @@
 // field rule doing more than fairness: with `int` fields the wrap is the
 // hardware's and the mistake is unavailable, so the reference cannot show you
 // that this compiler is calling `NtsRuntime.toInt` twice a step to get it.
-final class Ref {
+final class Ref extends Bench.Work {
     // The primitive analogue of the JS iterator protocol: a value and a
     // question, no wrapper object per step and no box.
     interface Steps {
@@ -88,7 +88,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return run(rounds);
     }
 }

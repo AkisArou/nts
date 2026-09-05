@@ -5,7 +5,7 @@
 // is the implementation this feature rejects, written out -- and C2's escape
 // analysis is what decides whether the boxing survives, which is the whole
 // interest of the column.
-final class Ref {
+final class Ref extends Bench.Work {
     static final class Box<T> {
         private final T v;
         Box(T v) { this.v = v; }
@@ -27,7 +27,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return work((int) seed);
     }
 }

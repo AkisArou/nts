@@ -20,7 +20,7 @@
 // `int` fields and `int` arithmetic: the source masks with `& 0xffff` and
 // `| 0`, so specialization proves an i32 and takes it. A `double` here would
 // measure a narrowing this compiler already performs.
-final class Ref {
+final class Ref extends Bench.Work {
     abstract static class Shape {
         abstract int area();
 
@@ -83,7 +83,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return work((int) seed);
     }
 }

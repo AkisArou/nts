@@ -41,7 +41,7 @@
 // uses.
 import java.nio.charset.StandardCharsets;
 
-final class Ref {
+final class Ref extends Bench.Work {
     private static final String TEXT =
         "the quick brown fox jumps over the lazy dog "
             + "éèêüñ précis café naïve "
@@ -67,7 +67,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return work((int) iterations);
     }
 }

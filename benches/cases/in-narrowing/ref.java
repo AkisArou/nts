@@ -19,7 +19,7 @@
 // let the JIT use a two-arm profile where the compiled program dispatches on
 // three unrelated classes. The reference should not be handed a shape the
 // subject cannot have.
-final class Ref {
+final class Ref extends Bench.Work {
     static final class Circle {
         int radius;
     }
@@ -38,7 +38,7 @@ final class Ref {
     // lets the JIT hoist the whole call out of the timed loop.
     private static volatile double seed = 5;
 
-    static double benchRun() {
+    @Override public double run() {
         int step = (int) seed;
         int total = 0;
         for (int i = 0; i < 4096; i++) {

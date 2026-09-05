@@ -21,7 +21,7 @@
 // difference between the lanes; it is Java's capture rule.
 import java.util.Arrays;
 
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the initial fill is not a compile-time constant.
     private static volatile double seed = 7;
 
@@ -41,7 +41,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return work(seed);
     }
 }

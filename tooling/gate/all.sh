@@ -211,6 +211,16 @@ sweep() {
 # an `unreachable!`, and the examples could not see it because none of them
 # shifted a bigint by a value.
 profile() {
+  # A discovery loop that finds nothing reports it as success. `benches.sh`
+  # did exactly that when the per-case `tsconfig.json` files were deleted: it
+  # skipped all fifty cases and exited green in zero seconds, while being the
+  # only step that compiles `benches/cases` at all. The pattern is the same
+  # here -- collect the *bad* ones, and an empty glob yields none.
+  modules=$(ls -d "$root"/runtime/node/*/tsconfig.json 2>/dev/null | wc -l)
+  if [ "$modules" -eq 0 ]; then
+    echo "  no runtime/node modules found -- this step checked nothing"
+    return 1
+  fi
   crashed=$(for m in "$root"/runtime/node/*/tsconfig.json; do
               if ./target/release/nts emit-c "$m" --out "$root/target/gate-profile" \
                    --napi 2>&1 | grep -q "panicked at"; then
@@ -240,6 +250,16 @@ profile() {
   # which nothing looked at again. A clone is only worth making while the name
   # it is built around still refers to something.
   known_invalid=""
+  # A discovery loop that finds nothing reports it as success. `benches.sh`
+  # did exactly that when the per-case `tsconfig.json` files were deleted: it
+  # skipped all fifty cases and exited green in zero seconds, while being the
+  # only step that compiles `benches/cases` at all. The pattern is the same
+  # here -- collect the *bad* ones, and an empty glob yields none.
+  modules=$(ls -d "$root"/runtime/node/*/tsconfig.json 2>/dev/null | wc -l)
+  if [ "$modules" -eq 0 ]; then
+    echo "  no runtime/node modules found -- this step checked nothing"
+    return 1
+  fi
   invalid=$(for m in "$root"/runtime/node/*/tsconfig.json; do
               if ./target/release/nts hir "$m" 2>&1 | grep -q "does NOT verify"; then
                 basename "$(dirname "$m")"
@@ -355,7 +375,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 106 "through the LLVM backend, counting" ); }
+  backend_examples 107 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -366,7 +386,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 106 "through the LLVM backend" ); }
+  backend_examples 107 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform

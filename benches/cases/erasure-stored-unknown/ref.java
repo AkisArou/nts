@@ -12,7 +12,7 @@
 //
 // Differs from `erasure-stored-typed/ref.java` in `Object[]` versus `double[]`
 // and in nothing else.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the array's contents are not compile-time constants.
     private static volatile double seed = 12345;
 
@@ -33,7 +33,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return erasureStoredUnknown(seed);
     }
 }

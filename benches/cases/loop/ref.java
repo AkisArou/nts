@@ -21,7 +21,7 @@
 // `(double) i * i` rather than `i * i`, because the TypeScript multiplies in
 // f64 and an `int` product would wrap at a bound this case does not reach but
 // the semantics do not promise.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the bound is not a compile-time constant: a known `n` lets
     // the JIT unroll to the trip count and turn the loop into a closed form.
     private static volatile double n = 1000;
@@ -34,7 +34,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return accumulate(n);
     }
 }

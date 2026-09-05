@@ -16,7 +16,7 @@
 // Every character is summed rather than the length read, for the reason the
 // TypeScript gives: a digit *count* can be produced without building the
 // string, and node was measured eliding exactly that.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the digits are not compile-time constants.
     private static volatile double seed = 3;
 
@@ -43,7 +43,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return format((int) seed);
     }
 }

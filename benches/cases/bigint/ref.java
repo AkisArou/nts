@@ -25,7 +25,7 @@
 // have to re-derive it.
 import java.math.BigInteger;
 
-final class Ref {
+final class Ref extends Bench.Work {
     private static final BigInteger MODULUS = BigInteger.valueOf(1000000007L);
     private static final BigInteger ADDEND = BigInteger.valueOf(12345L);
     private static final BigInteger MASK48 = new BigInteger("ffffffffffff", 16);
@@ -47,7 +47,7 @@ final class Ref {
         return a.xor(b).and(MASK16).doubleValue();
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return mix((int) seed);
     }
 }

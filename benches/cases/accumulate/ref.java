@@ -15,7 +15,7 @@
 // The same call as `dispatch`'s `int[]`.
 //
 // The `| 0`s are dropped because in Java the type is the proof.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the loop is not a compile-time constant.
     private static volatile double seed = 12345;
 
@@ -29,7 +29,7 @@ final class Ref {
         return total;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return accumulate((int) seed);
     }
 }

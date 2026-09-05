@@ -10,7 +10,7 @@
 // `(h << 5) - h` is left as written rather than folded to `h * 31`, because the
 // TypeScript says so and the two differ in nothing but what the compiler is
 // being asked to notice.
-final class Ref {
+final class Ref extends Bench.Work {
     // `volatile` so the whole loop is not a compile-time constant: `checksum`
     // is a pure function of its seed and 4096 is a literal trip count.
     private static volatile double seed = 12345;
@@ -25,7 +25,7 @@ final class Ref {
         return h;
     }
 
-    static double benchRun() {
+    @Override public double run() {
         return checksum((int) seed);
     }
 }
