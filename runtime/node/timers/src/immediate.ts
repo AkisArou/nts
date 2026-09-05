@@ -34,7 +34,9 @@ export type ImmediateCallback<Args extends unknown[] = []> = (...args: Args) => 
 export interface ImmediateHandle {
   _idleNext: ImmediateHandle | null;
   _idlePrev: ImmediateHandle | null;
-  _onImmediate: CallableFunction | null | undefined;
+  // Opaque on the erased queue view: only the concrete generic handle invokes
+  // this value, through its typed `invoke()` method.
+  _onImmediate: object | null | undefined;
   _argv: unknown[] | undefined;
   _destroyed: boolean;
   [kRefed]: boolean | null;

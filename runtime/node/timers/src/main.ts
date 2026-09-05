@@ -104,10 +104,40 @@ export { clearImmediate };
 export { promises };
 
 /**
- * The handle types, for callers that name them.
+ * Raw implementation exports for the conformance harness's node-internal
+ * facades. `shape.mjs` deliberately omits these from the public `timers`
+ * object. These are export aliases, not forwarding functions, so the facade
+ * adds no call on any scheduler path and the compiled lane cannot import
+ * TypeScript helpers beside the addon it is measuring.
  *
- * A type-only export: node's `require('timers')` has no `Timeout` property,
- * and adding one would be a difference a test could see. Code that needs the
- * classes themselves imports them from `./timeout.ts` and `./immediate.ts`.
+ * The handle classes remain usable as types as well as values. Node's
+ * `require('timers')` has no `Timeout` or `Immediate` property; the explicit
+ * public shape is what preserves that contract.
  */
-export type { Timeout, Immediate };
+export {
+  active,
+  cleanTimer,
+  decRefCount,
+  getTimerDuration,
+  insert,
+  kRefed,
+  setUnrefTimeout,
+  TIMEOUT_MAX,
+  timerListMap,
+  timerListQueue,
+  Timeout,
+  unrefActive,
+} from "./timeout.ts";
+export {
+  cleanImmediate,
+  immediateQueue,
+  Immediate,
+} from "./immediate.ts";
+export {
+  append,
+  init,
+  isEmpty,
+  peek,
+  remove,
+} from "./linkedlist.ts";
+export { PriorityQueue } from "./priority-queue.ts";

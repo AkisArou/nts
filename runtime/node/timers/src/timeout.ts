@@ -17,11 +17,11 @@
 // and the logarithmic part is over the number of distinct durations a program
 // uses, which is small and does not grow with the number of timers.
 //
-// What this file does not do is async_hooks. Node emits an init/before/after/
-// destroy quartet around every timer, and threads an async context frame
-// through it. That belongs to `async_hooks`, which this profile does not have;
-// the timer semantics here are complete without it, and the places node emits
-// from are not marked because they are not this module's business.
+// Async-hook identity and context are part of this machinery rather than a
+// host-side facade. Construction captures the current trigger id and context,
+// and the drain emits the init/before/after/destroy lifecycle around the real
+// callback. Importing the shared registry keeps timer resources observable to
+// the same `node:async_hooks` instance that registered the hook.
 
 import * as L from "./linkedlist.ts";
 import type { ListNode } from "./linkedlist.ts";
@@ -67,7 +67,9 @@ export type TimerCallback<Args extends unknown[] = []> = (...args: Args) => void
 export interface TimeoutHandle extends ListNode {
   _idleTimeout: number;
   _idleStart: number | null;
-  _onTimeout: CallableFunction | null | undefined;
+  // Opaque on the erased scheduler view: only the concrete generic handle
+  // invokes this value, through its typed `invoke()` method.
+  _onTimeout: object | null | undefined;
   _timerArgs: unknown[] | undefined;
   _repeat: number | null;
   _destroyed: boolean;

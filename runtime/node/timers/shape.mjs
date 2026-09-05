@@ -4,15 +4,16 @@
 // writes `require('timers').setTimeout`. Installing them is therefore not a
 // convenience but the main path, and the module export is the secondary one.
 
-import * as linkedlist from "./src/linkedlist.ts";
-import { PriorityQueue } from "./src/priority-queue.ts";
-import * as timeout from "./src/timeout.ts";
-import * as immediate from "./src/immediate.ts";
-
 export function shape(exports) {
-  const timers = { ...exports };
-  delete timers.default;
-  return timers;
+  return {
+    setTimeout: exports.setTimeout,
+    clearTimeout: exports.clearTimeout,
+    setImmediate: exports.setImmediate,
+    clearImmediate: exports.clearImmediate,
+    setInterval: exports.setInterval,
+    clearInterval: exports.clearInterval,
+    promises: exports.promises,
+  };
 }
 
 /** The promise-returning timer API is a public Node subpath. */
@@ -40,31 +41,36 @@ export function installGlobals(timers) {
 /**
  * The node-internal module ids these files stand in for.
  *
- * Imported from the source directly rather than routed through the public
- * module, so that `require('timers')` keeps exactly node's shape -- node's has
- * no `Timeout` property and no linked list on it, and a test that enumerates
- * the module would see the difference.
+ * Routed through hidden raw entry exports rather than source imports. The
+ * public shape above omits them, so `require('timers')` still has exactly
+ * node's seven names while the compiled lane uses only the addon it loaded.
  */
-export function internals() {
+export function internals(exports) {
   return {
-    "internal/linkedlist": linkedlist,
-    "internal/priority_queue": PriorityQueue,
+    "internal/linkedlist": {
+      append: exports.append,
+      init: exports.init,
+      isEmpty: exports.isEmpty,
+      peek: exports.peek,
+      remove: exports.remove,
+    },
+    "internal/priority_queue": exports.PriorityQueue,
     "internal/timers": {
-      TIMEOUT_MAX: timeout.TIMEOUT_MAX,
-      Timeout: timeout.Timeout,
-      Immediate: immediate.Immediate,
-      insert: timeout.insert,
-      active: timeout.active,
-      unrefActive: timeout.unrefActive,
-      setUnrefTimeout: timeout.setUnrefTimeout,
-      getTimerDuration: timeout.getTimerDuration,
-      cleanTimer: timeout.cleanTimer,
-      cleanImmediate: immediate.cleanImmediate,
-      timerListMap: timeout.timerListMap,
-      timerListQueue: timeout.timerListQueue,
-      immediateQueue: immediate.immediateQueue,
-      kRefed: timeout.kRefed,
-      decRefCount: timeout.decRefCount,
+      TIMEOUT_MAX: exports.TIMEOUT_MAX,
+      Timeout: exports.Timeout,
+      Immediate: exports.Immediate,
+      insert: exports.insert,
+      active: exports.active,
+      unrefActive: exports.unrefActive,
+      setUnrefTimeout: exports.setUnrefTimeout,
+      getTimerDuration: exports.getTimerDuration,
+      cleanTimer: exports.cleanTimer,
+      cleanImmediate: exports.cleanImmediate,
+      timerListMap: exports.timerListMap,
+      timerListQueue: exports.timerListQueue,
+      immediateQueue: exports.immediateQueue,
+      kRefed: exports.kRefed,
+      decRefCount: exports.decRefCount,
     },
   };
 }
