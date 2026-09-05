@@ -612,7 +612,22 @@ fn variants(
     // single blank -- or a single `refused` -- would flatten into one.
     let mut jvm_absence: Option<JvmAbsence> = None;
     let driver = native_driver(case, out, name, initializes)?;
+    // Only the lanes asked for. `NTS_BENCH_LANES=jvm` compiles no C++, no C and
+    // no LLVM, which is most of a run's wall clock: every other lane goes
+    // through `clang -flto` per case and the JVM lane goes through `javac`.
+    //
+    // For iterating on one backend this is the difference between a filtered
+    // run that answers in seconds and one that answers in minutes, and the
+    // published table is the *unfiltered* run -- `wanted_lanes` returning
+    // `None` is the default and changes nothing.
+    let lanes = wanted_lanes();
     for variant in VARIANTS {
+        if let Some(ref only) = lanes
+            && !only.iter().any(|want| lane_matches(want, variant.label))
+        {
+            results.push(None);
+            continue;
+        }
         let binary = out.join(format!(
             "{name}.{}",
             variant.label.replace([' ', '(', ')'], "")
@@ -725,8 +740,11 @@ fn work_agrees(row: &Row) -> Result<()> {
     ),
     ("engines", vec![("node", Some(row.node)), ("bun", row.bun)]),
     ] {
-    let ran: Vec<(&str, f64)> =
-        lanes.into_iter().filter_map(|(l, t)| t.map(|t| (l, t))).collect();
+    // `NaN` marks a lane a filter excluded, not a lane that ran fast.
+    let ran: Vec<(&str, f64)> = lanes
+        .into_iter()
+        .filter_map(|(l, t)| t.filter(|t| t.is_finite()).map(|t| (l, t)))
+        .collect();
     let Some((slow, slowest)) = ran
         .iter()
         .copied()
@@ -768,6 +786,38 @@ fn work_agrees(row: &Row) -> Result<()> {
     Ok(())
 }
 
+/// Which lanes to run, from `NTS_BENCH_LANES`, or every one.
+///
+/// `NTS_BENCH_LANES=jvm` runs the JVM backend, the Java reference and node.
+/// Anything filtered out renders `--`, the same as a lane that refused, so a
+/// filtered run is never mistaken for a published one -- and `finish_row`
+/// refuses to write the README from a filtered run for the same reason a
+/// filtered *case* list does.
+fn wanted_lanes() -> Option<Vec<String>> {
+    let raw = std::env::var("NTS_BENCH_LANES").ok()?;
+    let lanes: Vec<String> = raw
+        .split(',')
+        .map(|lane| lane.trim().to_lowercase())
+        .filter(|lane| !lane.is_empty())
+        .collect();
+    (!lanes.is_empty()).then_some(lanes)
+}
+
+/// Whether a lane name from `NTS_BENCH_LANES` selects a variant.
+///
+/// `jvm` selects both `nts (jvm)` and `Java`, because a ratio needs both halves
+/// and asking for one without the other is never what anybody means.
+fn lane_matches(want: &str, label: &str) -> bool {
+    let label = label.to_lowercase();
+    match want {
+        "jvm" => label.contains("jvm") || label == "java",
+        "llvm" => label.contains("llvm"),
+        "c" => label == "nts" || label == "c++",
+        "f64" => label.contains("f64"),
+        other => label.contains(other),
+    }
+}
+
 fn finish_row(
     case: &Utf8Path,
     out: &Utf8Path,
@@ -780,18 +830,30 @@ fn finish_row(
     let node = measure(std::process::Command::new("node").arg(&harness))?;
     // The same source on the other engine. Bun runs `.ts` natively too, so it
     // imports the identical file rather than a copy that could drift.
-    let bun = bun_binary()
-        .map(|binary| measure(std::process::Command::new(binary).arg(&harness)))
-        .transpose()?;
+    // node always runs: it is the oracle every other lane's checksum is compared
+    // against, and losing it would turn a filtered run into an unchecked one.
+    // bun is a column rather than a check, so a filter may drop it.
+    let bun = if wanted_lanes().is_some() {
+        None
+    } else {
+        bun_binary()
+            .map(|binary| measure(std::process::Command::new(binary).arg(&harness)))
+            .transpose()?
+    };
 
     agreed(results, bun.as_ref(), &node)?;
 
+    // A lane that must run, unless a filter deliberately excluded it. Under
+    // `NTS_BENCH_LANES` the C lanes are absent on purpose and their cells
+    // render `--`; without one, an absent `nts` column is a failure, because
+    // every ratio in the table divides by it.
+    let filtered = wanted_lanes().is_some();
     let required = |at: usize| -> Result<f64> {
-        Ok(results
-            .get(at)
-            .and_then(Option::as_ref)
-            .context("a variant that must run did not")?
-            .ns_per_op)
+        match results.get(at).and_then(Option::as_ref) {
+            Some(measured) => Ok(measured.ns_per_op),
+            None if filtered => Ok(f64::NAN),
+            None => bail!("a variant that must run did not"),
+        }
     };
     let row = Row {
         case: shown.to_owned(),
@@ -1725,6 +1787,12 @@ fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
 
 /// A duration a person can compare at a glance.
 fn human(ns: f64) -> String {
+    // A lane a filter excluded reads `--`, the same as one that refused. Both
+    // mean "this run does not have a number here", and a filtered run never
+    // reaches the README.
+    if ns.is_nan() {
+        return "--".to_owned();
+    }
     if ns < 1_000.0 {
         format!("{ns:.1} ns")
     } else if ns < 1_000_000.0 {
