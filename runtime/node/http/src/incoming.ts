@@ -59,6 +59,7 @@ const firstWins = new Set([
 
 export interface IncomingSocket {
   readonly destroyed: boolean;
+  readonly readableHighWaterMark?: number | undefined;
   remoteAddress?: string | undefined;
   remotePort?: number | undefined;
   destroy(error?: unknown, callback?: (error?: unknown) => void): unknown;
@@ -125,7 +126,7 @@ export class IncomingMessage extends Readable {
     // destroying it is what emits `close`. Programs listen for that to learn
     // that a request is over -- including that a client hung up mid-request --
     // so suppressing it removes the event most servers rely on.
-    super();
+    super(socket == null ? undefined : { highWaterMark: socket.readableHighWaterMark });
     this.socket = socket;
   }
 

@@ -61,10 +61,14 @@ export function shape(exports) {
   Readable.prototype.off = Readable.prototype.removeListener;
   for (const [name, value] of Object.entries(exports)) {
     if (
-      name === "default" || name === "Stream" ||
-      name === "kSynchronousCallback" || name === "addAbortSignalNoValidate" ||
-      name === "duplexFromWeb" || name === "duplexToWeb"
-    ) continue;
+      name === "default" ||
+      name === "Stream" ||
+      name === "kSynchronousCallback" ||
+      name === "addAbortSignalNoValidate" ||
+      name === "duplexFromWeb" ||
+      name === "duplexToWeb"
+    )
+      continue;
     Stream[name] = shapedConstructors[name] ?? value;
   }
   // These symbol-keyed links are CommonJS function-object metadata. They
@@ -94,16 +98,20 @@ export function subpaths(exports) {
 /** Node's test-only internal name for the synchronous finished option. */
 export function internals(exports) {
   return {
-    "_stream_readable": callableConstructor(exports.Readable, "Readable"),
-    "_stream_writable": callableConstructor(exports.Writable, "Writable"),
-    "_stream_duplex": callableConstructor(exports.Duplex, "Duplex"),
-    "_stream_transform": callableConstructor(exports.Transform, "Transform"),
-    "_stream_passthrough": callableConstructor(exports.PassThrough, "PassThrough"),
+    _stream_readable: callableConstructor(exports.Readable, "Readable"),
+    _stream_writable: callableConstructor(exports.Writable, "Writable"),
+    _stream_duplex: callableConstructor(exports.Duplex, "Duplex"),
+    _stream_transform: callableConstructor(exports.Transform, "Transform"),
+    _stream_passthrough: callableConstructor(exports.PassThrough, "PassThrough"),
     "internal/streams/end-of-stream": {
       kEosNodeSynchronousCallback: exports.kSynchronousCallback,
     },
     "internal/streams/add-abort-signal": {
       addAbortSignalNoValidate: exports.addAbortSignalNoValidate,
+    },
+    "internal/streams/state": {
+      getDefaultHighWaterMark: exports.getDefaultHighWaterMark,
+      setDefaultHighWaterMark: exports.setDefaultHighWaterMark,
     },
   };
 }

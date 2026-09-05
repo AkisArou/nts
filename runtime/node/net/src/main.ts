@@ -14,6 +14,7 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import { Duplex } from "../../stream/src/duplex.ts";
+import { getDefaultHighWaterMark } from "../../stream/src/state.ts";
 import { addTrackedAbortListener, EventEmitter } from "../../events/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
@@ -184,6 +185,9 @@ let autoSelectFamilyAttemptTimeoutDefault = nts_net_default_auto_select_family_a
 export interface SocketOptions {
   fd?: number | undefined;
   allowHalfOpen?: boolean | undefined;
+  highWaterMark?: number | null | undefined;
+  readableHighWaterMark?: number | null | undefined;
+  writableHighWaterMark?: number | null | undefined;
   blockList?: BlockList | undefined;
   autoSelectFamily?: boolean | undefined;
   autoSelectFamilyAttemptTimeout?: number | undefined;
@@ -217,6 +221,9 @@ export interface ConnectOptions {
   keepAlive?: boolean | undefined;
   keepAliveInitialDelay?: number | undefined;
   allowHalfOpen?: boolean | undefined;
+  highWaterMark?: number | null | undefined;
+  readableHighWaterMark?: number | null | undefined;
+  writableHighWaterMark?: number | null | undefined;
   blockList?: BlockList | undefined;
   autoSelectFamily?: boolean | undefined;
   autoSelectFamilyAttemptTimeout?: number | undefined;
@@ -556,6 +563,9 @@ export class Socket extends Duplex {
       emitClose: false,
       readable: options.readable ?? true,
       writable: options.writable ?? true,
+      highWaterMark: options.highWaterMark,
+      readableHighWaterMark: options.readableHighWaterMark,
+      writableHighWaterMark: options.writableHighWaterMark,
     });
 
     // One shared listener rather than one closure per socket. Besides being
@@ -1587,6 +1597,7 @@ export interface ServerOptions {
   noDelay?: boolean | undefined;
   keepAlive?: boolean | undefined;
   keepAliveInitialDelay?: number | undefined;
+  highWaterMark?: number | undefined;
   blockList?: BlockList | undefined;
 }
 
@@ -1594,6 +1605,7 @@ export class Server extends EventEmitter {
   _handle: number | null = null;
   listening = false;
   maxConnections = Infinity;
+  highWaterMark: number;
 
   #connections = 0;
   #options: ServerOptions;
@@ -1621,6 +1633,14 @@ export class Server extends EventEmitter {
       throw new ERR_INVALID_ARG_TYPE("options", "Object", options);
     }
     this.#options = options ?? {};
+    const configuredHighWaterMark = this.#options.highWaterMark;
+    if (configuredHighWaterMark !== undefined) {
+      validateNumber(configuredHighWaterMark, "options.highWaterMark");
+    }
+    this.highWaterMark =
+      configuredHighWaterMark === undefined || configuredHighWaterMark < 0
+        ? getDefaultHighWaterMark(false)
+        : configuredHighWaterMark;
     if (connectionListener) this.on("connection", connectionListener);
   }
 
@@ -1717,6 +1737,8 @@ export class Server extends EventEmitter {
             noDelay: this.#options.noDelay,
             keepAlive: this.#options.keepAlive,
             keepAliveInitialDelay: this.#options.keepAliveInitialDelay,
+            readableHighWaterMark: this.highWaterMark,
+            writableHighWaterMark: this.highWaterMark,
           });
           socket.server = this;
 
@@ -2025,6 +2047,27 @@ function readConnectOptions(input: object): ConnectOptions {
   if ("allowHalfOpen" in input && input.allowHalfOpen !== undefined) {
     options.allowHalfOpen = Boolean(input.allowHalfOpen);
   }
+  if ("highWaterMark" in input && input.highWaterMark !== undefined) {
+    const highWaterMark = input.highWaterMark;
+    if (highWaterMark !== null && typeof highWaterMark !== "number") {
+      throw new ERR_INVALID_ARG_VALUE("options.highWaterMark", highWaterMark);
+    }
+    options.highWaterMark = highWaterMark;
+  }
+  if ("readableHighWaterMark" in input && input.readableHighWaterMark !== undefined) {
+    const highWaterMark = input.readableHighWaterMark;
+    if (highWaterMark !== null && typeof highWaterMark !== "number") {
+      throw new ERR_INVALID_ARG_VALUE("options.readableHighWaterMark", highWaterMark);
+    }
+    options.readableHighWaterMark = highWaterMark;
+  }
+  if ("writableHighWaterMark" in input && input.writableHighWaterMark !== undefined) {
+    const highWaterMark = input.writableHighWaterMark;
+    if (highWaterMark !== null && typeof highWaterMark !== "number") {
+      throw new ERR_INVALID_ARG_VALUE("options.writableHighWaterMark", highWaterMark);
+    }
+    options.writableHighWaterMark = highWaterMark;
+  }
   if ("noDelay" in input && input.noDelay !== undefined) {
     options.noDelay = Boolean(input.noDelay);
   }
@@ -2218,7 +2261,7 @@ export function createServer(
 
 export function connect(...args: ConnectArguments): Socket {
   const { options } = normaliseConnectArguments(args);
-  const socket = new Socket();
+  const socket = new Socket(options);
   if (options.timeout) socket.setTimeout(options.timeout);
   return socket.connect(...args);
 }

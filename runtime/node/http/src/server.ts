@@ -167,6 +167,7 @@ export class Server extends NetServer {
       noDelay: opts.noDelay ?? true,
       keepAlive: opts.keepAlive,
       keepAliveInitialDelay: opts.keepAliveInitialDelay,
+      highWaterMark: opts.highWaterMark,
       blockList: opts.blockList,
     });
 
@@ -536,6 +537,7 @@ export class Server extends NetServer {
       }
 
       response = new this.#ServerResponse(message, {
+        highWaterMark: socket.writableHighWaterMark,
         rejectNonStandardBodyWrites: this.rejectNonStandardBodyWrites,
       });
       response._setHeaderValidation(this.#lenientHeaderValues);

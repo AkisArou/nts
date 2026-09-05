@@ -1,3 +1,5 @@
+const kHighWaterMark = Symbol("kHighWaterMark");
+
 function callableConstructor(Class, name) {
   const callable = function (...args) {
     if (new.target === undefined) return new Class(...args);
@@ -124,6 +126,14 @@ function requestConstructor(Class) {
 }
 
 export function shape(exports) {
+  // NTS represents this private slot as a fixed typed field. The symbol is
+  // only Node's host-facing spelling, so the mapping remains in this facade.
+  Object.defineProperty(exports.OutgoingMessage.prototype, kHighWaterMark, {
+    configurable: true,
+    get() {
+      return this._highWaterMark;
+    },
+  });
   nullPrototypeProperty(exports.IncomingMessage, "headersDistinct", "rawHeaders");
   nullPrototypeProperty(exports.IncomingMessage, "trailersDistinct", "rawTrailers");
   nullPrototypeResult(exports.OutgoingMessage, "getHeaders");
@@ -243,6 +253,9 @@ export function internals(exports) {
       },
       _checkInvalidHeaderChar: exports.checkInvalidHeaderChar,
       _checkIsHttpToken: exports.checkIsHttpToken,
+    },
+    _http_outgoing: {
+      kHighWaterMark,
     },
     "internal/options": {
       getOptionValue(name) {

@@ -93,6 +93,7 @@ interface PendingWrite {
 
 /** Internal options supplied while a server constructs one response. */
 export interface OutgoingMessageOptions {
+  highWaterMark?: number | null | undefined;
   rejectNonStandardBodyWrites?: boolean | undefined;
 }
 
@@ -235,7 +236,8 @@ function destroyOnRejection(this: OutgoingMessage, error: unknown): void {
 export class OutgoingMessage extends EventEmitter {
   #socket: OutgoingSocket | null = null;
   #lenientHeaderValues = false;
-  #highWaterMark: number;
+  /** Fixed typed representation of node's private `kHighWaterMark` slot. */
+  readonly _highWaterMark: number;
   #needDrain = false;
   #corked = 0;
   #errored: unknown = null;
@@ -260,7 +262,7 @@ export class OutgoingMessage extends EventEmitter {
 
   constructor(options: OutgoingMessageOptions = {}) {
     super();
-    this.#highWaterMark = getDefaultHighWaterMark(false);
+    this._highWaterMark = options.highWaterMark ?? getDefaultHighWaterMark(false);
     this.#rejectNonStandardBodyWrites = options.rejectNonStandardBodyWrites ?? false;
   }
 
@@ -359,7 +361,7 @@ export class OutgoingMessage extends EventEmitter {
       this.#pending.push({ chunk, encoding, callback });
       this.#pendingSize +=
         typeof chunk === "string" ? Buffer.byteLength(chunk, encoding ?? "utf8") : chunk.length;
-      return this.#pendingSize < this.#highWaterMark;
+      return this.#pendingSize < this._highWaterMark;
     }
     return this.#socket.write(chunk, encoding, callback) !== false;
   }
@@ -452,7 +454,7 @@ export class OutgoingMessage extends EventEmitter {
   }
 
   get writableHighWaterMark(): number {
-    return this.#socket?.writableHighWaterMark ?? this.#highWaterMark;
+    return this.#socket?.writableHighWaterMark ?? this._highWaterMark;
   }
 
   get writableLength(): number {

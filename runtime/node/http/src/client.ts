@@ -72,6 +72,7 @@ export interface RequestOptions {
   hints?: number | undefined;
   socketPath?: string | undefined;
   signal?: AbortSignalLike | undefined;
+  highWaterMark?: number | null | undefined;
   /** Node's name for "do not add a body framing", used by GET and HEAD. */
   maxHeaderSize?: number | undefined;
 }
@@ -185,14 +186,13 @@ export class ClientRequest extends OutgoingMessage {
   }
 
   constructor(options: RequestOptions | string, callback?: ResponseListener) {
-    super();
-
     const opts: RequestOptions =
       typeof options === "string"
         ? parseUrlish(options)
         : options.href === undefined
           ? { ...options }
           : { ...parseUrlish(options.href), ...options };
+    super({ highWaterMark: opts.highWaterMark });
     this.#options = opts;
 
     const requestedMethod: unknown = opts.method;
@@ -325,6 +325,7 @@ export class ClientRequest extends OutgoingMessage {
       hints: opts.hints,
       path: opts.socketPath,
       timeout: this.timeout,
+      highWaterMark: opts.highWaterMark,
     };
     if (opts.signal !== undefined) addAbortSignal(opts.signal, this);
     if (this.destroyed) return;
