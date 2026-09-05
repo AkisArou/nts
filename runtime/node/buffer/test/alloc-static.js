@@ -6,6 +6,7 @@
 
 require('../common');
 const assert = require('assert');
+const { SlowBuffer, kMaxLength } = require('buffer');
 
 {
   const bytes = Buffer.alloc(4);
@@ -20,6 +21,15 @@ assert.strictEqual(Buffer.allocUnsafe(3.3).length, 3);
 assert.strictEqual(Buffer.alloc(3.3).length, 3);
 assert.throws(() => Buffer.alloc(-1), { code: 'ERR_OUT_OF_RANGE' });
 assert.throws(() => Buffer.alloc('4'), { code: 'ERR_INVALID_ARG_TYPE' });
+for (const allocate of [Buffer.alloc, Buffer.allocUnsafe, Buffer.allocUnsafeSlow, SlowBuffer]) {
+  assert.throws(() => allocate(-1), { code: 'ERR_OUT_OF_RANGE' });
+  assert.throws(() => allocate(NaN), { code: 'ERR_OUT_OF_RANGE' });
+  assert.throws(() => allocate(kMaxLength + 1), { code: 'ERR_OUT_OF_RANGE' });
+}
+
+assert.deepStrictEqual([...new Buffer(3)], [0, 0, 0]);
+assert.strictEqual(new Buffer('hello', 'utf8').toString(), 'hello');
+assert.throws(() => new Buffer(42, 'utf8'), { code: 'ERR_INVALID_ARG_TYPE' });
 
 assert.deepStrictEqual([...Buffer.from('über')], [195, 188, 98, 101, 114]);
 assert.deepStrictEqual([...Buffer.from('über', 'ascii')], [252, 98, 101, 114]);

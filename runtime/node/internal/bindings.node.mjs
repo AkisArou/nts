@@ -13,6 +13,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import v8 from "node:v8";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
 
 const hostQueueMicrotask = globalThis.queueMicrotask;
 const hostSetImmediate = globalThis.setImmediate;
@@ -53,6 +54,9 @@ globalThis.nts_debug_write = (text) => { process.stderr.write(text); return 0; }
 globalThis.nts_platform = () => process.platform;
 globalThis.nts_process_cwd = () => process.cwd();
 globalThis.nts_os_release = () => os.release();
+globalThis.nts_node_eol = () => os.EOL;
+globalThis.nts_node_random_uuid = randomUUID;
+globalThis.nts_node_random_uuid_status = () => 0;
 
 // libuv's error table, for `internal/uv.ts`.
 //

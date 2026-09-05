@@ -1,14 +1,54 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uv.h>
 #include "shared.h"
 
 const NtsDescriptor nts_node_desc_double = {
     NTS_KIND_ARRAY, sizeof(double), 0, 0, 0, 0, "double", 0, 0};
 
-static int last_errno = 0;
+/* A loaded addon can be shared by Node workers. Result-plus-status calls are
+ * synchronous, but their status still belongs to the calling runtime thread. */
+static _Thread_local int last_errno = 0;
 
 double nts_errno(void) { return (double)last_errno; }
+
+NtsString *nts_node_eol(void) {
+#ifdef _WIN32
+    return nts_string_from_utf8("\r\n", 2);
+#else
+    return nts_string_from_utf8("\n", 1);
+#endif
+}
+
+static _Thread_local int random_uuid_status = 0;
+
+double nts_node_random_uuid_status(void) {
+    return (double)random_uuid_status;
+}
+
+NtsString *nts_node_random_uuid(void) {
+    uint8_t bytes[16];
+    int result = uv_random(NULL, NULL, bytes, sizeof(bytes), 0, NULL);
+    random_uuid_status = result < 0 ? -result : 0;
+    if (result < 0) return nts_string_from_utf8("", 0);
+
+    bytes[6] = (uint8_t)((bytes[6] & 0x0f) | 0x40);
+    bytes[8] = (uint8_t)((bytes[8] & 0x3f) | 0x80);
+
+    static const char hexadecimal[] = "0123456789abcdef";
+    char text[36];
+    size_t at = 0;
+    for (size_t index = 0; index < sizeof(bytes); index++) {
+        if (index == 4 || index == 6 || index == 8 || index == 10) {
+            text[at++] = '-';
+        }
+        uint8_t byte = bytes[index];
+        text[at++] = hexadecimal[byte >> 4];
+        text[at++] = hexadecimal[byte & 0x0f];
+    }
+    return nts_string_from_utf8(text, 36);
+}
 
 void nts_node_set_errno(int uv_result) {
     last_errno = uv_result < 0 ? -uv_result : 0;
@@ -71,8 +111,6 @@ char *nts_node_to_utf8_alloc(const NtsString *s, size_t *length) {
 /* libuv's own name and message for an error code. Node exposes the same pair
  * through `internalBinding('uv')`; taking them from libuv rather than from a
  * table means they cannot drift from the platform. */
-#include <uv.h>
-
 NtsString *nts_uv_err_name(double code) {
     const char *name = uv_err_name((int)code);
     return nts_string_from_utf8(name, name ? strlen(name) : 0);

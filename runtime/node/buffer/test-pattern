@@ -1,1 +1,1 @@
-^test-buffer(-.*)?\.js$
+^(test-buffer(-.*)?|test-blob(-.*)?|test-file|test-btoa-atob|test-icu-transcode)\.js$

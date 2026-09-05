@@ -20,6 +20,15 @@ void nts_node_set_errno(int uv_result);
 /** The process-global errno slot used by result-plus-errno bindings. */
 double nts_errno(void);
 
+/** Native line ending used by Web/File API normalization. */
+NtsString *nts_node_eol(void);
+
+/** Cryptographically random RFC 4122 version-4 identifier. */
+NtsString *nts_node_random_uuid(void);
+
+/** The positive libuv error code from the most recent UUID operation. */
+double nts_node_random_uuid_status(void);
+
 /** libuv's platform error table and its two direct lookup operations. */
 NtsString *nts_uv_err_name(double code);
 NtsString *nts_uv_err_message(double code);

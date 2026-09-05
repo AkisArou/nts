@@ -4,8 +4,6 @@
 // constructor rather than a namespace. `URL` and `URLSearchParams` are also
 // globals; unlike `Buffer`, nothing inside node consumes them on our behalf,
 // so substituting them is safe and is what the WHATWG tests measure.
-const HostURL = globalThis.URL;
-
 export function shape(exports) {
   shapeWhatwgClasses(exports.URL, exports.URLSearchParams);
   return {
@@ -108,19 +106,12 @@ function shapeWhatwgClasses(URL, URLSearchParams) {
     value: "URLSearchParams Iterator",
   });
 
-  // Blob URL storage belongs to the embedding Node environment. Preserve its
-  // registry operations when installing this profile's URL parser globally.
-  for (const name of ["createObjectURL", "revokeObjectURL"]) {
-    if (typeof HostURL?.[name] === "function") {
-      Object.defineProperty(URL, name, {
-        configurable: true,
-        enumerable: true,
-        writable: true,
-        value: HostURL[name],
-      });
-    }
-  }
-  makeEnumerableInOrder(URL, ["canParse", "parse"]);
+  makeEnumerableInOrder(URL, [
+    "canParse",
+    "parse",
+    "createObjectURL",
+    "revokeObjectURL",
+  ]);
 }
 
 function makeEnumerableInOrder(target, names) {

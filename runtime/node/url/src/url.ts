@@ -25,6 +25,11 @@ import {
 } from "./parser.ts";
 import { URLSearchParams, type SearchParamsOwner } from "./searchparams.ts";
 import { ERR_MISSING_ARGS } from "../../internal/errors.ts";
+import {
+  Blob,
+  createObjectURL as createBlobObjectURL,
+  revokeObjectURL as revokeBlobObjectURL,
+} from "../../buffer/src/blob.ts";
 import { customInspectSymbol, inspect, type InspectOptions } from "../../util/src/inspect.ts";
 
 export class URL implements SearchParamsOwner {
@@ -68,6 +73,15 @@ export class URL implements SearchParamsOwner {
       : base instanceof URL ? base.href
       : toUSVString(base);
     return URL.parse(text, baseString) !== null;
+  }
+
+  static createObjectURL(blob: Blob): string {
+    return createBlobObjectURL(blob);
+  }
+
+  static revokeObjectURL(url: string): void {
+    if (url === undefined) throw new ERR_MISSING_ARGS("url");
+    revokeBlobObjectURL(url);
   }
 
   // ---------------------------------------------- the SearchParamsOwner side

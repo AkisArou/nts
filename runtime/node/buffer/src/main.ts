@@ -25,11 +25,14 @@ import {
   decodeIn,
   isEncoding as isEncodingName,
   normalizeEncoding,
+  normalizeEncodingName,
   writeIn,
   type Encoding,
 } from "./encodings.ts";
 import { validateInteger } from "../../internal/validators.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
+
+export { Blob, File, resolveObjectURL } from "./blob.ts";
 
 export { isEncodingName as isEncoding };
 
@@ -330,6 +333,39 @@ function checkByteLength(byteLength: number): number {
 export class Buffer extends Uint8Array {
   static poolSize = 8192;
 
+  constructor(size: number);
+  constructor(value: string, encoding?: string);
+  constructor(array: ArrayLike<number>);
+  constructor(buffer: ArrayBuffer, byteOffset?: number, length?: number);
+  constructor(
+    value: number | string | ArrayBuffer | ArrayLike<number>,
+    encodingOrOffset?: string | number,
+    length?: number,
+  ) {
+    if (typeof value === "number") {
+      if (typeof encodingOrOffset === "string") {
+        throw new ERR_INVALID_ARG_TYPE("string", "string", value);
+      }
+      super(checkSize(value));
+      return;
+    }
+    if (typeof value === "string") {
+      const encoding = checkEncoding(encodingOrOffset);
+      const size = byteLengthIn(value, encoding);
+      super(size);
+      writeIn(this, value, 0, size, encoding);
+      return;
+    }
+    if (value instanceof ArrayBuffer) {
+      if (typeof encodingOrOffset === "string") {
+        throw new ERR_INVALID_ARG_TYPE("offset", "number", encodingOrOffset);
+      }
+      super(value, encodingOrOffset, length);
+      return;
+    }
+    super(value);
+  }
+
   /** Legacy spelling retained by Node as an alias for `buffer`. */
   get parent(): ArrayBufferLike | undefined {
     if (!(this instanceof Buffer)) return undefined;
@@ -543,6 +579,10 @@ export class Buffer extends Uint8Array {
     const to = stringSliceIndex(end, this.length, this.length);
     if (to <= from) return "";
     return decodeIn(this, from, to, codec);
+  }
+
+  override toLocaleString(): string {
+    return decodeIn(this, 0, this.length, "utf8");
   }
 
   asciiSlice(start = 0, end = this.length): string {
@@ -1247,8 +1287,8 @@ export class Buffer extends Uint8Array {
   // Node exposes both UInt and Uint spellings. NTS needs both names in the
   // static class layout, so these hot bodies are deliberately duplicated:
   // forwarding aliases would add another call and runtime prototype aliasing
-  // is a §13 non-goal. `shape.mjs` restores Node's function identity when this
-  // source is exercised by the upstream JavaScript suite.
+  // is a §13 non-goal. Observable function identity between the spellings is
+  // outside the static profile; their behavior is identical.
   readUint8(offset = 0): number {
     return this[checkedOffset(this, offset, 1)]!;
   }
@@ -1633,12 +1673,265 @@ export function isAscii(input: Uint8Array | ArrayBuffer): boolean {
   return true;
 }
 
-/** `atob`/`btoa`, which node exposes from this module. */
+type TranscodeEncoding = "utf8" | "utf16le" | "latin1" | "ascii";
+type TranscodeErrorCode =
+  | "U_ILLEGAL_ARGUMENT_ERROR"
+  | "U_INVALID_CHAR_FOUND";
+
+class TranscodeError extends Error {
+  readonly code: TranscodeErrorCode;
+  readonly errno: number;
+
+  constructor(code: TranscodeErrorCode) {
+    super(`Unable to transcode Buffer [${code}]`);
+    this.code = code;
+    this.errno = code === "U_ILLEGAL_ARGUMENT_ERROR" ? 1 : 10;
+  }
+}
+
+function transcodeEncoding(value: string): TranscodeEncoding {
+  const normalized = normalizeEncodingName(value);
+  switch (normalized) {
+    case "utf8": case "utf-8": return "utf8";
+    case "ucs2": case "ucs-2": case "utf16le": case "utf-16le": return "utf16le";
+    case "latin1": case "binary": return "latin1";
+    case "ascii": return "ascii";
+    default:
+      throw new TranscodeError("U_ILLEGAL_ARGUMENT_ERROR");
+  }
+}
+
+function transcodeSingleByte(value: string, ascii: boolean): Buffer {
+  const maximum = ascii ? 0x7f : 0xff;
+  let count = 0;
+  for (let i = 0; i < value.length; i++) {
+    let code = value.charCodeAt(i);
+    if (
+      code >= 0xd800 && code <= 0xdbff &&
+      i + 1 < value.length
+    ) {
+      const next = value.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        code = (code - 0xd800) * 0x400 + next - 0xdc00 + 0x10000;
+        i += 1;
+      }
+    }
+    if (code > maximum && isDefaultIgnorableCodePoint(code)) continue;
+    count += 1;
+  }
+
+  const output = Buffer.allocUnsafe(count);
+  let at = 0;
+  for (let i = 0; i < value.length; i++) {
+    let code = value.charCodeAt(i);
+    if (
+      code >= 0xd800 && code <= 0xdbff &&
+      i + 1 < value.length
+    ) {
+      const next = value.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        code = (code - 0xd800) * 0x400 + next - 0xdc00 + 0x10000;
+        i += 1;
+      }
+    }
+    if (code > maximum && isDefaultIgnorableCodePoint(code)) continue;
+    output[at] = code <= maximum ? code : 0x3f;
+    at += 1;
+  }
+  return output;
+}
+
+/** Unicode Default_Ignorable_Code_Point, the characters ICU omits on fallback. */
+function isDefaultIgnorableCodePoint(code: number): boolean {
+  return code === 0x00ad || code === 0x034f || code === 0x061c ||
+    (code >= 0x115f && code <= 0x1160) ||
+    (code >= 0x17b4 && code <= 0x17b5) ||
+    (code >= 0x180b && code <= 0x180f) ||
+    (code >= 0x200b && code <= 0x200f) ||
+    (code >= 0x202a && code <= 0x202e) ||
+    (code >= 0x2060 && code <= 0x206f) ||
+    code === 0x3164 ||
+    (code >= 0xfe00 && code <= 0xfe0f) ||
+    code === 0xfeff || code === 0xffa0 ||
+    (code >= 0xfff0 && code <= 0xfff8) ||
+    (code >= 0x1bca0 && code <= 0x1bca3) ||
+    (code >= 0x1d173 && code <= 0x1d17a) ||
+    (code >= 0xe0000 && code <= 0xe0fff);
+}
+
+function decodeAsciiForTranscode(
+  source: Uint8Array,
+  destination: TranscodeEncoding,
+): string {
+  let value = "";
+  for (let i = 0; i < source.length; i++) {
+    const byte = source[i];
+    if (byte === undefined) break;
+    if (byte < 0x80) {
+      value += String.fromCharCode(byte);
+    } else if (destination === "utf16le") {
+      value += String.fromCharCode(byte);
+    } else if (destination === "utf8") {
+      value += "\ufffd";
+    } else {
+      value += "?";
+    }
+  }
+  return value;
+}
+
+function decodeUtf16ForTranscode(
+  source: Uint8Array,
+  destination: TranscodeEncoding,
+): string {
+  const strict = destination === "utf8";
+  const replaceTrailingByte = destination === "utf16le";
+  let value = "";
+  let index = 0;
+  while (index + 1 < source.length) {
+    const low = source[index];
+    const high = source[index + 1];
+    if (low === undefined || high === undefined) break;
+    const code = low | (high << 8);
+    index += 2;
+
+    if (code >= 0xd800 && code <= 0xdbff) {
+      if (index + 1 < source.length) {
+        const nextLow = source[index];
+        const nextHigh = source[index + 1];
+        if (nextLow !== undefined && nextHigh !== undefined) {
+          const next = nextLow | (nextHigh << 8);
+          if (next >= 0xdc00 && next <= 0xdfff) {
+            value += String.fromCharCode(code, next);
+            index += 2;
+            continue;
+          }
+        }
+      }
+      if (strict) throw new TranscodeError("U_INVALID_CHAR_FOUND");
+      if (index + 1 === source.length) index = source.length;
+      value += "\ufffd";
+      continue;
+    }
+    if (code >= 0xdc00 && code <= 0xdfff) {
+      if (strict) throw new TranscodeError("U_INVALID_CHAR_FOUND");
+      value += "\ufffd";
+      continue;
+    }
+    value += String.fromCharCode(code);
+  }
+  if (index < source.length) {
+    if (strict && value.length === 0) {
+      throw new TranscodeError("U_INVALID_CHAR_FOUND");
+    }
+    if (replaceTrailingByte) value += "\ufffd";
+  }
+  return value;
+}
+
+/** Convert bytes between Node's ICU single-byte, UTF-8, and UTF-16 codecs. */
+export function transcode(
+  source: Uint8Array,
+  fromEncoding: string,
+  toEncoding: string,
+): Buffer {
+  if (!(source instanceof Uint8Array)) {
+    throw new ERR_INVALID_ARG_TYPE("source", ["Buffer", "Uint8Array"], source);
+  }
+  if (source.length === 0) return Buffer.alloc(0);
+  const from = transcodeEncoding(fromEncoding);
+  const to = transcodeEncoding(toEncoding);
+  let value: string;
+  if (from === "ascii") {
+    value = decodeAsciiForTranscode(source, to);
+  } else if (from === "utf16le") {
+    value = decodeUtf16ForTranscode(source, to);
+  } else {
+    if (from === "utf8" && to === "utf16le" && !isUtf8(source)) {
+      throw new TranscodeError("U_INVALID_CHAR_FOUND");
+    }
+    value = decodeIn(source, 0, source.length, from);
+  }
+  if (to === "ascii") return transcodeSingleByte(value, true);
+  if (to === "latin1") return transcodeSingleByte(value, false);
+  return Buffer.from(value, to);
+}
+
+class InvalidCharacterError extends Error {
+  override readonly name = "InvalidCharacterError";
+  readonly code = 5;
+
+  constructor(message = "Invalid character") {
+    super(message);
+  }
+}
+
+function isBase64Digit(code: number): boolean {
+  return (code >= 0x41 && code <= 0x5a) ||
+    (code >= 0x61 && code <= 0x7a) ||
+    (code >= 0x30 && code <= 0x39) ||
+    code === 0x2b || code === 0x2f;
+}
+
+function isBase64Whitespace(code: number): boolean {
+  return code === 0x09 || code === 0x0a || code === 0x0c ||
+    code === 0x0d || code === 0x20;
+}
+
+/** WHATWG `atob`, restricted to its statically typed string boundary. */
 export function atob(data: string): string {
+  if (typeof data !== "string") {
+    throw new ERR_INVALID_ARG_TYPE("input", "string", data);
+  }
+
+  let encodedLength = 0;
+  let previous = 0;
+  let last = 0;
+  for (let i = 0; i < data.length; i++) {
+    const code = data.charCodeAt(i);
+    if (isBase64Whitespace(code)) continue;
+    encodedLength += 1;
+    previous = last;
+    last = code;
+  }
+
+  let payloadLength = encodedLength;
+  if (payloadLength > 0 && last === 0x3d) {
+    payloadLength -= 1;
+    if (payloadLength > 0 && previous === 0x3d) {
+      payloadLength -= 1;
+    }
+  }
+  let nonWhitespaceIndex = 0;
+  for (let i = 0; i < data.length; i++) {
+    const code = data.charCodeAt(i);
+    if (isBase64Whitespace(code)) continue;
+    if (
+      nonWhitespaceIndex < payloadLength
+        ? !isBase64Digit(code)
+        : code !== 0x3d
+    ) {
+      throw new InvalidCharacterError();
+    }
+    nonWhitespaceIndex += 1;
+  }
+  if (payloadLength % 4 === 1) {
+    throw new InvalidCharacterError("The string to be decoded is not correctly encoded.");
+  }
+  if (payloadLength !== encodedLength && encodedLength % 4 !== 0) {
+    throw new InvalidCharacterError();
+  }
   return Buffer.from(data, "base64").toString("latin1");
 }
 
+/** WHATWG `btoa`, restricted to its statically typed Latin-1 string input. */
 export function btoa(data: string): string {
+  if (typeof data !== "string") {
+    throw new ERR_INVALID_ARG_TYPE("input", "string", data);
+  }
+  for (let i = 0; i < data.length; i++) {
+    if (data.charCodeAt(i) > 0xff) throw new InvalidCharacterError();
+  }
   return Buffer.from(data, "latin1").toString("base64");
 }
 
