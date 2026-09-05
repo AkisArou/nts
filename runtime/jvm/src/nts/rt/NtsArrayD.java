@@ -31,6 +31,30 @@ public final class NtsArrayD {
      * from a previous grow, which is a wrong answer with no exception at all.
      * Bounding by {@code a.length} answers both.
      */
+
+    /**
+     * The same read with an integral subscript, which needs no round trip.
+     *
+     * The bare-array path learned this and the growable wrapper did not.
+     * `array-predicates` emits `lload; l2d; get(...,D)` per element -- an `i64`
+     * loop counter widened to a `double` so a helper can narrow it straight
+     * back. That is the defect already fixed for `bounds`, worth 4.56x there,
+     * and this path kept paying it because a `double` overload was the only
+     * way in.
+     *
+     * `at < a.length` promotes the `int` for free, and `(int) at` is exact
+     * because the comparison has already bounded it.
+     */
+    public static double get(NtsArrayD a, long at) {
+        return at >= 0 && at < a.length ? a.items[(int) at]
+            : NtsRuntime.outOfRange((double) at, a.length);
+    }
+
+    public static double get(NtsArrayD a, int at) {
+        return at >= 0 && at < a.length ? a.items[at]
+            : NtsRuntime.outOfRange((double) at, a.length);
+    }
+
     public static double get(NtsArrayD a, double at) {
         // The `(int, int)` overload, not the `(int, double)` one: this
         // subscript is emitted `checked: false`, so the middle end already

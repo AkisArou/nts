@@ -1430,13 +1430,32 @@ impl Emitter<'_> {
                 let class = self.growable_class(&self.ty(*array).clone())?;
                 let (element, holds) = self.growable_element(&self.ty(*array).clone())?;
                 self.load(code, pool, *array)?;
-                self.push_as(code, pool, *index, Kind::Double, origin)?;
+                // The subscript by its own kind, not widened to a `double`.
+                //
+                // This path always pushed a `double`, so an `i64` loop counter
+                // became `lload; l2d` and the helper narrowed it straight back
+                // with `(int) at`. `array-predicates` does that per element,
+                // eight call sites of it. The bare-array subscript learned the
+                // same lesson at `bounds` -- worth 4.56x there -- and the
+                // growable wrapper was never given the overloads to learn it
+                // with.
+                let subscript = match self.kind_of(*index)? {
+                    Kind::Int => Kind::Int,
+                    Kind::Long => Kind::Long,
+                    _ => Kind::Double,
+                };
+                self.push_as(code, pool, *index, subscript, origin)?;
+                let at = match subscript {
+                    Kind::Int => "I",
+                    Kind::Long => "J",
+                    _ => "D",
+                };
                 code.invoke_static(
                     origin,
                     pool,
                     &class,
                     "get",
-                    &format!("(L{class};D){element}"),
+                    &format!("(L{class};{at}){element}"),
                 );
                 if holds != Kind::Ref {
                     self.adapt(code, holds, ty, origin)?;
