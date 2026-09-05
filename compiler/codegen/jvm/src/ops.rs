@@ -1256,6 +1256,26 @@ impl Emitter<'_> {
             if tag != nts_core::hir::tags::OBJECT
                 && !matches!(managed, ManagedType::String)
             {
+                // A closure singleton erased is itself a constant: the tag is
+                // `FUNCTION` and the reference is the one instance. Building it
+                // per use allocated 1.6 MB/op on `optional-chain`, for a value
+                // that could not change. `<clinit>` builds it once.
+                if matches!(
+                    self.func.values[value.0 as usize].kind,
+                    nts_core::hir::OpKind::ClosureStatic
+                ) && let HirType::Managed(ManagedType::Object(id)) = &from
+                    && let Some(layout) = self.program.layout(*id)
+                {
+                    let field = crate::erased_field(&types::class_name(layout));
+                    code.get_static(
+                        origin,
+                        pool,
+                        crate::PROGRAM,
+                        &field,
+                        types::VALUE_DESCRIPTOR,
+                    );
+                    return Ok(Placed::OnStack);
+                }
                 code.const_int(origin, pool, i32::try_from(tag).unwrap_or(0));
                 self.load(code, pool, value)?;
                 code.invoke_static(

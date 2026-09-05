@@ -169,8 +169,16 @@ pub fn emit(program: &Program) -> Emitted {
     for (field, class) in &singletons {
         builder.field(access::PRIVATE | access::STATIC | access::FINAL, field.clone(), format!("L{class};"));
     }
+    let erased = erased_closures(program);
+    for (field, _) in &erased {
+        builder.field(
+            access::PRIVATE | access::STATIC | access::FINAL,
+            field.clone(),
+            types::VALUE_DESCRIPTOR.to_owned(),
+        );
+    }
 
-    if let Some(body) = class_initializer(program, &singletons, &mut pool) {
+    if let Some(body) = class_initializer(program, &singletons, &erased, &mut pool) {
         builder.method(access::STATIC, "<clinit>", "()V", Some(body));
     }
     if let Err(error) = builder.default_constructor(&program_origin(program), &mut pool) {
@@ -651,6 +659,57 @@ fn resumes(program: &Program, layout: &nts_core::hir::Layout) -> Option<String> 
 /// call sites, and a closure class that is only ever constructed and called
 /// needs no singleton. Sorted, so two runs of one compiler on one input emit
 /// the same program -- the same rule `InstanceOf`'s class list keeps.
+/// The closure classes this program *erases*, and the field each gets.
+///
+/// A `ClosureStatic` is already a `private static final INSTANCE`, because
+/// `f === f` has to hold. Erasing one is equally constant -- the tag is
+/// `FUNCTION` for every closure and the reference is that singleton -- and it
+/// was rebuilt at every use: `NtsValue.ofTagged(4, closure$Closure0)`, which
+/// allocates.
+///
+/// `optional-chain` assigns one to a field on half its iterations and measured
+/// **1,600,000 bytes/op** -- 50,000 allocations of a value that could not
+/// change. It was the only row in the suite where allocation was demonstrably
+/// the cost, and the object being allocated was a constant.
+///
+/// Identity is not the reason to do this, but it is a reason it is safe: two
+/// erasures of one closure are now the same `NtsValue` where they were equal
+/// ones.
+fn erased_closures(program: &Program) -> Vec<(String, String)> {
+    let mut found = std::collections::BTreeSet::new();
+    for func in &program.funcs {
+        for op in &func.values {
+            let nts_core::hir::OpKind::Erase { value } = &op.kind else {
+                continue;
+            };
+            if !matches!(
+                func.values[value.0 as usize].kind,
+                nts_core::hir::OpKind::ClosureStatic
+            ) {
+                continue;
+            }
+            if let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) =
+                func.values[value.0 as usize].ty
+                && let Some(layout) = program.layout(id)
+            {
+                found.insert(types::class_name(layout));
+            }
+        }
+    }
+    found.into_iter().map(|class| (erased_field(&class), class)).collect()
+}
+
+/// The field an erased closure singleton gets, in one place because the scan
+/// and the emitter both have to agree about it.
+pub(crate) fn erased_field(class: &str) -> String {
+    format!("erased${}", class.rsplit('/').next().unwrap_or(class))
+}
+
+/// The field a closure singleton gets, for the same reason.
+pub(crate) fn closure_field(class: &str) -> String {
+    format!("closure${}", class.rsplit('/').next().unwrap_or(class))
+}
+
 fn closure_singletons(program: &Program) -> Vec<(String, String)> {
     let mut found = std::collections::BTreeSet::new();
     for func in &program.funcs {
@@ -665,13 +724,7 @@ fn closure_singletons(program: &Program) -> Vec<(String, String)> {
             }
         }
     }
-    found
-        .into_iter()
-        .map(|class| {
-            let field = format!("closure${}", class.rsplit('/').next().unwrap_or(&class));
-            (field, class)
-        })
-        .collect()
+    found.into_iter().map(|class| (closure_field(&class), class)).collect()
 }
 
 /// `<clinit>`, where a global that starts as something other than zero is set.
@@ -682,6 +735,7 @@ fn closure_singletons(program: &Program) -> Vec<(String, String)> {
 fn class_initializer(
     program: &Program,
     singletons: &[(String, String)],
+    erased: &[(String, String)],
     pool: &mut Pool,
 ) -> Option<nts_jvm_emitter::Body> {
     let interesting: Vec<_> = program
@@ -689,7 +743,7 @@ fn class_initializer(
         .iter()
         .filter(|global| global.initial != 0.0 && types::descriptor(types::Shape::of(program), &global.ty).is_some())
         .collect();
-    if interesting.is_empty() && singletons.is_empty() {
+    if interesting.is_empty() && singletons.is_empty() && erased.is_empty() {
         return None;
     }
     let mut code = Code::new(Vec::<VType>::new(), 0);
@@ -699,6 +753,20 @@ fn class_initializer(
         code.dup(&origin);
         code.invoke_special(&origin, pool, class, "<init>", "()V");
         code.put_static(&origin, pool, PROGRAM, field, &format!("L{class};"));
+    }
+    // After the instances they wrap, and in the same method, so an erased form
+    // cannot be read before the closure it names exists.
+    for (field, class) in erased {
+        code.const_int(&origin, pool, i32::try_from(nts_core::hir::tags::FUNCTION).unwrap_or(0));
+        code.get_static(&origin, pool, PROGRAM, &closure_field(class), &format!("L{class};"));
+        code.invoke_static(
+            &origin,
+            pool,
+            types::VALUE,
+            "ofTagged",
+            "(ILjava/lang/Object;)Lnts/rt/NtsValue;",
+        );
+        code.put_static(&origin, pool, PROGRAM, field, types::VALUE_DESCRIPTOR);
     }
     for global in interesting {
         let origin = global.origin.clone();
