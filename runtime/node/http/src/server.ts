@@ -420,7 +420,6 @@ export class Server extends NetServer {
       socket.resume();
       this.#idle.add(socket);
       socket.unref();
-      if (!this.listening) socket.end();
     };
 
     const ignoreSocketError = (_error: unknown): void => {};
