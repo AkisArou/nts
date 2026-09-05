@@ -178,3 +178,39 @@ to do there.** Three entries that looked identical in the profile split two-one
 on that question, and nothing short of building all three would have said which
 way. Two of three is a good rate, and the third cost an hour and is the reason
 the other two are trustworthy.
+
+**This rule is not sufficient, and record 0137 has the case that breaks it.**
+`NtsMap.hash` replaces real work -- a NaN-canonicalising bitcast, a select and a
+fold, for a `d2i` and a compare -- and is worth nothing. The row runs at **IPC
+3.8**, near this core's issue width, so the arithmetic was filling slots that
+were spare and the critical path is elsewhere. Work costs time only when it is
+on the dependency chain, and neither a profile nor IPC can say whether it is.
+
+---
+
+## A fourth, refuted in the direction opposite to the prediction
+
+`number-format`'s reference calls `Integer.toString(int)`; `numberToString`
+fast-paths whole numbers to `Long.toString((long) x)`. `Long.stringSize` walks up
+to nineteen digits where `Integer.stringSize` walks ten, and `StringLatin1`'s
+long path carries a division loop it only leaves once the value fits an `int`
+anyway. So: use `Integer.toString` where it fits.
+
+Two jars differing in nothing else, interleaved under the lock:
+
+    Long.toString     1274.9  1277.7  1273.6  1279.4  1280.5  1278.3
+    Integer.toString  1504.3  1507.0  1506.7  1504.1  1501.3  1505.8
+
+**18% slower**, not faster, on a row whose spread is 0.5%. Reverted.
+
+I do not have a confirmed mechanism and will not invent one. The plausible
+candidate is that the change turns one monomorphic call site into two, and what
+it costs in inlining is larger than what `stringSize` saves -- but that is a
+guess, and the measurement stands without it.
+
+What the four have in common is worth more than any of them. **Every one was a
+plausible story about where time goes, three were wrong, and in no case did the
+profile distinguish them.** The two that paid replaced *work*; the two that did
+not were removing a call C2 had already removed, or trading one library entry
+for another on an argument about digit counts. Nothing but building all four
+separated them, and the cost of finding out was an hour each.
