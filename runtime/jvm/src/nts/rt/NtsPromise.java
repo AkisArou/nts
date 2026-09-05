@@ -84,16 +84,29 @@ public final class NtsPromise {
         int remaining;
         All(int remaining) { this.remaining = remaining; }
         abstract void store(int index, NtsValue value);
+        /**
+         * The array this group fills, which is what {@code Promise.all}
+         * resolves *with*.
+         *
+         * <p>Both settle paths used to answer {@code UNDEFINED_VALUE}, so
+         * {@code reference()} on the result was null. A caller holding the
+         * array it passed in never noticed; `allOfNone` awaits
+         * `Promise.all([])` and reads the resolved value, and got a
+         * {@code NullPointerException} on `arraylength`.
+         */
+        abstract Object values();
     }
     private static final class AllNumbers extends All {
         private final double[] values;
         AllNumbers(int count, double[] values) { super(count); this.values = values; }
         @Override void store(int index, NtsValue value) { values[index] = value.num; }
+        @Override Object values() { return values; }
     }
     private static final class AllReferences extends All {
         private final Object[] values;
         AllReferences(int count, Object[] values) { super(count); this.values = values; }
         @Override void store(int index, NtsValue value) { values[index] = value.ref; }
+        @Override Object values() { return values; }
     }
     private static final class Waiting implements NtsResumable {
         private final NtsPromise element;
@@ -114,14 +127,19 @@ public final class NtsPromise {
             } else {
                 // Input position, not settlement order. Duplicated inputs get distinct indices.
                 group.store(index, element.settled);
-                if (--group.remaining == 0) { settle(result, FULFILLED, NtsValue.UNDEFINED_VALUE); }
+                if (--group.remaining == 0) {
+                    settle(result, FULFILLED, NtsValue.ofObject(group.values()));
+                }
             }
         }
     }
     private static NtsPromise combine(NtsPromise[] promises, All group) {
         NtsPromise result = new NtsPromise();
         if (promises.length == 0) {
-            if (group != null) { settle(result, FULFILLED, NtsValue.UNDEFINED_VALUE); }
+            // An empty `Promise.all` resolves immediately, and with the array
+            // rather than with nothing: `(await Promise.all([])).length` is 0,
+            // not a read of `undefined`.
+            if (group != null) { settle(result, FULFILLED, NtsValue.ofObject(group.values())); }
             return result;
         }
         for (int i = 0; i < promises.length; i++) {
