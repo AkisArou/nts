@@ -867,9 +867,22 @@ impl<'a> Decomposer<'a> {
                 // library's interface would pull in `next`, `return`, `throw`
                 // and `IteratorResult` to describe something already compiled.
                 // What is needed of it is `T`, and that is a type argument.
+                // `ReadonlyMap` and `ReadonlySet` are the same runtime object
+                // in a narrower type. Readonly-ness is a *type-level* fact --
+                // the same one the `readonly` row above records as not
+                // changing storage -- so representing them as the table they
+                // are is right rather than a convenience. Leaving them out
+                // stopped them at the library boundary and left every property
+                // holding one unrepresentable: `#uniqueHeaders` alone was 89
+                // of `http`'s 154 refusals.
                 matches!(
                     declared.name.as_str(),
-                    "Promise" | "Map" | "Set" | "Generator"
+                    "Promise"
+                        | "Map"
+                        | "ReadonlyMap"
+                        | "Set"
+                        | "ReadonlySet"
+                        | "Generator"
                 )
             })
     }

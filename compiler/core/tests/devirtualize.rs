@@ -149,6 +149,34 @@ fn the_receiver_is_unerased_to_the_class_it_is_called_as() {
         matches!(receiver.kind, OpKind::Unerase { .. }),
         "the receiver is read out of an erased field"
     );
+    // **Nothing converts a reference to a number.**
+    //
+    // That is the shape `reconcile` produces when a receiver is narrowed and
+    // the absence it is compared against is not: two mismatched pointers, made
+    // comparable the only way it knows, and clang answering `pointer cannot be
+    // cast to type 'double'` four times. It is asserted this way round rather
+    // than by inspecting the comparison, because by the time this runs the
+    // `Binary` no longer mentions either operand -- `reconcile` has replaced
+    // them with the conversions, which is precisely the defect.
+    //
+    // Kept from an attempt to serve the null test and the call from **one**
+    // `Unerase`, which the JVM session measured at ~7% of `optional-chain` and
+    // which was reverted: the second one was buying a borrow elision, because
+    // its live range is a few operations rather than a span across the branch.
+    // `tooling/memory/cases/callback-field` went 0 of 68 to 34 of 34. The
+    // assertion outlived the change.
+    for op in &func.values {
+        let OpKind::Convert(value) = &op.kind else {
+            continue;
+        };
+        let from = &func.values[value.0 as usize].ty;
+        assert!(
+            !(matches!(from, HirType::Managed(_)) && matches!(op.ty, HirType::Float { .. })),
+            "a reference is being converted to a number, which is `reconcile` \
+             making two mismatched pointers comparable"
+        );
+    }
+
     let HirType::Managed(ManagedType::Object(class)) = receiver.ty else {
         panic!("the receiver is an object, not {:?}", receiver.ty);
     };

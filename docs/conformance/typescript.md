@@ -365,6 +365,7 @@ inherits. The key was the sole blocker, checked rather than assumed:
 | ✅ | `Symbol()`, with a description or without — every call a fresh identity, because `Symbol("a") === Symbol("a")` is false |
 | ✅ | `Symbol.for` and `Symbol.keyFor` — one symbol per key for the life of the runtime. The registry's strong reference is the specification's rule rather than a leak, and is the whole difference from `Symbol()` |
 | ✅ | `typeof` answering `"symbol"`, `===` by address, a symbol in a field, and `Map`/`Set` keyed by one or by `string \| symbol` |
+| ✅ | `ReadonlyMap` and `ReadonlySet` — the same runtime table in a narrower type. Readonly-ness is a *type-level* fact, the one this document already records as not changing storage, so representing them as the table they are is right rather than a convenience. Leaving them out stopped them at the frontend's library boundary and left every property holding one unrepresentable: `#uniqueHeaders` alone was **89 of `http`'s 154** local refusals |
 | ✗ | a **well-known** symbol as a value — `Symbol.iterator`, `Symbol.asyncIterator`. They are declared in `lib.d.ts` as `unique symbol` properties of `SymbolConstructor` rather than calls, so they need a static singleton per name rather than the two entry points above |
 | ✗ | `sym.description` and `sym.toString()` as member reads — `nts_symbol_description` and `nts_symbol_to_string` exist and are tested, and nothing lowers a member access to them yet |
 

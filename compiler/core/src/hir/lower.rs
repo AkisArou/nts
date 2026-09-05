@@ -3222,7 +3222,7 @@ fn representation_of(
         // find nothing, which is the kind of wrong that looks like an empty
         // table rather than like a bug.
         TypeKind::Object { .. } | TypeKind::Structured { .. }
-            if named(snapshot, ty) == Some("Map") =>
+            if matches!(named(snapshot, ty), Some("Map" | "ReadonlyMap")) =>
         {
             let arguments = snapshot.type_arguments.get(&ty)?;
             let key = representation_within(snapshot, *arguments.first()?, path, subst)?;
@@ -3230,7 +3230,7 @@ fn representation_of(
             HirType::Managed(ManagedType::Map(Box::new(key), Box::new(value)))
         }
         TypeKind::Object { .. } | TypeKind::Structured { .. }
-            if named(snapshot, ty) == Some("Set") =>
+            if matches!(named(snapshot, ty), Some("Set" | "ReadonlySet")) =>
         {
             let arguments = snapshot.type_arguments.get(&ty)?;
             let element = representation_within(snapshot, *arguments.first()?, path, subst)?;
