@@ -30,14 +30,19 @@ import {
   ERR_CONSOLE_WRITABLE_STREAM,
   ERR_INCOMPATIBLE_OPTION_PAIR,
 } from "../../internal/errors.ts";
-import { validateArray, validateInteger, validateObject, validateOneOf } from "../../internal/validators.ts";
+import {
+  validateArray,
+  validateInteger,
+  validateObject,
+  validateOneOf,
+} from "../../internal/validators.ts";
 
 declare function nts_process_env(name: string): string;
 
 export type { WritableLike };
 
 /** Options accepted by `new Console({ ... })`. */
-export interface ConsoleOptions {
+export interface ConsoleConstructorOptions {
   stdout: WritableLike;
   stderr?: WritableLike;
   /** Swallow write errors rather than letting them reach the caller. */
@@ -45,17 +50,9 @@ export interface ConsoleOptions {
   /** `true`, `false`, or `"auto"`, which asks the stream. */
   colorMode?: boolean | "auto";
   /** Passed to `util.inspect`; a `Map` keyed by stream to differ per stream. */
-  inspectOptions?: InspectOptions | Map<WritableLike, InspectOptions>;
+  inspectOptions?: InspectOptions | ReadonlyMap<WritableLike, InspectOptions>;
   /** Spaces added per `group()` level. Default 2. */
   groupIndentation?: number;
-}
-
-/**
- * Structural view used only to distinguish the two constructor overloads.
- * A stream supplies `write`; an options bag supplies `stdout` instead.
- */
-interface ConsoleConstructorOptions extends ConsoleOptions {
-  write?: WritableLike["write"];
 }
 
 /** A `group` deeper than this is a runaway loop, not a formatting choice. */
@@ -79,6 +76,8 @@ const kColorInspectOptions: InspectOptions = { colors: true };
 const kNoColorInspectOptions: InspectOptions = {};
 
 function noop(): void {}
+
+function noopLabel(_label?: string): void {}
 
 class CollectedValue {
   readonly value: unknown;
@@ -134,11 +133,11 @@ export class Console {
 
   #counts = new Map<string, number>();
   #colorMode: boolean | "auto" = "auto";
-  #inspectOptions: Map<WritableLike, InspectOptions> | undefined;
+  #inspectOptions: ReadonlyMap<WritableLike, InspectOptions> | undefined;
   #groupIndentWidth = 2;
   #groupIndent = "";
 
-  constructor(options: ConsoleOptions);
+  constructor(options: ConsoleConstructorOptions);
   constructor(stdout: WritableLike, stderr?: WritableLike, ignoreErrors?: boolean);
   constructor(
     options: ConsoleConstructorOptions | WritableLike | null | undefined,
@@ -187,7 +186,7 @@ export class Console {
     if (inspectOptions !== undefined) {
       validateObject(inspectOptions, "options.inspectOptions");
 
-      const perStream = inspectOptions instanceof Map
+      const perStream = isInspectOptionsMap(inspectOptions)
         ? inspectOptions
         : new Map<WritableLike, InspectOptions>([
             [out, inspectOptions],
@@ -207,7 +206,7 @@ export class Console {
     this._stderr = err;
     this._stdoutErrorHandler = createWriteErrorHandler(this, "stdout");
     this._stderrErrorHandler = createWriteErrorHandler(this, "stderr");
-    this._ignoreErrors = Boolean(ignoreErrors);
+    this._ignoreErrors = ignoreErrors;
     this._times = new Map<string, Timestamp>();
     this.#colorMode = colorMode;
     this.#groupIndentWidth = groupIndentation ?? 2;
@@ -331,11 +330,14 @@ export class Console {
 
   /** One value inspected. Format specifiers are not interpreted. */
   dir = (object: unknown, options?: InspectOptions): void => {
-    this.#writeToConsole("stdout", inspect(object, {
-      customInspect: false,
-      ...this.#getInspectOptions(this._stdout),
-      ...options,
-    }));
+    this.#writeToConsole(
+      "stdout",
+      inspect(object, {
+        customInspect: false,
+        ...this.#getInspectOptions(this._stdout),
+        ...options,
+      }),
+    );
   };
 
   /** The message with a stack trace under it, on stderr. */
@@ -375,9 +377,6 @@ export class Console {
 
   /** https://console.spec.whatwg.org/#count */
   count = (label: string = "default"): void => {
-    // Coerces anything but a symbol, which throws -- as it should, since a
-    // symbol has no string form and a count table is keyed by strings.
-    label = `${label}`;
     const count = (this.#counts.get(label) ?? 0) + 1;
     this.#counts.set(label, count);
     this.log(`${label}: ${count}`);
@@ -389,21 +388,21 @@ export class Console {
       emitWarning(`Count for '${label}' does not exist`, "Warning", "");
       return;
     }
-    this.#counts.delete(`${label}`);
+    this.#counts.delete(label);
   };
 
   // --------------------------------------------------------------- timing
 
   time = (label: string = "default"): void => {
-    time(this._times, "console.time()", `${label}`);
+    time(this._times, "console.time()", label);
   };
 
   timeEnd = (label: string = "default"): void => {
-    timeEnd(this._times, "console.timeEnd()", this.#timeLogImpl, `${label}`);
+    timeEnd(this._times, "console.timeEnd()", this.#timeLogImpl, label);
   };
 
   timeLog = (label: string = "default", ...data: unknown[]): void => {
-    timeLog(this._times, "console.timeLog()", this.#timeLogImpl, `${label}`, data);
+    timeLog(this._times, "console.timeLog()", this.#timeLogImpl, label, data);
   };
 
   #timeLogImpl = (label: string, formatted: string, args?: unknown[]): void => {
@@ -461,8 +460,10 @@ export class Console {
     // table cell has no room for them, and the point of the table is the
     // columns rather than the values.
     const _inspect = (v: unknown): string => {
-      const depth = v !== null && typeof v === "object" && !isArrayLike(v) &&
-        Object.keys(v).length > 2 ? -1 : 0;
+      const depth =
+        v !== null && typeof v === "object" && !isArrayLike(v) && Object.keys(v).length > 2
+          ? -1
+          : 0;
       return inspect(v, {
         depth,
         maxArrayLength: 3,
@@ -554,8 +555,7 @@ export class Console {
       const index = indexKeyArray[i];
       if (index === undefined) continue;
       const item = data[index];
-      const primitive = item === null ||
-        (typeof item !== "function" && typeof item !== "object");
+      const primitive = item === null || (typeof item !== "function" && typeof item !== "object");
       if (properties === undefined && primitive) {
         hasPrimitives = true;
         valuesKeyArray[i] = _inspect(item);
@@ -594,12 +594,6 @@ export class Console {
 
     final(keys, values);
   };
-
-  // Timeline markers, so that code written for a browser runs unchanged.
-  // Node's are no-ops too.
-  profile = noop;
-  profileEnd = noop;
-  timeStamp = noop;
 }
 
 const keyKey = "Key";
@@ -612,10 +606,16 @@ function isArrayLike(v: unknown): boolean {
   return Array.isArray(v) || isTypedArray(v);
 }
 
-function isWritableLike(
-  value: ConsoleConstructorOptions | WritableLike | null | undefined,
-): value is WritableLike {
-  return value !== null && value !== undefined && typeof value.write === "function";
+function isWritableLike(value: unknown): value is WritableLike {
+  if (value === null || value === undefined) return false;
+  if (typeof value !== "object" && typeof value !== "function") return false;
+  return "write" in value && typeof value.write === "function";
+}
+
+function isInspectOptionsMap(
+  value: InspectOptions | ReadonlyMap<WritableLike, InspectOptions>,
+): value is ReadonlyMap<WritableLike, InspectOptions> {
+  return value instanceof Map;
 }
 
 /** A JavaScript value on which a string-key read is defined. */
@@ -632,14 +632,10 @@ function isPair(value: unknown): value is [unknown, unknown] {
  * no code to test, so the message is the test -- node does the same.
  */
 function isStackOverflowError(err: unknown): boolean {
-  return err instanceof RangeError &&
-    err.message === "Maximum call stack size exceeded";
+  return err instanceof RangeError && err.message === "Maximum call stack size exceeded";
 }
 
-function createWriteErrorHandler(
-  instance: Console,
-  target: Target,
-): (err?: Error | null) => void {
+function createWriteErrorHandler(instance: Console, target: Target): (err?: Error | null) => void {
   return (err) => {
     // True only when the write failed *and* the stream has not already
     // emitted for it -- which is the asynchronous case. Attaching a `once`
@@ -655,13 +651,26 @@ function createWriteErrorHandler(
 }
 
 /**
+ * Node adds browser timeline markers and the legacy constructor property only
+ * to the global namespace; independently constructed Console instances do not
+ * have them. Keeping that distinction in the class layout avoids a shape-time
+ * mutation and gives the public namespace its exact static type.
+ */
+class GlobalConsole extends Console {
+  Console = Console;
+  profile = noopLabel;
+  profileEnd = noopLabel;
+  timeStamp = noopLabel;
+}
+
+/**
  * The global `console`.
  *
  * Node builds a prototype-less namespace and customizes `instanceof`; both are
  * §13 object-model operations. A real instance gives typed code the same
  * methods, state, detached-call behavior and `instanceof Console` answer.
  */
-export const globalConsole: Console = new Console({
+export const globalConsole: GlobalConsole = new GlobalConsole({
   stdout: stdio.stdout,
   stderr: stdio.stderr,
 });

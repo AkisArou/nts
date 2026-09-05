@@ -5,9 +5,7 @@
 // and `require('console') === globalThis.console` is asserted by node's own
 // test-console-instance.js.
 export function shape(exports) {
-  const instance = exports.globalConsole ?? exports.default;
-  instance.Console = exports.Console_;
-  return instance;
+  return exports.globalConsole ?? exports.default;
 }
 
 /**
