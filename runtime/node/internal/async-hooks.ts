@@ -241,8 +241,23 @@ export function executionAsyncResource(): object {
 
 // -- the registry -----------------------------------------------------------
 
-const counts = { init: 0, before: 0, after: 0, destroy: 0, promiseResolve: 0 };
-type CountKey = keyof typeof counts;
+interface HookCounts {
+  init: number;
+  before: number;
+  after: number;
+  destroy: number;
+  promiseResolve: number;
+}
+
+type HookEventKind = "before" | "after" | "destroy" | "promiseResolve";
+
+const counts: HookCounts = {
+  init: 0,
+  before: 0,
+  after: 0,
+  destroy: 0,
+  promiseResolve: 0,
+};
 
 let hooks = new Map<RegisteredHook, RegisteredHook>();
 
@@ -257,13 +272,24 @@ let hooks = new Map<RegisteredHook, RegisteredHook>();
  */
 let callDepth = 0;
 let stagedHooks: Map<RegisteredHook, RegisteredHook> | null = null;
-let stagedCounts: typeof counts | null = null;
+let stagedCounts: HookCounts | null = null;
 
 /** Non-zero while any hook is enabled; gates the `popAsyncContext` check. */
 let checkDepth = 0;
 
-function hasHooks(key: CountKey): boolean {
-  return counts[key] > 0;
+function hasHooks(kind: "init" | HookEventKind): boolean {
+  switch (kind) {
+    case "init":
+      return counts.init > 0;
+    case "before":
+      return counts.before > 0;
+    case "after":
+      return counts.after > 0;
+    case "destroy":
+      return counts.destroy > 0;
+    case "promiseResolve":
+      return counts.promiseResolve > 0;
+  }
 }
 
 export function initHooksExist(): boolean { return hasHooks("init"); }
@@ -273,11 +299,17 @@ export function promiseResolveHooksExist(): boolean { return hasHooks("promiseRe
 export function enabledHooksExist(): boolean { return hooks.size > 0; }
 
 /** The registry a mutation should touch: the live one, or the staged copy. */
-function mutableRegistry(): [Map<RegisteredHook, RegisteredHook>, typeof counts] {
+function mutableRegistry(): [Map<RegisteredHook, RegisteredHook>, HookCounts] {
   if (callDepth === 0) return [hooks, counts];
   if (stagedHooks === null) {
     stagedHooks = new Map(hooks);
-    stagedCounts = { ...counts };
+    stagedCounts = {
+      init: counts.init,
+      before: counts.before,
+      after: counts.after,
+      destroy: counts.destroy,
+      promiseResolve: counts.promiseResolve,
+    };
   }
   const fields = stagedCounts;
   if (fields === null) return [hooks, counts];
@@ -369,11 +401,27 @@ function fatalError(error: unknown): void {
 }
 
 /** Call one kind of hook on every registered hook that wants it. */
-function emit(kind: Exclude<CountKey, "init">, asyncId: number, fromPromise: boolean): void {
+function hookEventCallback(
+  hook: RegisteredHook,
+  kind: HookEventKind,
+): ((asyncId: number) => void) | undefined {
+  switch (kind) {
+    case "before":
+      return hook.before;
+    case "after":
+      return hook.after;
+    case "destroy":
+      return hook.destroy;
+    case "promiseResolve":
+      return hook.promiseResolve;
+  }
+}
+
+function emit(kind: HookEventKind, asyncId: number, fromPromise: boolean): void {
   callDepth += 1;
   try {
     for (const hook of hooks.values()) {
-      const fn = hook[kind];
+      const fn = hookEventCallback(hook, kind);
       if (typeof fn !== "function") continue;
       if (fromPromise && hook.noPromiseHook) continue;
       fn(asyncId);

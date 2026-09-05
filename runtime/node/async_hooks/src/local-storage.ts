@@ -112,7 +112,9 @@ export class AsyncLocalStorage<T = unknown> {
   }
 
   /** `fn`, pinned to the context it was bound in. */
-  static bind<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
+  static bind<T, A extends unknown[], R>(
+    fn: (this: T, ...args: A) => R,
+  ): (this: T, ...args: A) => R {
     return AsyncResource.bind(fn);
   }
 
@@ -161,13 +163,17 @@ export class AsyncLocalStorage<T = unknown> {
   /**
    * Run `fn` with `store` in place, and restore what was there afterwards.
    */
-  run<A extends unknown[], R>(store: T, fn: (...args: A) => R, ...args: A): R {
+  run<A extends unknown[], R>(
+    store: T,
+    fn: (this: null, ...args: A) => R,
+    ...args: A
+  ): R {
     return this.#runStore(store, fn, args);
   }
 
   #runStore<A extends unknown[], R>(
     store: T | undefined,
-    fn: (...args: A) => R,
+    fn: (this: null, ...args: A) => R,
     args: A,
   ): R {
     const prior = this.getStore();
@@ -175,11 +181,11 @@ export class AsyncLocalStorage<T = unknown> {
     // `run` nested inside `run` with one store is common enough to be worth
     // the comparison. `Object.is`, so that re-entering with `NaN` is also a
     // no-op and re-entering with `-0` over `0` is not.
-    if (Object.is(prior, store)) return fn(...args);
+    if (Object.is(prior, store)) return fn.call(null, ...args);
 
     this.#enterStore(store);
     try {
-      return fn(...args);
+      return fn.call(null, ...args);
     } finally {
       // A new frame carrying the old value, rather than the old frame. They
       // differ when `fn` changed some *other* storage with `enterWith`: those
@@ -190,7 +196,7 @@ export class AsyncLocalStorage<T = unknown> {
   }
 
   /** Run `fn` with this storage unset, whatever it was. */
-  exit<A extends unknown[], R>(fn: (...args: A) => R, ...args: A): R {
+  exit<A extends unknown[], R>(fn: (this: null, ...args: A) => R, ...args: A): R {
     return this.#runStore(undefined, fn, args);
   }
 

@@ -146,7 +146,78 @@ export function createHook(callbacks: HookCallbacks): AsyncHook {
  * interface, not an implementation detail, because a hook may receive either
  * the name or the number depending on where the resource came from.
  */
-export const asyncWrapProviders: Readonly<Record<string, number>> = {
+export interface AsyncWrapProviders {
+  readonly NONE: number;
+  readonly DIRHANDLE: number;
+  readonly DNSCHANNEL: number;
+  readonly ELDHISTOGRAM: number;
+  readonly FILEHANDLE: number;
+  readonly FILEHANDLECLOSEREQ: number;
+  readonly BLOBREADER: number;
+  readonly FSEVENTWRAP: number;
+  readonly FSREQCALLBACK: number;
+  readonly FSREQPROMISE: number;
+  readonly GETADDRINFOREQWRAP: number;
+  readonly GETNAMEINFOREQWRAP: number;
+  readonly HEAPSNAPSHOT: number;
+  readonly HTTP2SESSION: number;
+  readonly HTTP2STREAM: number;
+  readonly HTTP2PING: number;
+  readonly HTTP2SETTINGS: number;
+  readonly HTTPINCOMINGMESSAGE: number;
+  readonly HTTPCLIENTREQUEST: number;
+  readonly LOCKS: number;
+  readonly JSSTREAM: number;
+  readonly JSUDPWRAP: number;
+  readonly MESSAGEPORT: number;
+  readonly PIPECONNECTWRAP: number;
+  readonly PIPESERVERWRAP: number;
+  readonly PIPEWRAP: number;
+  readonly PROCESSWRAP: number;
+  readonly PROMISE: number;
+  readonly QUERYWRAP: number;
+  readonly QUIC_ENDPOINT: number;
+  readonly QUIC_LOGSTREAM: number;
+  readonly QUIC_SESSION: number;
+  readonly QUIC_STREAM: number;
+  readonly QUIC_UDP: number;
+  readonly SHUTDOWNWRAP: number;
+  readonly SIGNALWRAP: number;
+  readonly STATWATCHER: number;
+  readonly STREAMPIPE: number;
+  readonly TCPCONNECTWRAP: number;
+  readonly TCPSERVERWRAP: number;
+  readonly TCPWRAP: number;
+  readonly TTYWRAP: number;
+  readonly UDPSENDWRAP: number;
+  readonly UDPWRAP: number;
+  readonly SIGINTWATCHDOG: number;
+  readonly WORKER: number;
+  readonly WORKERCPUPROFILE: number;
+  readonly WORKERCPUUSAGE: number;
+  readonly WORKERHEAPPROFILE: number;
+  readonly WORKERHEAPSNAPSHOT: number;
+  readonly WORKERHEAPSTATISTICS: number;
+  readonly WRITEWRAP: number;
+  readonly ZLIB: number;
+  readonly CHECKPRIMEREQUEST: number;
+  readonly PBKDF2REQUEST: number;
+  readonly KEYPAIRGENREQUEST: number;
+  readonly KEYGENREQUEST: number;
+  readonly KEYEXPORTREQUEST: number;
+  readonly ARGON2REQUEST: number;
+  readonly CIPHERREQUEST: number;
+  readonly DERIVEBITSREQUEST: number;
+  readonly HASHREQUEST: number;
+  readonly RANDOMBYTESREQUEST: number;
+  readonly RANDOMPRIMEREQUEST: number;
+  readonly SCRYPTREQUEST: number;
+  readonly SIGNREQUEST: number;
+  readonly TLSWRAP: number;
+  readonly VERIFYREQUEST: number;
+}
+
+export const asyncWrapProviders: AsyncWrapProviders = {
   NONE: 0,
   DIRHANDLE: 1,
   DNSCHANNEL: 2,

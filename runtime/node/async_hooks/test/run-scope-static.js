@@ -24,3 +24,13 @@ assert.strictEqual(storage.getStore(), 'default');
 storage.enterWith('later');
 outer.dispose();
 assert.strictEqual(storage.getStore(), 'later');
+
+// The pinned implementation uses ReflectApply with null for both callback
+// forms. Keep that observable receiver without bringing Reflect into the
+// Native TypeScript source.
+storage.run('run receiver', function() {
+  assert.strictEqual(this, null);
+});
+storage.exit(function() {
+  assert.strictEqual(this, null);
+});
