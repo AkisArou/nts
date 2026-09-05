@@ -27,6 +27,17 @@
 // reason this one does not. The rule is not "always f64"; it is "whatever the
 // subject actually carries", and the only way to know is to look.
 //
+// **The rule is about the fields and stops there.** A first pass widened the
+// *parameter* too -- `shape(double i)` -- and `i % 3` became a `drem`, which
+// HotSpot turns into nothing cheap. The row went from 1.08x to **0.05x**: the
+// reference at 956 us, level with node's 978, while this lane sat unmoved at
+// 50. A reference twenty times slower than the thing it measures is not a
+// stricter reference, it is a broken one -- and it fails the very rule that
+// motivated the change, a cost in one lane only, this time the reference's.
+//
+// So: `double` where `javap` says the class holds a double, `int` for a loop
+// counter, and the two are separate questions.
+//
 // Each subclass adds its own field on top of the base's, which is what
 // `Layout.base` records and what makes `super_class` real here rather than a
 // prefix coincidence.
@@ -57,7 +68,7 @@ final class Ref {
         }
     }
 
-    private static Shape shape(double i) {
+    private static Shape shape(int i) {
         if (i % 3 == 0) {
             return new Circle(i);
         }
