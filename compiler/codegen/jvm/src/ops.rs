@@ -1407,6 +1407,55 @@ impl Emitter<'_> {
     /// as a **defect** -- so every case the C lane legitimately *declines* would
     /// be counted as a failure here. The runtime turns it into the same refusal
     /// the C lane prints.
+    /// A growable-array read the middle end proved in range, as the storage
+    /// access it is.
+    ///
+    /// The point is not the call, which C2 inlines either way. It is the test.
+    /// `get` bounds by `a.length`, a mutable field, and a loop whose limit is
+    /// reloaded every iteration is not a counted loop: no range-check
+    /// elimination, no unrolling, no vectorisation, and no hoisting of
+    /// `a.items` either. The same walk written nine ways puts this at 25% of
+    /// `array-predicates` -- 137,478 instructions an operation against 104,001
+    /// -- and hoisting the field by hand on top of it buys a further 2%, which
+    /// is how the measurement separates the test from the load. C2 hoists the
+    /// load itself once the test is gone.
+    ///
+    /// This is also what the C lane does: `index_expression` returns a bare
+    /// `(uint32_t)index` for `checked: false`, with no `nts_check`. Reading a
+    /// slot between the length and the capacity is a stale value on both lanes
+    /// rather than a refusal on one of them.
+    #[allow(clippy::too_many_arguments, reason = "the call site has all of it and computes none of it")]
+    fn proved_growable_read(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        array: ValueId,
+        index: ValueId,
+        ty: &HirType,
+        class: &str,
+        element: &str,
+        holds: Kind,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        self.load(code, pool, array)?;
+        code.get_field(origin, pool, class, "items", &format!("[{element}"));
+        self.subscript(code, pool, index, origin)?;
+        code.array_load(origin, element);
+        if holds != Kind::Ref {
+            self.adapt(code, holds, ty, origin)?;
+        }
+        // `NtsArrayL` stores `Object`, so an array of strings hands back an
+        // `Object` where the slot wants a `String` -- the same restoration the
+        // helper path spells out for the same reason.
+        if let Some(want) = types::descriptor(self.shape, ty)
+            && want != element
+            && types::kind(ty) == Some(Kind::Ref)
+        {
+            code.check_cast(origin, pool, &want);
+        }
+        Ok(Placed::OnStack)
+    }
+
     fn array_operation(
         &mut self,
         code: &mut Code,
@@ -1439,9 +1488,14 @@ impl Emitter<'_> {
                 code.invoke_static(origin, pool, &class, "of", &format!("({n})L{class};"));
                 Ok(Placed::OnStack)
             }
-            OpKind::ArrayGet { array, index, .. } if self.shape.grows => {
+            OpKind::ArrayGet { array, index, checked } if self.shape.grows => {
                 let class = self.growable_class(&self.ty(*array).clone())?;
                 let (element, holds) = self.growable_element(&self.ty(*array).clone())?;
+                if !*checked {
+                    return self.proved_growable_read(
+                        code, pool, *array, *index, ty, &class, &element, holds, origin,
+                    );
+                }
                 self.load(code, pool, *array)?;
                 // The subscript by its own kind, not widened to a `double`.
                 //

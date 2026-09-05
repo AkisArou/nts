@@ -5,7 +5,18 @@ import java.util.Arrays;
 /** Dense growable Object storage; public double-valued ABI is unchanged. */
 public final class NtsArrayL {
     private static final Object[] EMPTY = new Object[0];
-    Object[] items;
+    /**
+     * The storage, reachable from generated code.
+     *
+     * <p>An `array.get` the middle end emitted `checked: false` reads this
+     * directly rather than through {@link #get}. Not an encapsulation the
+     * wrapper gave up lightly: going through the helper costs 25% of
+     * `array-predicates`, because the bounds test against a *field* is what
+     * stops C2 treating the walk as a counted loop -- and a loop it will not
+     * count is one it will not unroll, vectorise, or hoist this very field
+     * out of. Reading it inline, C2 hoists it itself.
+     */
+    public Object[] items;
     int length;
 
     private NtsArrayL(Object[] items, int length) { this.items = items; this.length = length; }
@@ -104,11 +115,24 @@ public final class NtsArrayL {
         }
     }
     public static double push(NtsArrayL a, Object value) {
-        int n = NtsArrays.checkedLength((long) a.length + 1);
-        reserve(a, n);
-        a.items[a.length] = value;
-        a.length = n;
-        return n;
+        // The append `NtsArrayD` was given and this one was not: in `int`, with
+        // one read of `items`. It widened `a.length + 1` to a `long` so
+        // `checkedLength` could range-check it and narrow it back, then reached
+        // `a.items` twice more -- once through `reserve` and once to store.
+        // `a.length` is a non-negative `int` over an `Object[]`, so the only value that
+        // can overflow is `MAX_ARRAY` itself, and only a grow can reach it.
+        int length = a.length;
+        Object[] items = a.items;
+        if (length == items.length) {
+            if (length >= NtsArrays.MAX_ARRAY) {
+                throw new OutOfMemoryError("array capacity exhausted");
+            }
+            items = Arrays.copyOf(items, NtsArrays.growCapacity(items.length, length + 1));
+            a.items = items;
+        }
+        items[length] = value;
+        a.length = length + 1;
+        return length + 1;
     }
     /** The nonempty precondition is supplied by lowering; use popValue otherwise. */
     public static Object pop(NtsArrayL a) {

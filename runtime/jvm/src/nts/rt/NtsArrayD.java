@@ -5,7 +5,18 @@ import java.util.Arrays;
 /** Dense growable double storage; public double-valued ABI is unchanged. */
 public final class NtsArrayD {
     private static final double[] EMPTY = new double[0];
-    double[] items;
+    /**
+     * The storage, reachable from generated code.
+     *
+     * <p>An `array.get` the middle end emitted `checked: false` reads this
+     * directly rather than through {@link #get}. Not an encapsulation the
+     * wrapper gave up lightly: going through the helper costs 25% of
+     * `array-predicates`, because the bounds test against a *field* is what
+     * stops C2 treating the walk as a counted loop -- and a loop it will not
+     * count is one it will not unroll, vectorise, or hoist this very field
+     * out of. Reading it inline, C2 hoists it itself.
+     */
+    public double[] items;
     int length;
 
     private NtsArrayD(double[] items, int length) { this.items = items; this.length = length; }
@@ -113,11 +124,18 @@ public final class NtsArrayD {
         // 11.4%: that row's `filter` builds a fresh array an element at a time,
         // eight times an operation, where the reference allocates once.
         int length = a.length;
-        if (length >= NtsArrays.MAX_ARRAY) {
-            throw new OutOfMemoryError("array capacity exhausted");
-        }
         double[] items = a.items;
         if (length == items.length) {
+            // Inside the grow, not before it. A `length` below the capacity is
+            // below `MAX_ARRAY` already, because the capacity is -- so the
+            // guard was answering on the appending path a question only the
+            // growing path can ask. Two instructions an append is not the
+            // point; the bytes are, because `push` is inlined into a caller
+            // with a budget and record 0109 is about what eighteen of them
+            // decide.
+            if (length >= NtsArrays.MAX_ARRAY) {
+                throw new OutOfMemoryError("array capacity exhausted");
+            }
             items = Arrays.copyOf(items, NtsArrays.growCapacity(items.length, length + 1));
             a.items = items;
         }

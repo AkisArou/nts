@@ -224,7 +224,8 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // A symbol is refused here for an unrelated reason and shares the arm
         // because the answer is the same: it is a runtime value on the C lane
         // and not yet on this one, so it has no class to name.
-        HirType::Never | HirType::Managed(ManagedType::Symbol) => return None,
+        HirType::Never
+        | HirType::Managed(ManagedType::Symbol | ManagedType::Date) => return None,
     })
 }
 
@@ -238,6 +239,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
             ManagedType::Object(_)
             | ManagedType::String
             | ManagedType::Symbol
+            | ManagedType::Date
             | ManagedType::Array(_)
             | ManagedType::Map(..)
             | ManagedType::Set(_)
@@ -303,6 +305,7 @@ pub fn describe(ty: &HirType) -> String {
         HirType::Erased => "an erased value".to_owned(),
         HirType::Managed(ManagedType::String) => "a string".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "a symbol".to_owned(),
+        HirType::Managed(ManagedType::Date) => "a date".to_owned(),
         // The element, because the one message that most needs this is two
         // arrays that differ only in it -- `an array` twice says nothing about
         // why the two would not agree.
