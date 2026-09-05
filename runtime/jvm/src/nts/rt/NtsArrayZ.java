@@ -38,7 +38,10 @@ public final class NtsArrayZ {
         // The double form re-proves integrality with a `(double)(int)`
         // round trip per element, which cost `growth-grown` 26% -- 1.01x to
         // 1.28x -- for a test whose answer is a precondition here.
-        return a.items[NtsRuntime.bounds(a.length, (int) at)];
+        int i = (int) at;
+        if (i >= 0 && i < a.length) { return a.items[i]; }
+        NtsRuntime.outOfRange(at, a.length);
+        return false;
     }
 
     public static void set(NtsArrayZ a, double at, boolean value) {

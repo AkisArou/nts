@@ -660,6 +660,21 @@ public final class NtsRuntime {
     public static int bounds(int length, long index) {
         return index >= 0L && index < length ? (int) index : outside((double) index, length);
     }
+    /**
+     * The refusal an out-of-range subscript raises, callable from the array
+     * classes so their reads need one call rather than two.
+     *
+     * <p>`NtsArrayD.get` was `a.items[bounds(a.length, (int) at)]`, and a
+     * profile of `array-predicates` put 25.6% in `get` and a further 9.6% in
+     * `bounds` -- a third of the row on element reads, where the reference
+     * indexes an array. The check is not the problem and cannot go: reading
+     * past `length` but inside the capacity returns a stale slot from an
+     * earlier grow. The second call level is the problem.
+     */
+    public static double outOfRange(double index, int length) {
+        return outside(index, length);
+    }
+
     private static int outside(double index, int length) {
         throw new NtsRefusal("index " + numberText(index) + " is outside [0, " + length + ")");
     }
