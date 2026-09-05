@@ -128,6 +128,16 @@ function processInformationHeader(name: unknown, value: unknown, lenient: boolea
   return `${name}: ${value}\r\n`;
 }
 
+function serializeHeader(name: string, value: OutgoingHeaderValue): string {
+  if (!Array.isArray(value)) return `${name}: ${value}\r\n`;
+  if (name.toLowerCase() === "cookie" && value.length >= 2) {
+    return `${name}: ${value.join("; ")}\r\n`;
+  }
+  let serialized = "";
+  for (const entry of value) serialized += `${name}: ${entry}\r\n`;
+  return serialized;
+}
+
 export function checkIsHttpToken(value: string): boolean {
   return value.length > 0 && TOKEN.test(value);
 }
@@ -329,6 +339,7 @@ export class OutgoingMessage extends EventEmitter {
   /** Lowercased name to `[originalName, value]`. */
   protected headersMap = new Map<string, [string, OutgoingHeaderValue]>();
   protected trailersMap = new Map<string, [string, OutgoingHeaderValue]>();
+  #rawHeaderPairs: ReadonlyArray<readonly [string, OutgoingHeaderValue]> | null = null;
 
   /** Filled in by a subclass: the status line or the request line. */
   protected statusLine = "";
@@ -495,6 +506,15 @@ export class OutgoingMessage extends EventEmitter {
     throw new ERR_METHOD_NOT_IMPLEMENTED("_implicitHeader()");
   }
 
+  /** Preserve an already validated raw header sequence exactly on the wire. */
+  protected _storeRawHeaderPairs(
+    pairs: ReadonlyArray<readonly [string, OutgoingHeaderValue]>,
+  ): void {
+    if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("render");
+    this.#rawHeaderPairs = pairs;
+    this.prepareHeaders();
+  }
+
   /**
    * Decide the framing and send the head.
    *
@@ -533,7 +553,7 @@ export class OutgoingMessage extends EventEmitter {
       this.chunkedEncoding = false;
     } else if (encoding && String(encoding[1]).toLowerCase().includes("chunked")) {
       this.chunkedEncoding = true;
-    } else if (this.useChunkedEncodingByDefault) {
+    } else if (this.useChunkedEncodingByDefault && !this._removedTE) {
       this.chunkedEncoding = true;
       addChunkedHeader = true;
     } else if (!this.keepAliveWithoutFramingWhenEmpty || this.#bodyWriteStarted) {
@@ -546,7 +566,7 @@ export class OutgoingMessage extends EventEmitter {
       this.headersMap.set("date", ["Date", new Date().toUTCString()]);
     }
 
-    if (!this.headersMap.has("connection")) {
+    if (!this._removedConnection && !this.headersMap.has("connection")) {
       this.headersMap.set("connection", [
         "Connection",
         this.shouldKeepAlive ? "keep-alive" : "close",
@@ -570,16 +590,21 @@ export class OutgoingMessage extends EventEmitter {
     }
 
     let head = `${this.statusLine}\r\n`;
-    for (const entry of this.headersMap.values()) {
-      const name = entry[0];
-      const value = entry[1];
-      if (Array.isArray(value)) {
-        // A repeated field is repeated lines, not a joined one -- required for
-        // `Set-Cookie` and harmless for everything else.
-        for (const one of value) head += `${name}: ${one}\r\n`;
-      } else {
-        head += `${name}: ${value}\r\n`;
+    const rawHeaderPairs = this.#rawHeaderPairs;
+    if (rawHeaderPairs === null) {
+      for (const entry of this.headersMap.values()) {
+        head += serializeHeader(entry[0], entry[1]);
       }
+    } else {
+      const rawNames = new Set<string>();
+      for (const entry of rawHeaderPairs) {
+        rawNames.add(entry[0].toLowerCase());
+        head += serializeHeader(entry[0], entry[1]);
+      }
+      for (const [name, entry] of this.headersMap) {
+        if (!rawNames.has(name)) head += serializeHeader(entry[0], entry[1]);
+      }
+      this.#rawHeaderPairs = null;
     }
     head += "\r\n";
 
@@ -712,6 +737,7 @@ export class OutgoingMessage extends EventEmitter {
       !this.headersSent &&
       this.hasBody &&
       this.useChunkedEncodingByDefault &&
+      !this._removedContLen &&
       !this.hasHeader("content-length") &&
       !this.hasHeader("transfer-encoding") &&
       this.trailersMap.size === 0

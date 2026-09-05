@@ -52,6 +52,7 @@ export interface RequestOptions {
   defaultPort?: number | undefined;
   timeout?: number | undefined;
   setHost?: boolean | undefined;
+  setDefaultHeaders?: boolean | undefined;
   httpValidation?: "strict" | "relaxed" | "insecure" | undefined;
   insecureHTTPParser?: boolean | undefined;
   createConnection?:
@@ -94,7 +95,18 @@ function requestHeaderIsPair(header: string | RequestHeaderPair): header is Requ
   return Array.isArray(header);
 }
 
-function applyRequestHeaderArray(request: OutgoingMessage, headers: RequestHeaderArray): void {
+function validateRequestHost(value: unknown, name: "host" | "hostname"): string | null | undefined {
+  if (value !== null && value !== undefined && typeof value !== "string") {
+    throw new ERR_INVALID_ARG_TYPE(`options.${name}`, ["string", "undefined", "null"], value);
+  }
+  return value;
+}
+
+function applyRequestHeaderArray(
+  request: OutgoingMessage,
+  headers: RequestHeaderArray,
+): RequestHeaderPair[] {
+  const pairs: RequestHeaderPair[] = [];
   const first = headers[0];
   if (first !== undefined && requestHeaderIsPair(first)) {
     for (const header of headers) {
@@ -106,8 +118,9 @@ function applyRequestHeaderArray(request: OutgoingMessage, headers: RequestHeade
         );
       }
       request.appendHeader(header[0], header[1]);
+      pairs.push([header[0], header[1]]);
     }
-    return;
+    return pairs;
   }
 
   if (headers.length % 2 !== 0) {
@@ -128,7 +141,9 @@ function applyRequestHeaderArray(request: OutgoingMessage, headers: RequestHeade
       );
     }
     request.appendHeader(name, value);
+    pairs.push([name, value]);
   }
+  return pairs;
 }
 
 export class ClientRequest extends OutgoingMessage {
@@ -180,15 +195,18 @@ export class ClientRequest extends OutgoingMessage {
     if (INVALID_PATH.test(this.path)) {
       throw new ERR_UNESCAPED_CHARACTERS("Request path");
     }
-    this.host = opts.hostname ?? opts.host ?? "localhost";
+    this.host =
+      validateRequestHost(opts.hostname, "hostname") ||
+      validateRequestHost(opts.host, "host") ||
+      "localhost";
 
     const selectedAgent =
       opts.agent === false || (opts.agent === undefined && opts.createConnection !== undefined)
         ? null
         : (opts.agent ?? globalAgent);
     this.protocol = opts.protocol ?? selectedAgent?.protocol ?? "http:";
-    const defaultPort = opts.defaultPort || selectedAgent?.defaultPort || 80;
-    this.#port = Number(opts.port || defaultPort);
+    const defaultPort = opts.defaultPort || selectedAgent?.defaultPort;
+    this.#port = Number(opts.port || defaultPort || 80);
     const timeoutOption: unknown = opts.timeout;
     this.timeout =
       timeoutOption === undefined ? undefined : getTimerDuration(timeoutOption, "timeout");
@@ -226,11 +244,15 @@ export class ClientRequest extends OutgoingMessage {
     this.useChunkedEncodingByDefault = !BODILESS.has(this.method);
     this.keepAliveWithoutFramingWhenEmpty = BODILESS.has(this.method);
     this.shouldKeepAlive = selectedAgent !== null;
+    this._removedConnection = opts.setDefaultHeaders === false;
+    this._removedContLen = opts.setDefaultHeaders === false;
+    this._removedTE = opts.setDefaultHeaders === false;
 
     const rawHeaderArray = opts.headers !== undefined && requestHeadersAreArray(opts.headers);
+    let rawHeaderPairs: RequestHeaderPair[] | undefined;
     if (opts.headers !== undefined) {
       if (requestHeadersAreArray(opts.headers)) {
-        applyRequestHeaderArray(this, opts.headers);
+        rawHeaderPairs = applyRequestHeaderArray(this, opts.headers);
       } else {
         for (const [name, value] of Object.entries(opts.headers)) {
           this.setHeader(name, value);
@@ -240,16 +262,29 @@ export class ClientRequest extends OutgoingMessage {
 
     // `Host` identifies which site on a shared address the request is for, and
     // is mandatory in HTTP/1.1. Added unless the caller set it or opted out.
-    if (!rawHeaderArray && opts.setHost !== false && !this.hasHeader("host")) {
+    const setHost =
+      opts.setHost !== undefined ? Boolean(opts.setHost) : opts.setDefaultHeaders !== false;
+    if (!rawHeaderArray && setHost && !this.hasHeader("host")) {
       const needsPort = this.#port !== defaultPort;
-      this.setHeader("Host", needsPort ? `${this.host}:${this.#port}` : this.host);
+      const firstColon = this.host.indexOf(":");
+      const hostHeader =
+        firstColon !== -1 && this.host.includes(":", firstColon + 1) && !this.host.startsWith("[")
+          ? `[${this.host}]`
+          : this.host;
+      this.setHeader("Host", needsPort ? `${hostHeader}:${this.#port}` : hostHeader);
     }
 
-    if (opts.auth && !this.hasHeader("authorization")) {
+    const hostHeader = this.getHeader("host");
+    if (hostHeader !== undefined && typeof hostHeader !== "string") {
+      throw new ERR_INVALID_ARG_TYPE("options.headers.host", "string", hostHeader);
+    }
+
+    if (!rawHeaderArray && opts.auth && !this.hasHeader("authorization")) {
       this.setHeader("Authorization", `Basic ${Buffer.from(opts.auth).toString("base64")}`);
     }
 
     this.statusLine = `${this.method} ${this.path} HTTP/1.1`;
+    if (rawHeaderPairs !== undefined) this._storeRawHeaderPairs(rawHeaderPairs);
 
     this.agent = selectedAgent;
     const connectionOptions = {
