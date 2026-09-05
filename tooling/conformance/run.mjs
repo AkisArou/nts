@@ -96,6 +96,14 @@ function readList(path) {
   );
 }
 
+function printedSkipReason(output) {
+  const prefix = "1..0 # Skipped:";
+  for (const line of output.split("\n")) {
+    if (line.startsWith(prefix)) return line.slice(prefix.length).trim();
+  }
+  return undefined;
+}
+
 const notApplicable = readList(join(ROOT, "runtime/node", moduleName, "not-applicable"));
 const moduleDir = join(ROOT, "runtime/node", moduleName);
 
@@ -254,9 +262,15 @@ for (const test of tests) {
       .split("\n")
       .filter((candidate) => candidate.startsWith(RESULT_PREFIX))
       .pop();
-    result = line
-      ? JSON.parse(line.slice(RESULT_PREFIX.length))
-      : { kind: "fail", why: "no result from the child" };
+    if (line) {
+      result = JSON.parse(line.slice(RESULT_PREFIX.length));
+    } else {
+      const skipReason = printedSkipReason(out);
+      result =
+        skipReason === undefined
+          ? { kind: "fail", why: "no result from the child" }
+          : { kind: "skip", why: skipReason };
+    }
   } catch (e) {
     // A non-zero exit *after* a result was reported means an exit handler
     // threw. Many of node's tests do their real assertion in

@@ -366,7 +366,7 @@ export function makeCommon(pipePath, nodeCommonDirectory = "") {
     hasFipsCrypto: false,
     platformTimeout: (ms) => ms,
     printSkipMessage(reason) {
-      throw new Skip(reason);
+      console.log(`1..0 # Skipped: ${reason}`);
     },
 
     // Verbatim from node `test/common/index.js:802`. Not ours to approximate:
