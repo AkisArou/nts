@@ -27,6 +27,7 @@ import {
   ERR_HTTP_HEADERS_SENT,
   ERR_HTTP_INVALID_HEADER_VALUE,
   ERR_HTTP_INVALID_STATUS_CODE,
+  ERR_HTTP_TRAILER_INVALID,
   ERR_INVALID_CHAR,
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
@@ -359,8 +360,8 @@ export class OutgoingMessage extends EventEmitter {
 
   /** Lowercased name to `[originalName, value]`. */
   protected headersMap = new Map<string, [string, OutgoingHeaderValue]>();
-  protected trailersMap = new Map<string, [string, OutgoingHeaderValue]>();
   #rawHeaderPairs: ReadonlyArray<readonly [string, OutgoingHeaderValue]> | null = null;
+  #trailer = "";
 
   /** Filled in by a subclass: the status line or the request line. */
   protected statusLine = "";
@@ -509,17 +510,24 @@ export class OutgoingMessage extends EventEmitter {
    * because there is nowhere to put them.
    */
   addTrailers(headers: OutgoingHeaders | TrailerEntries): void {
+    let trailer = "";
     if (isTrailerEntries(headers)) {
-      for (const [name, value] of headers) this.#setTrailer(name, value);
-      return;
+      for (const [name, value] of headers) trailer += this.#serializeTrailer(name, value);
+    } else {
+      for (const [name, value] of Object.entries(headers)) {
+        trailer += this.#serializeTrailer(name, value);
+      }
     }
-    for (const [name, value] of Object.entries(headers)) this.#setTrailer(name, value);
+    this.#trailer = trailer;
   }
 
-  #setTrailer(name: string, value: OutgoingHeaderValue): void {
+  #serializeTrailer(name: string, value: OutgoingHeaderValue): string {
     validateHeaderName(name);
     validateHeaderValue(name, value, this.#lenientHeaderValues);
-    this.trailersMap.set(name.toLowerCase(), [name, value]);
+    if (!Array.isArray(value)) return `${name}: ${value}\r\n`;
+    let trailer = "";
+    for (const entry of value) trailer += `${name}: ${entry}\r\n`;
+    return trailer;
   }
 
   /** Written by a subclass before the headers, as the first line. */
@@ -550,6 +558,7 @@ export class OutgoingMessage extends EventEmitter {
     const declared = this.headersMap.get("content-length");
     const encoding = this.headersMap.get("transfer-encoding");
     const connection = this.headersMap.get("connection");
+    const trailerHeader = this.headersMap.get("trailer");
     let addChunkedHeader = false;
 
     // The header is not merely text on the wire; it controls ownership of the
@@ -581,6 +590,10 @@ export class OutgoingMessage extends EventEmitter {
       // No length and no chunking on a message that may have a body: it ends
       // when the connection does, so the connection cannot be reused.
       this.shouldKeepAlive = false;
+    }
+
+    if (!this.chunkedEncoding && trailerHeader !== undefined) {
+      throw new ERR_HTTP_TRAILER_INVALID();
     }
 
     if (this.sendDate && !this.headersMap.has("date")) {
@@ -761,7 +774,7 @@ export class OutgoingMessage extends EventEmitter {
       !this._removedContLen &&
       !this.hasHeader("content-length") &&
       !this.hasHeader("transfer-encoding") &&
-      this.trailersMap.size === 0
+      this.#trailer.length === 0
     ) {
       const length =
         body === undefined
@@ -810,11 +823,7 @@ export class OutgoingMessage extends EventEmitter {
     this.finished = true;
 
     if (this.chunkedEncoding) {
-      let tail = "0\r\n";
-      for (const entry of this.trailersMap.values()) {
-        tail += `${entry[0]}: ${entry[1]}\r\n`;
-      }
-      tail += "\r\n";
+      const tail = `0\r\n${this.#trailer}\r\n`;
       this._writeRaw(tail, "latin1", this.#onFlushed);
     } else {
       // A zero-byte write is an ordering sentinel. Its callback runs only

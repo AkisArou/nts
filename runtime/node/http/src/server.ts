@@ -559,6 +559,12 @@ export class Server extends NetServer {
       if (incoming && !incoming.push(Buffer.from(chunk))) socket.pause();
     };
 
+    parser.onHeaders = (headers) => {
+      if (incoming === null) return;
+      incoming._beginTrailers();
+      incoming._addHeaders(headers);
+    };
+
     parser.onMessageComplete = () => {
       if (!incoming) return;
       deadline.requestComplete = true;

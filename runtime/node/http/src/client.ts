@@ -618,6 +618,12 @@ export class ClientRequest extends OutgoingMessage {
       if (response && !response.push(Buffer.from(chunk))) socket.pause();
     };
 
+    parser.onHeaders = (headers) => {
+      if (response === null) return;
+      response._beginTrailers();
+      response._addHeaders(headers);
+    };
+
     parser.onMessageComplete = () => {
       if (upgradeResponse !== null) {
         upgradeResponse.complete = true;

@@ -1307,6 +1307,19 @@ export class ERR_HTTP_CONTENT_LENGTH_MISMATCH extends NodeError {
   }
 }
 
+/** Trailers require chunked framing so the recipient can locate them. */
+export class ERR_HTTP_TRAILER_INVALID extends NodeError {
+  override get ["constructor"](): unknown {
+    return Error;
+  }
+  override readonly code = "ERR_HTTP_TRAILER_INVALID";
+
+  constructor() {
+    super("Trailers are invalid with this transfer encoding");
+    this.name = "Error";
+  }
+}
+
 function formatInvalidStatusCode(value: unknown): string {
   if (Array.isArray(value)) {
     if (value.length === 0) return "[]";
