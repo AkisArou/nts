@@ -522,17 +522,43 @@ extern const NtsDescriptor nts_desc_string2;
  * the object becomes a candidate; the collector later works out which
  * candidates really are garbage by removing internal references and seeing what
  * is left. */
-#define NTS_COLOR_MASK 3u
-#define NTS_BLACK 0u  /* In use. */
-#define NTS_GRAY 1u   /* Internal references are being removed. */
-#define NTS_WHITE 2u  /* Reachable only from within a cycle: garbage. */
-#define NTS_PURPLE 3u /* A candidate root. */
+/* Bits 4 and 5, and the bits are the whole of the point.
+ *
+ * These were bits 0 and 1, which are `NTS_TWO_BYTE` and `NTS_GROWN` -- and
+ * `NtsString` is a typedef of `NtsHeader`, so a string's representation and a
+ * collector colour were the same two bits of the same word. `nts_retain`
+ * blackens by clearing `NTS_COLOR_MASK`, so **retaining a heap two-byte string
+ * made it a one-byte string**: the next read took the narrow path and produced
+ * the low byte of each unit. A retained `"\u03a9"` reads back as `"\u00a9"`.
+ *
+ * Found by an external audit and reproduced against this runtime before the
+ * change: `flags` in the audit kit's `full-runtime.c` asserts the flag survives
+ * a retain, and it did not. Nothing here caught it because a literal is
+ * immortal -- `nts_retain` returns on its first line -- and the strings that
+ * are both heap-allocated and wide are the ones this compiler's examples build
+ * least often.
+ *
+ * Moving the colours rather than the representation, because the generated code
+ * and the emitted descriptors already know where `NTS_TWO_BYTE` is. */
+#define NTS_COLOR_MASK 0x30u
+#define NTS_BLACK 0u     /* In use. */
+#define NTS_GRAY 0x10u   /* Internal references are being removed. */
+#define NTS_WHITE 0x20u  /* Reachable only from within a cycle: garbage. */
+#define NTS_PURPLE 0x30u /* A candidate root. */
 #define NTS_BUFFERED 4u
 /* Already on the dying list, where the count word holds the list's *next
  * pointer* rather than a count -- see `nts_destroy`. A retain or a release
  * arriving after that would read and write a pointer as though it were a
  * number, which is how the list came to run into freed memory. */
 #define NTS_DYING 8u
+
+/* Stated rather than remembered. The bug above was two constants agreeing by
+ * accident for as long as nobody wrote down that they must not; a compile-time
+ * assertion is what makes the next bit added to this word a build error rather
+ * than a corrupted string. */
+_Static_assert((NTS_COLOR_MASK &
+                (NTS_TWO_BYTE | NTS_GROWN | NTS_BUFFERED | NTS_DYING)) == 0u,
+               "a collector colour must not overwrite a representation flag");
 
 /* Consider the candidates and reclaim whatever turns out to be garbage.
  *
@@ -693,7 +719,18 @@ int nts_string_cmp(const NtsString *a, const NtsString *b);
  * that is how this ABI passes a number the compiler knew all along. */
 NTS_ALLOCATES NtsMap *nts_map_new(double kind);
 NTS_ALLOCATES NtsMap *nts_set_new(double kind);
-NTS_READS_ONLY NtsValue nts_map_get(const NtsMap *map, NtsValue key);
+/* Not `NTS_READS_ONLY`, and the three below are not either.
+ *
+ * Each of them calls `nts_value_retain` on what it returns, so a reference
+ * comes back *owned*. `pure` promises the call can be elided when its result is
+ * already available -- and eliding an ownership acquisition loses a count.
+ * Clang at `-O2` does exactly that across translation units: two identical
+ * owned reads become one retain, and releasing both credits ends one below
+ * where it started. That the table does not change is not the question; the
+ * count is a memory effect.
+ *
+ * `has` and `next` stay read-only, because they genuinely are. */
+NtsValue nts_map_get(const NtsMap *map, NtsValue key);
 NTS_READS_ONLY bool nts_map_has(const NtsMap *map, NtsValue key);
 /* Returns the collection, which is what `set` and `add` evaluate to. */
 NtsMap *nts_map_set(NtsMap *map, NtsValue key, NtsValue value);
@@ -710,8 +747,8 @@ void nts_map_clear(NtsMap *map);
  * iteration state is therefore one number, so the loop that carries it
  * allocates nothing and specializes like any other counter. */
 NTS_READS_ONLY double nts_map_next(const NtsMap *map, double from);
-NTS_READS_ONLY NtsValue nts_map_key_at(const NtsMap *map, double at);
-NTS_READS_ONLY NtsValue nts_map_value_at(const NtsMap *map, double at);
+NtsValue nts_map_key_at(const NtsMap *map, double at);
+NtsValue nts_map_value_at(const NtsMap *map, double at);
 
 /* How many code units the code point at `at` occupies: 2 for a surrogate pair
  * and 1 otherwise. A string iterates by code point, so this is the step. */

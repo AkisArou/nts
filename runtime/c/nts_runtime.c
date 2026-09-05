@@ -492,6 +492,14 @@ static __int128 nts_bigint_low_bits(double bits, __int128 value, bool sign) {
     return value;
   }
   unsigned width = (unsigned)bits;
+  /* `ToIndex` truncates, so a width in (0, 1) is a width of zero -- and the
+   * signed path below shifts by `width - 1`, which underflows to a shift count
+   * no C shift has. The test above admits `0.5` because it asks about the
+   * *double*; this asks about what the conversion produced. Zero bits of a
+   * value is zero. Every other unsupported width still refuses above. */
+  if (width == 0u) {
+    return 0;
+  }
   unsigned __int128 mask = ((unsigned __int128)1 << width) - 1;
   unsigned __int128 low = (unsigned __int128)value & mask;
   if (!sign) {
@@ -1087,7 +1095,14 @@ __int128 nts_bigint_from_number(double value) {
             value);
     abort();
   }
-  if (!(value >= -1.7014118346046923e38 && value <= 1.7014118346046923e38)) {
+  /* Asymmetric, because two's complement is. `1.7014118346046923e38` is
+   * exactly 2^127, the largest signed 128-bit integer is 2^127 - 1, and
+   * converting the accepted positive endpoint is undefined -- UBSan says so.
+   * The negative endpoint is exactly representable and valid, and the next
+   * double below +2^127 is valid, so the interval is closed on the left and
+   * open on the right. Hex float literals rather than a decimal spelling
+   * because the boundary is a power of two and this says which one. */
+  if (!(value >= -0x1p127 && value < 0x1p127)) {
     fprintf(stderr, NTS_REFUSED "%g is outside the 128 bits a bigint has\n",
             value);
     abort();
@@ -2818,7 +2833,17 @@ nts_number_to_string_into(NtsHeader *into, double x) {
    * `String(-0)` is `"0"` -- the sign is not part of the answer, so this gives
    * exactly the right characters. NaN and the infinities fail the round-trip
    * test and fall through to `js_dtoa`, which spells them itself. */
-  const int32_t whole = (int32_t)x;
+  /* The range test comes *before* the conversion. It used to come after, and
+   * the comment above says NaN and the infinities are expected to arrive here
+   * and fall through -- converting either to `int32_t` is undefined before the
+   * round-trip test can reject it. A candidate outside the range takes zero,
+   * which no such input can equal, so the gate answers the same and executes.
+   *
+   * A sweep of every power of two against node found no wrong *characters*
+   * here, which is what made this invisible: undefined execution and a wrong
+   * answer are different failures, and only one of them prints. */
+  const int32_t whole =
+      x >= -2147483648.0 && x <= 2147483647.0 ? (int32_t)x : 0;
   if ((double)whole == x) {
     /* Straight into the string: no scratch buffer and no copy, because
      * `nts_digits10` knows the length before a digit is written. An integer is
@@ -3907,14 +3932,31 @@ void nts_map_clear(NtsMap *map) {
       continue;
     }
     nts_value_release(map->keys[at]);
+    /* Marked as a hole and *cleared*, not just released. The collector walks
+     * these arrays as far as `used`, so a slot still naming a released object
+     * is a reference it would follow into freed memory. */
+    map->keys[at].tag = NTS_TAG_HOLE;
+    map->keys[at].as.reference = 0;
     if (map->values) {
       nts_value_release(map->values[at]);
+      map->values[at] = nts_value_of_undefined();
     }
   }
   for (uint32_t slot = 0; slot < map->slots; slot++) {
     map->index[slot] = NTS_MAP_EMPTY;
   }
-  map->used = 0;
+  /* `used` is deliberately *not* reset.
+   *
+   * A walk's whole state is an entry index, and the contract beside
+   * `nts_map_next` is that an entry appended during one is visited. Resetting
+   * `used` puts the next insertion at slot zero, which a cursor already past it
+   * never reaches: walking `[1, 2]`, clearing after the first element and
+   * adding `3` must yield `[1, 3]` and yielded `[1]`.
+   *
+   * The cost is that a clear does not give the storage back, so a
+   * clear-and-refill loop grows. That is the price of the minimal repair and it
+   * is worth naming: reclaiming the dead prefix needs a logical base the
+   * cursors are relative to, which is a design rather than a line. */
   map->header.length = 0;
 }
 

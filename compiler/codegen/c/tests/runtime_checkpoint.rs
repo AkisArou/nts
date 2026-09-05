@@ -245,6 +245,79 @@ fn the_map_table_agrees_with_node() {
 /// still pointed at goes away. Both checks are regressions of one ordering bug
 /// that leaked a link out of every head-first list and, in a heap one shape
 /// further along, freed an object a live candidate still held.
+/// Six contracts the runtime states, each of which it once broke.
+///
+/// Reference counting, because four of the six are about what a retain, a
+/// release or a clear does — and under `NoGC` none of them does anything.
+///
+/// They are one suite because they share a shape rather than a subject: a
+/// promise made in the header or a comment, kept by a line somewhere else, with
+/// nothing asking whether the two still agree. An external audit found all six
+/// at `ce2b57a`; every one was reproduced against this runtime before its
+/// repair, and reverting any one of them fails this suite.
+///
+/// The seventh check runs as its own process because it is expected to
+/// **abort**: `2^127` is the one bigint value that must be refused, a refusal
+/// is a message and `abort`, and the version that admitted it converted an
+/// out-of-range double to `__int128` instead.
+#[test]
+fn the_runtime_keeps_the_contracts_its_header_states() {
+    let report = run_suite("contracts", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 20,
+        "expected at least 20 contract checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}
+
+/// And the endpoint it must refuse is refused rather than converted.
+///
+/// Separate because a refusal aborts, so it cannot share a process with the
+/// checks above. What makes this a real check rather than an assertion about a
+/// message is that the old code *did not* abort here: it converted `2^127` to a
+/// signed 128-bit integer, which is undefined, and returned.
+#[test]
+fn the_bigint_upper_endpoint_is_refused_rather_than_converted() {
+    let root = repository();
+    let runtime = root.join("runtime/c");
+    let out = std::env::temp_dir().join(format!("nts-contracts-abort-{}", std::process::id()));
+    std::fs::create_dir_all(&out).expect("a build directory");
+    let binary = out.join("contracts");
+    let compile = std::process::Command::new("clang")
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-O1"])
+        .arg("-DNTS_PROVIDER_RC")
+        .arg("-I")
+        .arg(&runtime)
+        .arg("-o")
+        .arg(&binary)
+        .arg(runtime.join("tests/contracts.c"))
+        .arg(runtime.join("nts_test_host.c"))
+        .arg(runtime.join("nts_runtime.c"))
+        .arg("-lm")
+        .output()
+        .expect("clang should run");
+    assert!(
+        compile.status.success(),
+        "the contracts suite did not compile:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = std::process::Command::new("timeout")
+        .args(["120"])
+        .arg(&binary)
+        .arg("abort")
+        .output()
+        .expect("the suite should run");
+    assert!(
+        !run.status.success(),
+        "2^127 was converted rather than refused"
+    );
+    let said = String::from_utf8_lossy(&run.stderr);
+    assert!(
+        said.contains("outside the 128 bits a bigint has"),
+        "the refusal should name the reason:\n{said}"
+    );
+}
+
 #[test]
 fn the_collector_reclaims_a_chain_and_keeps_what_is_still_held() {
     let report = run_suite("cycles", &["-DNTS_PROVIDER_RC"]);
