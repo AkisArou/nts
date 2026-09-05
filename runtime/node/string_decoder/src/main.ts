@@ -12,7 +12,7 @@
 // on by node's own tests, so they are part of the surface.
 
 import { Buffer } from "../../buffer/src/main.ts";
-import { normalizeEncoding, type Encoding } from "../../buffer/src/encodings.ts";
+import { normalizeEncodingName, type Encoding } from "../../buffer/src/encodings.ts";
 import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_THIS,
@@ -88,7 +88,14 @@ export class StringDecoder {
   }
 
   constructor(encoding?: string) {
-    const normalized = normalizeEncoding(encoding);
+    // The public typed form is a string, while a JavaScript caller can still
+    // cross the module boundary with anything. Narrow here so the normalizer
+    // itself has one precise input representation.
+    const normalized = encoding === undefined || encoding === null
+      ? "utf8"
+      : typeof encoding === "string"
+        ? normalizeEncodingName(encoding)
+        : undefined;
     if (normalized === undefined) {
       throw new ERR_UNKNOWN_ENCODING(String(encoding));
     }

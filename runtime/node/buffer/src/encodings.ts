@@ -15,12 +15,8 @@ export type Encoding =
   | "ascii"
   | "ucs2" | "ucs-2" | "utf16le" | "utf-16le";
 
-/** Node accepts several spellings for one encoding. */
-export function normalizeEncoding(encoding: unknown): Encoding | undefined {
-  if (encoding === undefined || encoding === null) {
-    return "utf8";
-  }
-  if (typeof encoding !== "string") return undefined;
+/** Normalize a value already proven to be a string. */
+export function normalizeEncodingName(encoding: string): Encoding | undefined {
   switch (encoding.toLowerCase()) {
     case "utf8": case "utf-8": return "utf8";
     case "hex": return "hex";
@@ -33,8 +29,15 @@ export function normalizeEncoding(encoding: unknown): Encoding | undefined {
   }
 }
 
+/** Node accepts several spellings for one encoding. */
+export function normalizeEncoding(encoding: unknown): Encoding | undefined {
+  if (encoding === undefined || encoding === null) return "utf8";
+  if (typeof encoding !== "string") return undefined;
+  return normalizeEncodingName(encoding);
+}
+
 export function isEncoding(encoding: unknown): encoding is Encoding {
-  return typeof encoding === "string" && normalizeEncoding(encoding) !== undefined;
+  return typeof encoding === "string" && normalizeEncodingName(encoding) !== undefined;
 }
 
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
