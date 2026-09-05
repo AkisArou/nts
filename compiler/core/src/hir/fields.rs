@@ -532,3 +532,283 @@ fn layout_of(program: &Program, ty: &HirType) -> Option<usize> {
         .iter()
         .position(|layout| layout.types.contains(id))
 }
+
+/// The one closure class a field can hold, where a field holds only one.
+///
+/// Keyed like [`FieldFacts`] and for the same reason: a read names a type, and
+/// looking the layout up again at every query would be a search per call site.
+pub type FieldClosures = FxHashMap<(super::TypeId, u32), super::TypeId>;
+
+/// What a value stored into a field says about which closure it is.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Held {
+    /// Nothing has been stored, or what was stored is absent — `undefined` or
+    /// `null`. A field that only ever holds these is never *called*, so it
+    /// contributes no candidate rather than making the answer unknown.
+    Absent,
+    One(super::TypeId),
+    Many,
+}
+
+impl Held {
+    fn join(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Absent, keep) | (keep, Self::Absent) => keep,
+            (Self::One(one), Self::One(two)) if one == two => Self::One(one),
+            _ => Self::Many,
+        }
+    }
+}
+
+/// Which closure class a value is, where that is decidable from the value alone.
+///
+/// A closure's type names its class, exactly as an object's does — see
+/// [`OpKind::ClosureStatic`]. Stores into an erased field arrive wrapped, so the
+/// `Erase` is stripped first; that is a change of representation and not of
+/// identity.
+fn held_by(func: &super::Func, value: super::ValueId) -> Held {
+    let mut at = value;
+    // One hop is all the lowering emits, but a loop costs nothing and does not
+    // depend on that staying true.
+    for _ in 0..8 {
+        let op = &func.values[at.0 as usize];
+        match &op.kind {
+            OpKind::Erase { value } => at = *value,
+            OpKind::ConstUndefined | OpKind::ConstNull => return Held::Absent,
+            _ => break,
+        }
+    }
+    let op = &func.values[at.0 as usize];
+    if matches!(op.kind, OpKind::ConstUndefined | OpKind::ConstNull) {
+        return Held::Absent;
+    }
+    match &op.ty {
+        HirType::Managed(ManagedType::Object(id)) if super::is_closure_type(*id) => Held::One(*id),
+        _ => Held::Many,
+    }
+}
+
+/// Join every store into every field, over which closure it holds.
+///
+/// # Why this is worth knowing
+///
+/// `f?.(x)` on a field emits a call through the receiver's dispatch table --
+/// two dependent loads and an indirect call clang cannot see through, so the
+/// callee is not inlined and the loop around it is not vectorised. Where the
+/// field can only hold one closure, the call is a direct call to a named
+/// function, and every one of those costs disappears.
+///
+/// Measured on `benches/cases/optional-chain`, by patching the emitted C:
+/// **87.90 us to 35.16 us**, against a C++ reference at 10.01. The residue is
+/// the `double` accumulator against the reference's `int64_t`, which is a
+/// different question.
+///
+/// # Why it is sound
+///
+/// For the reason the numeric domain above is sound, and it is the same
+/// sentence: a field holds what was stored into it, nothing else can store into
+/// it, and every store in the program is a `FieldSet` in this HIR. The
+/// aliasing rule is [`shares_storage`]'s, unchanged -- a store through a
+/// base-typed pointer lands in every layout sharing the prefix, so a read has
+/// to see all of them.
+#[must_use]
+pub fn closures(program: &Program) -> FieldClosures {
+    let mut stored: FxHashMap<(usize, u32), Held> = FxHashMap::default();
+    for func in &program.funcs {
+        for op in &func.values {
+            let OpKind::FieldSet {
+                object,
+                field,
+                value,
+            } = &op.kind
+            else {
+                continue;
+            };
+            let Some(layout) = layout_of(program, &func.values[object.0 as usize].ty) else {
+                continue;
+            };
+            let entry = stored.entry((layout, *field)).or_insert(Held::Absent);
+            let one = held_by(func, *value);
+            *entry = entry.join(one);
+        }
+    }
+
+    let mut visible: FieldClosures = FxHashMap::default();
+    for layout in &program.layouts {
+        for field in 0..u32::try_from(layout.fields.len()).unwrap_or(0) {
+            let mut held = Held::Absent;
+            for (other, candidate) in program.layouts.iter().enumerate() {
+                if !shares_storage(layout, candidate, field) {
+                    continue;
+                }
+                if let Some(seen) = stored.get(&(other, field)) {
+                    held = held.join(*seen);
+                }
+            }
+            if let Held::One(class) = held {
+                for ty in &layout.types {
+                    visible.insert((*ty, field), class);
+                }
+            }
+        }
+    }
+    visible
+}
+
+/// Call a closure directly where the field it came from can hold only one.
+///
+/// # What this removes
+///
+/// A closure call is a dispatch: two dependent loads to reach
+/// `descriptor->methods[slot]`, then an indirect call. The loads are the small
+/// half. The large half is that no C compiler can see through the indirection,
+/// so the callee is not inlined, the accumulator spills across the call, and
+/// the loop around it does not vectorise -- and closure bodies are usually
+/// tiny, so not inlining them is most of what they cost.
+///
+/// `benches/cases/optional-chain` is the measurement, taken by patching the one
+/// line in the emitted C rather than by argument: **87.90 us to 35.16 us**,
+/// against a C++ reference at 10.01 that writes a bare function pointer. The
+/// residue after this is the `double` accumulator against the reference's
+/// `int64_t`, which is a different question and a different pass.
+///
+/// # Why a field, and how often that is the shape
+///
+/// Because that is where the callbacks are. Of the 50 closure call sites in
+/// `stream`, `events`, `buffer` and `net`, **35 have a field receiver** -- an
+/// optional handler stored on an object and called if present is what a stream
+/// is made of. Six are parameters, which this cannot see and inlining can.
+///
+/// # Why the receiver needs no cast here
+///
+/// The emitted argument list already casts a managed argument to the
+/// parameter's type, because a call taking a base-typed pointer is handed a
+/// subclass every day. A closure's `call` takes its own class, and the
+/// receiver's static type is the *signature* layout, so this is that same cast.
+pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
+    // Resolved against the program before anything is rewritten, because the
+    // rewrite needs `&mut` and the lookup needs `&`.
+    let mut rewrites: Vec<(usize, usize, String, super::ValueId, super::TypeId)> = Vec::new();
+    for (at, func) in program.funcs.iter().enumerate() {
+        for (index, op) in func.values.iter().enumerate() {
+            let OpKind::Call {
+                callee: super::Callee::Closure { slot },
+                args,
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
+            let Some(receiver) = args.first() else {
+                continue;
+            };
+            let source = field_source(func, *receiver);
+            let class = source
+                .and_then(|(object, field)| {
+                    let HirType::Managed(ManagedType::Object(ty)) =
+                        &func.values[object.0 as usize].ty
+                    else {
+                        return None;
+                    };
+                    known.get(&(*ty, field))
+                })
+                .copied();
+            let Some(class) = class else {
+                continue;
+            };
+            let Some(name) = layout_of(program, &HirType::Managed(ManagedType::Object(class)))
+                .and_then(|layout| program.layouts[layout].methods.get(*slot as usize))
+                .and_then(Option::as_ref)
+            else {
+                continue;
+            };
+            // A closure whose body was refused is not in `funcs`, and a call to
+            // a name nothing defines is worse than the dispatch it replaced.
+            if !program.funcs.iter().any(|func| &func.name == name) {
+                continue;
+            }
+            // The erased value the receiver was read back from, so the fresh
+            // `Unerase` below reads the same thing at a narrower class.
+            let OpKind::Unerase { value: erased } = func.values[receiver.0 as usize].kind else {
+                continue;
+            };
+            rewrites.push((at, index, name.clone(), erased, class));
+        }
+    }
+
+    // The receiver's static type is the *signature* layout, and the function
+    // about to be called declares its own class. C casts a pointer for free and
+    // the JVM will not: `NTS4001 storing a Fn5__5 where a Closure0 is declared`
+    // is what it says, and it is right to say it -- a backend should not have to
+    // invent a narrowing the IR did not state.
+    //
+    // So the IR states it, with the operation whose whole content is exactly
+    // that: an `Unerase`'s result type is the representation an erased value is
+    // read back at, and this one is read back at the class the field can only
+    // hold. The licence is the analysis above rather than a tag test on the
+    // path, which is a stronger one.
+    //
+    // A **fresh** `Unerase` rather than retyping the one already there, because
+    // that value has other readers. `f?.(x)` tests the receiver against null
+    // first, and retyping it left `v10 == v11` comparing a `Closure1 *` against
+    // a `Fn2__2 *` -- which `reconcile` then made comparable by converting both
+    // to `double`, and clang answered `pointer cannot be cast to type 'double'`.
+    // Four errors, in a C file no unit test reads. The example caught it and the
+    // three tests over the HIR did not, because the shape they check was right.
+    let mut count = 0;
+    for (func, index, name, erased, class) in rewrites {
+        let origin = program.funcs[func].values[index].origin.clone();
+        let Some(block) = program.funcs[func]
+            .blocks
+            .iter()
+            .position(|block| block.ops.contains(&index_of(index)))
+        else {
+            continue;
+        };
+        let at = program.funcs[func].blocks[block]
+            .ops
+            .iter()
+            .position(|op| *op == index_of(index))
+            .unwrap_or(0);
+
+        let receiver = super::ValueId(
+            u32::try_from(program.funcs[func].values.len()).unwrap_or(u32::MAX),
+        );
+        program.funcs[func].values.push(super::Op {
+            kind: OpKind::Unerase { value: erased },
+            ty: HirType::Managed(ManagedType::Object(class)),
+            origin,
+        });
+        program.funcs[func].blocks[block].ops.insert(at, receiver);
+        if let OpKind::Call { callee, args, .. } = &mut program.funcs[func].values[index].kind {
+            *callee = super::Callee::Direct(name);
+            if let Some(first) = args.first_mut() {
+                *first = receiver;
+            }
+            count += 1;
+        }
+    }
+    count
+}
+
+/// A value arena index as a [`super::ValueId`].
+fn index_of(index: usize) -> super::ValueId {
+    super::ValueId(u32::try_from(index).unwrap_or(u32::MAX))
+}
+
+/// The `(object, field)` a value was read from, seeing through the erasure.
+///
+/// A field holding `T | undefined` is erased, so the read is wrapped in an
+/// `Unerase` by the time anything calls it -- that is a change of
+/// representation and not of provenance.
+fn field_source(func: &super::Func, value: super::ValueId) -> Option<(super::ValueId, u32)> {
+    let mut at = value;
+    for _ in 0..8 {
+        match &func.values[at.0 as usize].kind {
+            OpKind::Unerase { value } => at = *value,
+            OpKind::FieldGet { object, field } => return Some((*object, *field)),
+            _ => return None,
+        }
+    }
+    None
+}

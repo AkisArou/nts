@@ -1,0 +1,44 @@
+ideal 0
+allocated 0
+because a direct call has a body, and a body that stores nothing takes nothing.
+because
+because Allocations: none. Seventeen boxes are built and each dies with the
+because iteration that made it; `read` reads a field and returns a number, so
+because nothing about the argument outlives the call, and escape analysis puts
+because every box in a frame slot. The holder is one object, built once.
+because
+because Operations: none, and the number this case is for is the one it is
+because **not**. Measured against itself, two changes crossed:
+because
+because                        erasure fix off   erasure fix on
+because   devirtualisation off        35               35
+because   devirtualisation on          1                0
+because
+because The call is through a field, which is a dispatch -- and a dispatch is
+because opaque twice over. `own::mutating` must assume a call it cannot name
+because reaches a store, so a reference handed to one cannot be borrowed across
+because it; that is record 0091's shape, where a call nothing could see through
+because cost 34 operations on objects escape analysis had already framed. And
+because `inert_slots` gives up on the **whole function** when it meets a call
+because that is not harmless, because such a call can write through anything it
+because was handed.
+because
+because So the two changes are not independent, and the table says so: the
+because erasure fix is worth **nothing** on its own, 35 against 35. It only
+because pays once the call has a name, because until then there is no inert
+because analysis running for it to improve. Devirtualisation is what makes the
+because call nameable; seeing through the erasure is what collects the last one.
+because
+because That last one was a release at loop exit, giving back the holder's
+because callback field as the frame-placed holder dies. `costs_nothing` already
+because answered `true` for a static closure and `false` for one stored into an
+because **erased** slot -- which is every optional callback field, since
+because `fn?: (x) => y` is `T | undefined`. The fact was computed and the
+because erasure stood between it and the pass that wanted it, for the fourth
+because time: 0091 found erasure hiding frame-locality, 0095 found it hiding
+because ownership transfer, `deleted-field` has 51 against 17 waiting on it,
+because and this is it hiding immortality.
+because
+because **This is a cost no timing instrument on any lane could see.** A retain
+because on a frame-placed object is a no-op at run time; it costs a call. Only
+because a counting instrument with a floor argued in advance shows it.

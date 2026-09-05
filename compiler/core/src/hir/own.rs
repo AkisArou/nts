@@ -1011,6 +1011,18 @@ fn costs_nothing(
         | OpKind::ClosureStatic
         | OpKind::Call { frame: Some(_), .. } => true,
         OpKind::FieldGet { object, field, .. } => inert.contains(&(*object, *field)),
+        // An erased value is the same value in a wider representation, so what
+        // it costs is what the thing inside costs. The list above already
+        // answers `true` for a static closure and answered `false` for one
+        // stored into an erased slot -- which is every optional callback field,
+        // because `fn?: (x) => y` is `T | undefined` and that is erased.
+        //
+        // Fourth sighting of one shape: 0091 found erasure hiding frame-locality
+        // from the reference counter, 0095 found it hiding ownership transfer,
+        // `deleted-field` has 51 against 17 waiting on it, and this is it hiding
+        // *immortality*. Each time the fact was already computed and the
+        // erasure was between it and the pass that wanted it.
+        OpKind::Erase { value } => costs_nothing(func, inert, *value),
         _ => false,
     }
 }

@@ -1486,6 +1486,9 @@ pub struct Prepared {
     pub cloned: usize,
     /// Calls merged with the body they called, to place an allocation.
     pub copied: usize,
+    /// Closure calls made direct, because the field the closure came from can
+    /// hold only one. See [`fields::devirtualize`] for what that is worth.
+    pub devirtualized: usize,
 }
 
 /// Lower a snapshot and make it ready to emit.
@@ -1832,6 +1835,25 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
 /// Two of the three kinds of storage. [`elements`] is the third and runs after
 /// this, because what an array holds depends on what the fields feeding it were
 /// narrowed to.
+/// Operations whose answer is one of their own operands, in every function.
+fn simplify_all(program: &mut Program) -> usize {
+    program.funcs.iter_mut().map(simplify::simplify).sum()
+}
+
+/// Call a closure directly where the field it came from can hold only one.
+///
+/// Run before `reshape_calls`, so a call this makes direct is a call the
+/// inliner can inline and the interprocedural analysis can read a callee's
+/// facts through. A dispatch is opaque to both, and that opacity is most of
+/// what it costs: `benches/cases/optional-chain` went 87.98 us to 35.17 us on
+/// this, and `tooling/memory/cases/callback-field` went from 35 counting
+/// operations to 1 — a reference cannot be borrowed across a call nothing can
+/// name, which is record 0091's shape.
+fn devirtualize_closures(program: &mut Program) -> usize {
+    let held = fields::closures(program);
+    fields::devirtualize(program, &held)
+}
+
 fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis]) {
     let widths = fields::representations(program, analyses);
     fields::narrow(program, &widths);
@@ -1866,6 +1888,8 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // analyzed interprocedurally, specialized, proven and emitted, and a
     // function nothing can call should pay for none of that.
     let pruned = reachable::prune(&mut program, options.roots);
+
+    let devirtualized = devirtualize_closures(&mut program);
 
     let (cloned, copied, dropped) = reshape_calls(&mut program, options.roots);
     let pruned = pruned + dropped;
@@ -1949,10 +1973,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // tracking values that are copies of other values.
     let narrowed = narrow_widths(&mut program) + shed_erasure(&mut program) + unions_split;
 
-    let mut simplified = 0;
-    for func in &mut program.funcs {
-        simplified += simplify::simplify(func);
-    }
+    let mut simplified = simplify_all(&mut program);
 
     // Reconcile *after* the passes that rewrite operands, not before.
     //
@@ -2026,6 +2047,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     Prepared {
         cloned,
         copied,
+        devirtualized,
         program,
         diagnostics: lowered.diagnostics,
         specialized,
