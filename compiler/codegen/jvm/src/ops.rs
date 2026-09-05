@@ -2826,7 +2826,20 @@ impl Emitter<'_> {
                 code.goto(&origin, else_label);
                 code.bind(arm);
                 self.apply(code, pool, then_copies)?;
-                code.goto(&origin, then_label);
+                // The true arm is emitted last, so a jump to the block that
+                // follows is a jump to the next instruction. The false arm's
+                // `goto` above is *not* elidable the same way: the true arm's
+                // code sits between it and its target, so falling through
+                // there would run the wrong arm.
+                //
+                // Half the `goto`s in `Ball$bounce` were this -- seven of
+                // fourteen, jumping to the instruction after themselves. The
+                // no-copy path a few lines up has always checked; this path
+                // never did, so a branch acquired a redundant jump exactly
+                // when it carried block-parameter copies.
+                if next != Some(*then_target) {
+                    code.goto(&origin, then_label);
+                }
                 Ok(())
             }
         }
