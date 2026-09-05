@@ -2200,9 +2200,10 @@ function normaliseListenArguments(args: readonly unknown[]): {
 function readListenOptions(input: object): ListenOptions {
   const hasPort = "port" in input;
   const hasPath = "path" in input;
-  const hasFd = "fd" in input;
+  const fd: unknown = "fd" in input ? input.fd : undefined;
+  const hasValidFd = typeof fd === "number" && fd >= 0;
   const hasBoundSocket = "handle" in input && input.handle instanceof BoundSocket;
-  if (!hasPort && !hasPath && !hasFd && !hasBoundSocket) {
+  if (!hasPort && !hasPath && !hasValidFd && !hasBoundSocket) {
     throw new ERR_INVALID_ARG_VALUE("options", input, 'must have the property "port" or "path"');
   }
 
@@ -2224,9 +2225,9 @@ function readListenOptions(input: object): ListenOptions {
       throw new ERR_INVALID_ARG_VALUE("options", input);
     }
     options.path = input.path;
-  } else if (hasFd) {
-    validateInteger(input.fd, "options.fd", 0, 2_147_483_647);
-    options.fd = input.fd;
+  } else if (hasValidFd) {
+    validateInteger(fd, "fd", 0, 2_147_483_647);
+    options.fd = fd;
   }
 
   if ("host" in input && input.host !== undefined) {
