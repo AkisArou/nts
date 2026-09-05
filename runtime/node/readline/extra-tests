@@ -1,0 +1,1 @@
+test-stream-preprocess.js: upstream names this as a stream test, but every behavioral assertion exercises readline.createInterface
