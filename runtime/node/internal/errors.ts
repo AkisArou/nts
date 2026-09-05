@@ -92,6 +92,7 @@ function staticObjectName(value: object): string {
   if (value instanceof WeakMap) return "WeakMap";
   if (value instanceof WeakSet) return "WeakSet";
   if (value instanceof Promise) return "Promise";
+  if (value instanceof Date) return "Date";
   if (value instanceof Error) return value.name || "Error";
   return "Object";
 }
