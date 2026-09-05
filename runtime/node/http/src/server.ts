@@ -474,7 +474,8 @@ export class Server extends NetServer {
 
     const onSocketError = (error: unknown): void => {
       suppressFurtherSocketErrors();
-      if (!this.emit("clientError", error, socket)) socket.destroy(error);
+      this.emit("clientError", error, socket);
+      socket.destroy(error);
     };
 
     const handleParseError = (
@@ -485,7 +486,10 @@ export class Server extends NetServer {
       parseErrorSeen = true;
       const error = new HTTPParseError(parserError, rawPacket, packetOffset);
       suppressFurtherSocketErrors();
-      if (this.emit("clientError", error, socket)) return;
+      if (this.emit("clientError", error, socket)) {
+        socket.destroy(error);
+        return;
+      }
       if (socket.writable) {
         socket.end(defaultParseErrorResponse(error.code), () => socket.destroy(error));
       } else {
