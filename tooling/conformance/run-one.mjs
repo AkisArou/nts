@@ -432,6 +432,21 @@ const testModuleCache = new Map();
 const realChildProcess = realRequire("node:child_process");
 const conformanceRunner = join(HERE, "run-one.mjs");
 
+function commonJsNodeTestTarget(candidate, cwd) {
+  if (typeof candidate !== "string") return null;
+  const target = resolvePath(cwd, candidate);
+  const withinTestTree = relative(nodeTestRoot, target);
+  if (
+    !target.endsWith(".js") ||
+    dirname(target) !== dirname(resolvePath(file)) ||
+    withinTestTree.startsWith("..") ||
+    isAbsolute(withinTestTree)
+  ) {
+    return null;
+  }
+  return target;
+}
+
 function nestedChildOptions(options) {
   return {
     ...options,
@@ -444,22 +459,22 @@ function nestedChildOptions(options) {
 
 /**
  * Preserve the subject and Node's CommonJS test-runner mode when a fixture
- * forks itself.
+ * forks itself or another fixture in the same suite directory.
  *
  * Re-entering this runner prevents two false behaviors at once: the root ESM
  * package cannot reinterpret an upstream `.js` fixture, and the child cannot
  * silently switch from the implementation under test to Node's builtin. The
- * wrapper is deliberately limited to the current fixture's exact path so an
- * intentional ESM helper or unrelated child keeps ordinary `fork` semantics.
+ * wrapper is deliberately limited to sibling `.js` tests so an intentional
+ * ESM helper or unrelated child keeps ordinary `fork` semantics.
  */
 function forkInfrastructure(modulePath, argsOrOptions, maybeOptions) {
   const hasArgs = Array.isArray(argsOrOptions);
   const args = hasArgs ? argsOrOptions : [];
   const options = hasArgs ? maybeOptions : argsOrOptions;
   const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
-  const target = typeof modulePath === "string" ? resolvePath(cwd, modulePath) : null;
+  const target = commonJsNodeTestTarget(modulePath, cwd);
 
-  if (target === resolvePath(file) && target.endsWith(".js")) {
+  if (target !== null) {
     return realChildProcess.fork(
       conformanceRunner,
       [moduleName, target, addon ?? "-", ...args],
@@ -471,19 +486,19 @@ function forkInfrastructure(modulePath, argsOrOptions, maybeOptions) {
     : realChildProcess.fork(modulePath, options);
 }
 
-/** Re-enter this runner when Node is asked to execute this exact fixture. */
+/** Re-enter this runner when Node is asked to execute this or a sibling fixture. */
 function spawnInfrastructure(command, argsOrOptions, maybeOptions) {
   const hasArgs = Array.isArray(argsOrOptions);
   const args = hasArgs ? argsOrOptions : [];
   const options = hasArgs ? maybeOptions : argsOrOptions;
   const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
-  const fixtureIndex = args.findIndex(
-    (argument) => typeof argument === "string" && resolvePath(cwd, argument) === resolvePath(file),
-  );
+  const fixtureIndex = args.findIndex((argument) => commonJsNodeTestTarget(argument, cwd) !== null);
+  const target = commonJsNodeTestTarget(args[fixtureIndex], cwd);
 
   if (
     command === hostProcess.execPath &&
     fixtureIndex >= 0 &&
+    target !== null &&
     args
       .slice(0, fixtureIndex)
       .every((argument) => typeof argument === "string" && argument.startsWith("-"))
@@ -494,7 +509,7 @@ function spawnInfrastructure(command, argsOrOptions, maybeOptions) {
         ...args.slice(0, fixtureIndex),
         conformanceRunner,
         moduleName,
-        file,
+        target,
         addon ?? "-",
         ...args.slice(fixtureIndex + 1),
       ],
@@ -506,10 +521,82 @@ function spawnInfrastructure(command, argsOrOptions, maybeOptions) {
     : realChildProcess.spawn(command, options);
 }
 
+/** Synchronous counterpart of `spawnInfrastructure`, with identical targeting. */
+function spawnSyncInfrastructure(command, argsOrOptions, maybeOptions) {
+  const hasArgs = Array.isArray(argsOrOptions);
+  const args = hasArgs ? argsOrOptions : [];
+  const options = hasArgs ? maybeOptions : argsOrOptions;
+  const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
+  const fixtureIndex = args.findIndex((argument) => commonJsNodeTestTarget(argument, cwd) !== null);
+  const target = commonJsNodeTestTarget(args[fixtureIndex], cwd);
+
+  if (
+    command === hostProcess.execPath &&
+    fixtureIndex >= 0 &&
+    target !== null &&
+    args
+      .slice(0, fixtureIndex)
+      .every((argument) => typeof argument === "string" && argument.startsWith("-"))
+  ) {
+    return realChildProcess.spawnSync(
+      command,
+      [
+        ...args.slice(0, fixtureIndex),
+        conformanceRunner,
+        moduleName,
+        target,
+        addon ?? "-",
+        ...args.slice(fixtureIndex + 1),
+      ],
+      nestedChildOptions(options),
+    );
+  }
+  return hasArgs
+    ? realChildProcess.spawnSync(command, args, options)
+    : realChildProcess.spawnSync(command, options);
+}
+
+/** Re-enter the runner for exact `$NODE $FILE` commands inside a shell pipeline. */
+function execInfrastructure(command, optionsOrCallback, maybeCallback) {
+  const callbackOnly = typeof optionsOrCallback === "function";
+  const options = callbackOnly ? undefined : optionsOrCallback;
+  const callback = callbackOnly ? optionsOrCallback : maybeCallback;
+  const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
+  const environment = options?.env;
+  const target = commonJsNodeTestTarget(environment?.FILE, cwd);
+  const node = environment?.NODE;
+  const invocation = '"$NODE" "$FILE"';
+
+  if (
+    typeof command === "string" &&
+    node === hostProcess.execPath &&
+    target !== null &&
+    command.includes(invocation)
+  ) {
+    const nested = nestedChildOptions(options);
+    nested.env.NTS_CONFORMANCE_RUNNER = conformanceRunner;
+    nested.env.NTS_CONFORMANCE_MODULE = moduleName;
+    nested.env.NTS_CONFORMANCE_ADDON = addon ?? "-";
+    const replacement =
+      '"$NODE" "$NTS_CONFORMANCE_RUNNER" "$NTS_CONFORMANCE_MODULE" "$FILE" "$NTS_CONFORMANCE_ADDON"';
+    const rewritten = command.replaceAll(invocation, replacement);
+    return callback === undefined
+      ? realChildProcess.exec(rewritten, nested)
+      : realChildProcess.exec(rewritten, nested, callback);
+  }
+  if (callbackOnly) return realChildProcess.exec(command, optionsOrCallback);
+  if (options === undefined) return realChildProcess.exec(command);
+  return callback === undefined
+    ? realChildProcess.exec(command, options)
+    : realChildProcess.exec(command, options, callback);
+}
+
 const childProcessInfrastructure = {
   ...realChildProcess,
+  exec: execInfrastructure,
   fork: forkInfrastructure,
   spawn: spawnInfrastructure,
+  spawnSync: spawnSyncInfrastructure,
 };
 
 /** Node's `test/common/countdown`, attached to this runner's call tally. */
