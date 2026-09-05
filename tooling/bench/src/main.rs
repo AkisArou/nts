@@ -38,6 +38,8 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 struct Measured {
     ns_per_op: f64,
     checksum: String,
+    /// Slowest pass over fastest, across `RUNS` processes.
+    spread: f64,
 }
 
 /// Which translation unit, if any, the compiler contributes to a variant.
@@ -752,6 +754,24 @@ fn finish_row(
             .map(|it| it.ns_per_op),
         bun: bun.map(|result| result.ns_per_op),
     };
+    // A row whose own passes disagree has no single number, and printing one of
+    // them as though it were the answer is the failure this table exists to
+    // avoid. Said out loud rather than smoothed over; see `SPREAD_WORTH_SAYING`.
+    for (label, measured) in
+        [("nts (JVM)", results.get(4)), ("Java", results.get(5)), ("nts (C)", results.get(1))]
+    {
+        if let Some(Some(measured)) = measured
+            && measured.spread >= SPREAD_WORTH_SAYING
+        {
+            eprintln!(
+                "note: {} {} varied {:.2}x across {} runs of the same binary -- \
+                 this row reports which shape the JIT settled into, not how fast \
+                 the program is",
+                shown, label, measured.spread, RUNS
+            );
+        }
+    }
+
     // A reference and a subject that disagree about how much work to do are not
     // comparable, and the checksum cannot say so: every AWFY case answers 1 or
     // 0, and `nbody`'s `verifyResult` returns *true* for one iteration as
@@ -1472,12 +1492,25 @@ fn compile(
 ///
 /// Nearly free: compiling a case costs seconds and running it costs
 /// milliseconds, so the extra passes are lost in the build.
-const RUNS: usize = 3;
+/// **Five, because the paragraph above measured five and the constant said
+/// three.** The reason and the number had drifted apart, and the drift is
+/// visible in the table: `dispatch` reported 1.06, 1.24, 0.72, 1.06 and 1.05 on
+/// five consecutive locked runs of the same binary. It is bimodal -- a fast
+/// shape the JIT reaches about one set in five -- and a best-of-three finds it
+/// that seldom, so the published ratio was a coin flip between 0.72x and 1.24x.
+///
+/// `checksum` reported 1.00x five times out of five in the same window, so this
+/// is not ambient noise on the machine; it is which shape the JIT settles into,
+/// and a "best of" estimator answers that correctly only if it looks often
+/// enough to see the good one.
+const RUNS: usize = 5;
 
 fn measure(command: &mut std::process::Command) -> Result<Measured> {
     let mut best: Option<Measured> = None;
+    let mut worst = f64::MIN;
     for _ in 0..RUNS {
         let attempt = measure_once(command)?;
+        worst = worst.max(attempt.ns_per_op);
         if best
             .as_ref()
             .is_none_or(|held| attempt.ns_per_op < held.ns_per_op)
@@ -1485,8 +1518,26 @@ fn measure(command: &mut std::process::Command) -> Result<Measured> {
             best = Some(attempt);
         }
     }
-    best.context("a benchmark produced no measurement")
+    let mut best = best.context("a benchmark produced no measurement")?;
+    best.spread = if best.ns_per_op > 0.0 { worst / best.ns_per_op } else { 1.0 };
+    Ok(best)
 }
+
+/// A run whose passes disagree by more than this is reporting which shape the
+/// JIT settled into, not how fast the program is.
+///
+/// `dispatch` reported 1.06, 1.24, 0.72, 1.06 and 1.05 on five consecutive
+/// locked runs of one binary, and 1.04, 0.71, 0.70, 1.10 on four more after
+/// `RUNS` went from three to five. It is **bimodal**: there is a fast shape the
+/// JIT reaches about half the time and a slow one, and a best-of-N converges on
+/// neither -- it converges on *how often you looked*. `checksum` reported 1.00x
+/// nine times out of nine in the same window, so the machine is quiet and this
+/// is the program.
+///
+/// A row like that has no single number, and printing one of the two as though
+/// it were the answer is the failure this table exists to avoid. So it is said
+/// out loud instead.
+const SPREAD_WORTH_SAYING: f64 = 1.25;
 
 fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
     let output = command.output().context("running a benchmark")?;
@@ -1508,7 +1559,10 @@ fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
     Ok(Measured {
         ns_per_op,
         checksum,
-    })
+            // Filled in by `measure`, which is the only thing that sees more
+        // than one pass.
+        spread: 1.0,
+})
 }
 
 /// A duration a person can compare at a glance.
