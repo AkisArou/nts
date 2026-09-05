@@ -627,6 +627,11 @@ export class ClientRequest extends OutgoingMessage {
         return 1;
       }
 
+      // The request begins reusable when its Agent may pool the transport,
+      // but the peer has the final say. A non-persistent response makes the
+      // public request state and the later pool decision agree.
+      if (this.shouldKeepAlive && !info.shouldKeepAlive) this.shouldKeepAlive = false;
+
       response = message;
       this.res = message;
       socket.on("timeout", onResponseTimeout);
