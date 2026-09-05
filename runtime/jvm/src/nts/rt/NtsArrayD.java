@@ -16,7 +16,24 @@ public final class NtsArrayD {
     }
     public static NtsArrayD empty() { return new NtsArrayD(EMPTY, 0); }
     public static double length(NtsArrayD a) { return a.length; }
-    public static double get(NtsArrayD a, double at) { return a.items[(int) at]; }
+    /**
+     * Read, refusing an index outside the array rather than reading past it.
+     *
+     * <p>The subscript is emitted {@code checked: false} where the middle end
+     * proved the index in range, and a {@code !} can make that proof a lie --
+     * `xs[0]!` on an empty array. The C lane refuses those, seventeen of them
+     * in {@code examples/growable}, so this lane has to refuse them too or the
+     * two disagree about what the program *did*.
+     *
+     * <p>{@code a.items[(int) at]} was wrong twice over. Past the capacity it
+     * threw an {@code ArrayIndexOutOfBoundsException}, which reads as a crash;
+     * and *inside* the capacity but past the length it returned a stale slot
+     * from a previous grow, which is a wrong answer with no exception at all.
+     * Bounding by {@code a.length} answers both.
+     */
+    public static double get(NtsArrayD a, double at) {
+        return a.items[NtsRuntime.bounds(a.length, at)];
+    }
 
     public static void set(NtsArrayD a, double at, double value) {
         int i = (int) at;
