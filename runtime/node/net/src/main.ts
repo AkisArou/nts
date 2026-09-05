@@ -14,6 +14,7 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import { Duplex } from "../../stream/src/duplex.ts";
+import type { BufferedWrite } from "../../stream/src/writable.ts";
 import { getDefaultHighWaterMark } from "../../stream/src/state.ts";
 import {
   addTrackedAbortListener,
@@ -571,6 +572,7 @@ export class Socket extends Duplex {
       readableHighWaterMark: options.readableHighWaterMark,
       writableHighWaterMark: options.writableHighWaterMark,
     });
+    this._writev = this._writeVector;
 
     // One shared listener rather than one closure per socket. Besides being
     // observable through listenerCount(), this records why the writable side
@@ -1258,7 +1260,9 @@ export class Socket extends Duplex {
 
   override _write(chunk: unknown, encoding: string, callback: (error?: unknown) => void): void {
     let buffer: Buffer;
-    if (typeof chunk === "string") {
+    if (chunk instanceof Buffer) {
+      buffer = chunk;
+    } else if (typeof chunk === "string") {
       buffer = Buffer.from(chunk, encoding);
     } else if (chunk instanceof Uint8Array) {
       buffer = Buffer.from(chunk);
@@ -1312,6 +1316,30 @@ export class Socket extends Duplex {
     if (queued > 0) {
       request = new SocketRequest("WRITEWRAP", this.#asyncId);
     }
+  }
+
+  /** Coalesce a corked write batch into one native transport operation. */
+  protected _writeVector(chunks: BufferedWrite[], callback: (error?: unknown) => void): void {
+    const buffers: Buffer[] = [];
+    let totalLength = 0;
+    for (const entry of chunks) {
+      let buffer: Buffer;
+      if (entry.chunk instanceof Buffer) {
+        buffer = entry.chunk;
+      } else if (typeof entry.chunk === "string") {
+        buffer = Buffer.from(entry.chunk, entry.encoding);
+      } else if (entry.chunk instanceof Uint8Array) {
+        buffer = Buffer.from(entry.chunk);
+      } else {
+        callback(
+          new ERR_INVALID_ARG_TYPE("chunk", ["string", "Buffer", "Uint8Array"], entry.chunk),
+        );
+        return;
+      }
+      if (buffer.length > 0) buffers.push(buffer);
+      totalLength += buffer.length;
+    }
+    this._write(Buffer.concat(buffers, totalLength), "buffer", callback);
   }
 
   override _writeAfterEndError(): Error {

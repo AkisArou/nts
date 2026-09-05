@@ -20,6 +20,7 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import { captureRejectionSymbol, EventEmitter } from "../../events/src/main.ts";
+import { Socket } from "../../net/src/main.ts";
 import { getDefaultHighWaterMark } from "../../stream/src/state.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
@@ -113,6 +114,12 @@ interface PendingWrite {
   chunk: Buffer | string;
   encoding: string | undefined;
   callback: WriteCallback | undefined;
+}
+
+function pendingWriteByteLength(write: PendingWrite): number {
+  return typeof write.chunk === "string"
+    ? Buffer.byteLength(write.chunk, write.encoding ?? "utf8")
+    : write.chunk.length;
 }
 
 /** Internal options supplied while a server constructs one response. */
@@ -349,12 +356,44 @@ export class OutgoingMessage<
       const queuedSize = this.#pendingSize;
       this.#pending = [];
       this.#pendingSize = 0;
+      this.#foldNetworkFinishSentinel(value, queued);
       for (const write of queued) {
         if (value.write(write.chunk, write.encoding, write.callback) === false) {
           this.#needDrain = true;
         }
       }
       if (queuedSize > 0) this.#pendingDataObserver?.(-queuedSize);
+    }
+  }
+
+  /** Put a queued network completion callback on the last real byte. */
+  #foldNetworkFinishSentinel(socket: SocketType, queued: PendingWrite[]): void {
+    if (!(socket instanceof Socket) || !this.finished || this.chunkedEncoding) {
+      return;
+    }
+    const sentinel = queued.at(-1);
+    if (
+      sentinel === undefined ||
+      sentinel.callback !== this.#onFlushed ||
+      pendingWriteByteLength(sentinel) !== 0
+    ) {
+      return;
+    }
+
+    queued.pop();
+    const prior = queued.at(-1);
+    if (prior === undefined) {
+      nextTick(this.#onFlushed);
+      return;
+    }
+    const priorCallback = prior.callback;
+    if (priorCallback === undefined) {
+      prior.callback = this.#onFlushed;
+    } else {
+      prior.callback = (error?: unknown): void => {
+        priorCallback(error);
+        this.#onFlushed(error);
+      };
     }
   }
 
@@ -968,48 +1007,60 @@ export class OutgoingMessage<
     if (callback !== undefined) this.#endCallbacks.push(callback);
 
     this.prepareHeaders();
-    const bodyHasBytes =
-      body !== undefined &&
-      (typeof body === "string"
-        ? Buffer.byteLength(body, encodingName ?? "utf8") > 0
-        : body.byteLength > 0);
-    let flushCompletesWithBody = false;
-    if (this.chunkedEncoding) {
-      if (bodyHasBytes && body !== undefined) this.write(body, encodingName);
-      else this.flushHeaders();
-    } else if (this.hasBody && bodyHasBytes && body !== undefined) {
-      flushCompletesWithBody = true;
-      this.write(body, encodingName, this.#onFlushed);
-    } else if (!this.hasBody && body !== undefined && this.#rejectNonStandardBodyWrites) {
-      throw new ERR_HTTP_BODY_NOT_ALLOWED();
-    }
-
-    if (this.strictContentLength) {
-      const declared = this.#declaredContentLength();
-      if (
-        declared !== undefined &&
-        !this.chunkedEncoding &&
-        !this.hasHeader("transfer-encoding") &&
-        this.#bytesWritten !== declared
-      ) {
-        throw new ERR_HTTP_CONTENT_LENGTH_MISMATCH(this.#bytesWritten, declared);
+    const socket = this.#socket;
+    const finishOnRealNetworkWrite = socket instanceof Socket && !this.chunkedEncoding;
+    const batchWrites =
+      !finishOnRealNetworkWrite && socket?.cork !== undefined && socket.uncork !== undefined;
+    if (batchWrites) socket.cork?.();
+    try {
+      const bodyHasBytes =
+        body !== undefined &&
+        (typeof body === "string"
+          ? Buffer.byteLength(body, encodingName ?? "utf8") > 0
+          : body.byteLength > 0);
+      let flushCompletesWithBody = false;
+      if (finishOnRealNetworkWrite) {
+        if (this.hasBody && bodyHasBytes && body !== undefined) {
+          flushCompletesWithBody = true;
+          this.write(body, encodingName, this.#onFlushed);
+        } else if (!this.hasBody && body !== undefined && this.#rejectNonStandardBodyWrites) {
+          throw new ERR_HTTP_BODY_NOT_ALLOWED();
+        }
+      } else if (body !== undefined) {
+        this.write(body, encodingName);
+      } else {
+        this.flushHeaders();
       }
-    }
 
-    this.#ended = true;
-    this.writableEnded = true;
-    this.finished = true;
+      if (this.strictContentLength) {
+        const declared = this.#declaredContentLength();
+        if (
+          declared !== undefined &&
+          !this.chunkedEncoding &&
+          !this.hasHeader("transfer-encoding") &&
+          this.#bytesWritten !== declared
+        ) {
+          throw new ERR_HTTP_CONTENT_LENGTH_MISMATCH(this.#bytesWritten, declared);
+        }
+      }
 
-    if (this.chunkedEncoding) {
-      const tail = `0\r\n${this.#trailer}\r\n`;
-      this._writeRaw(tail, "latin1", this.#onFlushed);
-    } else if (!flushCompletesWithBody && !this.#flushPreparedHead(this.#onFlushed)) {
-      // A zero-byte write is an ordering sentinel. Its callback runs only
-      // after every preceding head/body write has completed, so `finish` and
-      // the end callback cannot make an undrained socket eligible for reuse.
-      // A fresh head or final body carries this callback itself; the sentinel
-      // is only needed when an earlier call already flushed all real bytes.
-      this._writeRaw("", undefined, this.#onFlushed);
+      this.#ended = true;
+      this.writableEnded = true;
+      this.finished = true;
+
+      if (this.chunkedEncoding) {
+        const tail = `0\r\n${this.#trailer}\r\n`;
+        this._writeRaw(tail, "latin1", this.#onFlushed);
+      } else if (
+        !finishOnRealNetworkWrite ||
+        (!flushCompletesWithBody && !this.#flushPreparedHead(this.#onFlushed))
+      ) {
+        // This preserves Node's observable generic-Writable contract while a
+        // generic stream may use the empty write as its completion boundary.
+        this._writeRaw("", "latin1", this.#onFlushed);
+      }
+    } finally {
+      if (batchWrites) socket.uncork?.();
     }
 
     return this;
