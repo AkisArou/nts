@@ -11,12 +11,32 @@
 // `reduceToSingleString`, and matching it is most of matching node's output.
 
 import {
-  isAnyArrayBuffer, isArrayBufferView, isBigInt64Array, isBigUint64Array,
-  isBoxedPrimitive, isDate, isFloat16Array, isFloat32Array, isFloat64Array,
-  isInt16Array, isInt32Array, isInt8Array, isMap, isRegExp, isSet,
-  isTypedArray, isUint16Array, isUint32Array, isUint8Array,
-  isUint8ClampedArray, type TypedArray,
+  isAnyArrayBuffer,
+  isArrayBufferView,
+  isBigInt64Array,
+  isBigUint64Array,
+  isBoxedPrimitive,
+  isDate,
+  isFloat16Array,
+  isFloat32Array,
+  isFloat64Array,
+  isInt16Array,
+  isInt32Array,
+  isInt8Array,
+  isMap,
+  isRegExp,
+  isSet,
+  isStringObject,
+  isTypedArray,
+  isUint16Array,
+  isUint32Array,
+  isUint8Array,
+  isWeakMap,
+  isWeakSet,
+  isUint8ClampedArray,
+  type TypedArray,
 } from "./types.ts";
+import { isArrayIndexKey, isURLValue } from "./value-shape.ts";
 
 /**
  * The symbol an object defines to render itself, upstream
@@ -37,8 +57,18 @@ export const customInspectSymbol = Symbol.for("nodejs.util.inspect.custom");
  * tests do both.
  */
 export type StyleType =
-  | "special" | "number" | "bigint" | "boolean" | "undefined" | "null"
-  | "string" | "symbol" | "date" | "regexp" | "module" | "name";
+  | "special"
+  | "number"
+  | "bigint"
+  | "boolean"
+  | "undefined"
+  | "null"
+  | "string"
+  | "symbol"
+  | "date"
+  | "regexp"
+  | "module"
+  | "name";
 
 export const inspectStyles: Record<string, string | undefined> = {
   special: "cyan",
@@ -61,25 +91,61 @@ export const inspectStyles: Record<string, string | undefined> = {
  * rather than reset everything.
  */
 export const inspectColors: Record<string, [number, number] | undefined> = {
-  reset: [0, 0], bold: [1, 22], dim: [2, 22], italic: [3, 23], underline: [4, 24],
-  blink: [5, 25], inverse: [7, 27], hidden: [8, 28], strikethrough: [9, 29],
+  reset: [0, 0],
+  bold: [1, 22],
+  dim: [2, 22],
+  italic: [3, 23],
+  underline: [4, 24],
+  blink: [5, 25],
+  inverse: [7, 27],
+  hidden: [8, 28],
+  strikethrough: [9, 29],
   doubleunderline: [21, 24],
-  black: [30, 39], red: [31, 39], green: [32, 39], yellow: [33, 39],
-  blue: [34, 39], magenta: [35, 39], cyan: [36, 39], white: [37, 39],
-  bgBlack: [40, 49], bgRed: [41, 49], bgGreen: [42, 49], bgYellow: [43, 49],
-  bgBlue: [44, 49], bgMagenta: [45, 49], bgCyan: [46, 49], bgWhite: [47, 49],
-  framed: [51, 54], overlined: [53, 55],
-  gray: [90, 39], grey: [90, 39], blackBright: [90, 39],
-  redBright: [91, 39], greenBright: [92, 39], yellowBright: [93, 39],
-  blueBright: [94, 39], magentaBright: [95, 39], cyanBright: [96, 39],
+  black: [30, 39],
+  red: [31, 39],
+  green: [32, 39],
+  yellow: [33, 39],
+  blue: [34, 39],
+  magenta: [35, 39],
+  cyan: [36, 39],
+  white: [37, 39],
+  bgBlack: [40, 49],
+  bgRed: [41, 49],
+  bgGreen: [42, 49],
+  bgYellow: [43, 49],
+  bgBlue: [44, 49],
+  bgMagenta: [45, 49],
+  bgCyan: [46, 49],
+  bgWhite: [47, 49],
+  framed: [51, 54],
+  overlined: [53, 55],
+  gray: [90, 39],
+  grey: [90, 39],
+  blackBright: [90, 39],
+  redBright: [91, 39],
+  greenBright: [92, 39],
+  yellowBright: [93, 39],
+  blueBright: [94, 39],
+  magentaBright: [95, 39],
+  cyanBright: [96, 39],
   whiteBright: [97, 39],
-  bgGray: [100, 49], bgGrey: [100, 49], bgBlackBright: [100, 49],
-  bgRedBright: [101, 49], bgGreenBright: [102, 49], bgYellowBright: [103, 49],
-  bgBlueBright: [104, 49], bgMagentaBright: [105, 49], bgCyanBright: [106, 49],
+  bgGray: [100, 49],
+  bgGrey: [100, 49],
+  bgBlackBright: [100, 49],
+  bgRedBright: [101, 49],
+  bgGreenBright: [102, 49],
+  bgYellowBright: [103, 49],
+  bgBlueBright: [104, 49],
+  bgMagentaBright: [105, 49],
+  bgCyanBright: [106, 49],
   bgWhiteBright: [107, 49],
   faint: [2, 22],
-  crossedout: [9, 29], strikeThrough: [9, 29], crossedOut: [9, 29],
-  conceal: [8, 28], swapColors: [7, 27], swapcolors: [7, 27],
+  crossedout: [9, 29],
+  strikeThrough: [9, 29],
+  crossedOut: [9, 29],
+  conceal: [8, 28],
+  swapColors: [7, 27],
+  swapcolors: [7, 27],
   doubleUnderline: [21, 24],
 };
 
@@ -194,7 +260,10 @@ export function quoteString(str: string): string {
     .replace(/\f/g, "\\f")
     .replace(/\v/g, "\\v")
     // Everything else below space, and the delete character.
-    .replace(/[\x00-\x07\x0e-\x1f\x7f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
+    .replace(
+      /[\x00-\x07\x0e-\x1f\x7f]/g,
+      (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`,
+    );
 
   if (!escaped.includes("'")) {
     return `'${escaped}'`;
@@ -256,24 +325,78 @@ export function formatNumber(value: number, numericSeparator = false): string {
   if (Number.isNaN(value)) {
     return asString;
   }
-  return `${addSeparators(asString)}.${
-    addSeparatorsAfterPoint(String(value).slice(asString.length + 1))
-  }`;
+  return `${addSeparators(asString)}.${addSeparatorsAfterPoint(
+    String(value).slice(asString.length + 1),
+  )}`;
 }
 
-function formatPrimitive(
-  stylize: Stylize,
-  value: unknown,
-  numericSeparator = false,
-): string | undefined {
+const kMinLineLength = 16;
+
+/** Split after each newline, without manufacturing an empty trailing row. */
+function stringLines(value: string): string[] {
+  let lineCount = 1;
+  let newline = value.indexOf("\n");
+  while (newline !== -1 && newline + 1 < value.length) {
+    lineCount += 1;
+    newline = value.indexOf("\n", newline + 1);
+  }
+
+  const lines = new Array<string>(lineCount);
+  let start = 0;
+  for (let index = 0; index < lineCount - 1; index++) {
+    const end = value.indexOf("\n", start) + 1;
+    lines[index] = value.slice(start, end);
+    start = end;
+  }
+  lines[lineCount - 1] = value.slice(start);
+  return lines;
+}
+
+function formatString(ctx: Context, original: string): string {
+  let value = original;
+  let trailer = "";
+  if (ctx.maxStringLength !== null && value.length > ctx.maxStringLength) {
+    const remaining = value.length - ctx.maxStringLength;
+    value = value.slice(0, ctx.maxStringLength);
+    trailer = `... ${remaining} more character${remaining === 1 ? "" : "s"}`;
+  }
+
+  if (
+    ctx.compact !== true &&
+    value.length > kMinLineLength &&
+    value.length > ctx.breakLength - ctx.indentationLvl - 4
+  ) {
+    const lines = stringLines(value);
+    const formatted = new Array<string>(lines.length);
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      if (line === undefined) {
+        throw new Error(`inspected string is missing line ${index}`);
+      }
+      formatted[index] = ctx.stylize(quoteString(line), "string");
+    }
+    return `${formatted.join(` +\n${" ".repeat(ctx.indentationLvl + 2)}`)}${trailer}`;
+  }
+
+  return `${ctx.stylize(quoteString(value), "string")}${trailer}`;
+}
+
+function formatPrimitive(ctx: Context, value: unknown): string | undefined {
   switch (typeof value) {
-    case "string": return stylize(quoteString(value), "string");
-    case "number": return stylize(formatNumber(value, numericSeparator), "number");
-    case "bigint": return stylize(formatBigInt(value, numericSeparator), "bigint");
-    case "boolean": return stylize(String(value), "boolean");
-    case "undefined": return stylize("undefined", "undefined");
-    case "symbol": return stylize(value.toString(), "symbol");
-    default: return value === null ? stylize("null", "null") : undefined;
+    case "string":
+      return formatString(ctx, value);
+    case "number":
+      return ctx.stylize(formatNumber(value, ctx.numericSeparator), "number");
+    case "bigint":
+      return ctx.stylize(formatBigInt(value, ctx.numericSeparator), "bigint");
+    case "boolean":
+      return ctx.stylize(String(value), "boolean");
+    case "undefined":
+      return ctx.stylize("undefined", "undefined");
+    case "symbol":
+      return ctx.stylize(value.toString(), "symbol");
+    default:
+      return value === null ? ctx.stylize("null", "null") : undefined;
   }
 }
 
@@ -284,7 +407,7 @@ function functionLabel(): string {
 }
 
 function formatValue(ctx: Context, value: unknown, recurseTimes: number): string {
-  const primitive = formatPrimitive(ctx.stylize, value, ctx.numericSeparator);
+  const primitive = formatPrimitive(ctx, value);
   if (primitive !== undefined) {
     return primitive;
   }
@@ -310,22 +433,48 @@ function formatObject(ctx: Context, value: InspectableObject, recurseTimes: numb
   }
 
   if (isDate(value)) {
-    return ctx.stylize(
+    const base = ctx.stylize(
       Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString(),
       "date",
     );
+    if (Object.keys(value).length === 0) return base;
   }
   if (isRegExp(value)) {
-    return ctx.stylize(String(value), "regexp");
+    const base = ctx.stylize(String(value), "regexp");
+    if (Object.keys(value).length === 0) return base;
   }
   if (value instanceof Error) {
-    return formatError(value);
+    const base = formatError(value);
+    if (Object.keys(value).length === 0) return base;
   }
   if (isBoxedPrimitive(value)) {
     const wrapped = value.valueOf();
-    return `[${typeof wrapped === "string" ? "String" : typeof wrapped === "number" ? "Number"
-      : typeof wrapped === "boolean" ? "Boolean" : typeof wrapped === "bigint" ? "BigInt" : "Symbol"}: ${
-      formatPrimitive(ctx.stylize, wrapped)}]`;
+    const base = `[${
+      typeof wrapped === "string"
+        ? "String"
+        : typeof wrapped === "number"
+          ? "Number"
+          : typeof wrapped === "boolean"
+            ? "Boolean"
+            : typeof wrapped === "bigint"
+              ? "BigInt"
+              : "Symbol"
+    }: ${formatPrimitive(ctx, wrapped)}]`;
+    const keys = Object.keys(value);
+    let hasNamedKey = false;
+    for (const key of keys) {
+      if (typeof wrapped !== "string" || !isArrayIndexKey(key)) {
+        hasNamedKey = true;
+        break;
+      }
+    }
+    if (!hasNamedKey) return base;
+  }
+  if (isURLValue(value) && Object.keys(value).length === 0) {
+    // With custom inspection disabled, this is Node's URL fallback. NTS does
+    // not dynamically discover arbitrary symbol hooks; recognizing this
+    // statically known built-in still keeps URL diagnostics meaningful.
+    return value.href;
   }
 
   const depthReached = ctx.depth !== null && recurseTimes > ctx.depth;
@@ -364,8 +513,14 @@ function typedArrayName(value: TypedArray): string {
 
 function formatByShape(ctx: Context, value: InspectableObject, recurseTimes: number): string {
   if (Array.isArray(value)) {
-    return formatWithKeys(ctx, value, recurseTimes, "", ["[", "]"], indented(ctx, () =>
-      formatArrayEntries(ctx, value, recurseTimes)));
+    return formatWithKeys(
+      ctx,
+      value,
+      recurseTimes,
+      "",
+      ["[", "]"],
+      indented(ctx, () => formatArrayEntries(ctx, value, recurseTimes)),
+    );
   }
   if (isTypedArray(value)) {
     const label = `${typedArrayName(value)}(${value.length})`;
@@ -384,15 +539,83 @@ function formatByShape(ctx: Context, value: InspectableObject, recurseTimes: num
     }
     return formatWithKeys(ctx, value, recurseTimes, label, ["[", "]"], entries);
   }
+  if (isDate(value)) {
+    const label = ctx.stylize(
+      Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString(),
+      "date",
+    );
+    return formatWithKeys(ctx, value, recurseTimes, label, ["{", "}"], []);
+  }
+  if (isRegExp(value)) {
+    return formatWithKeys(
+      ctx,
+      value,
+      recurseTimes,
+      ctx.stylize(String(value), "regexp"),
+      ["{", "}"],
+      [],
+    );
+  }
+  if (value instanceof Error) {
+    return formatWithKeys(ctx, value, recurseTimes, formatError(value), ["{", "}"], []);
+  }
+  if (isBoxedPrimitive(value)) {
+    const wrapped = value.valueOf();
+    const kind =
+      typeof wrapped === "string"
+        ? "String"
+        : typeof wrapped === "number"
+          ? "Number"
+          : typeof wrapped === "boolean"
+            ? "Boolean"
+            : typeof wrapped === "bigint"
+              ? "BigInt"
+              : "Symbol";
+    return formatWithKeys(
+      ctx,
+      value,
+      recurseTimes,
+      `[${kind}: ${formatPrimitive(ctx, wrapped)}]`,
+      ["{", "}"],
+      [],
+    );
+  }
+  if (isURLValue(value)) {
+    return formatWithKeys(ctx, value, recurseTimes, value.href, ["{", "}"], []);
+  }
+  if (isWeakMap(value)) {
+    return formatWithKeys(
+      ctx,
+      value,
+      recurseTimes,
+      "WeakMap",
+      ["{", "}"],
+      [ctx.stylize("<items unknown>", "special")],
+    );
+  }
+  if (isWeakSet(value)) {
+    return formatWithKeys(
+      ctx,
+      value,
+      recurseTimes,
+      "WeakSet",
+      ["{", "}"],
+      [ctx.stylize("<items unknown>", "special")],
+    );
+  }
   if (isMap(value)) {
     const entries = indented(ctx, () =>
       [...value].map(
-        ([k, v]) => `${formatValue(ctx, k, recurseTimes + 1)} => ${formatValue(ctx, v, recurseTimes + 1)}`,
-      ));
+        ([k, v]) =>
+          `${formatValue(ctx, k, recurseTimes + 1)} => ${formatValue(ctx, v, recurseTimes + 1)}`,
+      ),
+    );
     return formatWithKeys(ctx, value, recurseTimes, `Map(${value.size})`, ["{", "}"], entries);
   }
   if (isSet(value)) {
-    const entries = indented(ctx, () => [...value].map((v) => formatValue(ctx, v, recurseTimes + 1)));
+    const entries = indented(ctx, () =>
+      [...value].map((v) => formatValue(ctx, v, recurseTimes + 1)),
+    );
     return formatWithKeys(ctx, value, recurseTimes, `Set(${value.size})`, ["{", "}"], entries);
   }
   if (isAnyArrayBuffer(value)) {
@@ -463,14 +686,23 @@ function formatWithKeys(
   entries: string[],
 ): string {
   const output = [...entries];
-  const isArrayLike = Array.isArray(value) || isTypedArray(value);
+  const isArrayLike = Array.isArray(value) || isTypedArray(value) || isStringObject(value);
 
   let keys = Object.keys(value);
   if (isArrayLike) {
-    keys = keys.filter((k) => !/^\d+$/.test(k));
+    const named: string[] = [];
+    for (const key of keys) {
+      if (!isArrayIndexKey(key)) named.push(key);
+    }
+    keys = named;
   }
   if (ctx.sorted) {
-    keys.sort((a, b) => String(a).localeCompare(String(b)));
+    // Node's `sorted: true` uses Array's default UTF-16 ordering. Locale
+    // collation is observably different for mixed punctuation and digits.
+    keys.sort();
+    if (isMap(value) || isSet(value)) {
+      output.sort();
+    }
   }
 
   ctx.indentationLvl += 2;
@@ -544,11 +776,7 @@ function reduceToSingleString(
     // `compact: 3` means "combine a subtree less than three levels deep". A
     // deeper one reads better stacked even when it would fit on a line, and
     // grouping having changed the entries rules out combining them again.
-    if (
-      limit >= 1 &&
-      ctx.currentDepth - recurseTimes < limit &&
-      entries.length === output.length
-    ) {
+    if (limit >= 1 && ctx.currentDepth - recurseTimes < limit && entries.length === output.length) {
       const start = output.length + ctx.indentationLvl + braces[0].length + base.length + 10;
       if (isBelowBreakLength(ctx, output, start, base)) {
         const joined = output.join(", ");
@@ -560,9 +788,9 @@ function reduceToSingleString(
     output = entries;
   }
   const indentation = `\n${" ".repeat(ctx.indentationLvl)}`;
-  return `${base ? `${base} ` : ""}${braces[0]}${indentation}  ${
-    output.join(`,${indentation}  `)
-  }${indentation}${braces[1]}`;
+  return `${base ? `${base} ` : ""}${braces[0]}${indentation}  ${output.join(
+    `,${indentation}  `,
+  )}${indentation}${braces[1]}`;
 }
 
 /**
@@ -645,8 +873,8 @@ function groupArrayElements(ctx: Context, output: string[], value: InspectableOb
       }
       const entry = output[j] ?? "";
       if (padStart) {
-        const padding = (maxLineLength[j - start] ?? 0) + entry.length -
-          (dataLen[j] ?? 0) - separatorSpace;
+        const padding =
+          (maxLineLength[j - start] ?? 0) + entry.length - (dataLen[j] ?? 0) - separatorSpace;
         line += entry.padStart(padding, " ");
       } else {
         line += entry;
