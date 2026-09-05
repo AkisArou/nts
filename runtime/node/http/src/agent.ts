@@ -102,6 +102,7 @@ export class Agent extends EventEmitter {
   constructor(options: AgentOptions = {}) {
     super();
     this.options = { ...options };
+    if (this.options.noDelay === undefined) this.options.noDelay = true;
     this.defaultPort = options.defaultPort || 80;
     this.protocol = options.protocol || "http:";
     this.keepAlive = options.keepAlive ?? false;

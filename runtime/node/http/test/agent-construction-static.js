@@ -35,6 +35,7 @@ failed.on(
 
 class InspectingAgent extends http.Agent {
   createConnection(options, callback) {
+    assert.strictEqual(options.noDelay, true);
     assert.strictEqual(options.keepAlive, true);
     assert.strictEqual(options.keepAliveInitialDelay, this.keepAliveMsecs);
     return super.createConnection(options, callback);
