@@ -575,11 +575,6 @@ impl Code {
         self.branch(origin, insn::IF_ACMPEQ + u8::from(!equal), target, 2);
     }
 
-    pub fn branch_null(&mut self, origin: &Origin, is_null: bool, target: Label) {
-        let opcode = if is_null { insn::IFNULL } else { insn::IFNONNULL };
-        self.branch(origin, opcode, target, 1);
-    }
-
     pub fn goto(&mut self, origin: &Origin, target: Label) {
         self.branch(origin, insn::GOTO, target, 0);
     }
@@ -626,17 +621,15 @@ impl Code {
             self.fail(Error::BadDescriptor(signature.to_owned()));
             return;
         };
-        if opcode == insn::INVOKEINTERFACE {
-            let index = pool.interface_method_ref(class, name, signature);
-            let [hi, lo] = index.to_be_bytes();
-            // The redundant argument count, and a zero the format reserves and
-            // never used.
-            let count = u8::try_from(arguments + receiver).unwrap_or(u8::MAX);
-            self.emit(origin, &[opcode, hi, lo, count, 0], arguments + receiver, result);
-        } else {
-            let index = pool.method_ref(class, name, signature);
-            self.op_u2(origin, opcode, index, arguments + receiver, result);
-        }
+        // No `invokeinterface` arm. This backend emits no interfaces at all:
+        // a closure extends a per-descriptor abstract class and `NtsHost` is an
+        // abstract class rather than an interface with a default method, which
+        // record 0096 and the plan settle for reasons that have nothing to do
+        // with this method -- interface defaults need Android API 24. The five-
+        // byte encoding was written, never reached, and is gone with the
+        // `invoke_interface` that would have reached it.
+        let index = pool.method_ref(class, name, signature);
+        self.op_u2(origin, opcode, index, arguments + receiver, result);
     }
 
     pub fn invoke_static(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, signature: &str) {
@@ -649,10 +642,6 @@ impl Code {
 
     pub fn invoke_special(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, signature: &str) {
         self.invoke(origin, pool, insn::INVOKESPECIAL, class, name, signature);
-    }
-
-    pub fn invoke_interface(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, signature: &str) {
-        self.invoke(origin, pool, insn::INVOKEINTERFACE, class, name, signature);
     }
 
     // ----- objects and arrays -------------------------------------------

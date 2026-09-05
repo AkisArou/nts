@@ -30,7 +30,6 @@ mod tag {
     pub(super) const STRING: u8 = 8;
     pub(super) const FIELDREF: u8 = 9;
     pub(super) const METHODREF: u8 = 10;
-    pub(super) const INTERFACE_METHODREF: u8 = 11;
     pub(super) const NAME_AND_TYPE: u8 = 12;
 }
 
@@ -192,13 +191,6 @@ impl Pool {
 
     pub fn method_ref(&mut self, class: &str, name: &str, descriptor: &str) -> u16 {
         self.reference(tag::METHODREF, class, name, descriptor)
-    }
-
-    /// The same thing as [`Pool::method_ref`] with a different tag, and the
-    /// difference is load-bearing: `invokeinterface` requires an
-    /// `InterfaceMethodref` and `invokevirtual` refuses one.
-    pub fn interface_method_ref(&mut self, class: &str, name: &str, descriptor: &str) -> u16 {
-        self.reference(tag::INTERFACE_METHODREF, class, name, descriptor)
     }
 
     pub fn write(&self, out: &mut Vec<u8>) {
