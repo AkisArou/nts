@@ -5,7 +5,13 @@
 // one. That makes this the module whose conformance numbers say the most: a
 // passing test is this code parsing and framing, not somebody else's.
 
-import { DEFAULT_MAX_HEADER_SIZE, HTTPParser, METHODS, methods } from "./parser.ts";
+import {
+  DEFAULT_MAX_HEADER_SIZE,
+  HTTPParser,
+  METHODS,
+  methods,
+  setHTTPParserPoolLimit,
+} from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import {
   checkInvalidHeaderChar,
@@ -19,6 +25,12 @@ import { Server, createServer } from "./server.ts";
 import { Agent, globalAgent } from "./agent.ts";
 import { ClientRequest, get, request } from "./client.ts";
 import { STATUS_CODES } from "./status.ts";
+import { validateInteger } from "../../internal/validators.ts";
+
+export function setMaxIdleHTTPParsers(max: number): void {
+  validateInteger(max, "max", 1);
+  setHTTPParserPoolLimit(max);
+}
 
 export {
   Agent,

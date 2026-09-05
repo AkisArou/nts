@@ -16,7 +16,14 @@ import { Server as NetServer, Socket } from "../../net/src/main.ts";
 import type { ServerOptions as NetServerOptions, SocketOptions } from "../../net/src/main.ts";
 import type { EventName } from "../../events/src/main.ts";
 import type { Encoding } from "../../buffer/src/encodings.ts";
-import { DEFAULT_MAX_HEADER_SIZE, HTTPParseError, HTTPParser, REQUEST, methods } from "./parser.ts";
+import {
+  acquireHTTPParser,
+  DEFAULT_MAX_HEADER_SIZE,
+  HTTPParseError,
+  HTTPParser,
+  REQUEST,
+  methods,
+} from "./parser.ts";
 import type { ParserError } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { parseUniqueHeadersOption, ServerResponse } from "./outgoing.ts";
@@ -361,7 +368,8 @@ export class Server extends NetServer {
     };
     this.#deadlines.set(socket, deadline);
 
-    const parser = new HTTPParser();
+    const parserLease = acquireHTTPParser();
+    const parser = parserLease.parser;
     // The parser is work performed by this accepted connection, not by the
     // listener that happened to accept it. Node passes the socket resource to
     // its native parser for exactly this trigger relationship.
@@ -408,7 +416,7 @@ export class Server extends NetServer {
       // The parser belongs to the connection, not to a message: on a
       // keep-alive socket it survives between requests, so the connection
       // ending is the only moment it is finished.
-      parser.free();
+      parserLease.release();
     };
 
     const onSocketTimeout = (): void => {
@@ -510,7 +518,7 @@ export class Server extends NetServer {
       socket.removeListener("data", onSocketData);
       socket.removeListener("end", onSocketEnd);
       parser.finish();
-      parser.free();
+      parserLease.release();
       socket.readableFlowing = null;
 
       const eventName = message.method === "CONNECT" ? "connect" : "upgrade";

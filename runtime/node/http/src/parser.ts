@@ -477,6 +477,14 @@ export class HTTPParser {
    * looks exactly like one that will never be used again.
    */
   free(): void {
+    this.onMessageBegin = null;
+    this.onHeaders = null;
+    this.onHeadersComplete = null;
+    this.onBody = null;
+    this.onMessageComplete = null;
+    this.maxHeaderPairs = DEFAULT_MAX_HEADER_PAIRS;
+    this.reset();
+
     if (this.#asyncId <= 0) return;
     emitDestroy(this.#asyncId);
     this.#asyncId = 0;
@@ -1224,6 +1232,42 @@ export class HTTPParser {
   continueAfterMessage(): void {
     if (this.#state === State.Complete) this.reset();
   }
+}
+
+const idleHTTPParsers: HTTPParser[] = [];
+let maxIdleHTTPParsers = 1000;
+
+/** One parser checkout. Its idempotent release cannot free a later owner. */
+export interface HTTPParserLease {
+  readonly parser: HTTPParser;
+  release(): void;
+}
+
+class ParserLease implements HTTPParserLease {
+  #released = false;
+  readonly parser: HTTPParser;
+
+  constructor(parser: HTTPParser) {
+    this.parser = parser;
+  }
+
+  release(): void {
+    if (this.#released) return;
+    this.#released = true;
+    this.parser.free();
+    if (idleHTTPParsers.length < maxIdleHTTPParsers) idleHTTPParsers.push(this.parser);
+  }
+}
+
+/** Check out a reset parser without allocating when the idle pool has one. */
+export function acquireHTTPParser(): HTTPParserLease {
+  return new ParserLease(idleHTTPParsers.pop() ?? new HTTPParser());
+}
+
+/** Change the retention limit and promptly drop excess idle parsers. */
+export function setHTTPParserPoolLimit(max: number): void {
+  maxIdleHTTPParsers = max;
+  while (idleHTTPParsers.length > max) idleHTTPParsers.pop();
 }
 
 /** The index of the next LF at or after `from`, or -1. */

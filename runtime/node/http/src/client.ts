@@ -29,7 +29,7 @@ import {
   ERR_UNESCAPED_CHARACTERS,
 } from "../../internal/errors.ts";
 import { validateBoolean, validateInteger, validateOneOf } from "../../internal/validators.ts";
-import { HTTPParseError, HTTPParser, RESPONSE } from "./parser.ts";
+import { acquireHTTPParser, HTTPParseError, RESPONSE } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { checkIsHttpToken, OutgoingMessage, parseUniqueHeadersOption } from "./outgoing.ts";
 import type { OutgoingHeaders, OutgoingHeaderValue } from "./outgoing.ts";
@@ -433,7 +433,8 @@ export class ClientRequest extends OutgoingMessage {
     }
     if (onEarlyError !== undefined) socket.removeListener("error", onEarlyError);
 
-    const parser = new HTTPParser();
+    const parserLease = acquireHTTPParser();
+    const parser = parserLease.parser;
     parser.initialize(
       RESPONSE,
       this.#options.maxHeaderSize,
@@ -475,7 +476,7 @@ export class ClientRequest extends OutgoingMessage {
             throw new Error("HTTP parser failed without an error");
           }
           const error = new HTTPParseError(parserError, chunk, offset);
-          parser.free();
+          parserLease.release();
           cleanupSocketListeners();
           this.#failWithoutSocketError(error);
           return false;
@@ -496,7 +497,7 @@ export class ClientRequest extends OutgoingMessage {
           continue;
         }
 
-        parser.free();
+        parserLease.release();
         cleanupSocketListeners();
         return false;
       }
@@ -558,6 +559,7 @@ export class ClientRequest extends OutgoingMessage {
     };
 
     const onError = (error: unknown): void => {
+      parserLease.release();
       cleanupSocketListeners();
       this.#fail(error);
     };
@@ -565,7 +567,7 @@ export class ClientRequest extends OutgoingMessage {
     const onClose = (): void => {
       cleanupSocketListeners();
       // The response parser is finished with the connection.
-      parser.free();
+      parserLease.release();
       if (!this.res && !this.aborted) {
         // The connection went before any response arrived, which is the one
         // case a client cannot recover from on its own.
@@ -595,7 +597,7 @@ export class ClientRequest extends OutgoingMessage {
     const handoffUpgrade = (message: IncomingMessage, head: Buffer): void => {
       detachParserListeners();
       parser.finish();
-      parser.free();
+      parserLease.release();
 
       const eventName = this.method === "CONNECT" ? "connect" : "upgrade";
       if (this.listenerCount(eventName) === 0) {

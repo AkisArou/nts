@@ -1,4 +1,5 @@
 const kHighWaterMark = Symbol("kHighWaterMark");
+let maxIdleHTTPParsers = 1000;
 
 function callableConstructor(Class, name) {
   const callable = function (...args) {
@@ -142,6 +143,10 @@ export function shape(exports) {
   http.Agent = callableConstructor(exports.Agent, "Agent");
   http.ClientRequest = requestConstructor(exports.ClientRequest);
   http.Server = callableConstructor(exports.Server, "Server");
+  http.setMaxIdleHTTPParsers = (max) => {
+    exports.setMaxIdleHTTPParsers(max);
+    maxIdleHTTPParsers = max;
+  };
   http.request = (options, optionsOrCallback, callback) => {
     const preserveUrlLocation = optionsSupplyUrlLocation(options);
     return exports.request(
@@ -244,6 +249,9 @@ export function internals(exports) {
       HTTPParser,
       methods: exports.methods,
       parsers: {
+        get max() {
+          return maxIdleHTTPParsers;
+        },
         alloc() {
           return new HTTPParser();
         },
