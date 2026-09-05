@@ -14,6 +14,7 @@
 import { Buffer } from "../../buffer/src/main.ts";
 import { Server as NetServer, Socket } from "../../net/src/main.ts";
 import type { ServerOptions as NetServerOptions, SocketOptions } from "../../net/src/main.ts";
+import type { EventName } from "../../events/src/main.ts";
 import type { Encoding } from "../../buffer/src/encodings.ts";
 import { DEFAULT_MAX_HEADER_SIZE, HTTPParseError, HTTPParser, REQUEST, methods } from "./parser.ts";
 import type { ParserError } from "./parser.ts";
@@ -35,6 +36,7 @@ import {
   ERR_INVALID_ARG_VALUE,
   ERR_OUT_OF_RANGE,
 } from "../../internal/errors.ts";
+import { STATUS_CODES } from "./status.ts";
 
 export interface HttpServerOptions extends NetServerOptions {
   /** How long a connection may sit idle between requests. */
@@ -253,6 +255,37 @@ export class Server extends NetServer {
     if (handler) this.on("request", handler);
     this.on("connection", (socket: Socket) => this.#serve(socket));
     this.on("listening", () => this.#startConnectionsChecker());
+  }
+
+  /** Turn rejected async request handlers into a safe HTTP response. */
+  protected override handleCapturedRejection(
+    error: unknown,
+    event: EventName,
+    args: readonly unknown[],
+  ): void {
+    if (event !== "request") {
+      super.handleCapturedRejection(error, event, args);
+      return;
+    }
+
+    const response = args[1];
+    if (!(response instanceof ServerResponse)) {
+      super.handleCapturedRejection(error, event, args);
+      return;
+    }
+
+    if (!response.headersSent && !response.writableEnded) {
+      // A handler may have staged sensitive or representation-specific fields.
+      // Node's generic failure response must not leak any of them.
+      for (const name of response.getHeaderNames()) response.removeHeader(name);
+      response.statusCode = 500;
+      response.end(STATUS_CODES[500]);
+      return;
+    }
+
+    // Once any response bytes are committed, a second HTTP response would
+    // corrupt framing. Terminating the transport is the only safe outcome.
+    response.destroy();
   }
 
   protected override createAcceptedSocket(options: SocketOptions): Socket {

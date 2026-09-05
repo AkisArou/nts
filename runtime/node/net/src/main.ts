@@ -15,7 +15,12 @@
 import { Buffer } from "../../buffer/src/main.ts";
 import { Duplex } from "../../stream/src/duplex.ts";
 import { getDefaultHighWaterMark } from "../../stream/src/state.ts";
-import { addTrackedAbortListener, EventEmitter } from "../../events/src/main.ts";
+import {
+  addTrackedAbortListener,
+  captureRejectionSymbol,
+  EventEmitter,
+} from "../../events/src/main.ts";
+import type { EventName } from "../../events/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
   dnsException,
@@ -1602,6 +1607,17 @@ export interface ServerOptions {
 }
 
 export class Server extends EventEmitter {
+  private static dispatchCapturedRejection(
+    this: Server,
+    error: unknown,
+    event: EventName,
+    ...args: unknown[]
+  ): void {
+    this.handleCapturedRejection(error, event, args);
+  }
+
+  override [captureRejectionSymbol] = Server.dispatchCapturedRejection;
+
   _handle: number | null = null;
   listening = false;
   maxConnections = Infinity;
@@ -1642,6 +1658,22 @@ export class Server extends EventEmitter {
         ? getDefaultHighWaterMark(false)
         : configuredHighWaterMark;
     if (connectionListener) this.on("connection", connectionListener);
+  }
+
+  /** Route rejected async listeners through the resource that owns the event. */
+  protected handleCapturedRejection(
+    error: unknown,
+    event: EventName,
+    args: readonly unknown[],
+  ): void {
+    if (event === "connection") {
+      const socket = args[0];
+      if (socket instanceof Socket) {
+        socket.destroy(error);
+        return;
+      }
+    }
+    this.emit("error", error);
   }
 
   /** Build the transport object exposed for one accepted native handle. */

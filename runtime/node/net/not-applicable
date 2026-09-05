@@ -9,7 +9,6 @@ test-net-server-call-listen-multiple-times.js: language non-goal (typescript.md 
 test-net-server-try-ports.js: language non-goal (typescript.md section 13); invokes the Server class as a callable function without new
 test-net-socket-timeout.js: language non-goal (typescript.md section 13); invokes the Server class as a callable function without new
 test-net-write-arguments.js: language non-goal (typescript.md section 13); invokes the legacy Stream class alias as a callable function without new
-test-net-server-capture-rejection.js: language non-goal (typescript.md section 13); requires EventEmitter's runtime Symbol rejection hook
 test-net-server-keepalive.js: implementation-detail test; mutates methods on the private native server and client handles exposed by Node's C++ binding
 test-net-server-nodelay.js: implementation-detail test; mutates methods on the private native server and client handles exposed by Node's C++ binding
 test-net-connect-keepalive.js: implementation-detail test; overwrites setKeepAlive on Node's private native handle object, while this profile's native handle is deliberately opaque
