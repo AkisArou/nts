@@ -669,11 +669,11 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
       message.once("end", () => {
         this.#responseEnded = true;
         message._detachAbortSignal();
-        // Registered before the response is exposed, so this schedules the
-        // pool transition before next-tick work queued by user `end`
-        // listeners. The transition itself is still deferred, which means
-        // every listener in the current `end` emission sees the socket busy.
-        nextTick(() => this.#finishResponse(socket, message));
+        // Registered before the response is exposed, so the request becomes
+        // logically destroyed before user `end` listeners run. The actual
+        // close/free transition stays deferred, leaving the socket busy for
+        // the whole current event emission.
+        this.#finishResponse(socket, message);
       });
       if (!this.emit("response", message)) message._dump();
 
@@ -761,14 +761,23 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
       return;
     }
     const reusable = this.shouldKeepAlive && response.keepAlive && !this.destroyed;
-    this._emitClose();
-    this.#releaseSocket(
-      socket,
-      reusable,
-      typeof response.headers["keep-alive"] === "string"
-        ? response.headers["keep-alive"]
-        : undefined,
-    );
+    if (reusable) {
+      this.destroyed = true;
+      // A completed response must not destroy a socket that has already been
+      // returned to its owner. Keep `req.socket` for compatibility, while the
+      // incoming side relinquishes transport ownership immediately.
+      response.socket = null;
+    }
+    nextTick(() => {
+      this._emitClose();
+      this.#releaseSocket(
+        socket,
+        reusable,
+        typeof response.headers["keep-alive"] === "string"
+          ? response.headers["keep-alive"]
+          : undefined,
+      );
+    });
   }
 
   #releaseSocket(socket: HTTPDuplex, reusable: boolean, keepAliveHint?: string): void {
