@@ -432,6 +432,16 @@ const testModuleCache = new Map();
 const realChildProcess = realRequire("node:child_process");
 const conformanceRunner = join(HERE, "run-one.mjs");
 
+function nestedChildOptions(options) {
+  return {
+    ...options,
+    env: {
+      ...(options?.env ?? hostProcess.env),
+      NTS_CONFORMANCE_NESTED_CHILD: "1",
+    },
+  };
+}
+
 /**
  * Preserve the subject and Node's CommonJS test-runner mode when a fixture
  * forks itself.
@@ -450,17 +460,10 @@ function forkInfrastructure(modulePath, argsOrOptions, maybeOptions) {
   const target = typeof modulePath === "string" ? resolvePath(cwd, modulePath) : null;
 
   if (target === resolvePath(file) && target.endsWith(".js")) {
-    const childOptions = {
-      ...options,
-      env: {
-        ...(options?.env ?? hostProcess.env),
-        NTS_CONFORMANCE_NESTED_CHILD: "1",
-      },
-    };
     return realChildProcess.fork(
       conformanceRunner,
       [moduleName, target, addon ?? "-", ...args],
-      childOptions,
+      nestedChildOptions(options),
     );
   }
   return hasArgs
@@ -468,9 +471,45 @@ function forkInfrastructure(modulePath, argsOrOptions, maybeOptions) {
     : realChildProcess.fork(modulePath, options);
 }
 
+/** Re-enter this runner when Node is asked to execute this exact fixture. */
+function spawnInfrastructure(command, argsOrOptions, maybeOptions) {
+  const hasArgs = Array.isArray(argsOrOptions);
+  const args = hasArgs ? argsOrOptions : [];
+  const options = hasArgs ? maybeOptions : argsOrOptions;
+  const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
+  const fixtureIndex = args.findIndex(
+    (argument) => typeof argument === "string" && resolvePath(cwd, argument) === resolvePath(file),
+  );
+
+  if (
+    command === hostProcess.execPath &&
+    fixtureIndex >= 0 &&
+    args
+      .slice(0, fixtureIndex)
+      .every((argument) => typeof argument === "string" && argument.startsWith("-"))
+  ) {
+    return realChildProcess.spawn(
+      command,
+      [
+        ...args.slice(0, fixtureIndex),
+        conformanceRunner,
+        moduleName,
+        file,
+        addon ?? "-",
+        ...args.slice(fixtureIndex + 1),
+      ],
+      nestedChildOptions(options),
+    );
+  }
+  return hasArgs
+    ? realChildProcess.spawn(command, args, options)
+    : realChildProcess.spawn(command, options);
+}
+
 const childProcessInfrastructure = {
   ...realChildProcess,
   fork: forkInfrastructure,
+  spawn: spawnInfrastructure,
 };
 
 /** Node's `test/common/countdown`, attached to this runner's call tally. */
