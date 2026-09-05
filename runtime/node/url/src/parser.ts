@@ -1277,7 +1277,13 @@ export function serializeOrigin(url: UrlRecord): string {
     case "blob": {
       const path = hasOpaquePath(url) ? url.path : "";
       const inner = basicUrlParse(path);
-      return inner === null ? "null" : serializeOrigin(inner);
+      // Node deliberately inherits an origin only from an immediately nested
+      // HTTP(S) URL. Other special schemes, and a second `blob:` layer, still
+      // have an opaque origin even though they can be parsed successfully.
+      if (inner === null || (inner.scheme !== "http" && inner.scheme !== "https")) {
+        return "null";
+      }
+      return `${inner.scheme}://${serializeHost(inner)}`;
     }
     default:
       return "null";
