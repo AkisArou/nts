@@ -20,6 +20,7 @@ import { IncomingMessage } from "./incoming.ts";
 import { ServerResponse } from "./outgoing.ts";
 import { clearInterval, setInterval } from "../../timers/src/main.ts";
 import type { Timeout } from "../../timers/src/main.ts";
+import { nextTick } from "../../internal/tick.ts";
 import {
   validateBoolean,
   validateInteger,
@@ -279,8 +280,30 @@ export class Server extends NetServer {
 
     let incoming: IncomingMessage | null = null;
     let response: ServerResponse | null = null;
+    let activeResponse: ServerResponse | null = null;
+    let queuedResponses: ServerResponse[] = [];
+    let queuedResponseIndex = 0;
     /** Bytes that arrived after a message ended, belonging to the next one. */
     let pending: Buffer | null = null;
+
+    const advanceResponseQueue = (): void => {
+      const next = queuedResponses[queuedResponseIndex];
+      if (next !== undefined) {
+        queuedResponseIndex += 1;
+        activeResponse = next;
+        next.socket = socket;
+        return;
+      }
+
+      queuedResponses = [];
+      queuedResponseIndex = 0;
+      activeResponse = null;
+      this.#beginRequest(deadline);
+      socket.resume();
+      this.#idle.add(socket);
+      socket.unref();
+      if (!this.listening) socket.end();
+    };
 
     const ignoreSocketError = (_error: unknown): void => {};
 
@@ -349,8 +372,14 @@ export class Server extends NetServer {
       incoming = message;
       response = new this.#ServerResponse(message);
       response._setHeaderValidation(this.#lenientHeaderValues);
-      response.socket = socket;
       response.shouldKeepAlive = info.shouldKeepAlive;
+
+      if (activeResponse === null) {
+        activeResponse = response;
+        response.socket = socket;
+      } else {
+        queuedResponses.push(response);
+      }
 
       // A request has arrived, so this connection matters again until it is
       // answered, and it is no longer idle.
@@ -358,9 +387,14 @@ export class Server extends NetServer {
       this.#idle.delete(socket);
 
       const finished = response;
-      finished.once("finish", () =>
-        this.#afterResponse(socket, parser, deadline, message, finished),
-      );
+      finished.once("finish", () => {
+        if (activeResponse !== finished) {
+          throw new Error("HTTP response queue completed out of order");
+        }
+        finished.detachSocket(socket);
+        nextTick(() => finished._closeAfterFinish());
+        this.#afterResponse(socket, parser, message, finished, advanceResponseQueue);
+      });
 
       // RFC 9112 section 3.2 requires exactly one authority for HTTP/1.1.
       // Node preserves its historical first-wins handling for duplicates, but
@@ -440,9 +474,9 @@ export class Server extends NetServer {
   #afterResponse(
     socket: Socket,
     parser: HTTPParser,
-    deadline: ConnectionDeadline,
     message: IncomingMessage,
     response: ServerResponse,
+    advance: () => void,
   ): void {
     // Node's `resOnFinish`: a handler that never read its request has handed
     // ownership of the body back to the server.  Drain it so an ignored body
@@ -460,24 +494,12 @@ export class Server extends NetServer {
     if (!message.complete) {
       // `_dump()` resumed the source, but the parser has not reached the end
       // yet.  Reuse is safe only after the readable has drained that body.
-      message.once("end", () => this.#afterResponse(socket, parser, deadline, message, response));
+      message.once("end", () => this.#afterResponse(socket, parser, message, response, advance));
       return;
     }
 
     parser.continueAfterMessage();
-    this.#beginRequest(deadline);
-    socket.resume();
-
-    // Idle now: usable if the client sends another request, but not a reason
-    // for the process to stay alive. A keep-alive server that refed its idle
-    // connections would never let a program exit, which is not what keeping
-    // them open is for.
-    this.#idle.add(socket);
-    socket.unref();
-
-    // And if the server has stopped accepting, there will be no next request
-    // on it worth waiting for.
-    if (!this.listening) socket.end();
+    advance();
   }
 
   /** Node's name for the idle timeout on accepted connections. */

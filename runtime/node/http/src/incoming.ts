@@ -88,6 +88,7 @@ export class IncomingMessage extends Readable {
   /** Whether the sender said it wanted the connection kept open. */
   #keepAlive = true;
   #inTrailers = false;
+  #destroySocketOnDestroy = true;
 
   constructor(socket?: IncomingSocket) {
     // The stream's own defaults, which is what node uses here. `autoDestroy`
@@ -203,6 +204,12 @@ export class IncomingMessage extends Readable {
     return this.#keepAlive;
   }
 
+  /** The transport ended this message; report it without destroying it again. */
+  _destroyFromSocket(error: unknown): void {
+    this.#destroySocketOnDestroy = false;
+    this.destroy(error);
+  }
+
   /**
    * Stop the socket's idle timer for this message.
    *
@@ -222,8 +229,11 @@ export class IncomingMessage extends Readable {
       // one.
       this.aborted = true;
       this.emit("aborted");
-      this.socket?.destroy(error);
+      if (this.#destroySocketOnDestroy) this.socket?.destroy(error);
     }
-    callback(error);
+    // Keep IncomingMessage's compatibility rule: unlike a generic Readable,
+    // a premature peer close must not turn into an uncaught exception merely
+    // because the consumer listened for `aborted` but not `error`.
+    callback(this.listenerCount("error") === 0 ? undefined : error);
   }
 }

@@ -1106,6 +1106,24 @@ function untrackEventTargetListener(
   events.set(type, next);
 }
 
+/** Install an AbortSignal listener that the profile's inspection helpers own. */
+export function addTrackedAbortListener(
+  signal: AbortSignalLike,
+  listener: () => void,
+): void {
+  signal.addEventListener("abort", listener, { once: true });
+  trackEventTargetListener(signal, "abort", listener);
+}
+
+/** Remove a listener installed by `addTrackedAbortListener`. */
+export function removeTrackedAbortListener(
+  signal: AbortSignalLike,
+  listener: () => void,
+): void {
+  signal.removeEventListener("abort", listener);
+  untrackEventTargetListener(signal, "abort", listener);
+}
+
 function addEventSourceListener(
   source: EventSource,
   type: EventName,

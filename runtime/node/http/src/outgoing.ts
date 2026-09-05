@@ -19,7 +19,8 @@
 // response begins where the reader is still expecting bytes.
 
 import { Buffer } from "../../buffer/src/main.ts";
-import { EventEmitter } from "../../events/src/main.ts";
+import { captureRejectionSymbol, EventEmitter } from "../../events/src/main.ts";
+import { getDefaultHighWaterMark } from "../../stream/src/state.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
   ERR_HTTP_CONTENT_LENGTH_MISMATCH,
@@ -30,6 +31,10 @@ import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
   ERR_INVALID_HTTP_TOKEN,
+  ERR_METHOD_NOT_IMPLEMENTED,
+  ERR_STREAM_ALREADY_FINISHED,
+  ERR_STREAM_DESTROYED,
+  ERR_STREAM_NULL_VALUES,
   ERR_STREAM_WRITE_AFTER_END,
 } from "../../internal/errors.ts";
 import { STATUS_CODES } from "./status.ts";
@@ -60,9 +65,17 @@ export interface OutgoingSocket {
   setTimeout(msecs: number, callback?: () => void): unknown;
   setNoDelay(enable?: boolean): unknown;
   setKeepAlive(enable?: boolean, initialDelay?: number): unknown;
+  cork?(): void;
+  uncork?(): void;
+  readonly destroyed?: boolean;
+  readonly errored?: unknown;
+  readonly writableCorked?: number;
+  readonly writableHighWaterMark?: number;
+  readonly writableLength?: number;
 }
 
 type WriteCallback = (error?: unknown) => void;
+type EndCallback = (error?: unknown) => void;
 
 interface PendingWrite {
   chunk: Buffer | string;
@@ -124,9 +137,41 @@ export function validateHeaderValue(name: string, value: unknown, lenient = fals
   }
 }
 
+function destroyOnRejection(this: OutgoingMessage, error: unknown): void {
+  this.destroy(error);
+}
+
 export class OutgoingMessage extends EventEmitter {
   #socket: OutgoingSocket | null = null;
   #lenientHeaderValues = false;
+  #highWaterMark: number;
+  #needDrain = false;
+  #corked = 0;
+  #errored: unknown = null;
+  #flushError: unknown = null;
+  #endCallbacks: EndCallback[] = [];
+
+  readonly #onSocketDrain = (): void => {
+    if (this.#needDrain && this.writableLength === 0 && !this.destroyed && !this.finished) {
+      this.#needDrain = false;
+      this.emit("drain");
+    }
+  };
+
+  readonly #onSocketClose = (): void => {
+    this._emitClose();
+  };
+
+  readonly #onFlushed = (error?: unknown): void => {
+    this.#completeFlush(error);
+  };
+
+  constructor() {
+    super();
+    this.#highWaterMark = getDefaultHighWaterMark(false);
+  }
+
+  override [captureRejectionSymbol] = destroyOnRejection;
 
   /**
    * Output written before there was a socket to write it to.
@@ -137,20 +182,48 @@ export class OutgoingMessage extends EventEmitter {
    * head is written to nothing and the request never leaves.
    */
   #pending: PendingWrite[] = [];
+  #pendingSize = 0;
 
   get socket(): OutgoingSocket | null {
     return this.#socket;
   }
 
   set socket(value: OutgoingSocket | null) {
+    const previous = this.#socket;
+    if (previous === value) return;
+    if (previous !== null) {
+      if (typeof previous.removeListener === "function") {
+        previous.removeListener("drain", this.#onSocketDrain);
+        previous.removeListener("close", this.#onSocketClose);
+      }
+      for (let index = 0; index < this.#corked; index++) previous.uncork?.();
+    }
+
     this.#socket = value;
-    if (value && this.#pending.length > 0) {
+    if (value === null) return;
+
+    if (typeof value.on === "function") value.on("drain", this.#onSocketDrain);
+    if (typeof value.once === "function") value.once("close", this.#onSocketClose);
+    for (let index = 0; index < this.#corked; index++) value.cork?.();
+
+    if (this.#pending.length > 0) {
       const queued = this.#pending;
       this.#pending = [];
+      this.#pendingSize = 0;
       for (const write of queued) {
-        value.write(write.chunk, write.encoding, write.callback);
+        if (value.write(write.chunk, write.encoding, write.callback) === false) {
+          this.#needDrain = true;
+        }
       }
     }
+  }
+
+  get connection(): OutgoingSocket | null {
+    return this.socket;
+  }
+
+  set connection(value: OutgoingSocket | null) {
+    this.socket = value;
   }
 
   /** Internal fixed-layout validation policy selected by client/server options. */
@@ -162,7 +235,9 @@ export class OutgoingMessage extends EventEmitter {
   #sendRaw(chunk: Buffer | string, encoding?: string, callback?: WriteCallback): boolean {
     if (this.#socket === null) {
       this.#pending.push({ chunk, encoding, callback });
-      return true;
+      this.#pendingSize +=
+        typeof chunk === "string" ? Buffer.byteLength(chunk, encoding ?? "utf8") : chunk.length;
+      return this.#pendingSize < this.#highWaterMark;
     }
     return this.#socket.write(chunk, encoding, callback) !== false;
   }
@@ -184,6 +259,16 @@ export class OutgoingMessage extends EventEmitter {
   writableEnded = false;
   writableFinished = false;
   destroyed = false;
+
+  /** Legacy Node field: ending an HTTP message does not make this false. */
+  writable = true;
+
+  /** Fixed legacy fields used by `stream.finished()` to identify this type. */
+  _closed = false;
+  _defaultKeepAlive = true;
+  _removedConnection = false;
+  _removedContLen = false;
+  _removedTE = false;
 
   /** Set by the server or the client before anything is written. */
   shouldKeepAlive = true;
@@ -225,12 +310,37 @@ export class OutgoingMessage extends EventEmitter {
     return Number.isFinite(length) ? length : undefined;
   }
 
-  get connection(): OutgoingSocket | null {
-    return this.socket;
+  get closed(): boolean {
+    return this._closed;
   }
 
-  get writable(): boolean {
-    return !this.#ended && !this.destroyed;
+  get errored(): unknown {
+    return this.#errored;
+  }
+
+  get writableObjectMode(): boolean {
+    return false;
+  }
+
+  get writableHighWaterMark(): number {
+    return this.#socket?.writableHighWaterMark ?? this.#highWaterMark;
+  }
+
+  get writableLength(): number {
+    return this.#pendingSize + (this.#socket?.writableLength ?? 0);
+  }
+
+  get writableCorked(): number {
+    return this.#corked;
+  }
+
+  get writableNeedDrain(): boolean {
+    return !this.destroyed && !this.finished && this.#needDrain;
+  }
+
+  /** Approximate bytes held before a socket is assigned. */
+  get outputSize(): number {
+    return this.#pendingSize;
   }
 
   setHeader(name: string, value: OutgoingHeaderValue): this {
@@ -306,6 +416,9 @@ export class OutgoingMessage extends EventEmitter {
     // `Date` is synthesized only when the head is built, so deleting its
     // current map entry is not enough to honor an explicit removal.
     if (lowerName === "date") this.sendDate = false;
+    else if (lowerName === "connection") this._removedConnection = true;
+    else if (lowerName === "content-length") this._removedContLen = true;
+    else if (lowerName === "transfer-encoding") this._removedTE = true;
   }
 
   /**
@@ -331,7 +444,7 @@ export class OutgoingMessage extends EventEmitter {
 
   /** Written by a subclass before the headers, as the first line. */
   protected _implicitHeader(): void {
-    throw new Error("_implicitHeader() must be implemented by a subclass");
+    throw new ERR_METHOD_NOT_IMPLEMENTED("_implicitHeader()");
   }
 
   /**
@@ -343,6 +456,7 @@ export class OutgoingMessage extends EventEmitter {
   protected prepareHeaders(): void {
     if (this.headersSent) return;
     if (!this.statusLine) this._implicitHeader();
+    if (!this.statusLine) return;
 
     const declared = this.headersMap.get("content-length");
     const encoding = this.headersMap.get("transfer-encoding");
@@ -417,18 +531,38 @@ export class OutgoingMessage extends EventEmitter {
     this.prepareHeaders();
     if (this.#headerFlushed) return;
     const head = this.#head;
-    if (head === null) throw new Error("HTTP headers were not prepared");
     this.#headerFlushed = true;
-    this.#sendRaw(head, "latin1");
+    if (head !== null) this.#sendRaw(head, "latin1");
   }
 
-  write(chunk: string | Buffer, encoding?: string | (() => void), callback?: () => void): boolean {
+  write(
+    chunk: string | Uint8Array,
+    encoding?: string | WriteCallback,
+    callback?: WriteCallback,
+  ): boolean {
     let encodingName: string | undefined;
     if (typeof encoding === "function") callback = encoding;
     else encodingName = encoding;
+
+    if (chunk === null) throw new ERR_STREAM_NULL_VALUES();
+    if (typeof chunk !== "string" && !(chunk instanceof Uint8Array)) {
+      throw new ERR_INVALID_ARG_TYPE("chunk", ["string", "Buffer", "Uint8Array"], chunk);
+    }
+
     if (this.#ended) {
-      const error = new ERR_STREAM_WRITE_AFTER_END();
-      nextTick(() => this.emit("error", error));
+      const error = this.destroyed
+        ? new ERR_STREAM_DESTROYED("write")
+        : new ERR_STREAM_WRITE_AFTER_END();
+      nextTick(() => {
+        if (callback !== undefined) callback(error);
+        if (!this.destroyed) this.emit("error", error);
+      });
+      return false;
+    }
+
+    if (this.destroyed) {
+      const error = new ERR_STREAM_DESTROYED("write");
+      if (callback !== undefined) nextTick(callback, error);
       return false;
     }
 
@@ -438,11 +572,18 @@ export class OutgoingMessage extends EventEmitter {
       return true;
     }
 
-    const buffer = typeof chunk === "string" ? Buffer.from(chunk, encodingName ?? "utf8") : chunk;
+    const buffer =
+      typeof chunk === "string"
+        ? Buffer.from(chunk, encodingName ?? "utf8")
+        : chunk instanceof Buffer
+          ? chunk
+          : Buffer.from(chunk);
 
     if (buffer.length === 0) {
       // A zero-length chunk is not "nothing" in chunked encoding -- it is the
-      // terminator -- so it is dropped rather than framed.
+      // terminator -- so it is dropped rather than framed. It still commits
+      // the head, just as a non-empty first write would.
+      this.flushHeaders();
       if (callback) nextTick(callback);
       return true;
     }
@@ -465,25 +606,26 @@ export class OutgoingMessage extends EventEmitter {
 
     let ok: boolean;
     if (this.chunkedEncoding) {
-      this.#sendRaw(`${buffer.length.toString(16)}\r\n`, "latin1");
-      ok = this.#sendRaw(buffer);
+      ok = this.#sendRaw(`${buffer.length.toString(16)}\r\n`, "latin1");
+      if (!this.#sendRaw(buffer)) ok = false;
       // Completion belongs to the complete framed chunk, not merely to the
       // act of queueing its payload. In particular, a callback that destroys
       // the socket must not run before the trailing CRLF reached the native
       // write queue.
-      this.#sendRaw("\r\n", "latin1", callback);
+      if (!this.#sendRaw("\r\n", "latin1", callback)) ok = false;
     } else {
       ok = this.#sendRaw(buffer, undefined, callback);
     }
+    if (!ok) this.#needDrain = true;
     return ok;
   }
 
   end(
-    chunk?: string | Buffer | (() => void),
-    encoding?: string | (() => void),
-    callback?: () => void,
+    chunk?: string | Uint8Array | null | EndCallback,
+    encoding?: string | EndCallback,
+    callback?: EndCallback,
   ): this {
-    let body: string | Buffer | undefined;
+    let body: string | Uint8Array | null | undefined;
     let encodingName: string | undefined;
     if (typeof chunk === "function") {
       callback = chunk;
@@ -492,9 +634,17 @@ export class OutgoingMessage extends EventEmitter {
       if (typeof encoding === "function") callback = encoding;
       else encodingName = encoding;
     }
+    if (body === null) body = undefined;
+    if (body !== undefined && typeof body !== "string" && !(body instanceof Uint8Array)) {
+      throw new ERR_INVALID_ARG_TYPE("chunk", ["string", "Buffer", "Uint8Array"], body);
+    }
 
     if (this.#ended) {
-      if (callback) nextTick(callback);
+      if (body !== undefined && body !== "") {
+        this.write(body, encodingName, callback);
+      } else if (callback !== undefined) {
+        this.#queueEndCallback(callback);
+      }
       return this;
     }
 
@@ -511,14 +661,16 @@ export class OutgoingMessage extends EventEmitter {
           ? 0
           : typeof body === "string"
             ? Buffer.byteLength(body, encodingName ?? "utf8")
-            : body.length;
+            : body.byteLength;
       this.setHeader("Content-Length", length);
     }
 
     if (body !== undefined && this.strictContentLength) {
       const declared = this.#declaredContentLength();
       const bodyLength =
-        typeof body === "string" ? Buffer.byteLength(body, encodingName ?? "utf8") : body.length;
+        typeof body === "string"
+          ? Buffer.byteLength(body, encodingName ?? "utf8")
+          : body.byteLength;
       if (
         declared !== undefined &&
         !this.chunkedEncoding &&
@@ -528,6 +680,8 @@ export class OutgoingMessage extends EventEmitter {
         throw new ERR_HTTP_CONTENT_LENGTH_MISMATCH(this.#bytesWritten + bodyLength, declared);
       }
     }
+
+    if (callback !== undefined) this.#endCallbacks.push(callback);
 
     if (body !== undefined) this.write(body, encodingName);
     else this.flushHeaders();
@@ -548,24 +702,18 @@ export class OutgoingMessage extends EventEmitter {
     this.writableEnded = true;
     this.finished = true;
 
-    const onFlushed = (_error?: unknown): void => {
-      this.writableFinished = true;
-      this.emit("finish");
-      if (callback) callback();
-    };
-
     if (this.chunkedEncoding) {
       let tail = "0\r\n";
       for (const entry of this.trailersMap.values()) {
         tail += `${entry[0]}: ${entry[1]}\r\n`;
       }
       tail += "\r\n";
-      this.#sendRaw(tail, "latin1", onFlushed);
+      this.#sendRaw(tail, "latin1", this.#onFlushed);
     } else {
       // A zero-byte write is an ordering sentinel. Its callback runs only
       // after every preceding head/body write has completed, so `finish` and
       // the end callback cannot make an undrained socket eligible for reuse.
-      this.#sendRaw("", undefined, onFlushed);
+      this.#sendRaw("", undefined, this.#onFlushed);
     }
 
     return this;
@@ -574,23 +722,101 @@ export class OutgoingMessage extends EventEmitter {
   destroy(error?: unknown): this {
     if (this.destroyed) return this;
     this.destroyed = true;
-    this.socket?.destroy(error);
+    this.#errored = error;
+    const socket = this.socket;
+    if (socket !== null) {
+      socket.destroy(error);
+    } else {
+      const finalError = error ?? new ERR_STREAM_DESTROYED("write");
+      const pending = this.#pending;
+      this.#pending = [];
+      this.#pendingSize = 0;
+      for (const write of pending) {
+        if (write.callback !== undefined) nextTick(write.callback, finalError);
+      }
+      if (this.#endCallbacks.length > 0) this.#completeFlush(finalError);
+      nextTick(() => this._emitClose());
+    }
     return this;
   }
 
   setTimeout(msecs: number, callback?: () => void): this {
-    this.socket?.setTimeout(msecs, callback);
+    if (callback !== undefined) this.on("timeout", callback);
+    const socket = this.socket;
+    if (socket === null) {
+      this.once("socket", (connected: OutgoingSocket) => connected.setTimeout(msecs));
+    } else {
+      socket.setTimeout(msecs);
+    }
     return this;
   }
 
-  /** Batching hints. Present because programs call them; nothing to batch. */
-  cork(): void {}
-  uncork(): void {}
+  cork(): void {
+    this.#corked += 1;
+    this.socket?.cork?.();
+  }
+
+  uncork(): void {
+    if (this.#corked === 0) return;
+    this.#corked -= 1;
+    this.socket?.uncork?.();
+  }
+
+  /** Mark a socket-backed message closed exactly once. */
+  protected _emitClose(): void {
+    if (this._closed) return;
+    this._closed = true;
+    this.destroyed = true;
+    const socket = this.#socket;
+    if (socket !== null && typeof socket.removeListener === "function") {
+      socket.removeListener("drain", this.#onSocketDrain);
+      socket.removeListener("close", this.#onSocketClose);
+    }
+    if (!this.writableFinished && this.#endCallbacks.length > 0) {
+      this.#completeFlush(this.#flushError ?? new ERR_STREAM_DESTROYED("end"));
+    }
+    this.emit("close");
+  }
+
+  #queueEndCallback(callback: EndCallback): void {
+    if (this.writableFinished) {
+      callback(new ERR_STREAM_ALREADY_FINISHED("end"));
+    } else if (this.#flushError !== null) {
+      nextTick(callback, this.#flushError);
+    } else {
+      this.#endCallbacks.push(callback);
+    }
+  }
+
+  #completeFlush(error?: unknown): void {
+    if (this.writableFinished || this.#flushError !== null) return;
+
+    const socketError = this.#socket?.errored;
+    const failure = error ?? socketError;
+    const callbacks = this.#endCallbacks;
+    this.#endCallbacks = [];
+    if (failure !== undefined && failure !== null) {
+      this.#flushError = failure;
+      for (let index = 0; index < callbacks.length; index++) {
+        const endCallback = callbacks[index];
+        if (endCallback !== undefined) endCallback(failure);
+      }
+      return;
+    }
+
+    this.writableFinished = true;
+    for (let index = 0; index < callbacks.length; index++) {
+      const endCallback = callbacks[index];
+      if (endCallback !== undefined) endCallback(null);
+    }
+    this.emit("finish");
+  }
 }
 
 export class ServerResponse extends OutgoingMessage {
   statusCode = 200;
   statusMessage: string | undefined;
+  _sent100 = false;
 
   constructor(request: {
     httpVersionMajor: number;
@@ -668,8 +894,24 @@ export class ServerResponse extends OutgoingMessage {
     this.statusLine = `${RESPONSE_VERSION} ${this.statusCode} ${message}`;
   }
 
+  /** Attach the connection currently carrying this response. */
+  assignSocket(socket: OutgoingSocket): void {
+    this.socket = socket;
+  }
+
+  /** Release a completed response from the connection that carried it. */
+  detachSocket(socket: OutgoingSocket): void {
+    if (this.socket === socket) this.socket = null;
+  }
+
+  /** Complete the response-side close lifecycle after it has been detached. */
+  _closeAfterFinish(): void {
+    this._emitClose();
+  }
+
   /** Send `100 Continue`, for a client that asked whether it may send a body. */
   writeContinue(callback?: () => void): void {
+    this._sent100 = true;
     const socket = this.socket;
     if (socket === null) {
       if (callback !== undefined) nextTick(callback);

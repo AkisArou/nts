@@ -14,7 +14,11 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import { Duplex } from "../../stream/src/duplex.ts";
-import { EventEmitter } from "../../events/src/main.ts";
+import {
+  addTrackedAbortListener,
+  EventEmitter,
+  removeTrackedAbortListener,
+} from "../../events/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
   dnsException,
@@ -1494,12 +1498,12 @@ export class Socket extends Duplex {
     }
     this.#abortSignal = signal;
     this.#abortListener = onAbort;
-    signal.addEventListener("abort", onAbort, { once: true });
+    addTrackedAbortListener(signal, onAbort);
   }
 
   #clearAbort(): void {
     if (this.#abortSignal !== undefined && this.#abortListener !== undefined) {
-      this.#abortSignal.removeEventListener("abort", this.#abortListener);
+      removeTrackedAbortListener(this.#abortSignal, this.#abortListener);
     }
     this.#abortSignal = undefined;
     this.#abortListener = undefined;
@@ -1841,12 +1845,12 @@ export class Server extends EventEmitter {
     }
     this.#abortSignal = signal;
     this.#abortListener = onAbort;
-    signal.addEventListener("abort", onAbort, { once: true });
+    addTrackedAbortListener(signal, onAbort);
   }
 
   #clearAbort(): void {
     if (this.#abortSignal !== undefined && this.#abortListener !== undefined) {
-      this.#abortSignal.removeEventListener("abort", this.#abortListener);
+      removeTrackedAbortListener(this.#abortSignal, this.#abortListener);
     }
     this.#abortSignal = undefined;
     this.#abortListener = undefined;

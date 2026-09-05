@@ -41,6 +41,7 @@ export interface RequestOptions {
   hostname?: string | undefined;
   port?: number | string | undefined;
   path?: string | undefined;
+  protocol?: string | undefined;
   method?: string | undefined;
   headers?: RequestHeaders | undefined;
   auth?: string | undefined;
@@ -118,10 +119,15 @@ function applyRequestHeaderArray(request: OutgoingMessage, headers: RequestHeade
   }
 }
 
+function connectionResetError(message: string): Error & { code: string } {
+  return Object.assign(new Error(message), { code: "ECONNRESET" });
+}
+
 export class ClientRequest extends OutgoingMessage {
   method: string;
   path: string;
   host: string;
+  protocol: string;
   agent: Agent | null;
 
   aborted = false;
@@ -132,8 +138,8 @@ export class ClientRequest extends OutgoingMessage {
   res: IncomingMessage | null = null;
 
   #options: RequestOptions;
-  #closeEmitted = false;
   #port: number;
+  #errorEmitted = false;
 
   constructor(options: RequestOptions | string, callback?: ResponseListener) {
     super();
@@ -170,6 +176,7 @@ export class ClientRequest extends OutgoingMessage {
       opts.agent === false || (opts.agent === undefined && opts.createConnection !== undefined)
         ? null
         : (opts.agent ?? globalAgent);
+    this.protocol = opts.protocol ?? selectedAgent?.protocol ?? "http:";
     const defaultPort = opts.defaultPort || selectedAgent?.defaultPort || 80;
     this.#port = Number(opts.port || defaultPort);
     this.timeout = opts.timeout;
@@ -286,11 +293,14 @@ export class ClientRequest extends OutgoingMessage {
 
   /** Given a connection by the agent, or made one. Everything starts here. */
   onSocket(socket: Socket | null, error?: unknown): void {
+    if (this.destroyed) {
+      socket?.destroy();
+      return;
+    }
     if (error !== undefined || socket === null) {
       this.#fail(error ?? new Error("Agent did not provide a socket"));
       return;
     }
-    this.socket = socket;
 
     const parser = new HTTPParser();
     parser.initialize(
@@ -304,6 +314,12 @@ export class ClientRequest extends OutgoingMessage {
     );
 
     let response: IncomingMessage | null = null;
+
+    const abortResponse = (): void => {
+      if (response === null || response.complete || response.destroyed) return;
+      const error = connectionResetError("aborted");
+      response._destroyFromSocket(error);
+    };
 
     const onData = (chunk: Buffer): void => {
       const consumed = parser.execute(chunk);
@@ -322,9 +338,11 @@ export class ClientRequest extends OutgoingMessage {
     const onEnd = (): void => {
       // A response with no framing ends when the connection does, so the end
       // of the socket is what completes the message.
-      if (parser.finish() < 0 && !response) {
+      if (parser.finish() < 0 && response === null) {
         cleanupSocketListeners();
         this.#fail(new Error("socket hang up"));
+      } else {
+        abortResponse();
       }
     };
 
@@ -340,9 +358,11 @@ export class ClientRequest extends OutgoingMessage {
       if (!this.res && !this.aborted) {
         // The connection went before any response arrived, which is the one
         // case a client cannot recover from on its own.
-        this.#fail(Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }));
+        this.#fail(connectionResetError("socket hang up"));
+      } else {
+        abortResponse();
       }
-      this.#emitClose();
+      this._emitClose();
     };
 
     const cleanupSocketListeners = (): void => {
@@ -429,6 +449,9 @@ export class ClientRequest extends OutgoingMessage {
     socket.on("end", onEnd);
     socket.on("error", onError);
     socket.on("close", onClose);
+    // Assigning the socket flushes pre-connection writes, so the parser and
+    // lifecycle listeners must already be installed when that happens.
+    this.socket = socket;
 
     const timeout = this.timeout ?? this.agent?.options.timeout;
     if (timeout !== undefined) {
@@ -460,7 +483,7 @@ export class ClientRequest extends OutgoingMessage {
       return;
     }
     const reusable = this.shouldKeepAlive && response.keepAlive && !this.destroyed;
-    this.#emitClose();
+    this._emitClose();
     if (this.agent) {
       this.agent.release(
         this.agent.getName({ host: this.host, port: this.#port }),
@@ -481,23 +504,10 @@ export class ClientRequest extends OutgoingMessage {
   }
 
   #fail(error: unknown): void {
-    if (this.aborted) return;
+    if (this.aborted || this.#errorEmitted) return;
+    this.#errorEmitted = true;
     this.emit("error", error);
-    this.destroy();
-  }
-
-  #emitClose(): void {
-    if (this.#closeEmitted) return;
-    this.#closeEmitted = true;
-    this.destroyed = true;
-    this.emit("close");
-  }
-
-  override destroy(error?: unknown): this {
-    const socket = this.socket;
     super.destroy(error);
-    if (socket === null) nextTick(() => this.#emitClose());
-    return this;
   }
 
   /** Node's older name for `destroy`, kept because programs call it. */
@@ -506,6 +516,19 @@ export class ClientRequest extends OutgoingMessage {
     this.aborted = true;
     this.emit("abort");
     this.destroy();
+  }
+
+  override destroy(error?: unknown): this {
+    if (this.destroyed) return this;
+    if (this.socket === null && !this.aborted && !this.#errorEmitted) {
+      const failure = error ?? connectionResetError("socket hang up");
+      nextTick(() => {
+        if (this.#errorEmitted || this.aborted) return;
+        this.#errorEmitted = true;
+        this.emit("error", failure);
+      });
+    }
+    return super.destroy(error);
   }
 
   override setTimeout(msecs: number, callback?: () => void): this {
