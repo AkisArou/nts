@@ -26,6 +26,26 @@ way in and unboxed on the way out:
 allocates ~52 bytes per iteration -- the shape plus its box -- and C2
 eliminates none, because storing the shape into the box is a real escape.
 
+## Confirmed by putting the box into the reference
+
+One variable: give the hand-written Java a three-field value object holding a
+tag, a number and the reference, and construct it the way `Erase` does.
+
+| | ns/op | bytes/op |
+| --- | ---: | ---: |
+| reference, plain | 1.42 us | 0.0 |
+| **reference, boxed** | **16.13 us** | **212,944.0** |
+| nts (JVM) | 15.48 us | **212,944.0** |
+
+**The allocation matches to the byte** and the time to within 4%. The box is
+not a contributor to the gap; it is the gap. Nothing else this backend does to
+this program costs anything measurable.
+
+It also settles what the box costs *beyond* its own bytes: boxing the shape
+makes the shape escape, so C2 stops scalar-replacing the object that would
+otherwise have cost nothing either. Two objects are allocated per iteration
+where the reference allocates none, and only one of them is the box.
+
 ## Why this row and not another
 
 The plan named this the highest-value measurement in the design: *"`Erased`:
