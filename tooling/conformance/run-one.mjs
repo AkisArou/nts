@@ -21,13 +21,14 @@ import tmpdir from "./tmpdir.mjs";
 import fixtures from "./fixtures.mjs";
 import * as hijackstdio from "./hijackstdio.mjs";
 
-const [, , moduleName, file, addon] = process.argv;
+const [, , moduleName, file, addon, ...fixtureArgs] = process.argv;
 const RESULT_PREFIX = "NTS_CONFORMANCE_RESULT ";
+const nestedConformanceChild = process.env.NTS_CONFORMANCE_NESTED_CHILD === "1";
 
 // Node launches each fixture as the program, so its private harness arguments
 // are not visible through `process.argv`. Leaving ours in positions 2–4 changes
 // tests that accept optional command-line inputs before the subject is reached.
-process.argv = [process.execPath, file];
+process.argv = [process.execPath, file, ...fixtureArgs];
 
 // Node's own scheduling, captured before anything can replace it.
 //
@@ -77,6 +78,14 @@ let releaseSettle = null;
 function report(result) {
   if (reported) return;
   reported = true;
+  // A self-forked fixture re-enters this runner so it keeps the same subject
+  // and CommonJS loader. Its parent owns the published verdict; leaking a
+  // second framed result onto inherited stdout could make run.mjs select the
+  // child's line instead. Exit status is the ordinary child-process contract.
+  if (nestedConformanceChild) {
+    if (result.kind !== "pass") hostProcess.exitCode = 1;
+    return;
+  }
   // Bound at load: node's console tests replace `process.stdout.write`, and
   // the report must reach the parent whatever the test did to the stream.
   const line = `\n${RESULT_PREFIX}${JSON.stringify(result)}\n`;
@@ -420,6 +429,49 @@ const common = makeCommon(
 const realRequire = createRequire(import.meta.url);
 const nodeTestRoot = join(ROOT, "third_party/node/test");
 const testModuleCache = new Map();
+const realChildProcess = realRequire("node:child_process");
+const conformanceRunner = join(HERE, "run-one.mjs");
+
+/**
+ * Preserve the subject and Node's CommonJS test-runner mode when a fixture
+ * forks itself.
+ *
+ * Re-entering this runner prevents two false behaviors at once: the root ESM
+ * package cannot reinterpret an upstream `.js` fixture, and the child cannot
+ * silently switch from the implementation under test to Node's builtin. The
+ * wrapper is deliberately limited to the current fixture's exact path so an
+ * intentional ESM helper or unrelated child keeps ordinary `fork` semantics.
+ */
+function forkInfrastructure(modulePath, argsOrOptions, maybeOptions) {
+  const hasArgs = Array.isArray(argsOrOptions);
+  const args = hasArgs ? argsOrOptions : [];
+  const options = hasArgs ? maybeOptions : argsOrOptions;
+  const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
+  const target = typeof modulePath === "string" ? resolvePath(cwd, modulePath) : null;
+
+  if (target === resolvePath(file) && target.endsWith(".js")) {
+    const childOptions = {
+      ...options,
+      env: {
+        ...(options?.env ?? hostProcess.env),
+        NTS_CONFORMANCE_NESTED_CHILD: "1",
+      },
+    };
+    return realChildProcess.fork(
+      conformanceRunner,
+      [moduleName, target, addon ?? "-", ...args],
+      childOptions,
+    );
+  }
+  return hasArgs
+    ? realChildProcess.fork(modulePath, args, options)
+    : realChildProcess.fork(modulePath, options);
+}
+
+const childProcessInfrastructure = {
+  ...realChildProcess,
+  fork: forkInfrastructure,
+};
 
 /** Node's `test/common/countdown`, attached to this runner's call tally. */
 class Countdown {
@@ -752,6 +804,7 @@ function shimmedRequire(id, fromFile) {
   }
   if (bare === "assert" || bare === "assert/strict") return assert;
   if (bare === "test" || bare === "node:test") return countingTestRunner();
+  if (bare === "child_process") return childProcessInfrastructure;
   // A sibling the module under test shares state with. `console` publishes to
   // `diagnostics_channel`, and a test that subscribes has to reach the same
   // registry the console publishes into -- node's would be a different one and
