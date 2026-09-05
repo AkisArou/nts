@@ -68,6 +68,22 @@ dependency nts-69 measured on the memory case.
 
 ## One cause
 
+## Three prices, and one of them says we would win
+
+Each is one variable changed in the Java reference -- the `number` spelled as
+the `double` it is, with `(double)(int)` where the TypeScript writes `| 0`:
+
+    array-methods     2.20x     reference 1.02 us -> 2.26 us     we go 1.67x -> **0.74x**
+    generic-classes   1.89x     reference 1.45 us -> 2.74 us     we go 1.12x -> 0.61x
+    array-from        1.24x     reference  865 us -> 1.06 ms     we go 2.43x -> 1.97x
+
+`array-methods` is the one to point at: the whole of its 1.67x is the
+representation, and with an int one this backend is **faster than hand-written
+Java**. Its accumulator cannot narrow because `nts_array_index_of` returns
+`Float { bits: 64 }`, so `total = (total + xs.indexOf(step) + ...) | 0` mixes an
+int accumulator with an f64 return and every `| 0` becomes a `toInt32` call --
+28.96% of the row.
+
 **Four surface forms, one fact.** Element width in an array, a `d2i` per
 subscript, a ToInt32 round trip on every bitwise operator, and a `(D)D`
 signature at a call boundary. Nine of the twenty-four rows still above 1.00x are
