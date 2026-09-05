@@ -19,13 +19,32 @@ declare function nts_node_random_uuid(): string;
 declare function nts_node_random_uuid_status(): number;
 
 const BLOB_MAX_LENGTH = 2 ** 53 - 1;
-const INVALID_TYPE_CHARACTER = /[^\u0020-\u007e]/u;
-const URL_TAB_OR_NEWLINE = /[\t\n\r]/g;
 const BLOB_URL_PREFIX = "blob:nodedata:";
 const objectUrlStore = new Map<string, Blob>();
 
+function removeUrlTabsAndNewlines(input: string): string {
+  let first = -1;
+  for (let i = 0; i < input.length; i++) {
+    const code = input.charCodeAt(i);
+    if (code === 0x09 || code === 0x0a || code === 0x0d) {
+      first = i;
+      break;
+    }
+  }
+  if (first < 0) return input;
+
+  let output = input.slice(0, first);
+  for (let i = first; i < input.length; i++) {
+    const code = input.charCodeAt(i);
+    if (code !== 0x09 && code !== 0x0a && code !== 0x0d) {
+      output += input.charAt(i);
+    }
+  }
+  return output;
+}
+
 function objectUrlId(input: string): string | undefined {
-  const url = input.replace(URL_TAB_OR_NEWLINE, "");
+  const url = removeUrlTabsAndNewlines(input);
   let start = 0;
   let end = url.length;
   while (start < end && url.charCodeAt(start) <= 0x20) start += 1;
@@ -139,7 +158,11 @@ declare global {
 }
 
 function normalizeType(type: string | undefined): string {
-  if (type === undefined || INVALID_TYPE_CHARACTER.test(type)) return "";
+  if (type === undefined) return "";
+  for (let i = 0; i < type.length; i++) {
+    const code = type.charCodeAt(i);
+    if (code < 0x20 || code > 0x7e) return "";
+  }
   return type.toLowerCase();
 }
 
@@ -159,10 +182,33 @@ function normalizeSliceIndex(value: number, length: number): number {
     : Math.min(integer, length);
 }
 
+function normalizeNativeEndings(value: string): string {
+  let first = -1;
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code === 0x0a || code === 0x0d) {
+      first = i;
+      break;
+    }
+  }
+  if (first < 0) return value;
+
+  const eol = nts_node_eol();
+  let output = value.slice(0, first);
+  let textStart = first;
+  for (let i = first; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code !== 0x0a && code !== 0x0d) continue;
+    output += value.slice(textStart, i);
+    if (code === 0x0d && value.charCodeAt(i + 1) === 0x0a) i += 1;
+    output += eol;
+    textStart = i + 1;
+  }
+  return output + value.slice(textStart);
+}
+
 function encodeString(value: string, endings: "transparent" | "native"): Uint8Array {
-  const normalized = endings === "native"
-    ? value.replace(/\r\n|\r|\n/g, nts_node_eol())
-    : value;
+  const normalized = endings === "native" ? normalizeNativeEndings(value) : value;
   const size = byteLengthIn(normalized, "utf8");
   const bytes = new Uint8Array(size);
   const written = writeIn(bytes, normalized, 0, size, "utf8");
