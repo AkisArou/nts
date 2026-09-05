@@ -1528,16 +1528,39 @@ fn measure(command: &mut std::process::Command) -> Result<Measured> {
 ///
 /// `dispatch` reported 1.06, 1.24, 0.72, 1.06 and 1.05 on five consecutive
 /// locked runs of one binary, and 1.04, 0.71, 0.70, 1.10 on four more after
-/// `RUNS` went from three to five. It is **bimodal**: there is a fast shape the
-/// JIT reaches about half the time and a slow one, and a best-of-N converges on
-/// neither -- it converges on *how often you looked*. `checksum` reported 1.00x
-/// nine times out of nine in the same window, so the machine is quiet and this
-/// is the program.
+/// `RUNS` went from three to five. It is **trimodal** -- about 18, 28 and 34 us
+/// -- and a best-of-N converges on none of them; it converges on *how often you
+/// looked*. `checksum` reported 1.00x nine times out of nine in the same window,
+/// so the machine is quiet and this is the program.
+///
+/// It is not the JIT, which this comment used to say it was. The compilation
+/// log of a fast run and a slow one is the same methods at the same tiers in
+/// the same order, down to the OSR bci. The mode is chosen once per JVM and
+/// held for its life -- twelve measurement passes inside one process agree to a
+/// few percent while processes differ by 1.95x.
 ///
 /// A row like that has no single number, and printing one of the two as though
 /// it were the answer is the failure this table exists to avoid. So it is said
 /// out loud instead.
-const SPREAD_WORTH_SAYING: f64 = 1.25;
+///
+/// **1.10 rather than the 1.25 this started at, and now measured rather than
+/// guessed.** Twelve rows, six locked runs each, one binary:
+///
+///     absences 0.0%  user-iterable 0.0%  loop 0.1%  checksum 0.1%
+///     module-closures 0.4%  array-predicates 0.5%  closures 0.7%
+///     arrays 1.3%  fib 0.6%  map-and-set 2.1%
+///     awfy-bounce 15.1%  dispatch 23.3%
+///
+/// The stable rows stop at 1.021 and the modal ones start at 1.151, so the gap
+/// between them is an order of magnitude wide and 1.10 sits in the middle of
+/// nothing. The old 1.25 was chosen before any of this existed and let
+/// `awfy-bounce` through.
+///
+/// Record 0132 has the rest: the modes are chosen once per JVM and held, they
+/// are not warmup, compilation, SMT placement, address randomisation or
+/// allocation, and the hand-written Java reference for the same row on the same
+/// JVM is stable to 7.4% -- so they belong to the code this backend emits.
+const SPREAD_WORTH_SAYING: f64 = 1.10;
 
 fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
     let output = command.output().context("running a benchmark")?;
