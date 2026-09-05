@@ -95,6 +95,7 @@ export class IncomingMessage extends Readable {
 
   socket: IncomingSocket | null | undefined;
   complete = false;
+  joinDuplicateHeaders = false;
 
   /**
    * Whether the message ended before it was complete.
@@ -276,7 +277,9 @@ export class IncomingMessage extends Readable {
 
     const existing = dest[key];
     if (firstWins.has(key)) {
-      if (typeof existing !== "string" && !Array.isArray(existing)) {
+      if (typeof existing === "string") {
+        if (this.joinDuplicateHeaders) dest[key] = `${existing}, ${value}`;
+      } else if (!Array.isArray(existing)) {
         dest[key] = value;
       }
       return;

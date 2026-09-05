@@ -54,6 +54,7 @@ export interface RequestOptions {
   setHost?: boolean | undefined;
   setDefaultHeaders?: boolean | undefined;
   uniqueHeaders?: readonly string[] | undefined;
+  joinDuplicateHeaders?: boolean | undefined;
   httpValidation?: "strict" | "relaxed" | "insecure" | undefined;
   insecureHTTPParser?: boolean | undefined;
   createConnection?:
@@ -166,6 +167,7 @@ export class ClientRequest extends OutgoingMessage {
   #options: RequestOptions;
   #port: number;
   #errorEmitted = false;
+  #joinDuplicateHeaders = false;
 
   constructor(options: RequestOptions | string, callback?: ResponseListener) {
     super();
@@ -224,6 +226,9 @@ export class ClientRequest extends OutgoingMessage {
     if (insecureHTTPParser !== undefined) {
       validateBoolean(insecureHTTPParser, "options.insecureHTTPParser");
     }
+    if (opts.joinDuplicateHeaders !== undefined) {
+      validateBoolean(opts.joinDuplicateHeaders, "options.joinDuplicateHeaders");
+    }
     if (httpValidation !== undefined && insecureHTTPParser !== undefined) {
       throw new ERR_INVALID_ARG_VALUE(
         "options.httpValidation",
@@ -234,6 +239,7 @@ export class ClientRequest extends OutgoingMessage {
     this._setHeaderValidation(
       httpValidation === "relaxed" || httpValidation === "insecure" || insecureHTTPParser === true,
     );
+    this.#joinDuplicateHeaders = opts.joinDuplicateHeaders ?? false;
 
     if (callback) this.once("response", callback);
 
@@ -563,6 +569,7 @@ export class ClientRequest extends OutgoingMessage {
         throw new Error("response parser produced request metadata");
       }
       const message = new IncomingMessage(socket);
+      message.joinDuplicateHeaders = this.#joinDuplicateHeaders;
       message.httpVersionMajor = info.versionMajor;
       message.httpVersionMinor = info.versionMinor;
       message.httpVersion = `${info.versionMajor}.${info.versionMinor}`;

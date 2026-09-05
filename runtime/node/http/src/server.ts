@@ -48,6 +48,7 @@ export interface HttpServerOptions extends NetServerOptions {
   insecureHTTPParser?: boolean | undefined;
   requireHostHeader?: boolean | undefined;
   uniqueHeaders?: readonly string[] | undefined;
+  joinDuplicateHeaders?: boolean | undefined;
   shouldUpgradeCallback?: ShouldUpgradeCallback | undefined;
   IncomingMessage?: typeof IncomingMessage | undefined;
   ServerResponse?: typeof ServerResponse | undefined;
@@ -136,6 +137,7 @@ export class Server extends NetServer {
   #lenientHeaderValues: boolean;
   #lenientTransferEncoding: boolean;
   #uniqueHeaders: ReadonlySet<string> | null;
+  #joinDuplicateHeaders: boolean;
 
   constructor(options?: HttpServerOptions | RequestListener, listener?: RequestListener) {
     let opts: HttpServerOptions = {};
@@ -177,6 +179,9 @@ export class Server extends NetServer {
     if (opts.requireHostHeader !== undefined) {
       validateBoolean(opts.requireHostHeader, "options.requireHostHeader");
     }
+    if (opts.joinDuplicateHeaders !== undefined) {
+      validateBoolean(opts.joinDuplicateHeaders, "options.joinDuplicateHeaders");
+    }
     if (opts.shouldUpgradeCallback !== undefined) {
       validateFunction(opts.shouldUpgradeCallback, "options.shouldUpgradeCallback");
     }
@@ -201,6 +206,7 @@ export class Server extends NetServer {
     this.connectionsCheckingInterval = connectionsCheckingInterval;
     this.requireHostHeader = requireHostHeader;
     this.#uniqueHeaders = parseUniqueHeadersOption(opts.uniqueHeaders);
+    this.#joinDuplicateHeaders = opts.joinDuplicateHeaders ?? false;
     this.shouldUpgradeCallback = opts.shouldUpgradeCallback ?? upgradeWhenObserved;
     this.#lenientHeaderValues =
       httpValidation === "relaxed" || httpValidation === "insecure" || insecureHTTPParser === true;
@@ -482,6 +488,7 @@ export class Server extends NetServer {
       message.method = methods[info.method] ?? null;
       message.url = info.url;
       message.keepAlive = info.shouldKeepAlive;
+      message.joinDuplicateHeaders = this.#joinDuplicateHeaders;
       message._addHeaders(info.headers);
       // The socket is the source; asking for more means resuming it.
       message.setSource(() => socket.resume());
