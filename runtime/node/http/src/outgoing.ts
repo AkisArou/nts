@@ -45,6 +45,7 @@ import {
   validateLinkHeaderValue,
   validateObject,
 } from "../../internal/validators.ts";
+import type { IncomingMessage } from "./incoming.ts";
 import { STATUS_CODES } from "./status.ts";
 
 /** As much of a socket as an outgoing message uses. */
@@ -1098,18 +1099,13 @@ const assignedResponses = new WeakMap<OutgoingSocket, ServerResponse>();
 export class ServerResponse extends OutgoingMessage {
   statusCode = 200;
   statusMessage: string | undefined;
+  req: IncomingMessage;
   _sent100 = false;
   _expect_continue = false;
 
-  constructor(
-    request: {
-      httpVersionMajor: number;
-      httpVersionMinor: number;
-      method: string | null;
-    },
-    options: OutgoingMessageOptions = {},
-  ) {
+  constructor(request: IncomingMessage, options: OutgoingMessageOptions = {}) {
     super(options);
+    this.req = request;
     // HTTP/1.0 has no chunked encoding, so a response with no declared length
     // has to be delimited by closing the connection.
     this.useChunkedEncodingByDefault =

@@ -509,7 +509,6 @@ export class Socket extends Duplex {
 
   connecting = false;
   pending = true;
-  readyState: "opening" | "open" | "readOnly" | "writeOnly" | "closed" = "closed";
   bytesRead = 0;
   /** The server that accepted this socket, or null for outgoing sockets. */
   server: Server | null = null;
@@ -593,7 +592,6 @@ export class Socket extends Duplex {
       this._handle = consumeBoundSocket(options.handle);
       this.#boundSource = true;
       this.pending = true;
-      this.readyState = "closed";
     } else if (options.handle !== undefined) {
       this.#provider = options.handleType === "pipe" ? "PIPEWRAP" : "TCPWRAP";
       // Before the handle is touched, because taking an existing one starts
@@ -601,7 +599,6 @@ export class Socket extends Duplex {
       this.#resetAsyncIdentity(this.#provider);
       this._handle = options.handle;
       this.pending = false;
-      this.readyState = "open";
       this.#capture();
       if (options.noDelay) this.setNoDelay(true);
       if (options.keepAlive) {
@@ -713,6 +710,12 @@ export class Socket extends Duplex {
     return this.writableLength ?? 0;
   }
 
+  get readyState(): "opening" | "open" | "readOnly" | "writeOnly" | "closed" {
+    if (this.connecting) return "opening";
+    if (this.readable) return this.writable ? "open" : "readOnly";
+    return this.writable ? "writeOnly" : "closed";
+  }
+
   get autoSelectFamilyAttemptedAddresses(): string[] | undefined {
     return this.#attemptedAddresses?.slice(0, this.#attemptedAddressCount);
   }
@@ -772,7 +775,6 @@ export class Socket extends Duplex {
     }
 
     this.connecting = true;
-    this.readyState = "opening";
 
     if (options.port === undefined && options.path === undefined) {
       throw new ERR_MISSING_ARGS(["options", "port", "path"]);
@@ -1058,7 +1060,6 @@ export class Socket extends Duplex {
   #completeConnection(options: ConnectOptions): void {
     this.connecting = false;
     this.pending = false;
-    this.readyState = "open";
     this.#capture();
     if (options.noDelay) this.setNoDelay(true);
     if (options.keepAlive) {
@@ -1353,7 +1354,6 @@ export class Socket extends Duplex {
     this.#clearTimeout();
     this.#clearAbort();
     this.connecting = false;
-    this.readyState = "closed";
 
     const multiple = this.#multipleConnect;
     if (multiple !== null) {
