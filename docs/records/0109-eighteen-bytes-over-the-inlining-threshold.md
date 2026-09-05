@@ -215,3 +215,40 @@ The plan already said this, in a section about three sessions sharing a
 checkout: *"a hard-coded path can measure someone else's binary and report a
 floor for code nobody is looking at."* It was read and not applied, which is the
 third time in this record that a written-down fact was walked past.
+
+## The number, and a prediction that was wrong in the good direction
+
+    case            nts (JVM)      Java    jvm/Java
+    awfy-bounce       4.38 us   4.55 us       0.96x
+
+Was 7.94 us and 1.73x. The prediction written before the run was "roughly
+1.06x", from the `FreqInlineSize=400` probe that measured 5045 ns. **The actual
+is 4380 ns -- faster than the probe and faster than the reference.**
+
+So the flag experiment under-measured the fix, and the reason is worth keeping:
+raising `FreqInlineSize` lets a 343-byte method be inlined *as 343 bytes*, which
+consumes the caller's budget and can push the caller over its own threshold.
+Emitting 261 bytes instead is not the same intervention as permitting 343 -- it
+is cheaper at every level of the inlining tree, and the difference between 5045
+and 4380 is that compounding. A flag that diagnoses a threshold does not predict
+the fix for it.
+
+The other four rows in the same run, with the references committed today:
+
+    case            nts (JVM)      Java    jvm/Java
+    loop              1.32 us   1.56 us       0.85x
+    awfy-bounce       4.38 us   4.55 us       0.96x
+    objects           2.19 us   2.12 us       1.03x
+    fib             507.68 us 488.54 us       1.04x
+    awfy-queens      11.02 us   8.85 us       1.25x
+
+`awfy-queens` is the one gap with a known cause and it is not this backend's:
+the reference uses `int[]` where `hir::elements` has not yet proved the element
+width, so we emit `double[]` and pay a conversion per probe. Priced at 1.14x
+earlier and unchanged by this work.
+
+`loop` at 0.85x is worth a note against record 0004's framing. That row is
+1.93x C++ and the gap was traced to number specialization -- and against the
+Java a person writes, the same generated code wins. Two references disagreeing
+about the same row is not a contradiction; it is what having both columns is
+for.
