@@ -62,3 +62,29 @@ three percentage points of a two-and-a-half-times difference. The other two are
 unmeasured and I am not guessing again today -- this is the fifth hypothesis
 this session that a number declined to support, and the pattern in every one is
 that the profile or the bytecode named a *quantity* and I read it as a *cost*.
+
+## The prologue half of the same claim, also measured
+
+The plan pairs slot traffic with *"30% a definite-assignment prologue"*. Counted
+across seven cases, as leading const-then-store runs before any real work:
+
+    fib               101 bytecodes    4 prologue    7.9%
+    generic-classes   266                 0          0.0%
+    in-narrowing      435                 0          0.0%
+    upcast            337                 0          0.0%
+    instanceof        344                 0          0.0%
+    module-closures   425                 0          0.0%
+    symbol-keys       439                 0          0.0%
+
+**Zero in six of seven.** The 30% was measured on `upTo__resume`, a generator
+resume body, and generalised to the emitter. It does not generalise: a resume
+function re-enters at an arbitrary block and so must definitely-assign every
+slot it might reach, and an ordinary function does not.
+
+`fib` is the one with any, and it is 1.04x with **IPC 2.85 against the
+reference's 2.78** -- the same efficiency per instruction, four percent more
+instructions, on a recursion whose critical path is the call chain. The store
+and reload of `n - 1` before passing it are off that path, which is the rule
+this record's first half establishes.
+
+So both halves of that entry are now measured, and neither names a lever.
