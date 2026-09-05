@@ -308,7 +308,21 @@ fn collect_hierarchy(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> H
             // `extends` first, then `implements`, and a class extends at most one
             // class. An interface contributes no implementation, so it is not a
             // base for dispatch even though it is one for assignability.
-            if let Some(base) = snapshot.base_types.get(&ty).and_then(|bases| bases.first()) {
+            //
+            // An instantiation has no base of its own recorded. The checker
+            // answers `getBaseTypes` for a *declaration*, and `Box<number>` is
+            // a reference to one, so `class Box<T> extends Base` left every
+            // copy baseless and `b.tag()` found no declaration in the
+            // hierarchy. The declaration's base is the right answer whenever it
+            // does not mention a type parameter; when it does, it is
+            // `Container<T>`, whose layout is a placeholder, and the copy is
+            // refused for that rather than silently dispatching through it.
+            if let Some(base) = snapshot
+                .base_types
+                .get(&ty)
+                .or_else(|| snapshot.base_types.get(&declared))
+                .and_then(|bases| bases.first())
+            {
                 hierarchy.base.insert(ty, *base);
             }
 
@@ -1452,6 +1466,59 @@ fn members_of(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
 
 /// The copies of a class to lower.
 ///
+/// Every function one class declaration contributes, once per instantiation.
+///
+/// A generic class is lowered once per instantiation and not at all as itself:
+/// a field of type `T` has no width, and `Vector<Body>` and `Vector<double>`
+/// are two classes that happen to share a source.
+///
+/// A class with type parameters that **nothing here instantiates** still comes
+/// through, and is refused a member at a time. That is not the same as being
+/// dead: `runtime/node` exports generic classes a consumer instantiates, and a
+/// copy needs type arguments only a caller has. 129 refusal sites in the
+/// profile are exactly this, and the message names the class so they read as
+/// what they are rather than as a lowering gap.
+fn lower_class(
+    snapshot: &SemanticSnapshot,
+    class: NodeId,
+    generic: &rustc_hash::FxHashMap<NodeId, Vec<super::generics::Instantiation>>,
+    shared: &Shared,
+    lowered: &mut Lowered,
+    wanted: &mut std::collections::BTreeSet<usize>,
+) {
+    let members = members_of(snapshot, class);
+    for (copy, (instance, substitution)) in copies_of(generic, class).into_iter().enumerate() {
+        for &member in &members {
+            // One function for a `static` member, however many copies the class
+            // has -- see `class_name_for`, which names it without the
+            // instantiation for the same reason. Emitting it per copy would
+            // define `Factory.of` twice.
+            if copy > 0 && is_static_member(snapshot, member) {
+                continue;
+            }
+            let mut builder = shared.builder(snapshot, substitution.clone(), String::new());
+            match builder.lower_method_of(class, member, instance) {
+                Ok(func) => lowered.program.funcs.push(func),
+                Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+            }
+            wanted.extend(builder.used_closures.iter().copied());
+            collect_layouts(&mut lowered.program, builder.layouts);
+        }
+    }
+}
+
+/// Whether a class member carries `static`.
+///
+/// Read in two places that have to agree: the loop making one copy per
+/// instantiation, which emits a static once, and `lower_method_of`, which names
+/// it without the instantiation for the same reason.
+fn is_static_member(snapshot: &SemanticSnapshot, member: NodeId) -> bool {
+    snapshot.nodes.get(member.0 as usize).is_some_and(|node| {
+        node.modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
+    })
+}
+
 /// A generic class is lowered once per instantiation and not at all as itself:
 /// a field of type `T` has no width, and `Vector<Body>` and `Vector<double>` are
 /// two classes that happen to share a source. A class with type parameters that
@@ -2043,26 +2110,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
         // arrange: the checker resolved every call site, so a method call is a
         // static call and `this` is an ordinary argument.
         if node.kind == NodeKind::Syntax(syntax::CLASS_DECLARATION) {
-            let members = members_of(snapshot, id);
-            // A generic class is lowered once per instantiation and not at all
-            // as itself: a field of type `T` has no width, and `Vector<Body>`
-            // and `Vector<double>` are two classes that happen to share a
-            // source. A class with type parameters that nothing instantiates is
-            // dead, and lowering it would report a refusal for a program nobody
-            // wrote.
-            let copies = copies_of(&generic, id);
-
-            for (instance, substitution) in copies {
-                for &member in &members {
-                    let mut builder = shared.builder(snapshot, substitution.clone(), String::new());
-                    match builder.lower_method_of(id, member, instance) {
-                        Ok(func) => lowered.program.funcs.push(func),
-                        Err(diagnostic) => lowered.diagnostics.push(diagnostic),
-                    }
-                    wanted.extend(builder.used_closures.iter().copied());
-                    collect_layouts(&mut lowered.program, builder.layouts);
-                }
-            }
+            lower_class(snapshot, id, &generic, &shared, &mut lowered, &mut wanted);
             continue;
         }
 
@@ -4769,16 +4817,25 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    fn lower_method_of(
+    /// What a member of this class is named for, in the emitted program.
+    ///
+    /// A `static` member has no receiver, and TypeScript forbids it from
+    /// referencing a class type parameter (TS2302). So it is one function
+    /// however many copies the class has: there is nothing for a substitution
+    /// to change, and a call site writing `Factory.of(n)` names no
+    /// instantiation and could not choose between them if it wanted to. Naming
+    /// it for a copy emitted `Factory<86>.of` against a call to `Factory.of`,
+    /// and the call was dropped as calling something refused.
+    fn class_name_for(
         &mut self,
         class: NodeId,
-        member: NodeId,
         instance: Option<TypeId>,
-    ) -> Result<Func, Diagnostic> {
-        let class_name = match instance {
+        is_static: bool,
+    ) -> Result<String, Diagnostic> {
+        match instance.filter(|_| !is_static) {
             // The layout's name rather than the declaration's, because two
             // instantiations of one class must not produce one function.
-            Some(ty) => self.layout_of(class, ty)?.name,
+            Some(ty) => Ok(self.layout_of(class, ty)?.name),
             // Through the same naming that keeps two functions of one name
             // apart. A method is spelled `Class#method`, which cannot collide
             // with a plain function and collides readily with a method of
@@ -4793,15 +4850,24 @@ impl<'a> FuncBuilder<'a> {
                         .ok_or_else(|| self.unsupported(class, "an anonymous class"))
                 },
                 Ok,
-            )?,
-        };
+            ),
+        }
+    }
+
+    fn lower_method_of(
+        &mut self,
+        class: NodeId,
+        member: NodeId,
+        instance: Option<TypeId>,
+    ) -> Result<Func, Diagnostic> {
+        let is_static = is_static_member(self.snapshot, member);
+        let class_name = self.class_name_for(class, instance, is_static)?;
 
         // A static method has no receiver: it is a namespaced function, and its
         // call sites name the class rather than an instance. So it is lowered
         // without the `this` parameter, and without a slot -- nothing overrides
         // a static method, because a call site names the class it is written on.
-        let modifiers = self.node(member).modifiers;
-        let is_static = modifiers.contains(nts_semantic_schema::DeclarationModifiers::STATIC);
+
         // An `abstract` method declares a dispatch slot and nothing else. It is
         // lowered rather than refused because the *signature* is needed: a call
         // through `Shape#area` on a `Shape` receiver is an indirect call, and
@@ -4816,8 +4882,10 @@ impl<'a> FuncBuilder<'a> {
         // abstract class is never instantiated, so its slot is never the one
         // dispatch lands on. Every reachable receiver is a subclass whose
         // override fills the slot.
-        let is_abstract =
-            modifiers.contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT);
+        let is_abstract = self
+            .node(member)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT);
 
         let is_constructor = self.kind_of(member) == Some(syntax::CONSTRUCTOR);
         self.in_constructor = is_constructor;
@@ -4867,7 +4935,23 @@ impl<'a> FuncBuilder<'a> {
                 Some(ty) => HirType::Managed(ManagedType::Object(ty)),
                 None => self
                     .type_of(class)
-                    .ok_or_else(|| self.unrepresentable(member, "a class"))?,
+                    // Named rather than described. `unrepresentable` reads the
+                    // *member*'s type, and the member is a getter returning a
+                    // `string` -- so 38 sites in the node profile said "a class
+                    // of unrepresentable type (a representable type)", which
+                    // contradicts itself and points at the wrong thing. What
+                    // has no representation is the class, and after generic
+                    // classes lower this is reached by one that nothing
+                    // instantiates: `Holder<T>` is dead, and `v: T` has no
+                    // width.
+                    .ok_or_else(|| {
+                        self.unsupported(
+                            member,
+                            &format!(
+                                "a member of `{class_name}`, a class this compiler has no type for"
+                            ),
+                        )
+                    })?,
             };
             // `this` is a parameter like any other and needs its layout to
             // exist. Nothing else builds it for a class nothing constructs --

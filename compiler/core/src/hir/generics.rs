@@ -27,7 +27,7 @@
 //! against an instantiation's gives the map from `T` to `number` that the bodies
 //! need. That map is the whole of what this module computes.
 
-use nts_semantic_schema::{SemanticSnapshot, SymbolId, TypeId, TypeKind};
+use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, SymbolId, TypeId, TypeKind, syntax};
 use rustc_hash::FxHashMap;
 
 use super::lower::{Substitution, representation};
@@ -39,6 +39,37 @@ pub struct Instantiation {
     pub ty: TypeId,
     /// What each of the declaration's type parameters stands for here.
     pub substitution: Substitution,
+}
+
+/// The type each class **declaration** node has, by the symbol it declares.
+///
+/// The search below has to know which member of a group is the declaration, and
+/// *"the one whose arguments are its own type parameters"* does not decide it.
+/// `class Entry<K, V>` with a method returning `Entry<V, K>` gives **two** such
+/// types, both `Object`, both all-parameter, and picking the second reverses
+/// every substitution: `key` becomes the string and `value` the number, in
+/// silence, because a reversed map is still a total map and nothing downstream
+/// has anything to check it against.
+///
+/// The declaration node's own type is the authority, and the type record
+/// carries the declaring symbol, so no walk of the class's name is needed.
+fn declared_types(snapshot: &SemanticSnapshot) -> FxHashMap<SymbolId, TypeId> {
+    let mut declared = FxHashMap::default();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::CLASS_DECLARATION) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let Some(&ty) = snapshot.node_types.get(&id) else {
+            continue;
+        };
+        let Some(symbol) = snapshot.types.get(ty.0 as usize).and_then(|record| record.symbol)
+        else {
+            continue;
+        };
+        declared.insert(symbol, ty);
+    }
+    declared
 }
 
 /// Every instantiation of every generic type, by the symbol that declares it.
@@ -57,23 +88,48 @@ pub fn instantiations(snapshot: &SemanticSnapshot) -> FxHashMap<SymbolId, Vec<In
         let Some(symbol) = record.symbol else {
             continue;
         };
-        if !matches!(record.kind, TypeKind::Object { .. })
-            || !snapshot.type_arguments.contains_key(&ty)
-        {
+        if !snapshot.type_arguments.contains_key(&ty) {
+            continue;
+        }
+        // An *instantiation* has to be decomposed to be lowered, but the
+        // **declaration** does not, and requiring it of both is what kept
+        // generic classes refused. `class Holder<T> { v: T }` has a field
+        // whose type has no width, so the frontend leaves `Holder<T>` as a
+        // `Structured` placeholder -- correctly, because that type is never
+        // laid out and never constructed. It is still the only thing that
+        // names the type parameters, and without it the search below finds
+        // no declaration and abandons every instantiation with it.
+        let declares_itself = arguments(snapshot, ty)
+            .iter()
+            .all(|argument| is_parameter(snapshot, *argument));
+        if !matches!(record.kind, TypeKind::Object { .. }) && !declares_itself {
             continue;
         }
         groups.entry(symbol).or_default().push(ty);
     }
 
+    let declared = declared_types(snapshot);
+
     let mut found: FxHashMap<SymbolId, Vec<Instantiation>> = FxHashMap::default();
     for (symbol, members) in groups {
-        // The declaration is the one whose arguments are its own type
-        // parameters. Everything else in the group was made from it.
-        let Some(&declaration) = members.iter().find(|ty| {
-            arguments(snapshot, **ty)
-                .iter()
-                .all(|arg| is_parameter(snapshot, *arg))
-        }) else {
+        // The class declaration's own type, when the symbol has one. Everything
+        // else in the group was made from it.
+        //
+        // The fallback is for a symbol with no class declaration node -- a
+        // generic *interface*, which reaches this the same way. It keeps the
+        // shape the ambiguity above lives in, and is safe there because nothing
+        // asks this module for an interface's copies.
+        let Some(&declaration) = declared
+            .get(&symbol)
+            .filter(|ty| members.contains(ty))
+            .or_else(|| {
+                members.iter().find(|ty| {
+                    arguments(snapshot, **ty)
+                        .iter()
+                        .all(|arg| is_parameter(snapshot, *arg))
+                })
+            })
+        else {
             continue;
         };
         let parameters = arguments(snapshot, declaration);

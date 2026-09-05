@@ -1,0 +1,23 @@
+ideal 0
+allocated 0
+because being a copy costs nothing, and that is the whole of the claim.
+because
+because Allocations: none. Thirty-four boxes are built -- two per iteration --
+because and each dies with the iteration that made it. A copy per instantiation
+because is an ordinary class with an ordinary layout, so escape analysis has
+because the same question to answer it had before generic classes lowered at
+because all, and answers it the same way.
+because
+because The implementation this separates from is the other one. Erasing `T`
+because and boxing the field would give one class for both instantiations with
+because the value behind a pointer: identical answers on every input, no test
+because failing anywhere, and thirty-four allocations here.
+because
+because Both parameters are scalar on purpose. `Box<string>` allocates its
+because string, and the floor would then be measuring the string rather than
+because the copy -- which is the mistake `parameter-defaults` made once, where
+because a defaulted `string` measured thirty-four allocations of concatenation.
+because
+because Operations: none, by the rule `closure-capture` states -- an allocation
+because floor of zero forces an operation floor of zero. Neither copy holds a
+because reference: an `f64` and a `bool` are counted by nothing.
