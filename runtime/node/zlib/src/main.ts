@@ -32,6 +32,7 @@ import {
   validateInteger,
 } from "../../internal/validators.ts";
 import * as C from "./constants.ts";
+import { zlibCodeForStatus } from "./error-code.ts";
 import { byteView, optionalByteView, parameterArrays } from "./options.ts";
 export * as iter from "./iter.ts";
 
@@ -126,9 +127,7 @@ export class ZlibError extends Error {
   constructor(message: string, errno: number, nativeCode = "") {
     super(message);
     this.errno = errno;
-    const fallbackCode = C.codes[String(errno)];
-    this.code = nativeCode ||
-      (typeof fallbackCode === "string" ? fallbackCode : "Z_UNKNOWN");
+    this.code = nativeCode || zlibCodeForStatus(errno);
     this.name = "Error";
   }
 }

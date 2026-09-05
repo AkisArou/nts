@@ -25,6 +25,7 @@ import {
 } from "../../stream/src/iter/utils.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 import * as C from "./constants.ts";
+import { zlibCodeForStatus } from "./error-code.ts";
 import { optionalByteView, parameterArrays } from "./options.ts";
 
 const DEFAULT_OUTPUT_SIZE = 65_536;
@@ -279,11 +280,10 @@ function openEngine(configuration: TransformConfiguration): number {
       false,
     );
   if (handle < 0) {
-    const code = C.codes[String(handle)];
     throw new IteratorZlibError(
       "Failed to initialize the compression engine",
       handle,
-      typeof code === "string" ? code : "Z_UNKNOWN",
+      zlibCodeForStatus(handle),
     );
   }
   return handle;
@@ -310,12 +310,10 @@ async function nativeWrite(
     const output = await Promise.race([operation, aborted]);
     const status = nts_zlib_status(handle);
     if (status !== 0) {
-      const fallbackCode = C.codes[String(status)];
       throw new IteratorZlibError(
         nts_zlib_error_message(handle),
         status,
-        nts_zlib_error_code(handle) ||
-          (typeof fallbackCode === "string" ? fallbackCode : "Z_UNKNOWN"),
+        nts_zlib_error_code(handle) || zlibCodeForStatus(status),
       );
     }
     return Buffer.from(output);
@@ -403,12 +401,10 @@ function oneShot(
     );
   const status = nts_zlib_last_status();
   if (status !== 0) {
-    const fallbackCode = C.codes[String(status)];
     throw new IteratorZlibError(
       nts_zlib_last_error_message(),
       status,
-      nts_zlib_last_error_code() ||
-        (typeof fallbackCode === "string" ? fallbackCode : "Z_UNKNOWN"),
+      nts_zlib_last_error_code() || zlibCodeForStatus(status),
     );
   }
   return Buffer.from(output);

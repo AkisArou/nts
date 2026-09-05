@@ -9,6 +9,7 @@ export function shape(exports) {
   const codes = Object.freeze({ ...exports.codes });
   delete zlib.default;
   delete zlib.iter;
+  delete zlib.zlibCodeForStatus;
   for (const name of ["codes", "constants"]) {
     Object.defineProperty(zlib, name, {
       value: name === "codes" ? codes : exports.constants,
