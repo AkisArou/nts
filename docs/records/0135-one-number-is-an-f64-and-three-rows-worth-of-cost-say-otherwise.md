@@ -33,7 +33,46 @@ is the plan's first named measurement answered in our favour, on a row we lose.
 What is left is `total = total ^ counted.get() ^ ...` as `int` arithmetic on one
 side and an f64 round trip on the other. Nothing else differs.
 
+**And a second row that isolates it, from the other direction.** `absences`
+exists to measure how absences are represented -- `string | null`, `number |
+undefined`, `number | null | undefined`, in a loop. It is 1.22x, and the
+representation it was written to test is not the reason:
+
+    nts (JVM)          0.00 bytes/op        zero `NtsValue` in the emitted code
+    hand-written Java  0.00 bytes/op
+
+Nothing boxes. The scalarised absence the plan asked for is what this backend
+emits, and the row is still red. What is left is `total = (total + ...) | 0`
+five times an iteration -- `int` arithmetic on one side and an f64 with a
+`toint32` on the other, twelve of them in its prepared IR.
+
+So two rows written to measure two different things both come down to this one,
+and in both the thing they were written to measure is *fine*.
+
+**And a fourth form, at the call boundary.** `module-closures` is 1.06x on three
+consecutive draws -- the largest *stable* margin among the near-parity rows --
+and its per-iteration sequence is:
+
+    iload 11 ; i2d                                  the loop counter, widened
+    invokestatic Closure0$call:(Lnts/gen/Closure0;D)D
+    dstore 16 ; dload 16 ; d2i                      the result, narrowed back
+
+Two conversions per call and 8192 calls. `mix` is `(x: number) => number`, so
+its signature is `(D)D`, while the counter and the accumulator either side of it
+are `int`. The reference is `mix(int) -> int` and converts nothing.
+
+`hir::specialize` produces a `$whole` variant for a *direct* call; a closure
+reached through a global is not one, so the specialised body has no caller that
+can name it. Devirtualisation is what would make it nameable, which is the same
+dependency nts-69 measured on the memory case.
+
 ## One cause
+
+**Four surface forms, one fact.** Element width in an array, a `d2i` per
+subscript, a ToInt32 round trip on every bitwise operator, and a `(D)D`
+signature at a call boundary. Nine of the twenty-four rows still above 1.00x are
+one of these, and `dispatch` -- the only array row that prepares as
+`managed<[i32]>` -- is the control at 1.04x.
 
 A TypeScript `number` is an f64 and the compiler is right to say so. But a value
 whose every definition and every use is integral is an `int32` *in fact*, and
