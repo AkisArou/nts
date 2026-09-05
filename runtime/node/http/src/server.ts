@@ -820,7 +820,11 @@ export class Server extends NetServer {
     // ownership of the body back to the server.  Drain it so an ignored body
     // cannot become the next request on this connection, and so an already
     // complete empty body still advances through `end` and `close`.
-    if (!message._consuming && !message._readableState.resumeScheduled) {
+    if (
+      !message._consuming &&
+      !message.readableDidRead &&
+      !message._readableState.resumeScheduled
+    ) {
       message._dump();
     }
 
