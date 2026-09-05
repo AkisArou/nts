@@ -1192,8 +1192,24 @@ fn stopped(signal: Option<i32>, complaint: &str) -> Stopped {
         // for a loop bound of nine quadrillion and the program does exactly
         // what that asks. Not reached, not a verdict -- the same as `EXHAUSTED`
         // above, which the C lane recognises by its own message.
+        //
+        // `StackOverflowError` is the same event one resource over, and node
+        // has it too: `RangeError: Maximum call stack size exceeded`. A
+        // recursion the pool drives past its base case -- `count(n, acc = n)`
+        // terminating on `n <= 0`, given a NaN, since `NaN <= 0` is false and
+        // `NaN - 1` is NaN -- exhausts the stack in *both* lanes, so neither
+        // produced an answer and there is nothing to compare.
+        //
+        // This is the narrowest of the three and the one to be most careful
+        // about, because a genuine infinite recursion in this backend would
+        // look identical. What separates them is that the other lane fails as
+        // well; the case is only skipped, never asserted correct, and a
+        // codegen bug that recursed where node did not would still show up as a
+        // disagreement on every other case of the same function.
         let thrown_is_expected = complaint.lines().any(|line| {
-            line.contains("NtsRefusal") || line.contains("OutOfMemoryError")
+            line.contains("NtsRefusal")
+                || line.contains("OutOfMemoryError")
+                || line.contains("StackOverflowError")
         });
         if thrown_is_expected {
             return Stopped::Declined;

@@ -75,6 +75,77 @@ fn check_signature(program: &Program, func: &Func) -> Result<(), Diagnostic> {
     Ok(())
 }
 
+/// The first value an operation pushes, when that is unambiguous.
+///
+/// Not "operand zero": `Erase` pushes its tag *before* the value it wraps, and a
+/// helper that needs a length pushes the array and dups it. Whether a value can
+/// be left on the stack for the next operation depends on nothing being pushed
+/// under it, so this answers only for shapes where that is plain from the
+/// emitter, and `None` everywhere else. Guessing here is a `VerifyError` at
+/// best and a silently transposed pair of operands at worst.
+fn pushes_first(kind: &OpKind) -> Option<ValueId> {
+    match kind {
+        OpKind::Binary { lhs, .. } => Some(*lhs),
+        // Not `Truthy`. A truthiness test on a scalar loads its operand
+        // *three* times -- a NaN self-compare and then a compare against zero
+        // -- for one HIR use, and the whole premise here is that one use means
+        // one load. It does not: `uses` counts operand occurrences in the IR,
+        // and the emitter loads as often as it likes.
+        OpKind::Unary { op, operand } if !matches!(op, nts_core::hir::UnOp::Truthy) => {
+            Some(*operand)
+        }
+        OpKind::Convert(operand) => Some(*operand),
+        OpKind::Length(array)
+        | OpKind::ArrayGet { array, .. }
+        | OpKind::ArraySet { array, .. } => Some(*array),
+        OpKind::FieldGet { object, .. } | OpKind::FieldSet { object, .. } => Some(*object),
+        OpKind::Return(value) => *value,
+        _ => None,
+    }
+}
+
+/// Values that need no slot because the next instruction consumes them.
+///
+/// The JVM is a stack machine and this emitter had been ignoring it: every SSA
+/// value went to a local and came straight back, so `a * b + c` stored and
+/// reloaded twice for nothing. C2 removes the traffic, but the *bytes* stay,
+/// and bytes decide inlining -- which is the whole of record 0111.
+///
+/// The conditions are narrow on purpose. One use, that use in the very next
+/// operation of the same block, and the value is the first thing that
+/// operation pushes. Anything else and something would be stacked underneath
+/// it, or a label would fall between, or a second reader would find an empty
+/// slot.
+fn stack_scheduled(func: &Func, uses: &[u32]) -> rustc_hash::FxHashSet<ValueId> {
+    let mut kept = rustc_hash::FxHashSet::default();
+    for block in &func.blocks {
+        let params: rustc_hash::FxHashSet<ValueId> = block.params.iter().copied().collect();
+        for (at, &value) in block.ops.iter().enumerate() {
+            if uses.get(value.0 as usize).copied().unwrap_or(0) != 1 {
+                continue;
+            }
+            if params.contains(&value) || rematerialised(func, value) {
+                continue;
+            }
+            if matches!(func.values[value.0 as usize].ty, HirType::Void) {
+                continue;
+            }
+            let consumes = match block.ops.get(at + 1) {
+                Some(&next) => pushes_first(&func.values[next.0 as usize].kind),
+                // The terminator is the next instruction when the block ends.
+                None => match &block.terminator {
+                    nts_core::hir::Terminator::Return(returned) => *returned,
+                    _ => None,
+                },
+            };
+            if consumes == Some(value) {
+                kept.insert(value);
+            }
+        }
+    }
+    kept
+}
+
 /// The values whose slots need a declared verification type.
 ///
 /// A slot needs a declared verification type only where a frame can see
@@ -193,6 +264,13 @@ pub struct Emitter<'a> {
     pub(crate) scratch: Option<u16>,
     /// Erased values held as a bare reference rather than an `NtsValue`.
     pub(crate) unboxed: rustc_hash::FxHashSet<ValueId>,
+    /// Values the next instruction consumes, so they are never stored.
+    pub(crate) on_stack: rustc_hash::FxHashSet<ValueId>,
+    /// The one such value currently sitting on the operand stack.
+    pub(crate) pending: std::cell::Cell<Option<ValueId>>,
+    /// The value most recently taken off the stack, so a second read of it is
+    /// caught rather than served from a slot that was never written.
+    pub(crate) taken: std::cell::Cell<Option<ValueId>>,
     /// Scratch for a parallel-copy cycle, one per `(temp, kind)` actually used.
     pub(crate) temps: FxHashMap<(u32, u8), u16>,
     pub(crate) labels: FxHashMap<BlockId, Label>,
@@ -319,6 +397,9 @@ impl<'a> Emitter<'a> {
             unboxed,
             temps: FxHashMap::default(),
             labels: FxHashMap::default(),
+            on_stack: stack_scheduled(func, &uses),
+            pending: std::cell::Cell::new(None),
+            taken: std::cell::Cell::new(None),
             uses,
             order,
         })
@@ -451,6 +532,29 @@ impl<'a> Emitter<'a> {
         pool: &mut Pool,
         value: ValueId,
     ) -> Result<(), Diagnostic> {
+        // Already on the stack, put there by the instruction before this one.
+        if self.pending.get() == Some(value) {
+            self.pending.set(None);
+            self.taken.set(Some(value));
+            return Ok(());
+        }
+        // A second load of a value that was handed over on the stack. Its slot
+        // was never written, so emitting a load here reads whatever the slot
+        // held -- zero, in the case that found this, which made every `||=`
+        // assign its right-hand side. Refuse instead: the whitelist in
+        // `pushes_first` is wrong for this operation and should say so rather
+        // than produce a program that runs.
+        if self.taken.get() == Some(value) {
+            return Err(refuse(
+                self.func,
+                &format!(
+                    "%{} was handed to the next instruction on the stack and then \
+                     loaded again -- `pushes_first` claims this operation reads it \
+                     once and it does not",
+                    value.0
+                ),
+            ));
+        }
         let origin = self.func.values[value.0 as usize].origin.clone();
         if rematerialised(self.func, value) {
             let op = &self.func.values[value.0 as usize];
