@@ -45,6 +45,7 @@ import {
   ERR_OUT_OF_RANGE,
 } from "../../internal/errors.ts";
 import { STATUS_CODES } from "./status.ts";
+import { emitHttpDebugWarning } from "./debug.ts";
 
 export interface HttpServerOptions extends NetServerOptions {
   /** How long a connection may sit idle between requests. */
@@ -172,6 +173,7 @@ export class Server extends NetServer {
   #optimizeEmptyRequests: boolean;
 
   constructor(options?: HttpServerOptions | RequestListener, listener?: RequestListener) {
+    emitHttpDebugWarning();
     let opts: HttpServerOptions = {};
     let handler = listener;
     if (typeof options === "function") {

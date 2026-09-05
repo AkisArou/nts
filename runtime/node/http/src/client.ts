@@ -36,6 +36,7 @@ import { checkIsHttpToken, OutgoingMessage, parseUniqueHeadersOption } from "./o
 import type { HTTPDuplex, OutgoingHeaders, OutgoingHeaderValue } from "./outgoing.ts";
 import { Agent, globalAgent } from "./agent.ts";
 import type { AgentConnectionOptions } from "./agent.ts";
+import { emitHttpDebugWarning } from "./debug.ts";
 
 export type RequestHeaderPair = readonly [string, OutgoingHeaderValue];
 export type RequestHeaderArray = readonly (string | RequestHeaderPair)[];
@@ -203,6 +204,7 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
   }
 
   constructor(options: RequestOptions | string, callback?: ResponseListener) {
+    emitHttpDebugWarning();
     const opts: RequestOptions =
       typeof options === "string"
         ? parseUrlish(options)
