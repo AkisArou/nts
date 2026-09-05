@@ -141,3 +141,4 @@ export {
   remove,
 } from "./linkedlist.ts";
 export { PriorityQueue } from "./priority-queue.ts";
+export { now } from "./host.ts";

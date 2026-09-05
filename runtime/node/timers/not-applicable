@@ -1,5 +1,7 @@
 test-timers-to-primitive.js: language non-goal (§13); Symbol.toPrimitive is an excluded runtime operation hook
 test-timers-dispose.js: language non-goal (§13); Symbol.dispose is an excluded runtime operation hook
+test-timers-fast-calls.js: V8 implementation oracle; asserts optimization-tier native fast-call counters for the private timers binding, not scheduler behavior
+test-timers-now.js: V8/native-binding implementation oracle; asserts the private binding's startup-relative SMI representation and optimization-tier fast-call counter, not public timer behavior
 test-timers-user-call.js: language non-goal (§13); monkey-patched function properties require the excluded dynamic property map
 test-timers-timeout-promisified.js: language non-goal (§13); util.promisify.custom is stored as a dynamic function property; supported direct promise behavior is covered by local/promises-direct.js
 test-timers-interval-promisified.js: language non-goal (§13); util.promisify.custom is stored as a dynamic function property; supported direct promise behavior is covered by local/promises-direct.js

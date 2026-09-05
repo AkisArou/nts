@@ -225,6 +225,9 @@ const siblings = new Map();
 /** Node-internal module ids the module under test answers for, from its shape. */
 let internals = null;
 
+/** Private `internalBinding()` values explicitly supplied by the subject. */
+let subjectTestBindings = null;
+
 /** The module's own uncaught-exception dispatch, when it has one. */
 let uncaughtHandler = null;
 
@@ -304,6 +307,7 @@ try {
     }
   }
   const declaredInternals = shapeModule?.internals?.({ ...exports }) ?? null;
+  const declaredTestBindings = shapeModule?.testBindings?.({ ...exports }) ?? null;
   // A module that is also a global -- `console` -- has to be installed as one,
   // or a test comparing `require('console')` with `globalThis.console` sees
   // node's on one side and ours on the other. Declared per module rather than
@@ -325,6 +329,14 @@ try {
     for (const id of Object.keys(declaredInternals)) internals[id] = {};
   } else {
     internals = declaredInternals;
+  }
+  if (sabotaged && declaredTestBindings !== null) {
+    subjectTestBindings = {};
+    for (const name of Object.keys(declaredTestBindings)) {
+      subjectTestBindings[name] = {};
+    }
+  } else {
+    subjectTestBindings = declaredTestBindings;
   }
   uncaughtHandler = sabotaged ? null : (shapeModule?.dispatchUncaught ?? null);
 
@@ -534,6 +546,8 @@ for (const [code, [name]] of systemErrors) {
 Object.freeze(hostUvBinding);
 const internalTestBinding = {
   internalBinding(name) {
+    const subjectBinding = subjectTestBindings?.[name];
+    if (subjectBinding !== undefined) return subjectBinding;
     if (name === "uv") return hostUvBinding;
     throw new Skip(`needs internalBinding(${name})`);
   },

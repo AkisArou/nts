@@ -74,3 +74,12 @@ export function internals(exports) {
     },
   };
 }
+
+/** Private binding surface used by applicable upstream timer fixtures. */
+export function testBindings(exports) {
+  return {
+    timers: {
+      getLibuvNow: exports.now,
+    },
+  };
+}
