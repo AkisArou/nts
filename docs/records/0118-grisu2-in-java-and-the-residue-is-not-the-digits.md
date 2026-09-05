@@ -55,3 +55,22 @@ reaches this code.
 
 So the next question on this row is allocation, not arithmetic, and the
 instrument for it is the one that has been right all day: `bytes/op`.
+
+## `Integer.toString` is not faster than `Long.toString`, and that was worth one run
+
+The integer row, `number-format`, takes the `Long.toString` fast path above and
+sits at 1.39x against a reference that prints an `int`. The obvious inference is
+that we call the 64-bit method where they call the 32-bit one, and that
+`Long.toString` divides in 64 bits with its own digit loop.
+
+    guarded Integer.toString    1.50 us    1.66x
+    Long.toString                1.26 us    1.39x
+
+**Nineteen percent worse**, and reverting restored the number exactly, so it was
+not noise. Whatever `Long.toString` costs on this range, the range check in
+front of the narrower call costs more -- and both answer identically on the
+values they share, so nothing was bought at all.
+
+Recorded because the inference is a good one and will occur to the next reader:
+the narrower method for the narrower value is the sort of thing that does not
+need measuring right up until it is wrong.
