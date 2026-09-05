@@ -419,7 +419,7 @@ of the surface therefore costs nothing.
 | | |
 |---|---|
 | ✅ | aliases, unions, intersections, literal types, tuples |
-| ✅ | optional and `readonly` properties, index signatures |
+| ✅ | optional and `readonly` properties, index signatures | `readonly` was ✅ here while **leaking by name across the whole program**: one `readonly count` anywhere made every `count` in every unrelated type readonly, and twenty-four legal assignments in `runtime/node` were refused for it. Asked of the property's own declaration now, and of the *type* rather than the layout — a layout is shared by every type of the same shape, and `same_shape` ignores `readonly` on purpose. Record 0114 |
 | ✅ | mapped, conditional, indexed-access, `keyof`, `typeof`, template literal types |
 | ✅ | function and constructor types |
 | ✅ | `interface`, including `extends` |

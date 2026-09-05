@@ -574,7 +574,7 @@ impl<'a> Decomposer<'a> {
                     // where no declaration carries the keyword — and misses a plain
                     // `readonly host: string`. The modifier covers the opposite case.
                     readonly: symbol.check_flags & check_flags::READONLY != 0
-                        || Self::declared_readonly(snapshot, written_name(&symbol.name)),
+                        || self.declared_readonly(snapshot, symbol),
                     optional: symbol.flags & symbol_flags::OPTIONAL != 0,
                     // A getter is a call that looks like a load, a method is
                     // a call the dispatch table holds, and only a field has
@@ -683,17 +683,39 @@ impl<'a> Decomposer<'a> {
         })
     }
 
-    /// Whether a member is declared `readonly` on the type's own declaration.
+    /// Whether this property's **own declaration** carries `readonly`.
     ///
-    /// The syntactic half of readonly. Walks the declaring node's members looking
-    /// for one with this name that carries the modifier.
-    fn declared_readonly(snapshot: &SemanticSnapshot, name: &str) -> bool {
-        snapshot.nodes.iter().any(|node| {
-            node.modifiers.contains(DeclarationModifiers::READONLY)
-                && node
-                    .children
-                    .iter()
-                    .any(|c| snapshot.nodes[c.0 as usize].text.as_deref() == Some(name))
+    /// The syntactic half of readonly; `check_flags::READONLY` is the other,
+    /// and covers only computed symbols -- `Readonly<T>` and mapped types,
+    /// where no declaration carries the keyword.
+    ///
+    /// # Asked of the symbol, not of the name
+    ///
+    /// This used to walk **every node in the snapshot** for one carrying the
+    /// modifier and having a child whose text matched the name. Its own comment
+    /// said "on the type's own declaration", which is what it should have done
+    /// and never did: one `readonly count` anywhere in the program made every
+    /// `count` in every unrelated type readonly, and assigning to any of them
+    /// was refused.
+    ///
+    /// Thirteen lines reproduce it -- a class with `readonly count` beside a
+    /// class with `count = 0`, and the second cannot be written to. Twenty-four
+    /// sites in `runtime/node`, on `length`, `destroyed`, `closed`, `chunks`,
+    /// `port`, `resolve`, `finished`, `root`, `name` and `path`: every name
+    /// common enough that *somewhere* declares it readonly.
+    ///
+    /// A property symbol carries the declarations it came from, so the question
+    /// has an exact answer and no search. Inheritance keeps working for the
+    /// same reason: an inherited property's symbol is the base's, and the base's
+    /// declaration is where the modifier is written.
+    fn declared_readonly(&self, snapshot: &SemanticSnapshot, symbol: &SymbolResponse) -> bool {
+        symbol.declarations.iter().any(|handle| {
+            declaration_node(handle, &self.file_bases).is_some_and(|node| {
+                snapshot
+                    .nodes
+                    .get(node.0 as usize)
+                    .is_some_and(|node| node.modifiers.contains(DeclarationModifiers::READONLY))
+            })
         })
     }
 

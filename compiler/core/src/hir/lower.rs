@@ -9194,6 +9194,30 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
+    /// Whether this type declares this property `readonly`.
+    ///
+    /// From the snapshot rather than from the layout, because a layout is
+    /// shared between every type of the same shape and this is not a question
+    /// about shape. See the note at the one call site.
+    ///
+    /// A property the type does not have is not readonly: the caller has
+    /// already resolved the field, so absence here means the name reached the
+    /// layout by a route the type's own property list does not describe -- a
+    /// tuple index, or a symbol-keyed member -- and none of those is written
+    /// with the modifier.
+    fn property_is_readonly(&self, ty: TypeId, name: &str) -> bool {
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return false;
+        };
+        let TypeKind::Object { properties } = &record.kind else {
+            return false;
+        };
+        properties
+            .iter()
+            .find(|property| property.name == name)
+            .is_some_and(|property| property.readonly)
+    }
+
     /// What a method declared on a type returns, as a representation.
     fn member_returns(&self, ty: TypeId, member: &str) -> Option<HirType> {
         let record = self.snapshot.types.get(ty.0 as usize)?;
@@ -10851,10 +10875,32 @@ impl<'a> FuncBuilder<'a> {
             //
             // On `this` specifically. A constructor assigning another object's
             // readonly field is refused, as TypeScript refuses it.
-            if layout.fields[field as usize].readonly
+            // Asked of the **type**, not of the layout.
+            //
+            // A layout is shared by every type with the same shape, and
+            // `same_shape` deliberately ignores `readonly` -- correctly, since
+            // storage does not depend on who may write to it, and splitting
+            // `Point` from `Readonly<Point>` would be two descriptors for one
+            // arrangement of bytes. But writability is a fact about a *type*,
+            // and reading it off a shared structure gives whichever type was
+            // laid out first: `class Frozen { readonly count: number }` beside
+            // `class Counter { count = 0 }` is one layout, and writing to the
+            // counter was refused under the frozen one's name.
+            //
+            // The same mistake as the one in `declared_readonly` a level up,
+            // which asked the whole program by name. Twice, a property's
+            // writability was asked of something shared instead of of the
+            // declaration that decides it.
+            if self.property_is_readonly(type_id, &name)
                 && !(self.in_constructor && Some(object) == self.this)
             {
-                return Err(self.unsupported(target, "assigning to a readonly property"));
+                return Err(self.unsupported(
+                    target,
+                    &format!(
+                        "assigning to `{}`.`{name}`, which is readonly outside the constructor of the object it belongs to",
+                        layout.name,
+                    ),
+                ));
             }
             return Ok(Place::Field { object, field });
         }

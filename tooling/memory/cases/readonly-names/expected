@@ -1,0 +1,23 @@
+ideal 0
+allocated 0
+because Argued before measuring.
+because
+because Allocations: none. Both classes hold one number and neither object
+because escapes -- the counter dies with its iteration and the frozen one dies
+because with the function -- so escape analysis puts both in the frame. The
+because change this case accompanies is about *permission* to write a field,
+because and permission is not storage: granting it must not move an object to
+because the heap, must not add a field, and must not change what `same_shape`
+because merges.
+because
+because That last one is the reason the two classes are both here. `Frozen` and
+because `Counter` have identical fields and share one layout, deliberately --
+because `same_shape` ignores `readonly` because two identical arrangements of
+because bytes are one descriptor whoever may write to them. A fix that had
+because split them to carry writability in the layout would show up here as two
+because descriptors and, for a program that allocated, two shapes where one
+because will do.
+because
+because Operations: none, by the rule `closure-capture` states -- an allocation
+because floor of zero forces an operation floor of zero. The field is a number,
+because so writing it takes no reference and gives none back.
