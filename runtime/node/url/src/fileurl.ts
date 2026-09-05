@@ -214,10 +214,22 @@ export function pathToFileURL(filepath: string, options?: FileUrlOptions): URL {
 }
 
 /** What `http.request` wants: a URL taken apart into its options. */
-export function urlToHttpOptions(url: URL): Record<string, unknown> {
+export interface URLHttpOptions {
+  protocol: string;
+  hostname: string;
+  hash: string;
+  search: string;
+  pathname: string;
+  path: string;
+  href: string;
+  port?: number | undefined;
+  auth?: string | undefined;
+}
+
+export function urlToHttpOptions(url: URL): URLHttpOptions {
   validateObject(url, "url");
   const { hostname, pathname, port, username, password, search } = url;
-  const options: Record<string, unknown> = {
+  const options: URLHttpOptions = {
     protocol: url.protocol,
     // An IPv6 literal is bracketed in a URL and bare in a socket address.
     hostname: hostname && hostname[0] === "[" ? hostname.slice(1, -1) : hostname,
@@ -228,10 +240,10 @@ export function urlToHttpOptions(url: URL): Record<string, unknown> {
     href: url.href,
   };
   if (port !== "") {
-    options["port"] = Number(port);
+    options.port = Number(port);
   }
   if (username || password) {
-    options["auth"] = `${decodeURIComponent(username)}:${decodeURIComponent(password)}`;
+    options.auth = `${decodeURIComponent(username)}:${decodeURIComponent(password)}`;
   }
   return options;
 }

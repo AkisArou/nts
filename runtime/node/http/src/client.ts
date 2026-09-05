@@ -14,6 +14,8 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import type { LookupFunction } from "../../net/src/main.ts";
+import { URL } from "../../url/src/url.ts";
+import { urlToHttpOptions } from "../../url/src/fileurl.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
 import { addAbortSignal } from "../../stream/src/add-abort-signal.ts";
 import { getTimerDuration } from "../../timers/src/main.ts";
@@ -869,18 +871,13 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
 
 /** `http.request("http://host/path")`, taken apart. */
 function parseUrlish(url: string): RequestOptions {
-  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*:)/.exec(url)?.[1]?.toLowerCase();
-  if (scheme !== undefined && scheme !== "http:" && scheme !== "https:") {
-    return { protocol: scheme };
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new ERR_INVALID_URL(url);
   }
-  const match = /^https?:\/\/([^/:?#]+)(?::(\d+))?([^#]*)?$/i.exec(url);
-  if (!match) throw new ERR_INVALID_URL(url);
-  return {
-    protocol: scheme,
-    hostname: match[1],
-    port: match[2] ? Number(match[2]) : 80,
-    path: match[3] || "/",
-  };
+  return urlToHttpOptions(parsed);
 }
 
 export function request(
