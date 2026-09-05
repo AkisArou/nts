@@ -7,6 +7,10 @@
 
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE } from "./errors.ts";
 
+const LINK_HEADER_VALUE = /^(?:<[^>\r\n]*>)(?:\s*;\s*[^;"\s]+(?:=(")?[^;"\s]*\1)?)*$/;
+const LINK_HEADER_EXPECTATION =
+  'must be an array or string of format "</styles.css>; rel=preload; as=style"';
+
 export function validateString(value: unknown, name: string): asserts value is string {
   if (typeof value !== "string") {
     throw new ERR_INVALID_ARG_TYPE(name, "string", value);
@@ -98,6 +102,32 @@ export function validateOneOf<const Choices extends readonly unknown[]>(
   }
 }
 
+function validateLinkHeaderFormat(value: unknown): asserts value is string {
+  if (typeof value !== "string" || !LINK_HEADER_VALUE.test(value)) {
+    throw new ERR_INVALID_ARG_VALUE("hints", value, LINK_HEADER_EXPECTATION);
+  }
+}
+
+/** Validate and join the RFC 8288 Link values accepted by early hints. */
+export function validateLinkHeaderValue(value: unknown): string {
+  if (typeof value === "string") {
+    validateLinkHeaderFormat(value);
+    return value;
+  }
+  if (!Array.isArray(value)) {
+    throw new ERR_INVALID_ARG_VALUE("hints", value, LINK_HEADER_EXPECTATION);
+  }
+
+  let result = "";
+  for (let index = 0; index < value.length; index++) {
+    const link: unknown = value[index];
+    validateLinkHeaderFormat(link);
+    if (index > 0) result += ", ";
+    result += link;
+  }
+  return result;
+}
+
 /** A 32-bit unsigned integer; `positive` makes zero invalid too. */
 export function validateUint32(
   value: unknown,
@@ -154,7 +184,11 @@ export function parseFileMode(value: unknown, name: string, byDefault?: number):
   let mode = given;
   if (typeof mode === "string") {
     if (!OCTAL.test(mode)) {
-      throw new ERR_INVALID_ARG_VALUE(name, mode, "must be a 32-bit unsigned integer or an octal string");
+      throw new ERR_INVALID_ARG_VALUE(
+        name,
+        mode,
+        "must be a 32-bit unsigned integer or an octal string",
+      );
     }
     mode = Number.parseInt(mode, 8);
   }

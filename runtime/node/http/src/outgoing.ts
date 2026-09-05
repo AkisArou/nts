@@ -37,6 +37,11 @@ import {
   ERR_STREAM_NULL_VALUES,
   ERR_STREAM_WRITE_AFTER_END,
 } from "../../internal/errors.ts";
+import {
+  validateInteger,
+  validateLinkHeaderValue,
+  validateObject,
+} from "../../internal/validators.ts";
 import { STATUS_CODES } from "./status.ts";
 
 /** As much of a socket as an outgoing message uses. */
@@ -100,10 +105,27 @@ const RESPONSE_VERSION = "HTTP/1.1";
 
 export type OutgoingHeaderValue = string | number | string[];
 export type OutgoingHeaders = Record<string, OutgoingHeaderValue>;
+export type InformationHeaderValue = OutgoingHeaderValue | null | undefined;
+export type InformationHeaderPair = readonly [string, InformationHeaderValue];
+export type InformationHeaders =
+  | Record<string, InformationHeaderValue>
+  | readonly InformationHeaderValue[]
+  | readonly InformationHeaderPair[];
+export type EarlyHints = Record<string, string | string[] | null | undefined>;
 type TrailerEntries = ReadonlyArray<readonly [string, string]>;
 
 function isTrailerEntries(headers: OutgoingHeaders | TrailerEntries): headers is TrailerEntries {
   return Array.isArray(headers);
+}
+
+function isInformationHeaderPair(value: unknown): value is readonly [unknown, unknown] {
+  return Array.isArray(value) && value.length >= 2;
+}
+
+function processInformationHeader(name: unknown, value: unknown, lenient: boolean): string {
+  validateHeaderName(name);
+  validateHeaderValue(name, value, lenient);
+  return `${name}: ${value}\r\n`;
 }
 
 export function checkIsHttpToken(value: string): boolean {
@@ -248,8 +270,16 @@ export class OutgoingMessage extends EventEmitter {
     this.#lenientHeaderValues = lenient;
   }
 
+  protected _isLenientHeaderValidation(): boolean {
+    return this.#lenientHeaderValues;
+  }
+
   /** Write, or hold it until there is somewhere to write it. */
-  #sendRaw(chunk: Buffer | string, encoding?: string, callback?: WriteCallback): boolean {
+  protected _writeRaw(
+    chunk: Buffer | string,
+    encoding?: string,
+    callback?: WriteCallback,
+  ): boolean {
     if (this.#socket === null) {
       this.#pending.push({ chunk, encoding, callback });
       this.#pendingSize +=
@@ -267,7 +297,7 @@ export class OutgoingMessage extends EventEmitter {
     _byteLength?: number,
   ): boolean {
     this.flushHeaders();
-    return this.#sendRaw(chunk, encoding ?? undefined, callback);
+    return this._writeRaw(chunk, encoding ?? undefined, callback);
   }
 
   /** Whether the head has gone out and the headers are therefore fixed. */
@@ -562,7 +592,7 @@ export class OutgoingMessage extends EventEmitter {
     if (this.#headerFlushed) return;
     const head = this.#head;
     this.#headerFlushed = true;
-    if (head !== null) this.#sendRaw(head, "latin1");
+    if (head !== null) this._writeRaw(head, "latin1");
   }
 
   write(
@@ -636,15 +666,15 @@ export class OutgoingMessage extends EventEmitter {
 
     let ok: boolean;
     if (this.chunkedEncoding) {
-      ok = this.#sendRaw(`${buffer.length.toString(16)}\r\n`, "latin1");
-      if (!this.#sendRaw(buffer)) ok = false;
+      ok = this._writeRaw(`${buffer.length.toString(16)}\r\n`, "latin1");
+      if (!this._writeRaw(buffer)) ok = false;
       // Completion belongs to the complete framed chunk, not merely to the
       // act of queueing its payload. In particular, a callback that destroys
       // the socket must not run before the trailing CRLF reached the native
       // write queue.
-      if (!this.#sendRaw("\r\n", "latin1", callback)) ok = false;
+      if (!this._writeRaw("\r\n", "latin1", callback)) ok = false;
     } else {
-      ok = this.#sendRaw(buffer, undefined, callback);
+      ok = this._writeRaw(buffer, undefined, callback);
     }
     if (!ok) this.#needDrain = true;
     return ok;
@@ -738,12 +768,12 @@ export class OutgoingMessage extends EventEmitter {
         tail += `${entry[0]}: ${entry[1]}\r\n`;
       }
       tail += "\r\n";
-      this.#sendRaw(tail, "latin1", this.#onFlushed);
+      this._writeRaw(tail, "latin1", this.#onFlushed);
     } else {
       // A zero-byte write is an ordering sentinel. Its callback runs only
       // after every preceding head/body write has completed, so `finish` and
       // the end callback cannot make an undrained socket eligible for reuse.
-      this.#sendRaw("", undefined, this.#onFlushed);
+      this._writeRaw("", undefined, this.#onFlushed);
     }
 
     return this;
@@ -939,21 +969,71 @@ export class ServerResponse extends OutgoingMessage {
 
   /** Send `100 Continue`, for a client that asked whether it may send a body. */
   writeContinue(callback?: () => void): void {
+    this.writeInformation(100, null, callback);
     this._sent100 = true;
-    const socket = this.socket;
-    if (socket === null) {
-      if (callback !== undefined) nextTick(callback);
-      return;
-    }
-    socket.write(`${RESPONSE_VERSION} 100 Continue\r\n\r\n`, "latin1", callback);
   }
 
   writeProcessing(callback?: () => void): void {
-    const socket = this.socket;
-    if (socket === null) {
-      if (callback !== undefined) nextTick(callback);
-      return;
+    this.writeInformation(102, null, callback);
+  }
+
+  writeInformation(
+    statusCode: number,
+    headers?: InformationHeaders | null,
+    callback?: WriteCallback,
+  ): boolean {
+    if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("write");
+    validateInteger(statusCode, "statusCode", 100, 199);
+    if (statusCode === 101) throw new ERR_HTTP_INVALID_STATUS_CODE(statusCode);
+
+    const statusMessage = STATUS_CODES[statusCode] ?? "unknown";
+    let head = `${RESPONSE_VERSION} ${statusCode} ${statusMessage}\r\n`;
+    const lenient = this._isLenientHeaderValidation();
+
+    if (headers !== undefined && headers !== null) {
+      if (Array.isArray(headers)) {
+        const values: readonly unknown[] = headers;
+        if (isInformationHeaderPair(values[0])) {
+          for (let index = 0; index < values.length; index++) {
+            const entry: unknown = values[index];
+            if (!isInformationHeaderPair(entry)) {
+              throw new ERR_INVALID_ARG_VALUE("headers", headers);
+            }
+            head += processInformationHeader(entry[0], entry[1], lenient);
+          }
+        } else {
+          if (values.length % 2 !== 0) {
+            throw new ERR_INVALID_ARG_VALUE("headers", headers);
+          }
+          for (let index = 0; index < values.length; index += 2) {
+            head += processInformationHeader(values[index], values[index + 1], lenient);
+          }
+        }
+      } else {
+        validateObject(headers, "headers");
+        for (const [name, value] of Object.entries(headers)) {
+          head += processInformationHeader(name, value, lenient);
+        }
+      }
     }
-    socket.write(`${RESPONSE_VERSION} 102 Processing\r\n\r\n`, "latin1", callback);
+
+    head += "\r\n";
+    return this._writeRaw(head, "ascii", callback);
+  }
+
+  writeEarlyHints(hints: EarlyHints, callback?: WriteCallback): void {
+    validateObject(hints, "hints");
+    const linkValue: unknown = hints.link;
+    if (linkValue === null || linkValue === undefined) return;
+
+    const link = validateLinkHeaderValue(linkValue);
+    if (link.length === 0) return;
+    if (checkInvalidHeaderChar(link)) throw new ERR_INVALID_CHAR("header content", "Link");
+
+    const headers: Record<string, InformationHeaderValue> = { Link: link };
+    for (const [name, value] of Object.entries(hints)) {
+      if (name !== "link") headers[name] = value;
+    }
+    this.writeInformation(103, headers, callback);
   }
 }
