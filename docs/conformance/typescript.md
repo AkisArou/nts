@@ -428,7 +428,7 @@ of the surface therefore costs nothing.
 | ✅ | `declare` (ambient) |
 | ✅ | `enum` — numeric members, explicit and implicit, negative and fractional | the checker has already done the arithmetic and gives the member access a *literal* type, so `Colour.Red` is an **immediate**. There is no object: `tsc` emits a table per enum and reads a property per use, and the emitted C here is byte-identical to writing the numbers. The old note said `Colour.Red` resolves `Colour`, which is a type and not a value — true, and not the obstacle: the enum is not used as a value, the member is |
 | ✅ | `const enum` | the same substitution, which is what TypeScript's own erasure of one does. A plain `enum` differs only in also emitting the reverse-mapping object, which nothing compiled here reads |
-| ✗ | a **string** enum member (`Label.Short`) | a constant too, and a *managed* one — it wants the interned static a string literal gets rather than an immediate, which is a different emission. Refused by name |
+| ✅ | a **string** enum member (`Label.Short`) | a constant too, and a *managed* one: it takes the interned static a string literal gets rather than an immediate. The checker gives the member access the same `Literal(String("s"))` type it gives the literal, so the two do not merely agree — they **share one static**, verified in the emitted C. Empty members, `const enum` members, and a member defined as another all fold the same way |
 | ✗ | the **reverse mapping** (`Colour[1]` → `"Red"`) | needs the table a plain enum emits alongside its members, which is the one part of an enum that has run-time existence. Refused by name |
 | ✗ | decorators |
 

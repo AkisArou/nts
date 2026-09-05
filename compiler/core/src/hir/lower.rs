@@ -13564,12 +13564,21 @@ impl<'a> FuncBuilder<'a> {
                 let origin = self.origin(id);
                 return Ok(self.push(OpKind::ConstFloat(value), HirType::NUMBER, origin));
             }
-            // A string enum member is a constant too, and a *managed* one. It
-            // wants the interned static a string literal gets rather than an
-            // immediate, which is a different emission and not this one.
-            // Refused by name so the message says which enum and not "an enum".
-            Some(EnumMember::Text) => {
-                return Err(self.unsupported(id, "a string enum member"));
+            // A string member is a constant too, and a *managed* one: it wants
+            // the interned static a string literal gets rather than an
+            // immediate. That turns out to be the same emission, because the
+            // checker gives `Label.Short` the identical
+            // `Literal(String("s"))` type it gives the literal `"s"` -- so
+            // this is `lower_string` reading its text from the same place,
+            // and the two share an interned constant rather than each getting
+            // one.
+            Some(EnumMember::Text(text)) => {
+                let origin = self.origin(id);
+                return Ok(self.push(
+                    OpKind::ConstString(text),
+                    HirType::Managed(ManagedType::String),
+                    origin,
+                ));
             }
             None => {}
         }
@@ -14241,8 +14250,8 @@ impl<'a> FuncBuilder<'a> {
             TypeKind::Literal(nts_semantic_schema::LiteralValue::Number(value)) => {
                 Some(EnumMember::Number(*value))
             }
-            TypeKind::Literal(nts_semantic_schema::LiteralValue::String(_)) => {
-                Some(EnumMember::Text)
+            TypeKind::Literal(nts_semantic_schema::LiteralValue::String(text)) => {
+                Some(EnumMember::Text(text.clone()))
             }
             _ => None,
         }
@@ -18478,10 +18487,12 @@ fn math_constant(name: &str) -> Option<f64> {
 /// Two kinds because they need two emissions, not because they are two
 /// features: a number is an immediate and a string is the interned static a
 /// string literal gets.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum EnumMember {
     Number(f64),
-    Text,
+    /// The member's text, which the checker has already interned as the
+    /// access's literal type -- the same one it gives the literal itself.
+    Text(String),
 }
 
 /// What a compound assignment applies to the place it reads.

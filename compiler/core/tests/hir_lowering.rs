@@ -1243,14 +1243,19 @@ fn an_enum_member_is_an_immediate_and_not_a_lookup() {
 }
 
 #[test]
-fn the_two_enum_shapes_that_are_refused_are_named() {
+fn the_enum_shape_that_is_refused_is_named() {
     let Some(lowered) = lowered("unsupported") else {
         return;
     };
-    // Both are constants the compiler could produce and does not, for two
-    // different reasons, so they get two messages. "An enum" over both of them
-    // ranks neither and reads as the feature being absent when it is present --
-    // which is the mistake `0074` records for a different family.
+    // It was two, and the other one was the *string member* -- which is a
+    // constant this compiler now produces, because the checker gives the member
+    // access the same literal type it gives the literal and the interned static
+    // was already there. Record 0110.
+    //
+    // What survives is the reverse mapping, and it is named rather than called
+    // "an enum" for the reason 0074 records for a different family: a message
+    // covering a supported feature and an unsupported one ranks neither and
+    // reads as the whole feature being absent.
     let messages: Vec<&str> = lowered
         .diagnostics
         .iter()
@@ -1261,7 +1266,7 @@ fn the_two_enum_shapes_that_are_refused_are_named() {
         "the reverse mapping should be named: {messages:?}",
     );
     assert!(
-        messages.iter().any(|m| m.contains("a string enum member")),
-        "a string enum member should be named: {messages:?}",
+        !messages.iter().any(|m| m.contains("a string enum member")),
+        "a string enum member is supported and should not be refused: {messages:?}",
     );
 }

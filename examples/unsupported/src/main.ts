@@ -93,18 +93,6 @@ export function reverseMapping(n: number): number {
   return (Shade[1] === "Dark" ? 1 : 0) + n;
 }
 
-// A string enum member is a constant too, and a *managed* one: it wants the
-// interned static a string literal gets rather than an immediate. A different
-// emission, so a separate refusal with its own name.
-enum Label {
-  Short = "s",
-  Long = "l",
-}
-
-export function stringMember(n: number): number {
-  return Label.Short.length + n;
-}
-
 // A module-scope `let` holding a function.
 //
 // The `const` is supported, and the difference is the whole soundness

@@ -1,0 +1,21 @@
+ideal 0
+allocated 0
+because Argued before measuring.
+because
+because Allocations: none, and this is the whole claim. A string enum member is
+because a *constant*, and a string constant is an interned static in the binary
+because with `NTS_IMMORTAL` in its count word -- the same one a string literal
+because gets, and literally the same one where the texts agree. Nothing is
+because built, so nothing is allocated, however many times the loop chooses.
+because
+because What the case would catch is the implementation this replaced being
+because half-done: a member lowered as a *lookup* rather than a substitution
+because would read a property of the enum object, and a plain `enum` does emit
+because one. Every answer would stay right and the allocation would appear here.
+because
+because Operations: none, by the rule `closure-capture` states -- an allocation
+because floor of zero forces an operation floor of zero. An immortal object is
+because one `nts_retain` returns from on its first line, and `hir::rc` should
+because not emit the call at all for a value it can see is a constant. If it
+because does, that is the finding rather than the floor: the operation would be
+because a call whose whole body is a test that always fails.
