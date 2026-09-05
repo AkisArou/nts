@@ -189,3 +189,46 @@ for `awfy-bounce` was about the *caller*, and it does not hold for the callee.
 Four candidates tested, four refuted, and the residue is still unattributed.
 That is worth writing down as a state rather than leaving the list looking
 untried.
+
+## The prologue costs nothing either, measured in the reference
+
+Nineteen locals given a default at entry and then overwritten -- what this
+backend emits for definite assignment -- added to the hand-written reference,
+consumed at the end so javac cannot drop them:
+
+    no prologue   4.57 us/op
+    prologue      4.57 us/op
+
+Identical. At 5,000 calls per operation. Predicted before measuring, for the
+reason that made it worth testing anyway: this record had asserted the
+prologue was amortised, and that assertion was wrong about *which* method --
+`Ball$bounce` is the per-ball function, so its prologue runs per ball. It is
+free regardless, but it was free for a different reason than the one written
+down.
+
+## Five refuted, and the shape of what is left
+
+| candidate | verdict |
+| --- | --- |
+| bytecode volume | 196 → 160 bytecodes, zero change (0102) |
+| redundant `goto`s | 7 of 14 removed, ~1% |
+| the materialised boolean | 4 conditional branches ours, 4 theirs |
+| the definite-assignment prologue | 4.57 against 4.57 |
+| slot traffic | the prologue test is nineteen locals of it, and free |
+
+`async-profiler`, both sides, same program:
+
+    ours        Ball$bounce 1103ms (62%)   Bounce$benchmark 557ms (31%)
+    reference   bounce       603ms (55%)   benchmark        315ms (29%)
+
+**1.83x and 1.77x -- the same ratio in both methods.** There is no hotspot.
+The program is uniformly slower at the same IPC with 1.55x the instructions,
+which is not a defect with a location; it is the aggregate of an emission
+strategy.
+
+That is a different kind of answer from every other row settled today, each of
+which had a single cause and a single fix. It means the next move for
+`awfy-bounce` is not another peephole -- five have now been tried and priced --
+but a measurement of *which machine instructions* the extra 1.55x are, from
+`hsdis` on both sides rather than from the bytecode. Recorded as a state so
+the next attempt starts from here rather than from the candidate list.
