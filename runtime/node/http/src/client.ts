@@ -27,7 +27,7 @@ import {
   ERR_UNESCAPED_CHARACTERS,
 } from "../../internal/errors.ts";
 import { validateBoolean, validateOneOf } from "../../internal/validators.ts";
-import { HTTPParser, RESPONSE } from "./parser.ts";
+import { HTTPParseError, HTTPParser, RESPONSE } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { checkIsHttpToken, OutgoingMessage } from "./outgoing.ts";
 import type { OutgoingHeaders, OutgoingHeaderValue } from "./outgoing.ts";
@@ -352,6 +352,7 @@ export class ClientRequest extends OutgoingMessage {
 
     let response: IncomingMessage | null = null;
     let upgradeResponse: IncomingMessage | null = null;
+    let finalMessageComplete = false;
 
     const abortResponse = (): void => {
       if (response === null || response.complete || response.destroyed) return;
@@ -364,22 +365,39 @@ export class ClientRequest extends OutgoingMessage {
     };
 
     const onData = (chunk: Buffer): void => {
-      const consumed = parser.execute(chunk);
-      if (consumed < 0) {
-        const error = parser.error;
+      let offset = 0;
+      while (offset < chunk.length) {
+        const consumed = parser.execute(chunk.subarray(offset));
+        if (consumed < 0) {
+          const parserError = parser.error;
+          if (parserError === null) {
+            throw new Error("HTTP parser failed without an error");
+          }
+          const error = new HTTPParseError(parserError, chunk, offset);
+          parser.free();
+          cleanupSocketListeners();
+          this.#failWithoutSocketError(error);
+          return;
+        }
+        offset += consumed;
+
+        const acceptedUpgrade = upgradeResponse;
+        if (acceptedUpgrade !== null) {
+          upgradeResponse = null;
+          handoffUpgrade(acceptedUpgrade, chunk.subarray(offset));
+          return;
+        }
+
+        if (!finalMessageComplete) return;
+        if (offset < chunk.length) {
+          finalMessageComplete = false;
+          parser.continueAfterMessage();
+          continue;
+        }
+
+        parser.free();
         cleanupSocketListeners();
-        this.#fail(
-          Object.assign(new Error(error?.reason ?? "Parse Error"), {
-            code: error?.code,
-            bytesParsed: error?.bytesParsed,
-          }),
-        );
         return;
-      }
-      const acceptedUpgrade = upgradeResponse;
-      if (acceptedUpgrade !== null) {
-        upgradeResponse = null;
-        handoffUpgrade(acceptedUpgrade, chunk.subarray(consumed));
       }
     };
 
@@ -389,7 +407,7 @@ export class ClientRequest extends OutgoingMessage {
       parser.finish();
       if (response === null) {
         cleanupSocketListeners();
-        this.#failAfterSocketEnd(new ConnResetException("socket hang up"));
+        this.#failWithoutSocketError(new ConnResetException("socket hang up"));
       } else {
         abortResponse();
       }
@@ -504,9 +522,10 @@ export class ClientRequest extends OutgoingMessage {
       });
       if (!this.emit("response", message)) message._dump();
 
-      // The reply to a HEAD carries the length the body *would* have had. A
-      // parser that believed it would wait for bytes that never come.
-      return this.method === "HEAD" ? 1 : 0;
+      // HEAD, 204, and 304 may carry representation metadata such as
+      // Content-Length, but never a response body. Treating that metadata as
+      // framing would wait for bytes that a conforming server will not send.
+      return this.method === "HEAD" || info.statusCode === 204 || info.statusCode === 304 ? 1 : 0;
     };
 
     parser.onBody = (chunk) => {
@@ -528,11 +547,10 @@ export class ClientRequest extends OutgoingMessage {
       const completed = response;
       completed.complete = true;
       completed.push(null);
-      // A client parser belongs to this request, not to a pooled socket. The
-      // socket may survive for another request, but this parser's async
-      // resource is finished as soon as the response is complete.
-      parser.free();
-      cleanupSocketListeners();
+      // `execute()` may still have bytes from the same packet to inspect.
+      // Defer detaching until `onData` has either rejected that tail or shown
+      // that the response ended exactly at the packet boundary.
+      finalMessageComplete = true;
     };
 
     socket.on("data", onData);
@@ -609,8 +627,8 @@ export class ClientRequest extends OutgoingMessage {
     super.destroy(error);
   }
 
-  /** Report an EOF-before-response without turning that clean EOF into a socket error. */
-  #failAfterSocketEnd(error: unknown): void {
+  /** Report a protocol failure without emitting that request-owned error on the transport. */
+  #failWithoutSocketError(error: unknown): void {
     if (this.aborted || this.#errorEmitted) return;
     this.#errorEmitted = true;
     this.emit("error", error);

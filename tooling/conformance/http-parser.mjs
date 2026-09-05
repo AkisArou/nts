@@ -31,7 +31,7 @@
 await import("../../runtime/node/http/bindings.node.mjs");
 
 const { HTTPParser, REQUEST, RESPONSE } = await import(
-  new URL("../../runtime/node/http/src/parser.ts", import.meta.url).pathname,
+  new URL("../../runtime/node/http/src/parser.ts", import.meta.url).pathname
 );
 
 function drive(type, text, { split = 0, skipBody = false } = {}) {
@@ -39,9 +39,13 @@ function drive(type, text, { split = 0, skipBody = false } = {}) {
   p.initialize(type);
   p.skipBody = skipBody;
   const seen = { headers: null, body: [], complete: 0 };
-  p.onHeadersComplete = (i) => { seen.headers = i; };
+  p.onHeadersComplete = (i) => {
+    seen.headers = i;
+  };
   p.onBody = (c) => seen.body.push(Buffer.from(c).toString("latin1"));
-  p.onMessageComplete = () => { seen.complete++; };
+  p.onMessageComplete = () => {
+    seen.complete++;
+  };
 
   const bytes = Buffer.from(text, "latin1");
   let n = 0;
@@ -59,9 +63,15 @@ function drive(type, text, { split = 0, skipBody = false } = {}) {
   return { n, seen, error: p.error };
 }
 
-let pass = 0, fail = 0;
+let pass = 0,
+  fail = 0;
 const check = (name, cond, extra) => {
-  if (cond) { pass++; } else { fail++; console.log("  FAIL", name, extra ?? ""); }
+  if (cond) {
+    pass++;
+  } else {
+    fail++;
+    console.log("  FAIL", name, extra ?? "");
+  }
 };
 
 // A plain request with a body.
@@ -69,7 +79,10 @@ const check = (name, cond, extra) => {
   const { seen } = drive(REQUEST, "POST /x HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n\r\nhello");
   check("request method", seen.headers?.method === HTTPParser.methods.indexOf("POST"));
   check("request url", seen.headers?.url === "/x");
-  check("request headers", JSON.stringify(seen.headers?.headers) === '["Host","a","Content-Length","5"]');
+  check(
+    "request headers",
+    JSON.stringify(seen.headers?.headers) === '["Host","a","Content-Length","5"]',
+  );
   check("request body", seen.body.join("") === "hello", seen.body);
   check("request complete", seen.complete === 1);
   check("keep-alive", seen.headers?.shouldKeepAlive === true);
@@ -77,15 +90,19 @@ const check = (name, cond, extra) => {
 
 // The same, one byte at a time.
 {
-  const { seen } = drive(REQUEST, "POST /x HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n\r\nhello", { split: 1 });
+  const { seen } = drive(REQUEST, "POST /x HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n\r\nhello", {
+    split: 1,
+  });
   check("byte-at-a-time body", seen.body.join("") === "hello", seen.body);
   check("byte-at-a-time complete", seen.complete === 1);
 }
 
 // Chunked.
 {
-  const { seen } = drive(RESPONSE,
-    "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n");
+  const { seen } = drive(
+    RESPONSE,
+    "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n",
+  );
   check("chunked body", seen.body.join("") === "hello world", seen.body);
   check("chunked complete", seen.complete === 1);
   check("status", seen.headers?.statusCode === 200 && seen.headers?.statusMessage === "OK");
@@ -93,24 +110,36 @@ const check = (name, cond, extra) => {
 
 // Chunked, split mid-size and mid-data.
 {
-  const { seen } = drive(RESPONSE,
-    "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n", { split: 3 });
+  const { seen } = drive(
+    RESPONSE,
+    "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n",
+    { split: 3 },
+  );
   check("chunked split body", seen.body.join("") === "hello world", seen.body);
   check("chunked split complete", seen.complete === 1);
 }
 
 // HEAD: Content-Length present, no body follows.
 {
-  const { seen } = drive(RESPONSE, "HTTP/1.1 200 OK\r\nContent-Length: 42\r\n\r\n", { skipBody: true });
+  const { seen } = drive(RESPONSE, "HTTP/1.1 200 OK\r\nContent-Length: 42\r\n\r\n", {
+    skipBody: true,
+  });
   check("HEAD no body", seen.body.length === 0);
   check("HEAD complete", seen.complete === 1);
 }
 
 // Smuggling: both framings.
 {
-  const { error } = drive(REQUEST,
-    "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n");
-  check("both framings refused", error?.code === "HPE_UNEXPECTED_CONTENT_LENGTH", error);
+  const { error } = drive(
+    REQUEST,
+    "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+  );
+  check(
+    "both framings refused",
+    error?.code === "HPE_INVALID_TRANSFER_ENCODING" &&
+      error.reason === "Transfer-Encoding can't be present with Content-Length",
+    error,
+  );
 }
 
 // Smuggling: space before the colon.
@@ -132,7 +161,10 @@ const check = (name, cond, extra) => {
   let completes = 0;
   const bodies = [];
   p.onBody = (c) => bodies.push(Buffer.from(c).toString());
-  p.onMessageComplete = () => { completes++; p.continueAfterMessage(); };
+  p.onMessageComplete = () => {
+    completes++;
+    p.continueAfterMessage();
+  };
   const text = "GET /a HTTP/1.1\r\nHost: h\r\n\r\nGET /b HTTP/1.1\r\nHost: h\r\n\r\n";
   const buf = Buffer.from(text);
   let off = 0;
@@ -165,7 +197,9 @@ const check = (name, cond, extra) => {
   const bodies = [];
   let complete = 0;
   p.onBody = (c) => bodies.push(Buffer.from(c).toString());
-  p.onMessageComplete = () => { complete++; };
+  p.onMessageComplete = () => {
+    complete++;
+  };
   p.execute(Buffer.from("HTTP/1.1 200 OK\r\n\r\nsome body"));
   check("until-close body before end", bodies.join("") === "some body", bodies);
   check("until-close not yet complete", complete === 0);

@@ -19,6 +19,7 @@
 // stream. RFC 9112 §6.1 says the length must be rejected in that case, and
 // this rejects the message.
 
+import { Buffer } from "../../buffer/src/main.ts";
 import {
   emitAfter,
   emitBefore,
@@ -34,6 +35,7 @@ const CR = 13;
 const LF = 10;
 const SP = 32;
 const HTAB = 9;
+const RESPONSE_PROTOCOL_PREFIXES = ["HTTP/", "RTSP/", "ICE/"] as const;
 
 /**
  * What the parser is reading.
@@ -152,9 +154,25 @@ export const METHODS: string[] = [
 ];
 
 export interface ParserError {
-  code: string;
-  reason: string;
-  bytesParsed: number;
+  readonly code: string;
+  readonly reason: string;
+  readonly bytesParsed: number;
+}
+
+/** The public error shape produced when an HTTP packet cannot be parsed. */
+export class HTTPParseError extends Error {
+  readonly code: string;
+  readonly reason: string;
+  readonly bytesParsed: number;
+  readonly rawPacket: Buffer;
+
+  constructor(parserError: ParserError, rawPacket: Buffer, packetOffset = 0) {
+    super(`Parse Error: ${parserError.reason}`);
+    this.code = parserError.code;
+    this.reason = parserError.reason;
+    this.bytesParsed = packetOffset + parserError.bytesParsed;
+    this.rawPacket = rawPacket;
+  }
 }
 
 interface CommonHeadersComplete {
@@ -591,10 +609,15 @@ export class HTTPParser {
     if (this.#type === RESPONSE) {
       // HTTP-version SP status-code SP [ reason-phrase ]
       const firstSpace = line.indexOf(" ");
-      if (firstSpace === -1) return this.#fail("HPE_INVALID_CONSTANT", "Invalid status line");
+      if (firstSpace === -1) {
+        return this.#fail("HPE_INVALID_CONSTANT", "Expected HTTP/, RTSP/ or ICE/");
+      }
 
       const version = line.slice(0, firstSpace);
-      if (!this.#readVersion(version)) {
+      if (!this.#readResponseVersion(version)) {
+        if (!this.#hasResponseProtocolPrefix(version)) {
+          return this.#fail("HPE_INVALID_CONSTANT", "Expected HTTP/, RTSP/ or ICE/");
+        }
         return this.#fail("HPE_INVALID_VERSION", "Invalid HTTP version");
       }
 
@@ -609,10 +632,14 @@ export class HTTPParser {
     } else {
       // method SP request-target SP HTTP-version
       const firstSpace = line.indexOf(" ");
-      if (firstSpace === -1) return this.#fail("HPE_INVALID_METHOD", "Invalid request line");
+      if (firstSpace === -1) {
+        return this.#fail("HPE_INVALID_METHOD", "Invalid method encountered");
+      }
       const method = line.slice(0, firstSpace);
       const index = methods.indexOf(method);
-      if (index === -1) return this.#fail("HPE_INVALID_METHOD", "Invalid method");
+      if (index === -1) {
+        return this.#fail("HPE_INVALID_METHOD", "Invalid method encountered");
+      }
       this.#method = index;
 
       const lastSpace = line.lastIndexOf(" ");
@@ -635,17 +662,32 @@ export class HTTPParser {
 
   #validatePartialStartLine(): number {
     if (this.#state !== State.StartLine || this.#partial.length === 0) return 0;
-    if (this.#type === RESPONSE) return 0;
+
+    if (this.#type === RESPONSE) {
+      for (let index = 0; index < RESPONSE_PROTOCOL_PREFIXES.length; index++) {
+        const prefix = RESPONSE_PROTOCOL_PREFIXES[index];
+        if (
+          prefix !== undefined &&
+          (prefix.startsWith(this.#partial) || this.#partial.startsWith(prefix))
+        ) {
+          return 0;
+        }
+      }
+      return this.#fail("HPE_INVALID_CONSTANT", "Expected HTTP/, RTSP/ or ICE/");
+    }
 
     const firstSpace = this.#partial.indexOf(" ");
     const method = firstSpace === -1 ? this.#partial : this.#partial.slice(0, firstSpace);
-    if (!isValidFieldName(method)) {
-      return this.#fail("HPE_INVALID_METHOD", "Invalid method");
+    if (firstSpace !== -1) {
+      if (methods.indexOf(method) !== -1) return 0;
+      return this.#fail("HPE_INVALID_METHOD", "Invalid method encountered");
     }
-    if (firstSpace !== -1 && methods.indexOf(method) === -1) {
-      return this.#fail("HPE_INVALID_METHOD", "Invalid method");
+
+    for (let index = 0; index < methods.length; index++) {
+      const knownMethod = methods[index];
+      if (knownMethod !== undefined && knownMethod.startsWith(method)) return 0;
     }
-    return 0;
+    return this.#fail("HPE_INVALID_METHOD", "Invalid method encountered");
   }
 
   #readVersion(text: string): boolean {
@@ -654,6 +696,22 @@ export class HTTPParser {
     this.#versionMajor = Number(match[1]);
     this.#versionMinor = Number(match[2]);
     return true;
+  }
+
+  #readResponseVersion(text: string): boolean {
+    const match = /^(?:HTTP|RTSP|ICE)\/(\d)\.(\d)$/.exec(text);
+    if (!match) return false;
+    this.#versionMajor = Number(match[1]);
+    this.#versionMinor = Number(match[2]);
+    return true;
+  }
+
+  #hasResponseProtocolPrefix(text: string): boolean {
+    for (let index = 0; index < RESPONSE_PROTOCOL_PREFIXES.length; index++) {
+      const prefix = RESPONSE_PROTOCOL_PREFIXES[index];
+      if (prefix !== undefined && text.startsWith(prefix)) return true;
+    }
+    return false;
   }
 
   #readHeader(line: string): number {
@@ -746,8 +804,8 @@ export class HTTPParser {
     // to disagree about where a message ends, which is request smuggling.
     if (this.#sawTransferEncoding && this.#sawContentLength) {
       return this.#fail(
-        "HPE_UNEXPECTED_CONTENT_LENGTH",
-        "Content-Length can't be present with Transfer-Encoding",
+        "HPE_INVALID_TRANSFER_ENCODING",
+        "Transfer-Encoding can't be present with Content-Length",
       );
     }
 

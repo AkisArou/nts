@@ -14,7 +14,7 @@
 import { Buffer } from "../../buffer/src/main.ts";
 import { Server as NetServer, Socket } from "../../net/src/main.ts";
 import type { ServerOptions as NetServerOptions } from "../../net/src/main.ts";
-import { HTTPParser, REQUEST, methods } from "./parser.ts";
+import { HTTPParseError, HTTPParser, REQUEST, methods } from "./parser.ts";
 import type { ParserError } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { ServerResponse } from "./outgoing.ts";
@@ -74,19 +74,6 @@ class HTTPRequestTimeoutError extends Error {
   constructor() {
     super("Request timeout");
     this.name = "Error";
-  }
-}
-
-class HTTPParseError extends Error {
-  readonly code: string;
-  readonly bytesParsed: number;
-  readonly rawPacket: Buffer;
-
-  constructor(parserError: ParserError, rawPacket: Buffer) {
-    super(`Parse Error: ${parserError.reason}`);
-    this.code = parserError.code;
-    this.bytesParsed = parserError.bytesParsed;
-    this.rawPacket = rawPacket;
   }
 }
 
@@ -309,6 +296,8 @@ export class Server extends NetServer {
     let queuedResponseIndex = 0;
     let keepAliveTimeoutSet = false;
     let upgradeRequest: IncomingMessage | null = null;
+    let parseErrorSeen = false;
+    let socketErrorsSuppressed = false;
 
     const abortQueuedResponses = (error: unknown): void => {
       for (let index = queuedResponseIndex; index < queuedResponses.length; index++) {
@@ -390,6 +379,8 @@ export class Server extends NetServer {
     const ignoreSocketError = (_error: unknown): void => {};
 
     const suppressFurtherSocketErrors = (): void => {
+      if (socketErrorsSuppressed) return;
+      socketErrorsSuppressed = true;
       socket.removeListener("error", onSocketError);
       socket.on("error", ignoreSocketError);
     };
@@ -399,8 +390,13 @@ export class Server extends NetServer {
       if (!this.emit("clientError", error, socket)) socket.destroy(error);
     };
 
-    const handleParseError = (parserError: ParserError, rawPacket: Buffer): void => {
-      const error = new HTTPParseError(parserError, rawPacket);
+    const handleParseError = (
+      parserError: ParserError,
+      rawPacket: Buffer,
+      packetOffset = 0,
+    ): void => {
+      parseErrorSeen = true;
+      const error = new HTTPParseError(parserError, rawPacket, packetOffset);
       suppressFurtherSocketErrors();
       if (this.emit("clientError", error, socket)) return;
       if (socket.writable) {
@@ -437,12 +433,13 @@ export class Server extends NetServer {
     const feed = (data: Buffer): void => {
       if (!deadline.requestStarted) this.#beginRequest(deadline);
       let view = data;
+      let packetOffset = 0;
       for (;;) {
         const consumed = parser.execute(view);
         if (consumed < 0) {
           const error = parser.error;
           if (error === null) throw new Error("HTTP parser failed without an error");
-          handleParseError(error, data);
+          handleParseError(error, data, packetOffset);
           return;
         }
         const acceptedUpgrade = upgradeRequest;
@@ -454,6 +451,7 @@ export class Server extends NetServer {
         // A message ended part-way through this buffer: the rest is the next
         // request on the same connection, and must not be lost.
         if (consumed < view.length) {
+          packetOffset += consumed;
           view = view.subarray(consumed);
           if (incoming?.complete) {
             parser.continueAfterMessage();
@@ -582,6 +580,10 @@ export class Server extends NetServer {
     };
 
     const onSocketEnd = (): void => {
+      // A parser error has already been delivered with the packet that caused
+      // it. EOF is transport completion, not a second occurrence of the same
+      // protocol error.
+      if (parseErrorSeen) return;
       if (parser.finish() < 0) {
         const error = parser.error;
         if (error === null) throw new Error("HTTP parser failed without an error");
