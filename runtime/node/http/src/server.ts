@@ -17,7 +17,7 @@ import type { ServerOptions as NetServerOptions } from "../../net/src/main.ts";
 import { HTTPParseError, HTTPParser, REQUEST, methods } from "./parser.ts";
 import type { ParserError } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
-import { ServerResponse } from "./outgoing.ts";
+import { parseUniqueHeadersOption, ServerResponse } from "./outgoing.ts";
 import { clearInterval, setInterval } from "../../timers/src/main.ts";
 import type { Timeout } from "../../timers/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
@@ -47,6 +47,7 @@ export interface HttpServerOptions extends NetServerOptions {
   httpValidation?: "strict" | "relaxed" | "insecure" | undefined;
   insecureHTTPParser?: boolean | undefined;
   requireHostHeader?: boolean | undefined;
+  uniqueHeaders?: readonly string[] | undefined;
   shouldUpgradeCallback?: ShouldUpgradeCallback | undefined;
   IncomingMessage?: typeof IncomingMessage | undefined;
   ServerResponse?: typeof ServerResponse | undefined;
@@ -134,6 +135,7 @@ export class Server extends NetServer {
   #connectionsChecker: Timeout | undefined;
   #lenientHeaderValues: boolean;
   #lenientTransferEncoding: boolean;
+  #uniqueHeaders: ReadonlySet<string> | null;
 
   constructor(options?: HttpServerOptions | RequestListener, listener?: RequestListener) {
     let opts: HttpServerOptions = {};
@@ -198,6 +200,7 @@ export class Server extends NetServer {
     this.requestTimeout = requestTimeout;
     this.connectionsCheckingInterval = connectionsCheckingInterval;
     this.requireHostHeader = requireHostHeader;
+    this.#uniqueHeaders = parseUniqueHeadersOption(opts.uniqueHeaders);
     this.shouldUpgradeCallback = opts.shouldUpgradeCallback ?? upgradeWhenObserved;
     this.#lenientHeaderValues =
       httpValidation === "relaxed" || httpValidation === "insecure" || insecureHTTPParser === true;
@@ -496,6 +499,7 @@ export class Server extends NetServer {
 
       response = new this.#ServerResponse(message);
       response._setHeaderValidation(this.#lenientHeaderValues);
+      response._setUniqueHeaders(this.#uniqueHeaders);
       response.shouldKeepAlive = info.shouldKeepAlive;
       response._keepAliveTimeout = this.keepAliveTimeout;
 

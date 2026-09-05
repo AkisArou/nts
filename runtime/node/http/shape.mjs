@@ -9,7 +9,57 @@ function callableConstructor(Class, name) {
   return callable;
 }
 
+/**
+ * Native TypeScript records already have dictionary shape. The Node-hosted
+ * conformance lane also needs Node's observable null-prototype dictionaries;
+ * that host object-model detail belongs here rather than in runtime source.
+ */
+function nullPrototypeProperty(Class, name, rawName) {
+  const descriptor = Object.getOwnPropertyDescriptor(Class.prototype, name);
+  if (typeof descriptor?.get !== "function" || typeof descriptor.set !== "function") return;
+  const read = descriptor.get;
+  const write = descriptor.set;
+  Object.defineProperty(Class.prototype, name, {
+    ...descriptor,
+    get() {
+      const current = read.call(this);
+      if (Object.getPrototypeOf(current) === null) return current;
+      const shaped = Object.assign(Object.create(null), current);
+      if (!Object.hasOwn(shaped, "__proto__")) {
+        const raw = this[rawName];
+        for (let index = 0; index < raw.length; index += 2) {
+          if (raw[index].toLowerCase() !== "__proto__") continue;
+          const existing = shaped.__proto__;
+          if (Array.isArray(existing)) existing.push(raw[index + 1]);
+          else shaped.__proto__ = [raw[index + 1]];
+        }
+      }
+      write.call(this, shaped);
+      return shaped;
+    },
+  });
+}
+
+function nullPrototypeResult(Class, name) {
+  const original = Class.prototype[name];
+  if (typeof original !== "function") return;
+  Object.defineProperty(Class.prototype, name, {
+    configurable: true,
+    writable: true,
+    value: function (...args) {
+      const shaped = Object.assign(Object.create(null), original.apply(this, args));
+      if (!Object.hasOwn(shaped, "__proto__") && this.hasHeader("__proto__")) {
+        shaped.__proto__ = this.getHeader("__proto__");
+      }
+      return shaped;
+    },
+  });
+}
+
 export function shape(exports) {
+  nullPrototypeProperty(exports.IncomingMessage, "headersDistinct", "rawHeaders");
+  nullPrototypeProperty(exports.IncomingMessage, "trailersDistinct", "rawTrailers");
+  nullPrototypeResult(exports.OutgoingMessage, "getHeaders");
   const http = { ...exports };
   delete http.default;
   http.Agent = callableConstructor(exports.Agent, "Agent");

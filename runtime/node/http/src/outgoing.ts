@@ -150,14 +150,28 @@ function processInformationHeader(name: unknown, value: unknown, lenient: boolea
   return `${name}: ${value}\r\n`;
 }
 
-function serializeHeader(name: string, value: OutgoingHeaderValue): string {
+function serializeHeader(
+  name: string,
+  value: OutgoingHeaderValue,
+  uniqueHeaders: ReadonlySet<string> | null,
+): string {
   if (!Array.isArray(value)) return `${name}: ${value}\r\n`;
-  if (name.toLowerCase() === "cookie" && value.length >= 2) {
+  const lowerName = name.toLowerCase();
+  if ((lowerName === "cookie" && value.length >= 2) || uniqueHeaders?.has(lowerName) === true) {
     return `${name}: ${value.join("; ")}\r\n`;
   }
   let serialized = "";
   for (const entry of value) serialized += `${name}: ${entry}\r\n`;
   return serialized;
+}
+
+export function parseUniqueHeadersOption(
+  headers: readonly string[] | undefined,
+): ReadonlySet<string> | null {
+  if (!Array.isArray(headers)) return null;
+  const uniqueHeaders = new Set<string>();
+  for (const header of headers) uniqueHeaders.add(header.toLowerCase());
+  return uniqueHeaders;
 }
 
 export function checkIsHttpToken(value: string): boolean {
@@ -306,6 +320,11 @@ export class OutgoingMessage extends EventEmitter {
     return this.#lenientHeaderValues;
   }
 
+  /** Select fields whose array values serialize as one semicolon-delimited line. */
+  _setUniqueHeaders(headers: ReadonlySet<string> | null): void {
+    this.#uniqueHeaders = headers;
+  }
+
   /** Write, or hold it until there is somewhere to write it. */
   protected _writeRaw(
     chunk: Buffer | string,
@@ -362,6 +381,7 @@ export class OutgoingMessage extends EventEmitter {
   protected headersMap = new Map<string, [string, OutgoingHeaderValue]>();
   #rawHeaderPairs: ReadonlyArray<readonly [string, OutgoingHeaderValue]> | null = null;
   #trailer = "";
+  #uniqueHeaders: ReadonlySet<string> | null = null;
 
   /** Filled in by a subclass: the status line or the request line. */
   protected statusLine = "";
@@ -369,6 +389,7 @@ export class OutgoingMessage extends EventEmitter {
   /** Serialized head waiting to be written with the first body bytes. */
   #head: string | null = null;
   #headerFlushed = false;
+  #automaticContentLength: number | undefined;
 
   /**
    * Whether this message can carry a body at all.
@@ -386,7 +407,8 @@ export class OutgoingMessage extends EventEmitter {
 
   #declaredContentLength(): number | undefined {
     const value = this.getHeader("content-length");
-    if (Array.isArray(value) || value === undefined) return undefined;
+    if (value === undefined) return this.#automaticContentLength;
+    if (Array.isArray(value)) return undefined;
     const length = Number(value);
     return Number.isFinite(length) ? length : undefined;
   }
@@ -425,17 +447,17 @@ export class OutgoingMessage extends EventEmitter {
   }
 
   setHeader(name: string, value: OutgoingHeaderValue): this {
+    if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("set");
     validateHeaderName(name);
     validateHeaderValue(name, value, this.#lenientHeaderValues);
-    if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("set");
     this.headersMap.set(name.toLowerCase(), [name, value]);
     return this;
   }
 
   appendHeader(name: string, value: OutgoingHeaderValue): this {
+    if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("append");
     validateHeaderName(name);
     validateHeaderValue(name, value, this.#lenientHeaderValues);
-    if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("append");
 
     const key = name.toLowerCase();
     const current = this.headersMap.get(key);
@@ -524,10 +546,7 @@ export class OutgoingMessage extends EventEmitter {
   #serializeTrailer(name: string, value: OutgoingHeaderValue): string {
     validateHeaderName(name);
     validateHeaderValue(name, value, this.#lenientHeaderValues);
-    if (!Array.isArray(value)) return `${name}: ${value}\r\n`;
-    let trailer = "";
-    for (const entry of value) trailer += `${name}: ${entry}\r\n`;
-    return trailer;
+    return serializeHeader(name, value, this.#uniqueHeaders);
   }
 
   /** Written by a subclass before the headers, as the first line. */
@@ -560,6 +579,7 @@ export class OutgoingMessage extends EventEmitter {
     const connection = this.headersMap.get("connection");
     const trailerHeader = this.headersMap.get("trailer");
     let addChunkedHeader = false;
+    let automaticHeaders = "";
 
     // The header is not merely text on the wire; it controls ownership of the
     // socket after this message. Without this, an explicit `Connection:
@@ -579,7 +599,7 @@ export class OutgoingMessage extends EventEmitter {
         // response can be mistaken for a chunk body.
         this.shouldKeepAlive = false;
       }
-    } else if (declared) {
+    } else if (declared !== undefined || this.#automaticContentLength !== undefined) {
       this.chunkedEncoding = false;
     } else if (encoding && String(encoding[1]).toLowerCase().includes("chunked")) {
       this.chunkedEncoding = true;
@@ -597,14 +617,11 @@ export class OutgoingMessage extends EventEmitter {
     }
 
     if (this.sendDate && !this.headersMap.has("date")) {
-      this.headersMap.set("date", ["Date", new Date().toUTCString()]);
+      automaticHeaders += `Date: ${new Date().toUTCString()}\r\n`;
     }
 
     if (!this._removedConnection && !this.headersMap.has("connection")) {
-      this.headersMap.set("connection", [
-        "Connection",
-        this.shouldKeepAlive ? "keep-alive" : "close",
-      ]);
+      automaticHeaders += `Connection: ${this.shouldKeepAlive ? "keep-alive" : "close"}\r\n`;
     }
 
     if (
@@ -613,33 +630,35 @@ export class OutgoingMessage extends EventEmitter {
       this._keepAliveTimeout > 0 &&
       !this.headersMap.has("keep-alive")
     ) {
-      this.headersMap.set("keep-alive", [
-        "Keep-Alive",
-        `timeout=${Math.floor(this._keepAliveTimeout / 1000)}`,
-      ]);
+      automaticHeaders += `Keep-Alive: timeout=${Math.floor(this._keepAliveTimeout / 1000)}\r\n`;
     }
 
     if (addChunkedHeader) {
-      this.headersMap.set("transfer-encoding", ["Transfer-Encoding", "chunked"]);
+      automaticHeaders += "Transfer-Encoding: chunked\r\n";
+    } else if (declared === undefined && this.#automaticContentLength !== undefined) {
+      automaticHeaders += `Content-Length: ${this.#automaticContentLength}\r\n`;
     }
 
     let head = `${this.statusLine}\r\n`;
     const rawHeaderPairs = this.#rawHeaderPairs;
     if (rawHeaderPairs === null) {
       for (const entry of this.headersMap.values()) {
-        head += serializeHeader(entry[0], entry[1]);
+        head += serializeHeader(entry[0], entry[1], this.#uniqueHeaders);
       }
     } else {
       const rawNames = new Set<string>();
       for (const entry of rawHeaderPairs) {
         rawNames.add(entry[0].toLowerCase());
-        head += serializeHeader(entry[0], entry[1]);
+        head += serializeHeader(entry[0], entry[1], this.#uniqueHeaders);
       }
       for (const [name, entry] of this.headersMap) {
-        if (!rawNames.has(name)) head += serializeHeader(entry[0], entry[1]);
+        if (!rawNames.has(name)) {
+          head += serializeHeader(entry[0], entry[1], this.#uniqueHeaders);
+        }
       }
       this.#rawHeaderPairs = null;
     }
+    head += automaticHeaders;
     head += "\r\n";
 
     this.#head = head;
@@ -782,7 +801,7 @@ export class OutgoingMessage extends EventEmitter {
           : typeof body === "string"
             ? Buffer.byteLength(body, encodingName ?? "utf8")
             : body.byteLength;
-      this.setHeader("Content-Length", length);
+      this.#automaticContentLength = length;
     }
 
     if (body !== undefined && this.strictContentLength) {

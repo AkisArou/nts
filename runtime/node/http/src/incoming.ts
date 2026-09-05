@@ -67,17 +67,23 @@ export interface IncomingSocket {
   setTimeout?(msecs: number, callback?: () => void): unknown;
 }
 
+export type IncomingHttpHeaders = Record<string, string | string[] | undefined>;
+export type IncomingHttpHeadersDistinct = Record<string, string[] | undefined>;
+
 export class IncomingMessage extends Readable {
   httpVersionMajor = 1;
   httpVersionMinor = 1;
   httpVersion = "1.1";
 
   /** Header names lowercased, values joined per the rules above. */
-  headers: Record<string, string | string[] | undefined> = {};
+  headers: IncomingHttpHeaders = {};
   /** The same, in the order and case they arrived: `[name, value, ...]`. */
   rawHeaders: string[] = [];
-  trailers: Record<string, string | string[] | undefined> = {};
+  trailers: IncomingHttpHeaders = {};
   rawTrailers: string[] = [];
+
+  #headersDistinct: IncomingHttpHeadersDistinct | null = null;
+  #trailersDistinct: IncomingHttpHeadersDistinct | null = null;
 
   /** Set on a request. */
   method: string | null = null;
@@ -128,6 +134,30 @@ export class IncomingMessage extends Readable {
 
   set connection(socket: IncomingSocket | null | undefined) {
     this.socket = socket;
+  }
+
+  /** Every received header line retained separately, keyed case-insensitively. */
+  get headersDistinct(): IncomingHttpHeadersDistinct {
+    if (this.#headersDistinct === null) {
+      this.#headersDistinct = this.#createDistinctHeaders(this.rawHeaders);
+    }
+    return this.#headersDistinct;
+  }
+
+  set headersDistinct(headers: IncomingHttpHeadersDistinct) {
+    this.#headersDistinct = headers;
+  }
+
+  /** The trailer counterpart of `headersDistinct`. */
+  get trailersDistinct(): IncomingHttpHeadersDistinct {
+    if (this.#trailersDistinct === null) {
+      this.#trailersDistinct = this.#createDistinctHeaders(this.rawTrailers);
+    }
+    return this.#trailersDistinct;
+  }
+
+  set trailersDistinct(trailers: IncomingHttpHeadersDistinct) {
+    this.#trailersDistinct = trailers;
   }
 
   /**
@@ -231,11 +261,7 @@ export class IncomingMessage extends Readable {
   }
 
   /** One header line, folded into `headers` under the rules above. */
-  _addHeaderLine(
-    name: string,
-    value: string,
-    dest: Record<string, string | string[] | undefined>,
-  ): void {
+  _addHeaderLine(name: string, value: string, dest: IncomingHttpHeaders): void {
     const key = name.toLowerCase();
 
     if (key === "set-cookie") {
@@ -249,23 +275,51 @@ export class IncomingMessage extends Readable {
     }
 
     const existing = dest[key];
-    if (existing === undefined) {
-      dest[key] = value;
+    if (firstWins.has(key)) {
+      if (typeof existing !== "string" && !Array.isArray(existing)) {
+        dest[key] = value;
+      }
       return;
     }
-
-    if (firstWins.has(key)) return;
 
     // Ordinary and extension fields form a comma-delimited list. Cookie is
     // the sole semicolon-delimited exception because each line carries a
     // separate cookie-pair rather than another value in an HTTP list.
-    const separator = key === "cookie" ? "; " : ", ";
-    dest[key] = `${existing}${separator}${value}`;
+    if (typeof existing === "string") {
+      const separator = key === "cookie" ? "; " : ", ";
+      dest[key] = `${existing}${separator}${value}`;
+    } else {
+      // This deliberately treats an inherited Object property as absent in
+      // the Node-hosted lane. Native TypeScript records have no prototype,
+      // but HTTP field names such as `constructor` must behave identically.
+      dest[key] = value;
+    }
+  }
+
+  _addHeaderLineDistinct(name: string, value: string, dest: IncomingHttpHeadersDistinct): void {
+    const key = name.toLowerCase();
+    const existing = dest[key];
+    if (Array.isArray(existing)) existing.push(value);
+    else dest[key] = [value];
+  }
+
+  #createDistinctHeaders(raw: string[]): IncomingHttpHeadersDistinct {
+    const headers: IncomingHttpHeadersDistinct = {};
+    for (let index = 0; index < raw.length; index += 2) {
+      const name = raw[index];
+      const value = raw[index + 1];
+      if (name === undefined || value === undefined) {
+        throw new Error("raw HTTP headers must contain name/value pairs");
+      }
+      this._addHeaderLineDistinct(name, value, headers);
+    }
+    return headers;
   }
 
   /** Called by the parser's `kOnHeadersComplete` equivalent. */
   _addHeaders(raw: string[]): void {
     const target = this.#inTrailers ? this.trailers : this.headers;
+    const distinctTarget = this.#inTrailers ? this.#trailersDistinct : this.#headersDistinct;
     const rawTarget = this.#inTrailers ? this.rawTrailers : this.rawHeaders;
     for (let i = 0; i < raw.length; i += 2) {
       const name = raw[i];
@@ -275,6 +329,7 @@ export class IncomingMessage extends Readable {
       }
       rawTarget.push(name, value);
       this._addHeaderLine(name, value, target);
+      if (distinctTarget !== null) this._addHeaderLineDistinct(name, value, distinctTarget);
     }
   }
 

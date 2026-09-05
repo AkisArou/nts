@@ -29,7 +29,7 @@ import {
 import { validateBoolean, validateOneOf } from "../../internal/validators.ts";
 import { HTTPParseError, HTTPParser, RESPONSE } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
-import { checkIsHttpToken, OutgoingMessage } from "./outgoing.ts";
+import { checkIsHttpToken, OutgoingMessage, parseUniqueHeadersOption } from "./outgoing.ts";
 import type { OutgoingHeaders, OutgoingHeaderValue } from "./outgoing.ts";
 import { Agent, globalAgent } from "./agent.ts";
 
@@ -53,6 +53,7 @@ export interface RequestOptions {
   timeout?: number | undefined;
   setHost?: boolean | undefined;
   setDefaultHeaders?: boolean | undefined;
+  uniqueHeaders?: readonly string[] | undefined;
   httpValidation?: "strict" | "relaxed" | "insecure" | undefined;
   insecureHTTPParser?: boolean | undefined;
   createConnection?:
@@ -275,7 +276,7 @@ export class ClientRequest extends OutgoingMessage {
     }
 
     const hostHeader = this.getHeader("host");
-    if (hostHeader !== undefined && typeof hostHeader !== "string") {
+    if (!rawHeaderArray && hostHeader !== undefined && typeof hostHeader !== "string") {
       throw new ERR_INVALID_ARG_TYPE("options.headers.host", "string", hostHeader);
     }
 
@@ -285,6 +286,7 @@ export class ClientRequest extends OutgoingMessage {
 
     this.statusLine = `${this.method} ${this.path} HTTP/1.1`;
     if (rawHeaderPairs !== undefined) this._storeRawHeaderPairs(rawHeaderPairs);
+    this._setUniqueHeaders(parseUniqueHeadersOption(opts.uniqueHeaders));
 
     this.agent = selectedAgent;
     const connectionOptions = {
