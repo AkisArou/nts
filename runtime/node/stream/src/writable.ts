@@ -21,6 +21,7 @@
 // property names either way.
 
 import { Buffer } from "../../buffer/src/main.ts";
+import { normalizeEncodingSpelling, type Encoding } from "../../buffer/src/encodings.ts";
 import {
   ERR_INVALID_ARG_TYPE,
   ERR_METHOD_NOT_IMPLEMENTED,
@@ -118,7 +119,7 @@ export interface WritableOptions {
   writableHighWaterMark?: number | null | undefined;
   /** Convert strings to buffers before `_write` sees them. Default true. */
   decodeStrings?: boolean | undefined;
-  defaultEncoding?: string | undefined;
+  defaultEncoding?: Encoding | undefined;
   emitClose?: boolean | undefined;
   autoDestroy?: boolean | undefined;
   signal?: AbortSignalLike | undefined;
@@ -135,7 +136,7 @@ export class WritableState {
   highWaterMark: number;
   /** Convert a string to a Buffer before `_write`. */
   decodeStrings: boolean;
-  defaultEncoding: string;
+  defaultEncoding: Encoding;
   emitClose: boolean;
   autoDestroy: boolean;
 
@@ -333,11 +334,10 @@ export class Writable extends Stream {
     }
   }
 
-  setDefaultEncoding(encoding: string): this {
-    // Lowered because the encoding names are compared exactly further down.
-    if (typeof encoding === "string") encoding = encoding.toLowerCase();
-    if (!Buffer.isEncoding(encoding)) throw new ERR_UNKNOWN_ENCODING(encoding);
-    this._writableState.defaultEncoding = encoding;
+  setDefaultEncoding(encoding: Encoding): this {
+    const normalized = normalizeEncodingSpelling(encoding);
+    if (normalized === undefined) throw new ERR_UNKNOWN_ENCODING(encoding);
+    this._writableState.defaultEncoding = normalized;
     return this;
   }
 

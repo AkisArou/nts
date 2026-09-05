@@ -15,17 +15,63 @@ export type Encoding =
   | "ascii"
   | "ucs2" | "ucs-2" | "utf16le" | "utf-16le";
 
-/** Normalize a value already proven to be a string. */
+/** Validate an encoding and lowercase it without collapsing supported aliases. */
+export function normalizeEncodingSpelling(encoding: unknown): Encoding | undefined {
+  if (typeof encoding !== "string") return undefined;
+  switch (encoding.toLowerCase()) {
+    case "utf8":
+      return "utf8";
+    case "utf-8":
+      return "utf-8";
+    case "hex":
+      return "hex";
+    case "base64":
+      return "base64";
+    case "base64url":
+      return "base64url";
+    case "latin1":
+      return "latin1";
+    case "binary":
+      return "binary";
+    case "ascii":
+      return "ascii";
+    case "ucs2":
+      return "ucs2";
+    case "ucs-2":
+      return "ucs-2";
+    case "utf16le":
+      return "utf16le";
+    case "utf-16le":
+      return "utf-16le";
+    default:
+      return undefined;
+  }
+}
+
+/** Normalize a value already proven to be a string to its codec name. */
 export function normalizeEncodingName(encoding: string): Encoding | undefined {
   switch (encoding.toLowerCase()) {
-    case "utf8": case "utf-8": return "utf8";
-    case "hex": return "hex";
-    case "base64": return "base64";
-    case "base64url": return "base64url";
-    case "latin1": case "binary": return "latin1";
-    case "ascii": return "ascii";
-    case "ucs2": case "ucs-2": case "utf16le": case "utf-16le": return "utf16le";
-    default: return undefined;
+    case "utf8":
+    case "utf-8":
+      return "utf8";
+    case "hex":
+      return "hex";
+    case "base64":
+      return "base64";
+    case "base64url":
+      return "base64url";
+    case "latin1":
+    case "binary":
+      return "latin1";
+    case "ascii":
+      return "ascii";
+    case "ucs2":
+    case "ucs-2":
+    case "utf16le":
+    case "utf-16le":
+      return "utf16le";
+    default:
+      return undefined;
   }
 }
 

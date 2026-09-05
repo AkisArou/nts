@@ -14,7 +14,7 @@
 // implemented by both classes, while this class declares its public surface
 // normally.
 
-import { Buffer } from "../../buffer/src/main.ts";
+import { normalizeEncodingSpelling, type Encoding } from "../../buffer/src/encodings.ts";
 import {
   ERR_METHOD_NOT_IMPLEMENTED,
   ERR_STREAM_ALREADY_FINISHED,
@@ -194,9 +194,9 @@ export class Duplex extends Readable {
     }
   }
 
-  setDefaultEncoding(encoding: string): this {
-    const normalized = encoding.toLowerCase();
-    if (!Buffer.isEncoding(normalized)) throw new ERR_UNKNOWN_ENCODING(normalized);
+  setDefaultEncoding(encoding: Encoding): this {
+    const normalized = normalizeEncodingSpelling(encoding);
+    if (normalized === undefined) throw new ERR_UNKNOWN_ENCODING(encoding);
     this._writableState.defaultEncoding = normalized;
     return this;
   }

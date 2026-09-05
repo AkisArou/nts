@@ -12,7 +12,7 @@
 // on by node's own tests, so they are part of the surface.
 
 import { Buffer } from "../../buffer/src/main.ts";
-import { normalizeEncodingName, type Encoding } from "../../buffer/src/encodings.ts";
+import { normalizeEncoding, type Encoding } from "../../buffer/src/encodings.ts";
 import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_THIS,
@@ -62,7 +62,7 @@ function utf8CheckByte(byte: number): number {
  * incomplete tail until the next chunk completes it.
  */
 export class StringDecoder {
-  readonly encoding: string;
+  readonly encoding: Encoding;
 
   /** The bytes of a character seen so far. Four is the longest any encoding needs. */
   readonly #lastChar: Buffer;
@@ -87,17 +87,12 @@ export class StringDecoder {
     return this.#lastTotal;
   }
 
-  constructor(encoding?: string) {
-    // The public typed form is a string, while a JavaScript caller can still
-    // cross the module boundary with anything. Narrow here so the normalizer
-    // itself has one precise input representation.
-    const normalized = encoding === undefined || encoding === null
-      ? "utf8"
-      : typeof encoding === "string"
-        ? normalizeEncodingName(encoding)
-        : undefined;
+  constructor(encoding?: Encoding) {
+    // The public form is `BufferEncoding`, while the shared normalizer also
+    // validates values arriving from untyped JavaScript callers.
+    const normalized = normalizeEncoding(encoding);
     if (normalized === undefined) {
-      throw new ERR_UNKNOWN_ENCODING(String(encoding));
+      throw new ERR_UNKNOWN_ENCODING(encoding);
     }
     this.#codec = normalized;
     // Node reports the normalized name: `new StringDecoder('UTF-8').encoding`
@@ -172,11 +167,16 @@ export class StringDecoder {
     this.#fillConsumed = 0;
     const bytes = bytesOf(buf);
     switch (this.#codec) {
-      case "utf8": case "utf-8":
+      case "utf8":
+      case "utf-8":
         return this.utf8Text(bytes, offset);
-      case "ucs2": case "ucs-2": case "utf16le": case "utf-16le":
+      case "ucs2":
+      case "ucs-2":
+      case "utf16le":
+      case "utf-16le":
         return this.utf16Text(bytes, offset);
-      case "base64": case "base64url":
+      case "base64":
+      case "base64url":
         return this.base64Text(bytes, offset);
       default:
         // latin1, ascii and hex map byte-for-byte, so no character can straddle
@@ -233,11 +233,16 @@ export class StringDecoder {
   /** What the buffered bytes decode to when the stream ends on them. */
   private flush(): string {
     switch (this.#codec) {
-      case "base64": case "base64url":
+      case "base64":
+      case "base64url":
         return this.#lastChar.toString(this.#codec, 0, 3 - this.#lastNeed);
-      case "ucs2": case "ucs-2": case "utf16le": case "utf-16le":
+      case "ucs2":
+      case "ucs-2":
+      case "utf16le":
+      case "utf-16le":
         return this.#lastChar.toString("utf16le", 0, this.#lastTotal - this.#lastNeed);
-      case "utf8": case "utf-8":
+      case "utf8":
+      case "utf-8":
         // Decode the bytes themselves. A valid truncated sequence becomes one
         // replacement, while an invalid prefix such as F0 8F A2 becomes three;
         // returning a fixed replacement loses that distinction.

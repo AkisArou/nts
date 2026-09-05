@@ -7,6 +7,7 @@
 // keep cancellation/destruction symmetric in both directions.
 
 import { Buffer } from "../../buffer/src/main.ts";
+import type { Encoding } from "../../buffer/src/encodings.ts";
 import {
   AbortError,
   ERR_INVALID_ARG_TYPE,
@@ -32,7 +33,7 @@ import type { Duplex, DuplexOptions } from "./duplex.ts";
 
 export interface ReadableFromWebOptions {
   highWaterMark?: number | null | undefined;
-  encoding?: string | undefined;
+  encoding?: Encoding | undefined;
   objectMode?: boolean | undefined;
   signal?: AbortSignalLike | undefined;
 }

@@ -19,6 +19,7 @@
 // reason set out at the top of `writable.ts`.
 
 import { Buffer } from "../../buffer/src/main.ts";
+import type { Encoding } from "../../buffer/src/encodings.ts";
 import { StringDecoder } from "../../string_decoder/src/main.ts";
 import { validateAbortSignal, validateObject } from "../../internal/validators.ts";
 import {
@@ -130,8 +131,8 @@ export interface ReadableOptions {
   readableObjectMode?: boolean | undefined;
   highWaterMark?: number | null | undefined;
   readableHighWaterMark?: number | null | undefined;
-  encoding?: string | undefined;
-  defaultEncoding?: string | undefined;
+  encoding?: Encoding | undefined;
+  defaultEncoding?: Encoding | undefined;
   emitClose?: boolean | undefined;
   autoDestroy?: boolean | undefined;
   signal?: AbortSignalLike | undefined;
@@ -149,7 +150,7 @@ export class ReadableState {
   highWaterMark: number;
   emitClose: boolean;
   autoDestroy: boolean;
-  defaultEncoding = "utf8";
+  defaultEncoding: Encoding = "utf8";
 
   /** Chunks waiting to be read, and how far through them we are. */
   buffer: unknown[] = [];
@@ -168,7 +169,7 @@ export class ReadableState {
   multiAwaitDrain = false;
 
   decoder: StringDecoder | null = null;
-  encoding: string | null = null;
+  encoding: Encoding | null = null;
 
   /** A `_read` is outstanding: do not ask again until it pushes. */
   reading = false;
@@ -364,7 +365,7 @@ export class Readable extends Stream {
    * character split across two chunks arrives whole. That is the entire
    * reason this exists rather than the caller calling `toString`.
    */
-  setEncoding(encoding: string): this {
+  setEncoding(encoding: Encoding): this {
     const state = this._readableState;
     const decoder = new StringDecoder(encoding);
     state.decoder = decoder;
@@ -841,7 +842,7 @@ export class Readable extends Stream {
     return this._readableState ? this._readableState.objectMode : false;
   }
 
-  get readableEncoding(): string | null {
+  get readableEncoding(): Encoding | null {
     return this._readableState ? this._readableState.encoding : null;
   }
 

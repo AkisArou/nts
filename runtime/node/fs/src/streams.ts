@@ -14,6 +14,7 @@
 // closes.
 
 import { Buffer } from "../../buffer/src/main.ts";
+import type { Encoding } from "../../buffer/src/encodings.ts";
 import { Readable, Writable } from "../../stream/src/main.ts";
 import { finished } from "../../stream/src/main.ts";
 import type { BufferedWrite, WriteCallback } from "../../stream/src/writable.ts";
@@ -156,7 +157,7 @@ export interface StreamFSImplementation {
 
 export interface FileStreamOptions {
   flags?: string | undefined;
-  encoding?: string | undefined;
+  encoding?: Encoding | undefined;
   fd?: number | StreamFileHandle | null | undefined;
   mode?: number | undefined;
   autoClose?: boolean | undefined;
@@ -169,7 +170,7 @@ export interface FileStreamOptions {
   signal?: AbortSignalLike | null | undefined;
 }
 
-export type FileStreamOptionsInput = FileStreamOptions | string | null | undefined;
+export type FileStreamOptionsInput = FileStreamOptions | Encoding | null | undefined;
 
 function normalizeStreamOptions(options: FileStreamOptionsInput): FileStreamOptions {
   if (options === null || options === undefined) return {};
