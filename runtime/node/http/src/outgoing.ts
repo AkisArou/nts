@@ -514,6 +514,11 @@ export class OutgoingMessage<
     return this.#errored;
   }
 
+  /** Node's legacy read surface for the serialized start line and headers. */
+  get _header(): string | null {
+    return this.#head;
+  }
+
   get writableObjectMode(): boolean {
     return false;
   }
