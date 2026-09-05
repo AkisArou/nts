@@ -25,6 +25,10 @@ interface SocketReceiver {
 }
 
 export interface AgentOptions {
+  /** Port used when a request through this agent does not name one. */
+  defaultPort?: number | undefined;
+  /** URL protocol accepted by this agent. */
+  protocol?: string | undefined;
   /** Keep idle sockets for reuse. Off by default, as node's is. */
   keepAlive?: boolean | undefined;
   /** How long an idle socket is kept before being closed. */
@@ -43,6 +47,8 @@ interface Pending {
 }
 
 export class Agent extends EventEmitter {
+  defaultPort: number;
+  protocol: string;
   keepAlive: boolean;
   keepAliveMsecs: number;
   maxSockets: number;
@@ -60,6 +66,8 @@ export class Agent extends EventEmitter {
   constructor(options: AgentOptions = {}) {
     super();
     this.options = { ...options };
+    this.defaultPort = options.defaultPort || 80;
+    this.protocol = options.protocol || "http:";
     this.keepAlive = options.keepAlive ?? false;
     this.keepAliveMsecs = options.keepAliveMsecs ?? 1000;
     this.maxSockets = options.maxSockets ?? Infinity;
@@ -85,12 +93,9 @@ export class Agent extends EventEmitter {
   }
 
   /** Give `request` a socket, now or when one comes free. */
-  addRequest(
-    request: SocketReceiver,
-    options: { host?: string; port?: number },
-  ): void {
+  addRequest(request: SocketReceiver, options: { host?: string; port?: number }): void {
     const host = options.host ?? "localhost";
-    const port = options.port ?? 80;
+    const port = options.port ?? this.defaultPort;
     const name = this.getName({ host, port });
 
     const free = this.freeSockets[name];

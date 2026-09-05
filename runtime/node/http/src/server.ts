@@ -15,12 +15,18 @@ import { Buffer } from "../../buffer/src/main.ts";
 import { Server as NetServer, Socket } from "../../net/src/main.ts";
 import type { ServerOptions as NetServerOptions } from "../../net/src/main.ts";
 import { HTTPParser, REQUEST, methods } from "./parser.ts";
+import type { ParserError } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { ServerResponse } from "./outgoing.ts";
 import { clearInterval, setInterval } from "../../timers/src/main.ts";
 import type { Timeout } from "../../timers/src/main.ts";
-import { validateInteger, validateObject } from "../../internal/validators.ts";
-import { ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
+import {
+  validateBoolean,
+  validateInteger,
+  validateObject,
+  validateOneOf,
+} from "../../internal/validators.ts";
+import { ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
 
 export interface HttpServerOptions extends NetServerOptions {
   /** How long a connection may sit idle between requests. */
@@ -30,14 +36,14 @@ export interface HttpServerOptions extends NetServerOptions {
   requestTimeout?: number | undefined;
   connectionsCheckingInterval?: number | undefined;
   maxHeaderSize?: number | undefined;
+  httpValidation?: "strict" | "relaxed" | "insecure" | undefined;
+  insecureHTTPParser?: boolean | undefined;
+  requireHostHeader?: boolean | undefined;
   IncomingMessage?: typeof IncomingMessage | undefined;
   ServerResponse?: typeof ServerResponse | undefined;
 }
 
-export type RequestListener = (
-  request: IncomingMessage,
-  response: ServerResponse,
-) => void;
+export type RequestListener = (request: IncomingMessage, response: ServerResponse) => void;
 
 interface ConnectionDeadline {
   socket: Socket;
@@ -56,6 +62,29 @@ class HTTPRequestTimeoutError extends Error {
   }
 }
 
+class HTTPParseError extends Error {
+  readonly code: string;
+  readonly bytesParsed: number;
+  readonly rawPacket: Buffer;
+
+  constructor(parserError: ParserError, rawPacket: Buffer) {
+    super(`Parse Error: ${parserError.reason}`);
+    this.code = parserError.code;
+    this.bytesParsed = parserError.bytesParsed;
+    this.rawPacket = rawPacket;
+  }
+}
+
+function defaultParseErrorResponse(code: string): string {
+  if (code === "HPE_HEADER_OVERFLOW") {
+    return "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\n\r\n";
+  }
+  if (code === "HPE_CHUNK_EXTENSIONS_OVERFLOW") {
+    return "HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\n\r\n";
+  }
+  return "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n";
+}
+
 export class Server extends NetServer {
   /**
    * Idle time before a kept-alive connection is closed.
@@ -70,6 +99,7 @@ export class Server extends NetServer {
   connectionsCheckingInterval = 30000;
   maxHeadersCount: number | null = null;
   maxRequestsPerSocket = 0;
+  requireHostHeader: boolean;
 
   /**
    * Every accepted connection, so `close` can end the idle ones.
@@ -97,6 +127,8 @@ export class Server extends NetServer {
   #IncomingMessage: typeof IncomingMessage;
   #ServerResponse: typeof ServerResponse;
   #connectionsChecker: Timeout | undefined;
+  #lenientHeaderValues: boolean;
+  #lenientTransferEncoding: boolean;
 
   constructor(options?: HttpServerOptions | RequestListener, listener?: RequestListener) {
     let opts: HttpServerOptions = {};
@@ -115,11 +147,34 @@ export class Server extends NetServer {
     const keepAliveTimeout = opts.keepAliveTimeout ?? 5000;
     const connectionsCheckingInterval = opts.connectionsCheckingInterval ?? 30000;
     const maxHeaderSize = opts.maxHeaderSize ?? 80 * 1024;
+    const httpValidation: unknown = opts.httpValidation;
+    const insecureHTTPParser: unknown = opts.insecureHTTPParser;
+    const requireHostHeader = opts.requireHostHeader ?? true;
     validateInteger(requestTimeout, "requestTimeout", 0);
     validateInteger(headersTimeout, "headersTimeout", 0);
     validateInteger(keepAliveTimeout, "keepAliveTimeout", 0);
     validateInteger(connectionsCheckingInterval, "connectionsCheckingInterval", 0);
     validateInteger(maxHeaderSize, "maxHeaderSize", 0);
+    if (httpValidation !== undefined) {
+      validateOneOf(httpValidation, "options.httpValidation", [
+        "strict",
+        "relaxed",
+        "insecure",
+      ] as const);
+    }
+    if (insecureHTTPParser !== undefined) {
+      validateBoolean(insecureHTTPParser, "options.insecureHTTPParser");
+    }
+    if (opts.requireHostHeader !== undefined) {
+      validateBoolean(opts.requireHostHeader, "options.requireHostHeader");
+    }
+    if (httpValidation !== undefined && insecureHTTPParser !== undefined) {
+      throw new ERR_INVALID_ARG_VALUE(
+        "options.httpValidation",
+        httpValidation,
+        "cannot be used together with options.insecureHTTPParser",
+      );
+    }
     if (requestTimeout > 0 && headersTimeout > requestTimeout) {
       throw new ERR_OUT_OF_RANGE("headersTimeout", "<= requestTimeout", headersTimeout);
     }
@@ -131,6 +186,10 @@ export class Server extends NetServer {
     this.headersTimeout = headersTimeout;
     this.requestTimeout = requestTimeout;
     this.connectionsCheckingInterval = connectionsCheckingInterval;
+    this.requireHostHeader = requireHostHeader;
+    this.#lenientHeaderValues =
+      httpValidation === "relaxed" || httpValidation === "insecure" || insecureHTTPParser === true;
+    this.#lenientTransferEncoding = httpValidation === "insecure" || insecureHTTPParser === true;
 
     if (handler) this.on("request", handler);
     this.on("connection", (socket: Socket) => this.#serve(socket));
@@ -149,19 +208,21 @@ export class Server extends NetServer {
   }
 
   #checkConnections(): void {
-    const headersTimeout = Number.isFinite(this.headersTimeout) && this.headersTimeout >= 0
-      ? this.headersTimeout
-      : 0;
-    const requestTimeout = Number.isFinite(this.requestTimeout) && this.requestTimeout >= 0
-      ? this.requestTimeout
-      : 0;
+    const headersTimeout =
+      Number.isFinite(this.headersTimeout) && this.headersTimeout >= 0 ? this.headersTimeout : 0;
+    const requestTimeout =
+      Number.isFinite(this.requestTimeout) && this.requestTimeout >= 0 ? this.requestTimeout : 0;
     if (headersTimeout === 0 && requestTimeout === 0) return;
 
     const now = Date.now();
     for (const deadline of this.#deadlines.values()) {
-      const headersExpired = !deadline.headersComplete && headersTimeout > 0 &&
+      const headersExpired =
+        !deadline.headersComplete &&
+        headersTimeout > 0 &&
         now - deadline.headersStartedAt >= headersTimeout;
-      const requestExpired = !deadline.requestComplete && requestTimeout > 0 &&
+      const requestExpired =
+        !deadline.requestComplete &&
+        requestTimeout > 0 &&
         now - deadline.requestStartedAt >= requestTimeout;
       if (!headersExpired && !requestExpired) continue;
 
@@ -198,7 +259,13 @@ export class Server extends NetServer {
     // The parser is work performed by this accepted connection, not by the
     // listener that happened to accept it. Node passes the socket resource to
     // its native parser for exactly this trigger relationship.
-    parser.initialize(REQUEST, this.#maxHeaderSize, socket.asyncId());
+    parser.initialize(
+      REQUEST,
+      this.#maxHeaderSize,
+      socket.asyncId(),
+      this.#lenientHeaderValues,
+      this.#lenientTransferEncoding,
+    );
 
     socket.once("close", () => {
       this.#connections.delete(socket);
@@ -215,17 +282,37 @@ export class Server extends NetServer {
     /** Bytes that arrived after a message ended, belonging to the next one. */
     let pending: Buffer | null = null;
 
+    const ignoreSocketError = (_error: unknown): void => {};
+
+    const suppressFurtherSocketErrors = (): void => {
+      socket.removeListener("error", onSocketError);
+      socket.on("error", ignoreSocketError);
+    };
+
+    const onSocketError = (error: unknown): void => {
+      suppressFurtherSocketErrors();
+      if (!this.emit("clientError", error, socket)) socket.destroy(error);
+    };
+
+    const handleParseError = (parserError: ParserError, rawPacket: Buffer): void => {
+      const error = new HTTPParseError(parserError, rawPacket);
+      suppressFurtherSocketErrors();
+      if (this.emit("clientError", error, socket)) return;
+      if (socket.writable) {
+        socket.end(defaultParseErrorResponse(error.code), () => socket.destroy(error));
+      } else {
+        socket.destroy(error);
+      }
+    };
+
     const feed = (data: Buffer): void => {
       let view: Uint8Array = data;
       for (;;) {
         const consumed = parser.execute(view);
         if (consumed < 0) {
           const error = parser.error;
-          this.emit("clientError", Object.assign(new Error(error?.reason ?? "Parse Error"), {
-            code: error?.code,
-            bytesParsed: error?.bytesParsed,
-          }), socket);
-          socket.destroy();
+          if (error === null) throw new Error("HTTP parser failed without an error");
+          handleParseError(error, data);
           return;
         }
         // A message ended part-way through this buffer: the rest is the next
@@ -244,6 +331,9 @@ export class Server extends NetServer {
     };
 
     parser.onHeadersComplete = (info) => {
+      if (info.type !== REQUEST) {
+        throw new Error("request parser produced response metadata");
+      }
       deadline.headersComplete = true;
       const message = new this.#IncomingMessage(socket);
       message.httpVersionMajor = info.versionMajor;
@@ -258,6 +348,7 @@ export class Server extends NetServer {
 
       incoming = message;
       response = new this.#ServerResponse(message);
+      response._setHeaderValidation(this.#lenientHeaderValues);
       response.socket = socket;
       response.shouldKeepAlive = info.shouldKeepAlive;
 
@@ -267,10 +358,24 @@ export class Server extends NetServer {
       this.#idle.delete(socket);
 
       const finished = response;
-      finished.once(
-        "finish",
-        () => this.#afterResponse(socket, parser, deadline, message, finished),
+      finished.once("finish", () =>
+        this.#afterResponse(socket, parser, deadline, message, finished),
       );
+
+      // RFC 9112 section 3.2 requires exactly one authority for HTTP/1.1.
+      // Node preserves its historical first-wins handling for duplicates, but
+      // a missing Host field is unambiguously invalid unless the server owner
+      // explicitly opts out for a legacy peer.
+      if (
+        this.requireHostHeader &&
+        info.versionMajor === 1 &&
+        info.versionMinor === 1 &&
+        message.headers.host === undefined
+      ) {
+        finished.writeHead(400, { Connection: "close" });
+        finished.end();
+        return 0;
+      }
 
       // A client that said `Expect: 100-continue` is waiting for permission
       // before it sends the body. Node emits an event if anyone is listening
@@ -301,16 +406,24 @@ export class Server extends NetServer {
       incoming.push(null);
     };
 
-    socket.on("data", (chunk: Buffer) => feed(chunk));
+    socket.on("error", onSocketError);
 
-    socket.on("end", () => {
-      if (parser.finish() < 0) socket.destroy();
+    socket.on("data", (chunk: unknown) => {
+      if (chunk instanceof Buffer) {
+        feed(chunk);
+      } else if (typeof chunk === "string" || chunk instanceof Uint8Array) {
+        feed(Buffer.from(chunk));
+      } else {
+        throw new TypeError("HTTP socket produced a non-byte data chunk");
+      }
     });
 
-    socket.on("error", (error: unknown) => {
-      // A socket error with no request in flight is a client that went away,
-      // which is ordinary and not the program's business.
-      if (incoming) incoming.destroy(error);
+    socket.on("end", () => {
+      if (parser.finish() < 0) {
+        const error = parser.error;
+        if (error === null) throw new Error("HTTP parser failed without an error");
+        handleParseError(error, Buffer.alloc(0));
+      }
     });
 
     void pending;
@@ -347,10 +460,7 @@ export class Server extends NetServer {
     if (!message.complete) {
       // `_dump()` resumed the source, but the parser has not reached the end
       // yet.  Reuse is safe only after the readable has drained that body.
-      message.once(
-        "end",
-        () => this.#afterResponse(socket, parser, deadline, message, response),
-      );
+      message.once("end", () => this.#afterResponse(socket, parser, deadline, message, response));
       return;
     }
 

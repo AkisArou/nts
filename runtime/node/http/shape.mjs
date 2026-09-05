@@ -1,6 +1,19 @@
+function callableConstructor(Class, name) {
+  const callable = function (...args) {
+    if (new.target === undefined) return new Class(...args);
+    return Reflect.construct(Class, args, new.target === callable ? Class : new.target);
+  };
+  Object.setPrototypeOf(callable, Class);
+  callable.prototype = Class.prototype;
+  Object.defineProperty(callable, "name", { value: name });
+  return callable;
+}
+
 export function shape(exports) {
   const http = { ...exports };
   delete http.default;
+  http.Agent = callableConstructor(exports.Agent, "Agent");
+  http.Server = callableConstructor(exports.Server, "Server");
   return http;
 }
 
@@ -90,6 +103,8 @@ export function internals(exports) {
       freeParser(parser) {
         parser.free();
       },
+      _checkInvalidHeaderChar: exports.checkInvalidHeaderChar,
+      _checkIsHttpToken: exports.checkIsHttpToken,
     },
   };
 }

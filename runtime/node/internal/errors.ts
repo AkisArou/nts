@@ -114,7 +114,9 @@ abstract class NodeError extends Error {
   abstract readonly code: string;
   // Written with brackets because `get constructor()` is a type error, which
   // is presumably why node writes it this way too.
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override toString(): string {
     return `${this.name} [${this.code}]: ${this.message}`;
   }
@@ -122,7 +124,9 @@ abstract class NodeError extends Error {
 
 abstract class NodeTypeError extends TypeError {
   abstract readonly code: string;
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override toString(): string {
     return `${this.name} [${this.code}]: ${this.message}`;
   }
@@ -130,7 +134,9 @@ abstract class NodeTypeError extends TypeError {
 
 abstract class NodeRangeError extends RangeError {
   abstract readonly code: string;
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   override toString(): string {
     return `${this.name} [${this.code}]: ${this.message}`;
   }
@@ -138,7 +144,9 @@ abstract class NodeRangeError extends RangeError {
 
 abstract class NodeURIError extends URIError {
   abstract readonly code: string;
-  override get ["constructor"](): unknown { return URIError; }
+  override get ["constructor"](): unknown {
+    return URIError;
+  }
   override toString(): string {
     return `${this.name} [${this.code}]: ${this.message}`;
   }
@@ -159,9 +167,7 @@ export class ERR_DIR_CONCURRENT_OPERATION extends NodeError {
   override readonly code = "ERR_DIR_CONCURRENT_OPERATION";
 
   constructor() {
-    super(
-      "Cannot do synchronous work on directory handle with concurrent asynchronous operations",
-    );
+    super("Cannot do synchronous work on directory handle with concurrent asynchronous operations");
     this.name = "Error";
   }
 }
@@ -181,9 +187,7 @@ export class ERR_FS_EISDIR extends NodeError {
   path: string;
 
   constructor(errno: number, systemCode: string, description: string, path: string) {
-    super(
-      `Path is a directory: rm returned ${systemCode} (${description}) ${path}`,
-    );
+    super(`Path is a directory: rm returned ${systemCode} (${description}) ${path}`);
     this.name = "SystemError";
     this.errno = errno;
     this.syscall = "rm";
@@ -222,9 +226,7 @@ function isClassName(value: string): boolean {
   for (let i = 1; i < value.length; i++) {
     const code = value.charCodeAt(i);
     const alphaNumeric =
-      (code >= 48 && code <= 57) ||
-      (code >= 65 && code <= 90) ||
-      (code >= 97 && code <= 122);
+      (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
     if (!alphaNumeric) return false;
   }
   return true;
@@ -252,14 +254,9 @@ function isTypeName(value: string): boolean {
 
 type ExpectedCategory = "type" | "instance" | "other";
 
-function expectedCategory(
-  value: string,
-  objectIsInstance: boolean,
-): ExpectedCategory {
+function expectedCategory(value: string, objectIsInstance: boolean): ExpectedCategory {
   if (isTypeName(value)) {
-    return objectIsInstance && value.toLowerCase() === "object"
-      ? "instance"
-      : "type";
+    return objectIsInstance && value.toLowerCase() === "object" ? "instance" : "type";
   }
   return isClassName(value) ? "instance" : "other";
 }
@@ -288,9 +285,7 @@ function formatExpected(
   for (const value of values) {
     if (expectedCategory(value, objectIsInstance) !== category) continue;
     if (written > 0) {
-      result += written === count - 1
-        ? (count === 2 ? " or " : ", or ")
-        : ", ";
+      result += written === count - 1 ? (count === 2 ? " or " : ", or ") : ", ";
     }
     result += category === "type" ? value.toLowerCase() : value;
     written++;
@@ -300,7 +295,9 @@ function formatExpected(
 
 /** `The "path" argument must be of type string. Received type number (42)`. */
 export class ERR_INVALID_ARG_TYPE extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_ARG_TYPE";
 
   constructor(name: string, expected: string | string[], actual: unknown) {
@@ -368,7 +365,9 @@ function addNumericalSeparator(value: string): string {
 
 /** `The value of "pid" is out of range. It must be an integer. Received NaN`. */
 export class ERR_OUT_OF_RANGE extends NodeRangeError {
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   override readonly code = "ERR_OUT_OF_RANGE";
 
   constructor(name: string, range: string, input: unknown, replaceDefaultBoolean = false) {
@@ -479,7 +478,9 @@ export function inspectValue(value: unknown): string {
 
 /** `The "ext" argument must be of type string. Received ...` for a value. */
 export class ERR_INVALID_ARG_VALUE extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_ARG_VALUE";
 
   constructor(name: string, value: unknown, reason = "is invalid") {
@@ -497,7 +498,9 @@ export class ERR_INVALID_ARG_VALUE extends NodeTypeError {
 
 /** `The "listener" argument must be of type function. Received …`. */
 export class ERR_INVALID_ARG_TYPE_FUNCTION extends ERR_INVALID_ARG_TYPE {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   constructor(name: string, actual: unknown) {
     super(name, "function", actual);
   }
@@ -505,7 +508,9 @@ export class ERR_INVALID_ARG_TYPE_FUNCTION extends ERR_INVALID_ARG_TYPE {
 
 /** `Unhandled error. (…)` — an `error` event with nobody listening. */
 export class ERR_UNHANDLED_ERROR extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_UNHANDLED_ERROR";
   context: unknown;
 
@@ -517,7 +522,9 @@ export class ERR_UNHANDLED_ERROR extends NodeError {
 
 /** `URI malformed` — a lone surrogate, which has no UTF-8 encoding. */
 export class ERR_INVALID_URI extends NodeURIError {
-  override get ["constructor"](): unknown { return URIError; }
+  override get ["constructor"](): unknown {
+    return URIError;
+  }
   override readonly code = "ERR_INVALID_URI";
 
   constructor() {
@@ -528,7 +535,9 @@ export class ERR_INVALID_URI extends NodeURIError {
 
 /** `Unknown encoding: utf9`. */
 export class ERR_UNKNOWN_ENCODING extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_UNKNOWN_ENCODING";
 
   constructor(encoding: unknown) {
@@ -543,17 +552,21 @@ export class ERR_UNKNOWN_ENCODING extends NodeTypeError {
 
 /** `The "actual" and "expected" arguments must be specified`. */
 export class ERR_MISSING_ARGS extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_MISSING_ARGS";
 
   constructor(...names: (string | readonly string[])[]) {
-    const quoted = names.map((name) => Array.isArray(name)
-      ? name.map((part) => `"${part}"`).join(" or ")
-      : `"${name}"`);
+    const quoted = names.map((name) =>
+      Array.isArray(name) ? name.map((part) => `"${part}"`).join(" or ") : `"${name}"`,
+    );
     const list =
-      quoted.length === 1 ? quoted[0]
-      : quoted.length === 2 ? `${quoted[0]} and ${quoted[1]}`
-      : `${quoted.slice(0, -1).join(", ")}, and ${quoted[quoted.length - 1]}`;
+      quoted.length === 1
+        ? quoted[0]
+        : quoted.length === 2
+          ? `${quoted[0]} and ${quoted[1]}`
+          : `${quoted.slice(0, -1).join(", ")}, and ${quoted[quoted.length - 1]}`;
     super(`The ${list} argument${names.length > 1 ? "s" : ""} must be specified`);
     this.name = "TypeError";
   }
@@ -561,7 +574,9 @@ export class ERR_MISSING_ARGS extends NodeTypeError {
 
 /** `Query pairs must be iterable`. */
 export class ERR_ARG_NOT_ITERABLE extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_ARG_NOT_ITERABLE";
 
   constructor(name: string) {
@@ -572,7 +587,9 @@ export class ERR_ARG_NOT_ITERABLE extends NodeTypeError {
 
 /** `Console expects a writable stream instance for stdout`. */
 export class ERR_CONSOLE_WRITABLE_STREAM extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_CONSOLE_WRITABLE_STREAM";
 
   constructor(name: string) {
@@ -583,7 +600,9 @@ export class ERR_CONSOLE_WRITABLE_STREAM extends NodeTypeError {
 
 /** Two options that cannot both be given, such as `colorMode` and `colors`. */
 export class ERR_INCOMPATIBLE_OPTION_PAIR extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INCOMPATIBLE_OPTION_PAIR";
 
   constructor(first: string, second: string) {
@@ -594,7 +613,9 @@ export class ERR_INCOMPATIBLE_OPTION_PAIR extends NodeTypeError {
 
 /** `Cannot set cursor row without setting its column`. */
 export class ERR_INVALID_CURSOR_POS extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_CURSOR_POS";
 
   constructor() {
@@ -611,7 +632,9 @@ export class ERR_INVALID_CURSOR_POS extends NodeTypeError {
  * as success. The original is kept on `reason`.
  */
 export class ERR_FALSY_VALUE_REJECTION extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_FALSY_VALUE_REJECTION";
   readonly reason: unknown;
 
@@ -624,7 +647,9 @@ export class ERR_FALSY_VALUE_REJECTION extends NodeError {
 
 /** `Class constructor Assert cannot be invoked without \`new\``. */
 export class ERR_CONSTRUCT_CALL_REQUIRED extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_CONSTRUCT_CALL_REQUIRED";
 
   constructor(name: string) {
@@ -641,7 +666,9 @@ export class ERR_CONSTRUCT_CALL_REQUIRED extends NodeTypeError {
  * expectation and the assertion would pass for the wrong reason.
  */
 export class ERR_AMBIGUOUS_ARGUMENT extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_AMBIGUOUS_ARGUMENT";
 
   constructor(name: string, reason: string) {
@@ -652,13 +679,15 @@ export class ERR_AMBIGUOUS_ARGUMENT extends NodeTypeError {
 
 /** A callback or supplied function returned something it should not have. */
 export class ERR_INVALID_RETURN_VALUE extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_RETURN_VALUE";
 
   constructor(input: string, name: string, value: unknown) {
     super(
       `Expected ${input} to be returned from the "${name}" function but got ` +
-      `${determineSpecificType(value)}.`,
+        `${determineSpecificType(value)}.`,
     );
     this.name = "TypeError";
   }
@@ -666,7 +695,9 @@ export class ERR_INVALID_RETURN_VALUE extends NodeTypeError {
 
 /** Something was asked for while the process was on its way out. */
 export class ERR_UNAVAILABLE_DURING_EXIT extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_UNAVAILABLE_DURING_EXIT";
 
   constructor() {
@@ -677,7 +708,9 @@ export class ERR_UNAVAILABLE_DURING_EXIT extends NodeError {
 
 /** An operation on something that is no longer in a state to allow it. */
 export class ERR_INVALID_STATE extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_INVALID_STATE";
 
   constructor(reason: string) {
@@ -688,7 +721,9 @@ export class ERR_INVALID_STATE extends NodeError {
 
 /** The TypeError-flavoured form of `ERR_INVALID_STATE`. */
 export class ERR_INVALID_STATE_TYPE extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_STATE";
 
   constructor(reason: string) {
@@ -699,7 +734,9 @@ export class ERR_INVALID_STATE_TYPE extends NodeTypeError {
 
 /** The RangeError-flavoured form of `ERR_INVALID_STATE`. */
 export class ERR_INVALID_STATE_RANGE extends NodeRangeError {
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   override readonly code = "ERR_INVALID_STATE";
 
   constructor(reason: string) {
@@ -710,7 +747,9 @@ export class ERR_INVALID_STATE_RANGE extends NodeRangeError {
 
 /** `Invalid URL` — the input could not be parsed as one. */
 export class ERR_INVALID_URL extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_URL";
   readonly input: string;
 
@@ -729,7 +768,9 @@ export class ERR_INVALID_URL extends NodeTypeError {
 
 /** `File URL host must be "localhost" or empty on linux`. */
 export class ERR_INVALID_FILE_URL_HOST extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_FILE_URL_HOST";
 
   constructor(platform: string) {
@@ -740,7 +781,9 @@ export class ERR_INVALID_FILE_URL_HOST extends NodeTypeError {
 
 /** `File URL path must be absolute`. */
 export class ERR_INVALID_FILE_URL_PATH extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_FILE_URL_PATH";
   readonly input: unknown;
 
@@ -753,12 +796,15 @@ export class ERR_INVALID_FILE_URL_PATH extends NodeTypeError {
 
 /** `The URL must be of scheme file`. */
 export class ERR_INVALID_URL_SCHEME extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_URL_SCHEME";
 
   constructor(expected: string | readonly string[]) {
     const list = typeof expected === "string" ? [expected] : expected;
-    const wanted = list.length === 2 ? `one of scheme ${list[0]} or ${list[1]}` : `of scheme ${list[0]}`;
+    const wanted =
+      list.length === 2 ? `one of scheme ${list[0]} or ${list[1]}` : `of scheme ${list[0]}`;
     super(`The URL must be ${wanted}`);
     this.name = "TypeError";
   }
@@ -788,7 +834,9 @@ export class AbortError extends Error {
  * for the same mistake.
  */
 export class ERR_ILLEGAL_CONSTRUCTOR extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_ILLEGAL_CONSTRUCTOR";
 
   constructor() {
@@ -806,7 +854,9 @@ export class ERR_ILLEGAL_CONSTRUCTOR extends NodeTypeError {
  * promise the environment cannot keep -- another process can change it.
  */
 export class ERR_INVALID_OBJECT_DEFINE_PROPERTY extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_OBJECT_DEFINE_PROPERTY";
 
   constructor(message: string) {
@@ -817,7 +867,9 @@ export class ERR_INVALID_OBJECT_DEFINE_PROPERTY extends NodeTypeError {
 
 /** `Unknown signal: SIGBANANA`. */
 export class ERR_UNKNOWN_SIGNAL extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_UNKNOWN_SIGNAL";
 
   constructor(signal: string) {
@@ -828,18 +880,24 @@ export class ERR_UNKNOWN_SIGNAL extends NodeTypeError {
 
 /** Only one capture callback may be installed at a time. */
 export class ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET";
 
   constructor() {
-    super("`process.setupUncaughtExceptionCapture()` was called while a capture callback was already active");
+    super(
+      "`process.setupUncaughtExceptionCapture()` was called while a capture callback was already active",
+    );
     this.name = "Error";
   }
 }
 
 /** A user or group name/id that the operating system cannot resolve. */
 export class ERR_UNKNOWN_CREDENTIAL extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_UNKNOWN_CREDENTIAL";
 
   constructor(kind: "User" | "Group", value: number | string) {
@@ -850,11 +908,15 @@ export class ERR_UNKNOWN_CREDENTIAL extends NodeError {
 
 /** The host cannot do this at all, as opposed to refusing this request. */
 export class ERR_FEATURE_UNAVAILABLE_ON_PLATFORM extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_FEATURE_UNAVAILABLE_ON_PLATFORM";
 
   constructor(feature: string) {
-    super(`The feature ${feature} is unavailable on this platform, which is being used to run Node.js`);
+    super(
+      `The feature ${feature} is unavailable on this platform, which is being used to run Node.js`,
+    );
     this.name = "TypeError";
   }
 }
@@ -868,7 +930,9 @@ export class ERR_FEATURE_UNAVAILABLE_ON_PLATFORM extends NodeTypeError {
  * work for that and not for a type mistake.
  */
 export class ERR_INVALID_ARG_VALUE_RANGE extends NodeRangeError {
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   override readonly code = "ERR_INVALID_ARG_VALUE";
 
   constructor(name: string, value: unknown, reason = "is invalid") {
@@ -879,7 +943,9 @@ export class ERR_INVALID_ARG_VALUE_RANGE extends NodeRangeError {
 
 /** A whole-file read cannot be represented by libuv's signed I/O length. */
 export class ERR_FS_FILE_TOO_LARGE extends NodeRangeError {
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   override readonly code = "ERR_FS_FILE_TOO_LARGE";
 
   constructor(size: number) {
@@ -900,7 +966,9 @@ export class ERR_FS_WATCH_QUEUE_OVERFLOW extends NodeError {
 
 /** A callback that was already called, called again. */
 export class ERR_MULTIPLE_CALLBACK extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_MULTIPLE_CALLBACK";
 
   constructor() {
@@ -911,7 +979,9 @@ export class ERR_MULTIPLE_CALLBACK extends NodeError {
 
 /** A caught non-Error value promoted to Node's ordinary operation failure. */
 export class ERR_OPERATION_FAILED extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_OPERATION_FAILED";
 
   constructor(reason: string) {
@@ -940,11 +1010,7 @@ export function aggregateTwoErrors(inner: unknown, outer: unknown): unknown {
       return outer;
     }
     const message = outer instanceof Error ? outer.message : undefined;
-    const aggregate = new NodeAggregateError(
-      [outer, inner],
-      message,
-      knownErrorCode(outer),
-    );
+    const aggregate = new NodeAggregateError([outer, inner], message, knownErrorCode(outer));
     captureStackTrace(aggregate, aggregateTwoErrors);
     return aggregate;
   }
@@ -980,7 +1046,9 @@ function knownErrorCode(value: unknown): string | undefined {
 
 /** A subclass did not provide a method the base class requires. */
 export class ERR_METHOD_NOT_IMPLEMENTED extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_METHOD_NOT_IMPLEMENTED";
 
   constructor(name: string) {
@@ -991,7 +1059,9 @@ export class ERR_METHOD_NOT_IMPLEMENTED extends NodeError {
 
 /** `Cannot pipe, not readable`. A `Writable` inherits `pipe` and refuses it. */
 export class ERR_STREAM_CANNOT_PIPE extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_STREAM_CANNOT_PIPE";
 
   constructor() {
@@ -1001,7 +1071,9 @@ export class ERR_STREAM_CANNOT_PIPE extends NodeError {
 }
 
 export class ERR_STREAM_DESTROYED extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_STREAM_DESTROYED";
 
   constructor(name: string) {
@@ -1011,7 +1083,9 @@ export class ERR_STREAM_DESTROYED extends NodeError {
 }
 
 export class ERR_STREAM_ALREADY_FINISHED extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_STREAM_ALREADY_FINISHED";
 
   constructor(name: string) {
@@ -1028,7 +1102,9 @@ export class ERR_STREAM_ALREADY_FINISHED extends NodeError {
  * a runtime condition.
  */
 export class ERR_STREAM_NULL_VALUES extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_STREAM_NULL_VALUES";
 
   constructor() {
@@ -1038,7 +1114,9 @@ export class ERR_STREAM_NULL_VALUES extends NodeTypeError {
 }
 
 export class ERR_STREAM_WRITE_AFTER_END extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_STREAM_WRITE_AFTER_END";
 
   constructor() {
@@ -1049,7 +1127,9 @@ export class ERR_STREAM_WRITE_AFTER_END extends NodeError {
 
 /** The stream closed before it said it was done. */
 export class ERR_STREAM_PREMATURE_CLOSE extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_STREAM_PREMATURE_CLOSE";
 
   constructor() {
@@ -1059,7 +1139,9 @@ export class ERR_STREAM_PREMATURE_CLOSE extends NodeError {
 }
 
 export class ERR_STREAM_PUSH_AFTER_EOF extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_STREAM_PUSH_AFTER_EOF";
 
   constructor() {
@@ -1069,7 +1151,9 @@ export class ERR_STREAM_PUSH_AFTER_EOF extends NodeError {
 }
 
 export class ERR_STREAM_UNSHIFT_AFTER_END_EVENT extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_STREAM_UNSHIFT_AFTER_END_EVENT";
 
   constructor() {
@@ -1079,7 +1163,9 @@ export class ERR_STREAM_UNSHIFT_AFTER_END_EVENT extends NodeError {
 }
 
 export class ERR_STREAM_UNABLE_TO_PIPE extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_STREAM_UNABLE_TO_PIPE";
 
   constructor() {
@@ -1090,7 +1176,9 @@ export class ERR_STREAM_UNABLE_TO_PIPE extends NodeError {
 
 /** A brotli parameter key the library does not have. */
 export class ERR_BROTLI_INVALID_PARAM extends NodeRangeError {
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   override readonly code = "ERR_BROTLI_INVALID_PARAM";
 
   constructor(parameter: unknown) {
@@ -1101,7 +1189,9 @@ export class ERR_BROTLI_INVALID_PARAM extends NodeRangeError {
 
 /** A zstd parameter key the library does not have. */
 export class ERR_ZSTD_INVALID_PARAM extends NodeRangeError {
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   override readonly code = "ERR_ZSTD_INVALID_PARAM";
 
   constructor(parameter: unknown) {
@@ -1112,7 +1202,9 @@ export class ERR_ZSTD_INVALID_PARAM extends NodeRangeError {
 
 /** An operation on a socket that has already been closed. */
 export class ERR_SOCKET_CLOSED extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_SOCKET_CLOSED";
 
   constructor() {
@@ -1123,7 +1215,9 @@ export class ERR_SOCKET_CLOSED extends NodeError {
 
 /** A socket was destroyed while its connection request was still pending. */
 export class ERR_SOCKET_CLOSED_BEFORE_CONNECTION extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_SOCKET_CLOSED_BEFORE_CONNECTION";
 
   constructor() {
@@ -1134,7 +1228,9 @@ export class ERR_SOCKET_CLOSED_BEFORE_CONNECTION extends NodeError {
 
 /** A role-neutral bound handle transfers to exactly one server or socket. */
 export class ERR_SOCKET_HANDLE_ADOPTED extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_SOCKET_HANDLE_ADOPTED";
 
   constructor() {
@@ -1145,7 +1241,9 @@ export class ERR_SOCKET_HANDLE_ADOPTED extends NodeError {
 
 /** A reset was requested for a non-TCP transport. */
 export class ERR_INVALID_HANDLE_TYPE extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_HANDLE_TYPE";
 
   constructor() {
@@ -1156,7 +1254,9 @@ export class ERR_INVALID_HANDLE_TYPE extends NodeTypeError {
 
 /** A destination address was rejected by a net.BlockList. */
 export class ERR_IP_BLOCKED extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_IP_BLOCKED";
 
   constructor(address: string) {
@@ -1167,12 +1267,94 @@ export class ERR_IP_BLOCKED extends NodeError {
 
 /** A header changed after the head was already on the wire. */
 export class ERR_HTTP_HEADERS_SENT extends NodeError {
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
   override readonly code = "ERR_HTTP_HEADERS_SENT";
 
   constructor(action: string) {
     super(`Cannot ${action} headers after they are sent to the client`);
     this.name = "Error";
+  }
+}
+
+/** Strict HTTP body bytes do not match the declared Content-Length. */
+export class ERR_HTTP_CONTENT_LENGTH_MISMATCH extends NodeError {
+  override get ["constructor"](): unknown {
+    return Error;
+  }
+  override readonly code = "ERR_HTTP_CONTENT_LENGTH_MISMATCH";
+
+  constructor(actual: number, expected: number) {
+    super(
+      `Response body's content-length of ${actual} byte(s) does not match the content-length of ${expected} byte(s) set in header`,
+    );
+    this.name = "Error";
+  }
+}
+
+function formatInvalidStatusCode(value: unknown): string {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    return `[${value.join(", ")}]`;
+  }
+  if (value !== null && typeof value === "object") return "{}";
+  return String(value);
+}
+
+/** An HTTP response status outside Node's accepted three-digit range. */
+export class ERR_HTTP_INVALID_STATUS_CODE extends NodeRangeError {
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
+  override readonly code = "ERR_HTTP_INVALID_STATUS_CODE";
+
+  constructor(statusCode: unknown) {
+    super(`Invalid status code: ${formatInvalidStatusCode(statusCode)}`);
+    this.name = "RangeError";
+  }
+}
+
+/** `undefined` is never a meaningful serialized HTTP header value. */
+export class ERR_HTTP_INVALID_HEADER_VALUE extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_HTTP_INVALID_HEADER_VALUE";
+
+  constructor(value: unknown, name: string) {
+    super(`Invalid value "${String(value)}" for header "${name}"`);
+    this.name = "TypeError";
+  }
+}
+
+/** Text contains a character forbidden by the protocol field. */
+export class ERR_INVALID_CHAR extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_INVALID_CHAR";
+
+  constructor(name: string, field?: string) {
+    super(
+      field === undefined
+        ? `Invalid character in ${name}`
+        : `Invalid character in ${name} ["${field}"]`,
+    );
+    this.name = "TypeError";
+  }
+}
+
+/** A URL component contains bytes that must be percent-escaped. */
+export class ERR_UNESCAPED_CHARACTERS extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_UNESCAPED_CHARACTERS";
+
+  constructor(name: string) {
+    super(`${name} contains unescaped characters`);
+    this.name = "TypeError";
   }
 }
 
@@ -1184,7 +1366,9 @@ export class ERR_HTTP_HEADERS_SENT extends NodeError {
  * input into a header from becoming exploitable.
  */
 export class ERR_INVALID_HTTP_TOKEN extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_HTTP_TOKEN";
 
   constructor(what: string, token: string) {
@@ -1194,7 +1378,9 @@ export class ERR_INVALID_HTTP_TOKEN extends NodeTypeError {
 }
 
 export class ERR_INVALID_THIS extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_THIS";
 
   constructor(type: string) {
@@ -1205,7 +1391,9 @@ export class ERR_INVALID_THIS extends NodeTypeError {
 
 /** `Each query pair must be an iterable [name, value] tuple`. */
 export class ERR_INVALID_TUPLE extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_INVALID_TUPLE";
 
   constructor(name: string, reason: string) {
@@ -1216,20 +1404,26 @@ export class ERR_INVALID_TUPLE extends NodeTypeError {
 
 /** `Attempt to access memory outside buffer bounds`. */
 export class ERR_BUFFER_OUT_OF_BOUNDS extends NodeRangeError {
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   override readonly code = "ERR_BUFFER_OUT_OF_BOUNDS";
 
   constructor(name?: string) {
-    super(name === undefined
-      ? "Attempt to access memory outside buffer bounds"
-      : `"${name}" is outside of buffer bounds`);
+    super(
+      name === undefined
+        ? "Attempt to access memory outside buffer bounds"
+        : `"${name}" is outside of buffer bounds`,
+    );
     this.name = "RangeError";
   }
 }
 
 /** `Buffer size must be a multiple of 16-bits`. */
 export class ERR_INVALID_BUFFER_SIZE extends NodeRangeError {
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   override readonly code = "ERR_INVALID_BUFFER_SIZE";
 
   constructor(unit: string) {
@@ -1240,7 +1434,9 @@ export class ERR_INVALID_BUFFER_SIZE extends NodeRangeError {
 
 /** `Cannot create a Buffer larger than 64 bytes`. */
 export class ERR_BUFFER_TOO_LARGE extends NodeRangeError {
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   override readonly code = "ERR_BUFFER_TOO_LARGE";
 
   constructor(maximum: number) {
@@ -1251,7 +1447,9 @@ export class ERR_BUFFER_TOO_LARGE extends NodeRangeError {
 
 /** `Trailing junk found after the end of the compressed stream`. */
 export class ERR_TRAILING_JUNK_AFTER_STREAM_END extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_TRAILING_JUNK_AFTER_STREAM_END";
 
   constructor() {
@@ -1269,7 +1467,9 @@ export class ERR_TRAILING_JUNK_AFTER_STREAM_END extends NodeTypeError {
  * something the caller could catch.
  */
 export class ERR_ASYNC_CALLBACK extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_ASYNC_CALLBACK";
 
   constructor(name: string) {
@@ -1280,7 +1480,9 @@ export class ERR_ASYNC_CALLBACK extends NodeTypeError {
 
 /** `Invalid name for async "type": ` — an `AsyncResource` with an empty type. */
 export class ERR_ASYNC_TYPE extends NodeTypeError {
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
   override readonly code = "ERR_ASYNC_TYPE";
 
   constructor(type: unknown) {
@@ -1297,7 +1499,9 @@ export class ERR_ASYNC_TYPE extends NodeTypeError {
  * anything below -1 is not an id at all.
  */
 export class ERR_INVALID_ASYNC_ID extends NodeRangeError {
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   override readonly code = "ERR_INVALID_ASYNC_ID";
 
   constructor(name: string, value: unknown) {
@@ -1314,7 +1518,9 @@ export class ERR_INVALID_ASYNC_ID extends NodeRangeError {
  */
 export class ERR_USE_AFTER_CLOSE extends NodeError {
   override readonly code = "ERR_USE_AFTER_CLOSE";
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
 
   constructor(name: string) {
     super(`${name} was closed`);
@@ -1333,7 +1539,9 @@ export class ERR_USE_AFTER_CLOSE extends NodeError {
 /** `Socket is already bound` — `bind` on a socket that has one. */
 export class ERR_SOCKET_ALREADY_BOUND extends NodeError {
   override readonly code = "ERR_SOCKET_ALREADY_BOUND";
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
 
   constructor() {
     super("Socket is already bound");
@@ -1344,7 +1552,9 @@ export class ERR_SOCKET_ALREADY_BOUND extends NodeError {
 /** `Buffer size must be a positive integer`. */
 export class ERR_SOCKET_BAD_BUFFER_SIZE extends NodeTypeError {
   override readonly code = "ERR_SOCKET_BAD_BUFFER_SIZE";
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
 
   constructor() {
     super("Buffer size must be a positive integer");
@@ -1355,7 +1565,9 @@ export class ERR_SOCKET_BAD_BUFFER_SIZE extends NodeTypeError {
 /** `Already connected` — a second `connect` on a connected datagram socket. */
 export class ERR_SOCKET_DGRAM_IS_CONNECTED extends NodeError {
   override readonly code = "ERR_SOCKET_DGRAM_IS_CONNECTED";
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
 
   constructor() {
     super("Already connected");
@@ -1366,7 +1578,9 @@ export class ERR_SOCKET_DGRAM_IS_CONNECTED extends NodeError {
 /** `Not connected` — `remoteAddress` or a connected `send` without one. */
 export class ERR_SOCKET_DGRAM_NOT_CONNECTED extends NodeError {
   override readonly code = "ERR_SOCKET_DGRAM_NOT_CONNECTED";
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
 
   constructor() {
     super("Not connected");
@@ -1377,7 +1591,9 @@ export class ERR_SOCKET_DGRAM_NOT_CONNECTED extends NodeError {
 /** `Not running` — an operation on a socket whose handle has been closed. */
 export class ERR_SOCKET_DGRAM_NOT_RUNNING extends NodeError {
   override readonly code = "ERR_SOCKET_DGRAM_NOT_RUNNING";
-  override get ["constructor"](): unknown { return Error; }
+  override get ["constructor"](): unknown {
+    return Error;
+  }
 
   constructor() {
     super("Not running");
@@ -1388,7 +1604,9 @@ export class ERR_SOCKET_DGRAM_NOT_RUNNING extends NodeError {
 /** `Bad socket type specified. Valid types are: udp4, udp6`. */
 export class ERR_SOCKET_BAD_TYPE extends NodeTypeError {
   override readonly code = "ERR_SOCKET_BAD_TYPE";
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
 
   constructor() {
     super("Bad socket type specified. Valid types are: udp4, udp6");
@@ -1405,7 +1623,9 @@ export class ERR_SOCKET_BAD_TYPE extends NodeTypeError {
  */
 export class ERR_SOCKET_BAD_PORT extends NodeRangeError {
   override readonly code = "ERR_SOCKET_BAD_PORT";
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
 
   constructor(name: string, port: unknown, allowZero = true) {
     super(
@@ -1419,7 +1639,9 @@ export class ERR_SOCKET_BAD_PORT extends NodeRangeError {
 /** `Invalid IP address: value` returned by a socket lookup callback. */
 export class ERR_INVALID_IP_ADDRESS extends NodeTypeError {
   override readonly code = "ERR_INVALID_IP_ADDRESS";
-  override get ["constructor"](): unknown { return TypeError; }
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
 
   constructor(address: unknown) {
     super(`Invalid IP address: ${String(address)}`);
@@ -1430,7 +1652,9 @@ export class ERR_INVALID_IP_ADDRESS extends NodeTypeError {
 /** `Invalid address family: family host:port` from a socket lookup result. */
 export class ERR_INVALID_ADDRESS_FAMILY extends NodeRangeError {
   override readonly code = "ERR_INVALID_ADDRESS_FAMILY";
-  override get ["constructor"](): unknown { return RangeError; }
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
   readonly host: string;
   readonly port: number;
 

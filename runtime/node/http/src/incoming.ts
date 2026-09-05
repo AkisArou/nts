@@ -15,23 +15,6 @@
 import { Readable } from "../../stream/src/main.ts";
 
 /**
- * Fields that may appear more than once and are joined with a comma.
- *
- * Everything not named here keeps its *first* value and discards later ones,
- * which is node's rule and the one that matters for `Host`: a request with two
- * of those is ambiguous about which server it is for, and taking the first is
- * at least deterministic.
- */
-const commaJoined = new Set([
-  "accept", "accept-charset", "accept-encoding", "accept-language",
-  "access-control-request-headers", "cache-control", "connection",
-  "cookie", "dav", "expect", "forwarded", "if-match", "if-none-match",
-  "link", "pragma", "proxy-authenticate", "public", "sec-websocket-extensions",
-  "sec-websocket-protocol", "te", "trailer", "transfer-encoding", "upgrade",
-  "vary", "via", "warning", "www-authenticate", "x-forwarded-for",
-]);
-
-/**
  * Fields that keep only the first value, silently.
  *
  * Node's list. The reason these are singled out rather than falling under the
@@ -39,10 +22,24 @@ const commaJoined = new Set([
  * be an attack rather than a mistake.
  */
 const firstWins = new Set([
-  "age", "authorization", "content-length", "content-type", "etag", "expires",
-  "from", "host", "if-modified-since", "if-unmodified-since", "last-modified",
-  "location", "max-forwards", "proxy-authorization", "referer",
-  "retry-after", "server", "user-agent",
+  "age",
+  "authorization",
+  "content-length",
+  "content-type",
+  "etag",
+  "expires",
+  "from",
+  "host",
+  "if-modified-since",
+  "if-unmodified-since",
+  "last-modified",
+  "location",
+  "max-forwards",
+  "proxy-authorization",
+  "referer",
+  "retry-after",
+  "server",
+  "user-agent",
 ]);
 
 export interface IncomingSocket {
@@ -146,7 +143,11 @@ export class IncomingMessage extends Readable {
   }
 
   /** One header line, folded into `headers` under the rules above. */
-  _addHeaderLine(name: string, value: string, dest: Record<string, string | string[] | undefined>): void {
+  _addHeaderLine(
+    name: string,
+    value: string,
+    dest: Record<string, string | string[] | undefined>,
+  ): void {
     const key = name.toLowerCase();
 
     if (key === "set-cookie") {
@@ -166,13 +167,12 @@ export class IncomingMessage extends Readable {
     }
 
     if (firstWins.has(key)) return;
-    if (commaJoined.has(key)) {
-      dest[key] = `${existing}, ${value}`;
-      return;
-    }
-    // Not in either list: node keeps the first, so that an unknown field
-    // behaves like the cautious case rather than the permissive one.
-    dest[key] = existing;
+
+    // Ordinary and extension fields form a comma-delimited list. Cookie is
+    // the sole semicolon-delimited exception because each line carries a
+    // separate cookie-pair rather than another value in an HTTP list.
+    const separator = key === "cookie" ? "; " : ", ";
+    dest[key] = `${existing}${separator}${value}`;
   }
 
   /** Called by the parser's `kOnHeadersComplete` equivalent. */

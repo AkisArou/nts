@@ -75,11 +75,80 @@ export const RESPONSE = 2;
  * number the parser reports back into a name.
  */
 export const methods = [
-  "DELETE", "GET", "HEAD", "POST", "PUT", "CONNECT", "OPTIONS", "TRACE",
-  "COPY", "LOCK", "MKCOL", "MOVE", "PROPFIND", "PROPPATCH", "SEARCH",
-  "UNLOCK", "BIND", "REBIND", "UNBIND", "ACL", "REPORT", "MKACTIVITY",
-  "CHECKOUT", "MERGE", "M-SEARCH", "NOTIFY", "SUBSCRIBE", "UNSUBSCRIBE",
-  "PATCH", "PURGE", "MKCALENDAR", "LINK", "UNLINK", "SOURCE", "QUERY",
+  "DELETE",
+  "GET",
+  "HEAD",
+  "POST",
+  "PUT",
+  "CONNECT",
+  "OPTIONS",
+  "TRACE",
+  "COPY",
+  "LOCK",
+  "MKCOL",
+  "MOVE",
+  "PROPFIND",
+  "PROPPATCH",
+  "SEARCH",
+  "UNLOCK",
+  "BIND",
+  "REBIND",
+  "UNBIND",
+  "ACL",
+  "REPORT",
+  "MKACTIVITY",
+  "CHECKOUT",
+  "MERGE",
+  "M-SEARCH",
+  "NOTIFY",
+  "SUBSCRIBE",
+  "UNSUBSCRIBE",
+  "PATCH",
+  "PURGE",
+  "MKCALENDAR",
+  "LINK",
+  "UNLINK",
+  "SOURCE",
+  "QUERY",
+];
+
+/** Public method names in Node's stable alphabetical order. */
+export const METHODS: string[] = [
+  "ACL",
+  "BIND",
+  "CHECKOUT",
+  "CONNECT",
+  "COPY",
+  "DELETE",
+  "GET",
+  "HEAD",
+  "LINK",
+  "LOCK",
+  "M-SEARCH",
+  "MERGE",
+  "MKACTIVITY",
+  "MKCALENDAR",
+  "MKCOL",
+  "MOVE",
+  "NOTIFY",
+  "OPTIONS",
+  "PATCH",
+  "POST",
+  "PROPFIND",
+  "PROPPATCH",
+  "PURGE",
+  "PUT",
+  "QUERY",
+  "REBIND",
+  "REPORT",
+  "SEARCH",
+  "SOURCE",
+  "SUBSCRIBE",
+  "TRACE",
+  "UNBIND",
+  "UNLINK",
+  "UNLOCK",
+  "UNSUBSCRIBE",
 ];
 
 export interface ParserError {
@@ -88,18 +157,34 @@ export interface ParserError {
   bytesParsed: number;
 }
 
-/** What `kOnHeadersComplete` is given. */
-export interface HeadersComplete {
+interface CommonHeadersComplete {
   versionMajor: number;
   versionMinor: number;
   headers: string[];
-  method: number;
-  url: string;
-  statusCode: number;
-  statusMessage: string;
   upgrade: boolean;
   shouldKeepAlive: boolean;
 }
+
+/** Request metadata passed to `onHeadersComplete`. */
+export interface RequestHeadersComplete extends CommonHeadersComplete {
+  type: typeof REQUEST;
+  method: number;
+  url: string;
+  statusCode: undefined;
+  statusMessage: undefined;
+}
+
+/** Response metadata passed to `onHeadersComplete`. */
+export interface ResponseHeadersComplete extends CommonHeadersComplete {
+  type: typeof RESPONSE;
+  method: undefined;
+  url: undefined;
+  statusCode: number;
+  statusMessage: string;
+}
+
+/** What `onHeadersComplete` is given. */
+export type HeadersComplete = RequestHeadersComplete | ResponseHeadersComplete;
 
 /**
  * A header name, lowercased for comparison.
@@ -121,9 +206,17 @@ function isValidFieldName(name: string): boolean {
       (c >= 0x30 && c <= 0x39) || // 0-9
       (c >= 0x41 && c <= 0x5a) || // A-Z
       (c >= 0x61 && c <= 0x7a) || // a-z
-      c === 0x21 || (c >= 0x23 && c <= 0x27) || c === 0x2a || c === 0x2b ||
-      c === 0x2d || c === 0x2e || c === 0x5e || c === 0x5f || c === 0x60 ||
-      c === 0x7c || c === 0x7e;
+      c === 0x21 ||
+      (c >= 0x23 && c <= 0x27) ||
+      c === 0x2a ||
+      c === 0x2b ||
+      c === 0x2d ||
+      c === 0x2e ||
+      c === 0x5e ||
+      c === 0x5f ||
+      c === 0x60 ||
+      c === 0x7c ||
+      c === 0x7e;
     if (!ok) return false;
   }
   return true;
@@ -135,10 +228,14 @@ function isValidFieldName(name: string): boolean {
  * A newline inside a header value is header injection: everything after it is
  * read as a new header, or as the start of a second message.
  */
-function isValidFieldValue(value: string): boolean {
+function isValidFieldValue(value: string, lenient: boolean): boolean {
   for (let i = 0; i < value.length; i++) {
     const c = value.charCodeAt(i);
-    if (c === CR || c === LF || c === 0) return false;
+    if (lenient) {
+      if (c === CR || c === LF || c === 0 || c > 0xff) return false;
+    } else if (c !== HTAB && (c < SP || c === 0x7f || c > 0xff)) {
+      return false;
+    }
   }
   return true;
 }
@@ -171,6 +268,8 @@ export class HTTPParser {
   #headers: string[] = [];
   #headerBytes = 0;
   #maxHeaderSize = 80 * 1024;
+  #lenientHeaderValues = false;
+  #lenientTransferEncoding = false;
 
   #method = 0;
   #url = "";
@@ -194,9 +293,17 @@ export class HTTPParser {
   #triggerAsyncId = 0;
   #contextFrame: AsyncContextFrame | undefined;
 
-  initialize(type: number, maxHeaderSize?: number, triggerAsyncId?: number): void {
+  initialize(
+    type: number,
+    maxHeaderSize?: number,
+    triggerAsyncId?: number,
+    lenientHeaderValues = false,
+    lenientTransferEncoding = false,
+  ): void {
     this.#type = type;
     this.#maxHeaderSize = maxHeaderSize ?? 80 * 1024;
+    this.#lenientHeaderValues = lenientHeaderValues;
+    this.#lenientTransferEncoding = lenientTransferEncoding;
 
     // A parser is an asynchronous resource, and which one depends on what it
     // is parsing: node calls a request parser an HTTPINCOMINGMESSAGE and a
@@ -262,6 +369,17 @@ export class HTTPParser {
     const scope = this.#enterCallback();
     try {
       callback.call(this);
+    } finally {
+      this.#leaveCallback(scope);
+    }
+  }
+
+  #callHeaders(headers: string[], url: string): void {
+    const callback = this.onHeaders;
+    if (callback === null) return;
+    const scope = this.#enterCallback();
+    try {
+      callback.call(this, headers, url);
     } finally {
       this.#leaveCallback(scope);
     }
@@ -378,10 +496,16 @@ export class HTTPParser {
       const lineEnd = indexOfLF(data, offset);
       if (lineEnd === -1) {
         // No complete line: keep what is here and wait for more.
+        const remaining = data.length - offset;
         this.#partial += decode(data.subarray(offset));
         offset = data.length;
         this.#bytesParsed = offset;
-        this.#headerBytes += data.length - offset;
+        this.#headerBytes += remaining;
+        if (this.#headerBytes > this.#maxHeaderSize) {
+          return this.#fail("HPE_HEADER_OVERFLOW", "Header overflow");
+        }
+        const partialResult = this.#validatePartialStartLine();
+        if (partialResult < 0) return partialResult;
         break;
       }
 
@@ -441,6 +565,11 @@ export class HTTPParser {
 
       case State.Trailer:
         if (line === "") {
+          if (this.#headers.length > 0) {
+            const trailers = this.#headers;
+            this.#headers = [];
+            this.#callHeaders(trailers, "");
+          }
           this.#complete();
           return 0;
         }
@@ -494,9 +623,24 @@ export class HTTPParser {
     }
 
     // Keep-alive is the default from 1.1 and must be asked for in 1.0.
-    this.#shouldKeepAlive = this.#versionMajor > 1 ||
-      (this.#versionMajor === 1 && this.#versionMinor >= 1);
+    this.#shouldKeepAlive =
+      this.#versionMajor > 1 || (this.#versionMajor === 1 && this.#versionMinor >= 1);
     this.#state = State.Header;
+    return 0;
+  }
+
+  #validatePartialStartLine(): number {
+    if (this.#state !== State.StartLine || this.#partial.length === 0) return 0;
+    if (this.#type === RESPONSE) return 0;
+
+    const firstSpace = this.#partial.indexOf(" ");
+    const method = firstSpace === -1 ? this.#partial : this.#partial.slice(0, firstSpace);
+    if (!isValidFieldName(method)) {
+      return this.#fail("HPE_INVALID_METHOD", "Invalid method");
+    }
+    if (firstSpace !== -1 && methods.indexOf(method) === -1) {
+      return this.#fail("HPE_INVALID_METHOD", "Invalid method");
+    }
     return 0;
   }
 
@@ -533,7 +677,7 @@ export class HTTPParser {
     }
 
     const value = line.slice(colon + 1).trim();
-    if (!isValidFieldValue(value)) {
+    if (!isValidFieldValue(value, this.#lenientHeaderValues)) {
       return this.#fail("HPE_INVALID_HEADER_TOKEN", "Invalid header value");
     }
 
@@ -557,6 +701,12 @@ export class HTTPParser {
         break;
       }
       case "transfer-encoding": {
+        if (this.#sawTransferEncoding && !this.#lenientTransferEncoding) {
+          return this.#fail(
+            "HPE_INVALID_TRANSFER_ENCODING",
+            "Invalid `Transfer-Encoding` header value",
+          );
+        }
         this.#sawTransferEncoding = true;
         const encodings = value.split(",").map((e) => lower(e.trim()));
         // Only a final `chunked` gives a framing. Anything else leaves the
@@ -602,6 +752,10 @@ export class HTTPParser {
       } else if (this.#type === RESPONSE) {
         // A response with no framing runs until the connection closes.
         this.#framing = Framing.UntilClose;
+        // Closing the connection is the delimiter, so this socket cannot
+        // carry another response even when HTTP/1.1 would otherwise default
+        // to persistence.
+        this.#shouldKeepAlive = false;
       } else {
         // A request with no framing has no body at all. Assuming otherwise
         // would make the next request on the connection look like this one's
@@ -610,17 +764,32 @@ export class HTTPParser {
       }
     }
 
-    const info: HeadersComplete = {
-      versionMajor: this.#versionMajor,
-      versionMinor: this.#versionMinor,
-      headers: this.#headers,
-      method: this.#method,
-      url: this.#url,
-      statusCode: this.#statusCode,
-      statusMessage: this.#statusMessage,
-      upgrade: this.#upgrade,
-      shouldKeepAlive: this.#shouldKeepAlive,
-    };
+    const info: HeadersComplete =
+      this.#type === RESPONSE
+        ? {
+            type: RESPONSE,
+            versionMajor: this.#versionMajor,
+            versionMinor: this.#versionMinor,
+            headers: this.#headers,
+            method: undefined,
+            url: undefined,
+            statusCode: this.#statusCode,
+            statusMessage: this.#statusMessage,
+            upgrade: this.#upgrade,
+            shouldKeepAlive: this.#shouldKeepAlive,
+          }
+        : {
+            type: REQUEST,
+            versionMajor: this.#versionMajor,
+            versionMinor: this.#versionMinor,
+            headers: this.#headers,
+            method: this.#method,
+            url: this.#url,
+            statusCode: undefined,
+            statusMessage: undefined,
+            upgrade: this.#upgrade,
+            shouldKeepAlive: this.#shouldKeepAlive,
+          };
     this.#headers = [];
 
     // The callback may say "no body" -- that is how a client tells the parser
@@ -634,8 +803,11 @@ export class HTTPParser {
       return 0;
     }
 
-    if (skip || this.#framing === Framing.None ||
-      (this.#framing === Framing.ContentLength && this.#remaining === 0)) {
+    if (
+      skip ||
+      this.#framing === Framing.None ||
+      (this.#framing === Framing.ContentLength && this.#remaining === 0)
+    ) {
       this.#complete();
       return 0;
     }
@@ -646,9 +818,8 @@ export class HTTPParser {
 
   #readBody(data: Uint8Array, offset: number): number {
     const available = data.length - offset;
-    const take = this.#framing === Framing.UntilClose
-      ? available
-      : Math.min(available, this.#remaining);
+    const take =
+      this.#framing === Framing.UntilClose ? available : Math.min(available, this.#remaining);
 
     if (take > 0) {
       this.#callBody(data.subarray(offset, offset + take));
@@ -715,9 +886,7 @@ function indexOfLF(data: Uint8Array, from: number): number {
 }
 
 function stripCR(line: string): string {
-  return line.length > 0 && line.charCodeAt(line.length - 1) === CR
-    ? line.slice(0, -1)
-    : line;
+  return line.length > 0 && line.charCodeAt(line.length - 1) === CR ? line.slice(0, -1) : line;
 }
 
 /**

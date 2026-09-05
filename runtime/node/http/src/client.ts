@@ -15,24 +15,45 @@
 import { Buffer } from "../../buffer/src/main.ts";
 import { Socket } from "../../net/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
-import { ERR_INVALID_ARG_TYPE } from "../../internal/errors.ts";
+import {
+  ERR_INVALID_ARG_VALUE,
+  ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_HTTP_TOKEN,
+  ERR_UNESCAPED_CHARACTERS,
+} from "../../internal/errors.ts";
+import { validateBoolean, validateOneOf } from "../../internal/validators.ts";
 import { HTTPParser, RESPONSE } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
-import { OutgoingMessage } from "./outgoing.ts";
+import { checkIsHttpToken, OutgoingMessage } from "./outgoing.ts";
+import type { OutgoingHeaders, OutgoingHeaderValue } from "./outgoing.ts";
 import { Agent, globalAgent } from "./agent.ts";
 
+export type RequestHeaderPair = readonly [string, OutgoingHeaderValue];
+export type RequestHeaderArray = readonly (string | RequestHeaderPair)[];
+export type RequestHeaders = OutgoingHeaders | RequestHeaderArray;
+
 export interface RequestOptions {
+  /** Present on WHATWG URL objects accepted by `request()` and `get()`. */
+  href?: string | undefined;
   host?: string | undefined;
   hostname?: string | undefined;
   port?: number | string | undefined;
   path?: string | undefined;
   method?: string | undefined;
-  headers?: Record<string, string | number | string[]> | undefined;
+  headers?: RequestHeaders | undefined;
   auth?: string | undefined;
   agent?: Agent | false | undefined;
+  defaultPort?: number | undefined;
   timeout?: number | undefined;
   setHost?: boolean | undefined;
-  createConnection?: ((options: RequestOptions) => Socket) | undefined;
+  httpValidation?: "strict" | "relaxed" | "insecure" | undefined;
+  insecureHTTPParser?: boolean | undefined;
+  createConnection?:
+    | ((
+        options: RequestOptions,
+        callback: (error: unknown, socket?: Socket) => void,
+      ) => Socket | undefined)
+    | undefined;
   /** Node's name for "do not add a body framing", used by GET and HEAD. */
   maxHeaderSize?: number | undefined;
 }
@@ -41,6 +62,52 @@ export type ResponseListener = (response: IncomingMessage) => void;
 
 /** Methods that carry no body, so no framing header should be added. */
 const BODILESS = new Set(["GET", "HEAD", "DELETE", "OPTIONS", "TRACE", "CONNECT"]);
+const INVALID_PATH = /[^\u0021-\u00ff]/;
+
+function requestHeadersAreArray(headers: RequestHeaders): headers is RequestHeaderArray {
+  return Array.isArray(headers);
+}
+
+function requestHeaderIsPair(header: string | RequestHeaderPair): header is RequestHeaderPair {
+  return Array.isArray(header);
+}
+
+function applyRequestHeaderArray(request: OutgoingMessage, headers: RequestHeaderArray): void {
+  const first = headers[0];
+  if (first !== undefined && requestHeaderIsPair(first)) {
+    for (const header of headers) {
+      if (!requestHeaderIsPair(header)) {
+        throw new ERR_INVALID_ARG_VALUE(
+          "options.headers",
+          headers,
+          "must contain only name/value pairs",
+        );
+      }
+      request.appendHeader(header[0], header[1]);
+    }
+    return;
+  }
+
+  if (headers.length % 2 !== 0) {
+    throw new ERR_INVALID_ARG_VALUE(
+      "options.headers",
+      headers,
+      "must contain an even number of entries",
+    );
+  }
+  for (let index = 0; index < headers.length; index += 2) {
+    const name = headers[index];
+    const value = headers[index + 1];
+    if (typeof name !== "string" || typeof value !== "string") {
+      throw new ERR_INVALID_ARG_VALUE(
+        "options.headers",
+        headers,
+        "must contain alternating string names and values",
+      );
+    }
+    request.appendHeader(name, value);
+  }
+}
 
 export class ClientRequest extends OutgoingMessage {
   method: string;
@@ -60,16 +127,64 @@ export class ClientRequest extends OutgoingMessage {
   constructor(options: RequestOptions | string, callback?: ResponseListener) {
     super();
 
-    const opts: RequestOptions = typeof options === "string"
-      ? parseUrlish(options)
-      : { ...options };
+    const opts: RequestOptions =
+      typeof options === "string"
+        ? parseUrlish(options)
+        : options.href === undefined
+          ? { ...options }
+          : { ...parseUrlish(options.href), ...options };
     this.#options = opts;
 
-    this.method = (opts.method ?? "GET").toUpperCase();
-    this.path = opts.path ?? "/";
+    const requestedMethod: unknown = opts.method;
+    if (
+      requestedMethod !== undefined &&
+      requestedMethod !== null &&
+      typeof requestedMethod !== "string"
+    ) {
+      throw new ERR_INVALID_ARG_TYPE("options.method", "string", requestedMethod);
+    }
+    const method = requestedMethod || "GET";
+    if (typeof method !== "string" || !checkIsHttpToken(method)) {
+      throw new ERR_INVALID_HTTP_TOKEN("Method", String(method));
+    }
+
+    this.method = method.toUpperCase();
+    this.path = opts.path || "/";
+    if (INVALID_PATH.test(this.path)) {
+      throw new ERR_UNESCAPED_CHARACTERS("Request path");
+    }
     this.host = opts.hostname ?? opts.host ?? "localhost";
-    this.port = Number(opts.port ?? 80);
+
+    const selectedAgent =
+      opts.agent === false || (opts.agent === undefined && opts.createConnection !== undefined)
+        ? null
+        : (opts.agent ?? globalAgent);
+    const defaultPort = opts.defaultPort || selectedAgent?.defaultPort || 80;
+    this.port = Number(opts.port || defaultPort);
     this.#timeoutMs = opts.timeout;
+
+    const httpValidation: unknown = opts.httpValidation;
+    const insecureHTTPParser: unknown = opts.insecureHTTPParser;
+    if (httpValidation !== undefined) {
+      validateOneOf(httpValidation, "options.httpValidation", [
+        "strict",
+        "relaxed",
+        "insecure",
+      ] as const);
+    }
+    if (insecureHTTPParser !== undefined) {
+      validateBoolean(insecureHTTPParser, "options.insecureHTTPParser");
+    }
+    if (httpValidation !== undefined && insecureHTTPParser !== undefined) {
+      throw new ERR_INVALID_ARG_VALUE(
+        "options.httpValidation",
+        httpValidation,
+        "cannot be used together with options.insecureHTTPParser",
+      );
+    }
+    this._setHeaderValidation(
+      httpValidation === "relaxed" || httpValidation === "insecure" || insecureHTTPParser === true,
+    );
 
     if (callback) this.once("response", callback);
 
@@ -79,16 +194,21 @@ export class ClientRequest extends OutgoingMessage {
     this.useChunkedEncodingByDefault = this.hasBody;
     this.shouldKeepAlive = true;
 
-    if (opts.headers) {
-      for (const [name, value] of Object.entries(opts.headers)) {
-        this.setHeader(name, value);
+    const rawHeaderArray = opts.headers !== undefined && requestHeadersAreArray(opts.headers);
+    if (opts.headers !== undefined) {
+      if (requestHeadersAreArray(opts.headers)) {
+        applyRequestHeaderArray(this, opts.headers);
+      } else {
+        for (const [name, value] of Object.entries(opts.headers)) {
+          this.setHeader(name, value);
+        }
       }
     }
 
     // `Host` identifies which site on a shared address the request is for, and
     // is mandatory in HTTP/1.1. Added unless the caller set it or opted out.
-    if (opts.setHost !== false && !this.hasHeader("host")) {
-      const needsPort = this.port !== 80;
+    if (!rawHeaderArray && opts.setHost !== false && !this.hasHeader("host")) {
+      const needsPort = this.port !== defaultPort;
       this.setHeader("Host", needsPort ? `${this.host}:${this.port}` : this.host);
     }
 
@@ -98,15 +218,41 @@ export class ClientRequest extends OutgoingMessage {
 
     this.statusLine = `${this.method} ${this.path} HTTP/1.1`;
 
-    this.agent = opts.agent === false ? null : (opts.agent ?? globalAgent);
+    this.agent = selectedAgent;
     if (this.agent) {
       this.agent.addRequest(this, { host: this.host, port: this.port });
     } else {
-      const socket = opts.createConnection
-        ? opts.createConnection(opts)
-        : globalAgent.createConnection({ host: this.host, port: this.port });
-      nextTick(() => this.onSocket(socket));
+      const createConnection = opts.createConnection;
+      if (createConnection === undefined) {
+        const socket = globalAgent.createConnection({ host: this.host, port: this.port });
+        nextTick(() => this.onSocket(socket));
+      } else {
+        let completed = false;
+        const onCreated = (error: unknown, socket?: Socket): void => {
+          if (completed) return;
+          completed = true;
+          if (error !== null && error !== undefined) {
+            nextTick(() => this.#fail(error));
+          } else if (socket === undefined) {
+            nextTick(() => this.#fail(new TypeError("createConnection did not provide a socket")));
+          } else {
+            this.onSocket(socket);
+          }
+        };
+        try {
+          const socket = createConnection(opts, onCreated);
+          if (socket !== undefined) onCreated(null, socket);
+        } catch (error) {
+          onCreated(error);
+        }
+      }
     }
+
+    // `Expect: 100-continue` is a two-phase request. The server cannot grant
+    // permission until it has seen the head, while the caller correctly waits
+    // for that permission before writing the body. Queue the head immediately
+    // (or send it when the socket arrives) to avoid deadlocking both sides.
+    if (this.hasHeader("expect")) this.flushHeaders();
   }
 
   protected override _implicitHeader(): void {
@@ -118,7 +264,15 @@ export class ClientRequest extends OutgoingMessage {
     this.socket = socket;
 
     const parser = new HTTPParser();
-    parser.initialize(RESPONSE, this.#options.maxHeaderSize);
+    parser.initialize(
+      RESPONSE,
+      this.#options.maxHeaderSize,
+      undefined,
+      this.#options.httpValidation === "relaxed" ||
+        this.#options.httpValidation === "insecure" ||
+        this.#options.insecureHTTPParser === true,
+      this.#options.httpValidation === "insecure" || this.#options.insecureHTTPParser === true,
+    );
 
     let response: IncomingMessage | null = null;
 
@@ -127,10 +281,12 @@ export class ClientRequest extends OutgoingMessage {
       if (consumed < 0) {
         const error = parser.error;
         cleanupSocketListeners();
-        this.#fail(Object.assign(new Error(error?.reason ?? "Parse Error"), {
-          code: error?.code,
-          bytesParsed: error?.bytesParsed,
-        }));
+        this.#fail(
+          Object.assign(new Error(error?.reason ?? "Parse Error"), {
+            code: error?.code,
+            bytesParsed: error?.bytesParsed,
+          }),
+        );
       }
     };
 
@@ -167,6 +323,9 @@ export class ClientRequest extends OutgoingMessage {
     };
 
     parser.onHeadersComplete = (info) => {
+      if (info.type !== RESPONSE) {
+        throw new Error("response parser produced request metadata");
+      }
       const message = new IncomingMessage(socket);
       message.httpVersionMajor = info.versionMajor;
       message.httpVersionMinor = info.versionMinor;
@@ -196,7 +355,7 @@ export class ClientRequest extends OutgoingMessage {
 
       response = message;
       this.res = message;
-      this.emit("response", message);
+      if (!this.emit("response", message)) message._dump();
 
       // The reply to a HEAD carries the length the body *would* have had. A
       // parser that believed it would wait for bytes that never come.
@@ -208,15 +367,27 @@ export class ClientRequest extends OutgoingMessage {
     };
 
     parser.onMessageComplete = () => {
-      if (!response) return;
-      response.complete = true;
-      response.push(null);
+      if (!response) {
+        // Informational responses complete their own parser message, but not
+        // this ClientRequest. Reset synchronously so a final response already
+        // present later in the same TCP chunk is parsed rather than stranded.
+        parser.continueAfterMessage();
+        return;
+      }
+      const completed = response;
+      completed.complete = true;
+      completed.once("end", () => {
+        // A socket becomes reusable only after every user `end` listener has
+        // observed the completed response. Node performs the pool transition
+        // on the following tick for the same reason.
+        nextTick(() => this.#finishResponse(socket, completed));
+      });
+      completed.push(null);
       // A client parser belongs to this request, not to a pooled socket. The
       // socket may survive for another request, but this parser's async
       // resource is finished as soon as the response is complete.
       parser.free();
       cleanupSocketListeners();
-      this.#finishResponse(socket, response);
     };
 
     socket.on("data", onData);
@@ -233,6 +404,8 @@ export class ClientRequest extends OutgoingMessage {
 
   #finishResponse(socket: Socket, response: IncomingMessage): void {
     const reusable = this.shouldKeepAlive && response.keepAlive && !this.destroyed;
+    this.destroyed = true;
+    this.emit("close");
     if (this.agent) {
       this.agent.release(
         this.agent.getName({ host: this.host, port: this.port }),
