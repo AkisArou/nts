@@ -73,6 +73,11 @@ export interface RequestOptions {
 
 export type ResponseListener = (response: IncomingMessage) => void;
 
+interface PendingResponseChunk {
+  readonly chunk: Buffer;
+  next: PendingResponseChunk | null;
+}
+
 /** Methods that carry no body, so no framing header should be added. */
 const BODILESS = new Set(["GET", "HEAD", "DELETE", "OPTIONS", "TRACE", "CONNECT"]);
 const INVALID_PATH = /[^\u0021-\u00ff]/;
@@ -353,6 +358,9 @@ export class ClientRequest extends OutgoingMessage {
     let response: IncomingMessage | null = null;
     let upgradeResponse: IncomingMessage | null = null;
     let finalMessageComplete = false;
+    let parsingResponse = false;
+    let pendingResponseHead: PendingResponseChunk | null = null;
+    let pendingResponseTail: PendingResponseChunk | null = null;
 
     const abortResponse = (): void => {
       if (response === null || response.complete || response.destroyed) return;
@@ -364,7 +372,7 @@ export class ClientRequest extends OutgoingMessage {
       response?.emit("timeout", socket);
     };
 
-    const onData = (chunk: Buffer): void => {
+    const consumeResponseChunk = (chunk: Buffer): boolean => {
       let offset = 0;
       while (offset < chunk.length) {
         const consumed = parser.execute(chunk.subarray(offset));
@@ -377,7 +385,7 @@ export class ClientRequest extends OutgoingMessage {
           parser.free();
           cleanupSocketListeners();
           this.#failWithoutSocketError(error);
-          return;
+          return false;
         }
         offset += consumed;
 
@@ -385,10 +393,10 @@ export class ClientRequest extends OutgoingMessage {
         if (acceptedUpgrade !== null) {
           upgradeResponse = null;
           handoffUpgrade(acceptedUpgrade, chunk.subarray(offset));
-          return;
+          return false;
         }
 
-        if (!finalMessageComplete) return;
+        if (!finalMessageComplete) return true;
         if (offset < chunk.length) {
           finalMessageComplete = false;
           parser.continueAfterMessage();
@@ -397,7 +405,50 @@ export class ClientRequest extends OutgoingMessage {
 
         parser.free();
         cleanupSocketListeners();
+        return false;
+      }
+      return true;
+    };
+
+    const enqueueResponseChunk = (chunk: Buffer): void => {
+      const entry: PendingResponseChunk = { chunk, next: null };
+      const tail = pendingResponseTail;
+      if (tail === null) pendingResponseHead = entry;
+      else tail.next = entry;
+      pendingResponseTail = entry;
+    };
+
+    const takePendingResponseChunk = (): Buffer | null => {
+      const entry = pendingResponseHead;
+      if (entry === null) return null;
+      pendingResponseHead = entry.next;
+      if (pendingResponseHead === null) pendingResponseTail = null;
+      return entry.chunk;
+    };
+
+    const clearPendingResponseChunks = (): void => {
+      pendingResponseHead = null;
+      pendingResponseTail = null;
+    };
+
+    const onData = (chunk: Buffer): void => {
+      if (parsingResponse) {
+        enqueueResponseChunk(chunk);
         return;
+      }
+
+      parsingResponse = true;
+      let current: Buffer | null = chunk;
+      try {
+        while (current !== null) {
+          if (!consumeResponseChunk(current)) {
+            clearPendingResponseChunks();
+            return;
+          }
+          current = takePendingResponseChunk();
+        }
+      } finally {
+        parsingResponse = false;
       }
     };
 
