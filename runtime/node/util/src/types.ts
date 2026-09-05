@@ -136,14 +136,14 @@ export function isArgumentsObject(_value: unknown): boolean {
   return false;
 }
 
-export function isMapIterator(_value: unknown): boolean {
+export function isMapIterator(_value: unknown): _value is Iterable<unknown> {
   // Iteration itself is supported. Recognizing the origin of an erased
   // iterator needs a runtime kind tag; inspecting its shape would accept user
   // iterators incorrectly.
   return false;
 }
 
-export function isSetIterator(_value: unknown): boolean {
+export function isSetIterator(_value: unknown): _value is Iterable<unknown> {
   // See `isMapIterator`: this is a kind-observation gap, not an iteration
   // non-goal.
   return false;

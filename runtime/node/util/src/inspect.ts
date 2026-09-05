@@ -92,7 +92,7 @@ export const inspectStyles = {
  */
 export type InspectColor = [number, number];
 
-interface InspectColors {
+export interface InspectColors {
   reset: InspectColor;
   bold: InspectColor;
   dim: InspectColor;

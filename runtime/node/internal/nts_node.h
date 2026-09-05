@@ -24,6 +24,6 @@ bool nts_stdout_is_tty(void);
 bool nts_stderr_is_tty(void);
 void nts_process_really_exit(double code);
 void nts_process_emit_warning_object(NtsString *message, NtsString *name,
-                                     NtsHeader *warning);
+                                     void *warning);
 
 #endif

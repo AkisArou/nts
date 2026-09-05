@@ -76,6 +76,25 @@ rename="-Ddirname=nts_node_dirname"
 # lowers enough to reach the link step yet.
 module_c=$(find "$src" -maxdepth 1 -name '*.c' 2>/dev/null | tr '\n' ' ')
 shared_c=$(find "$root/runtime/node/internal" -maxdepth 1 -name '*.c' | tr '\n' ' ')
+
+# `declare function` lowers to an ordinary external C call. The corresponding
+# prototypes are owned by the same binding triples as their definitions, so
+# make those headers visible to the generated translation unit as well as to
+# the hand-written C files. Without this, clang has to diagnose every reached
+# native call as an implicit declaration even when its complete C half exists.
+binding_headers=(
+  "$root/runtime/node/internal/nts_node.h"
+  "$root/runtime/node/internal/shared.h"
+)
+while IFS= read -r -d '' header; do
+  binding_headers+=("$header")
+done < <(find "$src" -maxdepth 1 -name '*.h' -print0)
+
+binding_header_flags=()
+for header in "${binding_headers[@]}"; do
+  binding_header_flags+=(-include "$header")
+done
+
 module_libraries=()
 case "$module" in
   zlib)
@@ -84,6 +103,7 @@ case "$module" in
 esac
 
 clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared $rename \
+  "${binding_header_flags[@]}" \
   -I"$work" -I"$napi" $uv_flag -I"$src" -I"$root/runtime/node/internal" \
   -o "$out/$module.node" \
   "$work/program.c" "$work/nts_runtime.c" "$work/addon.c" \
