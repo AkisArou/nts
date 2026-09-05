@@ -487,10 +487,6 @@ impl Emitter<'_> {
         // A comparison whose only reader is this block's own branch never
         // becomes a value: the branch reads the comparison directly.
         let fused = self.fusable(&ops, &terminator);
-        // Nothing is carried across a block head: the stack is empty there, and
-        // that is the property `frames.rs` is built on.
-        self.pending.set(None);
-        self.taken.set(None);
 
         for &value in &ops {
             if Some(value) == fused {
@@ -511,33 +507,18 @@ impl Emitter<'_> {
             // function whose bytecode could not be printed *because* it had
             // been refused. Bisecting from TypeScript found it. This names the
             // operation, before anything downstream is emitted.
+            let before = code.depth();
             self.operation(code, pool, value)?;
-            // Only the operation that received it may have taken it.
-            self.taken.set(None);
-            // The invariant is now stated exactly rather than conservatively:
-            // between operations the stack holds the one value the next
-            // instruction is about to consume, and nothing else. With no such
-            // value that is the old rule, depth zero, and the reason it exists
-            // is unchanged -- the stack is empty at every block boundary, so
-            // `frames.rs` has nothing to merge.
-            let expected = self
-                .pending
-                .get()
-                .map_or(0i32, |held| {
-                    i32::from(
-                        types::kind(&self.func.values[held.0 as usize].ty).map_or(0, Kind::words),
-                    )
-                });
-            if code.depth() != expected {
+            if code.depth() != before {
                 return Err(refuse(
                     self.func,
                     &format!(
-                        "emitting %{} left the operand stack at {} where {} was \
-                         owed -- the emitter and its own accounting disagree \
-                         about this one",
+                        "emitting %{} moved the operand stack from {} to {}, and \
+                         an operation must leave it as it found it -- the emitter \
+                         and its own accounting disagree about this one",
                         value.0,
-                        code.depth(),
-                        expected
+                        before,
+                        code.depth()
                     ),
                 ));
             }
@@ -763,13 +744,6 @@ impl Emitter<'_> {
         ty: &HirType,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
-        // The next instruction takes it straight off the stack; see
-        // `stack_scheduled`. Nothing else reads it, so the slot stays unwritten
-        // and the store and its reload are both gone.
-        if self.on_stack.contains(&value) {
-            self.pending.set(Some(value));
-            return Ok(());
-        }
         if let Some(slot) = self.slot(value) {
             let kind = self.kind_of(value)?;
             code.store(origin, kind, slot);
