@@ -8,17 +8,20 @@
 import { encodeStr, hexTable, isHexTable } from "../../internal/querystring.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 
-export type ParsedUrlQuery = Record<string, string | string[]>;
+export interface ParsedUrlQuery {
+  [key: string]: string | string[] | undefined;
+}
+
+type StringifiableScalar = string | number | bigint | boolean | null | undefined;
+
+type StringifiableArray = ReadonlyArray<string | number | bigint | boolean>;
 
 /** A value `stringify` will accept. */
-export type StringifiableValue =
-  | string
-  | number
-  | bigint
-  | boolean
-  | ReadonlyArray<string | number | bigint | boolean>
-  | null
-  | undefined;
+export type StringifiableValue = StringifiableScalar | StringifiableArray;
+
+export interface ParsedUrlQueryInput {
+  [key: string]: StringifiableValue;
+}
 
 /**
  * Characters that need no escaping in a query string, node
@@ -38,15 +41,24 @@ const noEscape: number[] = [
 
 /** Hex digit values, indexed by code unit; -1 where there is none. */
 // prettier-ignore
-const unhexTable: number[] = (() => {
-  const table = new Array<number>(256).fill(-1);
-  for (let i = 0; i <= 9; i++) table[48 + i] = i;
-  for (let i = 0; i < 6; i++) {
-    table[65 + i] = 10 + i;  // A-F
-    table[97 + i] = 10 + i;  // a-f
-  }
-  return table;
-})();
+const unhexTable: number[] = [
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 0 - 15
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 16 - 31
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 32 - 47
+   0,  1,  2,  3,  4,  5,  6,  7,  8,  9, -1, -1, -1, -1, -1, -1, // 48 - 63
+  -1, 10, 11, 12, 13, 14, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 64 - 79
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 80 - 95
+  -1, 10, 11, 12, 13, 14, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 96 - 111
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 112 - 127
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+];
 
 /**
  * Percent-decoding onto bytes, node `lib/querystring.js:84`.
@@ -97,27 +109,17 @@ export function unescape(s: string, decodeSpaces?: boolean): string {
   try {
     return decodeURIComponent(s);
   } catch {
-    return unescapeBuffer(s, decodeSpaces ?? false).toString();
+    return QueryString.unescapeBuffer(s, decodeSpaces ?? false).toString();
   }
 }
 
 /** Upstream `lib/querystring.js:163`. `encodeURIComponent`, table-driven. */
-export function escape(str: unknown): string {
-  let value: string;
-  if (typeof str !== "string") {
-    if (typeof str === "object" && str !== null) {
-      value = String(str);
-    } else {
-      value = `${str}`;
-    }
-  } else {
-    value = str;
-  }
-  return encodeStr(value, noEscape, hexTable);
+export function escape(str: string): string {
+  return encodeStr(str, noEscape, hexTable);
 }
 
 /** Upstream `lib/querystring.js:178`. */
-function stringifyPrimitive(v: unknown): string {
+function stringifyPrimitive(v: StringifiableValue): string {
   if (typeof v === "string") {
     return v;
   }
@@ -134,7 +136,7 @@ function stringifyPrimitive(v: unknown): string {
 }
 
 /** Upstream `lib/querystring.js:195`. */
-function encodeStringified(v: unknown, encode: (s: string) => string): string {
+function encodeStringified(v: StringifiableValue, encode: (s: string) => string): string {
   if (typeof v === "string") {
     return v.length ? encode(v) : "";
   }
@@ -152,7 +154,7 @@ function encodeStringified(v: unknown, encode: (s: string) => string): string {
   return "";
 }
 
-function encodeStringifiedCustom(v: unknown, encode: (s: string) => string): string {
+function encodeStringifiedCustom(v: StringifiableValue, encode: (s: string) => string): string {
   return encode(stringifyPrimitive(v));
 }
 
@@ -162,7 +164,7 @@ export interface StringifyOptions {
 
 /** Upstream `lib/querystring.js:227`. */
 export function stringify(
-  obj?: Record<string, StringifiableValue> | null,
+  obj?: ParsedUrlQueryInput,
   sep?: string,
   eq?: string,
   options?: StringifyOptions,
@@ -262,7 +264,7 @@ function addKeyVal(
     }
     obj[key] = value;
   } else if (Array.isArray(current)) {
-    current.push(value);
+    current[current.length] = value;
   } else {
     obj[key] = [current, value];
   }
@@ -276,7 +278,7 @@ export interface ParseOptions {
 
 /** Upstream `lib/querystring.js:317`. */
 export function parse(
-  qs?: string,
+  qs: string,
   sep?: string,
   eq?: string,
   options?: ParseOptions,
@@ -447,13 +449,13 @@ function decodeStr(s: string, decoder: (v: string) => string): string {
  * is explicit.
  */
 export const QueryString = {
-  escape,
-  unescape,
   unescapeBuffer,
-  parse,
+  unescape,
+  escape,
   stringify,
-  decode: parse,
   encode: stringify,
+  parse,
+  decode: parse,
 };
 
 export const decode = parse;

@@ -1,0 +1,1 @@
+test-querystring-escape.js: mixed typed-surface/language non-goal (§9/§13); every non-string call is outside @types/node's escape(string), and the object/array cases require ToPrimitive/valueOf/toString dispatch; local/escape-static.js retains every string and malformed-surrogate assertion

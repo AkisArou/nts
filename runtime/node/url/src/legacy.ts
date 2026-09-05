@@ -21,7 +21,11 @@ import {
   ERR_INVALID_URL,
 } from "../../internal/errors.ts";
 import { validateObject, validateString } from "../../internal/validators.ts";
-import { parse as parseQuery, stringify as stringifyQuery } from "../../querystring/src/main.ts";
+import {
+  parse as parseQuery,
+  stringify as stringifyQuery,
+  type ParsedUrlQuery,
+} from "../../querystring/src/main.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
 import { URL } from "./url.ts";
 import { domainToASCII, domainToUnicode } from "./idna.ts";
@@ -196,7 +200,7 @@ function containsForbiddenHostChar(hostname: string, ipv6: boolean): boolean {
   return false;
 }
 
-export type LegacyQuery = string | Record<string, string | string[]> | null;
+export type LegacyQuery = string | ParsedUrlQuery | null;
 
 /** The statically readable fields accepted by legacy `url.format(object)`. */
 export interface LegacyUrlLike {
