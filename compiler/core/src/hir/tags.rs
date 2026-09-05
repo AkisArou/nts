@@ -29,6 +29,38 @@ pub const OBJECT: u32 = 5;
 /// comparison `tag >= OBJECT` instead of becoming a pair.
 pub const NULL: u32 = 6;
 
+/// The orderings the numbering above rests on, checked where it is written.
+///
+/// Both are prose in `nts_runtime.h` and both are load-bearing, and a
+/// renumbering that kept every name would satisfy any table comparison while
+/// making `typeof f` answer `"object"` in every program. `codegen/jvm` states
+/// two of these for its own emitter; these are the table's own, so that a
+/// change here fails here.
+///
+/// Adjacency is the one worth spelling out. `typeof x === "object"` is emitted
+/// as `tag >= OBJECT`, which is only equivalent to "`OBJECT` or `NULL`" while
+/// nothing sits between them -- a tag inserted there would answer `"object"`
+/// to `typeof` whatever it actually held.
+const _: () = assert!(
+    NULL == OBJECT + 1,
+    "`typeof x === \"object\"` is `tag >= OBJECT`, so NULL must be the next tag and the last"
+);
+const _: () = assert!(
+    FUNCTION < OBJECT && FUNCTION >= STRING,
+    "a closure answers \"function\", so it is a reference below the object range"
+);
+/// Every reference tag inside `STRING ..= OBJECT`, which is what
+/// `NTS_TAG_IS_REFERENCE` tests and what the tracer, retain, release and both
+/// emitters read.
+const _: () = assert!(
+    STRING < FUNCTION && FUNCTION < OBJECT,
+    "the reference tags are the contiguous range STRING ..= OBJECT"
+);
+const _: () = assert!(
+    NUMBER < STRING && BOOLEAN < STRING && UNDEFINED < STRING,
+    "and every tag whose payload is not a reference falls outside it"
+);
+
 /// The tag a reference of this type carries.
 ///
 /// Every object shares one tag: `typeof` answers "object" for a class
