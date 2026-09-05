@@ -14,6 +14,8 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import { Socket } from "../../net/src/main.ts";
+import type { LookupFunction } from "../../net/src/main.ts";
+import type { AbortSignalLike } from "../../internal/abort.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
   ERR_INVALID_ARG_VALUE,
@@ -54,6 +56,13 @@ export interface RequestOptions {
         callback: (error: unknown, socket?: Socket) => void,
       ) => Socket | undefined)
     | undefined;
+  lookup?: LookupFunction | undefined;
+  localAddress?: string | undefined;
+  localPort?: number | undefined;
+  family?: number | undefined;
+  hints?: number | undefined;
+  socketPath?: string | undefined;
+  signal?: AbortSignalLike | undefined;
   /** Node's name for "do not add a body framing", used by GET and HEAD. */
   maxHeaderSize?: number | undefined;
 }
@@ -113,16 +122,18 @@ export class ClientRequest extends OutgoingMessage {
   method: string;
   path: string;
   host: string;
-  port: number;
   agent: Agent | null;
 
   aborted = false;
   reusedSocket = false;
+  timeout: number | undefined;
+  timeoutCb: (() => void) | null = null;
   /** The response, once its head has arrived. */
   res: IncomingMessage | null = null;
 
   #options: RequestOptions;
-  #timeoutMs: number | undefined;
+  #closeEmitted = false;
+  #port: number;
 
   constructor(options: RequestOptions | string, callback?: ResponseListener) {
     super();
@@ -160,8 +171,8 @@ export class ClientRequest extends OutgoingMessage {
         ? null
         : (opts.agent ?? globalAgent);
     const defaultPort = opts.defaultPort || selectedAgent?.defaultPort || 80;
-    this.port = Number(opts.port || defaultPort);
-    this.#timeoutMs = opts.timeout;
+    this.#port = Number(opts.port || defaultPort);
+    this.timeout = opts.timeout;
 
     const httpValidation: unknown = opts.httpValidation;
     const insecureHTTPParser: unknown = opts.insecureHTTPParser;
@@ -188,10 +199,13 @@ export class ClientRequest extends OutgoingMessage {
 
     if (callback) this.once("response", callback);
 
-    // A client's request is chunked only if it says so; a GET with no body
-    // must not carry a framing header at all, or a server will wait for one.
-    this.hasBody = !BODILESS.has(this.method);
-    this.useChunkedEncodingByDefault = this.hasBody;
+    // Node permits an explicit body even on methods such as GET. Such methods
+    // merely default to *no framing*: an empty request is self-delimiting, but
+    // writing bytes without a Content-Length or Transfer-Encoding makes the
+    // connection close-delimited and therefore ineligible for reuse.
+    this.hasBody = true;
+    this.useChunkedEncodingByDefault = !BODILESS.has(this.method);
+    this.keepAliveWithoutFramingWhenEmpty = BODILESS.has(this.method);
     this.shouldKeepAlive = true;
 
     const rawHeaderArray = opts.headers !== undefined && requestHeadersAreArray(opts.headers);
@@ -208,8 +222,8 @@ export class ClientRequest extends OutgoingMessage {
     // `Host` identifies which site on a shared address the request is for, and
     // is mandatory in HTTP/1.1. Added unless the caller set it or opted out.
     if (!rawHeaderArray && opts.setHost !== false && !this.hasHeader("host")) {
-      const needsPort = this.port !== defaultPort;
-      this.setHeader("Host", needsPort ? `${this.host}:${this.port}` : this.host);
+      const needsPort = this.#port !== defaultPort;
+      this.setHeader("Host", needsPort ? `${this.host}:${this.#port}` : this.host);
     }
 
     if (opts.auth && !this.hasHeader("authorization")) {
@@ -219,12 +233,23 @@ export class ClientRequest extends OutgoingMessage {
     this.statusLine = `${this.method} ${this.path} HTTP/1.1`;
 
     this.agent = selectedAgent;
+    const connectionOptions = {
+      host: this.host,
+      port: this.#port,
+      lookup: opts.lookup,
+      localAddress: opts.localAddress,
+      localPort: opts.localPort,
+      family: opts.family,
+      hints: opts.hints,
+      path: opts.socketPath,
+      signal: opts.signal,
+    };
     if (this.agent) {
-      this.agent.addRequest(this, { host: this.host, port: this.port });
+      this.agent.addRequest(this, connectionOptions);
     } else {
       const createConnection = opts.createConnection;
       if (createConnection === undefined) {
-        const socket = globalAgent.createConnection({ host: this.host, port: this.port });
+        const socket = globalAgent.createConnection(connectionOptions);
         nextTick(() => this.onSocket(socket));
       } else {
         let completed = false;
@@ -260,7 +285,11 @@ export class ClientRequest extends OutgoingMessage {
   }
 
   /** Given a connection by the agent, or made one. Everything starts here. */
-  onSocket(socket: Socket): void {
+  onSocket(socket: Socket | null, error?: unknown): void {
+    if (error !== undefined || socket === null) {
+      this.#fail(error ?? new Error("Agent did not provide a socket"));
+      return;
+    }
     this.socket = socket;
 
     const parser = new HTTPParser();
@@ -313,6 +342,7 @@ export class ClientRequest extends OutgoingMessage {
         // case a client cannot recover from on its own.
         this.#fail(Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }));
       }
+      this.#emitClose();
     };
 
     const cleanupSocketListeners = (): void => {
@@ -320,6 +350,10 @@ export class ClientRequest extends OutgoingMessage {
       socket.removeListener("end", onEnd);
       socket.removeListener("error", onError);
       socket.removeListener("close", onClose);
+      if (this.timeoutCb !== null) {
+        socket.removeListener("timeout", this.timeoutCb);
+        this.timeoutCb = null;
+      }
     };
 
     parser.onHeadersComplete = (info) => {
@@ -355,6 +389,13 @@ export class ClientRequest extends OutgoingMessage {
 
       response = message;
       this.res = message;
+      message.once("end", () => {
+        // Registered before the response is exposed, so this schedules the
+        // pool transition before next-tick work queued by user `end`
+        // listeners. The transition itself is still deferred, which means
+        // every listener in the current `end` emission sees the socket busy.
+        nextTick(() => this.#finishResponse(socket, message));
+      });
       if (!this.emit("response", message)) message._dump();
 
       // The reply to a HEAD carries the length the body *would* have had. A
@@ -376,12 +417,6 @@ export class ClientRequest extends OutgoingMessage {
       }
       const completed = response;
       completed.complete = true;
-      completed.once("end", () => {
-        // A socket becomes reusable only after every user `end` listener has
-        // observed the completed response. Node performs the pool transition
-        // on the following tick for the same reason.
-        nextTick(() => this.#finishResponse(socket, completed));
-      });
       completed.push(null);
       // A client parser belongs to this request, not to a pooled socket. The
       // socket may survive for another request, but this parser's async
@@ -395,22 +430,45 @@ export class ClientRequest extends OutgoingMessage {
     socket.on("error", onError);
     socket.on("close", onClose);
 
-    if (this.#timeoutMs !== undefined) {
-      socket.setTimeout(this.#timeoutMs, () => this.emit("timeout"));
+    const timeout = this.timeout ?? this.agent?.options.timeout;
+    if (timeout !== undefined) {
+      socket.setTimeout(timeout);
+      this.timeoutCb = () => {
+        this.emit("timeout");
+      };
+      socket.once("timeout", this.timeoutCb);
     }
 
     this.emit("socket", socket);
   }
 
   #finishResponse(socket: Socket, response: IncomingMessage): void {
+    if (!this.writableFinished) {
+      // A server may answer before it has read the request body. Such a socket
+      // is still carrying outbound bytes and cannot be handed to another
+      // request. Keep it active; the ordered `finish` callback releases it if
+      // and when the write queue actually drains.
+      this.once("finish", () => this.#finishResponse(socket, response));
+      return;
+    }
+    if (socket.writableLength > 0) {
+      // ClientRequest is not itself the native Writable in this profile; its
+      // framed writes are delegated to the socket. Therefore the socket's
+      // queue is the final authority even after the request's ordered finish
+      // sentinel has completed.
+      socket.once("drain", () => this.#finishResponse(socket, response));
+      return;
+    }
     const reusable = this.shouldKeepAlive && response.keepAlive && !this.destroyed;
-    this.destroyed = true;
-    this.emit("close");
+    this.#emitClose();
     if (this.agent) {
       this.agent.release(
-        this.agent.getName({ host: this.host, port: this.port }),
+        this.agent.getName({ host: this.host, port: this.#port }),
         socket,
         reusable,
+        typeof response.headers["keep-alive"] === "string"
+          ? response.headers["keep-alive"]
+          : undefined,
       );
       return;
     }
@@ -428,6 +486,20 @@ export class ClientRequest extends OutgoingMessage {
     this.destroy();
   }
 
+  #emitClose(): void {
+    if (this.#closeEmitted) return;
+    this.#closeEmitted = true;
+    this.destroyed = true;
+    this.emit("close");
+  }
+
+  override destroy(error?: unknown): this {
+    const socket = this.socket;
+    super.destroy(error);
+    if (socket === null) nextTick(() => this.#emitClose());
+    return this;
+  }
+
   /** Node's older name for `destroy`, kept because programs call it. */
   abort(): void {
     if (this.aborted) return;
@@ -437,9 +509,17 @@ export class ClientRequest extends OutgoingMessage {
   }
 
   override setTimeout(msecs: number, callback?: () => void): this {
-    this.#timeoutMs = msecs;
+    this.timeout = msecs;
     if (callback) this.once("timeout", callback);
-    this.socket?.setTimeout(msecs, () => this.emit("timeout"));
+    const socket = this.socket;
+    if (socket !== null) {
+      if (this.timeoutCb !== null) socket.removeListener("timeout", this.timeoutCb);
+      socket.setTimeout(msecs);
+      this.timeoutCb = () => {
+        this.emit("timeout");
+      };
+      socket.once("timeout", this.timeoutCb);
+    }
     return this;
   }
 

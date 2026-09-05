@@ -49,6 +49,14 @@ export interface OutgoingSocket {
   destroy(error?: unknown, callback?: (error?: unknown) => void): unknown;
   writable?: boolean;
   on<Args extends unknown[]>(event: string | symbol, listener: (...args: Args) => unknown): unknown;
+  once<Args extends unknown[]>(
+    event: string | symbol,
+    listener: (...args: Args) => unknown,
+  ): unknown;
+  removeListener<Args extends unknown[]>(
+    event: string | symbol,
+    listener: (...args: Args) => unknown,
+  ): unknown;
   setTimeout(msecs: number, callback?: () => void): unknown;
   setNoDelay(enable?: boolean): unknown;
   setKeepAlive(enable?: boolean, initialDelay?: number): unknown;
@@ -180,6 +188,7 @@ export class OutgoingMessage extends EventEmitter {
   /** Set by the server or the client before anything is written. */
   shouldKeepAlive = true;
   useChunkedEncodingByDefault = true;
+  protected keepAliveWithoutFramingWhenEmpty = false;
   sendDate = false;
   chunkedEncoding = false;
   strictContentLength = false;
@@ -198,15 +207,15 @@ export class OutgoingMessage extends EventEmitter {
   /**
    * Whether this message can carry a body at all.
    *
-   * A `GET` cannot, and neither can a `204` or the reply to a `HEAD`. The
-   * distinction matters for framing: "no `Content-Length` and no chunking"
-   * means "read until the connection closes" only for a message that *may*
-   * have a body. For one that cannot, it means the body is empty, and closing
-   * the connection over it would end keep-alive for every bodiless request.
+   * A `204` and the reply to a `HEAD` cannot. The distinction matters for
+   * framing: "no `Content-Length` and no chunking" means "read until the
+   * connection closes" only for a message that *may* have a body. For one
+   * that cannot, it means the body is empty.
    */
   protected hasBody = true;
 
   #ended = false;
+  #bodyWriteStarted = false;
   #bytesWritten = 0;
 
   #declaredContentLength(): number | undefined {
@@ -365,7 +374,7 @@ export class OutgoingMessage extends EventEmitter {
     } else if (this.useChunkedEncodingByDefault) {
       this.chunkedEncoding = true;
       addChunkedHeader = true;
-    } else if (this.hasBody) {
+    } else if (!this.keepAliveWithoutFramingWhenEmpty || this.#bodyWriteStarted) {
       // No length and no chunking on a message that may have a body: it ends
       // when the connection does, so the connection cannot be reused.
       this.shouldKeepAlive = false;
@@ -423,9 +432,8 @@ export class OutgoingMessage extends EventEmitter {
       return false;
     }
 
-    this.flushHeaders();
-
     if (!this.hasBody) {
+      this.flushHeaders();
       if (callback) nextTick(callback);
       return true;
     }
@@ -438,6 +446,9 @@ export class OutgoingMessage extends EventEmitter {
       if (callback) nextTick(callback);
       return true;
     }
+
+    this.#bodyWriteStarted = true;
+    this.flushHeaders();
 
     if (this.strictContentLength) {
       const declared = this.#declaredContentLength();
@@ -533,26 +544,29 @@ export class OutgoingMessage extends EventEmitter {
       }
     }
 
+    this.#ended = true;
+    this.writableEnded = true;
+    this.finished = true;
+
+    const onFlushed = (_error?: unknown): void => {
+      this.writableFinished = true;
+      this.emit("finish");
+      if (callback) callback();
+    };
+
     if (this.chunkedEncoding) {
       let tail = "0\r\n";
       for (const entry of this.trailersMap.values()) {
         tail += `${entry[0]}: ${entry[1]}\r\n`;
       }
       tail += "\r\n";
-      this.#sendRaw(tail, "latin1");
+      this.#sendRaw(tail, "latin1", onFlushed);
+    } else {
+      // A zero-byte write is an ordering sentinel. Its callback runs only
+      // after every preceding head/body write has completed, so `finish` and
+      // the end callback cannot make an undrained socket eligible for reuse.
+      this.#sendRaw("", undefined, onFlushed);
     }
-
-    this.#ended = true;
-    this.writableEnded = true;
-    this.finished = true;
-
-    // On a tick, so a caller that ends and then adds a `finish` listener in
-    // the same statement still hears about it.
-    nextTick(() => {
-      this.writableFinished = true;
-      this.emit("finish");
-      if (callback) callback();
-    });
 
     return this;
   }

@@ -92,6 +92,10 @@ function internalHTTPParser(RawHTTPParser) {
 export function internals(exports) {
   const HTTPParser = internalHTTPParser(exports.HTTPParser);
   return {
+    _http_agent: {
+      Agent: exports.Agent,
+      globalAgent: exports.globalAgent,
+    },
     _http_common: {
       HTTPParser,
       methods: exports.methods,

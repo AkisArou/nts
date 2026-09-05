@@ -179,8 +179,7 @@ declare function nts_net_default_auto_select_family(): boolean;
 declare function nts_net_default_auto_select_family_attempt_timeout(): number;
 
 let autoSelectFamilyDefault = nts_net_default_auto_select_family();
-let autoSelectFamilyAttemptTimeoutDefault =
-  nts_net_default_auto_select_family_attempt_timeout();
+let autoSelectFamilyAttemptTimeoutDefault = nts_net_default_auto_select_family_attempt_timeout();
 
 export interface SocketOptions {
   fd?: number | undefined;
@@ -336,7 +335,6 @@ class SocketRequest {
       AsyncContextFrame.setCurrent(prior);
     }
   }
-
 }
 
 class MultipleConnectContext {
@@ -524,6 +522,7 @@ export class Socket extends Duplex {
   #pendingReadBytes: number[] | undefined;
   #pendingReadOffset = 0;
   #pendingReadEnd = false;
+  #destroyOnIdleData = false;
   #boundSource = false;
   #boundPipe = false;
   #boundPath: string | undefined;
@@ -616,6 +615,17 @@ export class Socket extends Duplex {
    */
   asyncReset(): void {
     this.#resetAsyncIdentity(this.#provider);
+  }
+
+  /**
+   * Arm or disarm the HTTP pool's guard against bytes arriving while no
+   * response parser owns this socket. The check lives at the native read
+   * boundary, so it adds no public `data` or `readable` listener that user
+   * code could remove or observe.
+   */
+  setIdleReadGuard(enabled: boolean): void {
+    this.#destroyOnIdleData = enabled;
+    if (enabled && this.readableLength > 0) this.destroy();
   }
 
   /** The native handle identity used to parent protocol resources above it. */
@@ -735,6 +745,7 @@ export class Socket extends Duplex {
       this.#pendingReadBytes = undefined;
       this.#pendingReadOffset = 0;
       this.#pendingReadEnd = false;
+      this.#destroyOnIdleData = false;
       this.#boundSource = false;
       this.#boundPipe = false;
       this.#boundPath = undefined;
@@ -782,12 +793,7 @@ export class Socket extends Duplex {
     return this;
   }
 
-  #lookupAndConnect(
-    host: string,
-    port: number,
-    path: string,
-    options: ConnectOptions,
-  ): void {
+  #lookupAndConnect(host: string, port: number, path: string, options: ConnectOptions): void {
     const useAutoSelectFamily =
       !this.#boundSource &&
       (options.autoSelectFamily ?? autoSelectFamilyDefault) &&
@@ -799,43 +805,44 @@ export class Socket extends Duplex {
       error: Error | null,
       address: string | LookupAddress[] | undefined,
       family?: number,
-    ): void => request.complete(() => {
-      if (!this.connecting) return;
-      if (error !== null) {
-        this.emit("lookup", error, undefined, undefined, host);
-        nextTick(() => this.destroy(error));
-        return;
-      }
-      if (Array.isArray(address)) {
-        for (let index = 0; index < address.length; index++) {
-          const current = address[index];
-          if (current !== undefined) {
-            this.emit("lookup", null, current.address, current.family, host);
+    ): void =>
+      request.complete(() => {
+        if (!this.connecting) return;
+        if (error !== null) {
+          this.emit("lookup", error, undefined, undefined, host);
+          nextTick(() => this.destroy(error));
+          return;
+        }
+        if (Array.isArray(address)) {
+          for (let index = 0; index < address.length; index++) {
+            const current = address[index];
+            if (current !== undefined) {
+              this.emit("lookup", null, current.address, current.family, host);
+            }
           }
+          const ordered = orderLookupAddresses(address, options.blockList);
+          if (ordered instanceof Error) {
+            nextTick(() => this.destroy(ordered));
+          } else if (ordered.length === 1) {
+            const only = ordered[0];
+            if (only !== undefined) this.#startConnect(only.address, port, path, options, false);
+          } else {
+            this.#startMultipleConnects(ordered, port, options);
+          }
+          return;
         }
-        const ordered = orderLookupAddresses(address, options.blockList);
-        if (ordered instanceof Error) {
-          nextTick(() => this.destroy(ordered));
-        } else if (ordered.length === 1) {
-          const only = ordered[0];
-          if (only !== undefined) this.#startConnect(only.address, port, path, options, false);
-        } else {
-          this.#startMultipleConnects(ordered, port, options);
+        this.emit("lookup", null, address, family, host);
+        if (typeof address !== "string" || isIP(address) === 0) {
+          nextTick(() => this.destroy(new ERR_INVALID_IP_ADDRESS(address)));
+          return;
         }
-        return;
-      }
-      this.emit("lookup", null, address, family, host);
-      if (typeof address !== "string" || isIP(address) === 0) {
-        nextTick(() => this.destroy(new ERR_INVALID_IP_ADDRESS(address)));
-        return;
-      }
-      if (family !== 4 && family !== 6) {
-        const invalidFamily = new ERR_INVALID_ADDRESS_FAMILY(family, host, port);
-        nextTick(() => this.destroy(invalidFamily));
-        return;
-      }
-      this.#startConnect(address, port, path, options, false);
-    });
+        if (family !== 4 && family !== 6) {
+          const invalidFamily = new ERR_INVALID_ADDRESS_FAMILY(family, host, port);
+          nextTick(() => this.destroy(invalidFamily));
+          return;
+        }
+        this.#startConnect(address, port, path, options, false);
+      });
 
     const customLookup = options.lookup;
     if (customLookup !== undefined) {
@@ -844,11 +851,7 @@ export class Socket extends Duplex {
         hints: options.hints ?? 0,
       };
       if (useAutoSelectFamily) lookupOptions.all = true;
-      customLookup(
-        host,
-        lookupOptions,
-        complete,
-      );
+      customLookup(host, lookupOptions, complete);
       return;
     }
 
@@ -861,11 +864,7 @@ export class Socket extends Duplex {
     });
   }
 
-  #startMultipleConnects(
-    addresses: LookupAddress[],
-    port: number,
-    options: ConnectOptions,
-  ): void {
+  #startMultipleConnects(addresses: LookupAddress[], port: number, options: ConnectOptions): void {
     const context = new MultipleConnectContext(addresses, port, options);
     this.#multipleConnect = context;
     this.#attemptedAddresses = new Array<string>(addresses.length);
@@ -890,47 +889,38 @@ export class Socket extends Duplex {
       this.#attemptedAddresses[this.#attemptedAddressCount++] =
         `${destination.address}:${context.port}`;
     }
-    this.emit(
-      "connectionAttempt",
-      destination.address,
-      context.port,
-      destination.family,
-    );
+    this.emit("connectionAttempt", destination.address, context.port, destination.family);
 
     const request = new SocketRequest("TCPCONNECTWRAP", this.#asyncId);
     let handle = -1;
-    const onConnected = (errno: number): void => request.complete(() => {
-      context.pending--;
-      if (this.#multipleConnect !== context || !this.connecting) {
-        if (handle >= 0) nts_net_close(handle, ignoreNativeClose);
-        return;
-      }
-      if (errno >= 0) {
-        this.#winMultipleConnect(context, handle);
-        return;
-      }
+    const onConnected = (errno: number): void =>
+      request.complete(() => {
+        context.pending--;
+        if (this.#multipleConnect !== context || !this.connecting) {
+          if (handle >= 0) nts_net_close(handle, ignoreNativeClose);
+          return;
+        }
+        if (errno >= 0) {
+          this.#winMultipleConnect(context, handle);
+          return;
+        }
 
-      if (handle >= 0) nts_net_close(handle, ignoreNativeClose);
-      const error = exceptionWithHostPort(
-        errno,
-        "connect",
-        destination.address,
-        context.port,
-      );
-      this.emit(
-        "connectionAttemptFailed",
-        destination.address,
-        context.port,
-        destination.family,
-        error,
-      );
-      context.errors[context.errorCount++] = error;
-      if (context.nextIndex < context.addresses.length) {
-        this.#startNextConnectAttempt(context);
-      } else if (context.pending === 0) {
-        this.#failMultipleConnects(context);
-      }
-    });
+        if (handle >= 0) nts_net_close(handle, ignoreNativeClose);
+        const error = exceptionWithHostPort(errno, "connect", destination.address, context.port);
+        this.emit(
+          "connectionAttemptFailed",
+          destination.address,
+          context.port,
+          destination.family,
+          error,
+        );
+        context.errors[context.errorCount++] = error;
+        if (context.nextIndex < context.addresses.length) {
+          this.#startNextConnectAttempt(context);
+        } else if (context.pending === 0) {
+          this.#failMultipleConnects(context);
+        }
+      });
 
     context.pending++;
     handle = nts_net_connect(
@@ -952,8 +942,7 @@ export class Socket extends Duplex {
       const socket: Socket = this;
       const timer = setTimeout(
         Socket.#startTimedConnectAttempt,
-        context.options.autoSelectFamilyAttemptTimeout ??
-          autoSelectFamilyAttemptTimeoutDefault,
+        context.options.autoSelectFamilyAttemptTimeout ?? autoSelectFamilyAttemptTimeoutDefault,
         socket,
         context,
       );
@@ -1002,31 +991,29 @@ export class Socket extends Duplex {
     options: ConnectOptions,
     isPipe: boolean,
   ): void {
-    const request = new SocketRequest(
-      isPipe ? "PIPECONNECTWRAP" : "TCPCONNECTWRAP",
-      this.#asyncId,
-    );
+    const request = new SocketRequest(isPipe ? "PIPECONNECTWRAP" : "TCPCONNECTWRAP", this.#asyncId);
 
     if (!isPipe && options.blockList?.check(host, isIPv6(host) ? "ipv6" : "ipv4")) {
       nextTick(() => this.destroy(new ERR_IP_BLOCKED(host)));
       return;
     }
 
-    const onConnected = (errno: number): void => request.complete(() => {
-      if (errno < 0) {
-        this.connecting = false;
-        this.destroy(
-          exceptionWithHostPort(
-            errno,
-            "connect",
-            path || host,
-            path.length === 0 ? port : undefined,
-          ),
-        );
-        return;
-      }
-      this.#completeConnection(options);
-    });
+    const onConnected = (errno: number): void =>
+      request.complete(() => {
+        if (errno < 0) {
+          this.connecting = false;
+          this.destroy(
+            exceptionWithHostPort(
+              errno,
+              "connect",
+              path || host,
+              path.length === 0 ? port : undefined,
+            ),
+          );
+          return;
+        }
+        this.#completeConnection(options);
+      });
     let handle: number;
     if (this.#boundSource && this._handle !== null) {
       handle = this._handle;
@@ -1077,36 +1064,43 @@ export class Socket extends Duplex {
 
     nts_net_read_start(
       this._handle,
-      (bytes: number[]) => this.#inScope(() => {
-        this.#refreshTimeout();
-        if (this.#onReadCallback !== undefined) {
-          this.#deliverOnReadBytes(bytes, 0);
-          return;
-        }
-        this.bytesRead += bytes.length;
-        // `push` returning false is the socket's backpressure: stop reading
-        // from the kernel until the consumer catches up, or the buffer grows
-        // without bound.
-        if (!this.push(Buffer.from(bytes)) && this._handle !== null) {
-          nts_net_read_stop(this._handle);
-          this.#readingStarted = false;
-        }
-      }),
-      () => this.#inScope(() => {
-        // `FIN` from the other end: no more data is coming, but this end may
-        // still write.
-        //
-        // The `read(0)` is not redundant. `push(null)` records the end; it
-        // does not *deliver* it, and a readable with no consumer never asks
-        // again on its own -- so `end` and `close` would never be emitted on
-        // a socket nobody reads, which is most of the sockets in a server
-        // that only writes. Node does the same two calls in the same order.
-        if (this.#pendingReadBytes !== undefined) this.#pendingReadEnd = true;
-        else this.#finishReadSide();
-      }),
-      (errno: number) => this.#inScope(() => {
-        this.destroy(exceptionWithHostPort(errno, "read"));
-      }),
+      (bytes: number[]) =>
+        this.#inScope(() => {
+          this.#refreshTimeout();
+          if (this.#destroyOnIdleData && bytes.length > 0) {
+            this.destroy();
+            return;
+          }
+          if (this.#onReadCallback !== undefined) {
+            this.#deliverOnReadBytes(bytes, 0);
+            return;
+          }
+          this.bytesRead += bytes.length;
+          // `push` returning false is the socket's backpressure: stop reading
+          // from the kernel until the consumer catches up, or the buffer grows
+          // without bound.
+          if (!this.push(Buffer.from(bytes)) && this._handle !== null) {
+            nts_net_read_stop(this._handle);
+            this.#readingStarted = false;
+          }
+        }),
+      () =>
+        this.#inScope(() => {
+          // `FIN` from the other end: no more data is coming, but this end may
+          // still write.
+          //
+          // The `read(0)` is not redundant. `push(null)` records the end; it
+          // does not *deliver* it, and a readable with no consumer never asks
+          // again on its own -- so `end` and `close` would never be emitted on
+          // a socket nobody reads, which is most of the sockets in a server
+          // that only writes. Node does the same two calls in the same order.
+          if (this.#pendingReadBytes !== undefined) this.#pendingReadEnd = true;
+          else this.#finishReadSide();
+        }),
+      (errno: number) =>
+        this.#inScope(() => {
+          this.destroy(exceptionWithHostPort(errno, "read"));
+        }),
     );
   }
 
@@ -1305,9 +1299,7 @@ export class Socket extends Duplex {
   }
 
   override _writeAfterEndError(): Error {
-    return this.#readEndedByPeer
-      ? new SocketPeerEndedError()
-      : new ERR_STREAM_WRITE_AFTER_END();
+    return this.#readEndedByPeer ? new SocketPeerEndedError() : new ERR_STREAM_WRITE_AFTER_END();
   }
 
   override _final(callback: (error?: unknown) => void): void {
@@ -1335,9 +1327,11 @@ export class Socket extends Duplex {
     // A shutdown rather than a close: the read side stays open, which is what
     // makes a half-open connection possible at all.
     const request = new SocketRequest("SHUTDOWNWRAP", this.#asyncId);
-    nts_net_shutdown(this._handle, (errno) => request.complete(() => {
-      callback(errno < 0 ? uvException(errno, "shutdown") : undefined);
-    }));
+    nts_net_shutdown(this._handle, (errno) =>
+      request.complete(() => {
+        callback(errno < 0 ? uvException(errno, "shutdown") : undefined);
+      }),
+    );
   }
 
   override _destroy(error: unknown, callback: (error?: unknown) => void): void {
@@ -1400,10 +1394,12 @@ export class Socket extends Duplex {
       finish(errno < 0 ? uvException(errno, "close") : error);
     } else if (this.#resetOnDestroy) {
       this.#resetOnDestroy = false;
-      nts_net_reset(handle, (errno) => this.#inScope(() => {
-        if (errno < 0) finish(exceptionWithHostPort(errno, "reset"));
-        else finish();
-      }));
+      nts_net_reset(handle, (errno) =>
+        this.#inScope(() => {
+          if (errno < 0) finish(exceptionWithHostPort(errno, "reset"));
+          else finish();
+        }),
+      );
     } else {
       nts_net_close(handle, () => this.#inScope(finish));
     }
@@ -1666,12 +1662,7 @@ export class Server extends EventEmitter {
   #scheduleListening(): void {
     const prior = AsyncContextFrame.exchange(this.#contextFrame);
     try {
-      defaultTriggerAsyncIdScope(
-        this.#asyncId,
-        nextTick,
-        emitServerListening,
-        this,
-      );
+      defaultTriggerAsyncIdScope(this.#asyncId, nextTick, emitServerListening, this);
     } finally {
       AsyncContextFrame.setCurrent(prior);
     }
@@ -1684,12 +1675,13 @@ export class Server extends EventEmitter {
     const boundSocket = options.boundSocket;
     const boundAddress = boundSocket?.address();
     const path = typeof boundAddress === "string" ? boundAddress : options.path;
-    const host = typeof boundAddress === "object"
-      ? boundAddress.address
-      : (options.host ?? "::");
-    const port = typeof boundAddress === "object"
-      ? boundAddress.port
-      : (options.port === undefined ? 0 : validateSocketPort(options.port));
+    const host = typeof boundAddress === "object" ? boundAddress.address : (options.host ?? "::");
+    const port =
+      typeof boundAddress === "object"
+        ? boundAddress.port
+        : options.port === undefined
+          ? 0
+          : validateSocketPort(options.port);
     const isPipe = boundSocket?.isPipe ?? (path !== undefined && path !== "");
     const boundHandle = boundSocket === undefined ? -1 : consumeBoundSocket(boundSocket);
     this.#handleClosed = false;
@@ -1714,59 +1706,61 @@ export class Server extends EventEmitter {
       options.fd ?? -1,
       boundHandle,
       () => this.#scheduleListening(),
-      (connection: number) => this.#inScope(() => {
-        const socket = new Socket({
-          handle: connection,
-          handleType: isPipe ? "pipe" : "tcp",
-          allowHalfOpen: this.#options.allowHalfOpen,
-          pauseOnCreate: this.#options.pauseOnConnect,
-          noDelay: this.#options.noDelay,
-          keepAlive: this.#options.keepAlive,
-          keepAliveInitialDelay: this.#options.keepAliveInitialDelay,
-        });
-        socket.server = this;
-
-        const remoteAddress = socket.remoteAddress;
-        if (
-          remoteAddress !== undefined &&
-          this.#options.blockList?.check(
-            remoteAddress,
-            socket.remoteFamily === "IPv6" ? "ipv6" : "ipv4",
-          )
-        ) {
-          socket.destroy();
-          return;
-        }
-
-        // Over the limit: accepted and closed immediately, because refusing
-        // to accept leaves the connection in the kernel's backlog where the
-        // client sees a hang rather than a refusal.
-        if (this.#connections >= this.maxConnections) {
-          this.emit("drop", {
-            localAddress: socket.localAddress,
-            localPort: socket.localPort,
-            localFamily: socket.localFamily,
-            remoteAddress: socket.remoteAddress,
-            remotePort: socket.remotePort,
-            remoteFamily: socket.remoteFamily,
+      (connection: number) =>
+        this.#inScope(() => {
+          const socket = new Socket({
+            handle: connection,
+            handleType: isPipe ? "pipe" : "tcp",
+            allowHalfOpen: this.#options.allowHalfOpen,
+            pauseOnCreate: this.#options.pauseOnConnect,
+            noDelay: this.#options.noDelay,
+            keepAlive: this.#options.keepAlive,
+            keepAliveInitialDelay: this.#options.keepAliveInitialDelay,
           });
-          socket.destroy();
-          return;
-        }
+          socket.server = this;
 
-        this.#connections++;
-        acceptedSocketClosing.set(socket, () => {
-          this.#connections--;
-          this.#maybeEmitClose();
-        });
+          const remoteAddress = socket.remoteAddress;
+          if (
+            remoteAddress !== undefined &&
+            this.#options.blockList?.check(
+              remoteAddress,
+              socket.remoteFamily === "IPv6" ? "ipv6" : "ipv4",
+            )
+          ) {
+            socket.destroy();
+            return;
+          }
 
-        if (!this.#options.pauseOnConnect) socket.resume();
-        this.emit("connection", socket);
-      }),
-      (errno: number) => this.#inScope(() => {
-        this.listening = false;
-        this.emit("error", listenError(errno, host, port, path));
-      }),
+          // Over the limit: accepted and closed immediately, because refusing
+          // to accept leaves the connection in the kernel's backlog where the
+          // client sees a hang rather than a refusal.
+          if (this.#connections >= this.maxConnections) {
+            this.emit("drop", {
+              localAddress: socket.localAddress,
+              localPort: socket.localPort,
+              localFamily: socket.localFamily,
+              remoteAddress: socket.remoteAddress,
+              remotePort: socket.remotePort,
+              remoteFamily: socket.remoteFamily,
+            });
+            socket.destroy();
+            return;
+          }
+
+          this.#connections++;
+          acceptedSocketClosing.set(socket, () => {
+            this.#connections--;
+            this.#maybeEmitClose();
+          });
+
+          if (!this.#options.pauseOnConnect) socket.resume();
+          this.emit("connection", socket);
+        }),
+      (errno: number) =>
+        this.#inScope(() => {
+          this.listening = false;
+          this.emit("error", listenError(errno, host, port, path));
+        }),
     );
 
     if (handle < 0) {
@@ -1829,12 +1823,7 @@ export class Server extends EventEmitter {
   }
 
   #maybeEmitClose(): void {
-    if (
-      !this.#closeEmitted &&
-      !this.listening &&
-      this.#handleClosed &&
-      this.#connections === 0
-    ) {
+    if (!this.#closeEmitted && !this.listening && this.#handleClosed && this.#connections === 0) {
       this.#closeEmitted = true;
       this.#clearAbort();
       this.emit("close");
@@ -2014,11 +2003,7 @@ function readConnectOptions(input: object): ConnectOptions {
     else {
       validateNumber(input.family, "options.family");
       if (input.family !== 0 && input.family !== 4 && input.family !== 6) {
-        throw new ERR_INVALID_ARG_VALUE(
-          "options.family",
-          input.family,
-          "must be one of: 0, 4, 6",
-        );
+        throw new ERR_INVALID_ARG_VALUE("options.family", input.family, "must be one of: 0, 4, 6");
       }
       options.family = input.family;
     }
@@ -2070,10 +2055,7 @@ function readConnectOptions(input: object): ConnectOptions {
       1,
       2_147_483_647,
     );
-    options.autoSelectFamilyAttemptTimeout = Math.max(
-      10,
-      input.autoSelectFamilyAttemptTimeout,
-    );
+    options.autoSelectFamilyAttemptTimeout = Math.max(10, input.autoSelectFamilyAttemptTimeout);
   }
   if ("onread" in input && input.onread !== undefined) {
     if (!isOnReadOptions(input.onread)) {
@@ -2146,11 +2128,7 @@ function readListenOptions(input: object): ListenOptions {
   const hasFd = "fd" in input;
   const hasBoundSocket = "handle" in input && input.handle instanceof BoundSocket;
   if (!hasPort && !hasPath && !hasFd && !hasBoundSocket) {
-    throw new ERR_INVALID_ARG_VALUE(
-      "options",
-      input,
-      'must have the property "port" or "path"',
-    );
+    throw new ERR_INVALID_ARG_VALUE("options", input, 'must have the property "port" or "path"');
   }
 
   const options: ListenOptions = {};
@@ -2209,7 +2187,8 @@ function readListenOptions(input: object): ListenOptions {
 }
 
 function isAbortSignalLike(value: unknown): value is AbortSignalLike {
-  return value !== null &&
+  return (
+    value !== null &&
     typeof value === "object" &&
     "aborted" in value &&
     typeof value.aborted === "boolean" &&
@@ -2217,7 +2196,8 @@ function isAbortSignalLike(value: unknown): value is AbortSignalLike {
     "addEventListener" in value &&
     typeof value.addEventListener === "function" &&
     "removeEventListener" in value &&
-    typeof value.removeEventListener === "function";
+    typeof value.removeEventListener === "function"
+  );
 }
 
 function isOnReadOptions(value: unknown): value is OnReadOptions {
