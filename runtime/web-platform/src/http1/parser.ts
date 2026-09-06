@@ -23,7 +23,6 @@ export interface ResponseHead {
 }
 
 export function validateWireValue(value: string): void {
-
   for (let i = 0; i < value.length; ++i) {
     const c = value.charCodeAt(i);
     if ((c < 32 && c !== 9) || c === 127 || c > 255)
@@ -103,7 +102,6 @@ export function contentLength(headers: Headers): number | null {
 }
 
 export function hasToken(headers: Headers, name: string, token: string): boolean {
-
   return (
     headers
       .get(name)

@@ -21,7 +21,6 @@ export function base64(bytes: Uint8Array): string {
 }
 
 function rotate(value: number, bits: number): number {
-
   return (value << bits) | (value >>> (32 - bits));
 }
 /** SHA-1 is used ONLY for RFC 6455's fixed handshake, not for security signatures. */
@@ -105,7 +104,6 @@ export function validateHandshake(
   key: string,
   protocols: readonly string[],
 ): string {
-
   if (
     status !== 101 ||
     !hasToken(headers, "connection", "upgrade") ||

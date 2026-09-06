@@ -417,7 +417,6 @@ export function tee<T>(
 }
 
 export function bytesStream(bytes: Uint8Array, chunkSize = 65536): ReadableStream<Uint8Array> {
-
   if (!Number.isSafeInteger(chunkSize) || chunkSize < 1)
     throw new RangeError("Invalid byte chunk size");
   let position = 0;

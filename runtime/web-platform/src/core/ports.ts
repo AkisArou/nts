@@ -9,7 +9,6 @@ const badPorts = new Set([
 ]);
 
 export function checkNetworkPort(port: string): void {
-
   if (port !== "" && badPorts.has(Number(port)))
     throw new TypeError("Port is blocked by Fetch/WebSocket");
 }

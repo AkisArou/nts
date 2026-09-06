@@ -12,7 +12,6 @@ export interface Frame {
 }
 
 function opcode(value: number): Opcode {
-
   switch (value) {
     case 0:
     case 1:
@@ -107,7 +106,6 @@ export function encodeFrame(
 }
 
 export function validWireCloseCode(code: number): boolean {
-
   return (
     (code >= 3000 && code <= 4999) ||
     [1000, 1001, 1002, 1003, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014].includes(code)
@@ -115,7 +113,6 @@ export function validWireCloseCode(code: number): boolean {
 }
 
 export function closePayload(code: number | null, reason: string): Uint8Array {
-
   if (code === null) {
     if (reason !== "") throw new ProtocolError("A close reason needs a code");
     return new Uint8Array(0);
@@ -134,7 +131,6 @@ export function closePayload(code: number | null, reason: string): Uint8Array {
 }
 
 export function parseClose(payload: Uint8Array): { code: number; reason: string } {
-
   if (payload.length === 0) return { code: 1005, reason: "" };
 
   if (payload.length === 1) throw new ProtocolError("One-byte close payload");

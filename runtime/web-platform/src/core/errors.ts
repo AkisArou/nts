@@ -1,6 +1,5 @@
 /** DOMException's useful non-DOM surface. No host DOMException dependency. */
 export class DOMException extends Error {
-
   constructor(message = "", name = "Error") {
     super(message);
     this.name = name;
@@ -45,7 +44,6 @@ export function networkError(cause: unknown): TypeError {
 }
 
 export class ProtocolError extends Error {
-
   constructor(message: string) {
     super(message);
     this.name = "ProtocolError";
@@ -53,7 +51,6 @@ export class ProtocolError extends Error {
 }
 
 export class LimitError extends RangeError {
-
   constructor(message: string) {
     super(message);
     this.name = "LimitError";
@@ -61,6 +58,5 @@ export class LimitError extends RangeError {
 }
 
 export function invariant(value: boolean, message: string): asserts value {
-
   if (!value) throw new Error(message);
 }

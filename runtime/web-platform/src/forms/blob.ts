@@ -8,7 +8,6 @@ export interface BlobOptions {
 }
 
 function mediaType(input: string): string {
-
   for (let i = 0; i < input.length; ++i) {
     const c = input.charCodeAt(i);
     if (c < 0x20 || c > 0x7e) return "";

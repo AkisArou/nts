@@ -84,13 +84,14 @@ provider under `runtime/node` nor an implementation used by the mobile targets.
 At the integrated tree, using the repository's TypeScript `7.0.2`, Node declarations
 `24.13.3`, and Node `v24.20.0`:
 
-| Command                                                   | Result                          |
-| --------------------------------------------------------- | ------------------------------- |
-| `tooling/conformance/web-platform/check.sh`               | 80/80 pass, zero skipped        |
-| `node tooling/conformance/web-platform/test-upstream.mjs` | expected nonzero exit; 8/9 pass |
+| Command                                                   | Result                   |
+| --------------------------------------------------------- | ------------------------ |
+| `tooling/conformance/web-platform/check.sh`               | 80/80 pass, zero skipped |
+| `node tooling/conformance/web-platform/test-upstream.mjs` | 9/9 pass                 |
 
 The 80-test corpus is adapted only where removal of the external synthetic realm
 changed construction: it creates the same canonical `Request`, `Response`, and
 `WebSocket` classes through an explicit test runtime. Host `fetch` and `WebSocket`
 remain replaced by throwing values. The WPT fixtures are unchanged and hash-checked;
-the same dictionary-initializer failure remains visible.
+the integrated implementation now passes the previously failing dictionary
+initializer without modifying the upstream test.

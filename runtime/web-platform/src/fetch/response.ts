@@ -17,7 +17,6 @@ export interface ResponseContext {
 }
 
 const noRandom: RandomSource = {
-
   fill() {
     throw new TypeError("FormData needs an environment-owned RandomSource");
   },

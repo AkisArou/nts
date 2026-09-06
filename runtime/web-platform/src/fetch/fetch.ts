@@ -17,14 +17,12 @@ import type {
 const redirects = new Set([301, 302, 303, 307, 308]);
 
 function checkURL(url: URLRecord): void {
-
   validateNetworkURL(url);
 
   checkNetworkPort(url.port);
 }
 
 function cancelBody(body: ReadableStream<Uint8Array> | null, reason?: unknown): void {
-
   if (body !== null) body.cancel(reason).catch(() => {});
 }
 

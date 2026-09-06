@@ -119,7 +119,6 @@ function readBodyPolicy(input: Partial<BodyPolicy> | undefined): BodyPolicy {
 }
 
 function validateByteLimit(limit: number): void {
-
   if (Number.isNaN(limit) || limit < 0 || (limit !== Infinity && !Number.isSafeInteger(limit))) {
     throw new RangeError("Invalid body byte limit");
   }

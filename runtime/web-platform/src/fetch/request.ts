@@ -28,7 +28,6 @@ export interface RequestContext {
 }
 
 export function normalizeMethod(method: string): string {
-
   if (!isToken(method)) throw new TypeError("Invalid HTTP method");
   const upper = method.toUpperCase();
 
@@ -38,7 +37,6 @@ export function normalizeMethod(method: string): string {
 }
 
 export function validateNetworkURL(url: URLRecord): void {
-
   if (url.protocol !== "http:" && url.protocol !== "https:")
     throw new TypeError("Only HTTP(S) URLs are supported");
 

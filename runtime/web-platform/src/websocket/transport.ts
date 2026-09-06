@@ -33,6 +33,5 @@ export interface WebSocketSession {
 }
 
 export interface WebSocketTransport {
-
   connect(handshake: WebSocketHandshake, signal: AbortSignal): Promise<WebSocketSession>;
 }

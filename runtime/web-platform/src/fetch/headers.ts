@@ -1,12 +1,15 @@
 /** Transport entries retain wire order and duplicates. Public iteration is sorted. */
 export type HeaderEntry = readonly [name: string, value: string];
 
-export type HeadersInit = Headers | readonly HeaderEntry[];
+export type HeaderSequence = Iterable<HeaderEntry>;
+
+export type HeaderRecord = Readonly<Record<string, string>>;
+
+export type HeadersInit = Headers | HeaderSequence | HeaderRecord;
 
 export type HeaderGuard = "none" | "immutable";
 
 export function isToken(value: string): boolean {
-
   if (value.length === 0) return false;
 
   for (let i = 0; i < value.length; ++i) {
@@ -18,7 +21,6 @@ export function isToken(value: string): boolean {
 }
 
 export function normalizeName(name: string): string {
-
   if (!isToken(name)) throw new TypeError("Invalid HTTP header name");
   return name.toLowerCase();
 }
@@ -45,15 +47,24 @@ function isHTTPWhitespace(code: number): boolean {
   return code === 9 || code === 10 || code === 13 || code === 32;
 }
 
+function isHeaderSequence(init: HeadersInit): init is Headers | HeaderSequence {
+  return Symbol.iterator in init;
+}
+
 export class Headers {
   private list: HeaderEntry[] = [];
   private guard: HeaderGuard = "none";
   private sortedCache: HeaderEntry[] | null = null;
 
   constructor(init: HeadersInit = []) {
-    const entries = init instanceof Headers ? init.raw() : init;
-    for (const entry of entries) this.append(entry[0], entry[1]);
+    if (isHeaderSequence(init)) {
+      for (const [name, value] of init) this.append(name, value);
+      return;
+    }
+
+    for (const [name, value] of Object.entries(init)) this.append(name, value);
   }
+
   private writable(): void {
     if (this.guard === "immutable") throw new TypeError("Headers are immutable");
   }
@@ -105,17 +116,21 @@ export class Headers {
   getSetCookie(): string[] {
     return this.list.filter((entry) => entry[0] === "set-cookie").map((entry) => entry[1]);
   }
+
   /** @internal Returns independent tuples; callers cannot mutate the header list. */
   raw(): HeaderEntry[] {
     return this.list.map((entry) => [entry[0], entry[1]]);
   }
+
   /** @internal */ get isImmutable(): boolean {
     return this.guard === "immutable";
   }
+
   /** @internal */ makeImmutable(): this {
     this.guard = "immutable";
     return this;
   }
+
   private sorted(): HeaderEntry[] {
     if (this.sortedCache !== null) return this.sortedCache;
     const names = Array.from(new Set(this.list.map((entry) => entry[0]))).sort();

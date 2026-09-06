@@ -303,7 +303,6 @@ export class WebSocket extends EventTarget {
 }
 
 function isSocketMessageEvent(event: Event): event is MessageEvent<WebSocketData> {
-
   if (!(event instanceof MessageEvent)) return false;
   const data: unknown = event.data;
   return typeof data === "string" || data instanceof Blob || data instanceof ArrayBuffer;

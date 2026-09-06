@@ -106,7 +106,6 @@ async function upload(
   length: number | null,
   chunked: boolean,
 ): Promise<void> {
-
   if (reader === null) return;
   let sent = 0;
   try {
