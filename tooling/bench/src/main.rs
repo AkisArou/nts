@@ -192,6 +192,55 @@ fn other_compilers() -> Vec<u32> {
     found
 }
 
+/// Whether this run may rewrite the README, and why not when it may not.
+///
+/// Split out from `main` so the three reasons to decline sit together: a
+/// filtered run, a run that lost a case, and a run that was not alone on the
+/// machine. Each of them publishes a table describing something other than what
+/// the header says, and the first two were already refused here while the third
+/// was only noted.
+fn publish(
+    root: &Utf8Path,
+    rows: &[Row],
+    cases: &[Utf8PathBuf],
+    requested: &[String],
+    spoiled: &[String],
+) -> Result<()> {
+    // Only a full run may rewrite the README. A filtered one would leave the
+    // table describing a mixture of two machines and two revisions, which is
+    // worse than a stale table because it does not look stale.
+    //
+    // A run that noted load is the same mixture and was published anyway. On
+    // 2026-09-06 a forty-minute publish had another session's `cargo build`
+    // running from `generic-classes` onward -- **twenty-eight of fifty cases
+    // carried the note** -- and this wrote the README regardless. The per-case
+    // note is the right call for the console, where a person reads it beside
+    // the number; it is not a substitute for refusing to publish, because the
+    // README carries the number and not the note.
+    //
+    // What saved that run was the publish being made from a pinned worktree, so
+    // the polluted table landed in a tree nobody reads and shipping it needed a
+    // deliberate copy. That is luck arranged in advance rather than a check,
+    // which is what this is.
+    if !spoiled.is_empty() && requested.is_empty() {
+        println!(
+            "\nREADME not updated: {} of {} cases were measured while something \
+             else ran -- {}",
+            spoiled.len(),
+            cases.len(),
+            spoiled.join(", ")
+        );
+        return Ok(());
+    }
+    if requested.is_empty() && rows.len() == cases.len() {
+        write_readme(root, rows)?;
+        println!("\nREADME updated.");
+    } else if !requested.is_empty() {
+        println!("\nREADME not updated: a filtered run measures only part of the table.");
+    }
+    Ok(())
+}
+
 /// Refuse to begin, or warn about the row that was measured anyway.
 ///
 /// A benchmark wants a quiet machine and the measurement lock does not give it
@@ -278,6 +327,7 @@ fn main() -> Result<()> {
     println!("{}", "-".repeat(158));
 
     let mut rows = Vec::new();
+    let mut spoiled = Vec::new();
     for case in &cases {
         // Before each case rather than once at the start: a sweep begun while
         // the suite is halfway through spoils the rows after it and none
@@ -285,6 +335,7 @@ fn main() -> Result<()> {
         // throws away forty minutes of correct measurement.
         if let Some(warning) = quiet_enough("while this case was measured") {
             println!("note: {:<16} {warning}", case.file_name().unwrap_or("?"));
+            spoiled.push(case.file_name().unwrap_or("?").to_string());
         }
         match run_case(&root, case, &out) {
             Ok(row) => rows.push(row),
@@ -292,15 +343,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // Only a full run may rewrite the README. A filtered one would leave the
-    // table describing a mixture of two machines and two revisions, which is
-    // worse than a stale table because it does not look stale.
-    if requested.is_empty() && rows.len() == cases.len() {
-        write_readme(&root, &rows)?;
-        println!("\nREADME updated.");
-    } else if !requested.is_empty() {
-        println!("\nREADME not updated: a filtered run measures only part of the table.");
-    }
+    publish(&root, &rows, &cases, &requested, &spoiled)?;
     Ok(())
 }
 
