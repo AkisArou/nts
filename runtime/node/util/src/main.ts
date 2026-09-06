@@ -27,12 +27,20 @@ import {
   validateStringArray,
 } from "../../internal/validators.ts";
 import { myersDiff } from "../../internal/assert/myers-diff.ts";
+import { parseArgs } from "./parse-args.ts";
 import { isNodeStream, isReadableStream, isWritableStream } from "../../internal/streams/utils.ts";
 import { shouldColorize } from "../../internal/colors.ts";
 import { stdout } from "../../internal/stdio.ts";
 
 export { inspect, inspectDefaultOptions, format, formatWithOptions, types };
 export { deprecate };
+export { parseArgs };
+export type {
+  ParseArgsConfig,
+  ParseArgsOptionDescriptor,
+  ParseArgsOptionsConfig,
+  ParseArgsOptionsType,
+} from "./parse-args.ts";
 export type { InspectOptions };
 
 // Keep the imported implementation as the exported function value. A
@@ -305,6 +313,7 @@ export default {
   debuglogEnabled,
   convertProcessSignalToExitCode,
   diff,
+  parseArgs,
   stripVTControlCharacters,
   toUSVString,
   promisify,

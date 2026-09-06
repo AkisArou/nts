@@ -58,9 +58,6 @@ const errnoOf = (fn) => {
 
 globalThis.nts_process_ppid = () => host.ppid;
 globalThis.nts_process_arch = () => host.arch;
-globalThis.nts_process_argv = () => host.argv.slice();
-globalThis.nts_process_argv0 = () => host.argv0;
-globalThis.nts_process_exec_path = () => host.execPath;
 globalThis.nts_process_exec_argv = () => host.execArgv.slice();
 globalThis.nts_process_version = () => host.version;
 globalThis.nts_process_version_names = () => Object.keys(host.versions);

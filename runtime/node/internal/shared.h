@@ -49,6 +49,11 @@ const NtsNodeSignalConstant *nts_node_signal_constants(size_t *count);
 NtsArray *nts_process_signal_names(void);
 double nts_process_signal_exit_code(NtsString *signal_code);
 
+/** Process invocation identity shared by `node:process` and argument parsing. */
+NtsArray *nts_process_argv(void);
+NtsString *nts_process_argv0(void);
+NtsString *nts_process_exec_path(void);
+
 /* An array of doubles.
  *
  * The runtime exports `nts_desc_ref` for an array of references and nothing for

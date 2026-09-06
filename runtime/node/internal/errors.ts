@@ -1408,6 +1408,49 @@ export class ERR_HTTP_SOCKET_ENCODING extends NodeError {
   }
 }
 
+/** A string option was missing a value, or a boolean option was given one. */
+export class ERR_PARSE_ARGS_INVALID_OPTION_VALUE extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_PARSE_ARGS_INVALID_OPTION_VALUE";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "TypeError";
+  }
+}
+
+/** A positional was supplied to a command that accepts only named options. */
+export class ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL";
+
+  constructor(value: string) {
+    super(`Unexpected argument '${value}'. This command does not take positional arguments`);
+    this.name = "TypeError";
+  }
+}
+
+/** An option was not present in the caller's strict option declaration. */
+export class ERR_PARSE_ARGS_UNKNOWN_OPTION extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_PARSE_ARGS_UNKNOWN_OPTION";
+
+  constructor(option: string, allowPositionals: boolean) {
+    const positionalHint = allowPositionals
+      ? ". To specify a positional argument starting with a '-', place it at the end " +
+        `of the command after '--', as in '-- ${JSON.stringify(option)}`
+      : "";
+    super(`Unknown option '${option}'${positionalHint}`);
+    this.name = "TypeError";
+  }
+}
+
 /** An environment proxy URL could not be parsed safely. */
 export class ERR_PROXY_INVALID_CONFIG extends NodeError {
   override readonly code = "ERR_PROXY_INVALID_CONFIG";

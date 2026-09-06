@@ -1,3 +1,4 @@
 parallel/test-diff.js
+parallel/test-parse-args.mjs
 parallel/test-uv-errno.js
 parallel/test-uv-errmap.js

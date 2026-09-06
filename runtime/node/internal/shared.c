@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
@@ -13,6 +14,131 @@ const NtsDescriptor nts_node_desc_double = {
 static _Thread_local int last_errno = 0;
 
 double nts_errno(void) { return (double)last_errno; }
+
+static NtsString *node_empty_string(void) {
+    return nts_string_from_utf8("", 0);
+}
+
+NtsString *nts_process_exec_path(void) {
+    size_t capacity = 256;
+    for (;;) {
+        char *path = malloc(capacity);
+        if (path == NULL) return node_empty_string();
+        size_t length = capacity;
+        int result = uv_exepath(path, &length);
+        if (result == UV_ENOBUFS) {
+            free(path);
+            capacity *= 2;
+            continue;
+        }
+        nts_node_set_errno(result);
+        NtsString *answer = result == 0
+                                ? nts_string_from_utf8(path, length)
+                                : node_empty_string();
+        free(path);
+        return answer;
+    }
+}
+
+#if defined(__linux__)
+static char *linux_command_line(size_t *length) {
+    FILE *file = fopen("/proc/self/cmdline", "rb");
+    if (file == NULL) return NULL;
+
+    size_t capacity = 4096;
+    size_t used = 0;
+    char *bytes = malloc(capacity);
+    if (bytes == NULL) {
+        fclose(file);
+        return NULL;
+    }
+
+    for (;;) {
+        if (used == capacity) {
+            capacity *= 2;
+            char *larger = realloc(bytes, capacity);
+            if (larger == NULL) {
+                free(bytes);
+                fclose(file);
+                return NULL;
+            }
+            bytes = larger;
+        }
+        size_t received = fread(bytes + used, 1, capacity - used, file);
+        used += received;
+        if (received == 0) break;
+    }
+    bool failed = ferror(file) != 0;
+    fclose(file);
+    if (failed || used == 0) {
+        free(bytes);
+        return NULL;
+    }
+    if (bytes[used - 1] != '\0') {
+        if (used == capacity) {
+            char *larger = realloc(bytes, capacity + 1);
+            if (larger == NULL) {
+                free(bytes);
+                return NULL;
+            }
+            bytes = larger;
+        }
+        bytes[used++] = '\0';
+    }
+    *length = used;
+    return bytes;
+}
+
+static size_t command_line_count(const char *bytes, size_t length) {
+    size_t count = 0;
+    for (size_t index = 0; index < length; index++) {
+        if (bytes[index] == '\0') count++;
+    }
+    return count;
+}
+#endif
+
+NtsArray *nts_process_argv(void) {
+#if defined(__linux__)
+    size_t length = 0;
+    char *bytes = linux_command_line(&length);
+    if (bytes == NULL) return nts_array_new(&nts_desc_ref, 0);
+    size_t count = command_line_count(bytes, length);
+    NtsArray *answer = nts_array_new(&nts_desc_ref, (double)count);
+    char *at = bytes;
+    for (size_t index = 0; index < count; index++) {
+        char *end = memchr(at, '\0', length - (size_t)(at - bytes));
+        size_t item_length = end == NULL ? 0 : (size_t)(end - at);
+        NTS_ITEMS(answer, void *)[index] =
+            index == 0 ? nts_process_exec_path()
+                       : nts_string_from_utf8(at, item_length);
+        at += item_length + 1;
+    }
+    free(bytes);
+    return answer;
+#else
+    NtsArray *answer = nts_array_new(&nts_desc_ref, 1);
+    NTS_ITEMS(answer, void *)[0] = nts_process_exec_path();
+    return answer;
+#endif
+}
+
+NtsString *nts_process_argv0(void) {
+#if defined(__linux__)
+    size_t length = 0;
+    char *bytes = linux_command_line(&length);
+    if (bytes == NULL) return node_empty_string();
+    size_t first_length = 0;
+    while (first_length < length && bytes[first_length] != '\0') {
+        first_length++;
+    }
+    NtsString *answer = nts_string_from_utf8(bytes, first_length);
+    free(bytes);
+    return answer;
+#else
+    return nts_process_exec_path();
+#endif
+}
 
 NtsString *nts_node_eol(void) {
 #ifdef _WIN32

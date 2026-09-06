@@ -109,6 +109,30 @@ export function validateStringArray(
   }
 }
 
+export function validateBooleanArray(
+  value: unknown,
+  name: string,
+): asserts value is boolean[] {
+  validateArray(value, name);
+  for (let index = 0; index < value.length; index++) {
+    const element: unknown = value[index];
+    if (typeof element !== "boolean") {
+      throw new ERR_INVALID_ARG_TYPE(`${name}[${index}]`, "boolean", element);
+    }
+  }
+}
+
+export function validateUnion<const Choices extends readonly string[]>(
+  value: unknown,
+  name: string,
+  choices: Choices,
+): asserts value is Choices[number] {
+  for (const choice of choices) {
+    if (value === choice) return;
+  }
+  throw new ERR_INVALID_ARG_TYPE(name, `('${choices.join("|")}')`, value);
+}
+
 export function validateInteger(
   value: unknown,
   name: string,
