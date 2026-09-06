@@ -39,6 +39,7 @@ import {
   ERR_IP_BLOCKED,
   ERR_MISSING_ARGS,
   ERR_OUT_OF_RANGE,
+  ERR_SERVER_ALREADY_LISTEN,
   ERR_SOCKET_CLOSED,
   ERR_SOCKET_CLOSED_BEFORE_CONNECTION,
   ERR_SOCKET_HANDLE_ADOPTED,
@@ -501,7 +502,6 @@ export class Socket extends Duplex {
   _handle: number | null = null;
 
   connecting = false;
-  pending = true;
   bytesRead = 0;
   /** The server that accepted this socket, or null for outgoing sockets. */
   server: Server | null = null;
@@ -585,14 +585,12 @@ export class Socket extends Duplex {
       this.#resetAsyncIdentity(this.#provider);
       this._handle = consumeBoundSocket(options.handle);
       this.#boundSource = true;
-      this.pending = true;
     } else if (options.handle !== undefined) {
       this.#provider = options.handleType === "pipe" ? "PIPEWRAP" : "TCPWRAP";
       // Before the handle is touched, because taking an existing one starts
       // reading and a read can complete before the constructor returns.
       this.#resetAsyncIdentity(this.#provider);
       this._handle = options.handle;
-      this.pending = false;
       this.#capture();
       if (options.noDelay) this.setNoDelay(true);
       if (options.keepAlive) {
@@ -710,6 +708,11 @@ export class Socket extends Duplex {
     return this.writable ? "writeOnly" : "closed";
   }
 
+  /** No transport has been acquired yet, or its connection is still opening. */
+  get pending(): boolean {
+    return this._handle === null || this.connecting;
+  }
+
   get autoSelectFamilyAttemptedAddresses(): string[] | undefined {
     return this.#attemptedAddresses?.slice(0, this.#attemptedAddressCount);
   }
@@ -793,7 +796,6 @@ export class Socket extends Duplex {
       );
     }
     if (options.signal !== undefined) this.#watchAbort(options.signal);
-    if (options.onread !== undefined) this.#setOnRead(options.onread);
     const providerIsPipe = this.#boundSource ? this.#boundPipe : isPipe;
     this.#resetAsyncIdentity(providerIsPipe ? "PIPEWRAP" : "TCPWRAP");
     if (!providerIsPipe && isIP(host) === 0) {
@@ -831,7 +833,7 @@ export class Socket extends Duplex {
               this.emit("lookup", null, current.address, current.family, host);
             }
           }
-          const ordered = orderLookupAddresses(address, options.blockList);
+          const ordered = orderLookupAddresses(address, options.blockList, host, port);
           if (ordered instanceof Error) {
             nextTick(() => this.destroy(ordered));
           } else if (ordered.length === 1) {
@@ -1053,7 +1055,6 @@ export class Socket extends Duplex {
 
   #completeConnection(options: ConnectOptions): void {
     this.connecting = false;
-    this.pending = false;
     this.#capture();
     if (options.noDelay) this.setNoDelay(true);
     if (options.keepAlive) {
@@ -1150,7 +1151,8 @@ export class Socket extends Duplex {
   }
 
   #nextOnReadBuffer(): Uint8Array {
-    const generated = this.#onReadBufferFactory?.();
+    const factory = this.#onReadBufferFactory;
+    const generated = factory?.();
     if (!(generated instanceof Uint8Array)) {
       throw new ERR_INVALID_ARG_TYPE(
         "options.onread.buffer()",
@@ -1493,7 +1495,9 @@ export class Socket extends Duplex {
    * to a request and to an idle keep-alive connection.
    */
   setTimeout(msecs: number, callback?: () => void): this {
+    if (this.destroyed) return this;
     const duration = getTimerDuration(msecs, "msecs");
+    if (callback !== undefined) validateFunction(callback, "callback");
     this.#clearTimeout();
     this.timeout = duration;
 
@@ -1502,7 +1506,7 @@ export class Socket extends Duplex {
         this.emit("timeout");
       }, duration);
       this.#timer.unref();
-      if (callback) this.once("timeout", callback);
+      if (callback !== undefined) this.once("timeout", callback);
     } else if (callback !== undefined) {
       this.removeListener("timeout", callback);
     }
@@ -1639,6 +1643,7 @@ export class Server extends EventEmitter {
   override [captureRejectionSymbol] = Server.dispatchCapturedRejection;
 
   _handle: number | null = null;
+  declare _connectionKey: string;
   listening = false;
   maxConnections = Infinity;
   highWaterMark: number;
@@ -1742,6 +1747,8 @@ export class Server extends EventEmitter {
   }
 
   listen(...args: ListenArguments): this {
+    if (this._handle !== null) throw new ERR_SERVER_ALREADY_LISTEN();
+
     const { options, callback } = normaliseListenArguments(args);
     if (callback) this.once("listening", callback);
 
@@ -1833,17 +1840,28 @@ export class Server extends EventEmitter {
         }),
       (errno: number) =>
         this.#inScope(() => {
+          this._handle = null;
           this.listening = false;
+          this.#handleClosed = true;
+          this.#clearAbort();
           this.emit("error", listenError(errno, host, port, path));
         }),
     );
 
     if (handle < 0) {
+      this.#handleClosed = true;
       nextTick(() => this.emit("error", listenError(handle, host, port, path)));
       return this;
     }
 
     this._handle = handle;
+    const localAddress = this.address();
+    if (typeof localAddress === "string") {
+      this._connectionKey = `-1:${localAddress}:-1`;
+    } else if (localAddress !== null) {
+      const addressType = localAddress.family === "IPv6" ? 6 : 4;
+      this._connectionKey = `${addressType}:${localAddress.address}:${port}`;
+    }
     if (!this.#keepProcessAlive) nts_net_server_ref(handle, false);
     if (options.signal !== undefined) this.#watchAbort(options.signal);
     return this;
@@ -2354,6 +2372,8 @@ function ignoreNativeClose(): void {}
 function orderLookupAddresses(
   input: LookupAddress[],
   blockList: BlockList | undefined,
+  host: string,
+  port: number,
 ): LookupAddress[] | Error {
   if (input.length === 0) return new ERR_INVALID_IP_ADDRESS(undefined);
 
@@ -2388,7 +2408,7 @@ function orderLookupAddresses(
     if (first === undefined || typeof first.address !== "string" || isIP(first.address) === 0) {
       return new ERR_INVALID_IP_ADDRESS(first?.address);
     }
-    return new ERR_INVALID_ADDRESS_FAMILY(first.family, "", 0);
+    return new ERR_INVALID_ADDRESS_FAMILY(first.family, host, port);
   }
 
   const ipv4 = new Array<LookupAddress>(ipv4Count);

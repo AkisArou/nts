@@ -187,7 +187,15 @@ function judgeWhenQuiet() {
 
   const onBeforeExit = () => {
     rounds++;
-    if (peekPending().length > 0 && rounds < SETTLE_ROUNDS) return;
+    if (peekPending().length > 0 && rounds < SETTLE_ROUNDS) {
+      // A native handle can queue its final JavaScript event while ceasing to
+      // keep the loop alive. In that case Node enters `beforeExit` before the
+      // queued event is delivered. Keep one host-immediate turn alive so the
+      // event and its implementation ticks can run, then judge the next quiet
+      // round. Merely returning here does not cause another `beforeExit`.
+      hostSetImmediate(() => {});
+      return;
+    }
     finish();
   };
   hostProcess.on("beforeExit", onBeforeExit);

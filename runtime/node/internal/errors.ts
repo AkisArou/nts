@@ -1691,6 +1691,19 @@ export class ERR_SOCKET_DGRAM_NOT_RUNNING extends NodeError {
   }
 }
 
+/** `Server.listen()` was called again before the current handle was closed. */
+export class ERR_SERVER_ALREADY_LISTEN extends NodeError {
+  override readonly code = "ERR_SERVER_ALREADY_LISTEN";
+  override get ["constructor"](): unknown {
+    return Error;
+  }
+
+  constructor() {
+    super("Listen method has been called more than once without closing.");
+    this.name = "Error";
+  }
+}
+
 /** `Bad socket type specified. Valid types are: udp4, udp6`. */
 export class ERR_SOCKET_BAD_TYPE extends NodeTypeError {
   override readonly code = "ERR_SOCKET_BAD_TYPE";

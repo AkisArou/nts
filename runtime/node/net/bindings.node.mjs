@@ -291,12 +291,16 @@ globalThis.nts_net_listen = (
   try {
     const bound = boundHandle >= 0 ? boundSockets.get(boundHandle) : undefined;
     if (boundHandle >= 0 && !bound) return -9;
+    const handle = bound ? boundHandle : nextHandle++;
     // Accepted transports follow the same rule as outgoing ones: the public
     // Socket above this seam, not the stand-in host socket, decides whether a
     // received FIN also ends writing.
     const server = net.createServer({ allowHalfOpen: true });
     server.on("connection", (socket) => onConnection(adopt(socket)));
-    server.on("error", (e) => onError(codeOf(e)));
+    server.on("error", (e) => {
+      servers.delete(handle);
+      onError(codeOf(e));
+    });
     server.on("listening", () => onListening());
     if (bound) {
       boundSockets.delete(boundHandle);
@@ -314,7 +318,6 @@ globalThis.nts_net_listen = (
       server.listen({ port, host, backlog, ipv6Only, reusePort });
     } else if (host === "::") server.listen(port, backlog);
     else server.listen(port, host, backlog);
-    const handle = bound ? boundHandle : nextHandle++;
     servers.set(handle, server);
     return handle;
   } catch (e) {
