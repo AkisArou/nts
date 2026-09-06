@@ -343,7 +343,6 @@ double nts_os_set_priority(double pid, double priority) {
  * assemble the object. Taking them from the headers rather than writing the
  * numbers down is the point: `SIGUSR1` is 10 on Linux and 30 on macOS, and a
  * table transcribed once would be wrong on the other. */
-#include <signal.h>
 #include <errno.h>
 #if !defined(_WIN32)
 #include <dlfcn.h>
@@ -353,116 +352,6 @@ typedef struct { const char *group; const char *name; double value; } NtsOsConst
 
 #define C_(g, n) { g, #n, (double)n }
 static const NtsOsConstant OS_CONSTANTS[] = {
-#ifdef SIGHUP
-    C_("signals", SIGHUP),
-#endif
-#ifdef SIGINT
-    C_("signals", SIGINT),
-#endif
-#ifdef SIGQUIT
-    C_("signals", SIGQUIT),
-#endif
-#ifdef SIGILL
-    C_("signals", SIGILL),
-#endif
-#ifdef SIGTRAP
-    C_("signals", SIGTRAP),
-#endif
-#ifdef SIGABRT
-    C_("signals", SIGABRT),
-#endif
-#ifdef SIGIOT
-    C_("signals", SIGIOT),
-#endif
-#ifdef SIGBUS
-    C_("signals", SIGBUS),
-#endif
-#ifdef SIGFPE
-    C_("signals", SIGFPE),
-#endif
-#ifdef SIGKILL
-    C_("signals", SIGKILL),
-#endif
-#ifdef SIGUSR1
-    C_("signals", SIGUSR1),
-#endif
-#ifdef SIGSEGV
-    C_("signals", SIGSEGV),
-#endif
-#ifdef SIGUSR2
-    C_("signals", SIGUSR2),
-#endif
-#ifdef SIGPIPE
-    C_("signals", SIGPIPE),
-#endif
-#ifdef SIGALRM
-    C_("signals", SIGALRM),
-#endif
-    C_("signals", SIGTERM),
-#ifdef SIGCHLD
-    C_("signals", SIGCHLD),
-#endif
-#ifdef SIGSTKFLT
-    C_("signals", SIGSTKFLT),
-#endif
-#ifdef SIGCONT
-    C_("signals", SIGCONT),
-#endif
-#ifdef SIGSTOP
-    C_("signals", SIGSTOP),
-#endif
-#ifdef SIGTSTP
-    C_("signals", SIGTSTP),
-#endif
-#ifdef SIGBREAK
-    C_("signals", SIGBREAK),
-#endif
-#ifdef SIGTTIN
-    C_("signals", SIGTTIN),
-#endif
-#ifdef SIGTTOU
-    C_("signals", SIGTTOU),
-#endif
-#ifdef SIGURG
-    C_("signals", SIGURG),
-#endif
-#ifdef SIGXCPU
-    C_("signals", SIGXCPU),
-#endif
-#ifdef SIGXFSZ
-    C_("signals", SIGXFSZ),
-#endif
-#ifdef SIGVTALRM
-    C_("signals", SIGVTALRM),
-#endif
-#ifdef SIGPROF
-    C_("signals", SIGPROF),
-#endif
-#ifdef SIGWINCH
-    C_("signals", SIGWINCH),
-#endif
-#ifdef SIGIO
-    C_("signals", SIGIO),
-#endif
-#ifdef SIGPOLL
-    C_("signals", SIGPOLL),
-#endif
-#ifdef SIGLOST
-    C_("signals", SIGLOST),
-#endif
-#ifdef SIGPWR
-    C_("signals", SIGPWR),
-#endif
-#ifdef SIGINFO
-    C_("signals", SIGINFO),
-#endif
-#ifdef SIGSYS
-    C_("signals", SIGSYS),
-#endif
-#ifdef SIGUNUSED
-    C_("signals", SIGUNUSED),
-#endif
-
 #ifdef E2BIG
     C_("errno", E2BIG),
 #endif
@@ -921,18 +810,30 @@ static const NtsOsConstant OS_CONSTANTS[] = {
 static const size_t OS_CONSTANT_COUNT = sizeof(OS_CONSTANTS) / sizeof(OS_CONSTANTS[0]);
 
 NtsArray *nts_os_constants(void) {
+    size_t signal_count = 0;
+    const NtsNodeSignalConstant *signals =
+        nts_node_signal_constants(&signal_count);
+    size_t total_count = signal_count + OS_CONSTANT_COUNT;
     NtsArray *columns = nts_array_new(&nts_desc_ref, 3);
-    NtsArray *groups = nts_array_new(&nts_desc_ref, (double)OS_CONSTANT_COUNT);
-    NtsArray *names = nts_array_new(&nts_desc_ref, (double)OS_CONSTANT_COUNT);
+    NtsArray *groups = nts_array_new(&nts_desc_ref, (double)total_count);
+    NtsArray *names = nts_array_new(&nts_desc_ref, (double)total_count);
     NtsArray *values =
-        nts_array_new(&nts_node_desc_double, (double)OS_CONSTANT_COUNT);
+        nts_array_new(&nts_node_desc_double, (double)total_count);
     NTS_ITEMS(columns, void *)[0] = groups;
     NTS_ITEMS(columns, void *)[1] = names;
     NTS_ITEMS(columns, void *)[2] = values;
+
+    for (size_t i = 0; i < signal_count; i++) {
+        NTS_ITEMS(groups, void *)[i] = utf8("signals");
+        NTS_ITEMS(names, void *)[i] =
+            nts_string_from_utf8(signals[i].name, signals[i].name_length);
+        NTS_ITEMS(values, double)[i] = (double)signals[i].value;
+    }
     for (size_t i = 0; i < OS_CONSTANT_COUNT; i++) {
-        NTS_ITEMS(groups, void *)[i] = utf8(OS_CONSTANTS[i].group);
-        NTS_ITEMS(names, void *)[i] = utf8(OS_CONSTANTS[i].name);
-        NTS_ITEMS(values, double)[i] = OS_CONSTANTS[i].value;
+        size_t output = signal_count + i;
+        NTS_ITEMS(groups, void *)[output] = utf8(OS_CONSTANTS[i].group);
+        NTS_ITEMS(names, void *)[output] = utf8(OS_CONSTANTS[i].name);
+        NTS_ITEMS(values, double)[output] = OS_CONSTANTS[i].value;
     }
     return columns;
 }

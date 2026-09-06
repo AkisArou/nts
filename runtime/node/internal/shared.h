@@ -35,6 +35,20 @@ NtsString *nts_uv_err_message(double code);
 NtsArray *nts_uv_error_codes(void);
 NtsArray *nts_uv_error_names(void);
 
+/** One platform signal constant, shared by `node:os` and signal utilities. */
+typedef struct {
+    const char *name;
+    size_t name_length;
+    int value;
+} NtsNodeSignalConstant;
+
+/** The platform's signal constants, in Node's public enumeration order. */
+const NtsNodeSignalConstant *nts_node_signal_constants(size_t *count);
+
+/** Signal names for public validation and the POSIX shell exit-code mapping. */
+NtsArray *nts_process_signal_names(void);
+double nts_process_signal_exit_code(NtsString *signal_code);
+
 /* An array of doubles.
  *
  * The runtime exports `nts_desc_ref` for an array of references and nothing for

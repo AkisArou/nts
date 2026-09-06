@@ -59,6 +59,13 @@ globalThis.nts_node_eol = () => os.EOL;
 globalThis.nts_node_random_uuid = randomUUID;
 globalThis.nts_node_random_uuid_status = () => 0;
 
+const hostSignalConstants = os.constants.signals;
+globalThis.nts_process_signal_names = () => Object.keys(hostSignalConstants);
+globalThis.nts_process_signal_exit_code = (signalCode) => {
+  const signalNumber = hostSignalConstants[signalCode];
+  return signalNumber === undefined ? 0 : 128 + signalNumber;
+};
+
 // libuv's error table, for `internal/uv.ts`.
 //
 // Here rather than in `fs` and `util`, which each had their own copy. The two

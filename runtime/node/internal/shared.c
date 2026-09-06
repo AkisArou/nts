@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
@@ -156,4 +157,161 @@ NtsArray *nts_uv_error_names(void) {
         NTS_ITEMS(names, NtsString *)[i] = nts_string_from_utf8(name, strlen(name));
     }
     return names;
+}
+
+/* Node publishes the platform's own <signal.h> values. Keep one ordered table
+ * for every consumer: `node:os` exposes the names and numbers, while
+ * `util.convertProcessSignalToExitCode` validates the same names and applies
+ * the POSIX 128 + signal-number convention. */
+#define NTS_SIGNAL_(name) { #name, sizeof(#name) - 1, name }
+static const NtsNodeSignalConstant signal_constants[] = {
+#ifdef SIGHUP
+    NTS_SIGNAL_(SIGHUP),
+#endif
+#ifdef SIGINT
+    NTS_SIGNAL_(SIGINT),
+#endif
+#ifdef SIGQUIT
+    NTS_SIGNAL_(SIGQUIT),
+#endif
+#ifdef SIGILL
+    NTS_SIGNAL_(SIGILL),
+#endif
+#ifdef SIGTRAP
+    NTS_SIGNAL_(SIGTRAP),
+#endif
+#ifdef SIGABRT
+    NTS_SIGNAL_(SIGABRT),
+#endif
+#ifdef SIGIOT
+    NTS_SIGNAL_(SIGIOT),
+#endif
+#ifdef SIGBUS
+    NTS_SIGNAL_(SIGBUS),
+#endif
+#ifdef SIGFPE
+    NTS_SIGNAL_(SIGFPE),
+#endif
+#ifdef SIGKILL
+    NTS_SIGNAL_(SIGKILL),
+#endif
+#ifdef SIGUSR1
+    NTS_SIGNAL_(SIGUSR1),
+#endif
+#ifdef SIGSEGV
+    NTS_SIGNAL_(SIGSEGV),
+#endif
+#ifdef SIGUSR2
+    NTS_SIGNAL_(SIGUSR2),
+#endif
+#ifdef SIGPIPE
+    NTS_SIGNAL_(SIGPIPE),
+#endif
+#ifdef SIGALRM
+    NTS_SIGNAL_(SIGALRM),
+#endif
+    NTS_SIGNAL_(SIGTERM),
+#ifdef SIGCHLD
+    NTS_SIGNAL_(SIGCHLD),
+#endif
+#ifdef SIGSTKFLT
+    NTS_SIGNAL_(SIGSTKFLT),
+#endif
+#ifdef SIGCONT
+    NTS_SIGNAL_(SIGCONT),
+#endif
+#ifdef SIGSTOP
+    NTS_SIGNAL_(SIGSTOP),
+#endif
+#ifdef SIGTSTP
+    NTS_SIGNAL_(SIGTSTP),
+#endif
+#ifdef SIGBREAK
+    NTS_SIGNAL_(SIGBREAK),
+#endif
+#ifdef SIGTTIN
+    NTS_SIGNAL_(SIGTTIN),
+#endif
+#ifdef SIGTTOU
+    NTS_SIGNAL_(SIGTTOU),
+#endif
+#ifdef SIGURG
+    NTS_SIGNAL_(SIGURG),
+#endif
+#ifdef SIGXCPU
+    NTS_SIGNAL_(SIGXCPU),
+#endif
+#ifdef SIGXFSZ
+    NTS_SIGNAL_(SIGXFSZ),
+#endif
+#ifdef SIGVTALRM
+    NTS_SIGNAL_(SIGVTALRM),
+#endif
+#ifdef SIGPROF
+    NTS_SIGNAL_(SIGPROF),
+#endif
+#ifdef SIGWINCH
+    NTS_SIGNAL_(SIGWINCH),
+#endif
+#ifdef SIGIO
+    NTS_SIGNAL_(SIGIO),
+#endif
+#ifdef SIGPOLL
+    NTS_SIGNAL_(SIGPOLL),
+#endif
+#ifdef SIGLOST
+    NTS_SIGNAL_(SIGLOST),
+#endif
+#ifdef SIGPWR
+    NTS_SIGNAL_(SIGPWR),
+#endif
+#ifdef SIGINFO
+    NTS_SIGNAL_(SIGINFO),
+#endif
+#ifdef SIGSYS
+    NTS_SIGNAL_(SIGSYS),
+#endif
+#ifdef SIGUNUSED
+    NTS_SIGNAL_(SIGUNUSED),
+#endif
+};
+#undef NTS_SIGNAL_
+
+static const size_t signal_constant_count =
+    sizeof(signal_constants) / sizeof(signal_constants[0]);
+
+const NtsNodeSignalConstant *nts_node_signal_constants(size_t *count) {
+    if (count != NULL) *count = signal_constant_count;
+    return signal_constants;
+}
+
+NtsArray *nts_process_signal_names(void) {
+    NtsArray *names = nts_array_new(&nts_desc_ref, (double)signal_constant_count);
+    for (size_t i = 0; i < signal_constant_count; i++) {
+        const char *name = signal_constants[i].name;
+        NTS_ITEMS(names, NtsString *)[i] =
+            nts_string_from_utf8(name, signal_constants[i].name_length);
+    }
+    return names;
+}
+
+static bool signal_name_equals(const NtsString *actual,
+                               const NtsNodeSignalConstant *expected) {
+    size_t expected_length = expected->name_length;
+    if ((size_t)actual->length != expected_length) return false;
+    for (size_t i = 0; i < expected_length; i++) {
+        if (nts_unit(actual, (uint32_t)i) != (uint8_t)expected->name[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+double nts_process_signal_exit_code(NtsString *signal_code) {
+    for (size_t i = 0; i < signal_constant_count; i++) {
+        if (signal_name_equals(signal_code, &signal_constants[i])) {
+            return (double)(128 + signal_constants[i].value);
+        }
+    }
+    return 0;
 }

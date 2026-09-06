@@ -39,6 +39,8 @@ export type { InspectOptions };
 export const isDeepStrictEqual = compareDeepStrict;
 
 declare function nts_process_env(name: string): string;
+declare function nts_process_signal_names(): string[];
+declare function nts_process_signal_exit_code(signalCode: string): number;
 
 /** Enabled sections of `NODE_DEBUG`, upstream `lib/internal/util/debuglog.js`. */
 const enabledSections = (() => {
@@ -64,6 +66,20 @@ export function debuglog(
 
 export function debuglogEnabled(section: string): boolean {
   return enabledSections.includes(section.toUpperCase());
+}
+
+const processSignalNames: readonly string[] = nts_process_signal_names();
+
+/** POSIX exit status for a process terminated by a named signal. */
+export function convertProcessSignalToExitCode(signalCode: string): number;
+export function convertProcessSignalToExitCode(signalCode: unknown): number {
+  const exitCode = typeof signalCode === "string"
+    ? nts_process_signal_exit_code(signalCode)
+    : 0;
+  if (exitCode === 0) {
+    validateOneOf(signalCode, "signalCode", processSignalNames);
+  }
+  return exitCode;
 }
 
 declare function nts_debug_write(text: string): number;
@@ -227,6 +243,7 @@ export default {
   deprecate,
   debuglog,
   debuglogEnabled,
+  convertProcessSignalToExitCode,
   stripVTControlCharacters,
   toUSVString,
   promisify,
