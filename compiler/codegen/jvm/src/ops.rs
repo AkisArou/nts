@@ -295,6 +295,48 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
             (types::BUFFER, "slice", "(Lnts/rt/NtsBuffer;DD)Lnts/rt/NtsBuffer;")
         }
         "nts_buffer_resize" => (types::BUFFER, "resize", "(Lnts/rt/NtsBuffer;D)V"),
+        // `DataView`. The width and the signedness are in the *name* rather
+        // than in the type -- one class, sixteen accessors -- so this is a
+        // table rather than an overload set, and `NtsDataView` already carries
+        // every one of them.
+        "nts_dataview_over" => (types::VIEW, "over", "(Lnts/rt/NtsBuffer;D)Lnts/rt/NtsDataView;"),
+        "nts_dataview_part" => {
+            (types::VIEW, "part", "(Lnts/rt/NtsBuffer;DD)Lnts/rt/NtsDataView;")
+        }
+        "nts_dataview_buffer" => (types::VIEW, "buffer", "(Lnts/rt/NtsDataView;)Lnts/rt/NtsBuffer;"),
+        "nts_dataview_byte_offset" => (types::VIEW, "byteOffset", "(Lnts/rt/NtsDataView;)D"),
+        "nts_dataview_byte_length" => (types::VIEW, "byteLength", "(Lnts/rt/NtsDataView;)D"),
+        "nts_dataview_get_int8" => (types::VIEW, "getInt8", "(Lnts/rt/NtsDataView;D)D"),
+        "nts_dataview_get_uint8" => (types::VIEW, "getUint8", "(Lnts/rt/NtsDataView;D)D"),
+        "nts_dataview_get_int16" => (types::VIEW, "getInt16", "(Lnts/rt/NtsDataView;DZ)D"),
+        "nts_dataview_get_uint16" => (types::VIEW, "getUint16", "(Lnts/rt/NtsDataView;DZ)D"),
+        "nts_dataview_get_int32" => (types::VIEW, "getInt32", "(Lnts/rt/NtsDataView;DZ)D"),
+        "nts_dataview_get_uint32" => (types::VIEW, "getUint32", "(Lnts/rt/NtsDataView;DZ)D"),
+        "nts_dataview_get_float32" => (types::VIEW, "getFloat32", "(Lnts/rt/NtsDataView;DZ)D"),
+        // The bigint pair. A bigint is `NtsBigInt` on this lane and 128 bits
+        // wide where the element is 64, so the read chooses what lands in the
+        // high word and the write keeps the low one.
+        "nts_dataview_get_bigint64" => {
+            (types::VIEW, "getBigInt64", "(Lnts/rt/NtsDataView;DZ)Lnts/rt/NtsBigInt;")
+        }
+        "nts_dataview_get_biguint64" => {
+            (types::VIEW, "getBigUint64", "(Lnts/rt/NtsDataView;DZ)Lnts/rt/NtsBigInt;")
+        }
+        "nts_dataview_set_bigint64" => {
+            (types::VIEW, "setBigInt64", "(Lnts/rt/NtsDataView;DLnts/rt/NtsBigInt;Z)V")
+        }
+        "nts_dataview_set_biguint64" => {
+            (types::VIEW, "setBigUint64", "(Lnts/rt/NtsDataView;DLnts/rt/NtsBigInt;Z)V")
+        }
+        "nts_dataview_get_float64" => (types::VIEW, "getFloat64", "(Lnts/rt/NtsDataView;DZ)D"),
+        "nts_dataview_set_int8" => (types::VIEW, "setInt8", "(Lnts/rt/NtsDataView;DD)V"),
+        "nts_dataview_set_uint8" => (types::VIEW, "setUint8", "(Lnts/rt/NtsDataView;DD)V"),
+        "nts_dataview_set_int16" => (types::VIEW, "setInt16", "(Lnts/rt/NtsDataView;DDZ)V"),
+        "nts_dataview_set_uint16" => (types::VIEW, "setUint16", "(Lnts/rt/NtsDataView;DDZ)V"),
+        "nts_dataview_set_int32" => (types::VIEW, "setInt32", "(Lnts/rt/NtsDataView;DDZ)V"),
+        "nts_dataview_set_uint32" => (types::VIEW, "setUint32", "(Lnts/rt/NtsDataView;DDZ)V"),
+        "nts_dataview_set_float32" => (types::VIEW, "setFloat32", "(Lnts/rt/NtsDataView;DDZ)V"),
+        "nts_dataview_set_float64" => (types::VIEW, "setFloat64", "(Lnts/rt/NtsDataView;DDZ)V"),
         "nts_buffer_transfer" => {
             (types::BUFFER, "transfer", "(Lnts/rt/NtsBuffer;DZ)Lnts/rt/NtsBuffer;")
         }

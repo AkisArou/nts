@@ -1758,7 +1758,8 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
             ManagedType::Object(_)
             | ManagedType::Array(_)
             | ManagedType::Date
-            | ManagedType::Buffer,
+            | ManagedType::Buffer
+            | ManagedType::DataView,
         ) => Some(("NTS_TAG_OBJECT", "reference")),
         _ => None,
     }
@@ -1824,6 +1825,7 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *",
         HirType::Managed(ManagedType::Date) => "NtsDate *",
         HirType::Managed(ManagedType::Buffer) => "NtsBuffer *",
+        HirType::Managed(ManagedType::DataView) => "NtsDataView *",
         // One runtime type whatever it carries. The payload's representation is
         // in the HIR type for the compiler's sake -- it says which
         // `nts_promise_fulfill_*` to emit -- and the C sees a tagged union, so

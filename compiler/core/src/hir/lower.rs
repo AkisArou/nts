@@ -3199,6 +3199,15 @@ fn provided_representation(
         return Some(HirType::Managed(ManagedType::Buffer));
     }
 
+    // A `DataView`, on the same terms once more -- and it is the clearest case
+    // in this family rather than the murkiest. A typed array *is* its element
+    // type; a `DataView` has none, because the width is chosen per access by
+    // the method called. `getUint8` and `getFloat64` are two calls on one type,
+    // so there is nothing for a payload to carry.
+    if named(snapshot, ty) == Some("DataView") {
+        return Some(HirType::Managed(ManagedType::DataView));
+    }
+
     // A provided error class used as a **value**. `lib.d.ts` declares
     // `TypeError` as a variable of type `TypeErrorConstructor`, so this is the
     // type a name's own mention has and the type a slot holding one is declared
@@ -14416,6 +14425,7 @@ impl<'a> FuncBuilder<'a> {
             }
             HirType::Managed(ManagedType::Date) => Some(self.lower_new_date(id)),
             HirType::Managed(ManagedType::Buffer) => Some(self.lower_new_buffer(id)),
+            HirType::Managed(ManagedType::DataView) => Some(self.lower_new_data_view(id)),
             _ => None,
         }
     }
@@ -15359,6 +15369,13 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::Buffer)
         ) {
             return self.buffer_property(id, value, member_name);
+        }
+
+        if matches!(
+            self.values[value.0 as usize].ty,
+            HirType::Managed(ManagedType::DataView)
+        ) {
+            return self.data_view_property(id, value, member_name);
         }
 
         if let HirType::Managed(ManagedType::Object(type_id)) =
@@ -16708,6 +16725,13 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_buffer_method(id, receiver, *member, arguments);
         }
 
+        if matches!(
+            self.values[receiver.0 as usize].ty,
+            HirType::Managed(ManagedType::DataView)
+        ) {
+            return self.lower_data_view_method(id, receiver, *member, arguments);
+        }
+
         let HirType::Managed(ManagedType::Object(type_id)) =
             self.values[receiver.0 as usize].ty.clone()
         else {
@@ -16728,6 +16752,259 @@ impl<'a> FuncBuilder<'a> {
     /// needs a timezone database this compiler does not carry and which would
     /// make the same program answer differently on two machines -- so it is a
     /// refusal with a reason rather than a gap.
+    /// `new DataView(buffer)`, `(buffer, byteOffset)` and
+    /// `(buffer, byteOffset, byteLength)`.
+    ///
+    /// The two-argument form **tracks** the buffer: no length was given, so the
+    /// view is however many bytes remain, and it changes when the buffer is
+    /// resized. The three-argument form is fixed for life. That is one runtime
+    /// distinction rather than two types, which is why `DataView` carries
+    /// nothing.
+    ///
+    /// A detached buffer is a `TypeError` here and not at the first access,
+    /// because the specification checks it in the constructor -- and a view
+    /// built over a detached buffer that only failed later would report a
+    /// `byteLength` before it failed.
+    fn lower_new_data_view(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let arguments = self.arguments_of(id);
+        let Some(first) = arguments.first() else {
+            return Err(self.unsupported(id, "a `new DataView` with no buffer"));
+        };
+        let buffer = self.lower_expression(*first)?;
+        if !matches!(
+            self.values[buffer.0 as usize].ty,
+            HirType::Managed(ManagedType::Buffer)
+        ) {
+            return Err(self.unsupported(id, "a `new DataView` over something other than an `ArrayBuffer`"));
+        }
+        self.guard_view_attached(id, buffer)?;
+        let origin = self.origin(id);
+
+        // `nts_to_index` **clamps** where `ToIndex` throws -- it is the shared
+        // arithmetic and the range check belongs to the callers, which is what
+        // its header says. So the raw value is guarded first, here, exactly as
+        // `new ArrayBuffer` guards its length. Without this,
+        // `new DataView(buffer, -1)` is a view at zero where node raises a
+        // `RangeError`, and `-0.5` is a view at zero on both -- which is the
+        // whole of the boundary and why the check is `<= -1` rather than `< 0`.
+        let offset = match arguments.get(1) {
+            Some(node) => {
+                let value = self.lower_expression(*node)?;
+                let value = self.coerce(value, &HirType::NUMBER, id)?;
+                self.guard_buffer_length(
+                    id,
+                    value,
+                    "Start offset is outside the bounds of the buffer",
+                )?;
+                self.call_runtime("nts_to_index", vec![value], HirType::NUMBER, &origin)
+            }
+            None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
+        };
+
+        let view = if let Some(node) = arguments.get(2) {
+            let length = self.lower_expression(*node)?;
+            let length = self.coerce(length, &HirType::NUMBER, id)?;
+            self.guard_buffer_length(id, length, "Invalid DataView length")?;
+            let length = self.call_runtime("nts_to_index", vec![length], HirType::NUMBER, &origin);
+            self.guard_view_window(id, buffer, offset, Some(length))?;
+            self.call_runtime(
+                "nts_dataview_part",
+                vec![buffer, offset, length],
+                HirType::Managed(ManagedType::DataView),
+                &origin,
+            )
+        } else {
+            self.guard_view_window(id, buffer, offset, None)?;
+            self.call_runtime(
+                "nts_dataview_over",
+                vec![buffer, offset],
+                HirType::Managed(ManagedType::DataView),
+                &origin,
+            )
+        };
+        self.guard_view_allocated(id, view)?;
+        Ok(view)
+    }
+
+    /// The three a `DataView` has, all read from the runtime struct.
+    fn data_view_property(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        member_name: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let (helper, ty) = match member_name {
+            // A tracking view over a buffer that has shrunk reports what is
+            // left, which is why this is a call rather than a stored field.
+            "byteLength" => ("nts_dataview_byte_length", HirType::NUMBER),
+            "byteOffset" => ("nts_dataview_byte_offset", HirType::NUMBER),
+            "buffer" => (
+                "nts_dataview_buffer",
+                HirType::Managed(ManagedType::Buffer),
+            ),
+            other => {
+                return Err(self.unsupported(
+                    id,
+                    &format!("`DataView.{other}`, which this compiler does not provide"),
+                ));
+            }
+        };
+        Ok(self.call_runtime(helper, vec![value], ty, &origin))
+    }
+
+    /// Every accessor, by name.
+    ///
+    /// The width and the signedness are in the *method*, not in the type, so
+    /// this table is the whole of what a `DataView` can do -- and a name that
+    /// is not in it is a refusal naming the method rather than a read of
+    /// whatever a layout holds, because a view has no layout.
+    ///
+    /// `littleEndian` defaults to **false**, which is the one place in the
+    /// language where the default is the less common byte order. Absent means
+    /// big-endian, and getting that backwards is correct on every symmetric
+    /// value.
+    fn lower_data_view_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let name = self
+            .literal_name(member)
+            .ok_or_else(|| self.unsupported(id, "a `DataView` member the program computes"))?;
+        let origin = self.origin(id);
+
+        // (helper suffix, width in bytes, result type, is a setter)
+        let reading = name.starts_with("get");
+        let stem = if reading {
+            name.strip_prefix("get").unwrap_or("")
+        } else {
+            name.strip_prefix("set").unwrap_or("")
+        };
+        let (helper, width, ty) = match stem {
+            "Int8" => ("int8", 1.0, HirType::NUMBER),
+            "Uint8" => ("uint8", 1.0, HirType::NUMBER),
+            "Int16" => ("int16", 2.0, HirType::NUMBER),
+            "Uint16" => ("uint16", 2.0, HirType::NUMBER),
+            "Int32" => ("int32", 4.0, HirType::NUMBER),
+            "Uint32" => ("uint32", 4.0, HirType::NUMBER),
+            "Float32" => ("float32", 4.0, HirType::NUMBER),
+            "Float64" => ("float64", 8.0, HirType::NUMBER),
+            // In the table, because the offset guard and the bounds check are
+            // the same; separated below, because the *value* is not a number.
+            // `getBigInt64` answers a bigint and `setBigInt64` takes one, and
+            // the language refuses to mix them with numbers rather than
+            // converting.
+            "BigInt64" => ("bigint64", 8.0, HirType::BigInt),
+            "BigUint64" => ("biguint64", 8.0, HirType::BigInt),
+            _ => {
+                return Err(self.unsupported(
+                    id,
+                    &format!("`DataView.{name}`, which this compiler does not provide"),
+                ));
+            }
+        };
+        if !name.starts_with("get") && !name.starts_with("set") {
+            return Err(self.unsupported(
+                id,
+                &format!("`DataView.{name}`, which this compiler does not provide"),
+            ));
+        }
+
+        let Some(first) = arguments.first() else {
+            return Err(self.unsupported(id, &format!("a `DataView.{name}` with no byte offset")));
+        };
+        let at = self.lower_expression(*first)?;
+        let at = self.coerce(at, &HirType::NUMBER, id)?;
+        // Same boundary as the constructor's: `getUint8(-0.5)` reads element
+        // zero and `getUint8(-1)` is a `RangeError`.
+        self.guard_buffer_length(id, at, "Offset is outside the bounds of the DataView")?;
+        let at = self.call_runtime("nts_to_index", vec![at], HirType::NUMBER, &origin);
+
+        // The bounds check is here rather than in the runtime, for the reason
+        // every other precondition in this file is: the runtime cannot throw,
+        // and a `RangeError` is what the language says an access past the end
+        // is.
+        self.guard_view_access(id, receiver, at, width)?;
+
+        // **No endianness argument for a one-byte access.** A single byte has
+        // no byte order, `getInt8` takes no such parameter in the language, and
+        // carrying one anyway would invite a reader to think it meant
+        // something. The helper's arity differs with the width for that reason
+        // and not by oversight.
+        let wide = width > 1.0;
+
+        if ty == HirType::BigInt {
+            let little = self.endianness(id, arguments.get(if reading { 1 } else { 2 }), &origin)?;
+            if reading {
+                return Ok(self.call_runtime(
+                    &format!("nts_dataview_get_{helper}"),
+                    vec![receiver, at, little],
+                    HirType::BigInt,
+                    &origin,
+                ));
+            }
+            let Some(second) = arguments.get(1) else {
+                return Err(self.unsupported(id, &format!("a `DataView.{name}` with no value")));
+            };
+            let value = self.lower_expression(*second)?;
+            if self.values[value.0 as usize].ty != HirType::BigInt {
+                return Err(self.unsupported(
+                    id,
+                    &format!("a `DataView.{name}` of something other than a bigint"),
+                ));
+            }
+            return Ok(self.call_runtime(
+                &format!("nts_dataview_set_{helper}"),
+                vec![receiver, at, value, little],
+                HirType::Void,
+                &origin,
+            ));
+        }
+
+        if reading {
+            let mut args = vec![receiver, at];
+            if wide {
+                args.push(self.endianness(id, arguments.get(1), &origin)?);
+            }
+            return Ok(self.call_runtime(&format!("nts_dataview_get_{helper}"), args, ty, &origin));
+        }
+
+        let Some(second) = arguments.get(1) else {
+            return Err(self.unsupported(id, &format!("a `DataView.{name}` with no value")));
+        };
+        let value = self.lower_expression(*second)?;
+        let value = self.coerce(value, &HirType::NUMBER, id)?;
+        let mut args = vec![receiver, at, value];
+        if wide {
+            args.push(self.endianness(id, arguments.get(2), &origin)?);
+        }
+        Ok(self.call_runtime(
+            &format!("nts_dataview_set_{helper}"),
+            args,
+            HirType::Void,
+            &origin,
+        ))
+    }
+
+    /// The `littleEndian` argument, defaulting to false.
+    fn endianness(
+        &mut self,
+        id: NodeId,
+        node: Option<&NodeId>,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        match node {
+            Some(node) => {
+                let value = self.lower_expression(*node)?;
+                self.coerce(value, &HirType::Bool, id)
+            }
+            None => Ok(self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone())),
+        }
+    }
+
     /// The four an `ArrayBuffer` has.
     ///
     /// By name, so that a member this compiler does not provide is a refusal
@@ -16903,6 +17180,143 @@ impl<'a> FuncBuilder<'a> {
         }
         self.switch_to(carry_on);
         Ok(())
+    }
+
+    /// A detached buffer, refused in the `DataView` constructor's own words.
+    fn guard_view_attached(&mut self, id: NodeId, buffer: ValueId) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let detached = self.call_runtime(
+            "nts_buffer_detached",
+            vec![buffer],
+            HirType::Bool,
+            &origin,
+        );
+        self.refuse_when(
+            id,
+            detached,
+            "TypeError",
+            "Cannot construct a DataView with a detached ArrayBuffer",
+        )
+    }
+
+    /// The window a `DataView` is being asked for, against the buffer it is
+    /// over.
+    ///
+    /// Two different refusals with two different messages, because the
+    /// language distinguishes them: an offset past the end is *"Start offset
+    /// is outside the bounds of the buffer"*, and a length that does not fit
+    /// from a legal offset is *"Invalid `DataView` length"*. Flattening them
+    /// would send a reader to the wrong argument.
+    fn guard_view_window(
+        &mut self,
+        id: NodeId,
+        buffer: ValueId,
+        offset: ValueId,
+        length: Option<ValueId>,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let size = self.call_runtime(
+            "nts_buffer_byte_length",
+            vec![buffer],
+            HirType::NUMBER,
+            &origin,
+        );
+        let past = self.push(
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs: offset,
+                rhs: size,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.refuse_when(
+            id,
+            past,
+            "RangeError",
+            "Start offset is outside the bounds of the buffer",
+        )?;
+        let Some(length) = length else { return Ok(()) };
+        let end = self.push(
+            OpKind::Binary {
+                op: BinOp::Add,
+                lhs: offset,
+                rhs: length,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let overruns = self.push(
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs: end,
+                rhs: size,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.refuse_when(id, overruns, "RangeError", "Invalid DataView length")
+    }
+
+    /// One access, checked against the view's length **as it is now**.
+    ///
+    /// A tracking view over a resizable buffer can shrink under an access that
+    /// was in range when the view was made, so the length is read here rather
+    /// than remembered. That is the same reason the runtime computes it.
+    fn guard_view_access(
+        &mut self,
+        id: NodeId,
+        view: ValueId,
+        at: ValueId,
+        width: f64,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let size = self.call_runtime(
+            "nts_dataview_byte_length",
+            vec![view],
+            HirType::NUMBER,
+            &origin,
+        );
+        let bytes = self.push(OpKind::ConstFloat(width), HirType::NUMBER, origin.clone());
+        let end = self.push(
+            OpKind::Binary {
+                op: BinOp::Add,
+                lhs: at,
+                rhs: bytes,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let past = self.push(
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs: end,
+                rhs: size,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.refuse_when(id, past, "RangeError", "Offset is outside the bounds of the DataView")
+    }
+
+    /// The allocation, which can fail for the same reason a buffer's can.
+    fn guard_view_allocated(&mut self, id: NodeId, view: ValueId) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let null = self.push(
+            OpKind::ConstNull,
+            HirType::Managed(ManagedType::DataView),
+            origin.clone(),
+        );
+        let failed = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: view,
+                rhs: null,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.refuse_when(id, failed, "RangeError", "DataView allocation failed")
     }
 
     fn guard_attached(

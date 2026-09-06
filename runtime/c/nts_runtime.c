@@ -4117,6 +4117,268 @@ void nts_buffer_resize(NtsBuffer *buffer, double byte_length) {
   buffer->length = length;
 }
 
+/* `DataView`.
+ *
+ * One reference -- the buffer -- so unlike `ArrayBuffer` this has an offset
+ * table and takes part in reference counting. Not cyclic: a buffer holds no
+ * references at all, so a view can never lead back to itself.
+ *
+ * `NTS_KIND_OBJECT` rather than a kind of its own, because a view owns no
+ * separate block: the bytes belong to the buffer, and freeing a view frees the
+ * struct and releases its reference. That is exactly what an object does. */
+static const uint32_t nts_dataview_offsets[] = {
+    (uint32_t)offsetof(NtsDataView, buffer),
+};
+
+static const NtsDescriptor nts_desc_dataview = {
+    NTS_KIND_OBJECT,
+    (uint32_t)sizeof(NtsDataView),
+    1u,
+    0u,
+    nts_dataview_offsets,
+    0,
+    "DataView",
+    0u,
+    0,
+};
+
+static NtsDataView *nts_dataview_make(NtsBuffer *buffer, double byte_offset,
+                                      double byte_length, bool tracks) {
+  NtsDataView *view = (NtsDataView *)nts_object_new(&nts_desc_dataview);
+  if (!view) {
+    return 0;
+  }
+  view->buffer = buffer;
+  nts_retain((NtsHeader *)buffer);
+  view->offset = nts_buffer_index(byte_offset);
+  view->length = tracks ? 0u : nts_buffer_index(byte_length);
+  view->tracks = tracks;
+  return view;
+}
+
+NtsDataView *nts_dataview_over(NtsBuffer *buffer, double byte_offset) {
+  return nts_dataview_make(buffer, byte_offset, 0.0, true);
+}
+
+NtsDataView *nts_dataview_part(NtsBuffer *buffer, double byte_offset,
+                               double byte_length) {
+  return nts_dataview_make(buffer, byte_offset, byte_length, false);
+}
+
+NtsBuffer *nts_dataview_buffer(const NtsDataView *view) {
+  return view->buffer;
+}
+
+double nts_dataview_byte_offset(const NtsDataView *view) {
+  return (double)view->offset;
+}
+
+/* Computed rather than stored.
+ *
+ * A tracking view over a buffer that has shrunk is shorter than it was, and a
+ * view over a detached one is empty -- a stored length would be right until the
+ * first `resize` and wrong afterwards, which a program without resizable
+ * buffers never reaches. */
+double nts_dataview_byte_length(const NtsDataView *view) {
+  const NtsBuffer *buffer = view->buffer;
+  if (!buffer->bytes) {
+    return 0.0;
+  }
+  if (!view->tracks) {
+    return (double)view->length;
+  }
+  if (view->offset >= buffer->length) {
+    return 0.0;
+  }
+  return (double)(buffer->length - view->offset);
+}
+
+/* One access, at an offset the lowering has already bounds-checked.
+ *
+ * Null for a detached buffer rather than a fault: the lowering checks the
+ * *length*, which is zero once detached, so an access to a detached view is a
+ * `RangeError` before it arrives here. This is the second answer to the same
+ * question and it is here because the first one being wrong should not be
+ * undefined behaviour. */
+static unsigned char *nts_dataview_at(const NtsDataView *view, double at) {
+  const NtsBuffer *buffer = view->buffer;
+  if (!buffer->bytes) {
+    return 0;
+  }
+  return buffer->bytes + view->offset + nts_buffer_index(at);
+}
+
+/* Assembled a byte at a time rather than by casting a pointer.
+ *
+ * A `DataView` access is legal at any offset -- `getFloat64(1)` is an ordinary
+ * read in the language -- and a cast to `double *` at an odd address is
+ * undefined in C and a fault on some machines. Byte assembly is correct at
+ * every alignment and is what makes the unaligned case not a special case. */
+static uint64_t nts_dataview_read(const unsigned char *from, unsigned width,
+                                  bool little_endian) {
+  uint64_t value = 0;
+  unsigned i;
+  for (i = 0; i < width; i++) {
+    unsigned shift = little_endian ? i : (width - 1u - i);
+    value |= (uint64_t)from[i] << (shift * 8u);
+  }
+  return value;
+}
+
+static void nts_dataview_write(unsigned char *into, unsigned width,
+                               uint64_t value, bool little_endian) {
+  unsigned i;
+  for (i = 0; i < width; i++) {
+    unsigned shift = little_endian ? i : (width - 1u - i);
+    into[i] = (unsigned char)((value >> (shift * 8u)) & 0xffu);
+  }
+}
+
+/* The one-byte pair, spelled out rather than macro-generated, because their
+ * signatures differ: no byte order for a single byte. */
+#define NTS_DATAVIEW_GET1(NAME, TYPE)                                          \
+  double nts_dataview_get_##NAME(const NtsDataView *view, double at) {         \
+    const unsigned char *from = nts_dataview_at(view, at);                     \
+    return from ? (double)(TYPE)*from : 0.0;                                   \
+  }
+
+#define NTS_DATAVIEW_SET1(NAME)                                                \
+  void nts_dataview_set_##NAME(NtsDataView *view, double at, double value) {   \
+    unsigned char *into = nts_dataview_at(view, at);                           \
+    if (into) {                                                                \
+      *into = (unsigned char)nts_to_int32(value);                              \
+    }                                                                          \
+  }
+
+NTS_DATAVIEW_GET1(int8, int8_t)
+NTS_DATAVIEW_GET1(uint8, uint8_t)
+NTS_DATAVIEW_SET1(int8)
+NTS_DATAVIEW_SET1(uint8)
+
+#define NTS_DATAVIEW_GET(NAME, WIDTH, TYPE)                                    \
+  double nts_dataview_get_##NAME(const NtsDataView *view, double at,           \
+                                 bool little_endian) {                         \
+    const unsigned char *from = nts_dataview_at(view, at);                     \
+    if (!from) {                                                               \
+      return 0.0;                                                              \
+    }                                                                          \
+    return (double)(TYPE)nts_dataview_read(from, WIDTH, little_endian);        \
+  }
+
+NTS_DATAVIEW_GET(int16, 2u, int16_t)
+NTS_DATAVIEW_GET(uint16, 2u, uint16_t)
+NTS_DATAVIEW_GET(int32, 4u, int32_t)
+NTS_DATAVIEW_GET(uint32, 4u, uint32_t)
+
+/* The floats are not casts. The bits *are* the value, so they are copied
+ * through `memcpy` -- type punning through a union or a pointer cast is
+ * undefined, and a NaN read out of four bytes has a payload that a conversion
+ * would canonicalise away. */
+double nts_dataview_get_float32(const NtsDataView *view, double at,
+                                bool little_endian) {
+  const unsigned char *from = nts_dataview_at(view, at);
+  float value;
+  uint32_t bits;
+  if (!from) {
+    return 0.0;
+  }
+  bits = (uint32_t)nts_dataview_read(from, 4u, little_endian);
+  memcpy(&value, &bits, sizeof value);
+  return (double)value;
+}
+
+double nts_dataview_get_float64(const NtsDataView *view, double at,
+                                bool little_endian) {
+  const unsigned char *from = nts_dataview_at(view, at);
+  double value;
+  uint64_t bits;
+  if (!from) {
+    return 0.0;
+  }
+  bits = nts_dataview_read(from, 8u, little_endian);
+  memcpy(&value, &bits, sizeof value);
+  return value;
+}
+
+#define NTS_DATAVIEW_SET(NAME, WIDTH)                                          \
+  void nts_dataview_set_##NAME(NtsDataView *view, double at, double value,     \
+                               bool little_endian) {                           \
+    unsigned char *into = nts_dataview_at(view, at);                           \
+    if (!into) {                                                               \
+      return;                                                                  \
+    }                                                                          \
+    nts_dataview_write(into, WIDTH, (uint64_t)(uint32_t)nts_to_int32(value),    \
+                       little_endian);                                         \
+  }
+
+NTS_DATAVIEW_SET(int16, 2u)
+NTS_DATAVIEW_SET(uint16, 2u)
+NTS_DATAVIEW_SET(int32, 4u)
+NTS_DATAVIEW_SET(uint32, 4u)
+
+void nts_dataview_set_float32(NtsDataView *view, double at, double value,
+                              bool little_endian) {
+  unsigned char *into = nts_dataview_at(view, at);
+  float narrowed = (float)value;
+  uint32_t bits;
+  if (!into) {
+    return;
+  }
+  memcpy(&bits, &narrowed, sizeof bits);
+  nts_dataview_write(into, 4u, bits, little_endian);
+}
+
+void nts_dataview_set_float64(NtsDataView *view, double at, double value,
+                              bool little_endian) {
+  unsigned char *into = nts_dataview_at(view, at);
+  uint64_t bits;
+  if (!into) {
+    return;
+  }
+  memcpy(&bits, &value, sizeof bits);
+  nts_dataview_write(into, 8u, bits, little_endian);
+}
+
+__int128 nts_dataview_get_bigint64(const NtsDataView *view, double at,
+                                   bool little_endian) {
+  const unsigned char *from = nts_dataview_at(view, at);
+  if (!from) {
+    return 0;
+  }
+  /* Through `int64_t` so the sign extends into the high half; the unsigned
+     read below goes through `uint64_t` so it does not. That cast is the whole
+     of the difference between the two accessors. */
+  return (__int128)(int64_t)nts_dataview_read(from, 8u, little_endian);
+}
+
+__int128 nts_dataview_get_biguint64(const NtsDataView *view, double at,
+                                    bool little_endian) {
+  const unsigned char *from = nts_dataview_at(view, at);
+  if (!from) {
+    return 0;
+  }
+  return (__int128)(unsigned __int128)nts_dataview_read(from, 8u,
+                                                        little_endian);
+}
+
+void nts_dataview_set_bigint64(NtsDataView *view, double at, __int128 value,
+                               bool little_endian) {
+  unsigned char *into = nts_dataview_at(view, at);
+  if (into) {
+    /* The low 64 bits, which is `BigInt.asIntN(64, v)` for the signed view and
+       `asUintN` for the unsigned one -- the same bits either way. */
+    nts_dataview_write(into, 8u, (uint64_t)value, little_endian);
+  }
+}
+
+void nts_dataview_set_biguint64(NtsDataView *view, double at, __int128 value,
+                                bool little_endian) {
+  unsigned char *into = nts_dataview_at(view, at);
+  if (into) {
+    nts_dataview_write(into, 8u, (uint64_t)value, little_endian);
+  }
+}
+
 NtsBuffer *nts_buffer_transfer(NtsBuffer *buffer, double byte_length,
                                bool fixed) {
   size_t length = nts_buffer_index(byte_length);

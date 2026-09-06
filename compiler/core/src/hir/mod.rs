@@ -210,6 +210,23 @@ pub enum ManagedType {
     /// are not inline; a `Float64Array` reading a buffer that began at an
     /// 8-byte boundary is the case that cost `elementwise` 33%.
     Buffer,
+    /// A `DataView`: a window on a [`ManagedType::Buffer`] with explicit
+    /// endianness and no element type.
+    ///
+    /// Carrying nothing, on the same standard as [`ManagedType::Buffer`] --
+    /// and for a sharper reason than the others. A typed array *is* its
+    /// element type: `Uint8Array` and `Float64Array` read the same bytes at
+    /// different widths and a view of one is not a view of the other. A
+    /// `DataView` has no element type at all. Its width is chosen **per
+    /// access** by the method called, so `getUint8` and `getFloat64` are two
+    /// calls on one type rather than two types, and there is nothing for a
+    /// payload to hold.
+    ///
+    /// That is why it is here before the typed arrays rather than with them:
+    /// it is the half of typed memory that does not carry anything, and
+    /// splitting on *that* rather than on "typed memory" is what let it land
+    /// separately.
+    DataView,
     /// A symbol: an interned cell whose **address is its identity**.
     ///
     /// Carrying nothing, because there is nothing to carry. A symbol has no

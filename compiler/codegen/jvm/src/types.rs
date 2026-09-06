@@ -287,6 +287,7 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // would have no single class, and every view would need two shapes to
         // point at. Resizability is a field.
         HirType::Managed(ManagedType::Buffer) => nts_jvm_emitter::descriptor::object(BUFFER),
+        HirType::Managed(ManagedType::DataView) => nts_jvm_emitter::descriptor::object(VIEW),
         // Every `ManagedType` is spelled above, so there is no catch-all here
         // and adding a variant upstream is a compile error rather than a
         // silent refusal. `never` reaching a value position means control got
@@ -307,6 +308,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
             | ManagedType::Symbol
             | ManagedType::Date
             | ManagedType::Buffer
+            | ManagedType::DataView
             | ManagedType::Array(_)
             | ManagedType::Map(..)
             | ManagedType::Set(_)
@@ -360,6 +362,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             HirType::Managed(ManagedType::Date) => VType::Object(DATE.to_owned()),
             HirType::Managed(ManagedType::Symbol) => VType::Object(SYMBOL.to_owned()),
             HirType::Managed(ManagedType::Buffer) => VType::Object(BUFFER.to_owned()),
+            HirType::Managed(ManagedType::DataView) => VType::Object(VIEW.to_owned()),
             // **No catch-all**, and the missing one here cost a day of the wrong
             // diagnosis. `descriptor` says of its own last arm that every
             // `ManagedType` is spelled out so adding a variant upstream is a
@@ -394,6 +397,7 @@ pub fn describe(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Symbol) => "a symbol".to_owned(),
         HirType::Managed(ManagedType::Date) => "a date".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "an array buffer".to_owned(),
+        HirType::Managed(ManagedType::DataView) => "a data view".to_owned(),
         // The element, because the one message that most needs this is two
         // arrays that differ only in it -- `an array` twice says nothing about
         // why the two would not agree.

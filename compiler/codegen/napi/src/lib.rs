@@ -82,7 +82,7 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // buffer that both sides may resize or detach is a lifetime question
         // rather than a marshalling one. Refused until that is answered, not
         // because it is hard to convert.
-        HirType::Managed(ManagedType::Buffer) => None,
+        HirType::Managed(ManagedType::Buffer | ManagedType::DataView) => None,
         // HIR currently does not retain the distinction between a declared
         // `string[]` parameter and a `...strings: string[]` rest parameter.
         // Treating both as rest made an ordinary array parameter receive all
@@ -164,6 +164,7 @@ fn spell(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Symbol) => "symbol".to_owned(),
         HirType::Managed(ManagedType::Date) => "Date".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "ArrayBuffer".to_owned(),
+        HirType::Managed(ManagedType::DataView) => "DataView".to_owned(),
         HirType::Managed(ManagedType::Array(e)) => format!("{}[]", spell(e)),
         HirType::Managed(ManagedType::Object(id)) if hir::is_closure_type(*id) => {
             "a function".to_owned()
@@ -208,6 +209,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *".to_owned(),
         HirType::Managed(ManagedType::Date) => "NtsDate *".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "NtsBuffer *".to_owned(),
+        HirType::Managed(ManagedType::DataView) => "NtsDataView *".to_owned(),
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *".to_owned(),
         // The fixed runtime layout, not a generated struct: the payload's
         // representation is in the type for the compiler's benefit, and the C
