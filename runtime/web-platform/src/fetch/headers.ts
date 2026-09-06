@@ -11,6 +11,11 @@ export type HeadersInit = Headers | HeaderSequence | HeaderRecord;
 
 export type HeaderGuard = "none" | "immutable";
 
+interface HeaderGroup {
+  readonly name: string;
+  readonly values: string[];
+}
+
 export function isToken(value: string): boolean {
   if (value.length === 0) return false;
 
@@ -97,8 +102,13 @@ export class Headers {
 
   get(name: string): string | null {
     const key = normalizeName(name);
-    const values = this.list.filter((entry) => entry[0] === key).map((entry) => entry[1]);
-    return values.length === 0 ? null : values.join(", ");
+    let result: string | null = null;
+
+    for (const entry of this.list) {
+      if (entry[0] !== key) continue;
+      result = result === null ? entry[1] : result + ", " + entry[1];
+    }
+    return result;
   }
 
   has(name: string): boolean {
@@ -107,12 +117,20 @@ export class Headers {
   }
 
   getSetCookie(): string[] {
-    return this.list.filter((entry) => entry[0] === "set-cookie").map((entry) => entry[1]);
+    const values: string[] = [];
+
+    for (const entry of this.list) {
+      if (entry[0] === "set-cookie") values.push(entry[1]);
+    }
+    return values;
   }
 
   /** @internal Returns independent tuples; callers cannot mutate the header list. */
   raw(): HeaderEntry[] {
-    return this.list.map((entry) => [entry[0], entry[1]]);
+    const result: HeaderEntry[] = [];
+
+    for (const entry of this.list) result.push([entry[0], entry[1]]);
+    return result;
   }
 
   /** @internal */ get isImmutable(): boolean {
@@ -126,15 +144,27 @@ export class Headers {
 
   private sorted(): HeaderEntry[] {
     if (this.sortedCache !== null) return this.sortedCache;
-    const names = Array.from(new Set(this.list.map((entry) => entry[0]))).sort();
-    const result: HeaderEntry[] = [];
-    for (const name of names) {
-      if (name === "set-cookie") {
-        for (const value of this.getSetCookie()) result.push([name, value]);
-      } else {
-        const value = this.get(name);
-        if (value !== null) result.push([name, value]);
+    const grouped = new Map<string, HeaderGroup>();
+
+    for (const entry of this.list) {
+      let group = grouped.get(entry[0]);
+
+      if (group === undefined) {
+        group = { name: entry[0], values: [] };
+        grouped.set(entry[0], group);
       }
+      group.values.push(entry[1]);
+    }
+
+    const groups = Array.from(grouped.values()).sort((left, right) =>
+      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+    );
+    const result: HeaderEntry[] = [];
+
+    for (const group of groups) {
+      if (group.name === "set-cookie")
+        for (const value of group.values) result.push([group.name, value]);
+      else result.push([group.name, group.values.join(", ")]);
     }
     this.sortedCache = result;
     return result;
