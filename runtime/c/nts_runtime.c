@@ -4339,6 +4339,46 @@ void nts_dataview_set_float64(NtsDataView *view, double at, double value,
   nts_dataview_write(into, 8u, bits, little_endian);
 }
 
+__int128 nts_dataview_get_bigint64(const NtsDataView *view, double at,
+                                   bool little_endian) {
+  const unsigned char *from = nts_dataview_at(view, at);
+  if (!from) {
+    return 0;
+  }
+  /* Through `int64_t` so the sign extends into the high half; the unsigned
+     read below goes through `uint64_t` so it does not. That cast is the whole
+     of the difference between the two accessors. */
+  return (__int128)(int64_t)nts_dataview_read(from, 8u, little_endian);
+}
+
+__int128 nts_dataview_get_biguint64(const NtsDataView *view, double at,
+                                    bool little_endian) {
+  const unsigned char *from = nts_dataview_at(view, at);
+  if (!from) {
+    return 0;
+  }
+  return (__int128)(unsigned __int128)nts_dataview_read(from, 8u,
+                                                        little_endian);
+}
+
+void nts_dataview_set_bigint64(NtsDataView *view, double at, __int128 value,
+                               bool little_endian) {
+  unsigned char *into = nts_dataview_at(view, at);
+  if (into) {
+    /* The low 64 bits, which is `BigInt.asIntN(64, v)` for the signed view and
+       `asUintN` for the unsigned one -- the same bits either way. */
+    nts_dataview_write(into, 8u, (uint64_t)value, little_endian);
+  }
+}
+
+void nts_dataview_set_biguint64(NtsDataView *view, double at, __int128 value,
+                                bool little_endian) {
+  unsigned char *into = nts_dataview_at(view, at);
+  if (into) {
+    nts_dataview_write(into, 8u, (uint64_t)value, little_endian);
+  }
+}
+
 NtsBuffer *nts_buffer_transfer(NtsBuffer *buffer, double byte_length,
                                bool fixed) {
   size_t length = nts_buffer_index(byte_length);

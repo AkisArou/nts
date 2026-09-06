@@ -16892,6 +16892,13 @@ impl<'a> FuncBuilder<'a> {
             "Uint32" => ("uint32", 4.0, HirType::NUMBER),
             "Float32" => ("float32", 4.0, HirType::NUMBER),
             "Float64" => ("float64", 8.0, HirType::NUMBER),
+            // In the table, because the offset guard and the bounds check are
+            // the same; separated below, because the *value* is not a number.
+            // `getBigInt64` answers a bigint and `setBigInt64` takes one, and
+            // the language refuses to mix them with numbers rather than
+            // converting.
+            "BigInt64" => ("bigint64", 8.0, HirType::BigInt),
+            "BigUint64" => ("biguint64", 8.0, HirType::BigInt),
             _ => {
                 return Err(self.unsupported(
                     id,
@@ -16928,6 +16935,34 @@ impl<'a> FuncBuilder<'a> {
         // something. The helper's arity differs with the width for that reason
         // and not by oversight.
         let wide = width > 1.0;
+
+        if ty == HirType::BigInt {
+            let little = self.endianness(id, arguments.get(if reading { 1 } else { 2 }), &origin)?;
+            if reading {
+                return Ok(self.call_runtime(
+                    &format!("nts_dataview_get_{helper}"),
+                    vec![receiver, at, little],
+                    HirType::BigInt,
+                    &origin,
+                ));
+            }
+            let Some(second) = arguments.get(1) else {
+                return Err(self.unsupported(id, &format!("a `DataView.{name}` with no value")));
+            };
+            let value = self.lower_expression(*second)?;
+            if self.values[value.0 as usize].ty != HirType::BigInt {
+                return Err(self.unsupported(
+                    id,
+                    &format!("a `DataView.{name}` of something other than a bigint"),
+                ));
+            }
+            return Ok(self.call_runtime(
+                &format!("nts_dataview_set_{helper}"),
+                vec![receiver, at, value, little],
+                HirType::Void,
+                &origin,
+            ));
+        }
 
         if reading {
             let mut args = vec![receiver, at];

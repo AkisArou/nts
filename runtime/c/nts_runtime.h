@@ -936,6 +936,22 @@ void nts_dataview_set_float32(NtsDataView *view, double at, double value,
 void nts_dataview_set_float64(NtsDataView *view, double at, double value,
                               bool little_endian);
 
+/* The bigint pair, whose element is 64 bits where a bigint is 128.
+ *
+ * A read sign-extends into the high half or zero-fills it -- that is the whole
+ * difference between the two -- and a write keeps the low half either way, so
+ * the two stores are identical and only the reads differ. */
+NTS_READS_ONLY __int128 nts_dataview_get_bigint64(const NtsDataView *view,
+                                                  double at,
+                                                  bool little_endian);
+NTS_READS_ONLY __int128 nts_dataview_get_biguint64(const NtsDataView *view,
+                                                   double at,
+                                                   bool little_endian);
+void nts_dataview_set_bigint64(NtsDataView *view, double at, __int128 value,
+                               bool little_endian);
+void nts_dataview_set_biguint64(NtsDataView *view, double at, __int128 value,
+                                bool little_endian);
+
 NTS_ALLOCATES NtsString *nts_concat(const NtsString *a, const NtsString *b);
 bool nts_string_eq(const NtsString *a, const NtsString *b);
 

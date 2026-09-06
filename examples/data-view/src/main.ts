@@ -151,3 +151,60 @@ export function overADetachedBuffer(n: number): number {
     return thrown(error);
   }
 }
+
+// The bigint pair, whose element is 64 bits where a bigint is 128. A read
+// sign-extends into the high half or zero-fills it -- that is the whole
+// difference between them -- and a write keeps the low half either way, so the
+// two stores are identical and only the reads differ.
+//
+// Returned as a number so the differential can compare it: the pool is doubles
+// and a bigint result would have nothing to be compared against.
+export function roundTripBigInt64(n: number): number {
+  try {
+    const view = new DataView(new ArrayBuffer(16));
+    view.setBigInt64(0, BigInt(Math.trunc(bounded(n))), true);
+    return Number(view.getBigInt64(0, true));
+  } catch (error) {
+    return thrown(error);
+  }
+}
+
+// The same bits read the other way.
+//
+// **Shifted into the top half deliberately.** The pool is bounded to 4,096, so
+// a value written as-is never sets bit 63 and the signed and unsigned reads
+// agree on every case -- which made the first version of this pass with the
+// unsigned accessor sign-extending. The shift is what puts the distinguishing
+// state in reach, and it is the same lesson as putting exact halves in a
+// rounding pool.
+export function signedAgainstUnsigned(n: number): number {
+  try {
+    const view = new DataView(new ArrayBuffer(16));
+    // Both states, chosen by the pool value rather than hoped for. Shifting
+    // alone does not reach bit 63 for a pool bounded to 4,096 -- the second
+    // version of this still passed with the unsigned accessor sign-extending,
+    // for that reason and not the first one.
+    const base = BigInt(Math.trunc(bounded(n)));
+    const top = base % 2n === 0n ? 0x8000000000000000n : 0n;
+    const high = BigInt.asUintN(64, (base << 8n) | top);
+    view.setBigInt64(0, BigInt.asIntN(64, high), false);
+    const signed = view.getBigInt64(0, false);
+    const unsigned = view.getBigUint64(0, false);
+    // Their difference is 2^64 exactly when the top bit is set, and zero
+    // otherwise -- so this reports *which* it was rather than merely that they
+    // differed.
+    return Number((unsigned - signed) >> 32n);
+  } catch (error) {
+    return thrown(error);
+  }
+}
+
+export function bigEndiannessMatters(n: number): number {
+  try {
+    const view = new DataView(new ArrayBuffer(16));
+    view.setBigUint64(0, BigInt(Math.trunc(bounded(n))), true);
+    return Number(view.getBigUint64(0, false) & 0xffffn);
+  } catch (error) {
+    return thrown(error);
+  }
+}

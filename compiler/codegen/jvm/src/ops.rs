@@ -313,6 +313,21 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         "nts_dataview_get_int32" => (types::VIEW, "getInt32", "(Lnts/rt/NtsDataView;DZ)D"),
         "nts_dataview_get_uint32" => (types::VIEW, "getUint32", "(Lnts/rt/NtsDataView;DZ)D"),
         "nts_dataview_get_float32" => (types::VIEW, "getFloat32", "(Lnts/rt/NtsDataView;DZ)D"),
+        // The bigint pair. A bigint is `NtsBigInt` on this lane and 128 bits
+        // wide where the element is 64, so the read chooses what lands in the
+        // high word and the write keeps the low one.
+        "nts_dataview_get_bigint64" => {
+            (types::VIEW, "getBigInt64", "(Lnts/rt/NtsDataView;DZ)Lnts/rt/NtsBigInt;")
+        }
+        "nts_dataview_get_biguint64" => {
+            (types::VIEW, "getBigUint64", "(Lnts/rt/NtsDataView;DZ)Lnts/rt/NtsBigInt;")
+        }
+        "nts_dataview_set_bigint64" => {
+            (types::VIEW, "setBigInt64", "(Lnts/rt/NtsDataView;DLnts/rt/NtsBigInt;Z)V")
+        }
+        "nts_dataview_set_biguint64" => {
+            (types::VIEW, "setBigUint64", "(Lnts/rt/NtsDataView;DLnts/rt/NtsBigInt;Z)V")
+        }
         "nts_dataview_get_float64" => (types::VIEW, "getFloat64", "(Lnts/rt/NtsDataView;DZ)D"),
         "nts_dataview_set_int8" => (types::VIEW, "setInt8", "(Lnts/rt/NtsDataView;DD)V"),
         "nts_dataview_set_uint8" => (types::VIEW, "setUint8", "(Lnts/rt/NtsDataView;DD)V"),
