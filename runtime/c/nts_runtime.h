@@ -227,6 +227,58 @@ typedef struct NtsBuffer {
   bool resizable;
 } NtsBuffer;
 
+/* A typed-array view: a window onto an `NtsBuffer`.
+ *
+ * The distinction this exists to make is the one `ManagedType::Array` cannot:
+ * an ordinary `number[]` owns its elements inline, and a `Uint8Array` is a
+ * *view* onto storage something else may also see. Two views over one buffer
+ * alias exactly, at different offsets and different element widths, and that
+ * is the whole feature.
+ *
+ * THE LENGTH IS COMPUTED, NOT STORED, when the view was built without one.
+ * `new Uint8Array(buffer)` tracks its buffer through `resize`, and a stored
+ * length would be right until the first resize and silently wrong afterwards.
+ * `tracking` says which kind of view this is; `length_` is meaningless when it
+ * is set.
+ *
+ * The buffer reserves its maximum at construction, so `bytes` never moves and
+ * a view holds the buffer rather than a raw pointer for exactly one reason:
+ * detachment. `transfer` frees the block and a view must observe that, which
+ * it does by reading through `buffer->bytes` and finding null. */
+typedef struct NtsView {
+  NtsHeader header;
+  NtsBuffer *buffer;
+  size_t byte_offset;
+  /* Elements, when `tracking` is false. */
+  size_t length_;
+  /* Bytes per element: 1, 2, 4 or 8. */
+  uint8_t width;
+  /* Which of the nine, because the width does not say. `Int16Array` and
+   * `Uint16Array` are two bytes each and differ on read; `Int32Array` and
+   * `Float32Array` are four each and differ on both.
+   *
+   * `set` between two views is why this is stored rather than inferred at the
+   * call. It converts *values*, not bytes: `u16.set(u8Of([9, 10]))` writes the
+   * numbers 9 and 10 as sixteen-bit elements, and `f32.set(i32Of([3, 4]))`
+   * writes 3.0 and 4.0 rather than reinterpreting the bit patterns. A byte
+   * copy is right only when the two kinds are identical. */
+  uint8_t kind;
+  bool tracking;
+} NtsView;
+
+/* The nine element kinds. `Float16Array` is absent, as it is from the
+ * lowering -- see `hir::builtin`, where the reason is that binary16 conversion
+ * is a real conversion and not a name. */
+#define NTS_ELEMENT_I8 0u
+#define NTS_ELEMENT_U8 1u
+#define NTS_ELEMENT_U8_CLAMPED 2u
+#define NTS_ELEMENT_I16 3u
+#define NTS_ELEMENT_U16 4u
+#define NTS_ELEMENT_I32 5u
+#define NTS_ELEMENT_U32 6u
+#define NTS_ELEMENT_F32 7u
+#define NTS_ELEMENT_F64 8u
+
 typedef struct NtsSymbol {
   NtsHeader header;
   /* `Symbol()` with no argument has none, which is a different value from
@@ -866,6 +918,61 @@ void nts_buffer_resize(NtsBuffer *buffer, double byte_length);
  * which is the point of them. */
 NTS_ALLOCATES_OR_NULL NtsBuffer *
 nts_buffer_transfer(NtsBuffer *buffer, double byte_length, bool fixed);
+
+/* Typed-array views.
+ *
+ * `width` is bytes per element and `tracking` says the length follows the
+ * buffer. The lowering has already made the arguments legal, on the division
+ * `ArrayBuffer` settled: a runtime here cannot throw, so every check the
+ * *language* specifies is a branch the lowering emits, and what is left for
+ * these is to be defined on what it lets through. */
+NTS_ALLOCATES_OR_NULL NtsView *nts_view_new(NtsBuffer *buffer,
+                                            double byte_offset, double length,
+                                            double kind, bool tracking);
+
+/* One element, as a number, and one number written as an element.
+ *
+ * These exist for `set` across two kinds and for `DataView`; ordinary indexed
+ * access is emitted inline by the backends, because a call per element is not
+ * a price a typed array can pay. */
+NTS_READS_ONLY double nts_view_get(const NtsView *view, double index);
+void nts_view_put(NtsView *view, double index, double value);
+
+/* Elements. Computed for a tracking view, so it follows `resize`; zero when
+ * the buffer has been detached, which makes a detached view empty rather than
+ * a crash. */
+NTS_READS_ONLY double nts_view_length(const NtsView *view);
+NTS_READS_ONLY double nts_view_byte_length(const NtsView *view);
+NTS_READS_ONLY double nts_view_byte_offset(const NtsView *view);
+NTS_READS_ONLY NtsBuffer *nts_view_buffer(const NtsView *view);
+
+/* The bytes this view begins at, or null when the buffer is detached. Every
+ * element access goes through it, so it is the one place detachment is seen. */
+NTS_READS_ONLY unsigned char *nts_view_bytes(const NtsView *view);
+
+/* A view over the same bytes: no copy, and mutations are visible through both.
+ * The difference between this and `slice` is the whole point of a view. */
+NTS_ALLOCATES_OR_NULL NtsView *nts_view_subarray(const NtsView *view,
+                                                 double from, double to);
+
+/* A new buffer holding a copy, and a view onto it. Isolated by specification,
+ * which is why it cannot share the backing. */
+NTS_ALLOCATES_OR_NULL NtsView *nts_view_slice(const NtsView *view, double from,
+                                              double to);
+
+/* `set` and `copyWithin`, the two operations whose entire difficulty is that
+ * source and destination can be the same storage.
+ *
+ * `copyWithin(2, 0, 5)` on eight bytes reads what it has already written, so
+ * the copy is `memmove` -- a forward loop is right on every non-overlapping
+ * range and wrong on every overlapping one.
+ *
+ * `set` is worse by a level: two views over one buffer can overlap at
+ * *different element widths*, so a `Uint16Array` written from a `Uint16Array`
+ * over the same bytes reads elements it has just written. The source is
+ * snapshotted when the two share a buffer. */
+void nts_view_copy_within(NtsView *view, double target, double from, double to);
+void nts_view_set(NtsView *view, const NtsView *source, double offset);
 
 NTS_ALLOCATES NtsString *nts_concat(const NtsString *a, const NtsString *b);
 bool nts_string_eq(const NtsString *a, const NtsString *b);

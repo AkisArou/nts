@@ -103,6 +103,19 @@ fn the_checkpoint_orders_ticks_microtasks_and_macrotasks_as_node_does() {
 }
 
 #[test]
+fn a_view_is_a_window_onto_a_buffer() {
+    // Reference counting, because a view owns its buffer and half of what this
+    // asks is whether the ownership is real -- under NoGC nothing is reclaimed
+    // and a missing release would read as correct.
+    let report = run_suite("views", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 20,
+        "expected at least 20 view checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}
+
+#[test]
 fn a_process_wide_count_still_answers_for_the_process() {
     // Reference counting, because half the suite is about an object being
     // released in one environment and a total taken in another, and under

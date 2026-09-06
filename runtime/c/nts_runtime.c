@@ -4140,6 +4140,346 @@ NtsBuffer *nts_buffer_transfer(NtsBuffer *buffer, double byte_length,
   return moved;
 }
 
+/* Typed-array views.
+ *
+ * A view holds its *buffer* rather than a raw pointer, and reads the bytes
+ * through it on every access. That costs one load and buys the two things a
+ * raw pointer cannot have: detachment is observable, because `transfer` frees
+ * the block and leaves null; and a tracking view follows `resize`, because the
+ * length is computed from the buffer it can still see.
+ *
+ * One reference each way is enough. The view owns the buffer; the buffer knows
+ * nothing about its views, which is why a buffer can be viewed at several
+ * widths at once without keeping a list. */
+static const NtsDescriptor nts_desc_view = {
+    NTS_KIND_OBJECT,
+    (uint32_t)sizeof(NtsView),
+    1u,
+    1u,
+    /* One reference, at offset zero: the buffer. Cyclic because a view is an
+       ordinary managed object and a program may put one in a cycle. */
+    (const uint32_t[]){(uint32_t)offsetof(NtsView, buffer)},
+    0,
+    "TypedArray",
+    0u,
+    0,
+};
+
+/* Bytes per element, from the kind. One place, so a width and a kind cannot
+ * disagree about the same view. */
+static uint8_t nts_element_width(uint8_t kind) {
+  switch (kind) {
+  case NTS_ELEMENT_I8:
+  case NTS_ELEMENT_U8:
+  case NTS_ELEMENT_U8_CLAMPED:
+    return 1u;
+  case NTS_ELEMENT_I16:
+  case NTS_ELEMENT_U16:
+    return 2u;
+  case NTS_ELEMENT_I32:
+  case NTS_ELEMENT_U32:
+  case NTS_ELEMENT_F32:
+    return 4u;
+  default:
+    return 8u;
+  }
+}
+
+NtsView *nts_view_new(NtsBuffer *buffer, double byte_offset, double length,
+                      double kind, bool tracking) {
+  NtsView *view = (NtsView *)nts_alloc(sizeof(NtsView));
+  view->header.descriptor = &nts_desc_view;
+  view->header.reserved = 1;
+  view->header.flags = 0;
+  view->header.length = 0;
+  view->buffer = buffer;
+  nts_retain((NtsHeader *)buffer);
+  view->byte_offset = nts_buffer_index(byte_offset);
+  view->length_ = nts_buffer_index(length);
+  view->kind = (uint8_t)nts_buffer_index(kind);
+  view->width = nts_element_width(view->kind);
+  view->tracking = tracking;
+  nts_note_allocation();
+  return view;
+}
+
+double nts_view_get(const NtsView *view, double index) {
+  const unsigned char *bytes = nts_view_bytes(view);
+  if (!bytes || !(index >= 0) || index >= nts_view_length(view)) {
+    /* Out of range is `undefined` in the language, which a `double` cannot
+       carry -- the lowering answers that where it has an absence to put it.
+       NaN here is the arithmetic identity of "no element", and every caller
+       inside this file has already bounded its index. */
+    return (double)NAN;
+  }
+  const unsigned char *at = bytes + (size_t)index * view->width;
+  switch (view->kind) {
+  case NTS_ELEMENT_I8: {
+    int8_t value;
+    memcpy(&value, at, 1);
+    return value;
+  }
+  case NTS_ELEMENT_U8:
+  case NTS_ELEMENT_U8_CLAMPED:
+    return *at;
+  case NTS_ELEMENT_I16: {
+    int16_t value;
+    memcpy(&value, at, 2);
+    return value;
+  }
+  case NTS_ELEMENT_U16: {
+    uint16_t value;
+    memcpy(&value, at, 2);
+    return value;
+  }
+  case NTS_ELEMENT_I32: {
+    int32_t value;
+    memcpy(&value, at, 4);
+    return value;
+  }
+  case NTS_ELEMENT_U32: {
+    uint32_t value;
+    memcpy(&value, at, 4);
+    return value;
+  }
+  case NTS_ELEMENT_F32: {
+    float value;
+    memcpy(&value, at, 4);
+    return value;
+  }
+  default: {
+    double value;
+    memcpy(&value, at, 8);
+    return value;
+  }
+  }
+}
+
+void nts_view_put(NtsView *view, double index, double value) {
+  unsigned char *bytes = nts_view_bytes(view);
+  if (!bytes || !(index >= 0) || index >= nts_view_length(view)) {
+    return;
+  }
+  unsigned char *at = bytes + (size_t)index * view->width;
+  switch (view->kind) {
+  case NTS_ELEMENT_I8: {
+    int8_t narrowed = nts_to_int8(value);
+    memcpy(at, &narrowed, 1);
+    return;
+  }
+  case NTS_ELEMENT_U8: {
+    uint8_t narrowed = nts_to_uint8(value);
+    memcpy(at, &narrowed, 1);
+    return;
+  }
+  case NTS_ELEMENT_U8_CLAMPED: {
+    /* Clamping, and the rounding is half-to-even rather than half-up: 0.5 is
+       0 and 1.5 is 2. `Math.round` agrees with this on every input except the
+       exact halves, which is why a pool without halves in it cannot tell the
+       two rules apart. */
+    uint8_t narrowed;
+    if (!(value > 0)) {
+      narrowed = 0u; /* NaN and everything at or below zero. */
+    } else if (value >= 255.0) {
+      narrowed = 255u;
+    } else {
+      /* Written out rather than `nearbyint`, which rounds by the *current*
+         floating-point mode -- correct today and silently wrong for anyone
+         who changes it. The rule is fixed by the language, so it is spelled
+         here. */
+      double below = floor(value);
+      double fraction = value - below;
+      double whole;
+      if (fraction < 0.5) {
+        whole = below;
+      } else if (fraction > 0.5) {
+        whole = below + 1.0;
+      } else {
+        whole = fmod(below, 2.0) == 0.0 ? below : below + 1.0;
+      }
+      narrowed = (uint8_t)whole;
+    }
+    memcpy(at, &narrowed, 1);
+    return;
+  }
+  case NTS_ELEMENT_I16: {
+    int16_t narrowed = nts_to_int16(value);
+    memcpy(at, &narrowed, 2);
+    return;
+  }
+  case NTS_ELEMENT_U16: {
+    uint16_t narrowed = nts_to_uint16(value);
+    memcpy(at, &narrowed, 2);
+    return;
+  }
+  case NTS_ELEMENT_I32: {
+    int32_t narrowed = nts_to_int32(value);
+    memcpy(at, &narrowed, 4);
+    return;
+  }
+  case NTS_ELEMENT_U32: {
+    uint32_t narrowed = nts_to_uint32(value);
+    memcpy(at, &narrowed, 4);
+    return;
+  }
+  case NTS_ELEMENT_F32: {
+    float narrowed = (float)value;
+    memcpy(at, &narrowed, 4);
+    return;
+  }
+  default:
+    memcpy(at, &value, 8);
+    return;
+  }
+}
+
+double nts_view_length(const NtsView *view) {
+  if (!view || !view->buffer || !view->buffer->bytes) {
+    return 0;
+  }
+  if (!view->tracking) {
+    return (double)view->length_;
+  }
+  /* Computed, so a view built without a length follows its buffer through
+     `resize`. A stored length is right until the first resize and silently
+     wrong afterwards, which is the failure a corpus finds twelve lines of. */
+  size_t bytes = view->buffer->length;
+  if (bytes <= view->byte_offset) {
+    return 0;
+  }
+  return (double)((bytes - view->byte_offset) / view->width);
+}
+
+double nts_view_byte_length(const NtsView *view) {
+  return nts_view_length(view) * (view ? (double)view->width : 0.0);
+}
+
+double nts_view_byte_offset(const NtsView *view) {
+  /* Zero once detached, the way a detached buffer reports zero length: the
+     specification answers rather than throwing, and `detached` is the question
+     with the answer. */
+  if (!view || !view->buffer || !view->buffer->bytes) {
+    return 0;
+  }
+  return (double)view->byte_offset;
+}
+
+NtsBuffer *nts_view_buffer(const NtsView *view) {
+  return view ? view->buffer : 0;
+}
+
+unsigned char *nts_view_bytes(const NtsView *view) {
+  if (!view || !view->buffer || !view->buffer->bytes) {
+    return 0;
+  }
+  return view->buffer->bytes + view->byte_offset;
+}
+
+NtsView *nts_view_subarray(const NtsView *view, double from, double to) {
+  uint32_t length = (uint32_t)nts_view_length(view);
+  uint32_t start = nts_str_clamp(from, length, 1);
+  uint32_t end = nts_str_clamp(to, length, 1);
+  uint32_t count = end > start ? end - start : 0u;
+  /* The same buffer, offset further in. No copy, and no tracking: a subarray
+     has the length it was cut to, which is why `new Uint8Array(buffer)` and
+     `view.subarray(0)` behave differently on a later `resize`. */
+  return nts_view_new(view->buffer,
+                      (double)(view->byte_offset + (size_t)start * view->width),
+                      (double)count, (double)view->width, false);
+}
+
+NtsView *nts_view_slice(const NtsView *view, double from, double to) {
+  uint32_t length = (uint32_t)nts_view_length(view);
+  uint32_t start = nts_str_clamp(from, length, 1);
+  uint32_t end = nts_str_clamp(to, length, 1);
+  uint32_t count = end > start ? end - start : 0u;
+  size_t bytes = (size_t)count * view->width;
+  NtsBuffer *copy = nts_buffer_new((double)bytes);
+  if (!copy) {
+    return 0;
+  }
+  const unsigned char *source = nts_view_bytes(view);
+  if (source && bytes) {
+    memcpy(copy->bytes, source + (size_t)start * view->width, bytes);
+  }
+  NtsView *out =
+      nts_view_new(copy, 0.0, (double)count, (double)view->width, false);
+  /* `nts_view_new` retained it, and this function is the only other owner. */
+  nts_release((NtsHeader *)copy);
+  return out;
+}
+
+void nts_view_copy_within(NtsView *view, double target, double from,
+                          double to) {
+  unsigned char *bytes = nts_view_bytes(view);
+  if (!bytes) {
+    return;
+  }
+  uint32_t length = (uint32_t)nts_view_length(view);
+  uint32_t at = nts_str_clamp(target, length, 1);
+  uint32_t start = nts_str_clamp(from, length, 1);
+  uint32_t end = nts_str_clamp(to, length, 1);
+  uint32_t count = end > start ? end - start : 0u;
+  if (count > length - at) {
+    count = length - at;
+  }
+  /* `memmove`, not a loop. `copyWithin(2, 0, 5)` reads bytes it has already
+     written, and a forward loop is right on every non-overlapping range --
+     which is every range a test contains unless someone wrote the overlapping
+     one down. */
+  memmove(bytes + (size_t)at * view->width, bytes + (size_t)start * view->width,
+          (size_t)count * view->width);
+}
+
+void nts_view_set(NtsView *view, const NtsView *source, double offset) {
+  unsigned char *bytes = nts_view_bytes(view);
+  const unsigned char *from = nts_view_bytes(source);
+  if (!bytes || !from) {
+    return;
+  }
+  size_t at = nts_buffer_index(offset);
+  size_t count = (size_t)nts_view_length(source);
+  size_t room = (size_t)nts_view_length(view);
+  if (at >= room) {
+    return;
+  }
+  if (count > room - at) {
+    count = room - at;
+  }
+  if (view->kind == source->kind) {
+    /* The same kind is byte-identical, so this is a move -- and `memmove`
+       rather than `memcpy` for the reason `copyWithin` needs it: two views of
+       one kind over one buffer can overlap. */
+    memmove(bytes + at * view->width, from, count * source->width);
+    return;
+  }
+  /* Different kinds convert *values*: `u16.set(u8Of([9, 10]))` writes the
+     numbers 9 and 10 as sixteen-bit elements, and `f32.set(i32Of([3, 4]))`
+     writes 3.0 and 4.0 rather than reinterpreting four bytes. A byte copy is
+     right only when the kinds are identical, and wrong invisibly when the
+     widths happen to match.
+
+     Over one buffer the source has to be snapshotted, because a wider
+     destination overwrites elements the loop has not read yet -- the case a
+     same-width test cannot construct at all. */
+  const NtsView *reading = source;
+  NtsView *snapshot = 0;
+  if (view->buffer == source->buffer) {
+    snapshot = nts_view_slice(source, 0.0, (double)count);
+    if (!snapshot) {
+      return;
+    }
+    reading = snapshot;
+  }
+  for (size_t index = 0; index < count; index++) {
+    nts_view_put(view, (double)(at + index),
+                 nts_view_get(reading, (double)index));
+  }
+  if (snapshot) {
+    nts_release((NtsHeader *)snapshot);
+  }
+}
+
 /* Symbols.
  *
  * A symbol is a header and a description pointer, and its identity is its
