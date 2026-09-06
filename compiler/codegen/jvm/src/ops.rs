@@ -2826,6 +2826,42 @@ impl Emitter<'_> {
                     external(name)
                         .or_else(|| element.as_deref().and_then(|e| array_external(name, e)))
                 };
+                // `String(n)` where `n` is provably an `i32`.
+                //
+                // `hir::runtime` types `nts_number_to_string` as taking a
+                // `double`, so the middle end widens an `i32` on the way in --
+                // `%93 = convert %13 : f64` -- and this lane then answers with
+                // the Grisu port, which exists to print every double node can
+                // print. For a value that came from an `i32` two instructions
+                // ago, `Integer.toString` is exact on every input and is a JDK
+                // intrinsic.
+                //
+                // The third member of a family: the array subscript (record
+                // 0138, 4.56x), the growable length (0158), and this. Each is a
+                // helper whose only signature answers in a `double` reached
+                // from generated code that had an integer, and each is visible
+                // in a descriptor rather than in a profile.
+                //
+                // Priced before building rather than after, which is the rule
+                // 0163 arrived at: the replacement is a JDK method that formats
+                // an `int` in tens of instructions against a Grisu conversion
+                // in hundreds, so it is cheap *and* priceable, and an A/B was
+                // not what it needed.
+                if name == "nts_number_to_string"
+                    && let Some(&only) = args.first()
+                    && let OpKind::Convert(inner) = self.func.values[only.0 as usize].kind
+                    && matches!(self.ty(inner), HirType::Int { bits, signed: true } if *bits <= 32)
+                {
+                    self.push_as(code, pool, inner, Kind::Int, origin)?;
+                    code.invoke_static(
+                        origin,
+                        pool,
+                        "java/lang/Integer",
+                        "toString",
+                        "(I)Ljava/lang/String;",
+                    );
+                    return Ok(Placed::OnStack);
+                }
                 let Some((owner, member, descriptor)) = found else {
                     // The cause, which is that *this table* has no entry, and
                     // not the remedy, which would be to build the helper.
