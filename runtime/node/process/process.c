@@ -230,7 +230,10 @@ NtsString *nts_process_metadata(NtsString *name) {
                "\"tls\":false,\"cached_builtins\":false,"
                "\"require_module\":false,\"typescript\":\"strip\"}";
     } else if (strcmp(key, "config") == 0) {
-        json = "{\"variables\":{\"napi_build_version\":\"10\","
+        json = "{\"target_defaults\":{\"cflags\":[],"
+               "\"default_configuration\":\"Release\",\"defines\":[],"
+               "\"include_dirs\":[],\"libraries\":[]},"
+               "\"variables\":{\"napi_build_version\":\"10\","
                "\"node_builtin_shareable_builtins\":[],"
                "\"node_use_amaro\":false,\"node_shared_openssl\":false}}";
     }

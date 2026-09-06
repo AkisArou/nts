@@ -93,7 +93,8 @@ declare function nts_process_allowed_env_flags(): string[];
  * binary, and a serialized constant is the one representation that does not
  * need a schema on both sides of the seam.
  */
-declare function nts_process_metadata(name: string): string;
+type ProcessMetadataName = "release" | "features" | "config";
+declare function nts_process_metadata(name: ProcessMetadataName): string;
 
 /** Names of what is currently keeping the loop alive. */
 declare function nts_process_active_resources(): string[];
@@ -184,6 +185,66 @@ let processExiting = false;
 let captureCallback: ((error: unknown) => void) | null = null;
 let handlingFatalException = false;
 
+export interface ProcessRelease {
+  readonly name: string;
+  readonly sourceUrl?: string | undefined;
+  readonly headersUrl?: string | undefined;
+  readonly libUrl?: string | undefined;
+  readonly lts?: string | undefined;
+  readonly [name: string]: string | undefined;
+}
+
+export interface ProcessFeatures {
+  readonly inspector: boolean;
+  readonly debug: boolean;
+  readonly uv: boolean;
+  readonly ipv6: boolean;
+  readonly openssl_is_boringssl: boolean;
+  readonly quic: boolean;
+  readonly tls_alpn: boolean;
+  readonly tls_sni: boolean;
+  readonly tls_ocsp: boolean;
+  readonly tls: boolean;
+  readonly cached_builtins: boolean;
+  readonly require_module: boolean;
+  readonly typescript: "strip" | "transform" | false;
+}
+
+export interface ProcessConfigVariables {
+  readonly napi_build_version: string;
+  readonly node_builtin_shareable_builtins: readonly string[];
+  readonly node_use_amaro: boolean;
+  readonly node_shared_openssl: boolean;
+  readonly [name: string]: unknown;
+}
+
+export interface ProcessConfigTargetDefaults {
+  readonly cflags: readonly string[];
+  readonly default_configuration: string;
+  readonly defines: readonly string[];
+  readonly include_dirs: readonly string[];
+  readonly libraries: readonly string[];
+  readonly [name: string]: unknown;
+}
+
+export interface ProcessConfig {
+  readonly variables: ProcessConfigVariables;
+  readonly target_defaults: ProcessConfigTargetDefaults;
+  readonly [name: string]: unknown;
+}
+
+export interface ProcessVersions {
+  readonly node: string;
+  readonly v8: string;
+  readonly ares: string;
+  readonly uv: string;
+  readonly zlib: string;
+  readonly modules: string;
+  readonly napi: string;
+  readonly openssl: string;
+  readonly [name: string]: string;
+}
+
 /**
  * The process.
  *
@@ -257,17 +318,17 @@ class Process extends EventEmitter {
   traceDeprecation = false;
   traceProcessWarnings = false;
 
-  readonly versions: Record<string, string> = buildVersions();
+  readonly versions: ProcessVersions = buildVersions();
 
   // Own properties rather than prototype getters: node's own test asserts
   // `Object.hasOwn(process, 'config')`, and a getter on the prototype is not
   // that. Parsed eagerly for the same reason -- an own property that appears
   // on first read is a different object shape before and after.
-  readonly release = releaseMetadata();
-  readonly features: Record<string, unknown> = metadata("features");
+  readonly release: ProcessRelease = releaseMetadata();
+  readonly features: ProcessFeatures = featuresMetadata();
   // Readonly in the static API. Node additionally freezes these objects at
   // runtime, but per-property mutability/extensibility is a §13 non-goal.
-  readonly config: Record<string, unknown> = metadata("config");
+  readonly config: ProcessConfig = configMetadata();
   allowedNodeEnvironmentFlags: ReadonlySet<string> = new NodeEnvironmentFlagsSet(
     nts_process_allowed_env_flags(),
   );
@@ -538,15 +599,42 @@ function rawDebug(...args: unknown[]): void {
 let execveWarningEmitted = false;
 
 /** One metadata table, parsed. */
-function metadata(name: string): Record<string, unknown> {
+function metadata(name: ProcessMetadataName): Record<string, unknown> {
   const value: unknown = JSON.parse(nts_process_metadata(name));
+  return metadataObject(value, `process ${name}`);
+}
+
+function metadataObject(value: unknown, name: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`invalid process ${name} metadata`);
+    throw new Error(`invalid ${name} metadata`);
   }
   return Object.fromEntries(Object.entries(value));
 }
 
-function releaseMetadata(): Record<string, string> & { name: string } {
+function metadataString(source: Readonly<Record<string, unknown>>, name: string): string {
+  const value = source[name];
+  if (typeof value !== "string") throw new Error(`invalid process metadata field ${name}`);
+  return value;
+}
+
+function metadataBoolean(source: Readonly<Record<string, unknown>>, name: string): boolean {
+  const value = source[name];
+  if (typeof value !== "boolean") throw new Error(`invalid process metadata field ${name}`);
+  return value;
+}
+
+function metadataStringArray(value: unknown, name: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`invalid process metadata field ${name}`);
+  const result = new Array<string>(value.length);
+  for (let i = 0; i < value.length; i++) {
+    const item: unknown = value[i];
+    if (typeof item !== "string") throw new Error(`invalid process metadata field ${name}[${i}]`);
+    result[i] = item;
+  }
+  return result;
+}
+
+function releaseMetadata(): ProcessRelease {
   const raw = metadata("release");
   const release: Record<string, string> = {};
   for (const [key, value] of Object.entries(raw)) {
@@ -560,7 +648,60 @@ function releaseMetadata(): Record<string, string> & { name: string } {
   return { ...release, name };
 }
 
-function buildVersions(): Record<string, string> {
+function featuresMetadata(): ProcessFeatures {
+  const raw = metadata("features");
+  const typeScript = raw["typescript"];
+  if (typeScript !== "strip" && typeScript !== "transform" && typeScript !== false) {
+    throw new Error("invalid process metadata field typescript");
+  }
+  return {
+    inspector: metadataBoolean(raw, "inspector"),
+    debug: metadataBoolean(raw, "debug"),
+    uv: metadataBoolean(raw, "uv"),
+    ipv6: metadataBoolean(raw, "ipv6"),
+    openssl_is_boringssl: metadataBoolean(raw, "openssl_is_boringssl"),
+    quic: metadataBoolean(raw, "quic"),
+    tls_alpn: metadataBoolean(raw, "tls_alpn"),
+    tls_sni: metadataBoolean(raw, "tls_sni"),
+    tls_ocsp: metadataBoolean(raw, "tls_ocsp"),
+    tls: metadataBoolean(raw, "tls"),
+    cached_builtins: metadataBoolean(raw, "cached_builtins"),
+    require_module: metadataBoolean(raw, "require_module"),
+    typescript: typeScript,
+  };
+}
+
+function configMetadata(): ProcessConfig {
+  const raw = metadata("config");
+  const variables = metadataObject(raw["variables"], "process config.variables");
+  const targetDefaults = metadataObject(
+    raw["target_defaults"],
+    "process config.target_defaults",
+  );
+  return {
+    ...raw,
+    variables: {
+      ...variables,
+      napi_build_version: metadataString(variables, "napi_build_version"),
+      node_builtin_shareable_builtins: metadataStringArray(
+        variables["node_builtin_shareable_builtins"],
+        "node_builtin_shareable_builtins",
+      ),
+      node_use_amaro: metadataBoolean(variables, "node_use_amaro"),
+      node_shared_openssl: metadataBoolean(variables, "node_shared_openssl"),
+    },
+    target_defaults: {
+      ...targetDefaults,
+      cflags: metadataStringArray(targetDefaults["cflags"], "target_defaults.cflags"),
+      default_configuration: metadataString(targetDefaults, "default_configuration"),
+      defines: metadataStringArray(targetDefaults["defines"], "target_defaults.defines"),
+      include_dirs: metadataStringArray(targetDefaults["include_dirs"], "target_defaults.include_dirs"),
+      libraries: metadataStringArray(targetDefaults["libraries"], "target_defaults.libraries"),
+    },
+  };
+}
+
+function buildVersions(): ProcessVersions {
   const names = nts_process_version_names();
   const values = nts_process_version_values();
   const versions: Record<string, string> = {};
@@ -572,7 +713,17 @@ function buildVersions(): Record<string, string> {
     }
     versions[name] = value;
   }
-  return versions;
+  return {
+    ...versions,
+    node: metadataString(versions, "node"),
+    v8: metadataString(versions, "v8"),
+    ares: metadataString(versions, "ares"),
+    uv: metadataString(versions, "uv"),
+    zlib: metadataString(versions, "zlib"),
+    modules: metadataString(versions, "modules"),
+    napi: metadataString(versions, "napi"),
+    openssl: metadataString(versions, "openssl"),
+  };
 }
 
 const process = new Process();
