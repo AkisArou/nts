@@ -611,30 +611,64 @@ function spawnSyncInfrastructure(command, argsOrOptions, maybeOptions) {
     : realChildProcess.spawnSync(command, options);
 }
 
-/** Re-enter the runner for exact `$NODE $FILE` commands inside a shell pipeline. */
+/**
+ * Locate an environment-quoted `node fixture.js` invocation in a shell command.
+ *
+ * Node's `escapePOSIXShell` passes interpolated paths through environment
+ * variables, conventionally `${ESCAPED_0}` and `${ESCAPED_1}`. Match those
+ * references only after their values have independently proved to be this
+ * Node executable and a declared test fixture. This keeps routing structural:
+ * it does not parse or reinterpret the rest of the caller's shell program.
+ */
+function routedShellInvocation(command, environment, cwd) {
+  if (typeof command !== "string" || environment === undefined) return null;
+
+  const name = "[A-Za-z_][A-Za-z0-9_]*";
+  const quotedPair = new RegExp(
+    `(\\"\\$(?:\\{(${name})\\}|(${name}))\\") +` + `(\\"\\$(?:\\{(${name})\\}|(${name}))\\")`,
+    "g",
+  );
+  for (const match of command.matchAll(quotedPair)) {
+    const nodeName = match[2] ?? match[3];
+    const targetName = match[5] ?? match[6];
+    if (
+      nodeName === undefined ||
+      targetName === undefined ||
+      !Object.hasOwn(environment, nodeName) ||
+      !Object.hasOwn(environment, targetName) ||
+      !isNodeExecutable(environment[nodeName]) ||
+      commonJsNodeTestTarget(environment[targetName], cwd) === null
+    ) {
+      continue;
+    }
+    const nodeReference = match[1];
+    const targetReference = match[4];
+    return {
+      invocation: match[0],
+      replacement:
+        `${nodeReference} "$NTS_CONFORMANCE_RUNNER" ` +
+        `"$NTS_CONFORMANCE_MODULE" ${targetReference} ` +
+        `"$NTS_CONFORMANCE_ADDON"`,
+    };
+  }
+  return null;
+}
+
+/** Re-enter the runner for an environment-quoted fixture in a shell pipeline. */
 function execInfrastructure(command, optionsOrCallback, maybeCallback) {
   const callbackOnly = typeof optionsOrCallback === "function";
   const options = callbackOnly ? undefined : optionsOrCallback;
   const callback = callbackOnly ? optionsOrCallback : maybeCallback;
   const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
   const environment = options?.env;
-  const target = commonJsNodeTestTarget(environment?.FILE, cwd);
-  const node = environment?.NODE;
-  const invocation = '"$NODE" "$FILE"';
+  const routed = routedShellInvocation(command, environment, cwd);
 
-  if (
-    typeof command === "string" &&
-    node === hostProcess.execPath &&
-    target !== null &&
-    command.includes(invocation)
-  ) {
+  if (routed !== null) {
     const nested = nestedChildOptions(options);
     nested.env.NTS_CONFORMANCE_RUNNER = conformanceRunner;
     nested.env.NTS_CONFORMANCE_MODULE = moduleName;
     nested.env.NTS_CONFORMANCE_ADDON = addon ?? "-";
-    const replacement =
-      '"$NODE" "$NTS_CONFORMANCE_RUNNER" "$NTS_CONFORMANCE_MODULE" "$FILE" "$NTS_CONFORMANCE_ADDON"';
-    const rewritten = command.replaceAll(invocation, replacement);
+    const rewritten = command.replaceAll(routed.invocation, routed.replacement);
     return callback === undefined
       ? realChildProcess.exec(rewritten, nested)
       : realChildProcess.exec(rewritten, nested, callback);

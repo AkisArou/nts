@@ -8,13 +8,12 @@ test-net-connect-nodelay.js: implementation-detail test; overwrites setNoDelay o
 test-net-keepalive-interval-count.js: implementation-detail test; overwrites setKeepAlive on Node's private native handle object to inspect binding arguments
 test-net-socket-setnodelay.js: implementation-detail test; constructs sockets around fabricated Node C++ handle objects and mutates their methods
 test-net-socket-write-after-close.js: implementation-detail test; directly closes and replaces Node's private native handle object
-test-net-child-process-connect-reset.js: harness limitation; spawns process.execPath, so the child runs Node's builtin net rather than this implementation
-test-net-listen-handle-in-cluster-1.js: harness limitation; forks a cluster worker and transfers a native server outside the substituted module process
-test-net-listen-handle-in-cluster-2.js: harness limitation; forks a cluster worker and requires Node's private TCP binding
-test-net-listen-twice.js: harness limitation; forks a cluster worker that cannot inherit module substitution and would execute Node's builtin net in a second process
+test-net-listen-handle-in-cluster-1.js: active-environment gap; cluster must transfer this profile's live native server handle through worker IPC and reconstruct the typed Server in the child
+test-net-listen-handle-in-cluster-2.js: private binding/active-environment gap; constructs a Node TCPWrap through internalBinding('tcp_wrap') and asks a cluster worker to adopt it
+test-net-listen-twice.js: active-environment gap; needs cluster worker bootstrap, its NODE_CLUSTER internal-message protocol, and process.disconnect on the substituted process
 test-net-server-transfer-worker.js: language non-goal (typescript.md section 13); requires worker structured-clone transfer hooks implemented through runtime Symbols
 test-net-socket-transfer-worker-http.js: language non-goal (typescript.md section 13); requires worker structured-clone transfer hooks implemented through runtime Symbols
 test-net-socket-transfer-worker.js: language non-goal (typescript.md section 13); requires worker structured-clone transfer hooks implemented through runtime Symbols
 test-net-transfer-guards.js: language non-goal (typescript.md section 13); directly exercises structured-clone transfer hooks implemented through runtime Symbols
-test-net-listen-exclusive-random-ports.js: harness limitation; forks cluster workers and asserts on values sent from processes running Node's builtin net
-test-net-socket-constructor.js: harness limitation; most cases fork a cluster worker or adopt and inspect Node's private native socket handles
+test-net-listen-exclusive-random-ports.js: active-environment gap; needs two cluster workers with process IPC send/message delivery so each typed Server can publish its independently selected port
+test-net-socket-constructor.js: mixed active-environment/private-handle gap; its worker cases need inherited raw-fd adoption and process.disconnect, while the primary branch also wraps the private `_handle` of another socket; ordinary empty Socket/connect behavior is exercised by the applicable net suite, but public raw-fd adoption still needs a real native binding
