@@ -33,6 +33,31 @@
 # frontends. See `CROWDED` in tooling/suite.
 set -eu
 
+# **Everything below is one brace group, and that is not a style choice.**
+#
+# `sh` reads a script incrementally: it parses up to the next command, runs it,
+# and comes back for more *at a byte offset*. Three sessions share this
+# checkout, so this file is edited while it is running -- and an edit above the
+# read point shifts every offset after it. On 2026-09-06 a gate forty-four
+# minutes in resumed inside the middle of a line:
+#
+#     ./tooling/gate/all.sh: line 535: examples: command not found
+#     ./tooling/gate/all.sh: line 535: ut: command not found
+#
+# Fifteen steps ran and passed, `memory` never ran at all, and the script
+# **exited 0**, because the last thing it managed to execute succeeded. A gate
+# that skips a step and reports success is worse than one that fails: the whole
+# point of the last step is that nothing else counts allocations.
+#
+# A brace group is parsed to its closing `}` before any of it runs, so the file
+# is read once and an edit during the run cannot move the interpreter. `exit`
+# before the close, so that anything appended after it is not executed either.
+#
+# Not a copy re-exec, which is the other fix and is wrong here: this script
+# locates the repository from its own path, and a copy in `/tmp` reports
+# `no frontend at /tmp/.../target/tsgo`. That was tried.
+{
+
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
 
@@ -552,3 +577,6 @@ step "rc"       ./tooling/gate/rc.sh
 step "memory"   ./tooling/memory/run.sh
 
 printf '\n\033[32mgreen\033[0m\n'
+
+exit 0
+}
