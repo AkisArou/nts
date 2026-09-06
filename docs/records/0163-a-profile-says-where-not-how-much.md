@@ -85,6 +85,18 @@ So the rule is a thing to do rather than a thing to know:
 > **Price the replacement before you build it, not the thing you are
 > removing.**
 
+**Superseded twice, and this rule is the weakest of the three.** Record 0165
+added the missing factor -- the saving is `share x (1 - replacement/original)`,
+and this record computes the second while assuming the first is 1. Record
+**0172** added the one that matters most and is not visible from here at all:
+*mutating the reference prices the shape in the **reference's** context.* Both
+of `array-methods`'s numbers were measurements -- 22.8% predicted from the
+mutated reference, 4.7% measured in our own code -- so the method was sound and
+only the context differed. A rule that says "price it" cannot catch that; a rule
+that asks **where** it was priced can.
+
+Read 0165 and 0172 with this one. What is written below is true and incomplete.
+
 It costs one sentence — you already have to say what the code will look like
 afterwards — and it would have killed all three predictions at the desk. It also
 answers *which* changes deserve an A/B, which "always A/B" does not: if you can
