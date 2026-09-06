@@ -47,6 +47,16 @@ public final class NtsArrayL {
     public static NtsArrayL empty() { return new NtsArrayL(EMPTY, 0); }
     public static double length(NtsArrayL a) { return a.length; }
     /**
+     * The same length where the middle end asked for an integer.
+     *
+     * <p>`array.len` is an `i32` upstream now, and the only way to it was a
+     * helper returning `double`, so a length went `getfield; i2d` and the
+     * caller put it back with `d2i`. The same round trip the subscript and
+     * the constructor were given overloads to avoid, in the third place it
+     * occurs.
+     */
+    public static int count(NtsArrayL a) { return a.length; }
+    /**
      * Read, refusing an index outside the array rather than reading past it.
      *
      * <p>The subscript is emitted {@code checked: false} where the middle end

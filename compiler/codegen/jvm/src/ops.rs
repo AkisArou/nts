@@ -263,6 +263,19 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // is how one backend gets a conversion the others do not.
         "nts_set_timeout" => (RUNTIME, "setTimeout", "(Ljava/lang/Object;DDZ)D"),
         "nts_clear_timeout" => (RUNTIME, "clearTimeout", "(D)V"),
+        // A symbol is a description and an identity. `keyFor` walks the
+        // registry rather than keeping a reverse index, which is `runtime/c`'s
+        // choice and its reason: `Symbol.keyFor` is the rare direction and a
+        // second index would cost every `Symbol.for` a write.
+        "nts_symbol_new" => (types::SYMBOL, "newSymbol", "(Ljava/lang/String;)Lnts/rt/NtsSymbol;"),
+        "nts_symbol_for" => (types::SYMBOL, "forKey", "(Ljava/lang/String;)Lnts/rt/NtsSymbol;"),
+        "nts_symbol_key_for" => (types::SYMBOL, "keyFor", "(Lnts/rt/NtsSymbol;)Ljava/lang/String;"),
+        "nts_symbol_description" => {
+            (types::SYMBOL, "description", "(Lnts/rt/NtsSymbol;)Ljava/lang/String;")
+        }
+        "nts_symbol_to_string" => {
+            (types::SYMBOL, "describe", "(Lnts/rt/NtsSymbol;)Ljava/lang/String;")
+        }
         // A `Date` is a `double` and an identity, and these are all of it.
         "nts_date_new" => (types::DATE, "newDate", "(D)Lnts/rt/NtsDate;"),
         "nts_date_value" => (types::DATE, "value", "(Lnts/rt/NtsDate;)D"),
@@ -1847,8 +1860,19 @@ impl Emitter<'_> {
             {
                 let class = self.growable_class(&self.ty(*of).clone())?;
                 self.load(code, pool, *of)?;
-                code.invoke_static(origin, pool, &class, "length", &format!("(L{class};)D"));
-                self.adapt_to(code, Kind::Double, value, origin)?;
+                // By what the length is *wanted* as. The field is an `int` and
+                // `array.len` is an `i32` upstream now, so reaching it through
+                // a `double`-returning helper emitted `i2d` inside and `d2i`
+                // outside -- `array-predicates` does that five times a
+                // specialization. The subscript and the constructor were given
+                // integral overloads for the same round trip; this is the
+                // third place it occurs and the last one that had none.
+                let integral = matches!(self.kind_of(value)?, Kind::Int | Kind::Long);
+                let (member, produced) =
+                    if integral { ("count", Kind::Int) } else { ("length", Kind::Double) };
+                let returns = if integral { "I" } else { "D" };
+                code.invoke_static(origin, pool, &class, member, &format!("(L{class};){returns}"));
+                self.adapt_to(code, produced, value, origin)?;
                 Ok(Placed::OnStack)
             }
             OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) => {

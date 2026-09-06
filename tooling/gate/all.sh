@@ -427,14 +427,19 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  # **109 of 110.** The plan set the target at 86 of 87, which was the LLVM
-  # floor the day it was written; the corpus has grown by twenty-three since.
+  # **110 of 110 — equal to the corpus.** The plan set the target at 86 of 87,
+  # which was the LLVM floor the day it was written; the corpus has grown by
+  # twenty-three since and this lane refuses nothing in it.
   #
-  # The one it is short of is named rather than absorbed: `symbol-values` wants
-  # a symbol as a runtime value, which this lane has no representation for and
-  # refuses by name. `dates` was the other, for one week -- a `Date` is a
-  # `double` and an identity and it needed a class to be, which is thirty lines
-  # and not a design.
+  # The last two came off in an afternoon and neither was a design. A `Date` is
+  # a `double` and an identity; a symbol is a description and an identity. Both
+  # wanted a class to be, which is thirty lines, and both had been refused by
+  # name for long enough that the refusal read like a verdict on the construct
+  # rather than on the absence of a file.
+  #
+  # A floor equal to the corpus is a different kind of number from one below it:
+  # from here it can only be held, and an example that does not agree fails this
+  # step on the day it lands rather than being absorbed into a gap.
   #
   # A floor is planted on *agreement* rather than on rendering, because
   # rendering is a property of the emitter and agreeing is a property of the
@@ -446,7 +451,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # one left, and its counter is a method *parameter*, which is the one place a
   # representation choice cannot be made without rewriting a descriptor.
   #
-  backend_examples 109 "through the JVM backend" ); }
+  backend_examples 110 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
