@@ -693,10 +693,11 @@ form; it is not distorted to avoid a temporary compiler limitation.
 
    JSON number emission calls the same canonical `Number::toString` implementation
    used by `String(number)` on each provider; on C/LLVM that is the existing
-   `nts_grisu.h`/`js_dtoa` shortest-round-tripping path, not a second formatter. The
-   remaining JSON-specific numeric cases include non-finite values stringifying to
-   `null`, negative zero stringifying as `0`, overflow such as `1e400`, and precision
-   past 2^53.
+   `nts_grisu.h`/`js_dtoa` shortest-round-tripping path, and on the JVM it is
+   `NtsRuntime.numberToString`, backed by the `NtsGrisu` port—not a second formatter.
+   The remaining JSON-specific numeric cases include non-finite values stringifying
+   to `null`, negative zero stringifying as `0`, overflow such as `1e400`, and
+   precision past 2^53.
 
    Parsing and escaping operate on JavaScript UTF-16 code units. Lone surrogates such
    as `\uD800` remain representable when parsed and are escaped correctly when
