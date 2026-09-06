@@ -3,3 +3,4 @@
 - an lsp or something, to show memory management analysis
 - an mcp that has access to HIR that leverages it for optimizations?
 - Documentation on hover for everything. for example android, posix etc...
+- For well-known arguments that might throw a RangeError, like for example some Temporal objects etc, we might not compile (literal discoverable values)
