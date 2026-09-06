@@ -1,9 +1,10 @@
 'use strict';
 
 // Focused applicable coverage from Node v24.20.0
-// `test-timers-async-store-leak.js`. The upstream file also spawns uninjected
-// child processes and inspects AsyncLocalStorage's private resource fields;
-// this retains the timer-owned callback and argument release assertions.
+// `test-timers-async-store-leak.js`. The upstream file couples these checks to
+// two private AsyncLocalStorage implementations, their symbol-keyed resource
+// fields, and forced-GC behavior; this retains the independent timer-owned
+// callback and argument release assertions.
 
 const common = require('../common');
 const assert = require('assert');

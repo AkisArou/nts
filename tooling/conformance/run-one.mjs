@@ -547,6 +547,10 @@ function spawnInfrastructure(command, argsOrOptions, maybeOptions) {
   const args = hasArgs ? argsOrOptions : [];
   const options = hasArgs ? maybeOptions : argsOrOptions;
   const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
+  const shellRoute = routedShellSpawn(command, args, options, cwd);
+  if (shellRoute !== null) {
+    return realChildProcess.spawn(command, shellRoute.args, shellRoute.options);
+  }
   const fixtureIndex = args.findIndex((argument) => commonJsNodeTestTarget(argument, cwd) !== null);
   const target = commonJsNodeTestTarget(args[fixtureIndex], cwd);
 
@@ -582,6 +586,10 @@ function spawnSyncInfrastructure(command, argsOrOptions, maybeOptions) {
   const args = hasArgs ? argsOrOptions : [];
   const options = hasArgs ? maybeOptions : argsOrOptions;
   const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
+  const shellRoute = routedShellSpawn(command, args, options, cwd);
+  if (shellRoute !== null) {
+    return realChildProcess.spawnSync(command, shellRoute.args, shellRoute.options);
+  }
   const fixtureIndex = args.findIndex((argument) => commonJsNodeTestTarget(argument, cwd) !== null);
   const target = commonJsNodeTestTarget(args[fixtureIndex], cwd);
 
@@ -654,6 +662,39 @@ function routedShellInvocation(command, environment, cwd) {
   return null;
 }
 
+/** Add the private routing values without disturbing any caller environment. */
+function nestedShellChildOptions(options) {
+  const nested = nestedChildOptions(options);
+  nested.env.NTS_CONFORMANCE_RUNNER = conformanceRunner;
+  nested.env.NTS_CONFORMANCE_MODULE = moduleName;
+  nested.env.NTS_CONFORMANCE_ADDON = addon ?? "-";
+  return nested;
+}
+
+/**
+ * Route the command string of an explicit `/bin/sh -c` child.
+ *
+ * This is deliberately narrower than recognizing arbitrary shells or their
+ * options. Node's fixtures use this exact spelling when they need shell state
+ * such as `ulimit` around a self-spawn, and the invocation inside the command
+ * still has to pass `routedShellInvocation`'s executable and fixture checks.
+ */
+function routedShellSpawn(command, args, options, cwd) {
+  if (command !== "/bin/sh" || args[0] !== "-c") return null;
+  const shellCommand = args[1];
+  const routed = routedShellInvocation(shellCommand, options?.env, cwd);
+  if (routed === null) return null;
+
+  return {
+    args: [
+      args[0],
+      shellCommand.replaceAll(routed.invocation, routed.replacement),
+      ...args.slice(2),
+    ],
+    options: nestedShellChildOptions(options),
+  };
+}
+
 /** Re-enter the runner for an environment-quoted fixture in a shell pipeline. */
 function execInfrastructure(command, optionsOrCallback, maybeCallback) {
   const callbackOnly = typeof optionsOrCallback === "function";
@@ -664,10 +705,7 @@ function execInfrastructure(command, optionsOrCallback, maybeCallback) {
   const routed = routedShellInvocation(command, environment, cwd);
 
   if (routed !== null) {
-    const nested = nestedChildOptions(options);
-    nested.env.NTS_CONFORMANCE_RUNNER = conformanceRunner;
-    nested.env.NTS_CONFORMANCE_MODULE = moduleName;
-    nested.env.NTS_CONFORMANCE_ADDON = addon ?? "-";
+    const nested = nestedShellChildOptions(options);
     const rewritten = command.replaceAll(routed.invocation, routed.replacement);
     return callback === undefined
       ? realChildProcess.exec(rewritten, nested)
@@ -1181,7 +1219,13 @@ function shimmedRequire(id, fromFile) {
   // those helpers through this same CommonJS shim so a helper's
   // `require('async_hooks')` reaches the implementation under test rather than
   // silently switching back to Node's builtin module.
-  if (id.startsWith("./") || id.startsWith("../") || isAbsolute(id)) {
+  const isPathRequest =
+    id === "." ||
+    id === ".." ||
+    id.startsWith("./") ||
+    id.startsWith("../") ||
+    isAbsolute(id);
+  if (isPathRequest) {
     const localRequire = createRequire(fromFile);
     let resolved = null;
     try {

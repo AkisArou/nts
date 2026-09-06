@@ -73,14 +73,16 @@ if (!existsSync(PARALLEL_SUITE)) {
 }
 
 // Some of node's tests spawn `process.execPath` and assert on what the child
-// prints. The child is real node running real node modules, so the assertion
-// is about node's binary and not about ours -- there is no way to inject our
-// module into a process we did not start.
+// prints. `run-one.mjs` routes structurally identifiable same-suite and
+// declared fixture programs back through itself so those children retain the
+// substituted subject. What remains here is a deliberate exception: a child
+// that cannot be routed without interpreting arbitrary program text, or a
+// test of Node's executable rather than of the selected module.
 //
-// Those are listed per module in `not-applicable`, one `file: reason` per line.
-// Listed rather than detected on purpose: a rule like "skip anything that
-// requires child_process" would quietly drop tests that only use it for part
-// of their work, and a conformance number nobody can audit is not worth
+// Exceptions are listed per module in `not-applicable`, one `file: reason` per
+// line. Listed rather than detected on purpose: a rule like "skip anything
+// that requires child_process" would quietly drop tests that only use it for
+// part of their work, and a conformance number nobody can audit is not worth
 // reporting. Every exclusion here is a claim someone can check.
 function readList(path) {
   if (!existsSync(path)) return new Map();
