@@ -38,10 +38,10 @@ export class ReadableStream<T> {
   private readonly controller: ReadableStreamDefaultController<T>;
   private readonly highWaterMark: number;
   private readonly sizeOf: (value: T) => number;
-  private queue: QueueEntry<T>[] = [];
+  private readonly queue: QueueEntry<T>[] = [];
   private queueHead = 0;
   private totalSize = 0;
-  private pending: PromiseWithResolvers<ReadResult<T>>[] = [];
+  private readonly pending: PromiseWithResolvers<ReadResult<T>>[] = [];
   // A head index keeps a burst of outstanding reads linear; Array.shift() would
   // move every remaining capability after each delivered chunk.
   private pendingHead = 0;
@@ -126,7 +126,7 @@ export class ReadableStream<T> {
     if (this.state === "errored") {
       throw this.storedError;
     }
-    this.queue = [];
+    this.queue.length = 0;
     this.queueHead = 0;
     this.totalSize = 0;
     this.finish();
@@ -149,10 +149,15 @@ export class ReadableStream<T> {
       this.queueHead++;
       this.totalSize = Math.max(0, this.totalSize - entry.size);
       if (this.queueHead === this.queue.length) {
-        this.queue = [];
+        this.queue.length = 0;
         this.queueHead = 0;
       } else if (this.queueHead > 1024 && this.queueHead * 2 > this.queue.length) {
-        this.queue = this.queue.slice(this.queueHead);
+        const remaining = this.queue.length - this.queueHead;
+        for (let index = 0; index < remaining; index++) {
+          const current = this.queue[this.queueHead + index];
+          if (current !== undefined) this.queue[index] = current;
+        }
+        this.queue.length = remaining;
         this.queueHead = 0;
       }
       if (this.closeRequested && this.queueHead === this.queue.length) {
@@ -225,7 +230,7 @@ export class ReadableStream<T> {
     }
     this.state = "errored";
     this.storedError = error;
-    this.queue = [];
+    this.queue.length = 0;
     this.queueHead = 0;
     this.totalSize = 0;
     this.rejectPending(error);
@@ -277,10 +282,15 @@ export class ReadableStream<T> {
     }
     this.pendingHead++;
     if (this.pendingHead === this.pending.length) {
-      this.pending = [];
+      this.pending.length = 0;
       this.pendingHead = 0;
     } else if (this.pendingHead > 1024 && this.pendingHead * 2 > this.pending.length) {
-      this.pending = this.pending.slice(this.pendingHead);
+      const remaining = this.pending.length - this.pendingHead;
+      for (let index = 0; index < remaining; index++) {
+        const current = this.pending[this.pendingHead + index];
+        if (current !== undefined) this.pending[index] = current;
+      }
+      this.pending.length = remaining;
       this.pendingHead = 0;
     }
     return read;
@@ -289,7 +299,6 @@ export class ReadableStream<T> {
   private resolvePendingAsClosed(): void {
     const pending = this.pending;
     const start = this.pendingHead;
-    this.pending = [];
     this.pendingHead = 0;
     for (let index = start; index < pending.length; index++) {
       const read = pending[index];
@@ -297,12 +306,12 @@ export class ReadableStream<T> {
         read.resolve({ done: true, value: undefined });
       }
     }
+    pending.length = 0;
   }
 
   private rejectPending(error: unknown): void {
     const pending = this.pending;
     const start = this.pendingHead;
-    this.pending = [];
     this.pendingHead = 0;
     for (let index = start; index < pending.length; index++) {
       const read = pending[index];
@@ -310,6 +319,7 @@ export class ReadableStream<T> {
         read.reject(error);
       }
     }
+    pending.length = 0;
   }
 
   tee(): [ReadableStream<T>, ReadableStream<T>] {

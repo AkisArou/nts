@@ -336,3 +336,16 @@ restore a leak or narrow the final API. The unchanged `AbortSignal.timeout` fixt
 is not claimed yet: the public one-argument signature still depends on the typed
 current-environment scheduler/clock seam, and a process-global timer is not an
 acceptable substitute.
+
+Readable stream chunk queues and pending-read queues now retain stable backing
+arrays. Emptying either queue shortens it in place, and crossing the existing
+1,024-entry compaction threshold moves only the live suffix before releasing stale
+references; neither path allocates a replacement array. A 2,050-entry test drives
+both chunk and pending-capability compaction and proves FIFO values and terminal
+state on each path. Mutating the chunk source offset by one makes the focused test
+fail at expected value 1,026 with 1,027. The Node-host suite passes 111/111, the
+pinned WPT slice remains 95/95, and the live NTS frontier remains 236 primary
+refusals, 36 cascades, zero JVM-backend refusals, and no invalid HIR. The compiler
+already classifies the stream's capability arrays under the planned
+`PromiseWithResolvers` representation dependency; the allocation-stable source did
+not introduce another diagnostic category.

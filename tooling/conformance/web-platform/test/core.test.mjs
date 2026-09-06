@@ -921,6 +921,42 @@ test("Stream strategy callbacks have no receiver and pending reads remain FIFO",
   bufferedController.close();
   assert.deepEqual(await bufferedReader.read(), { done: true, value: undefined });
 });
+test("Stream queue and pending-read compaction preserve long FIFO order", async () => {
+  const queued = new ReadableStream(
+    {
+      start(controller) {
+        for (let value = 0; value < 2_050; value++) controller.enqueue(value);
+        controller.close();
+      },
+    },
+    { highWaterMark: 2_050 },
+  );
+  const queuedReader = queued.getReader();
+  for (let value = 0; value < 2_050; value++) {
+    assert.deepEqual(await queuedReader.read(), { done: false, value });
+  }
+  assert.deepEqual(await queuedReader.read(), { done: true, value: undefined });
+
+  let controller;
+  const pending = new ReadableStream(
+    {
+      start(current) {
+        controller = current;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const pendingReader = pending.getReader();
+  const reads = [];
+  for (let value = 0; value < 2_050; value++) reads.push(pendingReader.read());
+  for (let value = 0; value < 2_050; value++) controller.enqueue(value);
+  controller.close();
+  const results = await Promise.all(reads);
+  for (let value = 0; value < results.length; value++) {
+    assert.deepEqual(results[value], { done: false, value });
+  }
+  assert.deepEqual(await pendingReader.read(), { done: true, value: undefined });
+});
 test("Tee validates the explicit backlog limit before locking its source", () => {
   for (const limit of [-1, NaN]) {
     const source = new ReadableStream();
