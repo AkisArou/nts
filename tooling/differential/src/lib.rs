@@ -2011,7 +2011,7 @@ fn report(
 
 #[cfg(test)]
 mod classification {
-    use super::{Stopped, stopped};
+    use super::{Stopped, stopped_with};
 
     /// The text `java` actually prints, kept verbatim rather than paraphrased:
     /// the classifier reads stderr, so a test that invented its own wording
@@ -2065,7 +2065,7 @@ mod classification {
 
 #[cfg(test)]
 mod tests {
-    use super::{stopped, Stopped};
+    use super::{Stopped, stopped_with};
 
     /// The distinction the whole check rests on, asked of each case that has
     /// actually occurred.
