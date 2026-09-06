@@ -888,7 +888,17 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::InstanceOf { value, .. } => {
             vec![*value]
         }
-        OpKind::Await { promise } => vec![*promise],
+        OpKind::Await { promise, rejects_to } => {
+            let mut read = vec![*promise];
+            // Every argument the rejection edge owes its handler is read here,
+            // which is what keeps them live to this point. Without it the
+            // values were dead at the `await` and `rc` released them before
+            // the handler could be given them.
+            if let Some(rejection) = rejects_to {
+                read.extend(rejection.args.iter().copied());
+            }
+            read
+        }
         OpKind::CellReady { cell, .. } => vec![*cell],
         OpKind::Suspend { promise, frame, .. } => vec![*promise, *frame],
         OpKind::Param(_)

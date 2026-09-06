@@ -178,6 +178,30 @@ fn crossing(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
             for operand in super::operands_of_terminator(&block.terminator) {
                 consider(operand);
             }
+            // What a rejection owes its handler crosses the suspension too, and
+            // it is the one set that does not follow from liveness: the values
+            // are read *at* the `await` as far as the analysis is concerned, so
+            // one used nowhere else dies there -- and the landing block, which
+            // is where the jump into the handler is built, is reached from the
+            // dispatch and dominated by nothing that defined it.
+            //
+            // `NotDominated { value: %14, used_in: b6 }`, from the first
+            // program whose `try` had both a `throw` and an `await` and a local
+            // they disagreed about.
+            if let OpKind::Await {
+                rejects_to: Some(rejection),
+                ..
+            } = &func.values[value.0 as usize].kind
+            {
+                for (slot, arg) in rejection.args.iter().enumerate() {
+                    // Not the reason: its slot holds the handler's own
+                    // parameter as a placeholder, and the value that arrives
+                    // there is read from the promise at the landing.
+                    if slot != rejection.reason_at {
+                        consider(*arg);
+                    }
+                }
+            }
         }
     }
     crossing
@@ -677,10 +701,22 @@ fn resume_function(
         origin: func.origin.clone(),
     };
 
-    let (base, starts) = segment_layout(func, points, mode);
+    // Whether anything still needs the shared exit: an `await` whose rejection
+    // the lowering did not give a handler.
+    let shared_exit = mode == Mode::Async
+        && points.iter().any(|(_, _, value)| {
+            matches!(
+                &func.values[value.0 as usize].kind,
+                OpKind::Await {
+                    rejects_to: None,
+                    ..
+                }
+            )
+        });
+    let (base, starts) = segment_layout(func, points, mode, shared_exit);
     // Immediately after the dispatch chain, which is what `segment_layout`
     // reserved the extra block for. A generator has no such block: a `yield`
-    // cannot reject.
+    // cannot reject, and neither has a function whose every `await` is caught.
     let reject = super::BlockId(base.saturating_sub(1));
 
     let mut body: Vec<super::Block> = Vec::new();
@@ -759,14 +795,21 @@ fn resume_function(
             // assert -- `await` of one aborted the program, which is the
             // failure mode a test that only awaits successes never sees.
             //
-            // There is no `try`/`catch` across an `await` yet, so the only
-            // thing a rejection can do is reject this function's own promise,
-            // which is what the shared block does.
+            // Where the rejection goes. The shared block rejects this
+            // function's own promise, which is the whole of what a rejection
+            // could do before `try`/`catch` spanned an `await`.
+            //
+            // With a handler it is an ordinary jump into that handler, and the
+            // arguments were settled at the lowering -- see `hir::Rejection`.
+            // They are *reloaded* here because a value defined before the
+            // suspension lives in the frame by now, which is the same thing
+            // every other operand in a resumption gets.
+            let caught = caught_by(&mut build, frame, slot_of, &starts, awaited);
             body.push(rejection_check(
                 &mut build,
                 frame,
                 std::mem::take(&mut params),
-                reject,
+                caught.unwrap_or((reject, Vec::new())),
                 super::BlockId(landing + 1),
             ));
             read_settled(&mut build, frame, awaited, slot_of);
@@ -775,7 +818,7 @@ fn resume_function(
     }
 
     let mut blocks = dispatch_chain(&mut build, frame, &resume_at);
-    if mode == Mode::Async {
+    if shared_exit {
         blocks.push(rejection_exit(&mut build, frame));
     }
     blocks.extend(body);
@@ -801,7 +844,7 @@ fn pause(
     marker: i64,
 ) -> Terminator {
     match build.values[stopping.0 as usize].kind.clone() {
-        OpKind::Await { promise } => {
+        OpKind::Await { promise, .. } => {
             let promise = reload(build, frame, slot_of, promise);
             build.set(frame, FIELD_AWAITED, promise);
             let marker = build.constant(marker);
@@ -914,13 +957,26 @@ fn segment_layout(
     func: &Func,
     points: &[(usize, usize, ValueId)],
     mode: Mode,
+    shared_exit: bool,
 ) -> (u32, Vec<u32>) {
     // The dispatch chain, then one block the whole function shares for
     // propagating a rejection, then the body. A generator has no rejection
     // block and no landing block per suspension, for the same reason: nothing
     // resumes it with a failure.
+    // A landing block per suspension, for every async function. The *shared*
+    // rejection exit is separate and is reserved only when something reaches
+    // it: with `try`/`catch` across an `await`, a function all of whose awaits
+    // are inside a handler has no path to it, and a block with no predecessors
+    // is one the verifier rejects -- `Unreachable { block: BlockId(3) }`, from
+    // the first program that caught its own rejection.
+    // Two different things wear the name `shared` here and only one of them is
+    // conditional. Every async function needs a *landing* block per suspension,
+    // which is what the count below adds; the **shared rejection exit** is one
+    // block for the whole function and is reserved only when something reaches
+    // it. Spending one `shared` on both took a block away from every generator
+    // and broke `examples/generators`, which is what the corpus is for.
     let shared = usize::from(mode == Mode::Async);
-    let base = u32::try_from(points.len() + 2 + shared).unwrap_or(0);
+    let base = u32::try_from(points.len() + 2 + usize::from(shared_exit)).unwrap_or(0);
     let mut starts = Vec::new();
     let mut count = 0u32;
     for index in 0..func.blocks.len() {
@@ -991,7 +1047,7 @@ fn rejection_check(
     build: &mut Build,
     frame: ValueId,
     params: Vec<ValueId>,
-    reject: super::BlockId,
+    rejected_to: (super::BlockId, Vec<ValueId>),
     settled: super::BlockId,
 ) -> super::Block {
     let held = build.get(
@@ -1012,12 +1068,77 @@ fn rejection_check(
         ops: std::mem::take(&mut build.ops),
         terminator: Terminator::Branch {
             cond: rejected,
-            then_target: reject,
-            then_args: Vec::new(),
+            then_target: rejected_to.0,
+            then_args: rejected_to.1,
             else_target: settled,
             else_args: Vec::new(),
         },
     }
+}
+
+/// Where a rejected `await` jumps, and what it takes with it.
+///
+/// `None` where the lowering recorded no handler: the rejection then rejects
+/// this function's own promise, through the shared exit.
+fn caught_by(
+    build: &mut Build,
+    frame: ValueId,
+    slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
+    starts: &[u32],
+    awaited: ValueId,
+) -> Option<(super::BlockId, Vec<ValueId>)> {
+    let it = rejection_of(build, awaited)?;
+    let reason = read_reason(build, frame);
+    let args = it
+        .args
+        .iter()
+        .enumerate()
+        .map(|(slot, value)| {
+            if slot == it.reason_at {
+                reason
+            } else {
+                // Already shifted: `rejection_of` reads the operation out of
+                // `build.values`, which is the arena `shifted_arena` produced
+                // with the frame in front -- and it rewrites every operand,
+                // these included. Shifting again here passed the handler the
+                // value *after* the one it wanted, which the verifier reported
+                // as `NotDominated` because that one was defined in the segment
+                // that suspended.
+                reload(build, frame, slot_of, *value)
+            }
+        })
+        .collect();
+    Some((super::BlockId(starts[it.handler.0 as usize]), args))
+}
+
+/// The handler a rejected `await` jumps to, where the lowering recorded one.
+fn rejection_of(build: &Build, stopping: ValueId) -> Option<super::Rejection> {
+    match &build.values[stopping.0 as usize].kind {
+        OpKind::Await { rejects_to, .. } => rejects_to.clone(),
+        _ => None,
+    }
+}
+
+/// The reason a rejected promise carries, as the erased value a `catch` binds.
+///
+/// `catch (e)` is `unknown` in TypeScript, so there is one representation and
+/// no question of which reader to call -- which is why the runtime helper for
+/// this did not exist until a handler needed it. Forwarding a rejection never
+/// had to name the reason.
+fn read_reason(build: &mut Build, frame: ValueId) -> ValueId {
+    let held = build.get(
+        frame,
+        FIELD_AWAITED,
+        HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
+    );
+    build.push(
+        OpKind::Call {
+            callee: super::Callee::External("nts_promise_reason".to_owned()),
+            args: vec![held],
+            frame: None,
+        },
+        HirType::Erased,
+    )
 }
 
 /// The one block every resumption's rejection goes to.

@@ -1797,6 +1797,19 @@ bool nts_promise_is_rejected(const NtsPromise *promise);
 /* Reject `result` with whatever `source` was rejected with. One call, so the
  * reason never has to become a typed value on the compiler's side. */
 void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source);
+/* Why it rejected, as a value a `catch` binding can hold.
+ *
+ * The sentence above is the reason this did not exist: while a rejection could
+ * only be *forwarded*, the reason never had to be named. `try { await p }
+ * catch (e)` is exactly the case that names it, and `e` is `unknown` -- so the
+ * answer is erased, with the tag read from the header rather than assumed,
+ * the way `nts_promise_value` does it.
+ *
+ * A rejection's reason is always a reference (`nts_promise_reject` takes one),
+ * so there is no number case. A rejection with no reason cannot arise here --
+ * `state` says rejected only after the pointer is stored -- and a null answers
+ * `undefined`, which is what a `catch` of one would see. */
+NTS_READS_ONLY NtsValue nts_promise_reason(const NtsPromise *promise);
 
 /* --- Combinators (docs/async.md 5b) ----------------------------------------
  *

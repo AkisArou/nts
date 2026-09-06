@@ -831,6 +831,20 @@ pub enum OpKind {
     /// sees one.
     Await {
         promise: ValueId,
+        /// Where a *rejection* goes, when this `await` is inside a `try` with a
+        /// `catch`.
+        ///
+        /// `None` is the ordinary case: nothing here catches, so a rejected
+        /// promise rejects this function's own, which is what
+        /// [`super::suspend`]'s shared exit does.
+        ///
+        /// It has to be recorded at the lowering because that is the only place
+        /// that knows. Exceptions here are *fully lowered* -- a handler is a
+        /// block and a `throw` is a jump the lowering emits -- so by the time
+        /// `suspend` runs there is no `try` left to find, only blocks. A
+        /// rejection is the one edge into a handler that no `throw` wrote, and
+        /// this is how it is written.
+        rejects_to: Option<Rejection>,
     },
     /// `yield v`: hand `v` to whoever is walking this generator, and stop here.
     ///
@@ -912,6 +926,34 @@ pub enum Callee {
     /// every closure of the type has its own. The signature is built from the
     /// call itself, which knows the argument types and the result type exactly.
     Closure { slot: u32 },
+}
+
+/// The jump a rejected `await` takes into an enclosing `catch`.
+///
+/// The handler's parameters are the thrown value followed by one per name the
+/// edges into it disagreed about — see `lower::open_handler`. A rejection is an
+/// edge like any other for the purpose of computing that list, and unlike any
+/// other in that the block it leaves does not exist yet: [`super::suspend`]
+/// creates it when it splits the function at this `await`.
+///
+/// So the arguments are settled at the lowering, with the reason's slot left to
+/// be filled by the only pass that has one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rejection {
+    /// The handler block, numbered in the *unsplit* function.
+    ///
+    /// `suspend` remaps it: `segment_layout` already records where each
+    /// original block's first segment lands, which is exactly what a jump to a
+    /// handler wants.
+    pub handler: BlockId,
+    /// What to pass, in the handler's parameter order, with the reason's place
+    /// held by [`Rejection::reason_at`].
+    pub args: Vec<ValueId>,
+    /// Which argument is the reason. Zero today, because the thrown value is
+    /// pushed first so that its position does not depend on how many names the
+    /// edges disagreed about — and carried rather than assumed, because that is
+    /// a decision of `open_handler`'s and this is a different file.
+    pub reason_at: usize,
 }
 
 /// A binary operator, after the source operator has been resolved against its

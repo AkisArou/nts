@@ -188,7 +188,18 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::InstanceOf { value, .. } => {
             *value = of(*value);
         }
-        OpKind::Await { promise } => *promise = of(*promise),
+        OpKind::Await { promise, rejects_to } => {
+            *promise = of(*promise);
+            // The rejection's arguments are operands like any other: they are
+            // the values the handler's parameters receive, and a renumbering
+            // that missed them would hand a handler a value that no longer
+            // exists.
+            if let Some(rejection) = rejects_to {
+                for arg in &mut rejection.args {
+                    *arg = of(*arg);
+                }
+            }
+        }
         OpKind::CellReady { cell, .. } => *cell = of(*cell),
         OpKind::Suspend { promise, frame, .. } => {
             *promise = of(*promise);

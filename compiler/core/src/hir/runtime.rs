@@ -313,6 +313,7 @@ pub const READS_ONLY: &[&str] = &[
     "nts_array_last_index_of",
     "nts_date_value",
     "nts_is_class",
+    "nts_promise_reason",
     "nts_map_has",
     "nts_map_next",
     "nts_str_char_code_at_fn",

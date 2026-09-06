@@ -152,7 +152,7 @@ counter, not by reading the emitted C.
 | ✅ | `new Promise(executor)` where the executor is an arrow written at the call: it runs synchronously, so its body is lowered where the promise is built and `resolve(v)` *is* the fulfil. No closure, nothing captured |
 | ✅ | a `throw` in an `async` function rejects the promise it owns, the way its `return` settles it |
 | ✗ | an executor that is not an arrow written at the call, or a `resolve` used as a value rather than called (`new Promise(r => { saved = r })`) — both need a real closure over the promise |
-| ✗ | a `catch` that spans an `await`: a rejected resumption goes to one shared exit, and reaching the `try`'s handler needs the suspension to record which handler it is inside |
+| ✅ | a **`catch` that spans an `await`** — `try { await p } catch { … }`, including a bound reason, a `throw` and an `await` reaching one handler, two awaits in one `try`, nesting, a rethrow, and an `await` inside the handler itself. A rejection is an *edge into the handler* like a `throw`, and the block it leaves does not exist when the lowering runs — `suspend` creates it on splitting at the `await` — so the handler and its arguments are settled at the lowering, into `OpKind::Await`, and read there. **89 occurrences across 17 sites** in `runtime/node`, and it was a wrong answer rather than a gap: `try { await failing() } catch { return -99 }` compiled, ran, and rejected. Record 0167 |
 | ✅ | type predicates (`x is T`) and `asserts x is T` |
 | ✅ | rest parameters | the call gathers its trailing arguments into the array |
 | ✅ | `function` expressions that do not bind their own `this` — the same closure an arrow is, with the same captures. One that *does* use `this` is still refused, and that is the whole of the difference |

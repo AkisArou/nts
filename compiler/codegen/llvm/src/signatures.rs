@@ -175,6 +175,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_promise_new", returns: "ptr", params: &[], attributes: &[] },
     Signature { name: "nts_promise_number", returns: "double", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_promise_race", returns: "ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_promise_reason", returns: "{ i32, i64 }", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_promise_reference", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_promise_reject", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_promise_reject_with", returns: "void", params: &["ptr", "ptr"], attributes: &[] },

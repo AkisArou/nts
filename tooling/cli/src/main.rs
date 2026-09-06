@@ -993,7 +993,19 @@ fn render_call(
 fn suspension(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
     match &op.kind {
-        OpKind::Await { promise } => format!("%{index} = await %{} : {ty}", promise.0),
+        OpKind::Await {
+            promise,
+            rejects_to,
+        } => {
+            // The rejection edge is printed, because an `await` inside a `try`
+            // and one outside it are the same three characters otherwise and
+            // the difference is the whole feature.
+            let caught = rejects_to.as_ref().map_or_else(String::new, |it| {
+                let args: Vec<String> = it.args.iter().map(|a| format!("%{}", a.0)).collect();
+                format!(" rejects to b{}({})", it.handler.0, args.join(", "))
+            });
+            format!("%{index} = await %{} : {ty}{caught}", promise.0)
+        }
         OpKind::Yield { value } => format!("yield %{}", value.0),
         OpKind::Suspend {
             promise,

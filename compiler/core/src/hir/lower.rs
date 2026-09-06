@@ -3804,6 +3804,21 @@ enum Exit {
     Finally(NodeId),
 }
 
+/// One `await` inside a `try`, whose rejection is an edge into the handler.
+///
+/// Recorded rather than emitted, for the same reason an [`Edge`] is: the
+/// handler's parameters are not known until the whole body has been lowered.
+/// Unlike an `Edge` there is no terminator to patch afterwards — the block a
+/// rejection leaves is created by [`super::suspend`], when it splits the
+/// function at this `await` — so what is settled here is written *into the
+/// operation* and read there.
+struct PendingRejection {
+    /// The `Await` operation.
+    at: ValueId,
+    /// What every name held at the `await`, exactly as a `throw` records it.
+    bindings: rustc_hash::FxHashMap<u32, ValueId>,
+}
+
 /// A `try` whose body is being lowered, and every `throw` that has reached it.
 struct Handler {
     /// The block the handler's code will go in, once something needs one.
@@ -3816,6 +3831,8 @@ struct Handler {
     block: Option<BlockId>,
     /// One per `throw` in the body, in the order they were lowered.
     edges: Vec<Edge>,
+    /// One per `await` in the body, whose rejection reaches this handler.
+    rejections: Vec<PendingRejection>,
 }
 
 /// One `throw`'s jump into a handler, before the handler has parameters.
@@ -8291,7 +8308,19 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "an `await` of something that is not a promise"));
         };
         let origin = self.origin(id);
-        Ok(self.push(OpKind::Await { promise }, *payload, origin))
+        // Filled in by `open_handler` where this `await` is inside a `try`
+        // with a `catch`: the handler's parameters are not known until the
+        // whole guarded body has been lowered.
+        let awaited = self.push(
+            OpKind::Await {
+                promise,
+                rejects_to: None,
+            },
+            *payload,
+            origin,
+        );
+        self.record_rejection(awaited);
+        Ok(awaited)
     }
 
     /// `Promise.resolve(v)` and `Promise.reject(e)`.
@@ -10301,6 +10330,58 @@ impl<'a> FuncBuilder<'a> {
         self.end_loop(&record, step)
     }
 
+    /// Note that this `await`'s rejection belongs to the enclosing `catch`.
+    ///
+    /// A rejected promise resumed inside a `try` has to reach that `try`'s
+    /// handler. Until this, the resumption's rejection branch went to one
+    /// shared exit that rejects the function's own promise — which is a *wrong
+    /// answer* rather than a missing one:
+    ///
+    /// ```ts
+    /// try { await failing() } catch { return -99 }   // node: -99
+    /// ```
+    ///
+    /// compiled, ran, and rejected. It was refused by name for exactly that
+    /// reason, and **89 occurrences across 17 sites** in `runtime/node` wait on
+    /// it — `try { await reader.close() } catch {}` is the shape.
+    ///
+    /// The nearest `catch` and no `finally` between: a `finally` that spans an
+    /// `await` is still refused, because it has to run on the path where the
+    /// function suspended and was resumed with an exception, and that is the
+    /// exception state machine rather than this edge. So a rejection is
+    /// recorded only where the innermost exit is a handler.
+    fn record_rejection(&mut self, awaited: ValueId) {
+        if !matches!(self.exits.last(), Some(Exit::Handler(_))) {
+            return;
+        }
+        // The handler block, created here if no `throw` has made one.
+        //
+        // It is created lazily so that a `try` around code that cannot throw
+        // leaves nothing behind -- a block with no predecessors is one the
+        // verifier rejects. A rejection is a predecessor like any other, and
+        // forgetting that left `try { await p } catch { .. }` with a dead
+        // handler and the rejection still going to the shared exit: node
+        // answered -99 and nts rejected, on 20 of 29 cases.
+        let block = match self.exits.last() {
+            Some(Exit::Handler(handler)) => handler.block,
+            _ => None,
+        };
+        if block.is_none() {
+            let made = self.new_block();
+            if let Some(Exit::Handler(handler)) = self.exits.last_mut() {
+                handler.block = Some(made);
+            }
+        }
+        let bindings = self.bindings.clone();
+        let Some(Exit::Handler(handler)) = self.exits.last_mut() else {
+            return;
+        };
+        handler.rejections.push(PendingRejection {
+            at: awaited,
+            bindings,
+        });
+    }
+
     /// `throw new Error("...")`.
     ///
     /// # A throw is a termination, for now
@@ -11068,6 +11149,7 @@ impl<'a> FuncBuilder<'a> {
         self.exits.push(Exit::Handler(Handler {
             block: None,
             edges: Vec::new(),
+            rejections: Vec::new(),
         }));
         let lowered = self.lower_statement(body);
         // Popped before the refusal is raised, so a refused body does not leave
@@ -11165,8 +11247,21 @@ impl<'a> FuncBuilder<'a> {
         let mut names: Vec<u32> = entry.keys().copied().collect();
         names.sort_unstable();
 
-        let at = |edge: &Edge, symbol: u32| {
-            edge.bindings
+        // A rejection is an edge for the purpose of this list. Its arguments go
+        // into the operation rather than onto a terminator, but the *names it
+        // disagrees about* have to be parameters exactly as a `throw`'s do --
+        // otherwise a handler reached by both reads a name at whatever the last
+        // `throw` left, and the rejection path sees a value from the wrong
+        // control flow.
+        let snapshots: Vec<&rustc_hash::FxHashMap<u32, ValueId>> = frame
+            .edges
+            .iter()
+            .map(|edge| &edge.bindings)
+            .chain(frame.rejections.iter().map(|it| &it.bindings))
+            .collect();
+
+        let at = |bindings: &rustc_hash::FxHashMap<u32, ValueId>, symbol: u32| {
+            bindings
                 .get(&symbol)
                 .copied()
                 .or_else(|| entry.get(&symbol).copied())
@@ -11175,7 +11270,7 @@ impl<'a> FuncBuilder<'a> {
         let mut disagreed = Vec::new();
         let mut bindings = entry.clone();
         for symbol in names {
-            let mut values = frame.edges.iter().filter_map(|edge| at(edge, symbol));
+            let mut values = snapshots.iter().filter_map(|it| at(it, symbol));
             let Some(first) = values.next() else {
                 continue;
             };
@@ -11190,10 +11285,9 @@ impl<'a> FuncBuilder<'a> {
         }
 
         for &symbol in &disagreed {
-            let ty = frame
-                .edges
+            let ty = snapshots
                 .iter()
-                .find_map(|edge| at(edge, symbol))
+                .find_map(|it| at(it, symbol))
                 .map_or(HirType::Erased, |value| {
                     self.values[value.0 as usize].ty.clone()
                 });
@@ -11201,10 +11295,42 @@ impl<'a> FuncBuilder<'a> {
             bindings.insert(symbol, param);
         }
 
+        // What each `await` in the body owes this handler, written into the
+        // operation because the block a rejection leaves does not exist yet.
+        // The reason takes slot zero, matching `thrown` above; `suspend` fills
+        // it with the value the settled promise carried.
+        let rejections: Vec<(ValueId, Vec<ValueId>)> = frame
+            .rejections
+            .iter()
+            .map(|it| {
+                let mut args = Vec::with_capacity(1 + disagreed.len());
+                args.push(thrown);
+                args.extend(
+                    disagreed
+                        .iter()
+                        .map(|symbol| at(&it.bindings, *symbol).unwrap_or(thrown)),
+                );
+                (it.at, args)
+            })
+            .collect();
+        for (awaited, args) in rejections {
+            if let OpKind::Await { rejects_to, .. } = &mut self.values[awaited.0 as usize].kind {
+                *rejects_to = Some(super::Rejection {
+                    handler,
+                    args,
+                    reason_at: 0,
+                });
+            }
+        }
+
         for edge in &frame.edges {
             let mut args = Vec::with_capacity(1 + disagreed.len());
             args.push(edge.thrown);
-            args.extend(disagreed.iter().filter_map(|&symbol| at(edge, symbol)));
+            args.extend(
+                disagreed
+                    .iter()
+                    .filter_map(|&symbol| at(&edge.bindings, symbol)),
+            );
             if let Some(Terminator::Jump { args: slot, .. }) =
                 &mut self.blocks[edge.from.0 as usize].terminator
             {
@@ -19227,25 +19353,6 @@ fn refused_by_name(snapshot: &SemanticSnapshot, id: NodeId) -> Option<&'static s
         {
             found = Some("a `finally` that spans a `yield`, which is iterator closing");
         }
-        // A rejected `await` inside a `try` has to reach that `try`'s handler,
-        // and it does not: a resumption's rejection goes to one shared exit
-        // that rejects this function's own promise, because until `try`/`catch`
-        // existed that was the whole of what a rejection could do.
-        //
-        // Refused rather than left alone, because leaving it alone is a *wrong
-        // answer*: `try { await failing() } catch { return -99 }` compiled, ran,
-        // and rejected where node returns -99. The shape of the fix is known --
-        // a suspension has to record which handler it is inside, so the
-        // rejection branch can jump there with the reason instead -- and it is
-        // the same question `throw` across a call asks. See 0071.
-        if kind == Some(syntax::TRY_STATEMENT)
-            && has_catch(snapshot, child)
-            && direct_children(snapshot, child)
-                .first()
-                .is_some_and(|block| contains_kind(snapshot, *block, syntax::AWAIT_EXPRESSION))
-        {
-            found = Some("a `catch` that spans an `await`");
-        }
     });
     found
 }
@@ -19258,12 +19365,6 @@ fn has_finally(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
     parts.len() >= 2 && kind_at(snapshot, parts[parts.len() - 1]) == Some(syntax::BLOCK)
 }
 
-/// A `try` has a `catch` when its second part is not a block -- the same
-/// reading of the same node as [`has_finally`], from the other end.
-fn has_catch(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
-    let parts = direct_children(snapshot, id);
-    parts.len() >= 2 && kind_at(snapshot, parts[1]) != Some(syntax::BLOCK)
-}
 
 /// The syntax kind of a node, or `None` for a list.
 fn kind_at(snapshot: &SemanticSnapshot, id: NodeId) -> Option<u16> {

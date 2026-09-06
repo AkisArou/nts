@@ -4777,6 +4777,14 @@ bool nts_promise_is_rejected(const NtsPromise *promise) {
  * stores every rejection in one reference slot, and the machinery for saying
  * "a managed reference of unknown class" would be a type-system change bought
  * for one argument that is immediately passed back. */
+NtsValue nts_promise_reason(const NtsPromise *promise) {
+  NtsHeader *reason = promise->reason;
+  if (!reason) {
+    return nts_value_of_undefined();
+  }
+  return nts_value_of_reference(reason, nts_tag_of_reference(reason));
+}
+
 void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source) {
   if (source->state != NTS_PROMISE_REJECTED) {
     fprintf(stderr,
