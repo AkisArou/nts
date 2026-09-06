@@ -2022,17 +2022,15 @@ function isConnectionCallback(value: unknown): value is () => void {
 function readConnectOptions(input: object): ConnectOptions {
   const options: ConnectOptions = {};
 
-  if ("objectMode" in input) {
+  if ("objectMode" in input && input.objectMode) {
     throw new ERR_INVALID_ARG_VALUE("options.objectMode", input.objectMode, "is not supported");
-  }
-  if ("readableObjectMode" in input) {
+  } else if ("readableObjectMode" in input && input.readableObjectMode) {
     throw new ERR_INVALID_ARG_VALUE(
       "options.readableObjectMode",
       input.readableObjectMode,
       "is not supported",
     );
-  }
-  if ("writableObjectMode" in input) {
+  } else if ("writableObjectMode" in input && input.writableObjectMode) {
     throw new ERR_INVALID_ARG_VALUE(
       "options.writableObjectMode",
       input.writableObjectMode,
