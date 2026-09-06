@@ -639,7 +639,7 @@ impl Emitter<'_> {
                 self.global(code, pool, &op.kind, &origin)?
             }
 
-            OpKind::Call { callee, args, .. } => self.call(code, pool, &op.ty, callee, args, &origin)?,
+            OpKind::Call { callee, args, .. } => self.call(code, pool, value, &op.ty, callee, args, &origin)?,
 
             // `new; dup; invokespecial <init>()V`, and then the lowering calls
             // the TypeScript constructor as an ordinary method on the result --
@@ -2230,7 +2230,16 @@ impl Emitter<'_> {
         {
             return Ok(Placed::OnStack);
         }
-        let from = self.ty(operand).clone();
+        // A helper answer held as an `int`; see `intcall`. The conversion has
+        // to start from what the value *is* rather than from what its signature
+        // says, or the emitter pushes an `int` and pops a `double` -- which is
+        // not a wrong number but a stack that stops balancing, caught by
+        // `Code`'s own accounting at the operation rather than a block later.
+        let from = if self.narrowed.contains(&operand) {
+            HirType::Int { bits: 32, signed: true }
+        } else {
+            self.ty(operand).clone()
+        };
         self.convert(code, pool, &from, result, origin)?;
         Ok(Placed::OnStack)
     }
@@ -2862,10 +2871,16 @@ impl Emitter<'_> {
         Ok(())
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the result's own id joined seven that were already here, because \
+                  `intcall` decides the descriptor from what the answer is used as"
+    )]
     fn call(
         &mut self,
         code: &mut Code,
         pool: &mut Pool,
+        value: ValueId,
         result: &HirType,
         callee: &Callee,
         args: &[ValueId],
@@ -2928,6 +2943,20 @@ impl Emitter<'_> {
                         "toString",
                         "(I)Ljava/lang/String;",
                     );
+                    return Ok(Placed::OnStack);
+                }
+                // An index this backend holds as an `int`; see `intcall`. The
+                // descriptor is the table's with its return replaced, so the
+                // argument spelling stays the one place it is decided.
+                if self.narrowed.contains(&value)
+                    && let Some(narrow) = crate::intcall::integral_helper(name)
+                    && let Some((owner, _, descriptor)) = &found
+                {
+                    let arguments = descriptor.split(')').next().unwrap_or("(").to_owned();
+                    for &arg in args {
+                        self.load(code, pool, arg)?;
+                    }
+                    code.invoke_static(origin, pool, owner, narrow, &format!("{arguments})I"));
                     return Ok(Placed::OnStack);
                 }
                 let Some((owner, member, descriptor)) = found else {

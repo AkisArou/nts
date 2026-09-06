@@ -759,28 +759,61 @@ public final class NtsRuntime {
     private static int outside(double index, int length) {
         throw new NtsRefusal("index " + numberText(index) + " is outside [0, " + length + ")");
     }
-    public static double arrayIndexOf(double[] a, double value) {
-        for (int i = 0; i < a.length; ++i) { if (a[i] == value) { return i; } } return -1.0;
+    /**
+     * The `I` forms answer in an `int`, and the `double` forms are them widened.
+     *
+     * <p>A JavaScript `indexOf` answers a number, so `hir::runtime` types it
+     * `f64` and every backend agrees about that. On this one the answer is
+     * almost always converted straight back: `total + xs.indexOf(step) | 0`
+     * emits `d2l; l2i` at the call and `i2d` at the argument, and the loop
+     * inside returns an `int` it widened on the way out.
+     *
+     * <p>Measured on the reference rather than argued -- `benches/cases/
+     * array-methods`, `indexOf` and `lastIndexOf` returning `double` and the
+     * caller casting back, one file, same checksum: **1,426.7 ns to 1,751.2 ns,
+     * +22.8%**, which is more than the whole gap the row had.
+     *
+     * <p>The index is exact in an `int` by construction -- it is the loop
+     * counter, or -1 -- so the two forms answer the same number and the choice
+     * between them is a representation, which is the same latitude this backend
+     * takes deciding an array is a `double[]`.
+     */
+    public static int arrayIndexOfI(double[] a, double value) {
+        for (int i = 0; i < a.length; ++i) { if (a[i] == value) { return i; } } return -1;
     }
+    public static int arrayLastIndexOfI(double[] a, double value) {
+        for (int i = a.length - 1; i >= 0; --i) { if (a[i] == value) { return i; } } return -1;
+    }
+    public static double arrayIndexOf(double[] a, double value) { return arrayIndexOfI(a, value); }
     public static double arrayLastIndexOf(double[] a, double value) {
-        for (int i = a.length - 1; i >= 0; --i) { if (a[i] == value) { return i; } } return -1.0;
+        return arrayLastIndexOfI(a, value);
     }
     public static boolean arrayIncludes(double[] a, double value) {
         if (value == value) { return arrayIndexOf(a, value) >= 0; }
         for (double x : a) { if (x != x) { return true; } } return false;
     }
-    public static double arrayIndexOf(Object[] a, Object value) {
-        for (int i = 0; i < a.length; ++i) { if (a[i] == value) { return i; } } return -1.0;
+    public static int arrayIndexOfI(Object[] a, Object value) {
+        for (int i = 0; i < a.length; ++i) { if (a[i] == value) { return i; } } return -1;
     }
+    public static int arrayLastIndexOfI(Object[] a, Object value) {
+        for (int i = a.length - 1; i >= 0; --i) { if (a[i] == value) { return i; } } return -1;
+    }
+    public static double arrayIndexOf(Object[] a, Object value) { return arrayIndexOfI(a, value); }
     public static double arrayLastIndexOf(Object[] a, Object value) {
-        for (int i = a.length - 1; i >= 0; --i) { if (a[i] == value) { return i; } } return -1.0;
+        return arrayLastIndexOfI(a, value);
     }
     public static boolean arrayIncludes(Object[] a, Object value) { return arrayIndexOf(a, value) >= 0; }
+    public static int arrayIndexOfStrI(Object[] a, Object value) {
+        for (int i = 0; i < a.length; ++i) { if (java.util.Objects.equals(a[i], value)) { return i; } } return -1;
+    }
+    public static int arrayLastIndexOfStrI(Object[] a, Object value) {
+        for (int i = a.length - 1; i >= 0; --i) { if (java.util.Objects.equals(a[i], value)) { return i; } } return -1;
+    }
     public static double arrayIndexOfStr(Object[] a, Object value) {
-        for (int i = 0; i < a.length; ++i) { if (java.util.Objects.equals(a[i], value)) { return i; } } return -1.0;
+        return arrayIndexOfStrI(a, value);
     }
     public static double arrayLastIndexOfStr(Object[] a, Object value) {
-        for (int i = a.length - 1; i >= 0; --i) { if (java.util.Objects.equals(a[i], value)) { return i; } } return -1.0;
+        return arrayLastIndexOfStrI(a, value);
     }
     public static boolean arrayIncludesStr(Object[] a, Object value) { return arrayIndexOfStr(a, value) >= 0; }
     public static NtsValue arrayAtValue(double[] a, double index) {

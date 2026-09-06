@@ -217,6 +217,8 @@ pub struct Emitter<'a> {
     pub(crate) unboxed: rustc_hash::FxHashSet<ValueId>,
     /// String accumulators held as a `StringBuilder`; see `builder`.
     pub(crate) accumulated: rustc_hash::FxHashSet<ValueId>,
+    /// Helper results declared `f64` and held as an `int`; see `intcall`.
+    pub(crate) narrowed: rustc_hash::FxHashSet<ValueId>,
     /// `i32` values held in a `double` slot on this target; see `widen`.
     pub(crate) widened: rustc_hash::FxHashSet<ValueId>,
     /// `(declaring class, field name)` for fields held as a `double`.
@@ -255,6 +257,9 @@ impl<'a> Emitter<'a> {
         // the others and before slots for the same reason: one answer, read by
         // the decision and by the slot type alike.
         let accumulated = crate::builder::accumulators(func);
+        // Index helpers whose answer every use converts to an integer; see
+        // `intcall`. Beside the others and before slots, for the same reason.
+        let narrowed = crate::intcall::narrowed(func);
         let widened = plan.values_in(func);
         let widened_fields = plan.fields().clone();
         let mut param_slot = Vec::with_capacity(func.params.len());
@@ -298,6 +303,7 @@ impl<'a> Emitter<'a> {
                 continue;
             }
             let held = crate::unbox::held_as(&unboxed, value)
+                .or_else(|| crate::intcall::held_as(&narrowed, value))
                 .or_else(|| crate::builder::held_as(&accumulated, value))
                 .or_else(|| widened.contains(&value).then_some(nts_jvm_emitter::VType::Double));
             let Some(vtype) = held.or_else(|| types::vtype(types::Shape::of(program), ty)) else {
@@ -358,6 +364,7 @@ impl<'a> Emitter<'a> {
             scratch: None,
             unboxed,
             accumulated,
+            narrowed,
             widened,
             widened_fields,
             temps: FxHashMap::default(),
@@ -488,6 +495,12 @@ impl<'a> Emitter<'a> {
         // as an int. Everything that moves or operates on a value asks here.
         if self.widened.contains(&value) {
             return Ok(Kind::Double);
+        }
+        // A helper answer held as an `int`; see `intcall`. Here rather than at
+        // each mover, for the reason the widened case is here: one answer, so a
+        // value cannot be stored as an int and loaded as a double.
+        if self.narrowed.contains(&value) {
+            return Ok(Kind::Int);
         }
         types::kind(self.ty(value))
             .ok_or_else(|| refuse(self.func, &format!("a value of type {:?}", self.ty(value))))

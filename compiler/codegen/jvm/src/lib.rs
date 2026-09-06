@@ -40,6 +40,7 @@
 //! erased is refused **by name**. A backend that emits something for every
 //! input is a backend nobody can trust the output of.
 
+mod intcall;
 mod builder;
 pub mod body;
 pub mod hierarchy;
