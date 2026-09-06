@@ -22,9 +22,7 @@ function environment(name: string): string | undefined {
   return nts_process_env_has(name) ? nts_process_env(name) : undefined;
 }
 
-function environmentIsSet(name: string): boolean {
-  return nts_process_env_has(name);
-}
+const environmentIsSet = nts_process_env_has;
 
 let warnedAboutDisabledColors = false;
 
