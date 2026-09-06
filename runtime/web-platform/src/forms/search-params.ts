@@ -140,32 +140,32 @@ export class URLSearchParams {
   delete(name: string, value?: string): void {
     const key = toUSVString(name);
     const match = value === undefined ? undefined : toUSVString(value);
-    const retained: SearchParamEntry[] = [];
+    let write = 0;
     for (const item of this.list) {
       if (item[0] !== key || (match !== undefined && item[1] !== match)) {
-        retained.push(item);
+        this.list[write++] = item;
       }
     }
-    this.list = retained;
+    this.list.length = write;
   }
 
   set(name: string, value: string): void {
     const key = toUSVString(name);
     const val = toUSVString(value);
     let found = false;
-    const result: SearchParamEntry[] = [];
+    let write = 0;
     for (const item of this.list) {
       if (item[0] !== key) {
-        result.push(item);
+        this.list[write++] = item;
       } else if (!found) {
-        result.push([key, val]);
+        this.list[write++] = [key, val];
         found = true;
       }
     }
     if (!found) {
-      result.push([key, val]);
+      this.list[write++] = [key, val];
     }
-    this.list = result;
+    this.list.length = write;
   }
 
   sort(): void {

@@ -32,19 +32,19 @@ export class FormData {
     const key = toUSVString(name);
     const converted = this.convert(value, filename);
     let found = false;
-    const next: FormDataEntry[] = [];
+    let write = 0;
     for (const item of this.list) {
       if (item[0] !== key) {
-        next.push(item);
+        this.list[write++] = item;
       } else if (!found) {
-        next.push([key, converted]);
+        this.list[write++] = [key, converted];
         found = true;
       }
     }
     if (!found) {
-      next.push([key, converted]);
+      this.list[write++] = [key, converted];
     }
-    this.list = next;
+    this.list.length = write;
   }
 
   get(name: string): FormDataEntryValue | null {
@@ -80,13 +80,13 @@ export class FormData {
 
   delete(name: string): void {
     const key = toUSVString(name);
-    const retained: FormDataEntry[] = [];
+    let write = 0;
     for (const item of this.list) {
       if (item[0] !== key) {
-        retained.push(item);
+        this.list[write++] = item;
       }
     }
-    this.list = retained;
+    this.list.length = write;
   }
 
   *entries(): Generator<FormDataEntry, void, unknown> {

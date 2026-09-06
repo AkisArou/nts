@@ -260,6 +260,40 @@ test("Web collection forEach methods apply thisArg as the callback receiver", ()
     assert.deepEqual(actualCalls, expectedCalls);
   }
 });
+test("Form collection mutation remains live and ordered", () => {
+  const formFactory = (Constructor) => {
+    const value = new Constructor();
+    value.append("a", "1");
+    value.append("b", "2");
+    value.append("a", "3");
+    value.append("c", "4");
+    return value;
+  };
+  const cases = [
+    [new URLSearchParams("a=1&b=2&a=3&c=4"), new NativeURLSearchParams("a=1&b=2&a=3&c=4")],
+    [formFactory(FormData), formFactory(NativeFormData)],
+  ];
+
+  for (const [actual, expected] of cases) {
+    const setActual = actual.entries();
+    const setExpected = expected.entries();
+    assert.deepEqual(setActual.next(), setExpected.next());
+    actual.set("a", "9");
+    expected.set("a", "9");
+    assert.deepEqual([...setActual], [...setExpected]);
+    assert.deepEqual([...actual], [...expected]);
+
+    actual.append("a", "10");
+    expected.append("a", "10");
+    const deleteActual = actual.entries();
+    const deleteExpected = expected.entries();
+    assert.deepEqual(deleteActual.next(), deleteExpected.next());
+    actual.delete("b");
+    expected.delete("b");
+    assert.deepEqual([...deleteActual], [...deleteExpected]);
+    assert.deepEqual([...actual], [...expected]);
+  }
+});
 test("Headers validation, guard and raw ownership", () => {
   for (const name of ["", "a b", "x\r\ny", ":a", "é"])
     assert.throws(() => new Headers([[name, "ok"]]));

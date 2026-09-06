@@ -245,3 +245,14 @@ The upstream evidence now includes Node's pinned, unchanged
 runs, and the VM context installs the shared `Event` and `EventTarget` classes
 rather than the host globals. This raises the immutable WPT slice to 53/53 while
 the Node-host suite remains 102/102.
+
+`FormData` and `URLSearchParams` now compact their ordered entry lists in place
+for `set()` and `delete()` instead of allocating replacement arrays. Differential
+tests cover mutation through already-live iterators so the allocation change cannot
+silently alter Web collection traversal. The Node-host suite passes 103/103 and the
+pinned WPT slice remains 53/53. The live NTS check reports 208 primary refusals, 40
+cascades, zero JVM-backend refusals, and no invalid HIR. Four primaries are the exact
+compiler dependency introduced by the final-form algorithm: assigning the compacted
+length back to the private array is not lowered yet. That blocker was reported to the
+compiler lane; rebuilding a second array would hide it by restoring the avoidable
+allocation this change removes.
