@@ -1,4 +1,7 @@
 parallel/test-diff.js
 parallel/test-parse-args.mjs
+parallel/test-trace-sigint-in-worker.js
 parallel/test-uv-errno.js
 parallel/test-uv-errmap.js
+pseudo-tty/test-start-trace-sigint.js
+pseudo-tty/test-stop-trace-sigint.js

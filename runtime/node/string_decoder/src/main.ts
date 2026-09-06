@@ -98,7 +98,11 @@ export class StringDecoder {
     // Node reports the normalized name: `new StringDecoder('UTF-8').encoding`
     // is `'utf8'`.
     this.encoding = normalized;
-    this.#lastChar = Buffer.allocUnsafe(4);
+    // Pinned Node zero-initializes the native decoder state. Besides matching
+    // the observable `lastChar` view before a full character has arrived,
+    // this makes every byte deterministic if the backing allocation policy
+    // ever changes from the currently zeroed NTS typed-array storage.
+    this.#lastChar = Buffer.alloc(4);
   }
 
   write(buf: ArrayBufferView | string): string {
