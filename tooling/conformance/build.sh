@@ -41,16 +41,11 @@ fi
 # ABI-stable by design and libuv is not, so this is the one that has to match
 # the running binary exactly.
 #
-# Absent, no `-I` is added at all and `<uv.h>` comes from the system -- which is
-# what happened before the clone carried them, and is a version match by luck
-# rather than a wrong answer. Better to build and say so than to refuse.
 uv_include="${NTS_UV_INCLUDE:-$root/third_party/node/deps/uv/include}"
-if [ -f "$uv_include/uv.h" ]; then
-  uv_flag="-I$uv_include"
-else
-  uv_flag=""
-  echo "no pinned uv.h; using the system's. run tooling/bootstrap/bootstrap.sh" >&2
-fi
+[ -f "$uv_include/uv.h" ] || {
+  echo "no pinned uv.h at $uv_include; run tooling/bootstrap/bootstrap.sh, or set NTS_UV_INCLUDE" >&2
+  exit 2
+}
 
 mkdir -p "$work" "$out"
 compiler="${NTS_COMPILER:-$root/target/release/nts}"
@@ -61,21 +56,21 @@ compiler="${NTS_COMPILER:-$root/target/release/nts}"
 NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$compiler" \
   emit-c "$src/tsconfig.json" --out "$work" --napi
 
-# GAP: the C backend spells an exported function with its source name, so an
-# export colliding with a libc symbol does not compile. `basename` is handled by
-# the backend's collision list; `dirname` lives in <libgen.h>, which nothing we
-# emit includes, so it is renamed here instead. Remove both when the module-
-# qualified naming of RFC §27.1 lands.
-rename="-Ddirname=nts_node_dirname"
-
 # The module's own C, plus the C every module shares. Globbed rather than
 # listed: a module owns its bindings, so adding one is adding a file to its own
 # directory and nothing else. The previous version named a single
 # `runtime/node/c/node_all.c`, which was deleted in 299b218 and left this
 # script referring to a file that does not exist -- invisible because no module
 # lowers enough to reach the link step yet.
-module_c=$(find "$src" -maxdepth 1 -name '*.c' 2>/dev/null | tr '\n' ' ')
-shared_c=$(find "$root/runtime/node/internal" -maxdepth 1 -name '*.c' | tr '\n' ' ')
+module_c=()
+while IFS= read -r -d '' source; do
+  module_c+=("$source")
+done < <(find "$src" -maxdepth 1 -name '*.c' -print0)
+
+shared_c=()
+while IFS= read -r -d '' source; do
+  shared_c+=("$source")
+done < <(find "$root/runtime/node/internal" -maxdepth 1 -name '*.c' -print0)
 
 # `declare function` lowers to an ordinary external C call. The corresponding
 # prototypes are owned by the same binding triples as their definitions, so
@@ -102,12 +97,12 @@ case "$module" in
     ;;
 esac
 
-clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared $rename \
+clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared \
   "${binding_header_flags[@]}" \
-  -I"$work" -I"$napi" $uv_flag -I"$src" -I"$root/runtime/node/internal" \
+  -I"$work" -I"$napi" -I"$uv_include" -I"$src" -I"$root/runtime/node/internal" \
   -o "$out/$module.node" \
   "$work/program.c" "$work/nts_runtime.c" "$work/addon.c" \
-  $module_c $shared_c \
+  "${module_c[@]}" "${shared_c[@]}" \
   "${module_libraries[@]}" -luv -lm
 
 echo "$out/$module.node: $(stat -c%s "$out/$module.node") bytes"

@@ -1,5 +1,7 @@
 'use strict';
 
+// Public formatting cases from pinned upstream
+// `test-buffer-prototype-inspect.js`.
 // `util.inspect()` discovers a runtime symbol hook, which is a §13 non-goal.
 // The formatting algorithm itself remains a normal typed Buffer method.
 

@@ -50,6 +50,12 @@ const arg = (name) => {
 const withSabotage = !argv.includes("--no-sabotage");
 const withCompiles = argv.includes("--compiles");
 const withTests = !argv.includes("--no-tests");
+const compiler = join(ROOT, "target/release/nts");
+
+if (withCompiles && !existsSync(compiler)) {
+  console.error(`no compiler at ${compiler}; the compiler session must build it`);
+  process.exit(2);
+}
 
 const requested = arg("--modules");
 const modules = requested
@@ -61,26 +67,25 @@ const modules = requested
 
 /**
  * `nts hir` for one module: how many functions lowered, how many constructs
- * refused. `null` when the compiler is not built, which is not a failure --
- * this axis is optional.
+ * refused. Compiler failures propagate: reporting them as an absent optional
+ * axis would turn a backend regression into an apparently successful sweep.
  */
 function compiles(module) {
-  try {
-    const out = execFileSync(
-      join(ROOT, "target/release/nts"),
-      ["hir", join(PROFILE, module, "tsconfig.json")],
-      {
-        encoding: "utf8",
-        maxBuffer: 256 * 1024 * 1024,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") },
-      },
-    );
-    const match = /(\d+) function\(s\), (\d+) construct\(s\) refused/.exec(out);
-    return match ? { lowered: Number(match[1]), refused: Number(match[2]) } : null;
-  } catch {
-    return null;
+  const out = execFileSync(
+    compiler,
+    ["hir", join(PROFILE, module, "tsconfig.json")],
+    {
+      encoding: "utf8",
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") },
+    },
+  );
+  const match = /(\d+) function\(s\), (\d+) construct\(s\) refused/.exec(out);
+  if (match === null) {
+    throw new Error(`could not read lowering totals for ${module}`);
   }
+  return { lowered: Number(match[1]), refused: Number(match[2]) };
 }
 
 /** One module, one mode. Returns the tally the runner reported. */

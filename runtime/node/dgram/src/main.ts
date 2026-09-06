@@ -299,8 +299,6 @@ export class Socket extends EventEmitter {
   #triggerAsyncId: number;
   #contextFrame: AsyncContextFrame | undefined;
 
-  constructor(type: "udp4" | "udp6", listener?: (msg: Buffer, rinfo: RemoteInfo) => void);
-  constructor(type: SocketOptions, listener?: (msg: Buffer, rinfo: RemoteInfo) => void);
   constructor(
     type: SocketOptions | "udp4" | "udp6",
     listener?: (msg: Buffer, rinfo: RemoteInfo) => void,
@@ -1189,16 +1187,8 @@ function toBufferList(data: unknown): Buffer[] {
 }
 
 export function createSocket(
-  type: "udp4" | "udp6",
-  listener?: (msg: Buffer, rinfo: RemoteInfo) => void,
-): Socket;
-export function createSocket(
-  type: SocketOptions,
-  listener?: (msg: Buffer, rinfo: RemoteInfo) => void,
-): Socket;
-export function createSocket(
   type: SocketOptions | "udp4" | "udp6",
   listener?: (msg: Buffer, rinfo: RemoteInfo) => void,
 ): Socket {
-  return typeof type === "string" ? new Socket(type, listener) : new Socket(type, listener);
+  return new Socket(type, listener);
 }

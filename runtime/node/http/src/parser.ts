@@ -1270,6 +1270,11 @@ export function setHTTPParserPoolLimit(max: number): void {
   while (idleHTTPParsers.length > max) idleHTTPParsers.pop();
 }
 
+/** Host-module accessor for Node's private `_http_common.parsers.max` view. */
+export function getHTTPParserPoolLimit(): number {
+  return maxIdleHTTPParsers;
+}
+
 /** The index of the next LF at or after `from`, or -1. */
 function indexOfLF(data: Uint8Array, from: number): number {
   for (let i = from; i < data.length; i++) {

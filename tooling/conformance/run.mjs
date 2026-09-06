@@ -69,7 +69,7 @@ if (!moduleName) {
 }
 if (!existsSync(PARALLEL_SUITE)) {
   console.error(`no node checkout at ${PARALLEL_SUITE}; see the clone command in .gitignore`);
-  process.exit(0);
+  process.exit(2);
 }
 
 // Some of node's tests spawn `process.execPath` and assert on what the child
@@ -141,7 +141,10 @@ if (existsSync(additionalSuitesPath)) {
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith("#"))) {
     const suite = join(ROOT, "third_party/node/test", suiteName);
-    if (!existsSync(suite)) continue;
+    if (!existsSync(suite)) {
+      console.error(`no configured Node test suite at ${suite}`);
+      process.exit(2);
+    }
     if (suiteName.endsWith(".js") || suiteName.endsWith(".mjs")) {
       upstream.push({ name: suiteName, path: suite });
       continue;
@@ -189,6 +192,10 @@ if (only !== null) {
     }
     tests = byBasename;
   }
+}
+if (only !== null && tests.length === 0) {
+  console.error(`no test named ${only} for module ${moduleName}`);
+  process.exit(2);
 }
 
 /**

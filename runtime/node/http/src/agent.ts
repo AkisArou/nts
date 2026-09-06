@@ -585,4 +585,14 @@ export class Agent extends EventEmitter {
 }
 
 /** The agent `http.request` uses when the caller does not supply one. */
-export const globalAgent = new Agent({ keepAlive: true, scheduling: "lifo", timeout: 5000 });
+export let globalAgent = new Agent({ keepAlive: true, scheduling: "lifo", timeout: 5000 });
+
+/** Read the live binding when constructing Node's writable CommonJS facade. */
+export function readGlobalAgentBinding(): Agent {
+  return globalAgent;
+}
+
+/** Update the live binding through Node's writable CommonJS facade. */
+export function writeGlobalAgentBinding(agent: Agent): void {
+  globalAgent = agent;
+}

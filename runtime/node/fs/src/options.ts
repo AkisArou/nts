@@ -502,9 +502,10 @@ export function warnOnNonPortableTemplate(template: string | number[]): void {
 /**
  * The encoding, checked.
  *
- * `null` means "give me the bytes", which node answers with a `Buffer`. There
- * is no `node:buffer` yet, so that request is refused with the reason rather
- * than answered with a string that would silently differ.
+ * Callers that accept `null` as "give me bytes" handle that branch before
+ * reaching this helper. Reaching it means the operation specifically needs a
+ * text codec, so absence is an invalid encoding rather than an implicit UTF-8
+ * choice.
  */
 export function requireTextEncoding(
   encoding: string | null | undefined,

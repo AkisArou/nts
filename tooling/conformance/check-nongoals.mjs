@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Audit runtime/node TypeScript for constructs excluded by
-// docs/conformance/typescript.md section 13.
+// docs/conformance/typescript.md section 13 and for unchecked type escapes.
 //
 //   node tooling/conformance/check-nongoals.mjs
 //   node tooling/conformance/check-nongoals.mjs async_hooks
@@ -41,6 +41,12 @@ const objectMetaOperations = new Set([
 ]);
 
 const symbolHooks = new Set(["hasInstance", "species", "toPrimitive", "unscopables"]);
+const assertionEscapeTypes = new Set([
+  SyntaxKind.AnyKeyword,
+  SyntaxKind.NeverKeyword,
+  SyntaxKind.ObjectKeyword,
+  SyntaxKind.UnknownKeyword,
+]);
 
 function tsFiles(directory) {
   const files = [];
@@ -113,6 +119,26 @@ function member(tokens, index) {
 
 function reason(tokens, index) {
   const token = tokens[index];
+  const nextKind = tokens[index + 1]?.kind;
+  const keywordIsMemberName =
+    nextKind === SyntaxKind.OpenParenToken ||
+    nextKind === SyntaxKind.ColonToken ||
+    (nextKind === SyntaxKind.QuestionToken &&
+      tokens[index + 2]?.kind === SyntaxKind.ColonToken);
+  if (
+    token.kind === SyntaxKind.AnyKeyword &&
+    tokens[index - 1]?.kind !== SyntaxKind.DotToken &&
+    tokens[index - 1]?.kind !== SyntaxKind.AsKeyword &&
+    !keywordIsMemberName
+  ) {
+    return "any erases the static contract at this boundary";
+  }
+  if (
+    token.kind === SyntaxKind.AsKeyword &&
+    assertionEscapeTypes.has(tokens[index + 1]?.kind)
+  ) {
+    return `as ${tokens[index + 1].text} is an unchecked type escape`;
+  }
   if (isIdentifier(token, "__proto__")) {
     return "__proto__ depends on prototype mutation";
   }
@@ -175,6 +201,15 @@ for (const file of roots.flatMap(tsFiles).sort()) {
   const text = readFileSync(file, "utf8");
   const tokens = scan(text);
   const lineStarts = computeLineStarts(text);
+  for (const match of text.matchAll(/@ts-(?:expect-error|ignore|nocheck)\b/g)) {
+    const start = lineAndColumn(lineStarts, match.index);
+    findings.push({
+      file: relative(ROOT, file),
+      line: start.line,
+      column: start.column,
+      why: `${match[0]} suppresses the type contract`,
+    });
+  }
   for (let index = 0; index < tokens.length; index++) {
     const why = reason(tokens, index);
     if (why) {
@@ -195,9 +230,9 @@ for (const finding of findings) {
 
 if (findings.length === 0) {
   console.log(
-    `section 13 audit passed for ${requested.length === 0 ? "runtime/node" : requested.join(", ")}`,
+    `runtime contract audit passed for ${requested.length === 0 ? "runtime/node" : requested.join(", ")}`,
   );
 } else {
-  console.error(`${findings.length} section 13 violation(s)`);
+  console.error(`${findings.length} runtime contract violation(s)`);
   process.exitCode = 1;
 }

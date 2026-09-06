@@ -1,6 +1,9 @@
 // Flags: --experimental-stream-iter
 'use strict';
 
+// Focused ownership cases from pinned upstream
+// `test-stream-iter-{push-writer,writable-interop,share-coverage}.js` plus
+// `lib/internal/streams/iter/duplex.js`, whose disposer has no direct fixture.
 const common = require('../common');
 const assert = require('assert');
 const { broadcast, duplex, text } = require('stream/iter');

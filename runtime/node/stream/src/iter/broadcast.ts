@@ -705,8 +705,6 @@ export interface BroadcastLike {
   cancel(reason?: unknown): void;
 }
 
-class ProtocolWriterPlaceholder {}
-
 export interface BroadcastPair<
   Writer extends object = BroadcastWriter,
   Channel extends object = BroadcastController,
@@ -757,7 +755,7 @@ export interface BroadcastProtocolSource<Result extends object> {
 function broadcastFrom<Result extends object>(
   input: BroadcastProtocolSource<Result>,
   options?: unknown,
-): BroadcastPair<ProtocolWriterPlaceholder, Result>;
+): BroadcastPair<Record<string, never>, Result>;
 function broadcastFrom(
   input: unknown,
   options?: unknown,
@@ -775,7 +773,7 @@ function broadcastFrom(
         result,
       );
     }
-    return { writer: new ProtocolWriterPlaceholder(), broadcast: result };
+    return { writer: {}, broadcast: result };
   }
 
   const source = from(input);

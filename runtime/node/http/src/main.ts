@@ -9,6 +9,7 @@ import {
   DEFAULT_MAX_HEADER_SIZE,
   HTTPParser,
   METHODS,
+  getHTTPParserPoolLimit,
   methods,
   setHTTPParserPoolLimit,
 } from "./parser.ts";
@@ -22,7 +23,12 @@ import {
   validateHeaderValue,
 } from "./outgoing.ts";
 import { Server, createServer } from "./server.ts";
-import { Agent, globalAgent } from "./agent.ts";
+import {
+  Agent,
+  globalAgent,
+  readGlobalAgentBinding,
+  writeGlobalAgentBinding,
+} from "./agent.ts";
 import { ClientRequest, get, request } from "./client.ts";
 import { STATUS_CODES } from "./status.ts";
 import { validateInteger } from "../../internal/validators.ts";
@@ -150,10 +156,13 @@ export {
   checkIsHttpToken,
   createServer,
   get,
+  getHTTPParserPoolLimit,
   globalAgent,
   methods,
   request,
+  readGlobalAgentBinding,
   validateHeaderName,
   validateHeaderValue,
+  writeGlobalAgentBinding,
   DEFAULT_MAX_HEADER_SIZE as maxHeaderSize,
 };

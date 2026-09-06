@@ -17,9 +17,12 @@ const hostSetImmediate = globalThis.setImmediate;
 
 const NANOSECONDS_PER_MILLISECOND = 1_000_000n;
 
-// The same expression the module's `host.now()` uses, so that a timer's start
-// and the instant it is judged against come from one clock.
+// JavaScript cannot reach Node's private `getLibuvNow()` binding. Keep that
+// host-lane limitation here: shipped runtimes implement `nts_timers_now` with
+// the active loop's cached `uv_now()`, while this test adapter uses the same
+// monotonic clock for both enrolment and delivery.
 const now = () => Number(process.hrtime.bigint() / NANOSECONDS_PER_MILLISECOND);
+globalThis.nts_timers_now = now;
 
 let onTimers;
 let onImmediates;

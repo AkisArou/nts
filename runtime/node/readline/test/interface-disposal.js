@@ -1,5 +1,8 @@
 'use strict';
 
+// The disposal contract from pinned
+// `lib/internal/readline/interface.js:Interface[SymbolDispose]`; the upstream
+// readline fixtures do not exercise that public method.
 const common = require('../common');
 const readline = require('readline');
 const readlinePromises = require('readline/promises');

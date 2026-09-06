@@ -1,5 +1,8 @@
 'use strict';
 
+// The disposal contract from pinned `lib/net.js`'s
+// `BoundSocket[SymbolDispose]`; its upstream fixture covers close and adoption
+// but does not exercise the public disposer.
 const common = require('../common');
 const assert = require('assert');
 const net = require('net');

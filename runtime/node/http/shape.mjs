@@ -1,5 +1,4 @@
 const kHighWaterMark = Symbol("kHighWaterMark");
-let maxIdleHTTPParsers = 1000;
 
 function callableConstructor(Class, name) {
   const callable = function (...args) {
@@ -107,33 +106,13 @@ function requestOptions(options, preserveUrlLocation = false) {
   return shaped;
 }
 
-function optionsSupplyUrlLocation(options) {
-  return (
+function invokeRequest(request, options, optionsOrCallback, callback) {
+  const preserveUrlLocation =
     typeof options === "string" ||
     options instanceof URL ||
-    (options !== null && typeof options === "object" && typeof options.href === "string")
-  );
-}
-
-function supplyGlobalAgent(options, globalAgent) {
-  if (options === null || typeof options !== "object") return;
-  if (
-    (options.agent === undefined || options.agent === null) &&
-    options.createConnection === undefined
-  ) {
-    options.agent = globalAgent;
-  }
-}
-
-function requestWithGlobalAgent(request, globalAgent, options, optionsOrCallback, callback) {
-  const preserveUrlLocation = optionsSupplyUrlLocation(options);
+    (options !== null && typeof options === "object" && typeof options.href === "string");
   const first = requestOptions(options);
   const second = requestOptions(optionsOrCallback, preserveUrlLocation);
-  if (typeof first === "string" && (second === undefined || typeof second === "function")) {
-    return request(first, { agent: globalAgent }, typeof second === "function" ? second : callback);
-  }
-  if (typeof first === "string") supplyGlobalAgent(second, globalAgent);
-  else supplyGlobalAgent(first, globalAgent);
   return request(first, second, callback);
 }
 
@@ -162,35 +141,27 @@ export function shape(exports) {
   nullPrototypeResult(exports.OutgoingMessage, "getHeaders");
   const http = { ...exports };
   delete http.default;
-  let globalAgent = exports.globalAgent;
+  delete http.getHTTPParserPoolLimit;
+  delete http.readGlobalAgentBinding;
+  delete http.writeGlobalAgentBinding;
   Object.defineProperty(http, "globalAgent", {
     configurable: true,
     enumerable: true,
     get() {
-      return globalAgent;
+      return exports.readGlobalAgentBinding();
     },
     set(value) {
-      globalAgent = value;
+      exports.writeGlobalAgentBinding(value);
     },
   });
   http.Agent = callableConstructor(exports.Agent, "Agent");
   http.ClientRequest = requestConstructor(exports.ClientRequest);
   http.Server = callableConstructor(exports.Server, "Server");
-  http.setMaxIdleHTTPParsers = (max) => {
-    exports.setMaxIdleHTTPParsers(max);
-    maxIdleHTTPParsers = max;
-  };
   http.request = (options, optionsOrCallback, callback) => {
-    return requestWithGlobalAgent(
-      exports.request,
-      globalAgent,
-      options,
-      optionsOrCallback,
-      callback,
-    );
+    return invokeRequest(exports.request, options, optionsOrCallback, callback);
   };
   http.get = (options, optionsOrCallback, callback) => {
-    return requestWithGlobalAgent(exports.get, globalAgent, options, optionsOrCallback, callback);
+    return invokeRequest(exports.get, options, optionsOrCallback, callback);
   };
   return http;
 }
@@ -272,14 +243,16 @@ export function internals(exports) {
   return {
     _http_agent: {
       Agent: exports.Agent,
-      globalAgent: exports.globalAgent,
+      get globalAgent() {
+        return exports.readGlobalAgentBinding();
+      },
     },
     _http_common: {
       HTTPParser,
       methods: exports.methods,
       parsers: {
         get max() {
-          return maxIdleHTTPParsers;
+          return exports.getHTTPParserPoolLimit();
         },
         alloc() {
           return new HTTPParser();

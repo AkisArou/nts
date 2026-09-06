@@ -18,8 +18,6 @@
 //   - `checkpoint` runs ticks and microtasks between callbacks, which node
 //     does between every timer in a batch and is observable from user code.
 
-import { now as monotonicNanoseconds } from "../../internal/time.ts";
-
 /**
  * Install the two drains. Called once, when this module is first evaluated.
  *
@@ -75,6 +73,9 @@ declare function nts_timers_toggle_immediate_ref(hasRefs: boolean): void;
  */
 declare function nts_checkpoint(): void;
 
+/** The active event loop's cached millisecond clock (`uv_now`). */
+declare function nts_timers_now(): number;
+
 export const install = nts_timers_install;
 export const schedule = nts_timers_schedule;
 export const cancel = nts_timers_cancel;
@@ -82,24 +83,4 @@ export const scheduleImmediate = nts_timers_schedule_immediate;
 export const toggleRef = nts_timers_toggle_ref;
 export const toggleImmediateRef = nts_timers_toggle_immediate_ref;
 export const checkpoint = nts_checkpoint;
-
-const NANOSECONDS_PER_MILLISECOND = 1_000_000n;
-
-/**
- * The clock every expiry is measured against, in whole milliseconds.
- *
- * Whole because the loop underneath cannot do better: a delay becomes an
- * integer number of milliseconds before any host sees it, so a list keyed by
- * `1.5` and a list keyed by `1` would be two lists that expire at the same
- * instant. Truncating here keeps the key and the wakeup in the same units.
- *
- * Node reads the loop's *cached* time, which is taken once per iteration and
- * does not move while callbacks run; this reads the clock. The difference is
- * that two timers enrolled either side of a slow callback get start times a
- * few milliseconds apart where node's would be equal. They still land in the
- * same duration list and still expire in enrolment order, so what it changes
- * is the recorded `_idleStart`, not the ordering.
- */
-export function now(): number {
-  return Number(monotonicNanoseconds() / NANOSECONDS_PER_MILLISECOND);
-}
+export const now = nts_timers_now;
