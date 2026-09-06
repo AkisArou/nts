@@ -1136,10 +1136,6 @@ fn signal_of(status: std::process::ExitStatus) -> Option<i32> {
 /// so a case that takes too long stays what it was: not reached, and not a
 /// verdict. An `abort()` *after* a refusal keeps its refusal line and stays a
 /// decline, which is what every bounds check does.
-fn stopped(signal: Option<i32>, complaint: &str) -> Stopped {
-    stopped_with(None, signal, complaint)
-}
-
 /// `timeout`'s own exit status when it kills the child. Not a signal on this
 /// side -- the shell tool exits with it -- so nothing in `stopped` saw it.
 const TIMED_OUT: i32 = 124;
@@ -2025,7 +2021,7 @@ mod classification {
     #[test]
     fn a_class_that_will_not_verify_is_a_defect() {
         assert!(
-            matches!(stopped(None, VERIFY_ERROR), Stopped::Defect(_)),
+            matches!(stopped_with(None, None, VERIFY_ERROR), Stopped::Defect(_)),
             "a VerifyError read as a declined case, which is how              `examples/fluent-this` reported seventeen bounds failures about a              file with no subscript in it"
         );
     }
@@ -2047,7 +2043,7 @@ mod classification {
         ] {
             let complaint = format!("Exception in thread \"main\" java.lang.{name}: nts/gen/Program\n");
             assert!(
-                matches!(stopped(None, &complaint), Stopped::Defect(_)),
+                matches!(stopped_with(None, None, &complaint), Stopped::Defect(_)),
                 "{name} read as a declined case"
             );
         }
@@ -2060,10 +2056,10 @@ mod classification {
         // exits non-zero, and that is the normal, expected outcome for a pool
         // value outside a parameter's proved type.
         assert!(matches!(
-            stopped(None, "nts: refused: index 5 is outside [0, 3)\n"),
+            stopped_with(None, None, "nts: refused: index 5 is outside [0, 3)\n"),
             Stopped::Declined
         ));
-        assert!(matches!(stopped(None, "nts: out of memory\n"), Stopped::Declined));
+        assert!(matches!(stopped_with(None, None, "nts: out of memory\n"), Stopped::Declined));
     }
 }
 
@@ -2083,22 +2079,27 @@ mod tests {
         // A bounds check: it refuses, prints, then aborts. SIGABRT with a
         // refusal line is the program keeping the promise its `!` made.
         assert_eq!(
-            stopped(Some(6), "nts: refused: index 9 is outside [0, 3)\n"),
+            stopped_with(None, Some(6), "nts: refused: index 9 is outside [0, 3)\n"),
             Stopped::Declined,
         );
         // Out of the memory this harness allowed: not reached, not a verdict.
         assert_eq!(
-            stopped(Some(9), "nts: out of memory\n"),
+            stopped_with(None, Some(9), "nts: out of memory\n"),
             Stopped::Declined,
         );
         // A timeout. `timeout` exits of its own accord, so there is no signal
         // on the child and nothing was printed.
-        assert_eq!(stopped(None, ""), Stopped::Declined);
+        assert_eq!(stopped_with(None, None, ""), Stopped::Declined);
+        // The same empty complaint, with `timeout`'s exit code in front of it.
+        // These two lines are the whole bug: a run that said nothing because it
+        // refused and a run that said nothing because it was killed were one
+        // verdict, and the second is not a verdict at all.
+        assert_eq!(stopped_with(Some(124), None, ""), Stopped::TimedOut);
         // A segfault that printed nothing. This is the case that was missing.
-        assert!(matches!(stopped(Some(11), ""), Stopped::Defect(_)));
+        assert!(matches!(stopped_with(None, Some(11), ""), Stopped::Defect(_)));
         // And one that named itself is a defect however it died.
         assert!(matches!(
-            stopped(None, "nts: `x` was read before its declaration ran\n"),
+            stopped_with(None, None, "nts: `x` was read before its declaration ran\n"),
             Stopped::Defect(_)
         ));
     }
@@ -2126,7 +2127,7 @@ mod tests {
             "\tat nts.gen.Program.unassignedRef(Program.java)",
         ]
         .join("\n");
-        let Stopped::Defect(said) = stopped(None, &trace) else {
+        let Stopped::Defect(said) = stopped_with(None, None, &trace) else {
             panic!("a thrown exception is not a declined case");
         };
         // The *cause*, not the reflective wrapper. `InvocationTargetException`
@@ -2161,7 +2162,7 @@ mod tests {
             "\tat nts.rt.Check.bounds(Check.java:64)",
         ]
         .join("\n");
-        assert_eq!(stopped(None, &trace), Stopped::Declined);
+        assert_eq!(stopped_with(None, None, &trace), Stopped::Declined);
     }
 
     /// And running out of heap is not reached, not a verdict.
@@ -2177,7 +2178,7 @@ mod tests {
             "\tat nts.gen.Program.build(Program.java)",
         ]
         .join("\n");
-        assert_eq!(stopped(None, &trace), Stopped::Declined);
+        assert_eq!(stopped_with(None, None, &trace), Stopped::Declined);
     }
 
     /// And a refusal that happens to mention a frame is still a refusal.
@@ -2190,7 +2191,7 @@ mod tests {
     #[test]
     fn a_refusal_is_not_a_stack_trace() {
         assert_eq!(
-            stopped(
+            stopped_with(None, 
                 Some(6),
                 "nts: refused: index 9 is outside [0, 3) at /var/cat(1)/x
 "
