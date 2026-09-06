@@ -27,7 +27,12 @@ import {
   tee,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/streams/readable.js";
 import { BufferedReader } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/io.js";
-import { parseChunkSize } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/parser.js";
+import {
+  contentLength,
+  hasToken,
+  parseChunkSize,
+  readHead,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/parser.js";
 import {
   toClampedUnsignedShort,
   toUSVString,
@@ -592,6 +597,7 @@ test("HTTP chunk extensions follow the RFC 9112 grammar", () => {
     ["a;token=value", 10],
     ['A \t; \tquoted \t= \t"value\\\"part" ; flag', 10],
     ["ffffffff", 4_294_967_295],
+    ["1fffffffffffff", Number.MAX_SAFE_INTEGER],
   ]) {
     assert.equal(parseChunkSize(line), expected);
   }
@@ -605,9 +611,53 @@ test("HTTP chunk extensions follow the RFC 9112 grammar", () => {
     '1;name="unterminated',
     '1;name="value"junk',
     "1 trailing",
+    "20000000000000",
   ]) {
     assert.throws(() => parseChunkSize(line), undefined, line);
   }
+});
+test("HTTP response heads parse incrementally without relaxing wire grammar", async () => {
+  const wire = Buffer.from(
+    "HTTP/1.1 206 Partial Content\r\nX-A:  one\t\r\nSet-Cookie: a=1\r\nSet-Cookie: b=2\r\n\r\n",
+    "latin1",
+  );
+  for (let split = 1; split <= wire.length; split++) {
+    assert.deepEqual(await readHead(readerFrom(wire, split)), {
+      version: "1.1",
+      status: 206,
+      statusText: "Partial Content",
+      headers: [
+        ["x-a", "one"],
+        ["set-cookie", "a=1"],
+        ["set-cookie", "b=2"],
+      ],
+    });
+  }
+
+  for (const line of [
+    "HTTP/1.1 200",
+    "HTTP/1.2 200 OK",
+    "HTTP/1.1 20x OK",
+    "HTTP/1.1 099 Continue",
+    "HTTP/1.1 600 Nope",
+  ]) {
+    await assert.rejects(readHead(readerFrom(Buffer.from(line + "\r\n\r\n", "latin1"), 1)));
+  }
+});
+test("Content-Length and connection token parsing is strict and allocation-bounded", () => {
+  assert.equal(contentLength(new Headers()), null);
+  assert.equal(contentLength(new Headers([["content-length", "00042\t, 42"]])), 42);
+  assert.equal(
+    contentLength(new Headers([["content-length", String(Number.MAX_SAFE_INTEGER)]])),
+    Number.MAX_SAFE_INTEGER,
+  );
+  for (const value of ["", "+1", "1.0", "1 2", "1,", "1, 2", "9007199254740992"]) {
+    assert.throws(() => contentLength(new Headers([["content-length", value]])), undefined, value);
+  }
+
+  const connection = new Headers([["connection", "upgrade, Keep-Alive"]]);
+  assert.equal(hasToken(connection, "connection", "keep-alive"), true);
+  assert.equal(hasToken(connection, "connection", "close"), false);
 });
 test.after(() => api.close());
 test("Header HTTP whitespace normalization, non-breaking space and embedded newline rejection", () => {
