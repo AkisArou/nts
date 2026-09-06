@@ -1,7 +1,7 @@
 import { ReadableStream, bytesStream, tee, transfer } from "../streams/readable.ts";
 import { concatBytes, decodeUTF8, utf8 } from "../core/encoding.ts";
 import { LimitError } from "../core/errors.ts";
-import type { RandomSource } from "../core/platform.ts";
+import type { RandomSource } from "../provider/ports.ts";
 import { Blob } from "../forms/blob.ts";
 import { FormData } from "../forms/form-data.ts";
 import { URLSearchParams } from "../forms/search-params.ts";

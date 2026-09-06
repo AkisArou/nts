@@ -8,7 +8,7 @@ import type {
   ConnectAddress,
   Scheduler,
   SocketConnector,
-} from "../core/platform.ts";
+} from "../provider/ports.ts";
 import { BufferedReader } from "./io.ts";
 
 export interface PoolOptions {

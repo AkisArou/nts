@@ -1,5 +1,5 @@
 import { asciiBytes } from "../core/encoding.ts";
-import type { RandomSource } from "../core/platform.ts";
+import type { RandomSource } from "../provider/ports.ts";
 import { Headers } from "../fetch/headers.ts";
 import { hasToken } from "../http1/parser.ts";
 import { ProtocolError } from "../core/errors.ts";

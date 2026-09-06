@@ -1,8 +1,10 @@
-import type { AbortSignal } from "./abort.ts";
+import type { AbortSignal } from "../core/abort.ts";
 
+/** A provider-owned cancellation token. Repeated cancellation is harmless. */
 export interface CancelHandle {
   cancel(): void;
 }
+
 /** enqueue MUST enqueue a task, never invoke inline. Timer cancellation is idempotent. */
 export interface Scheduler {
   enqueue(task: () => void): void;
@@ -29,6 +31,7 @@ export interface URLRecord {
   readonly username: string;
   readonly password: string;
 }
+
 /** Bind the project's WHATWG URL implementation here, not java.net.URI. */
 export interface URLParser {
   parse(input: string, base?: string): URLRecord;
@@ -40,6 +43,7 @@ export interface ConnectAddress {
   readonly secure: boolean;
   readonly connectTimeoutMs: number;
 }
+
 /**
  * One concurrent read and one concurrent write are allowed. No overlapping reads
  * or overlapping writes. read() transfers ownership of a nonempty chunk of at

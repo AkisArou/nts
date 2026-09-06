@@ -1,5 +1,5 @@
 import type { AbortSignal } from "../core/abort.ts";
-import type { URLRecord } from "../core/platform.ts";
+import type { URLRecord } from "../provider/ports.ts";
 import type { ReadableStream } from "../streams/readable.ts";
 import type { HeaderEntry } from "./headers.ts";
 

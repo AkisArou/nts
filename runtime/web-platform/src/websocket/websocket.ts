@@ -4,7 +4,7 @@ import type { EventHandlerSlot } from "../core/events.ts";
 import { Event, EventTarget, MessageEvent, CloseEvent } from "../core/events.ts";
 import { DOMException, LimitError } from "../core/errors.ts";
 import { utf8 } from "../core/encoding.ts";
-import type { Scheduler, URLParser, URLRecord } from "../core/platform.ts";
+import type { Scheduler, URLParser, URLRecord } from "../provider/ports.ts";
 import { isToken } from "../fetch/headers.ts";
 import { Blob } from "../forms/blob.ts";
 import type {

@@ -1,4 +1,4 @@
-import type { ByteConnection } from "../core/platform.ts";
+import type { ByteConnection } from "../provider/ports.ts";
 import { ProtocolError, LimitError } from "../core/errors.ts";
 import { concatBytes, latin1 } from "../core/encoding.ts";
 export async function writeAll(connection: ByteConnection, data: Uint8Array): Promise<void> {

@@ -29,6 +29,7 @@ runtime/web-platform/src/core           shared Web foundations
 runtime/web-platform/src/fetch          Fetch objects, body and policy algorithms
 runtime/web-platform/src/forms          Blob/form/multipart algorithms pending dedup
 runtime/web-platform/src/http1          portable deterministic HTTP/1 reference engine
+runtime/web-platform/src/provider       provider ports and environment-owned assembly
 runtime/web-platform/src/streams        canonical Web Streams implementation
 runtime/web-platform/src/websocket      WebSocket API, protocol and reference engine
 

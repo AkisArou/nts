@@ -2,7 +2,7 @@ import { Body, BodyState, standardBodyPolicy } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers } from "./headers.ts";
 import type { HeadersInit, HeaderEntry } from "./headers.ts";
-import type { RandomSource, URLParser } from "../core/platform.ts";
+import type { RandomSource, URLParser } from "../provider/ports.ts";
 import type { ReadableStream } from "../streams/readable.ts";
 
 export interface ResponseInit {

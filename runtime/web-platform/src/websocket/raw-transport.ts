@@ -9,7 +9,7 @@ import type {
   RandomSource,
   Scheduler,
   SocketConnector,
-} from "../core/platform.ts";
+} from "../provider/ports.ts";
 import { addressOf } from "../http1/transport.ts";
 import { BufferedReader, writeAll } from "../http1/io.ts";
 import { defaultHeadLimits, readHead, validateWireValue } from "../http1/parser.ts";

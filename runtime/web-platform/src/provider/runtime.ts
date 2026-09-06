@@ -1,16 +1,16 @@
-import type { PlatformPrimitives } from "./core/platform.ts";
-import type { BodyPolicy } from "./fetch/body.ts";
-import { FetchClient } from "./fetch/fetch.ts";
-import type { RequestContext, RequestInit } from "./fetch/request.ts";
-import { Request } from "./fetch/request.ts";
-import type { Response } from "./fetch/response.ts";
-import type { ContentDecoder, FetchTransport } from "./fetch/transport.ts";
-import { Http1Transport } from "./http1/transport.ts";
-import type { Http1Options } from "./http1/transport.ts";
-import { RawWebSocketTransport } from "./websocket/raw-transport.ts";
-import type { RawWebSocketOptions } from "./websocket/raw-transport.ts";
-import type { WebSocketTransport } from "./websocket/transport.ts";
-import { WebSocket } from "./websocket/websocket.ts";
+import type { BodyPolicy } from "../fetch/body.ts";
+import { FetchClient } from "../fetch/fetch.ts";
+import type { RequestContext, RequestInit } from "../fetch/request.ts";
+import { Request } from "../fetch/request.ts";
+import type { Response } from "../fetch/response.ts";
+import type { ContentDecoder, FetchTransport } from "../fetch/transport.ts";
+import { Http1Transport } from "../http1/transport.ts";
+import type { Http1Options } from "../http1/transport.ts";
+import { RawWebSocketTransport } from "../websocket/raw-transport.ts";
+import type { RawWebSocketOptions } from "../websocket/raw-transport.ts";
+import type { WebSocketTransport } from "../websocket/transport.ts";
+import { WebSocket } from "../websocket/websocket.ts";
+import type { PlatformPrimitives } from "./ports.ts";
 
 export interface WebPlatformOptions {
   baseURL?: string;
@@ -113,7 +113,6 @@ function readBodyPolicy(input: Partial<BodyPolicy> | undefined): BodyPolicy {
   };
 
   validateByteLimit(policy.maxConsumeBytes);
-
   validateByteLimit(policy.maxCloneBufferBytes);
   return policy;
 }

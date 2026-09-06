@@ -1,7 +1,7 @@
 import { checkNetworkPort } from "../core/ports.ts";
 import { AbortSignal } from "../core/abort.ts";
 import { networkError } from "../core/errors.ts";
-import type { URLRecord } from "../core/platform.ts";
+import type { URLRecord } from "../provider/ports.ts";
 import { ReadableStream } from "../streams/readable.ts";
 import { Request, validateNetworkURL } from "./request.ts";
 import type { RequestInit, RequestContext } from "./request.ts";

@@ -1,5 +1,5 @@
 import { ProtocolError, LimitError } from "../core/errors.ts";
-import type { RandomSource } from "../core/platform.ts";
+import type { RandomSource } from "../provider/ports.ts";
 import type { BufferedReader } from "../http1/io.ts";
 import { decodeUTF8, utf8 } from "../core/encoding.ts";
 

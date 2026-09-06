@@ -1,5 +1,5 @@
 import { AbortSignal } from "../core/abort.ts";
-import type { RandomSource, URLParser, URLRecord } from "../core/platform.ts";
+import type { RandomSource, URLParser, URLRecord } from "../provider/ports.ts";
 import { Body, BodyState } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers, isToken } from "./headers.ts";
