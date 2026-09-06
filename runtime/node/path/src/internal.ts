@@ -63,7 +63,7 @@ export function normalizeString(
           res.charCodeAt(res.length - 2) !== CHAR_DOT
         ) {
           if (res.length > 2) {
-            const lastSlashIndex = res.lastIndexOf(separator);
+            const lastSlashIndex = res.length - lastSegmentLength - 1;
             if (lastSlashIndex === -1) {
               res = "";
               lastSegmentLength = 0;
