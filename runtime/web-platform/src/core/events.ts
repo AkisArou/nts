@@ -1,10 +1,25 @@
+import type { AbortSignal } from "./abort.ts";
+import { abortSignalBrand } from "./abort-brand.ts";
+import type { AbortSignalOperations } from "./abort-brand.ts";
 import { DOMException } from "./errors.ts";
-import { toUnsignedLong, toUnsignedShort, toUSVString } from "./webidl.ts";
+import { coerceToDOMString, coerceToUSVString, toUnsignedLong, toUnsignedShort } from "./webidl.ts";
 
 export interface EventInit {
   bubbles?: boolean;
   cancelable?: boolean;
   composed?: boolean;
+}
+
+function validateDictionary(init: unknown, name: string): void {
+  if (typeof init !== "object" && typeof init !== "function") {
+    throw new TypeError(name + " must be a dictionary");
+  }
+}
+
+function requireArguments(args: readonly unknown[], required: number, operation: string): void {
+  if (args.length < required) {
+    throw new TypeError(operation + " requires at least " + required + " argument(s)");
+  }
 }
 
 export class Event {
@@ -14,9 +29,9 @@ export class Event {
   static readonly BUBBLING_PHASE = 3;
 
   private eventType: string;
-  private eventBubbles: boolean;
-  private eventCancelable: boolean;
-  private readonly eventComposed: boolean;
+  private eventBubbles = false;
+  private eventCancelable = false;
+  private eventComposed = false;
   private eventTarget: EventTarget | null = null;
   private eventCurrentTarget: EventTarget | null = null;
   private phase = Event.NONE;
@@ -27,11 +42,18 @@ export class Event {
   private immediateStopped = false;
   private passiveListener = false;
 
-  constructor(type: string, init: EventInit = {}) {
-    this.eventType = type;
-    this.eventBubbles = init.bubbles ? true : false;
-    this.eventCancelable = init.cancelable ? true : false;
-    this.eventComposed = init.composed ? true : false;
+  constructor(...args: [type: string, init?: EventInit]) {
+    requireArguments(args, 1, "Event constructor");
+    const type = args[0];
+    const init = args[1];
+    const convertedType = coerceToDOMString(type);
+    this.eventType = convertedType;
+    if (init !== undefined && init !== null) {
+      validateDictionary(init, "Event init");
+      this.eventBubbles = init.bubbles ? true : false;
+      this.eventCancelable = init.cancelable ? true : false;
+      this.eventComposed = init.composed ? true : false;
+    }
   }
 
   get type(): string {
@@ -124,8 +146,12 @@ export class Event {
     this.immediateStopped = true;
   }
 
-  initEvent(type: string, bubbles = false, cancelable = false): void {
-    this.initialize(type, bubbles, cancelable);
+  initEvent(...args: [type: string, bubbles?: boolean, cancelable?: boolean]): void {
+    requireArguments(args, 1, "Event.initEvent");
+    const type = args[0];
+    const bubbles = args[1] ?? false;
+    const cancelable = args[2] ?? false;
+    this.initialize(coerceToDOMString(type), bubbles ? true : false, cancelable ? true : false);
   }
 
   protected initialize(type: string, bubbles: boolean, cancelable: boolean): boolean {
@@ -138,6 +164,16 @@ export class Event {
     this.eventBubbles = bubbles ? true : false;
     this.eventCancelable = cancelable ? true : false;
     return true;
+  }
+
+  protected applyConvertedEventInit(
+    bubbles: boolean,
+    cancelable: boolean,
+    composed: boolean,
+  ): void {
+    this.eventBubbles = bubbles;
+    this.eventCancelable = cancelable;
+    this.eventComposed = composed;
   }
 
   /** @internal */ begin(target: EventTarget, trusted: boolean): void {
@@ -180,9 +216,22 @@ export interface CustomEventInit<T> extends EventInit {
 export class CustomEvent<T = unknown> extends Event {
   private customDetail: T | null;
 
-  constructor(type: string, init: CustomEventInit<T> = {}) {
-    super(type, init);
-    this.customDetail = init.detail === undefined ? null : init.detail;
+  constructor(...args: [type: string, init?: CustomEventInit<T>]) {
+    requireArguments(args, 1, "CustomEvent constructor");
+    const type = args[0];
+    const init = args[1];
+    super(type);
+    if (init === undefined || init === null) {
+      this.customDetail = null;
+    } else {
+      validateDictionary(init, "CustomEvent init");
+      const bubbles = init.bubbles ? true : false;
+      const cancelable = init.cancelable ? true : false;
+      const composed = init.composed ? true : false;
+      const detail = init.detail;
+      this.applyConvertedEventInit(bubbles, cancelable, composed);
+      this.customDetail = detail === undefined ? null : detail;
+    }
   }
 
   get detail(): T | null {
@@ -190,12 +239,19 @@ export class CustomEvent<T = unknown> extends Event {
   }
 
   initCustomEvent(
-    type: string,
-    bubbles = false,
-    cancelable = false,
-    detail: T | null = null,
+    ...args: [type: string, bubbles?: boolean, cancelable?: boolean, detail?: T | null]
   ): void {
-    if (this.initialize(type, bubbles, cancelable)) this.customDetail = detail;
+    requireArguments(args, 1, "CustomEvent.initCustomEvent");
+    const type = args[0];
+    const bubbles = args[1] ?? false;
+    const cancelable = args[2] ?? false;
+    const detail = args[3] ?? null;
+    const convertedType = coerceToDOMString(type);
+    const convertedBubbles = bubbles ? true : false;
+    const convertedCancelable = cancelable ? true : false;
+    if (this.initialize(convertedType, convertedBubbles, convertedCancelable)) {
+      this.customDetail = detail;
+    }
   }
 }
 
@@ -207,6 +263,12 @@ export interface EventListenerObject {
 
 export type EventListenerOrEventListenerObject = EventListener | EventListenerObject;
 
+interface EventListenerCallbackObject {
+  readonly handleEvent?: unknown;
+}
+
+type ConvertedEventListener = EventListener | EventListenerCallbackObject;
+
 export interface EventHandlerSlot<Target extends EventTarget, E extends Event> {
   callback: ((this: Target, event: E) => void) | null;
   listener: EventListener | null;
@@ -216,18 +278,12 @@ export interface ListenerOptions {
   once?: boolean;
   capture?: boolean;
   passive?: boolean;
-  signal?: EventListenerSignal;
-}
-
-/** The AbortSignal operations EventTarget needs, without a runtime import cycle. */
-export interface EventListenerSignal {
-  readonly aborted: boolean;
-  subscribe(callback: () => void): () => void;
+  signal?: AbortSignal;
 }
 
 interface ListenerRecord {
   type: string;
-  callback: EventListenerOrEventListenerObject;
+  callback: ConvertedEventListener;
   capture: boolean;
   once: boolean;
   passive: boolean;
@@ -237,17 +293,73 @@ interface ListenerRecord {
 
 type ListenerObserver = (type: string, added: boolean) => void;
 
-function listenerOption(value: boolean | undefined): boolean {
+function listenerOption(value: unknown): boolean {
   return value ? true : false;
 }
 
-function validateListenerSignal(signal: EventListenerSignal | undefined): void {
-  if (
-    signal !== undefined &&
-    (signal === null || typeof signal !== "object" || typeof signal.subscribe !== "function")
-  ) {
-    throw new TypeError("signal must be an AbortSignal");
+function isEventListener(callback: unknown): callback is EventListener {
+  return typeof callback === "function";
+}
+
+function isEventListenerCallbackObject(callback: unknown): callback is EventListenerCallbackObject {
+  return typeof callback === "object" && callback !== null;
+}
+
+function convertEventListener(callback: unknown): ConvertedEventListener | null {
+  if (callback === undefined || callback === null) {
+    return null;
   }
+  if (isEventListener(callback) || isEventListenerCallbackObject(callback)) {
+    return callback;
+  }
+  throw new TypeError("callback must be an EventListener");
+}
+
+interface ListenerOptionsDictionary {
+  readonly capture?: unknown;
+  readonly once?: unknown;
+  readonly passive?: unknown;
+  readonly signal?: unknown;
+}
+
+function isListenerOptionsDictionary(value: unknown): value is ListenerOptionsDictionary {
+  return (typeof value === "object" && value !== null) || typeof value === "function";
+}
+
+function convertEventListenerOptions(options: unknown): boolean {
+  if (typeof options === "boolean") {
+    return options;
+  }
+  if (options === undefined || options === null) {
+    return false;
+  }
+  if (isListenerOptionsDictionary(options)) {
+    return listenerOption(options.capture);
+  }
+  return options ? true : false;
+}
+
+function convertListenerSignal(signal: unknown): AbortSignalOperations | undefined {
+  if (signal === undefined) {
+    return undefined;
+  }
+  if (isEventListenerSignal(signal)) {
+    return signal;
+  }
+  throw new TypeError("signal must be an AbortSignal");
+}
+
+function isEventListenerSignal(signal: unknown): signal is AbortSignalOperations {
+  return (
+    signal !== null &&
+    typeof signal === "object" &&
+    abortSignalBrand in signal &&
+    signal[abortSignalBrand] === true &&
+    "aborted" in signal &&
+    typeof signal.aborted === "boolean" &&
+    "subscribe" in signal &&
+    typeof signal.subscribe === "function"
+  );
 }
 
 /** Non-tree EventTarget; deliberately not a DOM propagation implementation. */
@@ -262,30 +374,49 @@ export class EventTarget {
   }
 
   addEventListener(
-    type: string,
-    callback: EventListenerOrEventListenerObject | null,
-    options: ListenerOptions | boolean = {},
+    ...args: [
+      type: string,
+      callback: EventListenerOrEventListenerObject | null,
+      options?: ListenerOptions | boolean,
+    ]
   ): void {
-    const once = typeof options === "boolean" ? false : listenerOption(options.once);
-    const capture = typeof options === "boolean" ? options : listenerOption(options.capture);
-    const passive = typeof options === "boolean" ? false : listenerOption(options.passive);
-    const signal = typeof options === "boolean" ? undefined : options.signal;
-    validateListenerSignal(signal);
-    if (callback === null) return;
+    requireArguments(args, 2, "EventTarget.addEventListener");
+    const type = args[0];
+    const callback = args[1];
+    const options = args[2];
+    const convertedType = coerceToDOMString(type);
+    const convertedCallback = convertEventListener(callback);
+    let capture = false;
+    let once = false;
+    let passive = false;
+    let signal: AbortSignalOperations | undefined;
+    if (typeof options === "boolean") {
+      capture = options;
+    } else if (options !== undefined && options !== null) {
+      if (isListenerOptionsDictionary(options)) {
+        capture = listenerOption(options.capture);
+        once = listenerOption(options.once);
+        passive = listenerOption(options.passive);
+        signal = convertListenerSignal(options.signal);
+      } else {
+        capture = options ? true : false;
+      }
+    }
+    if (convertedCallback === null) return;
     if (signal?.aborted) return;
     if (
       this.listeners.some(
         (item) =>
           !item.removed &&
-          item.type === type &&
-          item.callback === callback &&
+          item.type === convertedType &&
+          item.callback === convertedCallback &&
           item.capture === capture,
       )
     )
       return;
     const listener: ListenerRecord = {
-      type,
-      callback,
+      type: convertedType,
+      callback: convertedCallback,
       capture,
       once,
       passive,
@@ -293,28 +424,45 @@ export class EventTarget {
       unsubscribeAbort: null,
     };
     this.listeners.push(listener);
-    this.listenerObserver?.(type, true);
+    this.listenerObserver?.(convertedType, true);
     if (signal !== undefined) {
       listener.unsubscribeAbort = signal.subscribe(() => this.removeRecord(listener));
     }
   }
 
   removeEventListener(
-    type: string,
-    callback: EventListenerOrEventListenerObject | null,
-    options: ListenerOptions | boolean = {},
+    ...args: [
+      type: string,
+      callback: EventListenerOrEventListenerObject | null,
+      options?: ListenerOptions | boolean,
+    ]
   ): void {
-    if (callback === null) return;
-    const capture = typeof options === "boolean" ? options : listenerOption(options.capture);
+    requireArguments(args, 2, "EventTarget.removeEventListener");
+    const type = args[0];
+    const callback = args[1];
+    const options = args[2];
+    const convertedType = coerceToDOMString(type);
+    const convertedCallback = convertEventListener(callback);
+    const capture = convertEventListenerOptions(options);
+    if (convertedCallback === null) return;
     for (const item of this.listeners) {
-      if (item.type === type && item.callback === callback && item.capture === capture) {
+      if (
+        item.type === convertedType &&
+        item.callback === convertedCallback &&
+        item.capture === capture
+      ) {
         this.removeRecord(item);
         return;
       }
     }
   }
 
-  dispatchEvent(event: Event): boolean {
+  dispatchEvent(...args: [event: Event]): boolean {
+    requireArguments(args, 1, "EventTarget.dispatchEvent");
+    const event = args[0];
+    if (!(event instanceof Event)) {
+      throw new TypeError("event must be an Event");
+    }
     return this.#dispatch(event, false);
   }
 
@@ -337,10 +485,14 @@ export class EventTarget {
           if (item.once) this.removeRecord(item);
           event.setPassiveListener(item.passive);
           try {
-            if (typeof item.callback === "function") {
+            if (isEventListener(item.callback)) {
               item.callback.call(this, event);
             } else {
-              item.callback.handleEvent(event);
+              const handleEvent = item.callback.handleEvent;
+              if (typeof handleEvent !== "function") {
+                throw new TypeError("EventListener.handleEvent must be callable");
+              }
+              handleEvent.call(item.callback, event);
             }
           } catch (error) {
             this.report(error);
@@ -406,8 +558,27 @@ export interface MessageEventInit<T> extends EventInit {
   data?: T | null;
   lastEventId?: string;
   origin?: string;
-  ports?: readonly EventTarget[];
+  ports?: Iterable<EventTarget> & object;
   source?: EventTarget | null;
+}
+
+function convertEventTargetSequence(
+  input: (Iterable<EventTarget> & object) | undefined,
+): EventTarget[] {
+  if (input === undefined) {
+    return [];
+  }
+  if ((typeof input !== "object" || input === null) && typeof input !== "function") {
+    throw new TypeError("MessageEvent ports must be a sequence");
+  }
+  const ports: EventTarget[] = [];
+  for (const port of input) {
+    if (!(port instanceof EventTarget)) {
+      throw new TypeError("MessageEvent ports must contain EventTarget values");
+    }
+    ports.push(port);
+  }
+  return ports;
 }
 
 export class MessageEvent<T = unknown> extends Event {
@@ -417,13 +588,43 @@ export class MessageEvent<T = unknown> extends Event {
   private messagePorts: readonly EventTarget[];
   private messageSource: EventTarget | null;
 
-  constructor(type: string, init: MessageEventInit<T> = {}) {
-    super(type, init);
-    this.messageData = init.data === undefined ? null : init.data;
-    this.messageLastEventId = init.lastEventId ?? "";
-    this.messageOrigin = toUSVString(init.origin ?? "");
-    this.messagePorts = init.ports?.slice() ?? [];
-    this.messageSource = init.source ?? null;
+  constructor(...args: [type: string, init?: MessageEventInit<T>]) {
+    requireArguments(args, 1, "MessageEvent constructor");
+    const type = args[0];
+    const init = args[1];
+    super(type);
+    if (init === undefined || init === null) {
+      this.messageData = null;
+      this.messageLastEventId = "";
+      this.messageOrigin = "";
+      this.messagePorts = [];
+      this.messageSource = null;
+    } else {
+      validateDictionary(init, "MessageEvent init");
+      const bubbles = init.bubbles ? true : false;
+      const cancelable = init.cancelable ? true : false;
+      const composed = init.composed ? true : false;
+      const dataValue = init.data;
+      const lastEventIdValue = init.lastEventId;
+      const lastEventId = lastEventIdValue === undefined ? "" : coerceToDOMString(lastEventIdValue);
+      const originValue = init.origin;
+      const origin = originValue === undefined ? "" : coerceToUSVString(originValue);
+      const ports = convertEventTargetSequence(init.ports);
+      const sourceValue = init.source;
+      if (
+        sourceValue !== undefined &&
+        sourceValue !== null &&
+        !(sourceValue instanceof EventTarget)
+      ) {
+        throw new TypeError("MessageEvent source must be an EventTarget");
+      }
+      this.applyConvertedEventInit(bubbles, cancelable, composed);
+      this.messageData = dataValue === undefined ? null : dataValue;
+      this.messageLastEventId = lastEventId;
+      this.messageOrigin = origin;
+      this.messagePorts = ports;
+      this.messageSource = sourceValue ?? null;
+    }
   }
 
   get data(): T | null {
@@ -447,21 +648,41 @@ export class MessageEvent<T = unknown> extends Event {
   }
 
   initMessageEvent(
-    type: string,
-    bubbles = false,
-    cancelable = false,
-    data: T | null = null,
-    origin = "",
-    lastEventId = "",
-    source: EventTarget | null = null,
-    ports: readonly EventTarget[] = [],
+    ...args: [
+      type: string,
+      bubbles?: boolean,
+      cancelable?: boolean,
+      data?: T | null,
+      origin?: string,
+      lastEventId?: string,
+      source?: EventTarget | null,
+      ports?: Iterable<EventTarget> & object,
+    ]
   ): void {
-    if (!this.initialize(type, bubbles, cancelable)) return;
+    requireArguments(args, 1, "MessageEvent.initMessageEvent");
+    const type = args[0];
+    const bubbles = args[1] ?? false;
+    const cancelable = args[2] ?? false;
+    const data = args[3] ?? null;
+    const origin = args[4] === undefined ? "" : args[4];
+    const lastEventId = args[5] === undefined ? "" : args[5];
+    const source = args[6] ?? null;
+    const ports = args[7] === undefined ? [] : args[7];
+    const convertedType = coerceToDOMString(type);
+    const convertedBubbles = bubbles ? true : false;
+    const convertedCancelable = cancelable ? true : false;
+    const convertedOrigin = coerceToUSVString(origin);
+    const convertedLastEventId = coerceToDOMString(lastEventId);
+    if (source !== null && !(source instanceof EventTarget)) {
+      throw new TypeError("MessageEvent source must be an EventTarget");
+    }
+    const convertedPorts = convertEventTargetSequence(ports);
+    if (!this.initialize(convertedType, convertedBubbles, convertedCancelable)) return;
     this.messageData = data;
-    this.messageOrigin = toUSVString(origin);
-    this.messageLastEventId = lastEventId;
+    this.messageOrigin = convertedOrigin;
+    this.messageLastEventId = convertedLastEventId;
     this.messageSource = source;
-    this.messagePorts = ports.slice();
+    this.messagePorts = convertedPorts;
   }
 }
 
@@ -476,11 +697,30 @@ export class CloseEvent extends Event {
   private readonly closeReason: string;
   private readonly clean: boolean;
 
-  constructor(type: string, init: CloseEventInit = {}) {
-    super(type, init);
-    this.closeCode = toUnsignedShort(init.code ?? 0);
-    this.closeReason = toUSVString(init.reason ?? "");
-    this.clean = init.wasClean ? true : false;
+  constructor(...args: [type: string, init?: CloseEventInit]) {
+    requireArguments(args, 1, "CloseEvent constructor");
+    const type = args[0];
+    const init = args[1];
+    super(type);
+    if (init === undefined || init === null) {
+      this.closeCode = 0;
+      this.closeReason = "";
+      this.clean = false;
+    } else {
+      validateDictionary(init, "CloseEvent init");
+      const bubbles = init.bubbles ? true : false;
+      const cancelable = init.cancelable ? true : false;
+      const composed = init.composed ? true : false;
+      const codeValue = init.code;
+      const code = codeValue === undefined ? 0 : toUnsignedShort(codeValue);
+      const reasonValue = init.reason;
+      const reason = reasonValue === undefined ? "" : coerceToUSVString(reasonValue);
+      const wasClean = init.wasClean ? true : false;
+      this.applyConvertedEventInit(bubbles, cancelable, composed);
+      this.closeCode = code;
+      this.closeReason = reason;
+      this.clean = wasClean;
+    }
   }
 
   get code(): number {
@@ -511,13 +751,38 @@ export class ErrorEvent extends Event {
   private readonly errorLine: number;
   private readonly errorMessage: string;
 
-  constructor(type: string, init: ErrorEventInit = {}) {
-    super(type, init);
-    this.errorColumn = toUnsignedLong(init.colno ?? 0);
-    this.errorValue = init.error ?? null;
-    this.errorFilename = toUSVString(init.filename ?? "");
-    this.errorLine = toUnsignedLong(init.lineno ?? 0);
-    this.errorMessage = init.message ?? "";
+  constructor(...args: [type: string, init?: ErrorEventInit]) {
+    requireArguments(args, 1, "ErrorEvent constructor");
+    const type = args[0];
+    const init = args[1];
+    super(type);
+    if (init === undefined || init === null) {
+      this.errorColumn = 0;
+      this.errorValue = undefined;
+      this.errorFilename = "";
+      this.errorLine = 0;
+      this.errorMessage = "";
+    } else {
+      validateDictionary(init, "ErrorEvent init");
+      const bubbles = init.bubbles ? true : false;
+      const cancelable = init.cancelable ? true : false;
+      const composed = init.composed ? true : false;
+      const colnoValue = init.colno;
+      const colno = colnoValue === undefined ? 0 : toUnsignedLong(colnoValue);
+      const errorValue = init.error;
+      const filenameValue = init.filename;
+      const filename = filenameValue === undefined ? "" : coerceToUSVString(filenameValue);
+      const linenoValue = init.lineno;
+      const lineno = linenoValue === undefined ? 0 : toUnsignedLong(linenoValue);
+      const messageValue = init.message;
+      const message = messageValue === undefined ? "" : coerceToDOMString(messageValue);
+      this.applyConvertedEventInit(bubbles, cancelable, composed);
+      this.errorColumn = colno;
+      this.errorValue = errorValue;
+      this.errorFilename = filename;
+      this.errorLine = lineno;
+      this.errorMessage = message;
+    }
   }
 
   get colno(): number {

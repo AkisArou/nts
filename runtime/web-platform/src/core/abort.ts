@@ -1,3 +1,5 @@
+import { abortSignalBrand } from "./abort-brand.ts";
+import type { AbortSignalOperations } from "./abort-brand.ts";
 import type { EventHandlerSlot } from "./events.ts";
 import { Event, EventTarget } from "./events.ts";
 import { abortError, DOMException } from "./errors.ts";
@@ -12,7 +14,8 @@ interface AbortAlgorithm {
 
 function doNothing(): void {}
 
-export class AbortSignal extends EventTarget {
+export class AbortSignal extends EventTarget implements AbortSignalOperations {
+  readonly [abortSignalBrand] = true;
   private isAborted = false;
   private abortReason: unknown = undefined;
   private firstAlgorithm: AbortAlgorithm | null = null;

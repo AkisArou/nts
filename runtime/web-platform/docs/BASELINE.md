@@ -560,3 +560,44 @@ converters into `DOMString` conversion and from public method normalization into
 `ByteString` conversion. They expose the planned union and boundary-conversion work;
 they are not separate runtime features and were not hidden with altered source
 semantics.
+
+The canonical event constructors and `EventTarget` methods now perform their Web IDL
+boundary conversion explicitly. Required arguments are distinguished from explicit
+`undefined` with typed rest tuples rather than the permanently unsupported
+`arguments` object. Constructor arguments convert left to right; inherited event
+dictionaries read `bubbles`, `cancelable`, and `composed` before each derived
+dictionary's lexicographically ordered members. Every property and iterable is
+consumed once. `MessageEvent` converts `lastEventId` as `DOMString`, `origin` as
+`USVString`, and copies its ports sequence. `CloseEvent.reason` and
+`ErrorEvent.filename` are `USVString`; `ErrorEvent.message` remains `DOMString`, and
+a missing `ErrorEvent.error` remains `undefined`. Legacy initializer methods perform
+all argument conversion before the dispatch-state guard, including rejecting an
+explicit null ports sequence.
+
+`EventTarget` converts `type`, callback, and options before applying null-callback or
+duplicate-listener semantics. Its dictionary order is inherited `capture` followed
+by `once`, `passive`, and `signal`. The `(ListenerOptions or boolean)` union sends
+objects through dictionary conversion and other primitive values through Web IDL
+boolean conversion. This deliberately differs from pinned Node 24.20.0, which
+rejects numeric and symbol options. Pinned Node also reads the native `Event` init
+dictionary before `type`, splits `CustomEvent` conversion around `type`, and reads
+`CloseEvent.code` before inherited `composed`; the shared implementation follows the
+normative DOM/Web IDL order rather than copying those host deviations.
+
+Listener signals now use the public canonical `AbortSignal` type and an internal
+unique-symbol brand shared through a cycle-free contract module. A merely structural
+object with `aborted` and `subscribe` members is rejected. Converted constructor
+dictionaries and listener options do not allocate transient result records: values
+are held in typed locals and committed only after conversion completes. This is an
+allocation-shape result, not a measured throughput claim.
+
+Swapping `once` and `passive` conversion made the focused mutation fail with
+`capture,passive,once` instead of `capture,once,passive`. The Node-host suite passes
+123/123 and the unchanged pinned WPT slice remains 95/95. The live NTS frontier is
+253 primary refusals, 57 cascades, zero JVM-backend refusals, and no invalid HIR.
+Relative to 247/57, eight final-form rest-tuple boundaries, one iterable/intersection
+ports boundary, and the computed unique-symbol brand check replace four older
+diagnostics for the structural signal and event-init types, a nullability case, and
+an erased-value use. The net six-primary increase is therefore an exact compiler
+dependency inventory, not a runtime regression and not a reason to weaken the final
+API.

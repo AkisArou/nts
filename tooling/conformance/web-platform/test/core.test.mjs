@@ -136,6 +136,97 @@ test("Web event constructors consume typed init dictionaries", () => {
   assert.deepEqual(defaults.ports, []);
   assert.equal(defaults.source, null);
 });
+test("Web event constructors apply Web IDL conversion once and in member order", () => {
+  const trace = (Constructor, members) => {
+    const reads = [];
+    const init = {};
+    for (const member of members) {
+      Object.defineProperty(init, member, {
+        get() {
+          reads.push(member);
+          return undefined;
+        },
+      });
+    }
+    new Constructor(
+      {
+        toString() {
+          reads.push("type");
+          return "event";
+        },
+      },
+      init,
+    );
+    return reads;
+  };
+
+  for (const [Actual, members] of [
+    [Event, ["bubbles", "cancelable", "composed"]],
+    [CustomEvent, ["bubbles", "cancelable", "composed", "detail"]],
+    [
+      MessageEvent,
+      ["bubbles", "cancelable", "composed", "data", "lastEventId", "origin", "ports", "source"],
+    ],
+    [CloseEvent, ["bubbles", "cancelable", "composed", "code", "reason", "wasClean"]],
+    [
+      ErrorEvent,
+      ["bubbles", "cancelable", "composed", "colno", "error", "filename", "lineno", "message"],
+    ],
+  ]) {
+    assert.deepEqual(trace(Actual, members), ["type", ...members]);
+  }
+
+  for (const [Actual, Expected] of [
+    [Event, globalThis.Event],
+    [CustomEvent, NativeCustomEvent],
+    [MessageEvent, globalThis.MessageEvent],
+    [CloseEvent, globalThis.CloseEvent],
+  ]) {
+    assert.equal(new Actual(42, null).type, new Expected(42, null).type);
+    assert.throws(() => new Actual("event", 1), TypeError);
+    assert.throws(() => new Expected("event", 1), TypeError);
+  }
+  assert.throws(() => new Event(Symbol("type")), TypeError);
+  for (const Constructor of [Event, CustomEvent, MessageEvent, CloseEvent, ErrorEvent]) {
+    assert.throws(() => new Constructor(), TypeError);
+  }
+
+  const close = new CloseEvent("close", { code: "1.9", reason: null });
+  const nativeClose = new globalThis.CloseEvent("close", { code: "1.9", reason: null });
+  assert.deepEqual([close.code, close.reason], [nativeClose.code, nativeClose.reason]);
+
+  const message = new MessageEvent("message", {
+    lastEventId: null,
+    origin: "\ud800",
+    ports: (function* () {
+      yield new EventTarget();
+    })(),
+  });
+  assert.equal(message.lastEventId, "null");
+  assert.equal(message.origin, "\ufffd");
+  assert.equal(message.ports.length, 1);
+  assert.throws(() => new MessageEvent("message", { ports: null }), TypeError);
+  assert.throws(() => new MessageEvent("message", { source: {} }), TypeError);
+
+  const error = new ErrorEvent(null, {
+    colno: "2.9",
+    filename: null,
+    lineno: 4_294_967_297,
+    message: "\ud800",
+  });
+  assert.deepEqual(
+    [error.type, error.colno, error.filename, error.lineno, error.message],
+    ["null", 2, "null", 1, "\ud800"],
+  );
+
+  const initialized = new MessageEvent("before");
+  initialized.initMessageEvent("after", false, false, null, null, null, null, []);
+  assert.deepEqual([initialized.origin, initialized.lastEventId], ["null", "null"]);
+  assert.throws(
+    () => initialized.initMessageEvent("after", false, false, null, "", "", null, null),
+    TypeError,
+  );
+});
 test("DOMException legacy constants and active codes match Node", () => {
   const constantNames = [
     "INDEX_SIZE_ERR",
@@ -635,34 +726,72 @@ test("EventTarget listener objects resolve handleEvent at dispatch time", () => 
   }
 });
 test("EventTarget reads listener options with Web IDL timing", () => {
-  const trace = (EventTargetClass) => {
-    const reads = [];
-    const options = {
-      get capture() {
-        reads.push("capture");
-        return false;
-      },
-      get once() {
-        reads.push("once");
-        return false;
-      },
-      get passive() {
-        reads.push("passive");
-        return false;
-      },
-      get signal() {
-        reads.push("signal");
-        return undefined;
-      },
-    };
-    const target = new EventTargetClass();
-    target.addEventListener("options", null, options);
-    reads.push("remove");
-    target.removeEventListener("options", null, options);
-    return reads;
+  const reads = [];
+  const options = {
+    get capture() {
+      reads.push("capture");
+      return false;
+    },
+    get once() {
+      reads.push("once");
+      return false;
+    },
+    get passive() {
+      reads.push("passive");
+      return false;
+    },
+    get signal() {
+      reads.push("signal");
+      return undefined;
+    },
+  };
+  const target = new EventTarget();
+  target.addEventListener("options", null, options);
+  reads.push("remove");
+  target.removeEventListener("options", null, options);
+
+  assert.deepEqual(reads, ["capture", "once", "passive", "signal", "remove", "capture"]);
+});
+test("EventTarget converts type, callback and options before applying listener semantics", () => {
+  const target = new EventTarget();
+  let calls = 0;
+  const listener = () => calls++;
+  const type = {
+    toString() {
+      return "converted";
+    },
   };
 
-  assert.deepEqual(trace(EventTarget), trace(globalThis.EventTarget));
+  target.addEventListener(type, listener, null);
+  target.dispatchEvent(new Event("converted"));
+  assert.equal(calls, 1);
+  target.removeEventListener(type, listener, null);
+  target.dispatchEvent(new Event("converted"));
+  assert.equal(calls, 1);
+
+  target.addEventListener("ignored", undefined);
+  target.addEventListener("scalar", listener, 1);
+  target.removeEventListener("scalar", listener, true);
+  target.dispatchEvent(new Event("scalar"));
+  assert.equal(calls, 1);
+  target.addEventListener("symbol", listener, Symbol("capture"));
+  target.removeEventListener("symbol", listener, true);
+  target.dispatchEvent(new Event("symbol"));
+  assert.equal(calls, 1);
+  assert.throws(() => target.addEventListener("missing"), TypeError);
+  assert.throws(() => target.removeEventListener("missing"), TypeError);
+  assert.throws(() => target.addEventListener("invalid", 1), TypeError);
+  assert.throws(() => target.removeEventListener("invalid", 1), TypeError);
+  target.addEventListener("ignored-scalar", null, 1);
+  target.removeEventListener("ignored-scalar", null, 1);
+  assert.throws(
+    () =>
+      target.addEventListener("forged-signal", listener, {
+        signal: { aborted: false, subscribe() {} },
+      }),
+    TypeError,
+  );
+  assert.throws(() => target.dispatchEvent({}), TypeError);
 });
 test("EventTarget signal and passive listener options match Node", () => {
   const target = new EventTarget();
@@ -888,8 +1017,8 @@ test("Event subclasses apply Web IDL value and readonly-state semantics", () => 
     lineno: -1,
   });
   assert.deepEqual(
-    [error.colno, error.filename, error.lineno, error.message],
-    [1, "�", 4_294_967_295, ""],
+    [error.colno, error.error, error.filename, error.lineno, error.message],
+    [1, undefined, "�", 4_294_967_295, ""],
   );
   assert.throws(() => {
     error.lineno = 1;
