@@ -1,8 +1,8 @@
 import { concatBytes, decodeUTF8, utf8 } from "../core/encoding.ts";
-import { toUSVString } from "../core/webidl.ts";
+import { toClampedLongLong, toUSVString } from "../core/webidl.ts";
 import { ReadableStream } from "../streams/readable.ts";
 
-export type BlobPart = string | Uint8Array | ArrayBuffer | Blob;
+export type BlobPart = string | ArrayBuffer | ArrayBufferView | Blob;
 
 export interface BlobOptions {
   type?: string;
@@ -18,8 +18,26 @@ function mediaType(input: string): string {
   return input.toLowerCase();
 }
 
+function copyBlobPart(part: string | ArrayBuffer | ArrayBufferView): Uint8Array<ArrayBuffer> {
+  if (typeof part === "string") {
+    return utf8.encode(part);
+  }
+  if (part instanceof ArrayBuffer) {
+    return new Uint8Array(part.slice(0));
+  }
+  const source = new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
+  const copy = new Uint8Array(source.length);
+  copy.set(source);
+  return copy;
+}
+
+function normalizeSliceIndex(value: number, length: number): number {
+  const integer = toClampedLongLong(value);
+  return integer < 0 ? Math.max(length + integer, 0) : Math.min(integer, length);
+}
+
 export class Blob {
-  private chunks: Uint8Array[] = [];
+  private readonly chunks: Uint8Array<ArrayBuffer>[] = [];
   private byteLength = 0;
   readonly type: string;
 
@@ -32,12 +50,7 @@ export class Blob {
         }
         this.byteLength += part.size;
       } else {
-        const data =
-          typeof part === "string"
-            ? utf8.encode(part)
-            : part instanceof Uint8Array
-              ? part.slice()
-              : new Uint8Array(part.slice(0));
+        const data = copyBlobPart(part);
         if (data.length !== 0) {
           this.chunks.push(data);
           this.byteLength += data.length;
@@ -51,12 +64,8 @@ export class Blob {
   }
 
   slice(start = 0, end = this.size, contentType = ""): Blob {
-    const normalize = (value: number): number => {
-      const integer = Number.isNaN(value) ? 0 : Math.trunc(value);
-      return integer < 0 ? Math.max(this.size + integer, 0) : Math.min(integer, this.size);
-    };
-    const from = normalize(start);
-    const to = Math.max(from, normalize(end));
+    const from = normalizeSliceIndex(start, this.size);
+    const to = Math.max(from, normalizeSliceIndex(end, this.size));
     const result = new Blob([], { type: contentType });
     let offset = 0;
     for (const chunk of this.chunks) {
@@ -74,18 +83,16 @@ export class Blob {
     return result;
   }
 
-  async bytes(): Promise<Uint8Array> {
-    return concatBytes(this.chunks, this.size);
+  bytes(): Promise<Uint8Array<ArrayBuffer>> {
+    return Promise.resolve(concatBytes(this.chunks, this.size));
   }
 
-  async arrayBuffer(): Promise<ArrayBuffer> {
-    const output = new ArrayBuffer(this.size);
-    new Uint8Array(output).set(await this.bytes());
-    return output;
+  arrayBuffer(): Promise<ArrayBuffer> {
+    return this.bytes().then((bytes) => bytes.buffer);
   }
 
-  async text(): Promise<string> {
-    return decodeUTF8(await this.bytes());
+  text(): Promise<string> {
+    return this.bytes().then((bytes) => decodeUTF8(bytes));
   }
 
   stream(): ReadableStream<Uint8Array> {
@@ -125,6 +132,8 @@ export class File extends Blob {
   constructor(parts: readonly BlobPart[], name: string, options: FileOptions = {}) {
     super(parts, options);
     this.name = toUSVString(name);
-    this.lastModified = options.lastModified ?? Date.now();
+    const lastModified = options.lastModified;
+    this.lastModified =
+      lastModified === undefined ? Date.now() : Number.isNaN(lastModified) ? 0 : lastModified;
   }
 }

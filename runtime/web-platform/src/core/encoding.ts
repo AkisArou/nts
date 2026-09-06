@@ -5,7 +5,7 @@ import { trimASCIIWhitespace } from "./ascii.ts";
 export class TextEncoder {
   readonly encoding = "utf-8";
 
-  encode(input = ""): Uint8Array {
+  encode(input = ""): Uint8Array<ArrayBuffer> {
     const output = new Uint8Array(utf8Length(input));
     utf8Write(output, input, 0, output.length);
     return output;
@@ -164,7 +164,7 @@ export function latin1(bytes: Uint8Array): string {
   return result;
 }
 
-export function encodeByteString(text: string): Uint8Array {
+export function encodeByteString(text: string): Uint8Array<ArrayBuffer> {
   const result = new Uint8Array(text.length);
 
   for (let i = 0; i < text.length; ++i) {
@@ -175,8 +175,17 @@ export function encodeByteString(text: string): Uint8Array {
   return result;
 }
 
-export function concatBytes(chunks: readonly Uint8Array[], length?: number): Uint8Array {
-  const total = length ?? chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+export function concatBytes(
+  chunks: readonly Uint8Array[],
+  length?: number,
+): Uint8Array<ArrayBuffer> {
+  let total = length;
+  if (total === undefined) {
+    total = 0;
+    for (const chunk of chunks) {
+      total += chunk.length;
+    }
+  }
   const result = new Uint8Array(total);
   let offset = 0;
 

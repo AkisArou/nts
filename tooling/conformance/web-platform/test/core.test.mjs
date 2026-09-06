@@ -47,6 +47,8 @@ const NativeEncoder = globalThis.TextEncoder;
 const NativeResponse = globalThis.Response;
 const NativeFormData = globalThis.FormData;
 const NativeURLSearchParams = globalThis.URLSearchParams;
+const NativeBlob = globalThis.Blob;
+const NativeFile = globalThis.File;
 globalThis.fetch = () => {
   throw new Error("Host fetch is forbidden");
 };
@@ -454,6 +456,27 @@ test("Blob immutability, slices, File and form serialization", async () => {
   assert.match(text, /filename="hello.txt"/);
   assert.equal(utf8.encode(text).length, encoded.blob.size);
   assert.match(encoded.contentType, /boundary=----nts-/);
+});
+test("Blob copies every view and applies Web IDL slice conversion", async () => {
+  const backing = Uint8Array.of(9, 1, 2, 3, 9);
+  const view = new DataView(backing.buffer, 1, 3);
+  const blob = new Blob([view]);
+  backing.fill(7);
+  assert.deepEqual(await blob.bytes(), Uint8Array.of(1, 2, 3));
+
+  const returned = new Uint8Array(await blob.arrayBuffer());
+  returned.fill(8);
+  assert.deepEqual(await blob.bytes(), Uint8Array.of(1, 2, 3));
+
+  const actual = new Blob(["hello"]);
+  const expected = new NativeBlob(["hello"]);
+  for (const value of [NaN, -Infinity, -1.5, -0.5, 0.1, 0.5, 1.4, 1.5, 1.6, 2.5, Infinity]) {
+    assert.equal(actual.slice(0, value).size, expected.slice(0, value).size, String(value));
+    assert.equal(actual.slice(value).size, expected.slice(value).size, String(value));
+  }
+
+  assert.equal(new File([], "name", { lastModified: NaN }).lastModified, 0);
+  assert.equal(new NativeFile([], "name", { lastModified: NaN }).lastModified, 0);
 });
 test("URLSearchParams differential and URL-encoded body consumption", async () => {
   for (const text of ["?a=1&a=2&x=a+b", "x=%FF%GG&=v", "a=~!*()&b=💙"]) {

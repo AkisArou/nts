@@ -1,14 +1,39 @@
-/** Convert a number using Web IDL's `[Clamp] unsigned short` rules. */
-export function toClampedUnsignedShort(value: number): number {
-  if (Number.isNaN(value) || value <= 0) return 0;
-  if (value >= 65535) return 65535;
-
+function roundTiesToEven(value: number): number {
   const lower = Math.floor(value);
   const fraction = value - lower;
 
-  if (fraction < 0.5) return lower;
-  if (fraction > 0.5) return lower + 1;
+  if (fraction < 0.5) {
+    return lower;
+  }
+  if (fraction > 0.5) {
+    return lower + 1;
+  }
   return lower % 2 === 0 ? lower : lower + 1;
+}
+
+/** Convert a number using Web IDL's `[Clamp] unsigned short` rules. */
+export function toClampedUnsignedShort(value: number): number {
+  if (Number.isNaN(value) || value <= 0) {
+    return 0;
+  }
+  if (value >= 65_535) {
+    return 65_535;
+  }
+  return roundTiesToEven(value);
+}
+
+/** Convert a number using Web IDL's `[Clamp] long long` rules. */
+export function toClampedLongLong(value: number): number {
+  if (Number.isNaN(value)) {
+    return 0;
+  }
+  if (value <= Number.MIN_SAFE_INTEGER) {
+    return Number.MIN_SAFE_INTEGER;
+  }
+  if (value >= Number.MAX_SAFE_INTEGER) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  return roundTiesToEven(value);
 }
 
 /** Convert a TypeScript string to a Web IDL scalar-value string. */
