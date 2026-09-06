@@ -4,9 +4,25 @@
 // `btoa` and the rest; the class itself is one property, not the module.
 
 export function shape(exports) {
-  const mod = { ...exports };
-  delete mod.default;
-  delete mod._createBlobFromExternalSource;
+  // ESM namespace keys are sorted. Node's CommonJS module is populated in
+  // this insertion order, so spell out the public surface instead of leaking
+  // the namespace object's unrelated ordering into `Object.keys(buffer)`.
+  const mod = {
+    Buffer: exports.Buffer,
+    SlowBuffer: exports.SlowBuffer,
+    transcode: exports.transcode,
+    isUtf8: exports.isUtf8,
+    isAscii: exports.isAscii,
+    kMaxLength: exports.kMaxLength,
+    kStringMaxLength: exports.kStringMaxLength,
+    btoa: exports.btoa,
+    atob: exports.atob,
+    constants: exports.constants,
+    INSPECT_MAX_BYTES: exports.INSPECT_MAX_BYTES,
+    Blob: exports.Blob,
+    resolveObjectURL: exports.resolveObjectURL,
+    File: exports.File,
+  };
 
   // Class syntax makes methods non-enumerable. Node installs Buffer's public
   // operations with ordinary assignments, so its static and prototype

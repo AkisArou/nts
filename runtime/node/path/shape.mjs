@@ -9,18 +9,41 @@
 // It adds shape and no behaviour: nothing here answers a question the
 // implementation cannot.
 export function shape(exports) {
-  const { posix: _posix, win32: win32Exports, ...flat } = exports;
+  const posix = pathVariant(exports, "/", ":");
+  const win32 = exports.win32 ? pathVariant(exports.win32, "\\", ";") : undefined;
 
-  const posix = { ...flat, sep: "/", delimiter: ":" };
-  const win32 = win32Exports ? { ...win32Exports, sep: "\\", delimiter: ";" } : undefined;
-
-  posix.posix = posix;
+  // These final four assignments follow `lib/path.js`'s CommonJS insertion
+  // order. In particular `win32` precedes the self-referential `posix` key,
+  // while the legacy `_makeLong` alias is last.
   posix.win32 = win32;
+  posix.posix = posix;
+  posix._makeLong = exports._makeLong;
   if (win32) {
     win32.win32 = win32;
     win32.posix = posix;
+    win32._makeLong = exports.win32._makeLong;
   }
   return posix;
+}
+
+/** The documented operations in the order Node installs them. */
+function pathVariant(exports, sep, delimiter) {
+  return {
+    resolve: exports.resolve,
+    normalize: exports.normalize,
+    isAbsolute: exports.isAbsolute,
+    join: exports.join,
+    relative: exports.relative,
+    toNamespacedPath: exports.toNamespacedPath,
+    dirname: exports.dirname,
+    basename: exports.basename,
+    extname: exports.extname,
+    format: exports.format,
+    parse: exports.parse,
+    matchesGlob: exports.matchesGlob,
+    sep,
+    delimiter,
+  };
 }
 
 /** The two documented module subpaths are the exact shaped namespace values. */

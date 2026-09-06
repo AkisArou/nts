@@ -1,10 +1,159 @@
 // The object node's tests see as `require('fs')`.
+
+// `lib/fs.js` populates a CommonJS object in this order. The typed build is an
+// ESM namespace, whose keys are sorted, so a spread has the right values but
+// the wrong public enumeration order.
+const publicExportNames = [
+  "appendFile",
+  "appendFileSync",
+  "access",
+  "accessSync",
+  "chown",
+  "chownSync",
+  "chmod",
+  "chmodSync",
+  "close",
+  "closeSync",
+  "copyFile",
+  "copyFileSync",
+  "cp",
+  "cpSync",
+  "createReadStream",
+  "createWriteStream",
+  "exists",
+  "existsSync",
+  "fchown",
+  "fchownSync",
+  "fchmod",
+  "fchmodSync",
+  "fdatasync",
+  "fdatasyncSync",
+  "fstat",
+  "fstatSync",
+  "fsync",
+  "fsyncSync",
+  "ftruncate",
+  "ftruncateSync",
+  "futimes",
+  "futimesSync",
+  "glob",
+  "globSync",
+  "lchown",
+  "lchownSync",
+  "lchmod",
+  "lchmodSync",
+  "link",
+  "linkSync",
+  "lstat",
+  "lstatSync",
+  "lutimes",
+  "lutimesSync",
+  "mkdir",
+  "mkdirSync",
+  "mkdtemp",
+  "mkdtempSync",
+  "mkdtempDisposableSync",
+  "open",
+  "openSync",
+  "openAsBlob",
+  "readdir",
+  "readdirSync",
+  "read",
+  "readSync",
+  "readv",
+  "readvSync",
+  "readFile",
+  "readFileSync",
+  "readlink",
+  "readlinkSync",
+  "realpath",
+  "realpathSync",
+  "rename",
+  "renameSync",
+  "rm",
+  "rmSync",
+  "rmdir",
+  "rmdirSync",
+  "stat",
+  "statfs",
+  "statSync",
+  "statfsSync",
+  "symlink",
+  "symlinkSync",
+  "truncate",
+  "truncateSync",
+  "unwatchFile",
+  "unlink",
+  "unlinkSync",
+  "utimes",
+  "utimesSync",
+  "watch",
+  "watchFile",
+  "writeFile",
+  "writeFileSync",
+  "write",
+  "writeSync",
+  "writev",
+  "writevSync",
+  "Dirent",
+  "Stats",
+  "ReadStream",
+  "WriteStream",
+  "FileReadStream",
+  "FileWriteStream",
+  "Utf8Stream",
+  "_toUnixTimestamp",
+  "Dir",
+  "opendir",
+  "opendirSync",
+  "constants",
+  "promises",
+];
+
+const promiseExportNames = [
+  "access",
+  "copyFile",
+  "cp",
+  "glob",
+  "open",
+  "opendir",
+  "rename",
+  "truncate",
+  "rm",
+  "rmdir",
+  "mkdir",
+  "readdir",
+  "readlink",
+  "symlink",
+  "lstat",
+  "stat",
+  "statfs",
+  "link",
+  "unlink",
+  "chmod",
+  "lchmod",
+  "lchown",
+  "chown",
+  "utimes",
+  "lutimes",
+  "realpath",
+  "mkdtemp",
+  "mkdtempDisposable",
+  "writeFile",
+  "appendFile",
+  "readFile",
+  "watch",
+  "constants",
+];
+
 export function shape(exports) {
   const module = { ...exports };
-  const promises = { ...exports.promises };
+  const promiseNamespace = { ...exports.promises };
   // FileHandle is the public result type of promises.open(), not a runtime
   // property of the node:fs/promises namespace.
-  delete promises.FileHandle;
+  delete promiseNamespace.FileHandle;
+  const promises = {};
+  for (const name of promiseExportNames) promises[name] = promiseNamespace[name];
   module.promises = promises;
   module.Stats = callableStats(exports.Stats);
   module.ReadStream = callableReadStream(exports.ReadStream);
@@ -43,7 +192,10 @@ export function shape(exports) {
   delete module._statColumns;
   delete module._validateRmOptionsSync;
   delete module.flagsOf;
-  return module;
+
+  const ordered = {};
+  for (const name of publicExportNames) ordered[name] = module[name];
+  return ordered;
 }
 
 /** `node:fs/promises` is the exact same namespace exposed as `fs.promises`. */
@@ -81,22 +233,24 @@ function callableBigIntStats(Implementation) {
     ctimeNs,
     birthtimeNs,
   ) {
-    return new Implementation([
-      dev,
-      mode,
-      nlink,
-      uid,
-      gid,
-      rdev,
-      blksize,
-      ino,
-      size,
-      blocks,
-      atimeNs,
-      mtimeNs,
-      ctimeNs,
-      birthtimeNs,
-    ].map(String));
+    return new Implementation(
+      [
+        dev,
+        mode,
+        nlink,
+        uid,
+        gid,
+        rdev,
+        blksize,
+        ino,
+        size,
+        blocks,
+        atimeNs,
+        mtimeNs,
+        ctimeNs,
+        birthtimeNs,
+      ].map(String),
+    );
   }
   BigIntStats.prototype = Implementation.prototype;
   return BigIntStats;
@@ -112,11 +266,7 @@ function callableStats(Implementation) {
   function Stats(...columns) {
     if (!warned) {
       warned = true;
-      process.emitWarning(
-        "fs.Stats constructor is deprecated.",
-        "DeprecationWarning",
-        "DEP0180",
-      );
+      process.emitWarning("fs.Stats constructor is deprecated.", "DeprecationWarning", "DEP0180");
     }
     return new Implementation(columns);
   }

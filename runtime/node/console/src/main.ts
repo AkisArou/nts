@@ -278,8 +278,6 @@ export class Console {
     this.#writeToConsole("stdout", this.#format("stdout", args));
   };
 
-  dirxml = this.log;
-
   warn = (...args: unknown[]): void => {
     if (onWarn.hasSubscribers) {
       onWarn.publish(args);
@@ -304,6 +302,28 @@ export class Console {
         ...options,
       }),
     );
+  };
+
+  // --------------------------------------------------------------- timing
+
+  time = (label: string = "default"): void => {
+    time(this._times, "console.time()", label);
+  };
+
+  timeEnd = (label: string = "default"): void => {
+    timeEnd(this._times, "console.timeEnd()", this.#timeLogImpl, label);
+  };
+
+  timeLog = (label: string = "default", ...data: unknown[]): void => {
+    timeLog(this._times, "console.timeLog()", this.#timeLogImpl, label, data);
+  };
+
+  #timeLogImpl = (label: string, formatted: string, args?: unknown[]): void => {
+    if (args === undefined) {
+      this.log("%s: %s", label, formatted);
+    } else {
+      this.log("%s: %s", label, formatted, ...args);
+    }
   };
 
   /** The message with a stack trace under it, on stderr. */
@@ -357,28 +377,6 @@ export class Console {
     this.#counts.delete(label);
   };
 
-  // --------------------------------------------------------------- timing
-
-  time = (label: string = "default"): void => {
-    time(this._times, "console.time()", label);
-  };
-
-  timeEnd = (label: string = "default"): void => {
-    timeEnd(this._times, "console.timeEnd()", this.#timeLogImpl, label);
-  };
-
-  timeLog = (label: string = "default", ...data: unknown[]): void => {
-    timeLog(this._times, "console.timeLog()", this.#timeLogImpl, label, data);
-  };
-
-  #timeLogImpl = (label: string, formatted: string, args?: unknown[]): void => {
-    if (args === undefined) {
-      this.log("%s: %s", label, formatted);
-    } else {
-      this.log("%s: %s", label, formatted, ...args);
-    }
-  };
-
   // ------------------------------------------------------------- grouping
 
   group = (...data: unknown[]): void => {
@@ -387,8 +385,6 @@ export class Console {
     }
     this.#groupIndent += " ".repeat(this.#groupIndentWidth);
   };
-
-  groupCollapsed = this.group;
 
   groupEnd = (): void => {
     this.#groupIndent = this.#groupIndent.slice(
@@ -560,6 +556,12 @@ export class Console {
 
     final(keys, values);
   };
+
+  // Node installs the two aliases after the primary console family. They are
+  // the same function values, with no forwarding call, and retaining their
+  // source order also gives the host CommonJS namespace its exact key order.
+  dirxml = this.log;
+  groupCollapsed = this.group;
 }
 
 const keyKey = "Key";

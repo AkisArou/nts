@@ -22,17 +22,30 @@ function addEllipsis(value) {
 }
 
 const METHODS = [
-  "fail", "equal", "notEqual", "deepEqual", "notDeepEqual",
-  "deepStrictEqual", "notDeepStrictEqual", "strictEqual",
-  "notStrictEqual", "partialDeepStrictEqual", "match", "doesNotMatch",
-  "throws", "rejects", "doesNotThrow", "doesNotReject", "ifError",
+  "fail",
+  "equal",
+  "notEqual",
+  "deepEqual",
+  "notDeepEqual",
+  "deepStrictEqual",
+  "notDeepStrictEqual",
+  "strictEqual",
+  "notStrictEqual",
+  "partialDeepStrictEqual",
+  "match",
+  "doesNotMatch",
+  "throws",
+  "rejects",
+  "doesNotThrow",
+  "doesNotReject",
+  "ifError",
 ];
 
 export function shape(exports) {
   // Custom inspection is a Symbol-dispatched Node object hook, deliberately a
   // section-13 non-goal for compiled TypeScript. Keep the whole hook at this
   // JavaScript boundary rather than leaving a symbol-shaped half in the class.
-  exports.AssertionError.prototype[inspect.custom] = function(_depth, context) {
+  exports.AssertionError.prototype[inspect.custom] = function (_depth, context) {
     const actual = this.actual;
     const expected = this.expected;
     if (typeof actual === "string") this.actual = addEllipsis(actual);
@@ -55,23 +68,25 @@ export function shape(exports) {
   const assert = function assert(...args) {
     return exports.ok.apply(undefined, args);
   };
+  // `lib/assert.js` installs these three before the assertion family. Keep
+  // that order: CommonJS namespace enumeration is observable at this host
+  // boundary even though the compiled implementation has no property map.
+  assert.AssertionError = exports.AssertionError;
+  assert.CallTracker = exports.CallTracker;
+  assert.ok = assert;
   for (const name of METHODS) {
     assert[name] = exports[name];
   }
-  assert.ok = assert;
-  assert.AssertionError = exports.AssertionError;
-  assert.CallTracker = exports.CallTracker;
-  assert.Assert = Assert;
 
   const strict = function strict(...args) {
     return exports.ok.apply(undefined, args);
   };
+  strict.AssertionError = exports.AssertionError;
+  strict.CallTracker = exports.CallTracker;
+  strict.ok = strict;
   for (const name of METHODS) {
     strict[name] = exports[name];
   }
-  strict.ok = strict;
-  strict.AssertionError = exports.AssertionError;
-  strict.CallTracker = exports.CallTracker;
   strict.equal = exports.strictEqual;
   strict.deepEqual = exports.deepStrictEqual;
   strict.notEqual = exports.notStrictEqual;
@@ -80,6 +95,7 @@ export function shape(exports) {
   strict.strict = strict;
 
   assert.strict = strict;
+  assert.Assert = Assert;
   return assert;
 }
 
