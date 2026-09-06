@@ -18,10 +18,12 @@ export interface TransportResponse {
   readonly headers: readonly HeaderEntry[];
   readonly body: ReadableStream<Uint8Array> | null;
 }
+
 /** No redirects, cookie jar, automatic retry or authentication in this contract. */
 export interface FetchTransport {
   dispatch(request: TransportRequest): Promise<TransportResponse>;
 }
+
 /** Optional native decompressor; coding decisions and order belong to Fetch. */
 export interface ContentDecoder {
   supports(coding: string): boolean;

@@ -23,6 +23,7 @@ export function base64(bytes: Uint8Array): string {
 function rotate(value: number, bits: number): number {
   return (value << bits) | (value >>> (32 - bits));
 }
+
 /** SHA-1 is used ONLY for RFC 6455's fixed handshake, not for security signatures. */
 export function websocketAccept(key: string): string {
   const input = encodeByteString(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");

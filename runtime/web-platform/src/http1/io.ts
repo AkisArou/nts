@@ -12,6 +12,7 @@ export async function writeAll(connection: ByteConnection, data: Uint8Array): Pr
     offset += written;
   }
 }
+
 /** Incremental buffered reader; an upgrade keeps this object so no head bytes are lost. */
 export class BufferedReader {
   private readonly connection: ByteConnection;

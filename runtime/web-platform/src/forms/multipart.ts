@@ -15,6 +15,7 @@ function newlines(input: string): string {
 function quoted(input: string): string {
   return newlines(input).replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/"/g, "%22");
 }
+
 /** Blob concatenation shares immutable segments; file contents are NOT eagerly materialized. */
 export function encodeMultipart(form: FormData, random: RandomSource): EncodedMultipart {
   const entropy = new Uint8Array(24);

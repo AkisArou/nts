@@ -36,6 +36,7 @@ export class AbortSignal extends EventTarget {
   throwIfAborted(): void {
     if (this.isAborted) throw this.abortReason;
   }
+
   /** Internal cancellation algorithms cannot be blocked by stopImmediatePropagation. */
   subscribe(callback: () => void): () => void {
     if (this.isAborted) {
@@ -54,6 +55,7 @@ export class AbortSignal extends EventTarget {
       if (index >= 0) this.algorithms.splice(index, 1);
     };
   }
+
   /** @internal */ trigger(reason: unknown): void {
     if (this.isAborted) return;
     this.isAborted = true;
@@ -94,6 +96,7 @@ export class AbortSignal extends EventTarget {
     }
     return result;
   }
+
   /** Runtime code supplies its owning environment's scheduler. */
   static timeout(milliseconds: number, scheduler: Scheduler): AbortSignal {
     if (!Number.isSafeInteger(milliseconds) || milliseconds < 0)

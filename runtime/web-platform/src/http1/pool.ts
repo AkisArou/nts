@@ -220,6 +220,7 @@ export class ConnectionPool {
         );
     }
   }
+
   /** @internal */ release(record: RecordEntry, reusable: boolean): void {
     if (!this.records.has(record)) return;
     if (

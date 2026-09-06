@@ -11,6 +11,7 @@ export interface MultipartDecodeLimits {
   maxParts?: number;
   maxPartHeaderBytes?: number;
 }
+
 /** KMP search avoids quadratic behavior on adversarial repeated boundary prefixes. */
 class BytePattern {
   private readonly needle: Uint8Array;
@@ -40,6 +41,7 @@ class BytePattern {
 function at(bytes: Uint8Array, position: number, a: number, b: number): boolean {
   return bytes[position] === a && bytes[position + 1] === b;
 }
+
 /** Materializing Body.formData() parser, not an implicit network buffer. */
 export function decodeMultipart(
   bytes: Uint8Array,

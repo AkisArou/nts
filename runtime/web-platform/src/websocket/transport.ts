@@ -18,6 +18,7 @@ export interface WebSocketHandshake {
   protocols: readonly string[];
   origin: string;
 }
+
 /** Public WebSocket state does not know whether the provider owns RFC 6455 framing. */
 export interface WebSocketSession {
   readonly protocol: string;

@@ -68,6 +68,7 @@ export async function readFrame(
     for (let i = 0; i < payload.length; i++) payload[i] = (payload[i] ?? 0) ^ (mask[i & 3] ?? 0);
   return { fin, opcode: code, payload };
 }
+
 /** Returned chunks may be gathered by native writev. ownPayload allows in-place masking. */
 export function encodeFrame(
   frame: Frame,

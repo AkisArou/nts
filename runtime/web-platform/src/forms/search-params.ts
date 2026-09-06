@@ -51,6 +51,7 @@ export function formDecode(input: string): string {
   }
   return decodeUTF8(bytes.subarray(0, length), false, true);
 }
+
 /** Standalone URLSearchParams. Live linkage to URL is supplied by the existing NTS URL package. */
 export class URLSearchParams {
   private list: SearchParamEntry[] = [];

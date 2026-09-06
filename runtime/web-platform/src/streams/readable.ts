@@ -18,6 +18,7 @@ interface QueueEntry<T> {
   value: T;
   size: number;
 }
+
 /**
  * Default-reader Streams subset, not BYOB or a Web-IDL implementation. Reads are
  * pull-driven, with a single in-flight underlying pull and explicit ownership.
@@ -63,12 +64,15 @@ export class ReadableStream<T> {
   get locked(): boolean {
     return this.currentReader !== null;
   }
+
   /** @internal */ get disturbed(): boolean {
     return this.isDisturbed;
   }
+
   /** @internal */ get queuedSize(): number {
     return this.totalSize;
   }
+
   /** @internal */ markDisturbed(): void {
     this.isDisturbed = true;
   }
@@ -77,6 +81,7 @@ export class ReadableStream<T> {
     if (this.locked) throw new TypeError("Stream is locked");
     return new ReadableStreamDefaultReader(this);
   }
+
   /** @internal */ attach(reader: ReadableStreamDefaultReader<T>): void {
     if (this.locked) throw new TypeError("Stream is locked");
     this.currentReader = reader;
@@ -88,6 +93,7 @@ export class ReadableStream<T> {
     if (this.locked) return Promise.reject(new TypeError("Stream is locked"));
     return this.cancelInternal(reason);
   }
+
   /** @internal */ async cancelInternal(reason: unknown): Promise<void> {
     this.isDisturbed = true;
     if (this.state === "closed") return;
@@ -98,6 +104,7 @@ export class ReadableStream<T> {
     this.finish();
     await this.source.cancel?.(reason);
   }
+
   /** @internal */ read(reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<T>> {
     if (reader !== this.currentReader)
       return Promise.reject(new TypeError("Reader has been released"));
@@ -124,6 +131,7 @@ export class ReadableStream<T> {
     this.maybePull();
     return result.promise;
   }
+
   /** @internal */ release(reader: ReadableStreamDefaultReader<T>): void {
     if (reader !== this.currentReader) return;
     this.currentReader = null;
@@ -131,6 +139,7 @@ export class ReadableStream<T> {
     for (const read of this.pending.splice(0)) read.reject(error);
     reader.released(error);
   }
+
   /** @internal */ enqueue(value: T): void {
     if (this.state !== "readable" || this.closeRequested)
       throw new TypeError("Stream is not writable");
@@ -150,6 +159,7 @@ export class ReadableStream<T> {
     }
     this.maybePull();
   }
+
   /** @internal */ requestClose(): void {
     if (this.state !== "readable" || this.closeRequested)
       throw new TypeError("Stream cannot be closed twice");
@@ -161,6 +171,7 @@ export class ReadableStream<T> {
     for (const read of this.pending.splice(0)) read.resolve({ done: true, value: undefined });
     this.currentReader?.finish();
   }
+
   /** @internal */ fail(error: unknown): void {
     if (this.state !== "readable") return;
     this.state = "errored";
@@ -171,6 +182,7 @@ export class ReadableStream<T> {
     for (const read of this.pending.splice(0)) read.reject(error);
     this.currentReader?.fail(error);
   }
+
   /** @internal */ get desiredSize(): number | null {
     if (this.state === "errored") return null;
     if (this.state === "closed") return 0;
@@ -268,6 +280,7 @@ export class ReadableStreamDefaultReader<T> {
     ignoreRejection(this.closed);
     stream.attach(this);
   }
+
   /** @internal */ released(error: unknown): void {
     if (this.closedState !== "pending") {
       this.closedCapability = Promise.withResolvers<void>();
@@ -294,11 +307,13 @@ export class ReadableStreamDefaultReader<T> {
     this.stream?.release(this);
     this.stream = null;
   }
+
   /** @internal */ finish(): void {
     if (this.closedState !== "pending") return;
     this.closedState = "fulfilled";
     this.closedCapability.resolve();
   }
+
   /** @internal */ fail(error: unknown): void {
     if (this.closedState !== "pending") return;
     this.closedState = "rejected";
@@ -442,6 +457,7 @@ export function bytesStream(bytes: Uint8Array, chunkSize = 65536): ReadableStrea
     { highWaterMark: 0, size: (chunk) => chunk.length },
   );
 }
+
 /** The source becomes disturbed immediately, matching Request body transfer. */
 export function transfer<T>(stream: ReadableStream<T>): ReadableStream<T> {
   const reader = stream.getReader();
