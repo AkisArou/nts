@@ -26,6 +26,14 @@ globalThis.nts_fs_o_excl = () => C.O_EXCL;
 globalThis.nts_fs_o_trunc = () => C.O_TRUNC;
 globalThis.nts_fs_o_append = () => C.O_APPEND;
 globalThis.nts_fs_o_sync = () => C.O_SYNC;
+globalThis.nts_fs_o_direct = () => C.O_DIRECT ?? 0;
+globalThis.nts_fs_o_directory = () => C.O_DIRECTORY ?? 0;
+globalThis.nts_fs_o_dsync = () => C.O_DSYNC ?? 0;
+globalThis.nts_fs_o_noatime = () => C.O_NOATIME ?? 0;
+globalThis.nts_fs_o_noctty = () => C.O_NOCTTY ?? 0;
+globalThis.nts_fs_o_nofollow = () => C.O_NOFOLLOW ?? 0;
+globalThis.nts_fs_o_nonblock = () => C.O_NONBLOCK ?? 0;
+globalThis.nts_fs_o_filemap = () => C.UV_FS_O_FILEMAP ?? 0;
 globalThis.nts_fs_binding_warns_on_mkdtemp = () => true;
 globalThis.nts_fs_eisdir = () => -os.constants.errno.EISDIR;
 

@@ -66,6 +66,14 @@ declare function nts_fs_o_excl(): number;
 declare function nts_fs_o_trunc(): number;
 declare function nts_fs_o_append(): number;
 declare function nts_fs_o_sync(): number;
+declare function nts_fs_o_direct(): number;
+declare function nts_fs_o_directory(): number;
+declare function nts_fs_o_dsync(): number;
+declare function nts_fs_o_noatime(): number;
+declare function nts_fs_o_noctty(): number;
+declare function nts_fs_o_nofollow(): number;
+declare function nts_fs_o_nonblock(): number;
+declare function nts_fs_o_filemap(): number;
 
 /** Platform-defined open flags, obtained from the same C constants libuv uses. */
 export const O_CREAT = nts_fs_o_creat();
@@ -73,3 +81,11 @@ export const O_EXCL = nts_fs_o_excl();
 export const O_TRUNC = nts_fs_o_trunc();
 export const O_APPEND = nts_fs_o_append();
 export const O_SYNC = nts_fs_o_sync();
+export const O_DIRECT = nts_fs_o_direct();
+export const O_DIRECTORY = nts_fs_o_directory();
+export const O_DSYNC = nts_fs_o_dsync();
+export const O_NOATIME = nts_fs_o_noatime();
+export const O_NOCTTY = nts_fs_o_noctty();
+export const O_NOFOLLOW = nts_fs_o_nofollow();
+export const O_NONBLOCK = nts_fs_o_nonblock();
+export const UV_FS_O_FILEMAP = nts_fs_o_filemap();

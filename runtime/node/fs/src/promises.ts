@@ -1958,6 +1958,7 @@ export const symlink = promisifyVoid(callbacks.symlink);
 export const truncate = promisifyVoid(callbacks.truncate);
 export const unlink = promisifyVoid(callbacks.unlink);
 export const utimes = promisifyVoid(callbacks.utimes);
+export const lutimes = promisifyVoid(callbacks.lutimes);
 export async function lchmod(
   _path: PathLike,
   _mode: number | string,

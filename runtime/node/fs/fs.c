@@ -78,6 +78,42 @@ double nts_fs_o_excl(void) { return (double)O_EXCL; }
 double nts_fs_o_trunc(void) { return (double)O_TRUNC; }
 double nts_fs_o_append(void) { return (double)O_APPEND; }
 double nts_fs_o_sync(void) { return (double)O_SYNC; }
+#ifdef O_DIRECT
+double nts_fs_o_direct(void) { return (double)O_DIRECT; }
+#else
+double nts_fs_o_direct(void) { return 0; }
+#endif
+#ifdef O_DIRECTORY
+double nts_fs_o_directory(void) { return (double)O_DIRECTORY; }
+#else
+double nts_fs_o_directory(void) { return 0; }
+#endif
+#ifdef O_DSYNC
+double nts_fs_o_dsync(void) { return (double)O_DSYNC; }
+#else
+double nts_fs_o_dsync(void) { return 0; }
+#endif
+#ifdef O_NOATIME
+double nts_fs_o_noatime(void) { return (double)O_NOATIME; }
+#else
+double nts_fs_o_noatime(void) { return 0; }
+#endif
+#ifdef O_NOCTTY
+double nts_fs_o_noctty(void) { return (double)O_NOCTTY; }
+#else
+double nts_fs_o_noctty(void) { return 0; }
+#endif
+#ifdef O_NOFOLLOW
+double nts_fs_o_nofollow(void) { return (double)O_NOFOLLOW; }
+#else
+double nts_fs_o_nofollow(void) { return 0; }
+#endif
+#ifdef O_NONBLOCK
+double nts_fs_o_nonblock(void) { return (double)O_NONBLOCK; }
+#else
+double nts_fs_o_nonblock(void) { return 0; }
+#endif
+double nts_fs_o_filemap(void) { return (double)UV_FS_O_FILEMAP; }
 bool nts_fs_binding_warns_on_mkdtemp(void) { return false; }
 bool nts_fs_is_32_bit(void) { return sizeof(void *) == 4; }
 double nts_fs_eisdir(void) { return (double)UV_EISDIR; }

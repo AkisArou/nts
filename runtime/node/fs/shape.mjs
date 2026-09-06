@@ -1,6 +1,11 @@
 // The object node's tests see as `require('fs')`.
 export function shape(exports) {
   const module = { ...exports };
+  const promises = { ...exports.promises };
+  // FileHandle is the public result type of promises.open(), not a runtime
+  // property of the node:fs/promises namespace.
+  delete promises.FileHandle;
+  module.promises = promises;
   module.Stats = callableStats(exports.Stats);
   module.ReadStream = callableReadStream(exports.ReadStream);
   module.WriteStream = callableWriteStream(exports.WriteStream);
@@ -42,8 +47,8 @@ export function shape(exports) {
 }
 
 /** `node:fs/promises` is the exact same namespace exposed as `fs.promises`. */
-export function subpaths(exports) {
-  return { "fs/promises": exports.promises };
+export function subpaths(_exports, underTest) {
+  return { "fs/promises": underTest.promises };
 }
 
 /** Private utilities explicitly exercised by otherwise applicable fs tests. */
