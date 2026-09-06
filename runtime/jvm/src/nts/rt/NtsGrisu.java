@@ -49,8 +49,10 @@ final class NtsGrisu {
         long p00 = a0 * b0, p01 = a0 * b1, p10 = a1 * b0, p11 = a1 * b1;
         long mid = (p00 >>> 32) + (p01 & 0xFFFFFFFFL) + (p10 & 0xFFFFFFFFL);
         long hi = p11 + (p01 >>> 32) + (p10 >>> 32) + (mid >>> 32);
-        long lo = (mid << 32) | (p00 & 0xFFFFFFFFL);
-        return hi + (lo >>> 63);
+        // The rounding bit is the top bit of the low half, and the low half is
+        // `mid` shifted up by thirty-two -- so it is bit 31 of `mid`, and the
+        // low half never has to be assembled to read it.
+        return hi + ((mid >>> 31) & 1);
     }
 
     private static int digitsOf(long n) {
@@ -116,9 +118,15 @@ final class NtsGrisu {
         if (biased != 0) { vf = frac + (1L << 52); ve = biased - 1075; }
         else { vf = frac; ve = -1074; }
 
+        // `numberOfLeadingZeros` is an intrinsic -- `lzcnt` on this machine and
+        // `clz` on ART -- where the shift-until-set loop it replaces runs
+        // eleven times for every normal double, twice per call. Same answer:
+        // the loop stops when the top bit is set, which is exactly the count.
         long wf = vf;
         int we = ve;
-        while ((wf & (1L << 63)) == 0) { wf <<= 1; we--; }
+        int wz = Long.numberOfLeadingZeros(wf);
+        wf <<= wz;
+        we -= wz;
 
         // The two values halfway to the neighbouring doubles, normalised
         // together. Anything strictly inside reads back as `d`. The lower gap is
@@ -127,7 +135,9 @@ final class NtsGrisu {
         // to have stepped down from.
         long plusF = (vf << 1) + 1;
         int plusE = ve - 1;
-        while ((plusF & (1L << 63)) == 0) { plusF <<= 1; plusE--; }
+        int plusZ = Long.numberOfLeadingZeros(plusF);
+        plusF <<= plusZ;
+        plusE -= plusZ;
         long minusF;
         int minusE;
         if (frac == 0 && biased != 0) { minusF = (vf << 2) - 1; minusE = ve - 2; }
@@ -165,10 +175,20 @@ final class NtsGrisu {
         long divisor = POW10[digits - 1];
         int kappa = digits;
         int length = 0;
+        // The integral part fits thirty-two bits -- *unsigned*, which is why
+        // this divides through `Integer.divideUnsigned` and not a plain cast:
+        // the choice of power above bounds it below 2^32, not below 2^31, and a
+        // ten-digit value above 2,147,483,647 casts to a negative `int`. The
+        // divisor is a power of ten no larger than 10^9, so it needs no such
+        // care. A 32-bit divide is several times a 64-bit one here and the loop
+        // runs once per digit.
+        int narrow = (int) integral;
         while (kappa > 0) {
-            long digit = integral / divisor;
+            int small = (int) divisor;
+            int digit = Integer.divideUnsigned(narrow, small);
             buffer[length++] = (byte) ('0' + digit);
-            integral -= digit * divisor;
+            narrow -= digit * small;
+            integral = narrow & 0xFFFFFFFFL;
             kappa--;
             long rest = (integral << shift) + fractional;
             if (Long.compareUnsigned(rest, unsafe) < 0) {
