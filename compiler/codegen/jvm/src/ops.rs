@@ -2087,6 +2087,14 @@ impl Emitter<'_> {
         if self.widened.contains(&operand) && self.kind_of(value)? == Kind::Double {
             return Ok(Placed::OnStack);
         }
+        // The same identity on the other side: an `f64` narrowed to an `i32`
+        // that `widen` decided to hold in a `double` slot is already in it, so
+        // the `d2i` this would emit is the one widening exists to remove.
+        if self.widened.contains(&value)
+            && types::kind(&self.ty(operand).clone()) == Some(Kind::Double)
+        {
+            return Ok(Placed::OnStack);
+        }
         // The mirror: an `i32` widened to an `i64` that `narrow` decided to keep
         // in an `int` slot has nothing left to do. Guarded on the declared types
         // being exactly that widening, because `Convert` between a float and an
@@ -3027,8 +3035,17 @@ impl Emitter<'_> {
             Terminator::Return(value) => {
                 match value {
                     Some(value) => {
-                        self.load(code, pool, *value)?;
-                        let kind = self.kind_of(*value)?;
+                        // The *method descriptor's* kind, not the value's. They
+                        // agree wherever this backend holds a value in its
+                        // declared representation and they are exactly what
+                        // `narrow` makes disagree -- and a `return` is one of
+                        // the places that reads a value by its declaration, so
+                        // it has to say which one it means. Falling back to the
+                        // value's kind keeps the old behaviour for a return
+                        // type with no `Kind`.
+                        let kind = types::kind(&self.func.return_type)
+                            .map_or_else(|| self.kind_of(*value), Ok)?;
+                        self.push_as(code, pool, *value, kind, &origin)?;
                         code.ret(&origin, Some(kind));
                     }
                     None => code.ret(&origin, None),

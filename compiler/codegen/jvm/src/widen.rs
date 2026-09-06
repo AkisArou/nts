@@ -231,10 +231,22 @@ pub fn plan(program: &Program) -> Plan {
 
     let mut refused: FxHashSet<u32> = FxHashSet::default();
     let mut wanted: FxHashSet<u32> = FxHashSet::default();
+    // A class some member of which is *defined* by narrowing an f64, and one
+    // some member of which is computed rather than merely carried.
+    let mut from_f64: FxHashSet<u32> = FxHashSet::default();
+    let mut computed: FxHashSet<u32> = FxHashSet::default();
 
     unify(program, &mut classes, &offset, &field_index);
 
-    strike_down(program, &mut classes, &offset, &mut refused, &mut wanted);
+    strike_down(
+        program,
+        &mut classes,
+        &offset,
+        &mut refused,
+        &mut wanted,
+        &mut from_f64,
+        &mut computed,
+    );
 
     // Only a class that reaches a **field**.
     //
@@ -253,6 +265,30 @@ pub fn plan(program: &Program) -> Plan {
     // too -- but "widen what removes a conversion from a field access".
     let reaching_a_field: FxHashSet<u32> =
         field_index.values().map(|slot| classes.find(*slot)).collect();
+
+    // The second shape, and the reason it is not the losing one.
+    //
+    // A class every member of which is narrowed *from* an f64, or a constant,
+    // or a block parameter -- and nothing else -- and which is converted back
+    // to an f64 to be used. `optional-chain` carries the closure's `f64` result
+    // through an absence payload typed `i32`, so it emits `d2i` on the way in
+    // and `i2d` on the way out, once an iteration, and the payload's only
+    // reader is the widening. Held as a `double` **both conversions disappear
+    // and nothing replaces them**: the constants become double constants and
+    // the block parameters become double slots.
+    //
+    // That is what separates it from the two locals experiments this file
+    // records losing. On `closures` widening removed one `i2d` from a
+    // 103-instruction method and put an `i2d` somewhere else, and a `double`
+    // slot where an `int` would do cost 30%. Here there is nothing to relocate,
+    // because `computed` excludes any class that *computes* a member rather
+    // than carrying one -- no arithmetic, no field read, only the round trip.
+    //
+    // Priced before building, on the shape rather than the emitter: the same
+    // program with an `f64` payload instead of an `i32` one runs at 2.96 cycles
+    // an iteration against 4.17. Record 0150.
+    let round_trip: FxHashSet<u32> =
+        from_f64.difference(&computed).copied().collect();
     let mut plan = Plan::empty();
     for func in program.funcs.iter().filter(|it| emitted(it)) {
         let mut kept = FxHashSet::default();
@@ -262,7 +298,7 @@ pub fn plan(program: &Program) -> Plan {
             if narrow(&op.ty)
                 && !refused.contains(&root)
                 && wanted.contains(&root)
-                && reaching_a_field.contains(&root)
+                && (reaching_a_field.contains(&root) || round_trip.contains(&root))
             {
                 kept.insert(value);
             }
@@ -285,12 +321,15 @@ pub fn plan(program: &Program) -> Plan {
 /// Split from `plan` because the union pass and the refusal pass are two
 /// separate readings of the program and reading them as one function was the
 /// thing that hid a `yield` in a block nothing reaches.
+#[allow(clippy::too_many_arguments, reason = "four disjoint verdicts about one class")]
 fn strike_down(
     program: &Program,
     classes: &mut Classes,
     offset: &FxHashMap<String, usize>,
     refused: &mut FxHashSet<u32>,
     wanted: &mut FxHashSet<u32>,
+    from_f64: &mut FxHashSet<u32>,
+    computed: &mut FxHashSet<u32>,
 ) {
     let id = |func: &Func, value: ValueId| -> u32 {
         u32::try_from(offset[&func.name] + value.0 as usize).unwrap_or(u32::MAX)
@@ -308,8 +347,19 @@ fn strike_down(
                 continue;
             }
             match &op.kind {
-                OpKind::ConstInt(_) | OpKind::BlockParam(_) | OpKind::FieldGet { .. } => {}
-                OpKind::Binary { op, .. } if shares_representation(*op) => {}
+                OpKind::ConstInt(_) | OpKind::BlockParam(_) => {}
+                OpKind::FieldGet { .. } => {
+                    computed.insert(classes.find(here));
+                }
+                OpKind::Binary { op, .. } if shares_representation(*op) => {
+                    computed.insert(classes.find(here));
+                }
+                // An `f64` narrowed to an `i32`. Held as a `double` this
+                // definition is nothing at all, which is what makes the class
+                // below a round trip rather than a relocation.
+                OpKind::Convert(source) if is_f64(&func.values[source.0 as usize].ty) => {
+                    from_f64.insert(classes.find(here));
+                }
                 _ => {
                     refused.insert(classes.find(here));
                 }

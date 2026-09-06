@@ -349,9 +349,11 @@ pub(crate) fn narrowable(func: &Func) -> FxHashSet<ValueId> {
 /// Values something reads by their *declared* type rather than by how they are
 /// held.
 ///
-/// A `putfield` names `J` in its descriptor, a `return` names the method's, and
-/// a call names its parameter's -- and each of those sites loads the operand and
-/// hands it straight to the instruction. An `int` where a `long` is declared is
+/// A `putfield` names `J` in its descriptor and a call names its parameter's,
+/// and each of those sites loads the operand and hands it straight to the
+/// instruction. A `return` was on this list until it learned to push by the
+/// method descriptor's kind rather than the value's, which is what it should
+/// have been reading all along. An `int` where a `long` is declared is
 /// one word where two are wanted, which is why every one of these was caught by
 /// the emitter's stack accounting rather than by the verifier, and why none of
 /// them produced a class at all.
@@ -379,15 +381,6 @@ fn read_by_declaration(func: &Func, chosen: &FxHashSet<ValueId>) -> FxHashSet<Va
             other => nts_core::hir::operands_of(other),
         };
         give_up.extend(risky.into_iter().filter(|value| chosen.contains(value)));
-    }
-    for block in &func.blocks {
-        // A jump's arguments become block parameters through `apply`, which
-        // reads both ends. A `return` hands the value to the method descriptor.
-        if let Terminator::Return(Some(value)) = &block.terminator
-            && chosen.contains(value)
-        {
-            give_up.insert(*value);
-        }
     }
     give_up
 }
