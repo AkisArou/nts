@@ -40,6 +40,7 @@ const {
   Event,
   EventTarget,
   File,
+  FormData,
   Headers,
   DOMException,
   ReadableStream,
@@ -91,6 +92,7 @@ function createWptContext(path, pending) {
     Float32Array,
     Float64Array,
     Function,
+    FormData,
     Headers,
     Int8Array,
     Int16Array,
@@ -120,6 +122,15 @@ function createWptContext(path, pending) {
     assert_equals: assert.strictEqual,
     assert_false(value, message) {
       assert.equal(value, false, message);
+    },
+    assert_greater_than_equal(actual, expected, message) {
+      assert.ok(actual >= expected, message);
+    },
+    assert_less_than(actual, expected, message) {
+      assert.ok(actual < expected, message);
+    },
+    assert_less_than_equal(actual, expected, message) {
+      assert.ok(actual <= expected, message);
     },
     assert_not_equals(actual, expected, message) {
       assert.notStrictEqual(actual, expected, message);

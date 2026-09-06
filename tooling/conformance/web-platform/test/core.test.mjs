@@ -1639,6 +1639,138 @@ test("FormData applies Web IDL overload conversion and preserves renamed files",
   expected.append("blob", new NativeBlob(["body"]), undefined);
   assert.equal(actual.get("blob").name, expected.get("blob").name);
 });
+test("FormData enforces required arguments before conversion", () => {
+  const actual = new FormData();
+  const expected = new NativeFormData();
+  for (const operation of ["append", "set"]) {
+    assert.throws(() => actual[operation](), TypeError);
+    assert.throws(() => actual[operation]("name"), TypeError);
+    assert.throws(() => expected[operation](), TypeError);
+    assert.throws(() => expected[operation]("name"), TypeError);
+  }
+  for (const operation of ["delete", "get", "getAll", "has"]) {
+    assert.throws(() => actual[operation](), TypeError);
+    assert.throws(() => expected[operation](), TypeError);
+  }
+
+  actual.append(undefined, undefined);
+  expected.append(undefined, undefined);
+  assert.deepEqual([...actual], [...expected]);
+
+  const actualOrder = [];
+  const expectedOrder = [];
+  const makeValue = (order, label) => ({
+    toString() {
+      order.push(label);
+      return label;
+    },
+  });
+  assert.throws(
+    () =>
+      actual.append(
+        makeValue(actualOrder, "name"),
+        makeValue(actualOrder, "value"),
+        makeValue(actualOrder, "filename"),
+      ),
+    TypeError,
+  );
+  assert.throws(
+    () =>
+      expected.append(
+        makeValue(expectedOrder, "name"),
+        makeValue(expectedOrder, "value"),
+        makeValue(expectedOrder, "filename"),
+      ),
+    TypeError,
+  );
+  assert.deepEqual(actualOrder, expectedOrder);
+});
+test("FormData validates callbacks before iteration and keeps iteration live", () => {
+  const empty = new FormData();
+  assert.throws(() => empty.forEach(null), TypeError);
+
+  const actual = new FormData();
+  const expected = new NativeFormData();
+  for (const form of [actual, expected]) {
+    form.append("first", "1");
+    form.append("second", "2");
+  }
+  const actualEntries = [];
+  const expectedEntries = [];
+  actual.forEach(function (value, name, parent) {
+    actualEntries.push([name, value, this, parent === actual]);
+    if (name === "first") parent.append("third", "3");
+  }, "receiver");
+  expected.forEach(function (value, name, parent) {
+    expectedEntries.push([name, value, this, parent === expected]);
+    if (name === "first") parent.append("third", "3");
+  }, "receiver");
+  assert.deepEqual(actualEntries, expectedEntries);
+  assert.equal(Object.prototype.toString.call(actual), "[object FormData]");
+  assert.deepEqual(Object.keys(actual), Object.keys(expected));
+
+  const iterators = [actual.entries(), actual.keys(), actual.values(), actual[Symbol.iterator]()];
+  const iteratorPrototype = Object.getPrototypeOf(iterators[0]);
+  for (const iterator of iterators) {
+    assert.equal(Object.getPrototypeOf(iterator), iteratorPrototype);
+    assert.equal(Object.prototype.toString.call(iterator), "[object FormData Iterator]");
+    assert.equal(iterator[Symbol.iterator](), iterator);
+    assert.equal(iterator.return, undefined);
+    assert.equal(iterator.throw, undefined);
+    assert.deepEqual(Object.keys(iterator), []);
+  }
+  assert.deepEqual(
+    actual
+      .entries()
+      .map(([name]) => name)
+      .toArray(),
+    [...actual.keys()],
+  );
+  const actualShape = actual.entries();
+  const expectedShape = expected.entries();
+  assert.deepEqual(Object.keys(actualShape.next()), Object.keys(expectedShape.next()));
+  for (const _entry of actualShape) {
+    // Consume the same live iterator to its terminal result.
+  }
+  for (const _entry of expectedShape) {
+    // Consume the native oracle to the same terminal result.
+  }
+  assert.deepEqual(Object.keys(actualShape.next()), Object.keys(expectedShape.next()));
+
+  const growingActual = new FormData();
+  const growingExpected = new NativeFormData();
+  const growingActualIterator = growingActual.entries();
+  const growingExpectedIterator = growingExpected.entries();
+  assert.deepEqual(growingActualIterator.next(), growingExpectedIterator.next());
+  growingActual.append("late", "value");
+  growingExpected.append("late", "value");
+  assert.deepEqual(growingActualIterator.next(), growingExpectedIterator.next());
+  assert.throws(() => iterators[0].next.call({}), TypeError);
+
+  const yielded = actual.entries().next().value;
+  yielded[1] = "not stored";
+  assert.equal(actual.get("first"), "1");
+  assert.throws(() => FormData.prototype.get.call({}, "name"), TypeError);
+  assert.throws(() => FormData.prototype.append.call({}, "name", "value"), TypeError);
+  assert.throws(() => FormData.prototype.entries.call({}), TypeError);
+  assert.throws(() => FormData.prototype.forEach.call({}, () => {}), TypeError);
+});
+test("FormData obtains generated File timestamps from its owning environment", () => {
+  const installedRuntime = globalThis.nts_environment_platform;
+  const expectedTime = 1_234_567_890;
+  globalThis.nts_environment_platform = () => ({
+    wallTimeMilliseconds() {
+      return expectedTime;
+    },
+  });
+  try {
+    const form = new FormData();
+    form.append("blob", new Blob());
+    assert.equal(form.get("blob").lastModified, expectedTime);
+  } finally {
+    globalThis.nts_environment_platform = installedRuntime;
+  }
+});
 test("Blob copies every view and applies Web IDL slice conversion", async () => {
   const backing = Uint8Array.of(9, 1, 2, 3, 9);
   const view = new DataView(backing.buffer, 1, 3);

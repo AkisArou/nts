@@ -717,3 +717,48 @@ iterable/runtime-class recognition, rest-tuple representation, computed `in`, an
 the new typed platform wall-clock method. These are dependencies already owned by
 the integration plan. The final-form File API surface was not narrowed, and the
 host boundary was not moved into compiled TypeScript, to reduce that count.
+
+`FormData` now implements the complete server/mobile Web IDL surface without
+exposing an HTML-form substitute. Its constructor accepts omission or explicit
+`undefined` and rejects other form values; every named operation performs receiver
+branding and required-argument checks before conversion. `append()` and `set()`
+select their string/Blob overload from the runtime values, preserve Web IDL
+conversion order, keep an existing `File` by identity when no filename is supplied,
+and obtain the timestamp for a generated `File` from the owning environment.
+`set()` and `delete()` retain the allocation-stable in-place compaction introduced
+earlier, while replacement mutates the exclusively owned stored entry rather than
+allocating another pair.
+
+The collection now returns one branded `FormData Iterator` implementation for
+entries, keys, values, and default iteration. It is live under mutation, returns a
+fresh pair only for entry iteration, has no generator-only `return()` or `throw()`,
+and inherits the standard `Iterator` prototype so current iterator helpers operate
+on it. The stored list and iterator state use ECMAScript private fields, leaving no
+enumerable implementation properties. `forEach()` validates its callback even for
+an empty form, applies `thisArg`, observes mutation live, and walks stored entries
+without allocating transient pairs.
+
+Nine complete unchanged non-DOM `xhr/formdata/*.any.js` WPT fixtures add 40 cases,
+expanding the immutable upstream slice from 483 to 523 tests; all 523 pass. The
+Node-host suite passes 136/136, and the root TypeScript solution remains green. A
+clock mutation made the environment-time assertion observe the host wall clock, a
+required-argument mutation accepted an omitted value, a callback-validation
+mutation accepted `null`, an iterator-brand mutation exposed `[object Generator]`,
+and an iterator-result mutation created `done` before `value`; every focused run
+failed before the mutation was restored.
+The source contains no `any`, assertion cast, proxy, reflection, or prototype
+mutation. Exact reflective method `.length` values are not claimed: the typed rest
+tuples that distinguish omission from explicit `undefined` necessarily change the
+emitted arity, while `arguments` and function property descriptors are permanent
+language non-goals. Call behavior and conversion order are covered directly.
+
+The live NTS frontier is 289 primary refusals, 64 cascades, zero JVM-backend
+refusals, and no invalid HIR. Relative to the File API frontier of 279/62, the net
+movement exposes the final FormData constructor/operation rest tuples, private
+iterator state and standard `IterableIterator` return types, stored-entry property
+assignment, and direct environment-clock call graph. Four primaries explicitly name
+the `IterableIterator` return representation. These are instances of the plan's
+existing class/interface, iteration, absence/arity, property-assignment, and
+environment-access prerequisites; the native `Iterator` base did not produce
+invalid HIR. The counts are a dependency frontier, not ten newly completed or
+regressed language features.

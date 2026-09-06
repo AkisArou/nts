@@ -1,68 +1,143 @@
-import { coerceToUSVString } from "../core/webidl.ts";
+import { coerceToUSVString, requireArguments } from "../core/webidl.ts";
 import { Blob, File } from "../file/blob.ts";
+import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
+
+declare function nts_environment_platform(): WebPlatformRuntime;
 
 export type FormDataEntryValue = string | File;
 
 export type FormDataEntry = readonly [name: string, value: FormDataEntryValue];
-type OptionalFilename = [] | [filename: string | undefined];
+type StoredFormDataEntry = [name: string, value: FormDataEntryValue];
+type FormDataValueArguments = [value?: unknown, filename?: unknown];
+type FormDataNameArguments = [name?: unknown];
+type FormDataForEachCallback = (
+  this: unknown,
+  value: FormDataEntryValue,
+  name: string,
+  parent: FormData,
+) => void;
+
+function selectEntry(item: StoredFormDataEntry): FormDataEntry {
+  return [item[0], item[1]];
+}
+
+function selectName(item: StoredFormDataEntry): string {
+  return item[0];
+}
+
+function selectValue(item: StoredFormDataEntry): FormDataEntryValue {
+  return item[1];
+}
+
+class FormDataIterator<T> extends Iterator<T> {
+  readonly #list: readonly StoredFormDataEntry[];
+  readonly #select: (item: StoredFormDataEntry) => T;
+  #position = 0;
+
+  constructor(list: readonly StoredFormDataEntry[], select: (item: StoredFormDataEntry) => T) {
+    super();
+    this.#list = list;
+    this.#select = select;
+  }
+
+  next(): IteratorResult<T, undefined> {
+    const list = this.#list;
+    const position = this.#position;
+    if (position >= list.length) {
+      return { value: undefined, done: true };
+    }
+    const item = list[position];
+    if (item === undefined) {
+      return { value: undefined, done: true };
+    }
+    this.#position = position + 1;
+    return { value: this.#select(item), done: false };
+  }
+
+  override get [Symbol.toStringTag](): "FormData Iterator" {
+    return "FormData Iterator";
+  }
+}
 
 function convertFormDataValue(
-  value: string | Blob,
-  filename: OptionalFilename,
+  value: unknown,
+  filenameGiven: boolean,
+  rawFilename: unknown,
 ): FormDataEntryValue {
   if (!(value instanceof Blob)) {
-    if (filename.length !== 0) {
+    if (filenameGiven) {
       throw new TypeError("A filename requires a Blob");
     }
     return coerceToUSVString(value);
   }
-  const suppliedFilename = filename.length === 0 ? undefined : filename[0];
+  const suppliedFilename = rawFilename === undefined ? undefined : coerceToUSVString(rawFilename);
   if (value instanceof File && suppliedFilename === undefined) {
     return value;
   }
-  return new File(
-    [value],
-    suppliedFilename === undefined ? "blob" : coerceToUSVString(suppliedFilename),
-    {
-      type: value.type,
-      lastModified: value instanceof File ? value.lastModified : Date.now(),
-    },
-  );
+  return new File([value], suppliedFilename === undefined ? "blob" : suppliedFilename, {
+    type: value.type,
+    lastModified:
+      value instanceof File
+        ? value.lastModified
+        : nts_environment_platform().wallTimeMilliseconds(),
+  });
 }
 
-export class FormData {
-  private readonly list: FormDataEntry[] = [];
+export class FormData implements Iterable<FormDataEntry> {
+  readonly #list: StoredFormDataEntry[] = [];
+
+  constructor();
+  constructor(form: undefined);
+  constructor(...args: [] | [form: undefined]) {
+    if (args.length !== 0 && args[0] !== undefined) {
+      throw new TypeError("FormData constructor does not accept an HTML form in this environment");
+    }
+  }
 
   append(name: string, value: string): void;
   append(name: string, value: Blob, filename?: string): void;
-  append(name: string, value: string | Blob, ...filename: OptionalFilename): void {
-    this.list.push([coerceToUSVString(name), convertFormDataValue(value, filename)]);
+  append(name: unknown, ...args: FormDataValueArguments): void {
+    const list = this.#list;
+    if (args.length === 0) {
+      throw new TypeError("FormData.append requires at least 2 argument(s)");
+    }
+    const key = coerceToUSVString(name);
+    const converted = convertFormDataValue(args[0], args.length > 1, args[1]);
+    list.push([key, converted]);
   }
 
   set(name: string, value: string): void;
   set(name: string, value: Blob, filename?: string): void;
-  set(name: string, value: string | Blob, ...filename: OptionalFilename): void {
+  set(name: unknown, ...args: FormDataValueArguments): void {
+    const list = this.#list;
+    if (args.length === 0) {
+      throw new TypeError("FormData.set requires at least 2 argument(s)");
+    }
     const key = coerceToUSVString(name);
-    const converted = convertFormDataValue(value, filename);
+    const converted = convertFormDataValue(args[0], args.length > 1, args[1]);
     let found = false;
     let write = 0;
-    for (const item of this.list) {
+    for (const item of list) {
       if (item[0] !== key) {
-        this.list[write++] = item;
+        list[write++] = item;
       } else if (!found) {
-        this.list[write++] = [key, converted];
+        item[1] = converted;
+        list[write++] = item;
         found = true;
       }
     }
     if (!found) {
-      this.list[write++] = [key, converted];
+      list[write++] = [key, converted];
     }
-    this.list.length = write;
+    list.length = write;
   }
 
-  get(name: string): FormDataEntryValue | null {
-    const key = coerceToUSVString(name);
-    for (const item of this.list) {
+  get(name: string): FormDataEntryValue | null;
+  get(...args: FormDataNameArguments): FormDataEntryValue | null {
+    const list = this.#list;
+    requireArguments(args, 1, "FormData.get");
+    const key = coerceToUSVString(args[0]);
+    for (const item of list) {
       if (item[0] === key) {
         return item[1];
       }
@@ -70,10 +145,13 @@ export class FormData {
     return null;
   }
 
-  getAll(name: string): FormDataEntryValue[] {
-    const key = coerceToUSVString(name);
+  getAll(name: string): FormDataEntryValue[];
+  getAll(...args: FormDataNameArguments): FormDataEntryValue[] {
+    const list = this.#list;
+    requireArguments(args, 1, "FormData.getAll");
+    const key = coerceToUSVString(args[0]);
     const values: FormDataEntryValue[] = [];
-    for (const item of this.list) {
+    for (const item of list) {
       if (item[0] === key) {
         values.push(item[1]);
       }
@@ -81,9 +159,12 @@ export class FormData {
     return values;
   }
 
-  has(name: string): boolean {
-    const key = coerceToUSVString(name);
-    for (const item of this.list) {
+  has(name: string): boolean;
+  has(...args: FormDataNameArguments): boolean {
+    const list = this.#list;
+    requireArguments(args, 1, "FormData.has");
+    const key = coerceToUSVString(args[0]);
+    for (const item of list) {
       if (item[0] === key) {
         return true;
       }
@@ -91,45 +172,47 @@ export class FormData {
     return false;
   }
 
-  delete(name: string): void {
-    const key = coerceToUSVString(name);
+  delete(name: string): void;
+  delete(...args: FormDataNameArguments): void {
+    const list = this.#list;
+    requireArguments(args, 1, "FormData.delete");
+    const key = coerceToUSVString(args[0]);
     let write = 0;
-    for (const item of this.list) {
+    for (const item of list) {
       if (item[0] !== key) {
-        this.list[write++] = item;
+        list[write++] = item;
       }
     }
-    this.list.length = write;
+    list.length = write;
   }
 
-  *entries(): Generator<FormDataEntry, void, unknown> {
-    for (const item of this.list) {
-      yield [item[0], item[1]];
+  entries(): IterableIterator<FormDataEntry> {
+    return new FormDataIterator(this.#list, selectEntry);
+  }
+
+  keys(): IterableIterator<string> {
+    return new FormDataIterator(this.#list, selectName);
+  }
+
+  values(): IterableIterator<FormDataEntryValue> {
+    return new FormDataIterator(this.#list, selectValue);
+  }
+
+  forEach(callback: FormDataForEachCallback, thisArg?: unknown): void {
+    const list = this.#list;
+    if (typeof callback !== "function") {
+      throw new TypeError("FormData.forEach callback must be callable");
+    }
+    for (const item of list) {
+      callback.call(thisArg, item[1], item[0], this);
     }
   }
 
-  *keys(): Generator<string, void, unknown> {
-    for (const item of this.entries()) {
-      yield item[0];
-    }
+  [Symbol.iterator](): IterableIterator<FormDataEntry> {
+    return new FormDataIterator(this.#list, selectEntry);
   }
 
-  *values(): Generator<FormDataEntryValue, void, unknown> {
-    for (const item of this.entries()) {
-      yield item[1];
-    }
-  }
-
-  forEach(
-    callback: (this: unknown, value: FormDataEntryValue, name: string, parent: FormData) => void,
-    thisArg?: unknown,
-  ): void {
-    for (const [name, value] of this.entries()) {
-      callback.call(thisArg, value, name, this);
-    }
-  }
-
-  [Symbol.iterator](): Generator<FormDataEntry, void, unknown> {
-    return this.entries();
+  get [Symbol.toStringTag](): "FormData" {
+    return "FormData";
   }
 }

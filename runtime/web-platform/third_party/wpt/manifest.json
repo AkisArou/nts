@@ -1,10 +1,19 @@
 {
   "repository": "https://github.com/web-platform-tests/wpt",
-  "retrieved": "2026-09-06",
+  "retrieved": "2026-09-07",
   "pinType": "Git blob SHA-1 (content addressed)",
   "files": {
     "fetch/api/headers/headers-combine.any.js": "4f3b6d11df97481c4593ec69ae3432692d4749f4",
     "fetch/api/headers/headers-normalize.any.js": "68cf5b85f3acb7fcfe6275ffa0c4d37843ac2935",
+    "xhr/formdata/append.any.js": "6871f69df591cc468e5fd99ae6456d48ad96e3a9",
+    "xhr/formdata/constructor.any.js": "43704538ab2489a6cbd7a2449532a040fdb4adbd",
+    "xhr/formdata/delete.any.js": "9424614f961b2e4b88ad0355d4da9d9e3ad9bccf",
+    "xhr/formdata/foreach.any.js": "9fc1e2d9b399fe08acf090f0aaa4a9f6bbe33c3f",
+    "xhr/formdata/get.any.js": "b307f1edd0ad3b739c1fa44b178d90f4697f465a",
+    "xhr/formdata/has.any.js": "2c1a3fdafe3480732f177be32584a7d8a889e493",
+    "xhr/formdata/iteration.any.js": "1633fd9c4daa792f7050723220b7fcaa38b20858",
+    "xhr/formdata/set-blob.any.js": "6a8b5c717050598058d44ac6772ed04722924be3",
+    "xhr/formdata/set.any.js": "734e55bb759cad5df13bb4e374a30eac28e85f2a",
     "LICENSE.md": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
   },
   "nodeWpt": {
